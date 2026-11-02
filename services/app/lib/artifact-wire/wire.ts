@@ -314,16 +314,17 @@ export async function placementFor(
  * commit that wrote the row counted it, so neither publishing nor this module
  * reaches the annotation store.
  */
-export async function replacedArtifactWire(
+export function replacedArtifactWire(
   row: ArtifactRow,
   base: string,
   sentMarkup: unknown,
   { affected, warnings, openAnnotations }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; openAnnotations: number },
-): Promise<Record<string, unknown>> {
+  owner: UserPagesOwner | null = null,
+): Record<string, unknown> {
   return {
     ...monitoringGuidance(base,row.id,row.format),
     ...artifactOwnershipWire(row),
-    id: row.id, url: `${base}/a/${row.id}`, user_page_url: await userPageUrl(row), version: row.version, visibility: row.visibility,
+    id: row.id, url: `${base}/a/${row.id}`, user_page_url: userPageUrlForOwner(row, owner), version: row.version, visibility: row.visibility,
     ...(affected?{affected_dependents:affected.map(dependent=>({id:dependent.id,title:dependent.title}))}:{}),
     // A replace moves the head pointer — hand back the new one so the caller
     // can keep editing without a re-read. A FOLDER's metadata write moves

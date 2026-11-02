@@ -93,7 +93,8 @@ describe('echoes', () => {
     expect(createdArtifactWire(markupRow, BASE, '<p>sent</p>')).toMatchObject({ markup_changed: true, markup: '<p>stored</p>' });
     expect(createdArtifactWire(markupRow, BASE, undefined)).toMatchObject({ markup: '<p>stored</p>' });
     const next = await replaceArtifactFor(owner, row.id, page('Two'), { expectedVersion: 1 }) as ArtifactRow;
-    const replaced = await replacedArtifactWire(next, BASE, undefined, { affected: [row], warnings: [{ id: 'w', title: null, details: ['x'] }], openAnnotations: 1 });
+    // Transaction receipts must render synchronously, without querying the global DB.
+    const replaced = replacedArtifactWire(next, BASE, undefined, { affected: [row], warnings: [{ id: 'w', title: null, details: ['x'] }], openAnnotations: 1 });
     expect(replaced).toMatchObject({ version: 2, edit_id: next.edit_id, affected_dependents: [{ id: row.id, title: 'Doc' }], warnings: [{ id: 'w' }], shares: [] });
     expect(await replacedArtifactWire(next, BASE, undefined, { affected: null, warnings: [], openAnnotations: 0 })).not.toHaveProperty('warnings');
     const version = (await getVersionFor(owner, row.id, 1))!;

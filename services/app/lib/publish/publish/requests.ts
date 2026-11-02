@@ -243,6 +243,7 @@ export async function replaceArtifactWithBody(
   }
   // Resolve advisory effects before the storage transaction so the exact wire reply
   // can be committed atomically without querying outside PGLite's transaction connection.
+  const receiptOwner = await documentOwner(current);
   const receiptEffects=options.mutationReceipt?{
     warnings:[],
     affected:['dataset','image','pdf','file'].includes(input.format)?await findDependentsFor(actor,id):null,
@@ -255,7 +256,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)}),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
+    : await replaceArtifactFor(actor, id, input, {...expected,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -271,7 +272,7 @@ export async function replaceArtifactWithBody(
   // resolve (warnings, never blocks).
   const warnings = receiptEffects?receiptEffects.warnings:[];
   const affected = receiptEffects?receiptEffects.affected:['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
-  return json({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, openAnnotations: committedOpenAnnotations(row) }),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
+  return json({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, openAnnotations: committedOpenAnnotations(row) },receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
 }
 
 /**

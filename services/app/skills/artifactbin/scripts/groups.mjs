@@ -1,5 +1,5 @@
 /** What this command does and how to use it; also printed by --help. */
-export const DESCRIPTION = `Groups: membership, invitations, sharing, ownership and navigation links.
+export const DESCRIPTION = `Groups: membership, invitations, sharing, ownership and links.
 Usage: node scripts/groups.mjs list
        node scripts/groups.mjs show GROUP [--pages] [--cursor CURSOR]
        node scripts/groups.mjs create HANDLE --name NAME [--description TEXT]
@@ -44,25 +44,32 @@ export async function groupsCommand({sub,values,positionals},options={}){
  confirmation(sub,values);
  const pageVerb=['share','unshare','move'].includes(sub);
  if(sub==='invite'){
-  if(positionals.length<2)throw new ToolError('invalid_arguments','Supply GROUP and one or more emails.',2);
- }else positional(positionals,sub==='list'?0:['role','remove','uninvite','link','unlink'].includes(sub)?2:1);
+  if(positionals.length<2)throw new ToolError('invalid_arguments',
+  'Supply GROUP and one or more emails.',2);
+ }else positional(positionals,sub==='list'?0:['role','remove','uninvite','link',
+  'unlink'].includes(sub)?2:1);
  let role;
  if(['invite','role','share'].includes(sub)){
   if(sub==='role')requireFlags(values,['role']);
-  role=enumValue(values.role??'viewer',sub==='share'?['viewer','commenter','editor']:['viewer','editor'],'role');
+  role=enumValue(values.role??'viewer',sub==='share'?['viewer','commenter','editor']:['viewer',
+  'editor'],'role');
  }
  if(sub==='delete')requireFlags(values,['handle']);
- if(sub==='move'&&Boolean(values.group)===Boolean(values.personal))throw new ToolError('invalid_destination','Choose exactly one of --group or --personal.',2);
+ if(sub==='move'&&Boolean(values.group)===Boolean(values.personal))
+  throw new ToolError('invalid_destination','Choose exactly one of --group or --personal.',2);
  if(['share','unshare'].includes(sub))requireFlags(values,['group']);
- if(values.cursor&&!values.pages)throw new ToolError('invalid_cursor','--cursor requires show --pages.',2);
+ if(values.cursor&&!values.pages)throw new ToolError('invalid_cursor',
+  '--cursor requires show --pages.',2);
  const patch={};
  if(['create','update'].includes(sub)){
   if(sub==='create')requireFlags(values,['name']);
   for(const key of ['name','description'])if(values[key]!==undefined){
-   if(typeof values[key]!=='string'||key==='name'&&!values[key].trim())throw new ToolError('invalid_'+key,'Supply a nonblank name.',2);
+   if(typeof values[key]!=='string'||key==='name'&&!values[key].trim())
+  throw new ToolError('invalid_'+key,'Supply a nonblank name.',2);
    patch[key]=values[key];
   }
-  if(sub==='update'&&!Object.keys(patch).length)throw new ToolError('empty_patch','Supply --name or --description.',2);
+  if(sub==='update'&&!Object.keys(patch).length)throw new ToolError('empty_patch',
+  'Supply --name or --description.',2);
  }
  const emails=sub==='invite'?positionals.slice(1).map(invitationEmail):[];
  const email=sub==='uninvite'?invitationEmail(positionals[1]):undefined;
@@ -74,35 +81,44 @@ export async function groupsCommand({sub,values,positionals},options={}){
  const write=(path,method,body)=>client.request(path,{method,body,unsafe:true});
  if(sub==='list')return client.request('/api/groups');
  if(sub==='create')return write('/api/groups','POST',{handle:positionals[0],...patch});
- if(sub==='move'&&values.personal)return write('/api/artifacts/'+target.id+'/transfer','POST',{destination:{type:'personal'}});
+ if(sub==='move'&&values.personal)return write('/api/artifacts/'+target.id+'/transfer','POST',
+  {destination:{type:'personal'}});
  const detail=await resolveGroup(client,pageVerb?values.group:positionals[0]);
  const group=detail.group,base='/api/groups/'+segment(group.id);
  if(sub==='show'){
   if(!values.pages)return detail;
-  const query=new URLSearchParams({group_id:group.id});if(values.cursor)query.set('cursor',values.cursor);
+  const query=new URLSearchParams({group_id:group.id});if(values.cursor)query.set('cursor',
+  values.cursor);
   return {...detail,pages:await client.request('/api/artifacts?'+query)};
  }
  if(sub==='update')return write(base,'PATCH',patch);
  if(sub==='delete'){
-  if(values.handle!==group.handle)throw new ToolError('handle_mismatch','Echo the exact current group handle with --handle.',2);
+  if(values.handle!==group.handle)throw new ToolError('handle_mismatch',
+  'Echo the exact current group handle with --handle.',2);
   return write(base,'DELETE',{handle:values.handle});
  }
  if(sub==='invite'){
   const results=[];
-  for(const email of emails){try{results.push({email,ok:true,result:await write(base+'/invitations','POST',{email,role})});}
+  for(const email of emails){try{results.push({email,ok:true,result:await
+  write(base+'/invitations','POST',{email,role})});}
    catch(error){results.push({email,...toolFailure('groups',error),exit:toolExit(error)});}}
   const failures=results.filter(result=>!result.ok);
   return {ok:failures.length===0,code:failures.length?'partial_failure':'completed',group,results,
    ...(failures.length?{exit:Math.max(...failures.map(result=>result.exit))}:{})};
  }
- if(sub==='uninvite')return write(base+'/invitations/'+segment(await resolveInvitation(client,group.id,email)),'DELETE');
+ if(sub==='uninvite')return write(base+'/invitations/'+segment(await resolveInvitation(client,
+  group.id,email)),'DELETE');
  if(['role','remove'].includes(sub)){
   const user=await resolveMember(client,group.id,positionals[1]);
-  return write(base+'/members/'+segment(user),sub==='role'?'PUT':'DELETE',sub==='role'?{role}:undefined);
+  return write(base+'/members/'+segment(user),sub==='role'?'PUT':'DELETE',
+  sub==='role'?{role}:undefined);
  }
  if(sub==='leave')return write(base+'/members/me','DELETE');
- if(['share','unshare'].includes(sub))return write('/api/artifacts/'+target.id+'/group-shares/'+segment(group.id),sub==='share'?'PUT':'DELETE',sub==='share'?{role}:undefined);
- if(sub==='move')return write('/api/artifacts/'+target.id+'/transfer','POST',{destination:{type:'group',id:group.id}});
+ if(['share','unshare'].includes(sub))return
+  write('/api/artifacts/'+target.id+'/group-shares/'+segment(group.id),
+  sub==='share'?'PUT':'DELETE',sub==='share'?{role}:undefined);
+ if(sub==='move')return write('/api/artifacts/'+target.id+'/transfer','POST',
+  {destination:{type:'group',id:group.id}});
  if(['link','unlink'].includes(sub)){
   const linked=await resolveGroup(client,positionals[1]);
   return write(base+'/links/'+segment(linked.group.id),sub==='link'?'PUT':'DELETE');
@@ -110,5 +126,6 @@ export async function groupsCommand({sub,values,positionals},options={}){
  throw new ToolError('invalid_invocation','Choose a documented groups subcommand.',2);
 }
 await runTool('groups',import.meta.url,async parsed=>{
- const result=await groupsCommand(parsed);if(result.ok===false)process.exitCode=result.exit??1;return result;
+ const result=await groupsCommand(parsed);if(result.ok===false)process.exitCode=result.exit??1;
+  return result;
 });

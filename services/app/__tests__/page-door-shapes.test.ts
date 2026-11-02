@@ -34,7 +34,7 @@ async function world() {
   return { owner, actor, make, answer };
 }
 
-const BASE_SURFACE = ['accountSession', 'anonSession', 'author', 'captureKey', 'colorMode', 'columns', 'dataPreview', 'editId', 'format', 'group_id', 'hasInvitedUsers', 'id', 'membershipAvailable', 'openAnnotations', 'pwaEnabled', 'refs', 'template', 'theme', 'title', 'version', 'visibility'];
+const BASE_SURFACE = ['accountSession', 'anonSession', 'author', 'captureKey', 'colorMode', 'columns', 'dataPreview', 'editId', 'format', 'group_id', 'hasInvitedUsers', 'id', 'membershipAvailable', 'openAnnotations', 'pwaEnabled', 'refs', 'template', 'theme', 'title', 'user_page_url', 'version', 'visibility'];
 const DOC_TOP = ['canonical', 'description', 'follow', 'kind', 'like', 'role'];
 
 describe('the JSON door keeps the shape of everything that is not a framed document', () => {
