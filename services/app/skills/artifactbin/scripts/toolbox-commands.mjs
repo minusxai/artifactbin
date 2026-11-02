@@ -36,6 +36,7 @@ const commands = {
       title: flag(),
       visibility: flag(),
       group: flag(),
+      personal: flag('boolean'),
       'dry-run': flag('boolean'),
       strict: flag('boolean'),
       create: flag('boolean'),

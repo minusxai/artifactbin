@@ -131,7 +131,9 @@ sharing and deliberate ownership moves.
   `--resolve --expected-revision R` when done). Anchors are described at the top of
   `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
-- **Watch, always.** After every publish and every edit, write your full reply (link, Built with,
+- **Watch, always.** Finish every page and edit in the current request before starting a watch.
+  For a multi-page request, finish and report all requested pages first; monitoring must never
+  block the remaining work. After completing the request, write your full reply (link, Built with,
   Tested) as message text first, then run `node scripts/comment.mjs watch ID --next`: the user
   reads the reply while you watch. Run it in the foreground, never with `&`, `timeout` or a shorter
   `--wait`; it waits up to 4 minutes, so set your shell tool's timeout to 300000 ms (5 minutes).

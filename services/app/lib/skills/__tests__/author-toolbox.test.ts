@@ -322,6 +322,8 @@ it('publish --group resolves the group first and sends an explicit destination o
   const planned=await publishCommand({values:{server,'dry-run':true,group:'@team'},positionals:[file]},options);
   expect(seen).toEqual(['/api/groups/team']);expect(planned).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
   expect(await publishCommand({values:{server,'dry-run':true},positionals:[file]},options)).not.toHaveProperty('destination');
+  expect(await publishCommand({values:{server,'dry-run':true,personal:true},positionals:[file]},options)).toMatchObject({destination:{type:'personal'}});
+  await expect(publishCommand({values:{server,'dry-run':true,personal:true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'invalid_destination'});
   role='viewer';
   await expect(publishCommand({values:{server,'dry-run':true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'group_not_editor'});
  }finally{await rm(root,{recursive:true,force:true});}

@@ -22,7 +22,8 @@ same. Default share role is viewer; use commenter when teammates should comment.
 is not an owner and cannot govern ownership or further sharing. “Put it in team space” means an
 explicit ownership move, which also transfers a folder's descendants and can refuse dependency
 conflicts. `publish.mjs page.html --group design_crit` creates new group-owned work; it does not
-share an existing page. Group editors govern group-owned pages; viewers read them. Membership,
+share an existing page. Use `publish.mjs page.html --personal` for personal ownership even when
+your default is a group; omitting both flags uses your default destination. Group editors govern group-owned pages; viewers read them. Membership,
 page readability and navigation links never automatically grant dataset writes.
 
 ```sh

@@ -2,7 +2,7 @@
 export const DESCRIPTION = `Publish a page, dataset or asset with its local dependencies.
 FILE and FILE.af.json are rewritten in place with the canonical result.
 Usage: node scripts/publish.mjs FILE [--title T] [--visibility private|unlisted|public]
-         [--group HANDLE] [--dry-run] [--strict]
+         [--group HANDLE | --personal] [--dry-run] [--strict]
        node scripts/publish.mjs --resume JOURNAL
 Flags: --type html|dataset|asset (inferred from unambiguous extensions); --root DIR project
   boundary (default: the source directory); --manifest FILE JSON {"manifest":[paths]} of extra
@@ -13,6 +13,8 @@ Flags: --type html|dataset|asset (inferred from unambiguous extensions); --root 
   writes; --strict refuses fixable autofix problems instead of fixing them; --create new identity
   for ambiguous recovered source; --artifact ID with --baseline FILE (advanced recovery); --request
   FILE exclusive journal outside the project; --resume JOURNAL.
+  --personal creates personally owned work even with a default group. Omit both destination
+  flags to use your account default. Neither flag moves existing pages.
   Common: --server ORIGIN, --json, --output FILE, --help.
 Examples:
   node scripts/publish.mjs ./project/index.html           # first publish; prints the receipt and
