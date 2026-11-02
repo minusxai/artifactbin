@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { escapeAttr, escapeHtml, escapeText, scriptJson } from '../escape';
+import { escapeAttr, escapeSourceAttribute, escapeHtml, escapeText, scriptJson } from '../escape';
 
 const probe = `a&b<c>d"e'f &amp;`;
 
 describe('markup escapers', () => {
+  it('source attributes preserve angle brackets and apostrophes while encoding delimiters', () => {
+    expect(escapeSourceAttribute(probe)).toBe(`a&amp;b<c>d&quot;e'f &amp;amp;`);
+  });
   it('escapeText leaves quotes alone', () => {
     expect(escapeText(probe)).toBe(`a&amp;b&lt;c&gt;d"e'f &amp;amp;`);
   });

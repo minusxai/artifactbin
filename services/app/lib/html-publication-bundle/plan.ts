@@ -1,3 +1,4 @@
+import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {libraryPathForSpecifier} from '../libraries';
 import path from 'node:path';
 import {admitRuntimeModuleImports} from './runtime-module-imports';
@@ -130,7 +131,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
  return {backendSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
-  for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
+  for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
 }
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
@@ -151,7 +152,7 @@ export function pinPublicationAssetUrls(source:string,pageId:string,version:numb
   }
   url.searchParams.set('version',String(version));
   const address=url.pathname+url.search+url.hash;
-  const escaped=link.htmlAttribute?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
+  const escaped=link.htmlAttribute?escapeSourceAttribute(address):address;
   result=result.slice(0,link.start)+escaped+result.slice(link.end);
  }
  return result;
@@ -176,7 +177,7 @@ export function authoringHtml(html:string,options:AuthoringHtmlOptions):string{
   normalized(receipt.path);
   let value=path.posix.relative(path.posix.dirname(options.entryPath),receipt.path);if(!value.startsWith('.'))value='./'+value;
   value+=suffix;
-  if(link.htmlAttribute)value=value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+  if(link.htmlAttribute)value=escapeSourceAttribute(value).replaceAll("'",'&#39;');
   return [{start:link.start,end:link.end,value}];
  });
  let result=html;for(const edit of edits.sort((a,b)=>b.start-a.start))result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);

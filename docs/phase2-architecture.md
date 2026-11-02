@@ -334,8 +334,8 @@ story only through the frame bridge.
 3. In-place editing. `setMode('edit')` unmounts the islands and the editor
    (`solid/editor/InPlaceEditor.tsx`, with the runtime's `lib/frame-edit/session`) makes the
    same story element editable. Every edit is composed into the source, saved through the save-less
-   protocol (`solid/editor/create-live-edits.ts`) and previewed by sending the draft (`EditDraft`,
-   `solid/editor/edit-draft.ts`) through the controller to the server compiler. "Done" returns the page to
+   protocol (`solid/editor/create-live-edits.ts`) and previewed by sending the draft (`EditDraft` in
+   `lib/story-runtime/contract.ts`) through the controller to the server compiler. "Done" returns the page to
    reading in place: `setMode('read')` once the page has drawn the saved version.
 4. Overlays. Island overlays portal to the trusted UI container (`solid/components/TrustedUi`) the app
    owns, or inside the story root when the story's CSS is present (`kit/trusted-overlay.tsx`); a Solid

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { isolateStoryCss, isolateStoryNodes } from '../inline-css';
-import { applyStyleOverrides, styleOverrides } from '../style-overrides';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 describe('inline document CSS isolation', () => {
@@ -55,13 +54,20 @@ describe('inline document CSS isolation', () => {
     expect(css).toContain('[data-mx-inline-story] *{--tw-translate-x:0}');
     expect(css).toContain('--tw-shadow:0 0#0000');
   });
-  it('ships the node policy as data: raw nodes plus the rewritten values reproduce the isolated tree', () => {
+  it('isolates nested HTML and SVG font references while preserving unrelated attributes and raw source', () => {
     const parsed = parseJsxOrThrow('<div><p style={{fontFamily:"IBM Plex Sans",fontSize:14}}>A</p><svg><text fontFamily="IBM Plex Sans">B</text></svg><p className="x">C</p></div>');
     const isolated = isolateStoryNodes(parsed.nodes, '@font-face{font-family:"IBM Plex Sans";src:url(/webfonts/a.woff2)}');
-    const overrides = styleOverrides(parsed.nodes, isolated);
-    expect(overrides.map(([path, at]) => `${path}@${at}`)).toEqual(['0.0@0', '0.1.0@0']);
-    expect(applyStyleOverrides(parsed.nodes, overrides)).toEqual(isolated);
-    expect(JSON.stringify(parsed.nodes)).toContain('"IBM Plex Sans"');
-    expect(applyStyleOverrides(parsed.nodes, [])).toBe(parsed.nodes);
+    const serialized = JSON.stringify(isolated);
+    expect(serialized).not.toContain('IBM Plex Sans');
+    expect(serialized.match(/mx-author-/g)).toHaveLength(2);
+    const root = isolated[0];
+    if (root.type !== 'element') throw Error('Missing div');
+    const [paragraph, svg, unchanged] = root.children;
+    if (paragraph.type !== 'element' || svg.type !== 'element') throw Error('Missing nested elements');
+    expect(paragraph.attributes.find(attr => attr.name === 'style')?.value).toMatchObject({
+      static: true, json: { fontSize: 14, fontFamily: expect.stringContaining('mx-author-') },
+    });
+    expect(unchanged).toEqual(parsed.nodes[0].type === 'element' ? parsed.nodes[0].children[2] : null);
+    expect(JSON.stringify(parsed.nodes)).toContain('IBM Plex Sans');
   });
 });

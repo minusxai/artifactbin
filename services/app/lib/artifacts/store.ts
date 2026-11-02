@@ -346,7 +346,6 @@ interface VersionSummary {
   created_at: string;
 }
 
-/** Archive the head as it stands — its author rides along, so history can say who. */
 /** Registered programs carried to a new page version: what to commit once that version is written. */
 interface CarriedRebinds {queries:readonly RegisteredQueryRebind[];mutations:readonly RegisteredMutationRebind[]}
 const NO_REBINDS:CarriedRebinds={queries:[],mutations:[]};
@@ -414,6 +413,61 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
     [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, changes?JSON.stringify(changes):null],
   );
   await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
+}
+
+/** The locked whole-document write, scoped to ONE transaction and its authorized head.
+ * Doors own refusal/policy decisions and content preparation. Publication always archives,
+ * bumps/stamps the head, moves any folder subtree, then commits carried programs atomically.
+ * No notification/telemetry outside tx may run here (PGLite has one serialized connection). */
+async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) {
+  const scope = editorScope(actor);
+  const current = (await artifactQuery<ArtifactRow>(tx,
+    `SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val],
+  )).rows[0];
+  if (!current) return null;
+  return {
+    current,
+    async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
+      await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
+      const catalog = catalogOf(content);
+      if (catalog?.kind === 'postgres' && catalog.connection)
+        await resolveDatasetConnection(catalog.connection, undefined, current.id, tx);
+    },
+    async publish(content: ArtifactInput, rebinds: CarriedRebinds): Promise<ArtifactRow> {
+      await archiveVersion(tx, current);
+      const updated = (await artifactQuery<ArtifactRow>(tx,
+        `UPDATE artifacts
+         SET format=$3, source=CASE WHEN $15::jsonb IS NULL THEN $4::text ELSE NULL END, document=$15::jsonb,
+             meta=$5, title=$6, description=$7, visibility=COALESCE($9,visibility),
+             ancestor_ids=COALESCE($10::text[],ancestor_ids), access=COALESCE($11,access), link_role=COALESCE($14,link_role),
+             ${headBumpSql('$8', '$12', '$13')}
+         WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
+        [id, scope.val, content.format, content.source, JSON.stringify(content.meta),
+          content.title !== undefined ? content.title : current.title,
+          content.description !== undefined ? content.description : current.description,
+          newEditId(), content.visibility ?? null, content.ancestor_ids ?? null, content.access ?? null,
+          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document],
+      )).rows[0];
+      if (content.ancestor_ids && current.format === 'folder') {
+        const swap = ancestorsForMove(current, content.ancestor_ids);
+        await tx.query(swap.sql, swap.params);
+      }
+      await commitCarriedRebinds(tx, { pageId: id, version: updated.version, html: updated.source ?? '' }, rebinds);
+      return updated;
+    },
+  };
+}
+
+/** Restore only reactivates known IDs; replace also reserves newly authored ones. */
+async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 'restore' | 'replace'): Promise<void> {
+  if (!['markup', 'html'].includes(updated.format) || !updated.source) return;
+  const ids = updated.format === 'html' ? [...canonicalizeHtmlPage(updated.source).nodeIds] : [...nodeIndex(updated.source).keys()];
+  const restore = () => tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [updated.id, ids]);
+  if (mode === 'replace') await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
+    SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [updated.id, updated.version, JSON.stringify(ids)]);
+  else await restore();
+  await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($3::text[]))', [updated.id, updated.version, ids]);
+  if (mode === 'replace') await restore();
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -499,32 +553,24 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     return null;
   };
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
-  let target = (await artifactQuery<ArtifactRow>(db,'SELECT title,description,format,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
+  let target = (await artifactQuery<Pick<ArtifactRow, 'title' | 'description' | 'format' | 'source' | 'document' | 'meta'>>(db,'SELECT title,description,format,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
   if(target.format==='markup')return {notArchived:true,refusal:json({error:'jsonb_operations_required',hint:'Read the archived version and submit a client-validated whole JSONB replacement.'},400)};
 
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
-    const current = (
-      await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
-    ).rows[0];
-    if (!current) return null;
+    const write = await lockArtifactWrite(tx, actor, id);
+    if (!write) return null;
+    const { current } = write;
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
 
     if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
-    try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
-    const targetCatalog=catalogOf(target);
-    if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
-      try{await resolveDatasetConnection(targetCatalog.connection,undefined,current.id,tx);}
-      catch(error){
-        if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};
-        throw error;
-      }
-    }
+    try { await write.validateContent(target); }
+    catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
     // A reverted page names the registered programs of the version it restores; they are re-bound to the new version like any save.
     let rebinds: CarriedRebinds = NO_REBINDS;
@@ -535,22 +581,10 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
       rebinds=carried.rebinds;
       target={...target,meta:{...target.meta,htmlLinks:restored.map(link=>link.kind==='backend'?carried.links.find(next=>next.name===link.name)??link:link)}};
     }
-    await archiveVersion(tx, current);
-    const updated = await artifactQuery<ArtifactRow>(tx,
-      `UPDATE artifacts
-       SET title = $3, description = $4, format = $5, source = CASE WHEN $11::jsonb IS NULL THEN $6::text ELSE NULL END, document=$11::jsonb, meta = $7,
-           ${headBumpSql('$8', '$9', '$10')}
-       WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-      [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
-    );
-    await commitCarriedRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
-    await logWholeDocumentWrite(tx, current, updated.rows[0]);
-    if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
-      const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
-      await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [id, ids]);
-      await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($3::text[]))', [id, updated.rows[0].version, ids]);
-    }
-    return updated.rows[0];
+    const updated = await write.publish(target, rebinds);
+    await logWholeDocumentWrite(tx, current, updated);
+    await reconcileSourceIds(tx, updated, 'restore');
+    return updated;
   });
   if (result && !isVersionNotArchived(result)) { void trackEvent('revert', result.id, { userId: result.user_id }); void queueMermaidHarvest(result); }
   return result;
@@ -594,7 +628,6 @@ async function replaceScoped(
   opts: ReplaceOpts = {},
 ): Promise<ArtifactRow | null | VersionConflict | Response> {
   const db = await getDb();
-  const scope = editorScope(actor);
   if(input.format==='markup')return json({error:'jsonb_operations_required'},400);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
@@ -602,10 +635,9 @@ async function replaceScoped(
   let unchanged = false;
   const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
     let rebinds: CarriedRebinds = NO_REBINDS;
-    const current = (
-      await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
-    ).rows[0];
-    if (!current) return null;
+    const write = await lockArtifactWrite(tx, actor, id);
+    if (!write) return null;
+    const { current } = write;
     /*
      * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
      *
@@ -674,9 +706,7 @@ async function replaceScoped(
       try { validateDatasetPolicyForRow({format:input.format,meta:input.meta}, current.dataset_policy); }
       catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
     }
-    await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({meta:{objectKey:key}}));
-    const replacementCatalog=catalogOf(input);
-    if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
+    await write.validateContent(input);
 
     const replacementIdentity = input.format === 'markup' && input.source
       ? stampNodeIds(input.source, {
@@ -690,61 +720,25 @@ async function replaceScoped(
     const receipts=operations.length?(await tx.query<{annotation_changes:AnnotationReceipt[]}>(`SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt WHERE receipt->>'operationId'=ANY($2::text[]))`,[id,operations.map(op=>op.id)])).rows.flatMap(row=>row.annotation_changes??[]):[];
     if(operations.some(op=>op.kind==='undo'&&!receipts.some(receipt=>receipt.operationId===op.id&&receipt.direction==='map')))return {conflict:true,reason:'doc_changed',currentVersion:current.version};
     const effects=operations.length?annotationEffects(current.source??'',replacementIdentity?.source??input.source??'',operations,annotationRows,receipts):{updates:[],receipts:[]};
-    await archiveVersion(tx, current);
-
-    const updated = await artifactQuery<ArtifactRow>(tx,
-      `UPDATE artifacts
-       SET format = $3, source = CASE WHEN $15::jsonb IS NULL THEN $4::text ELSE NULL END, document=$15::jsonb, meta = $5, title = $6, description = $7,
-           visibility = COALESCE($9, visibility), ancestor_ids = COALESCE($10::text[], ancestor_ids),
-           access = COALESCE($11, access), link_role = COALESCE($14, link_role),
-           ${headBumpSql('$8', '$12', '$13')}
-       WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-      [
-        id,
-        scope.val,
-        input.format,
-        replacementIdentity?.source ?? input.source,
-        JSON.stringify(finalizeArtifactMetadata(input.format, replacementIdentity?.source ?? input.source, input.meta)),
-        input.title !== undefined ? input.title : current.title,
-        input.description !== undefined ? input.description : current.description,
-        newEditId(),
-        input.visibility ?? null,
-        input.ancestor_ids ?? null,
-        input.access ?? null,
-        ...actorStamp(actor),
-        input.link_role ?? null,
-        sourceStorage(input.format,replacementIdentity?.source ?? input.source).document,
-      ],
-    );
-    // A replace may also FILE the row. When the row is a folder, its whole
-    // subtree follows in the same statement the move door uses — one prefix
-    // swap, inside this transaction, so a half-moved tree cannot be observed.
-    if (input.ancestor_ids && current.format === 'folder') {
-      const swap = ancestorsForMove(current, input.ancestor_ids);
-      await tx.query(swap.sql, swap.params);
-    }
-    await commitCarriedRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
-    if(opts.shares!==undefined)Object.assign(updated.rows[0],await writeShares(tx,id,opts.shares));
-    else updated.rows[0].shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
-    await bindCurrentUserScopes(tx,updated.rows[0]);
-    await documentMentions(tx,updated.rows[0],actor,current.source??'');
-    await logWholeDocumentWrite(tx, current, updated.rows[0],true);
+    const source = replacementIdentity?.source ?? input.source;
+    const updated = await write.publish({
+      ...input, source, meta: finalizeArtifactMetadata(input.format, source, input.meta),
+    }, rebinds);
+    if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares));
+    else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
+    await bindCurrentUserScopes(tx,updated);
+    await documentMentions(tx,updated,actor,current.source??'');
+    await logWholeDocumentWrite(tx, current, updated,true);
     const movedAnnotations=new Set<string>();
     for(const change of effects.updates){
       const applied=await tx.query<{id:string}>('UPDATE annotations SET anchor_key=$3,range=$4 WHERE artifact_id=$1 AND id=$2 AND anchor_key=$5 AND range IS NOT DISTINCT FROM $6 RETURNING id',[id,change.annotationId,change.after.anchor,change.after.range,change.before.anchor,change.before.range]);
       for(const row of applied.rows)movedAnnotations.add(row.id);
     }
-    if(effects.receipts.length)await tx.query('UPDATE artifact_edits SET annotation_changes=$3::jsonb WHERE artifact_id=$1 AND edit_id=$2',[id,updated.rows[0].edit_id,JSON.stringify(effects.receipts.filter(receipt=>!receipt.annotationId||movedAnnotations.has(receipt.annotationId)))]);
-    if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
-      const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
-      await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
-        SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
-      await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
-      await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[id,ids]);
-    }
-    if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated.rows[0]));
-    moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
-    return updated.rows[0];
+    if(effects.receipts.length)await tx.query('UPDATE artifact_edits SET annotation_changes=$3::jsonb WHERE artifact_id=$1 AND edit_id=$2',[id,updated.edit_id,JSON.stringify(effects.receipts.filter(receipt=>!receipt.annotationId||movedAnnotations.has(receipt.annotationId)))]);
+    await reconcileSourceIds(tx, updated, 'replace');
+    if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated));
+    moved = { from: parentOf(current), to: parentOf(updated) };
+    return updated;
   });
   const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
   if (written) { void trackEvent('update', written.id, { userId: written.user_id }); void queueMermaidHarvest(written); }

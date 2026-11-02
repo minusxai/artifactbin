@@ -1,3 +1,4 @@
+import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc} from '../html-page';
 import {parse as parseJavaScript} from 'acorn';
 import {createHash} from 'node:crypto';
@@ -11,7 +12,6 @@ export const OFFLINE_DEPENDENCY_LIMITS={resources:256,resourceBytes:16*1024*1024
 const JS=new Set(['application/javascript','text/javascript','application/ecmascript','text/ecmascript']);
 const type=(mime:string)=>mime.split(';')[0]!.trim().toLowerCase();
 const encoded=(mime:string,bytes:Uint8Array)=>`data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
-const escaped=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;');
 /** Pure byte transformation: all IO and authorization happen before this boundary. */
 export async function packOfflineDependencies(input:OfflineDependencyInput):Promise<OfflineDependencyResult>{
  const limits=OFFLINE_DEPENDENCY_LIMITS;if(Buffer.byteLength(input.html)>limits.htmlBytes||input.resources.length>limits.resources)throw Error('Offline dependency input limit exceeded');let total=0;for(const resource of input.resources){if(resource.bytes.byteLength>limits.resourceBytes||(total+=resource.bytes.byteLength)>limits.totalBytes)throw Error('Offline dependency byte limit exceeded');}
@@ -59,7 +59,7 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  const document=parse(input.html,{sourceCodeLocationInfo:true});type Element=DefaultTreeAdapterMap['element'];const elements:Element[]=[];
  const walk=(node:DefaultTreeAdapterMap['node'])=>{if('tagName'in node){elements.push(node);if(node.tagName==='template'&&'content'in node)walk(node.content);}if('childNodes'in node)for(const child of node.childNodes)walk(child);};walk(document);
  const edits:Array<{start:number;end:number;text:string}>=[];let extraCss='';
- for(const element of elements){const attr=(name:string)=>element.attrs.find(a=>a.name===name)?.value;const set=(name:string,value:string)=>{const location=element.sourceCodeLocation?.attrs?.[name];if(location)edits.push({start:location.startOffset,end:location.endOffset,text:`${name}="${escaped(value)}"`});};
+ for(const element of elements){const attr=(name:string)=>element.attrs.find(a=>a.name===name)?.value;const set=(name:string,value:string)=>{const location=element.sourceCodeLocation?.attrs?.[name];if(location)edits.push({start:location.startOffset,end:location.endOffset,text:`${name}="${escapeSourceAttribute(value)}"`});};
   const remove=(name:string)=>{const location=element.sourceCodeLocation?.attrs?.[name];if(location)edits.push({start:location.startOffset,end:location.endOffset,text:''});};
   const src=attr('src'),href=attr('href');
   if(element.tagName==='script'&&attr('data-af')!=='core'&&!isRuntimeCoreSrc(src)){

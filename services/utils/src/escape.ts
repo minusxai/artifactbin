@@ -1,6 +1,7 @@
 /*
- * The one set of markup escapers. Three variants, because their outputs differ on purpose:
+ * The one set of markup escapers. Four variants, because their outputs differ on purpose:
  *
+ *  - escapeSourceAttribute: `& "` — preserve source bytes in double-quoted HTML attributes.
  *  - escapeText: `& < >` — element text; a quote is harmless there.
  *  - escapeHtml: `& < > "` — text and double-quoted attribute values (nothing is ever written unquoted).
  *  - escapeAttr: `& < > " '` — also safe inside a single-quoted attribute.
@@ -19,3 +20,6 @@ export const escapeAttr = (s: string): string => s.replace(/[&<>"']/g, (c) => AT
 /** JSON that cannot close its `<script>` element: every `<`, `>`, U+2028 and U+2029 is escaped. */
 export const scriptJson = (value: unknown): string => JSON.stringify(value)
   .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+
+/** Source-preserving double-quoted HTML attributes: encode only delimiters, retaining authored angle brackets. */
+export const escapeSourceAttribute = (value: string): string => value.replace(/[&"]/g, c => HTML[c] ?? c);
