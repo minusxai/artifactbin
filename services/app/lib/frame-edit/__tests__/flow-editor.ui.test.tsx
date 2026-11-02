@@ -14,7 +14,8 @@ import type { EditorView } from 'prosemirror-view';
 import { editorDocument, sourceNodes } from '@/lib/editor-engine/model';
 import { FlowEditor } from '../FlowEditor';
 import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-engine/flow-view';
-import { createEditorSource } from '@/solid/editor/create-editor-source';
+import { SourceHistory } from '@/lib/editor-engine/history';
+import type { EditorSelectionChange } from '@/lib/editor-engine';
 import { captureBookmark } from '@/lib/editor-engine/bookmark';
 
 function nodes(source: string) {
@@ -345,13 +346,34 @@ it('keeps the first line\'s leading and the last line\'s trailing spaces of a mu
   expect(serializeJsx(onChange.mock.calls.at(-1)![0])).toMatch(/alpha first<\/p>.*>last omega<\/p>$/);
 });
 
+/** Capture the editor's source changes with the production history kernel, without app orchestration. */
+function recordedSource(initial: string) {
+  let current = initial;
+  const history = new SourceHistory();
+  const move = (direction: 'undo' | 'redo') => {
+    const result = history[direction](current);
+    expect(result.ok).toBe(true);
+    if (result.ok) current = result.source;
+  };
+  return {
+    current: () => current,
+    change(next: JsxNode[], group?: string, selection?: EditorSelectionChange) {
+      const source = serializeJsx(next);
+      history.record(current, source, { group, before: selection?.before, after: selection?.after });
+      current = source;
+    },
+    undo: () => move('undo'),
+    redo: () => move('redo'),
+  };
+}
+
 /** HTML typing stays literal; rich formatting remains an explicit command. */
 describe('HTML text editing', () => {
   function editor(source: string) {
     let engine: EditorView | null = null;
     const initial = serializeJsx(nodes(source));
-    const store = createEditorSource({ initial, live: { queue: () => {} }, draw: () => {}, commitPending: async () => {} });
-    const view = render(() => <FlowEditor nodes={nodes(initial)} path="0" onChange={(next, group, selection) => store.apply(serializeJsx(next), { origin: 'local', group, selection })} onView={(v) => { if (v) engine = v; }} />);
+    const store = recordedSource(initial);
+    const view = render(() => <FlowEditor nodes={nodes(initial)} path="0" onChange={store.change} onView={(v) => { if (v) engine = v; }} />);
     const v = () => engine!;
     const type = (text: string) => {
       for (const ch of text) {
@@ -550,8 +572,8 @@ describe('document-editor keys: Tab indents, links are typed, pasted and found',
   function editor(source: string) {
     let engine: EditorView | null = null;
     const initial = serializeJsx(nodes(source));
-    const store = createEditorSource({ initial, live: { queue: () => {} }, draw: () => {}, commitPending: async () => {} });
-    const view = render(() => <FlowEditor nodes={nodes(initial)} path="0" onChange={(next, group, selection) => store.apply(serializeJsx(next), { origin: 'local', group, selection })} onView={(v) => { if (v) engine = v; }} />);
+    const store = recordedSource(initial);
+    const view = render(() => <FlowEditor nodes={nodes(initial)} path="0" onChange={store.change} onView={(v) => { if (v) engine = v; }} />);
     const v = () => engine!;
     const type = (text: string) => {
       for (const ch of text) {
