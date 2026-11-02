@@ -1,5 +1,6 @@
-/** Deprecated executable and export adapter. Canonical snapshots live in
- * toolbox-publication-bundle.mjs; saved-request sends retain their receipt-file contract. */
+/** Internal: deprecated executable and export adapter. Canonical snapshots live in
+ * toolbox-publication-bundle.mjs; saved-request sends retain their receipt-file contract.
+ * Used by: installed legacy callers and publication compatibility tests. */
 import {beforeCommand} from './toolbox-update.mjs';
 import {readFile,writeFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
@@ -10,7 +11,8 @@ export {prepareBundle,prepareBundleUpdate} from './toolbox-publication-bundle.mj
 export async function sendBundleFile(requestFile,env=process.env,fetcher=fetch){
  const saved=JSON.parse(await readFile(requestFile,'utf8'));
  const saveReceipt=receipt=>writeFile(requestFile+'.receipt.json',JSON.stringify({receipt,
-  mappings:Object.fromEntries((receipt.dependencyReceipts??[]).map(({path,...mapping})=>[path,mapping]))
+  mappings:Object.fromEntries((receipt.dependencyReceipts??[]).map(
+   ({path,...mapping})=>[path,mapping]))
  },null,2)+'\n',{mode:0o600});
  let receipt;
  try{receipt=await sendPublication(saved,env,fetcher);}

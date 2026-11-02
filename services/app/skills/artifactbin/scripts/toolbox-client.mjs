@@ -6,6 +6,8 @@
  * Used by: every command script (auth serve autofix publish read export check graphql comment),
  *   toolbox-*.mjs, author-toolbox/author-check tests.
  */
+import {ToolError,serverOrigin,requestUrl,originRequest} from './toolbox-transport.mjs';
+export {ToolError,serverOrigin,originRequest} from './toolbox-transport.mjs';
 import {beforeCommand} from './toolbox-update.mjs';
 import {homedir} from 'node:os';import path from 'node:path';
 import {readFile,writeFile,realpath,lstat} from 'node:fs/promises';
@@ -18,14 +20,6 @@ import {checkDigest} from './toolbox-check-digest.mjs';export {checkDigest};
 // toolbox-journal.mjs imports helpers back from this module; the cycle is safe because neither
 // module uses the other's exports while loading.
 export {createJournal,journalIntent,resumeJournal} from './toolbox-journal.mjs';
-export class ToolError extends Error{constructor(code,message,exit=1,recovery=
-  'Inspect the refusal and correct the request.',details){super(message);Object.assign(this,{code,
-  exit,recovery,details});}}
-export function serverOrigin(value){let url;try{url=new URL(value);}catch{throw new ToolError(
-  'server_required','Select --server ORIGIN or origin-bound ARTIFACTBIN_URL.',2);}
-if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||
-   url.search||url.hash)throw new ToolError('invalid_origin',
-   'Select an HTTP(S) origin without path or credentials.',2);return url.origin;}
 export function resolveTarget(value,selected){
  let id=value,server=selected;
 if(/^https?:/i.test(value??'')){const url=new URL(value);if(url.username||url.password||url.search||
@@ -63,19 +57,6 @@ export async function safeParent(file){const parent=await realpath(path.dirname(
   file)));return path.join(parent,path.basename(file));}
 export function within(root,file){const relative=path.relative(root,file);return relative===''||
   relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);}
-/** Shared origin-bound JSON transport. Callers own credential selection, retry and refusal policy. */
-function requestUrl(server,route){
- const url=new URL(route,server);
- if(url.origin!==server||!route.startsWith('/')||route.startsWith('//')||route.includes('\\'))
-  throw new ToolError('origin_mismatch','Refused a request outside the selected origin.',2);
- return url;
-}
-export function originRequest(server,route,{method='GET',body,headers={},signal},fetcher=fetch){
- const url=requestUrl(serverOrigin(server),route);
- return fetcher(url.href,{method,redirect:'error',...(signal?{signal}:{}),
-  headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},
-  ...(body===undefined?{}:{body:JSON.stringify(body)})});
-}
 export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays=undefined}={}){
  server=serverOrigin(server);const root=credentialRoot(env);
  async function grant(){
@@ -102,7 +83,8 @@ requestUrl(server,route);
    // and 502/503/504 — reads, declared-safe requests and keyed writes only, the same
    // Idempotency-Key every time; never 4xx.
 try{response=(await (await platform()).retryFetch(()=>originRequest(server,route,{method,body,
-     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),
+     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):
+      AbortSignal.timeout(timeoutMs),
      headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{
      Authorization:'Bearer '+connection.token}:{}),...headers}},fetcher),{
      method,idempotencyKey:headers['Idempotency-Key'],safeToRepeat,signal,policy:retryDelays?{

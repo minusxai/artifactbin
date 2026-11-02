@@ -1,4 +1,5 @@
-/** Canonical project snapshot mechanics, shared by publication and compatibility commands. */
+/** Internal: canonical project snapshot mechanics.
+ * Used by: toolbox publication and publication-bundle compatibility commands. */
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
