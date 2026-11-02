@@ -39,6 +39,7 @@ describe('the route table', () => {
     expect(byDir.get('/api/artifacts')).toEqual(expect.arrayContaining(['GET', 'POST']));
     expect(byDir.get('/oauth/register') ?? null).toBeNull(); // the proxy's
     expect(byDir.get('/api/my/backends/[id]/[version]/secrets')).toEqual(['GET', 'PUT', 'DELETE']);
+    expect(byDir.get('/api/my/resolvers/[id]/[version]/secrets')).toEqual(['GET', 'PUT', 'DELETE']);
   });
   it('detects every form of exported method, and nothing else', () => {
     expect(exportedMethods('const handle=()=>0;\nexport const GET=handle,PUT=handle,DELETE=handle;')).toEqual(['GET', 'PUT', 'DELETE']);

@@ -5,6 +5,7 @@ import type { ArtifactBackend, ArtifactHead } from '@/lib/artifact-backend';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import { readPwaSettings } from '@/lib/html-page/pwa-settings';
 import ReferenceFilesPanel from '../editor/ReferenceFilesPanel';
+import ResolversPanel from './ResolversPanel';
 import { PwaSettingsPanel, PwaSharingSetting } from '../editor/PwaSettingsPanel';
 import { Dialog } from '../ui/Dialog';
 import { Tabs } from '../ui/Tabs';
@@ -13,6 +14,8 @@ import { StatusMessage } from '../ui/StatusMessage';
 export interface DocumentSettingsProps {
   id: string;
   title: string;
+  /** The page owner also sees the Resolvers tab (secrets and Test connection); editors never do. */
+  owner?: boolean;
   backend?: ArtifactBackend;
   onPwaEnabledChange: (enabled: boolean) => void;
   onClose: () => void;
@@ -39,10 +42,11 @@ export default function DocumentSettings(props: DocumentSettingsProps): JSX.Elem
     finally { setBusy(false); }
   };
   const content = (current: ArtifactHead) => <>
-    <Tabs label="Artifact settings" value={tab()} onChange={setTab} items={[{ value: 'app', label: 'App' }, { value: 'files', label: 'Files' }]} />
+    <Tabs label="Artifact settings" value={tab()} onChange={setTab} items={[{ value: 'app', label: 'App' }, { value: 'files', label: 'Files' }, ...(props.owner ? [{ value: 'resolvers', label: 'Resolvers' }] : [])]} />
     <div class="mt-5" aria-busy={busy()} inert={busy()}>
       <Show when={tab() === 'app'}><PwaSharingSetting source={current.html ?? ''} onChange={(source) => void save(source)} /><PwaSettingsPanel id={props.id} title={props.title} source={current.html ?? ''} onChange={(source) => void save(source)} onUpload={(file) => backend.importImage({ file, name: file.name })} beforeInstall={async () => !busy()} /></Show>
       <Show when={tab() === 'files'}><ReferenceFilesPanel refs={current.refs ?? []} /></Show>
+      <Show when={props.owner && tab() === 'resolvers'}><ResolversPanel id={props.id} /></Show>
     </div>
   </>;
   return <Dialog title="Artifact settings" size="xl" closeLabel="Close settings" busy={busy()} onClose={props.onClose}>
