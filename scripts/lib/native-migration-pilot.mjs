@@ -96,7 +96,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
   if(input.implementation==='html'){
    const response=await fetch(server+'/skills/artifactbin.zip');if(!response.ok)throw Error('pilot-skill-archive');const archive=new Uint8Array(await response.arrayBuffer());skillSha256=sha(archive);const files=installedFiles(archive);staging=await mkdtemp(path.join(tmpdir(),'native-pilot-skill-'));
    for(const [name,bytes]of files)if(name.startsWith('scripts/')){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
-   ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/publication-bundle.mjs'))));
+   ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/toolbox-publication-bundle.mjs'))));
   }
   const publishSnapshot=async regression=>{
    if(input.implementation==='jsx'){if(regression)throw Error('pilot-original-regression');const meta=source.row.meta??{};return publish({markup:source.markup,title:source.row.title,description:source.row.description,theme:meta.theme,template:meta.template,colorMode:meta.colorMode});}

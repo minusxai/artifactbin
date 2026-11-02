@@ -2,7 +2,7 @@ import {mkdtemp,writeFile,mkdir,rm,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import sharp from 'sharp';
-import {prepareBundle} from '../../services/app/skills/artifactbin/scripts/publication-bundle.mjs';
+import {prepareBundle} from '../../services/app/skills/artifactbin/scripts/toolbox-publication-bundle.mjs';
 import {planPublicationBundle} from '../../services/app/lib/html-publication-bundle/plan';
 import {describe,it,expect} from 'vitest';
 import {createHash} from 'node:crypto';

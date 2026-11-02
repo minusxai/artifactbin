@@ -4,9 +4,100 @@
  * Used by: publish.mjs (main, when argv[2] is --prepare or --send).
  */
 import {readFile, writeFile} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import {serverOrigin,originRequest} from './toolbox-client.mjs';
+import {prepareBundle} from './toolbox-publication-bundle.mjs';
 
-/** Runs the deprecated flags with publish.mjs's prepareSample and sendPublication. */
-export async function main(args, {prepareSample, sendPublication}) {
+const root = fileURLToPath(new URL('../', import.meta.url));
+export async function prepareSample(name, server, datasetId) {
+  const origin = serverOrigin(server);
+  let body;
+  if (name === 'repairs-data')
+    body = {
+      dataset: await readFile(path.join(root, 'examples/repairs.csv'), 'utf8'),
+      title: 'Repair bench sample',
+      visibility: 'unlisted',
+      access: 'readwrite'
+    };
+  else {
+    if (!['report', 'csv-dashboard', 'shared-app'].includes(name))
+      throw Error('Unknown sample. Choose report, repairs-data, csv-dashboard or shared-app.');
+    let html = await readFile(path.join(root, `examples/${name}.html`), 'utf8');
+    if (name === 'csv-dashboard' || name === 'shared-app') {
+      if (!/^[A-Za-z0-9]{6,}$/.test(datasetId ?? ''))
+        throw Error('This sample requires the real returned dataset ID.');
+      html = html.replace('ref:DATASET_ID', `ref:${datasetId}`);
+    }
+    const snapshot = await prepareBundle({
+      root,
+      entry: `examples/${name}.html`,
+      server: origin,
+      entryHtml: html
+    });
+    body = {
+      ...snapshot.body,
+      title: {
+        report: 'A cooler walk home',
+        'csv-dashboard': 'Repair bench capacity',
+        'shared-app': 'Household budget'
+      }[name],
+      visibility: 'unlisted'
+    };
+    if (name === 'shared-app') {
+      const backend = snapshot.body.publicationBundle.files.find(
+        file => file.path === 'examples/garden.ts'
+      );
+      if (!backend) throw Error('Sample backend is missing from its publication snapshot.');
+      body.backendSources = {budget: Buffer.from(backend.base64, 'base64').toString('utf8')};
+    }
+  }
+  return {server: origin, method: 'POST', idempotencyKey: randomUUID(), body};
+}
+export async function sendPublication(saved, env = process.env, fetcher = fetch) {
+  const origin = serverOrigin(saved.server);
+  if (env.ARTIFACTBIN_URL !== origin || !env.ARTIFACTBIN_TOKEN)
+    throw Error(
+      'Supply origin-matched ARTIFACTBIN_URL and ARTIFACTBIN_TOKEN outside the saved request.'
+    );
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(saved.idempotencyKey ?? ''))
+    throw Error('A durable idempotency key is required.');
+  if (!['POST', 'PUT'].includes(saved.method) || !saved.body || typeof saved.body !== 'object')
+    throw Error('Invalid saved publication request.');
+  const id = saved.artifactId;
+  if (saved.method === 'PUT' && !/^[A-Za-z0-9]{6,}$/.test(id ?? ''))
+    throw Error('An update requires the existing artifact ID.');
+  if (
+    saved.method === 'PUT' &&
+    (!Number.isInteger(saved.body.expectedVersion) || typeof saved.body.expectedState !== 'string')
+  )
+    throw Error('An update requires observed expectedVersion and expectedState.');
+  // Legacy writes have always made one attempt. Sharing transport must not add retries,
+  // stored grants, refreshes or a different refusal/receipt contract.
+  const route = '/api/artifacts' + (saved.method === 'PUT' ? '/' + id : '');
+  const response = await originRequest(origin, route, {
+    method: saved.method, body: saved.body,
+    headers: {Authorization: 'Bearer ' + env.ARTIFACTBIN_TOKEN,
+      'Idempotency-Key': saved.idempotencyKey}
+  }, fetcher);
+  const receipt = await response.json();
+  if (!response.ok) {
+    const error = Error(
+      `Publication refused (HTTP ${response.status}): ` +
+        (typeof receipt.error === 'string'
+          ? receipt.error
+          : 'read the server recovery instructions')
+    );
+    error.receipt = receipt;
+    throw error;
+  }
+  return receipt;
+}
+
+
+/** Compatibility command: immutable saved requests and environment-only credentials. */
+export async function main(args) {
   if (args.length === 1 && args[0] === '--help') {
     console.log(
       'Usage: node publish.mjs --prepare SAMPLE --server ORIGIN --output REQUEST.json ' +

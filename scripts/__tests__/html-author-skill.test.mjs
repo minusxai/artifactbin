@@ -75,3 +75,40 @@ it('prepares an installed design-system stylesheet whose fonts stay on the platf
   expect(prepared.body.publicationBundle.files.map(file=>file.path)).toEqual(['design-systems/almanac.css']);
  }finally{await installed.dispose();}
 });
+
+it('legacy sends preserve updates, refusal receipts and single-attempt uncertain outcomes',async()=>{
+ const env={ARTIFACTBIN_URL:BASE,ARTIFACTBIN_TOKEN:'test-only-token'};
+ const saved={server:BASE,method:'PUT',artifactId:'PAGE12',idempotencyKey:'test-only-key-123456',
+  body:{html:'<p>Update</p>',expectedVersion:3,expectedState:'observed',publicationBundle:{mappings:{}}}};
+ const calls=[];
+ const receipt={error:'conflict',dependencyReceipts:[{path:'logo.svg',id:'ASSET1',version:1}]};
+ await expect(sendPublication(saved,env,async(url,input)=>{
+  calls.push({url,input});return Response.json(receipt,{status:409});
+ })).rejects.toMatchObject({receipt});
+ expect(calls[0].url).toBe(BASE+'/api/artifacts/PAGE12');
+ expect(calls[0].input).toMatchObject({method:'PUT',redirect:'error',body:JSON.stringify(saved.body),
+  headers:{Authorization:'Bearer test-only-token','Idempotency-Key':saved.idempotencyKey}});
+ for(const result of [()=>{throw Error('connection lost');},()=>new Response('not JSON'),
+  ()=>Response.json({error:'unavailable'},{status:503})]){
+  let attempts=0;
+  await expect(sendPublication(saved,env,async()=>{attempts++;return result();})).rejects.toThrow();
+  expect(attempts).toBe(1);
+ }
+ for(const server of [BASE+'/path','https://user:pass@example.test','https://example.test?query=1']){
+  await expect(sendPublication({...saved,server},env,async()=>{throw Error('must not send');})).rejects.toThrow();
+ }
+ for(const body of [{html:'old'}, {...saved.body,expectedVersion:'3'}]){
+  await expect(sendPublication({...saved,body},env,async()=>{throw Error('must not send');})).rejects.toThrow('observed');
+ }
+ const dir=await mkdtemp(path.join(tmpdir(),'legacy-receipt-'));
+ try{
+  const {sendBundleFile}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/publication-bundle.mjs')).href);
+  const file=path.join(dir,'request.json'),bytes=JSON.stringify(saved);await writeFile(file,bytes);
+  await expect(sendBundleFile(file,env,async()=>Response.json(receipt,{status:409}))).rejects.toMatchObject({receipt});
+  expect(JSON.parse(await readFile(file+'.receipt.json','utf8'))).toEqual({receipt,mappings:{'logo.svg':{id:'ASSET1',version:1}}});
+  expect(await readFile(file,'utf8')).toBe(bytes);
+  const success={id:'PAGE12',dependencyReceipts:receipt.dependencyReceipts};
+  expect(await sendBundleFile(file,env,async()=>Response.json(success))).toEqual(success);
+  expect(JSON.parse(await readFile(file+'.receipt.json','utf8'))).toEqual({receipt:success,mappings:{'logo.svg':{id:'ASSET1',version:1}}});
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

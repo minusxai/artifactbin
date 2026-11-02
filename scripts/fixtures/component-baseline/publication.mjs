@@ -37,7 +37,7 @@ export function installedFiles(archive){
     const relative=name.slice('artifactbin/'.length);if(files.has(relative))throw Error('Duplicate skill ZIP member');files.set(relative,bytes.subarray(start,end));offset=end;
   }
   if(!files.size||offset+4>bytes.length||![0x02014b50,0x06054b50].includes(bytes.readUInt32LE(offset)))throw Error('Invalid stored skill ZIP');
-  for(const name of ['scripts/publication-bundle.mjs','scripts/preview-html.mjs','design-systems/almanac.css'])if(!files.has(name))throw Error('Installed skill archive is missing '+name);
+  for(const name of ['scripts/toolbox-publication-bundle.mjs','scripts/preview-html.mjs','design-systems/almanac.css'])if(!files.has(name))throw Error('Installed skill archive is missing '+name);
   return files;
 }
 /** Reuse only successful receipts for identical local bytes and their entire
@@ -82,7 +82,7 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
     // branch installs and executes the selected candidate's normal Node helper.
     const files=installedFiles(skillArchive);staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));
     for(const [name,bytes]of files)if(/^(?:scripts|design-systems)\//.test(name)){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
-    ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/publication-bundle.mjs')).href));
+    ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/toolbox-publication-bundle.mjs')).href));
     const {publicationLocalReferences}=await import(pathToFileURL(path.join(staging,'scripts/preview-html.mjs')).href);reuse=dependencyReceiptCache(publicationLocalReferences);
   }
   for(const fixture of fixtures)for(const theme of parityThemes){

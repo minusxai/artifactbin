@@ -1,25 +1,26 @@
 import {it,expect} from 'vitest';
 it('runs the installed native helper with Node alone and refuses project symlinks',async()=>{
- const {mkdtemp,mkdir,writeFile,readFile,copyFile,symlink,rm}=await import('node:fs/promises');
+ const {mkdtemp,mkdir,writeFile,readFile,symlink,rm}=await import('node:fs/promises');
  const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');
  const dir=await mkdtemp(join(tmpdir(),'bundle-fresh-'));
  try{
-  await mkdir(join(dir,'scripts'));await mkdir(join(dir,'project'));
-  for(const script of ['publication-bundle.mjs','publish.mjs','toolbox-update.mjs','toolbox-update-state.mjs','toolbox-update-archive.mjs'])await copyFile(new URL('../../../skills/artifactbin/scripts/'+script,import.meta.url),join(dir,'scripts',script));
-  const {buildPreviewParser}=await import('../../skills');
-  await writeFile(join(dir,'scripts/preview-html.mjs'),await buildPreviewParser(await readFile(new URL('../../../skills/artifactbin/scripts/preview-html.mjs',import.meta.url),'utf8')));
+  await mkdir(join(dir,'project'));
+  const {GET:archive}=await import('../../../app/skills/artifactbin.zip/route');
+  const zip=join(dir,'skill.zip');
+  await writeFile(zip,new Uint8Array(await (await archive(new Request('https://example.test/skills/artifactbin.zip'))).arrayBuffer()));
+  execFileSync('unzip',['-q',zip,'-d',dir]);
   await writeFile(join(dir,'project','index.html'),'<img src="./logo.svg"><script type="module">import "./main.js";</script>');await writeFile(join(dir,'project','logo.svg'),'<svg/>');
   await writeFile(join(dir,'project','main.js'),'export const lazy=()=>import("./chunk.js");');await writeFile(join(dir,'project','chunk.js'),'export const value=42;');
-  execFileSync(process.execPath,[join(dir,'scripts/publication-bundle.mjs'),join(dir,'project'),'index.html','https://example.test',join(dir,'request.json')]);
+  execFileSync(process.execPath,[join(dir,'artifactbin/scripts/publication-bundle.mjs'),join(dir,'project'),'index.html','https://example.test',join(dir,'request.json')]);
   const request=JSON.parse(await readFile(join(dir,'request.json'),'utf8'));expect(request.body.publicationBundle.files[0].path).toBe('logo.svg');expect(request).not.toHaveProperty('token');expect(request.body.publicationBundle.files.map((file:{path:string})=>file.path)).toEqual(['logo.svg','main.js','chunk.js']);
   await rm(join(dir,'project/logo.svg'));await symlink(join(dir,'request.json'),join(dir,'project/logo.svg'));
-  expect(()=>execFileSync(process.execPath,[join(dir,'scripts/publication-bundle.mjs'),join(dir,'project'),'index.html','https://example.test',join(dir,'other.json')],{stdio:'pipe'})).toThrow();
+  expect(()=>execFileSync(process.execPath,[join(dir,'artifactbin/scripts/publication-bundle.mjs'),join(dir,'project'),'index.html','https://example.test',join(dir,'other.json')],{stdio:'pipe'})).toThrow();
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
 it('snapshots inline, static and lazy module graphs with shared chunks once',async()=>{
  const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
- const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
  const root=await mkdtemp(join(tmpdir(),'bundle-modules-'));
  try{
   await mkdir(join(root,'components/chunks'),{recursive:true});
@@ -65,7 +66,7 @@ it('preserves URL query identity in inline modules and styles while escaping HTM
 });
 
 it('snapshots every quoted font URL and escaped CSS import without admitting comment or content strings',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
  const root=await mkdtemp(join(tmpdir(),'bundle-fonts-'));try{
   await mkdir(join(root,'css'));await mkdir(join(root,'fonts'));await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="./css/main.css">');
   await writeFile(join(root,'css/main.css'),'@font-face{src:url("../fonts/first.woff2")}@font-face{src:url(\'../fonts/second.woff2\')}@import "./nested\\20 theme.css";/*url("../fonts/ignored.woff2")*/.a{content:"url(../fonts/also-ignored.woff2)"}');
@@ -78,7 +79,7 @@ it('snapshots every quoted font URL and escaped CSS import without admitting com
 });
 
 it('resolves subfolder stylesheet and font URLs inside the project before enforcing traversal limits',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
  const root=await mkdtemp(join(tmpdir(),'bundle-relative-fonts-'));try{
   await mkdir(join(root,'examples'));await mkdir(join(root,'design-systems'));await mkdir(join(root,'fonts'));
   await writeFile(join(root,'examples/page.html'),'<link rel="stylesheet" href="../design-systems/theme.css">');
@@ -93,7 +94,7 @@ it('resolves subfolder stylesheet and font URLs inside the project before enforc
 });
 
 it('snapshots an admitted in-memory entry override before discovery without changing disk source',async()=>{
- const {mkdtemp,writeFile,readFile,symlink,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
+ const {mkdtemp,writeFile,readFile,symlink,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
  const root=await mkdtemp(join(tmpdir(),'bundle-entry-'));try{
   const original='<script type="module" src="./old.js"></script>',html='<script type="module" src="./new.js"></script>';
   await writeFile(join(root,'index.html'),original);for(const name of ['old.js','new.js'])await writeFile(join(root,name),'export const value=42;');

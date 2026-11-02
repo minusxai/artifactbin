@@ -41,6 +41,9 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
+/** Explicit retired routes must answer JSON rather than falling through to the app shell. */
+export const notFound = (_request?: Request, _context?: unknown): Response => json({error: 'not_found'}, 404);
+
 /** Shared refusal: keep HTTP clients on their credential flow; installed CLI remains optional. */
 export function unauthorized(request: Request): Response {
   const base = baseUrl(request);
