@@ -1,3 +1,4 @@
+import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 /**
  * Source-preserving HTML editing on top of parse5 locations. Pure: every
  * helper reads a parsed document and returns splice edits against the
@@ -81,10 +82,6 @@ export function applyEdits(source: string, edits: readonly Edit[]): string {
   return output;
 }
 
-function escapeAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-}
-
 /** Where a new attribute goes: after the last written attribute, else after the tag name. */
 function attributeInsertPoint(source: string, element: Element): number {
   const location = element.sourceCodeLocation!;
@@ -98,7 +95,7 @@ function attributeInsertPoint(source: string, element: Element): number {
 
 export function insertAttribute(source: string, element: Element, name: string, value: string): Edit {
   const point = attributeInsertPoint(source, element);
-  return { start: point, end: point, text: ` ${name}="${escapeAttribute(value)}"` };
+  return { start: point, end: point, text: ` ${name}="${escapeSourceAttribute(value)}"` };
 }
 
 /** Indentation before `offset` when only whitespace precedes it on its line. */

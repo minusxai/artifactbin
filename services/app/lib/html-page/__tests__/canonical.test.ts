@@ -1,3 +1,4 @@
+import { applyEdits, attribute, insertAttribute, parseSource } from '../html-source';
 import { describe, expect, it } from 'vitest';
 import { canonicalizeHtmlPage } from '../index';
 
@@ -41,4 +42,13 @@ describe('the core script is platform-added: pages work with or without it',()=>
    expect(cores(html)).toEqual([src]);
   }
  });
+});
+
+it('inserts source-minimal double-quoted attributes and round-trips entities', () => {
+ const source = '<p>unchanged &amp; text</p>';
+ const value = `a&b"c<d>e'f &quot;`;
+ const element = parseSource(source).elements.find(element => element.tagName === 'p')!;
+ const result = applyEdits(source, [insertAttribute(source, element, 'data-value', value)]);
+ expect(result).toBe(`<p data-value="a&amp;b&quot;c<d>e'f &amp;quot;">unchanged &amp; text</p>`);
+ expect(attribute(parseSource(result).elements.find(element => element.tagName === 'p')!, 'data-value')).toBe(value);
 });

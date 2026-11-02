@@ -1,3 +1,4 @@
+import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from '../html-page/core-script';
 import {INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
@@ -16,7 +17,7 @@ export function recoverPortableRendering(fileBytes:string):string {
    if(!location)throw new Error('Portable bootstrap has no source location');
    const core=node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='core');
    const id=node.attrs.find(attr=>attr.name==='data-af-id')?.value;
-   spans.push({start:location.startOffset,end:location.endOffset,replacement:core?`<script src="${RUNTIME_CORE_PATH}"${id?` data-af-id="${id.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:''}></script>`:''});
+   spans.push({start:location.startOffset,end:location.endOffset,replacement:core?`<script src="${RUNTIME_CORE_PATH}"${id?` data-af-id="${escapeSourceAttribute(id)}"`:''}></script>`:''});
   }
   if('childNodes' in node)for(const child of node.childNodes)walk(child);
  };

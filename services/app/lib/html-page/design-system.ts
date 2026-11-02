@@ -1,3 +1,4 @@
+import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 /**
  * DESIGN SELECTION for HTML pages (D1/D2/D4). A page names its default design system with
  * `<meta name="artifactbin:design-system" content="NAME">` in <head>. The <html data-af-design-system / data-af-dark>
@@ -19,8 +20,7 @@ const metaOf = (document: SourceDocument): Element | undefined => document.eleme
 const copiedLinks = (document: SourceDocument): Element[] => document.elements.filter((el) => el.tagName === 'link' && attribute(el, 'data-af') === 'design-system');
 /** The system a copied skill stylesheet names: `…/design-systems/NAME.css`. */
 const linkedSystem = (link: Element): string | null => /(?:^|\/)design-systems\/([a-z0-9-]+)\.css(?:[?#]|$)/.exec(attribute(link, 'href') ?? '')?.[1] ?? null;
-const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
-const designSystemMetaTag = (name: string): string => `<meta name="${DESIGN_SYSTEM_META}" content="${escape(name)}">`;
+const designSystemMetaTag = (name: string): string => `<meta name="${DESIGN_SYSTEM_META}" content="${escapeSourceAttribute(name)}">`;
 
 interface DesignNormalization {
   html: string;
