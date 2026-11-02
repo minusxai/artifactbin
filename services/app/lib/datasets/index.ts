@@ -14,7 +14,7 @@ export { connectionShape, secretTargetShape } from './input';
 export { storedMediaReferences } from './media-references';
 export { compileNotebookSql } from './notebook';
 export { throttlePublicMutation } from './policy/usage';
-export { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy, type PolicyDoor, type StoredDatasetPolicy } from './policy/validation';
+export { LEGACY_POLICY_REFUSED, readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy, type StoredDatasetPolicy } from './policy/validation';
 export { placeholderSession, policySession, viewerMutationPolicy } from './policy/viewer-policy';
 export { discoverPostgres, queryPostgres } from './postgres';
 export type { ServerRefLoader } from './asset-reference';

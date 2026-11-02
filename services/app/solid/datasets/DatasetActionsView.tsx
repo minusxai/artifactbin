@@ -1,26 +1,22 @@
 /* @jsxImportSource solid-js */
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import type { DatasetAccessPolicy, DatasetGrantSelector, DatasetOperation } from '@artifactbin/contracts';
-import { rowTitle } from '@/lib/document/display-title';
-import { Disclosure } from '../ui/Disclosure';
 import { SectionHeading } from '../ui/PageHeader';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
-import { artifactLink } from '../lib/artifact-link';
 
-type Actions = { policy: DatasetAccessPolicy | null; writtenBy: Array<{id: string; title: string | null; mutations: string[]}> };
-const operations: DatasetOperation[] = ['insert', 'update', 'delete'];
-const describeCaller = (from: DatasetGrantSelector) => Object.entries(from).map(([key, value]) => {
-  if (key === 'user') return value === '*' ? 'Users with dataset access' : value === '$owner' ? 'Dataset owner' : `User ${value}`;
-  if (key === 'artifactOwner') return value === '$owner' ? 'Apps owned by the dataset owner' : `Apps owned by ${value}`;
-  return `Artifact ${value}`;
-}).join(' · ');
+/** The parts of the policy API's GET (`/api/artifacts/:id/policy`, lib/dataset-graphql `policy`) this view reads. */
+type Actions = {
+  source: 'v3' | 'v1' | 'v2' | 'none' | 'unreadable';
+  report: Array<{ code: string; message: string }>;
+  readBackTables: Array<{ title: string; lines: string[] }>;
+  warnings: Array<{ code: string; message: string }>;
+};
 
-/** Read-only inspection uses the existing editor-scoped policy door; never widens access. */
+/** Read-only inspection: the v3 read-back of who can see and change the data, from the editor-scoped policy API; never widens access. */
 export function DatasetActionsView(props: { id: string; canInspect: boolean; kind?: string }): JSX.Element {
   return <section aria-label="Read-only data actions" class="space-y-5 text-sm">
-    <header><SectionHeading>Data actions</SectionHeading><p class="mt-1 text-muted">View the rules for changing this dataset. Use Edit dataset to change them.</p></header>
+    <header><SectionHeading>Data actions</SectionHeading><p class="mt-1 text-muted">Who can see and change this data. Use Edit dataset to change the rules.</p></header>
     <Show when={props.kind !== 'postgres'} fallback={<p class="text-muted">PostgreSQL datasets are read-only.</p>}>
       <Show when={props.canInspect} fallback={<p class="text-muted">Data action rules are visible to dataset editors.</p>}>
         <SavedActions id={props.id} />
@@ -35,37 +31,30 @@ function SavedActions(props: {id: string}): JSX.Element {
   onMount(() => {
     const controller = new AbortController();
     onCleanup(() => controller.abort());
-    void retryingFetch(`/api/my/artifacts/${encodeURIComponent(props.id)}/policy`, {signal: controller.signal})
+    void retryingFetch(`/api/artifacts/${encodeURIComponent(props.id)}/policy`, {signal: controller.signal})
       .then(async response => {
         if (!response.ok) throw new Error('Could not load data action rules. Dataset edit access is required.');
         return response.json() as Promise<Actions>;
       }).then(value => { if (!controller.signal.aborted) setState(value); })
       .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load data action rules.'); });
   });
-  const grants = () => { const policy = state()?.policy; return policy?.version === 2 ? policy.allow : []; };
   return <>
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <Show when={!state() && !error()}><StatusMessage kind="loading">Loading data actions…</StatusMessage></Show>
     <Show when={state()}>{loaded => <>
-      <Show when={loaded().policy} fallback={<p class="text-muted">No data action rules are configured.</p>}>{policy => <>
-        <Show when={policy().version === 2}>
-          <section class="space-y-3"><h3 class="font-semibold">Allowed actions</h3>
-            <For each={grants()} fallback={<p class="text-muted">No actions are granted.</p>}>{grant => <Panel padding="sm"><p class="font-medium">{grant.actions.join(', ')}</p><p class="mt-1 text-muted">{describeCaller(grant.from)}</p></Panel>}</For>
-          </section>
-        </Show>
-        <section class="space-y-3"><h3 class="font-semibold">Table rules</h3>
-          <Show when={policy().tables === undefined}><p class="text-muted">No additional table restrictions. Granted actions apply to all tables.</p></Show>
-          <Show when={policy().tables?.length === 0}><p class="text-muted">No table writes are allowed.</p></Show>
-          <For each={policy().tables}>{table => <Panel padding="sm" class="space-y-3">
-            <h4 class="font-mono font-semibold">{table.table.schema}.{table.table.name}</h4>
-            <For each={operations}>{operation => <For each={table[`${operation}_permissions`]} fallback={<p class="text-muted">{operation}: not allowed</p>}>{entry => <Disclosure summary={`${operation} · ${entry.role}`}>
-              <pre class="mt-2 overflow-x-auto rounded-control bg-raised p-3 font-mono text-xs">{JSON.stringify(entry.permission, null, 2)}</pre>
-            </Disclosure>}</For>}</For>
-          </Panel>}</For>
-        </section>
-        <section><h3 class="font-semibold">Blocked functions</h3><p class="mt-1 text-muted">{policy().execution?.functions?.deny?.join(', ') || 'None'}</p></section>
-      </>}</Show>
-      <section><h3 class="font-semibold">Connected apps</h3><ul class="mt-2 space-y-2"><For each={loaded().writtenBy} fallback={<li class="text-muted">No apps use these actions yet.</li>}>{app => <li><a class="text-accent underline" {...artifactLink(`/a/${app.id}`, 'markup')}>{rowTitle(app)}</a><span class="ml-2 text-muted">{app.mutations.join(', ')}</span></li>}</For></ul></section>
+      <Show when={loaded().source === 'none'}><p class="text-muted">No rules are saved yet. These are the defaults: everyone who reaches the dataset reads it, and only the owner and editors change rows.</p></Show>
+      <Show when={loaded().source === 'unreadable'}><StatusMessage kind="error">The stored rules could not be read, so nobody below editor can use the data until new rules are saved.</StatusMessage></Show>
+      <Show when={loaded().source === 'v1' || loaded().source === 'v2'}>
+        <Panel padding="sm" label="Policy migration" class="space-y-2">
+          <p class="font-medium">These rules use the older version {loaded().source === 'v1' ? 1 : 2} format. This is how they apply today; saving them in Edit dataset writes them as version 3 rules.</p>
+          <ul class="list-disc space-y-1 pl-5"><For each={loaded().report}>{item => <li>{item.message}</li>}</For></ul>
+        </Panel>
+      </Show>
+      <For each={loaded().readBackTables}>{table => <Panel padding="sm" class="space-y-2">
+        <h3 class="font-semibold">{table.title}</h3>
+        <ul class="list-disc space-y-1 pl-5"><For each={table.lines}>{line => <li>{line}</li>}</For></ul>
+      </Panel>}</For>
+      <Show when={loaded().warnings.length}><StatusMessage kind="caution"><ul class="list-disc pl-5"><For each={loaded().warnings}>{warning => <li>{warning.message}</li>}</For></ul></StatusMessage></Show>
     </>}</Show>
   </>;
 }

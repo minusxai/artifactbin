@@ -11,7 +11,6 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { InboxProvider } from '@/solid/lib/notifications';
 import { ArtifactDataPage, type DataAnswer } from '@/solid/pages/ArtifactData';
-import type { DatasetAccessPolicy } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 
@@ -23,17 +22,18 @@ class FakeEventSource {
 }
 const catalog = (name = 'rows'): DatasetCatalog => ({ kind: 'stored', defaultSchema: 'public', refreshSeconds: 0, tables: [{ schema: 'public', name, columns: [{ name: 'region', type: 'string' }] }] } as unknown as DatasetCatalog);
 let pageAnswers: unknown[] = [];
-let policy: DatasetAccessPolicy | null;
+// The policy API's GET (`/api/artifacts/:id/policy`): the v3 reading and its read-back; the view renders the read-back.
+let policy: Record<string, unknown>;
 beforeEach(() => {
   streams.length = 0; pageAnswers = [];
-  policy = {version: 1, enforcement: 'enabled', tables: [{table: {schema: 'public', name: 'rows'}, insert_permissions: [{role: 'viewer', permission: {columns: '*', check: {}}}]}]};
+  policy = {source: 'v3', report: [], revision: 1, readBackTables: [{title: 'Table public.rows', lines: ['Owner, editors: see and change everything.', 'Shared viewers: see all rows and columns; add rows.']}], warnings: []};
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.endsWith('/tables')) return Response.json({ rows: [{ region: 'North' }], columns: [{ name: 'region', type: 'string' }], refreshedAt: '2026-09-30T00:00:00.000Z' });
     if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'dataset', title: 'Regional sales', source: null, dataPreview: null });
     if (url.startsWith('/api/page/artifact/')) return Response.json(pageAnswers.shift() ?? {});
-    if (url.endsWith('/policy')) return Response.json({policy, revision: 1, tables: [], writtenBy: []});
+    if (url.endsWith('/policy')) return Response.json(policy);
     if (url.endsWith('/sharing')) return Response.json({ visibility: 'public', linkRole: 'viewer', shares: [] });
     return Response.json({});
   }));
@@ -158,8 +158,9 @@ it('gives dataset viewers the workspace layout with read-only data tabs and shar
   expect(screen.getAllByRole('link', { name: 'Edit dataset' })).toHaveLength(1);
   fireEvent.click(tabs.getByRole('tab', { name: 'Data actions' }));
   expect(await screen.findByLabelText('Read-only data actions')).toBeVisible();
-  expect(await screen.findByText('public.rows')).toBeVisible();
-  expect(screen.getByText('insert · viewer')).toBeVisible();
+  // The v3 read-back replaces the v1 per-entry list.
+  expect(await screen.findByText('Table public.rows')).toBeVisible();
+  expect(screen.getByText('Shared viewers: see all rows and columns; add rows.')).toBeVisible();
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/policy'))).toHaveLength(1);
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Save access policies' })).toBeNull();
@@ -182,16 +183,15 @@ it('keeps captures free of workspace navigation and mutation rules', () => {
   expect(screen.getByLabelText('Dataset catalog')).toBeInTheDocument();
 });
 
-it.each([
-  [undefined, 'No additional table restrictions. Granted actions apply to all tables.'],
-  [[], 'No table writes are allowed.'],
-] as const)('explains v2 grants and table restrictions without editing them (%s)', async (tables, message) => {
-  policy = {version: 2, allow: [{actions: ['insert', 'update'], from: {artifactOwner: '$owner'}}], ...(tables ? {tables: [...tables]} : {})};
+// The v2 grant list became the v3 read-back: a stored older policy shows its migration report beside it.
+it('shows a stored v1/v2 policy as its v3 read-back with the migration report, without editing it', async () => {
+  policy = {...policy, source: 'v2', report: [{code: 'artifact_owner_grant', message: 'Grants to apps owned by the dataset owner become backend-only rules.'}], warnings: [{code: 'anonymous_write', message: 'Signed-out link holders can change rows.'}]};
   open(answer('dataset', {catalog: catalog()}, 'owner'));
   fireEvent.click(screen.getByRole('tab', {name: 'Data actions'}));
-  expect(await screen.findByText(message)).toBeVisible();
-  expect(screen.getByText('insert, update')).toBeVisible();
-  expect(screen.getByText('Apps owned by the dataset owner')).toBeVisible();
+  expect(await screen.findByText(/older version 2 format/)).toBeVisible();
+  expect(screen.getByText('Grants to apps owned by the dataset owner become backend-only rules.')).toBeVisible();
+  expect(screen.getByText('Signed-out link holders can change rows.')).toBeVisible();
+  expect(screen.getByText('Table public.rows')).toBeVisible();
   expect(within(screen.getByLabelText('Read-only data actions')).queryByRole('button')).toBeNull();
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/policy')).every(([, options]) => !options?.method || options.method === 'GET')).toBe(true);
 });

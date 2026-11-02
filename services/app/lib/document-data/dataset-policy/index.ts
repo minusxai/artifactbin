@@ -1,6 +1,6 @@
 import type { GrantDocument } from '@/lib/artifact-access';
 import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
-import { validateDatasetPolicyForRow, catalogOf, type PolicyDoor, type StoredDatasetPolicy } from '@/lib/datasets';
+import { validateDatasetPolicyForRow, catalogOf, type StoredDatasetPolicy } from '@/lib/datasets';
 import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
 import { getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
@@ -10,7 +10,6 @@ export async function setDatasetPolicy(
   id: string,
   value: unknown,
   revision: number,
-  door: PolicyDoor = {},
 ): Promise<
   { revision: number; policy: StoredDatasetPolicy | null } | { conflict: true } | null
 > {
@@ -19,7 +18,7 @@ export async function setDatasetPolicy(
     return null;
   if (!Number.isSafeInteger(revision) || revision < 0)
     throw new Error('expectedPolicyRevision must be a nonnegative integer');
-  const policy = validateDatasetPolicyForRow(row,value,door);
+  const policy = validateDatasetPolicyForRow(row,value);
   const committed = await commitDatasetPolicy(await getDb(), actor, row, policy, revision);
   return committed === null ? { conflict: true } : { revision: committed, policy };
 }

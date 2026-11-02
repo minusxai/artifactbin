@@ -8,7 +8,8 @@ import { loadDatasetRows } from '@/lib/datasets';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
 import {createDatasetGraphql} from '@/lib/dataset-graphql';
 import {randomUUID} from 'node:crypto';
-import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
+// The policy API serves the app's editor and the read-only view since the old app policy route was retired.
+import { GET as readPolicy, PUT as writePolicy } from '@/app/api/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -206,12 +207,12 @@ it('lets editors open the visual policy editor', async () => {
   const f = await sharedFixture('editor');
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const response = await readPolicy(
-    request(`/api/my/artifacts/${f.ds}/policy`, { actor: f.session }),
+    request(`/api/artifacts/${f.ds}/policy`, { actor: f.session, origin: 'same' }),
     { params: Promise.resolve({ id: f.ds }) },
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    canManage: true,
+    source: 'v3',
     policy: f.policy,
   });
 });
@@ -222,7 +223,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
   async (role) => {
     const f = await sharedFixture(role);
     const save = (policy: unknown, revision: number) => writePolicy(
-      request(`/api/my/artifacts/${f.ds}/policy`, {method:'PUT', actor:f.session,
+      request(`/api/artifacts/${f.ds}/policy`, {method:'PUT', actor:f.session, origin:'same',
         json:{policy,expectedPolicyRevision:revision}}),
       {params:Promise.resolve({id:f.ds})},
     );

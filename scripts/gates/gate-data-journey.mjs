@@ -107,10 +107,10 @@ try {
     }
     ;
   });
-  await lane(check, "retained dataset policy editor").run(async () => {
+  await lane(check, "dataset permissions editor").run(async () => {
     const owner = await startDocument(BASE);
     const ds = await create(owner, { dataset: [{ choice: "ramen" }], access: "readwrite" });
-    // No policy to start from (the policy API refuses version 1 bodies; the retained form below still saves them).
+    // New datasets start on the read-only template; the version 3 editor below adds and removes the write rule.
     await put(owner, datasetPageHtml(ds.id));
     const email = `mxmx_test_policy_editor_${Date.now()}@example.com`;
     const editor = await connectAgent(BASE, { email });
@@ -118,7 +118,10 @@ try {
     const opened = await open(ds.id, editor);
     await opened.page.goto(`${BASE}/a/${ds.id}/edit`, { waitUntil: "domcontentloaded" });
     await opened.page.getByRole("tab", { name: "Data actions", exact: true }).click();
-    await opened.page.getByLabel("Allow insert", { exact: true }).check();
+    // Version 3 grid (the retained v1 form is gone): signed-out link holders may add rows matching the conditions.
+    await opened.page.getByLabel("Signed-out link holders: add", { exact: true }).click();
+    await opened.page.getByRole("option", { name: "All rows", exact: true }).click();
+    await opened.page.getByLabel("Edit Signed-out link holders add rule", { exact: true }).click();
     await opened.page.getByLabel("Add insert check condition", { exact: true }).click();
     await opened.page.getByLabel("insert check.1.1 value", { exact: true }).fill('"blocked"');
     await opened.page.getByLabel("Add insert check condition", { exact: true }).click();
@@ -134,10 +137,13 @@ try {
     const frame = await framed(guest.page);
     await frame.locator("#vote").click();
     await frame.locator("#receipt").filter({ hasText: "committed" }).waitFor();
-    check(true, "saved viewer insert policy authorizes the native page mutation");
-    await opened.page.getByLabel("Allow insert", { exact: true }).uncheck();
+    check(true, "saved signed-out insert rule authorizes the native page mutation");
+    await opened.page.getByLabel("Signed-out link holders: add", { exact: true }).click();
+    await opened.page.getByRole("option", { name: "Off", exact: true }).click();
+    // The notice reads the same after both saves: wait for the save itself (a PUT that is not a dry run).
+    const revoked = opened.page.waitForResponse((r) => r.url().endsWith(`/api/artifacts/${ds.id}/policy`) && r.request().method() === "PUT" && r.request().postDataJSON()?.dryRun !== true);
     await opened.page.getByRole("button", { name: "Save access policies", exact: true }).click();
-    await opened.page.getByText("Access policies saved.", { exact: true }).waitFor();
+    check((await revoked).ok(), "policy editor saves the revocation");
     await frame.locator("#vote").click();
     await frame.locator("#receipt").filter({ hasText: /rejected|refused/i }).waitFor();
     check(true, "policy editor revocation stops an already-open anonymous writer");
@@ -146,7 +152,7 @@ try {
     await opened.page.getByLabel("Dataset title", { exact: true }).fill("Updated policy dataset");
     await opened.page.getByLabel("Save dataset", { exact: true }).click();
     await opened.page.getByRole("link", { name: "Edit dataset", exact: true }).waitFor();
-    check(!new URL(opened.page.url()).pathname.endsWith("/edit"), "dataset metadata saves through retained editor and returns to reader");
+    check(!new URL(opened.page.url()).pathname.endsWith("/edit"), "dataset metadata saves through the dataset editor and returns to reader");
   });
   await lane(check, "local drafts, dialog and booking").run(async () => {
     const owner = await startDocument(BASE);

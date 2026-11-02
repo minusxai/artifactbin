@@ -8,7 +8,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
 export type StoredDatasetPolicy = DatasetAccessPolicy | DatasetPermissions;
 
 /** The refusal a version 1/2 body gets from every policy-setting door. Stored ones keep working until migrated. */
-const LEGACY_POLICY_REFUSED = 'Version 1 and 2 dataset policies can no longer be set: send a version 3 policy, {"version":3,"tables":[{"table":{"schema":"public","name":"rows"},"select_permissions":[{"role":"viewer","permission":{"columns":"*","filter":{}}}]}]}, with Hasura permission entries for the roles viewer, signed_in and anonymous (owner and editors always have full access). GET the policy for the dataset\'s tables and current rules.';
+export const LEGACY_POLICY_REFUSED = 'Version 1 and 2 dataset policies can no longer be set: send a version 3 policy, {"version":3,"tables":[{"table":{"schema":"public","name":"rows"},"select_permissions":[{"role":"viewer","permission":{"columns":"*","filter":{}}}]}]}, with Hasura permission entries for the roles viewer, signed_in and anonymous (owner and editors always have full access). GET the policy for the dataset\'s tables and current rules.';
 
 type PolicyRow = Pick<DatasetHost,'format'|'meta'|'dataset_policy'>;
 const tablesOf = (row:PolicyRow) => catalogOf(row)?.tables ?? [{schema:'public',name:'rows',columns:(row.meta.columns ?? []) as Array<{ name: string }>}];
@@ -33,28 +33,14 @@ function validateV3(row:PolicyRow,value:unknown):DatasetPermissions {
  return result.policy;
 }
 
-/** How a door sets policies. */
-export interface PolicyDoor {
- /**
-  * CARVE-OUT for the app's retained policy form (/api/my/artifacts/:id/policy), which edits version 1 viewer
-  * entries and has no version 3 editor yet: it may still store a version 1 policy (never version 2), which every
-  * door reads as v3 and the stored migration rewrites (rerun it after the version 3 editor ships). Remove with
-  * that form.
-  */
- retainedEditor?:boolean;
-}
-
 /**
- * THE POLICY-SETTING DOORS (the policy API, metadata PATCH, the app form): a version 3 policy, or null (no policy
- * reads as the read-only template). Version 1 and 2 bodies are refused with LEGACY_POLICY_REFUSED, except the
- * retained form's version 1 (PolicyDoor).
+ * THE POLICY-SETTING DOORS (the policy API, metadata PATCH): a version 3 policy, or null (no policy reads as the
+ * read-only template). Version 1 and 2 bodies are refused with LEGACY_POLICY_REFUSED.
  */
-export function validateDatasetPolicyForRow(row:PolicyRow,value:unknown,door:PolicyDoor={}):StoredDatasetPolicy|null {
+export function validateDatasetPolicyForRow(row:PolicyRow,value:unknown):DatasetPermissions|null {
  requireStoredDataset(row);
  if(value===null)return null;
  if(isV3(value))return validateV3(row,value);
- const version=value&&typeof value==='object'?(value as {version?:unknown}).version:undefined;
- if(door.retainedEditor&&version!==2)return validateLegacy(row,value);
  throw new Error(LEGACY_POLICY_REFUSED);
 }
 

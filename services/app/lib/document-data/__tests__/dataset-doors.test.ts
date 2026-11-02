@@ -1,6 +1,6 @@
 /**
- * The document-data HTTP doors for a dataset: the policy door (datasetPolicyRequest and its read and
- * write halves) and the owner's direct write door (respondToMutate). Each refusal keeps the status
+ * The document-data HTTP doors for a dataset: the policy write door (writeDatasetPolicy; the policy API
+ * reads) and the owner's direct write door (respondToMutate). Each refusal keeps the status
  * and error shape the routes and the CLI read; the writes themselves are covered by
  * the dataset-mutate tests.
  */
@@ -11,7 +11,7 @@ import {artifactState,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
 import {loadDatasetRows} from '@/lib/datasets';
 import {account,datasetFixture,type Db} from './dataset-fixture';
-import {canWriteDataset,datasetPolicyRequest,readDatasetPolicy,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
+import {canWriteDataset,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
 
 useAppHarness();
 let db:Db;
@@ -23,14 +23,7 @@ const legacy={version:1,enforcement:'enabled',tables:[{table:{schema:'public',na
 const fixture=()=>datasetFixture();
 const reply=async(response:Response|Promise<Response>)=>{const r=await response;return [r.status,await r.json()] as const;};
 
-it('shows the policy, its revision and the dataset tables to an editor, and nothing to anyone else',async()=>{
- const f=await fixture(),stranger=await account('stranger');
- const [status,body]=await reply(readDatasetPolicy(f.owner.actor,f.id));
- expect(status).toBe(200);
- expect(body).toMatchObject({canManage:true,policy:null,revision:0,tables:[{schema:'public',name:'rows',columns:[expect.objectContaining({name:'n'})]}]});
- expect(await reply(readDatasetPolicy(stranger.actor,f.id))).toEqual([404,{error:'not_found'}]);
-});
-
+// The read half moved to the policy API (dataset-policy-http.test.ts) with the old app policy route.
 it('saves a policy against its revision, audits it, and refuses stale, invalid or foreign writes',async()=>{
  const f=await fixture(),stranger=await account('stranger');
  expect(await reply(writeDatasetPolicy(f.owner.actor,f.id,{expectedPolicyRevision:0}))).toEqual([400,{error:'invalid_policy'}]);
@@ -51,19 +44,7 @@ it('saves a policy against its revision, audits it, and refuses stale, invalid o
   .toEqual([{revision:1,policy,actor_user_id:f.owner.id,actor_token_id:f.owner.tokenId},{revision:2,policy:null,actor_user_id:f.owner.id,actor_token_id:f.owner.tokenId}]);
 });
 
-it('routes a policy request by method and refuses a body that is not JSON',async()=>{
- const f=await fixture(),url=`http://localhost:3000/api/my/artifacts/${f.id}/policy`;
- expect((await datasetPolicyRequest(new Request(url),f.owner.actor,f.id)).status).toBe(200);
- expect(await reply(datasetPolicyRequest(new Request(url,{method:'PUT',body:'{',headers:{'content-type':'application/json'}}),f.owner.actor,f.id))).toEqual([400,{error:'invalid_json'}]);
- const put=(body:object)=>datasetPolicyRequest(new Request(url,{method:'PUT',body:JSON.stringify(body),headers:{'content-type':'application/json'}}),f.owner.actor,f.id);
- const saved=await put({policy,expectedPolicyRevision:0});
- expect((await saved.json()).revision).toBe(1);
- // The app's retained form (this door only) may still store version 1 until its version 3 editor ships; never version 2.
- expect(await reply(put({policy:legacy,expectedPolicyRevision:1}))).toEqual([200,{revision:2,policy:legacy}]);
- const [status,refused]=await reply(put({policy:{version:2,allow:[]},expectedPolicyRevision:2}));
- expect([status,refused.error]).toEqual([400,'invalid_policy']);expect(refused.detail).toMatch(/^Version 1 and 2 dataset policies can no longer be set/);
-});
-
+// The app's retained form route, the last door that saved version 1, is retired: nothing sets v1/v2.
 it('lets the data policy admit a page reader only while the dataset is readable through its link',async()=>{
  const f=await fixture(),reader=await account('reader');
  const stale=(await getArtifactById(f.id))!;

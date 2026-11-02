@@ -101,8 +101,8 @@ compatibility can be removed. Nothing changes what any door enforces, except the
    (`system`). Datasets with no report items go first; `--limit <n>` stops after n.
 3. **Rerun** to resume after a crash or a limit: v3 rows are skipped, so reruns are idempotent.
    Exit 1 means a dataset was not rewritten (`invalid_policy`, `failed`); fix or ask its owner,
-   then rerun. Rerun again after anything still stores version 1 (the app's retained policy form
-   does until its v3 editor ships).
+   then rerun. No door stores version 1 or 2 anymore (every policy door refuses them), so one
+   complete run leaves nothing to migrate.
 
 What the rewrite decides beyond the plain mapping:
 

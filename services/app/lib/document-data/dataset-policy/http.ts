@@ -1,40 +1,16 @@
-import { getDb } from '@/lib/platform';
-import { getArtifactFor, getSharingFor } from '@/lib/artifacts';
-import { editorScope } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
-import { catalogOf, type PolicyDoor } from '@/lib/datasets';
-import { json, readJson } from '@/lib/http';
+import { json } from '@/lib/http';
 import { setDatasetPolicy } from '.';
 
-export async function readDatasetPolicy(
-  actor: AccessActor,
-  id: string,
-): Promise<Response> {
-  const row = await getArtifactFor(actor, id);
-  if (!row || row.format !== 'dataset')
-    return json({ error: 'not_found' }, 404);
-  const db=await getDb(),scope=editorScope(actor);
-  return json({
-    artifacts:(await db.query<{id:string;title:string|null}>(`SELECT id,title FROM artifacts WHERE deleted_at IS NULL AND format='html' AND ${scope.where('$1')} ORDER BY title,id LIMIT 200`,[scope.val])).rows,
-    people:(await (await getDb()).query<{user_id:string;username:string|null;name:string|null}>(`SELECT id AS user_id,username,name FROM users u WHERE kind='account' AND username IS NOT NULL ORDER BY username LIMIT 200`,[])).rows,
-    canManage: true,
-    policy: row.dataset_policy ?? null,
-    revision: row.policy_revision ?? 0,
-    tables: catalogOf(row)?.tables.map((t) => ({
-      schema: t.schema,
-      name: t.name,
-      columns: t.columns,
-    })) ?? [
-      { schema: 'public', name: 'rows', columns: row.meta.columns ?? [] },
-    ],
-    writtenBy: (await getSharingFor(actor, id))?.writtenBy ?? [],
-  });
-}
+/**
+ * Set a dataset's stored policy (version 3 or null) with revision compare-and-swap. The policy API
+ * (lib/dataset-graphql `writeDatasetPermissions`) answers v3 bodies itself and saves null through here; version 1
+ * and 2 bodies are refused (LEGACY_POLICY_REFUSED).
+ */
 export async function writeDatasetPolicy(
   actor: AccessActor,
   id: string,
   body: Record<string, unknown>,
-  door: PolicyDoor = {},
 ): Promise<Response> {
   if (!Object.hasOwn(body, 'policy'))
     return json({ error: 'invalid_policy' }, 400);
@@ -44,7 +20,6 @@ export async function writeDatasetPolicy(
       id,
       body.policy,
       body.expectedPolicyRevision as number,
-      door,
     );
     if (!result) return json({ error: 'not_found' }, 404);
     if ('conflict' in result)
@@ -65,16 +40,4 @@ export async function writeDatasetPolicy(
       400,
     );
   }
-}
-/** The app's retained policy form (/api/my/artifacts/:id/policy): the one door that may still store version 1 (PolicyDoor). */
-export async function datasetPolicyRequest(
-  request: Request,
-  actor: AccessActor,
-  id: string,
-): Promise<Response> {
-  if (request.method === 'GET') return readDatasetPolicy(actor, id);
-  const body = await readJson(request);
-  return body
-    ? writeDatasetPolicy(actor, id, body, { retainedEditor: true })
-    : json({ error: 'invalid_json' }, 400);
 }
