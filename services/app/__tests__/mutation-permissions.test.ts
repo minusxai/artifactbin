@@ -49,7 +49,7 @@ it('refuses a commit when dataset sharing is revoked while preparing the pending
   if(!revoked){revoked=true;await (await getDb()).query('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.dataset]);}
   return original(key);
  });
- try{const result=await f.insert(f.actor);expect(revoked).toBe(true);expect(outcome(result)).toBe('rejected');expect((await getArtifactById(f.dataset))?.version).toBe(1);}finally{spy.mockRestore();}
+ try{const result=await f.insert(f.actor);expect(revoked).toBe(true);expect(outcome(result),JSON.stringify(result.body)).toBe('rejected');expect((await getArtifactById(f.dataset))?.version).toBe(1);}finally{spy.mockRestore();}
 });
 it('requires the explicit viewers-write dataset policy for shared viewers and the link audience',async()=>{
  const f=await fixture();await f.share(f.dataset,'viewer');expect(outcome(await f.insert(f.actor))).toBe('rejected');expect(outcome(await f.insert())).toBe('rejected');

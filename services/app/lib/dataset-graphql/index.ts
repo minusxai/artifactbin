@@ -61,7 +61,10 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
   async write(actor:AccessActor,binding:HtmlDatasetLink,input:DatasetWriteRequest,signal:AbortSignal){
    signal.throwIfAborted();
    if(binding.mode==='pinned'||!input.expectedRevision||!input.requestId||!input.changes.length||input.changes.length>100)return {requestId:input.requestId,revision:null,outcome:'rejected',rowIds:[]};
-   const snapshot=await port.snapshot(actor,binding,signal),table=tableFor(snapshot,input.tableId);
+   // Access moving under the read fence (a revoked share, a new rule) before the commit starts writes nothing: a definite rejection.
+   let snapshot:DatasetSnapshot;
+   try{snapshot=await port.snapshot(actor,binding,signal);}catch(error){if(error instanceof Error&&error.message==='dataset_changed')return {requestId:input.requestId,revision:null,outcome:'rejected',rowIds:[]};throw error;}
+   const table=tableFor(snapshot,input.tableId);
    // Receipt lookup and expected-revision validation live together in the retained commit port.
    return port.commit(actor,binding,snapshot,input,compileChanges(table,input.changes,hash([snapshot.id,actor,input.requestId])),signal);
   },
