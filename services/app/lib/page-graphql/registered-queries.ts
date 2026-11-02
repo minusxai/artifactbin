@@ -237,14 +237,14 @@ export function createRetainedRegisteredQueries(
       const verify=async(active:AbortSignal)=>{
         const current=await ports.resolveImport(await document(active,true),binding,actor);
         active.throwIfAborted();
-        if(stamp(current.artifact)!==identity||JSON.stringify(current.catalog)!==JSON.stringify(resolved.catalog))throw Error('dataset_changed');
+        if(stamp(current.artifact)!==identity||(current.view?.identity??null)!==(resolved.view?.identity??null)||JSON.stringify(current.catalog)!==JSON.stringify(resolved.catalog))throw Error('dataset_changed');
         if(credential!==null&&await connectionIdentity()!==credential)throw Error('dataset_changed');
         active.throwIfAborted();
       };
       ports.retainReadFence?.(()=>verify(ports.fenceSignal??new AbortController().signal));
       return {verify,execute:async(sql,params,paramTypes,active)=>{
         // The evaluator verifies this source before and after each execution; the read itself adds no fence of its own.
-        return ports.readWindow(resolved.catalog,sql,params,{limit:limits.rows,offset:0,paramTypes,timeoutMs:5000,actor,datasetId:resolved.artifact.id,signal:active,authorize:async()=>active.throwIfAborted(),execute:input=>runOwned(input,active)});
+        return ports.readWindow(resolved.catalog,sql,params,{view:resolved.view,limit:limits.rows,offset:0,paramTypes,timeoutMs:5000,actor,datasetId:resolved.artifact.id,signal:active,authorize:async()=>active.throwIfAborted(),execute:input=>runOwned(input,active)});
       }};
     },
     source: async (_context, binding, signal) => {
@@ -265,7 +265,7 @@ export function createRetainedRegisteredQueries(
       signal.throwIfAborted();
       const identity = stamp(resolved.artifact),
         authority = createHash("sha256")
-          .update(JSON.stringify([identity, documentStamp, actor]))
+          .update(JSON.stringify([identity, documentStamp, actor, resolved.view?.identity ?? null]))
           .digest("hex");
       const verify = async (active: AbortSignal) => {
         const currentDoc = await document(active, true);
@@ -277,6 +277,7 @@ export function createRetainedRegisteredQueries(
         active.throwIfAborted();
         if (
           stamp(current.artifact) !== identity ||
+          (current.view?.identity ?? null) !== (resolved.view?.identity ?? null) ||
           JSON.stringify(current.catalog) !== JSON.stringify(resolved.catalog)
         )
           throw Error("dataset_changed");
@@ -299,6 +300,7 @@ export function createRetainedRegisteredQueries(
             `SELECT * FROM ${quote(selected.schema)}.${quote(selected.name)}`,
             {},
             {
+              view: resolved.view,
               limit:prepared.catalog.kind==='postgres'?limits.rows:limit,
               offset:prepared.catalog.kind==='postgres'?0:offset,
               actor,

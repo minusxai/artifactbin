@@ -5,6 +5,8 @@ import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';
 import { catalogOf, DatasetError } from '@/lib/datasets';
+import { datasetReadAccess } from '@/lib/dataset-permissions';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import { trackEvent } from '@/lib/analytics';
 import { json } from '@/lib/http';
 
@@ -87,6 +89,17 @@ export async function forkArtifact(
    */
   const unforkable = forkRefusal(source);
   if (unforkable) return unforkable;
+  /*
+   * A DATASET COPIES WHAT THE FORKER MAY READ: their role view (lib/dataset-permissions). Owner and editor (and the
+   * creating token) copy it whole with its policy; any other reader that sees it whole gets the read-only template
+   * (no policy), never the source's rules; a reader whose select rule hides rows or columns cannot copy it yet.
+   */
+  if (source.format === 'dataset' && !holdsCreatingToken(source, actor)) {
+    const decision = await datasetReadAccess(source, actor);
+    if (!decision.allowed) return json({ error: 'not_found' }, 404);
+    if (!decision.full) return json({ error: 'not_forkable', hint: 'Your access shows only part of this dataset: query the rows you can see and publish them as a new dataset.' }, 403);
+    if (!decision.admin) source = { ...source, dataset_policy: null, policy_revision: 0 };
+  }
   // A copy is born marked current (lib/dataflow/data-syntax): a retired stored shape is never copied into one.
   const retired = unservable(source);
   if (retired) return retired.response();

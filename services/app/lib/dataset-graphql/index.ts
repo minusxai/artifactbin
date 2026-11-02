@@ -47,6 +47,7 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
    signal.throwIfAborted();
    const snapshot=await port.snapshot(actor,binding,signal),table=tableFor(snapshot,input.tableId),normalized=parameterizedFilters(input);
    if(!input.aggregates?.length&&input.groupBy?.length)throw new Error('dataset_aggregate_required');
+   if(input.aggregates?.length&&snapshot.aggregatable?.[input.tableId]===false)throw new Error('dataset_aggregations_denied');
    const base=input.aggregates?.length?undefined:compileRead(table,normalized);
    const plan=input.aggregates?.length?compileDatasetQuery(table,input):{
     statement:base!.statement,columns:descriptors(table).filter(c=>base!.columns.some(p=>columnIdentity(input.tableId,p.name)===c.id)),

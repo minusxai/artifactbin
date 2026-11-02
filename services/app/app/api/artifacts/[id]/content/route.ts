@@ -4,6 +4,7 @@ import { withTokenAuth } from '@/lib/authentication';
 import { canEdit } from '@artifactbin/contracts';
 import {serveStoredFile, catalogOf, publicCatalogOf, serializeDatasetDefinition, type DatasetCatalog} from '@/lib/datasets';
 import {objectStore} from '@/lib/object-store';
+import {datasetReadAccess,datasetRowsFor,viewCatalog} from '@/lib/dataset-permissions';
 import {json} from '@/lib/http';
 
 /** A reader's definition names the public relations only: no connection, no notebook. */
@@ -22,13 +23,17 @@ export const GET=withTokenAuth((request,{ actor,params })=>refusingUnservable(as
  if(!row)return json({error:'not_found'},404);
  if(['image','pdf','file'].includes(row.format))return serveStoredFile(request,{id:head.id,meta:row.meta});
  if(row.format==='dataset'){
+  // The reader's role view (lib/dataset-permissions): a role that sees every row gets the stored bytes.
+  const decision=await datasetReadAccess(head,actor);
+  if(!decision.allowed)return json({error:'not_found'},404);
   const catalog=catalogOf(row);
   const table=catalog?.kind==='stored'&&catalog.tables.length===1?catalog.tables[0]:null;
+  if(table?.objectKey&&!decision.full)return new Response(JSON.stringify(await datasetRowsFor(decision,row,table)),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
   if(table?.objectKey)return new Response(new Uint8Array(await objectStore().get(table.objectKey)),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
   if(!catalog)return json({error:'not_found'},404);
   // A connected or multi-table dataset holds no downloadable rows: its content is the definition.
   const stored=typeof row.source==='string'&&row.source.trimStart().startsWith('<Dataset')?row.source:null;
-  const definition=canEdit(readable.role)&&stored?stored:readableDefinition(publicCatalogOf(row)??catalog);
+  const definition=canEdit(readable.role)&&stored?stored:readableDefinition(viewCatalog(decision,publicCatalogOf(row)??catalog));
   return new Response(definition,{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
  }
  return new Response(row.source??'',{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});

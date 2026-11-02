@@ -21,28 +21,28 @@ async function setup(){
  return {row,catalog,token,actor,secret};
 }
 it('executeCatalog persists shared results and separates dataset ids, params and windows',async()=>{
- const {row,catalog}=await setup(),opts={datasetId:row.id,authorize:async()=>{expect((await (await getDb()).query('SELECT id FROM artifacts WHERE id=$1',[row.id])).rows).toHaveLength(1);}};
+ const {row,catalog}=await setup(),opts={view:null,datasetId:row.id,authorize:async()=>{expect((await (await getDb()).query('SELECT id FROM artifacts WHERE id=$1',[row.id])).rows).toHaveLength(1);}};
  await executeCatalog(catalog,'select * from rows',{},opts);await executeCatalog(catalog,'select * from rows',{},opts);
  expect(upstream.query).toHaveBeenCalledTimes(1);expect((await (await getDb()).query('SELECT result FROM dataset_result_cache')).rows).toHaveLength(1);
  await executeCatalog(catalog,'select * from rows',{}, {...opts,offset:1});expect(upstream.query).toHaveBeenCalledTimes(2);
 });
 it('cached hits cannot survive credential removal',async()=>{
- const {row,catalog,secret}=await setup();const authorize=async()=>{expect((await (await getDb()).query('SELECT id FROM artifacts WHERE id=$1',[row.id])).rows).toHaveLength(1);};await executeCatalog(catalog,'select * from rows',{}, {datasetId:row.id,authorize});
+ const {row,catalog,secret}=await setup();const authorize=async()=>{expect((await (await getDb()).query('SELECT id FROM artifacts WHERE id=$1',[row.id])).rows).toHaveLength(1);};await executeCatalog(catalog,'select * from rows',{}, {view:null,datasetId:row.id,authorize});
  await (await getDb()).query('DELETE FROM dataset_secrets WHERE id=$1',[secret.id]);
- await expect(executeCatalog(catalog,'select * from rows',{}, {datasetId:row.id,authorize})).rejects.toThrow('credentials');expect(upstream.query).toHaveBeenCalledTimes(1);
+ await expect(executeCatalog(catalog,'select * from rows',{}, {view:null,datasetId:row.id,authorize})).rejects.toThrow('credentials');expect(upstream.query).toHaveBeenCalledTimes(1);
 });
 
 it('callback-less internal probes bypass shared retention',async()=>{
  const {row,catalog}=await setup();
- for(let i=0;i<2;i++)await executeCatalog(catalog,'select * from rows',{}, {datasetId:row.id});
+ for(let i=0;i<2;i++)await executeCatalog(catalog,'select * from rows',{}, {view:null,datasetId:row.id});
  expect(upstream.query).toHaveBeenCalledTimes(2);expect((await (await getDb()).query('SELECT result FROM dataset_result_cache')).rows).toHaveLength(0);
 });
 it('credential changes fence both the filling owner and joined waiter',async()=>{
  const {row,catalog,secret}=await setup();let done!:(r:unknown)=>void,started!:()=>void;
  const begun=new Promise<void>(resolve=>{started=resolve;});upstream.query.mockImplementation(()=>{started();return new Promise(resolve=>{done=resolve;});});
  const authorize=async()=>{expect((await (await getDb()).query('SELECT id FROM artifacts WHERE id=$1',[row.id])).rows).toHaveLength(1);};
- const first=executeCatalog(catalog,'select * from rows',{}, {datasetId:row.id,authorize}),rejected=expect(first).rejects.toThrow('credentials');await begun;
- const second=executeCatalog(catalog,'select * from rows',{}, {datasetId:row.id,authorize}),waitRejected=expect(second).rejects.toThrow('credentials');
+ const first=executeCatalog(catalog,'select * from rows',{}, {view:null,datasetId:row.id,authorize}),rejected=expect(first).rejects.toThrow('credentials');await begun;
+ const second=executeCatalog(catalog,'select * from rows',{}, {view:null,datasetId:row.id,authorize}),waitRejected=expect(second).rejects.toThrow('credentials');
  await (await getDb()).query('DELETE FROM dataset_secrets WHERE id=$1',[secret.id]);done({rows:[{n:1}],columns:[{name:'n',type:'number'}]});
  await rejected;await waitRejected;
  expect((await (await getDb()).query('SELECT result FROM dataset_result_cache WHERE result IS NOT NULL')).rows).toHaveLength(0);

@@ -34,7 +34,9 @@ it('enforces read grants independently of link visibility and keeps owner admini
  expect(await readableArtifact(identityForUser(null, ''),id)).toBeNull();
  expect(await readableArtifact(actor,id)).not.toBeNull();
  await setDatasetPolicy(actor,id,{version:2,allow:[]},1);
- expect(await readableArtifact(actor,id)).toBeNull();
+ // Deliberate (dataset permissions v3): the owner is admin-equivalent and cannot be locked out; everyone else is.
+ expect(await readableArtifact(actor,id)).not.toBeNull();
+ expect(await readableArtifact(identityForUser(null, ''),id)).toBeNull();
  await expect(setDatasetPolicy(actor,id,null,2)).rejects.toThrow('version 2');
 });
 

@@ -17,7 +17,6 @@
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { grantContext, liveAccessFacts, readThrough, writerFor, type ArtifactRow, type GrantDocument } from '@/lib/artifact-access';
-import { artifactQuery } from '@/lib/artifacts/table';
 import { catalogOf, DatasetError } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
@@ -63,7 +62,7 @@ function permissionsOf(row: Pick<ArtifactRow, 'dataset_policy' | 'visibility' | 
 }
 
 /** The account that wrote a document's program: its owner's identity, for its dataset role. */
-async function documentOwnerAdmin(dataset: ArtifactRow, owner: { userId: string | null; tokenId: string | null; groupId?: string | null }, db: Queryable): Promise<boolean> {
+export async function documentOwnerAdmin(dataset: ArtifactRow, owner: { userId: string | null; tokenId: string | null; groupId?: string | null }, db: Queryable): Promise<boolean> {
   const actor = writerFor({ user_id: owner.userId, token_id: owner.tokenId, group_id: owner.groupId ?? null });
   const role = await datasetRole(dataset, actor, { facts: liveAccessFacts(actor, db) });
   return role === 'owner' || role === 'editor';
@@ -71,7 +70,7 @@ async function documentOwnerAdmin(dataset: ArtifactRow, owner: { userId: string 
 
 /** The document carrying the write is live at its attested edit, the caller reads it, and its owner administers the dataset. */
 async function documentProvenance(dataset: ArtifactRow, actor: AccessActor, document: GrantDocument, db: Queryable): Promise<boolean> {
-  const doc = (await artifactQuery<ArtifactRow>(db, 'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [document.id])).rows[0];
+  const doc = (await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [document.id])).rows[0];
   if (!doc || doc.edit_id !== document.editId || !(await readThrough(db, doc, actor))) return false;
   return documentOwnerAdmin(dataset, { userId: doc.group_id ? null : doc.user_id, tokenId: doc.group_id ? null : doc.token_id, groupId: doc.group_id ?? null }, db);
 }
@@ -187,7 +186,7 @@ const decisionKey = (d: DatasetWriteDecision) => JSON.stringify([d.allowed, d.ro
  */
 export async function assertWriteCommit(tx: Queryable, dataset: ArtifactRow, actor: AccessActor, before: DatasetWriteDecision, options: Omit<DatasetWriteOptions, 'tx'> = {}): Promise<void> {
   await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE', [[...new Set([dataset.id, ...(options.document ? [options.document.id] : [])])]]);
-  const current = (await artifactQuery<ArtifactRow>(tx, 'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [dataset.id])).rows[0];
+  const current = (await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [dataset.id])).rows[0];
   if (!current || (current.policy_revision ?? 0) !== before.revision) throw new DatasetError('Mutation permission changed', 403);
   const now = await datasetWriteAccess(current, actor, { ...options, tx });
   if (!now.allowed || decisionKey(now) !== decisionKey(before)) throw new DatasetError('Mutation permission changed', 403);

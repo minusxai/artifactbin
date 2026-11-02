@@ -101,7 +101,7 @@ export async function prepareCatalog(input:unknown,actor:AccessActor,previous?:P
   // Dependencies are probed in topological order by retrying only unknown model shapes.
   const pending=tables.filter(t=>t.sql);let lastError:unknown;
   while(pending.length){let progress=false;
-   for(let i=pending.length-1;i>=0;i--){const t=pending[i];try{const result=await executeCatalog(catalog,t.sql!,{}, {limit:1,refresh:true,objects});t.columns=result.columns;pending.splice(i,1);progress=true;}catch(error){lastError=error;}}
+   for(let i=pending.length-1;i>=0;i--){const t=pending[i];try{const result=await executeCatalog(catalog,t.sql!,{}, {view:null/* host model probing while preparing the owner's catalog */,limit:1,refresh:true,objects});t.columns=result.columns;pending.splice(i,1);progress=true;}catch(error){lastError=error;}}
    if(!progress)throw new DatasetError(lastError instanceof Error?lastError.message:'Model dependencies are invalid or cyclic');
   }
   // Keep the original single-table alias pinned to public.rows; adding tables never rebinds it.

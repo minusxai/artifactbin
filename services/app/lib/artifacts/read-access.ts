@@ -9,6 +9,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
 import {publicCatalogOf} from '@/lib/datasets';
+import {datasetReadAccess} from '@/lib/dataset-permissions';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 
 /**
@@ -26,7 +27,9 @@ export async function canReadArtifact(
     // A dataset's policy and visibility are columns of its header; its rows (the `source`) are never consulted here.
     const dataset=await getArtifactHeaderById(row.id);
     if(!dataset)return false;
-    if(grantsOf(dataset))return grantsPermitRead(dataset,reader);
+    // A dataset is read by its dataset role and select rules (lib/dataset-permissions): admission only; a door
+    // serving rows asks `datasetReadAccess` itself for the role view.
+    if(dataset.format==='dataset')return (await datasetReadAccess(dataset,reader)).allowed;
   }
   // One decision, asked one way: reading is simply the bottom of the lattice.
   return canRead(await effectiveRole({ ...row, token_id: '' }, reader));
@@ -54,6 +57,7 @@ interface ReadableArtifact<T extends ArtifactHeader> { row:T; role:ArtifactRole 
 async function readableRow<T extends ArtifactHeader>(actor:AccessActor,row:T|null):Promise<ReadableArtifact<T>|null>{
  if(!row)return null;
  const role=await effectiveRole(row,actor);
+ if(row.format==='dataset')return (await datasetReadAccess(row,actor)).allowed?{row,role:role==='none'?'viewer':role}:null;
  if(grantsOf(row))return await grantsPermitRead(row,actor)?{row,role:role==='none'?'viewer':role}:null;
  return canRead(role)?{row,role}:null;
 }

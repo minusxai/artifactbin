@@ -9,44 +9,56 @@ import {canWriteDataset,isMutationRefused,mutateDataset} from '@/lib/document-da
 import type {DatasetGraphqlPort} from './types';
 import {createDatasetGraphql} from './index';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
-import {authorizedDataset,resolveDatasetBinding,datasetBindingCatalog} from './authority';
+import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
+import {canAggregate,datasetView,viewCatalog} from '@/lib/dataset-permissions';
 const unavailable=()=>new Error('dataset_not_found');
 /** Original dataset object store, executor, grants, version CAS and durable receipt ledger. */
 interface RetainedReadOptions { retainReadFence?:(verify:()=>Promise<void>)=>void }
 const authorityIdentity=(row:ArtifactRow)=>JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision,catalogOf(row)]);
+/** The head's identity and the reader's role view (role, policy, session, rules): any change refuses a continuation. */
+async function readIdentity(actor:import('@/lib/accounts').AccessActor,id:string){
+ const read=await authorizedDatasetRead(actor,id);
+ return {...read,identity:JSON.stringify([authorityIdentity(read.row),read.decision.identity])};
+}
 export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):DatasetGraphqlPort {
  return {
   async people(actor,snapshot,ids,signal){
-   const verify=async()=>{signal.throwIfAborted();if(authorityIdentity(await authorizedDataset(actor,snapshot.id))!==snapshot.policyIdentity)throw Error('dataset_changed');};
+   const verify=async()=>{signal.throwIfAborted();if((await readIdentity(actor,snapshot.id)).identity!==snapshot.policyIdentity)throw Error('dataset_changed');};
    options.retainReadFence?.(verify);
-   return readDatasetPeople(snapshot,ids,{verify,rows:async table=>{if(!table.objectKey)throw unavailable();return loadDatasetRows({meta:{objectKey:table.objectKey}});},cards:async ids=>people(await getDb(),ids)},signal);
+   // Only rows the reader may see vouch for a person.
+   return readDatasetPeople(snapshot,ids,{verify,rows:async table=>{if(!table.objectKey)throw unavailable();const rows=await loadDatasetRows({meta:{objectKey:table.objectKey}});return snapshot.view?snapshot.view.rows(table,rows):rows;},cards:async ids=>people(await getDb(),ids)},signal);
   },
   async snapshot(actor,binding,signal){
    signal.throwIfAborted();
-   const admitted=await authorizedDataset(actor,binding.datasetId),policyIdentity=authorityIdentity(admitted);
-   const row=await resolveDatasetBinding(actor,binding),catalog=datasetBindingCatalog(row);
-   const verify=async()=>{signal.throwIfAborted();if(authorityIdentity(await authorizedDataset(actor,row.id))!==policyIdentity)throw new Error('dataset_changed');};
+   const {decision,identity:policyIdentity}=await readIdentity(actor,binding.datasetId);
+   const row=await resolveDatasetBinding(actor,binding,async(reader,id)=>(await authorizedDatasetRead(reader,id)).row);
+   // The reader's role view: tables they cannot select and hidden columns leave the schema; rows are filtered at execution.
+   const view=datasetView(decision),catalog=viewCatalog(decision,datasetBindingCatalog(row));
+   const verify=async()=>{signal.throwIfAborted();if((await readIdentity(actor,row.id)).identity!==policyIdentity)throw new Error('dataset_changed');};
    options.retainReadFence?.(verify);
    const rowIds:Record<string,readonly string[]>={},sources:Record<string,DatasetSourceInfo>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
    for(const table of catalog.tables){
     const tableId=tableIdentity(table),rows=await loadDatasetRows({meta:{objectKey:table.objectKey}}),prior=saved?.[tableId];
+    // Row IDs are positions in the stored object (execution decorates before the view filters); counts are the view's.
     rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey!,rows.length,prior);
     const metadata=row.meta as {truncated?:unknown;totalRows?:unknown};
+    if(view){const visible=view.rows(table,rows).length;sources[tableId]={truncated:false,storedRows:visible,totalRows:visible};continue;}
     const truncated=table.schema==='public'&&table.name==='rows'&&metadata.truncated===true;
     sources[tableId]={truncated,storedRows:rows.length,totalRows:truncated?(typeof metadata.totalRows==='number'&&Number.isSafeInteger(metadata.totalRows)&&metadata.totalRows>=rows.length?metadata.totalRows:null):rows.length};
    }
    // Schema/source metadata has no later execution fence; recheck readership after object loads too.
    await verify();
-   return {id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,sources};
+   const aggregatable=Object.fromEntries(catalog.tables.map(table=>[tableIdentity(table),canAggregate(decision,table)]));
+   return {id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,sources,view,aggregatable};
   },
   async execute(actor,snapshot,tableId,statement,window,signal){
    const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===tableId);if(!table?.objectKey)throw unavailable();
    if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
    const source=objectStore();
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
-   const authorize=async()=>{const row=await authorizedDataset(actor,snapshot.id);if(snapshot.policyIdentity!==authorityIdentity(row))throw new Error('dataset_changed');};
-   const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,timeoutMs:5000,actor,datasetId:snapshot.id,signal,authorize,
+   const authorize=async()=>{if(snapshot.policyIdentity!==(await readIdentity(actor,snapshot.id)).identity)throw new Error('dataset_changed');};
+   const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,timeoutMs:5000,actor,datasetId:snapshot.id,signal,authorize,view:snapshot.view??null,
     objects:{get:async key=>{
      const bytes=await source.get(key);if(key!==table.objectKey)return bytes;
      const rows=JSON.parse(bytes.toString('utf8')) as Record<string,unknown>[];
@@ -56,7 +68,7 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
    return result.rows;
   },
   async commit(actor,binding,snapshot,input,statements,signal){
-   const current=await authorizedDataset(actor,binding.datasetId);
+   const current=(await authorizedDatasetRead(actor,binding.datasetId)).row;
    // A page link never supplies edit permission: the dataset role and its v3 rules decide. Repeat before
    // ledger lookup and in mutateDataset's commit transaction.
    const nativePolicy=true;
