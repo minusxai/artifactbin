@@ -46,28 +46,35 @@ artifacts merely shared with you are never returned.
 
 ## Dataset attachments in pages
 
-Use the declared dataset import name with the reusable upload control:
+Declare a live dataset link in native HTML and use the hosted upload component:
 
-```jsx
-<Helmet>
-  <Import name="attachments" src="ref:<datasetId>" />
-  <Value name="attachment_refs" type="string" default="[]" url={false} />
-  <Value name="uploading" type="boolean" default={false} url={false} />
-</Helmet>
-<FileUpload dataset="attachments" value="$attachment_refs" multiple
-  accept="image/png,image/jpeg,image/webp" label="Screenshots"
-  busy="$uploading" maxFiles={5} />
+```html
+<link rel="af-dataset" data-af-name="attachments" href="ref:DATASET_ID">
+<af-file-upload dataset="attachments" multiple accept="image/png,image/jpeg,image/webp"></af-file-upload>
+<script type="module">
+import '@afbin/file-upload';
+import {bindFileUpload} from '@afbin/apollo';
+const binding=bindFileUpload(document.querySelector('af-file-upload'));
+// Call binding.dispose() when removing this UI.
+</script>
 ```
 
-A single upload binds a nullable string reference; `multiple` binds a JSON array
-of references in a string Value. The control uploads bytes and updates this local
-Value only. Save those references with your own Mutation, guarding Save while
-`$uploading` is true. Removing an item removes its reference; it does not delete
-stored bytes. Failed uploads can retry the same selected File without duplicating
-successful earlier items. Signed-out and archived controls cannot upload.
+The platform adds the core script before author modules. The component's
+`af-change` event carries `detail.value` (file metadata) and a reason of `upload`
+or `remove`. Upload changes the selection only: persist the returned references
+through your declared dataset's GraphQL mutation and current write policy.
+Removing a reference does not delete stored bytes.
 
-For author components, `page.upload('attachments', file)` returns
-`{ref, url, name, contentType, size}`. Resolve a saved reference through
-`page.fileUrl('attachments', ref)` for a dataset-scoped preview or download.
-`page.uploadImage` remains compatible with existing pages. `accept` and the
-shared 50 MB client limit guide selection; the server owns byte/type validation.
+For custom controls, `watchUploadContext` reports trusted upload availability;
+`uploadFile(file,{dataset,signal,requestId})` returns the receipt. The signed-in
+caller needs current insert authority. The server rechecks provenance, access,
+file policy and grants; client `accept` and size limits only guide selection.
+Retry an uncertain upload with the same File or explicit request ID; reusing the
+ID for different bytes conflicts. Four pending uploads and 50 MB per request are
+bounded at the native transport boundary. Archived readers, portable downloads
+and raw pages without the trusted frame cannot upload.
+
+The readable component contract is
+`services/app/skills/artifactbin/components/file-upload.ts`; the native runtime
+and datasets guides are served from the selected server at `/llms/runtime` and
+`/llms/datasets`.
