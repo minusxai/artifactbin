@@ -6,17 +6,14 @@
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PGlite } from '@electric-sql/pglite';
+import { testDb } from '@artifactbin/test-support/db';
 import type { EventEnvelope, EventsService, Queryable } from '@artifactbin/contracts';
 import { EVENTS_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import { eventsClient, loadEventsConfig, runEvents, serveEvents } from '@artifactbin/events';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 
 const SCHEMA = 'evt_test';
-const pg = new PGlite();
-const db: Queryable = {
-  query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => ({ rows: (await pg.query<T>(sql, params)).rows }),
-};
+const db: Queryable = testDb();
 const count = async (schema = SCHEMA): Promise<number> => (await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${schema}.events`)).rows[0]!.n;
 const until = async (cond: () => Promise<boolean>, ms = 4000): Promise<void> => {
   const t0 = Date.now();
@@ -52,7 +49,7 @@ beforeAll(async () => {
   server = serveEvents(createEvents({ db, schema: SCHEMA, sinks: [failingSink, sink] }), { serviceSecret: 's3cret' });
   remote = eventsClient(server.listen(0).url, { serviceSecret: 's3cret', batchMs: 10, batchMax: 50, deadlineMs: 2000 });
 });
-afterAll(async () => { await remote?.close?.(); await server?.close(); await pg.close(); });
+afterAll(async () => { await remote?.close?.(); await server?.close(); });
 beforeEach(async () => { await db.query(`DELETE FROM ${SCHEMA}.events`); sunk.length = 0; });
 
 describe.each<[string, () => EventsService]>([['in-process', () => local], ['over HTTP', () => remote]])('%s', (_name, svc) => {

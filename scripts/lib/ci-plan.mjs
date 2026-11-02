@@ -21,8 +21,8 @@ export const CI_MODULES = {
   'test-support': [],
   sql: ['contracts', 'utils'],
   browser: ['contracts', 'utils', 'test-support'],
-  events: ['contracts', 'utils'],
-  runner: ['contracts', 'utils'],
+  events: ['contracts', 'utils', 'test-support'],
+  runner: ['contracts', 'utils', 'test-support'],
   auth: ['contracts', 'utils', 'test-support'],
   app: ['contracts', 'utils', 'sql', 'browser', 'events', 'auth', 'runner', 'test-support'],
 };
