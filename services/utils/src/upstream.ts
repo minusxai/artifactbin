@@ -62,7 +62,10 @@ export const overHttp = (url: string, secret: string, timeouts: UpstreamTimeouts
   request.headers.forEach((value, name) => { if (!HOP_BY_HOP.includes(name)) headers[name] = value; });
   headers[ACTOR_HEADER] = signActor(actor, secret);
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
-  if (!hasBody && request.method !== 'GET' && request.method !== 'HEAD') headers['content-length'] = '0';
+  // Node does not infer chunked framing for DELETE. Recompute framing after stripping
+  // inbound hop headers so streamed bodies never become unframed bytes on the socket.
+  if (hasBody) headers['transfer-encoding'] = 'chunked';
+  else if (request.method !== 'GET' && request.method !== 'HEAD') headers['content-length'] = '0';
   const outgoing = (target.protocol === 'https:' ? httpsRequest : httpRequest)(target, { method: request.method, headers, signal: request.signal }, (incoming) => {
     clearTimeout(headersTimer);
     const status = incoming.statusCode ?? 502;
