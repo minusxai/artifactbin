@@ -64,6 +64,16 @@ const commands = {
       mutate: {document: flag(), operation: flag(), variables: flag(), revision: flag()}
     }
   },
+  groups: {sub: {
+    list: {}, show: {pages: flag('boolean'), cursor: flag()},
+    create: {name: flag(), description: flag()}, update: {name: flag(), description: flag()},
+    invite: {role: flag(), yes: flag('boolean')}, uninvite: {yes: flag('boolean')},
+    role: {role: flag(), yes: flag('boolean')}, remove: {yes: flag('boolean')},
+    leave: {yes: flag('boolean')}, share: {group: flag(), role: flag(), yes: flag('boolean')},
+    unshare: {group: flag(), yes: flag('boolean')},
+    move: {group: flag(), personal: flag('boolean'), yes: flag('boolean')},
+    link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')}
+  }},
   comment: {
     sub: {
       list: {status: flag(), cursor: flag(), limit: flag()},
