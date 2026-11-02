@@ -75,3 +75,4 @@ export {datasetNamespaceSources,createDatasetNamespaceInvoker} from './namespace
 export {authorizeDatasetBinding,DatasetBindingUnsupportedError} from './authority';
 export { createRetainedDatasetGraphql } from './retained';
 export {datasetGraphqlSchema,executeDatasetGraphql,executeLinkedDatasetGraphql,isDatasetGraphqlTarget} from './hasura';
+export {datasetPermissionTemplates,readDatasetPermissions,writeDatasetPermissions} from './policy';

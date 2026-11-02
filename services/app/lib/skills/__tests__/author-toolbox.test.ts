@@ -69,6 +69,7 @@ it('validates selected GraphQL against SDL and never replays an unknown mutation
   await writeFile(document,'mutation { increment }');
   await expect(graphqlCommand({sub:'query',values:{document},positionals:['PAGE12']},options)).rejects.toThrow();expect(writes).toBe(0);
   await expect(graphqlCommand({sub:'mutate',values:{document},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(writes).toBe(1);
+  await expect(graphqlCommand({sub:'mutate',values:{document,'idempotency-key':'k'},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'idempotency_key_unsupported',exit:2});expect(writes).toBe(1);
   await writeFile(document,'mutation { unknownField }');await expect(graphqlCommand({sub:'mutate',values:{document},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'graphql_validation'});expect(writes).toBe(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });

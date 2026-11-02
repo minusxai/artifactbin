@@ -3,7 +3,7 @@ import {notificationJobOperations} from './notification-jobs';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
 import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
-import { readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
+import { respondToMutate } from '@/lib/document-data';
 import { notificationJobStore } from '@/lib/notifications';
 import {GROUP_OPERATIONS} from './groups';
 import { MEMBERSHIP_OPERATIONS } from './membership';
@@ -28,7 +28,7 @@ import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
-import { DatasetBindingUnsupportedError, executeDatasetGraphql } from '@/lib/dataset-graphql';
+import { DatasetBindingUnsupportedError, datasetPermissionTemplates, executeDatasetGraphql, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-graphql';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
@@ -494,21 +494,29 @@ const restoreArtifactOp: Operation = {
   },
 };
 
+const POLICY_INVALID: OperationError = { status: 400, code: 'invalid_policy', fix: 'fix every entry in errors (each names its JSON path: the role, table or column); a dry run checks without saving' };
 const getDatasetPolicyOp: Operation = {
-  name:'get_dataset_policy', title:'Read dataset access policies',
+  name:'get_dataset_policy', title:'Read dataset permissions',
   http:{method:'GET',path:'/api/artifacts/{id}/policy'},
-  description:'Inspect a dataset you own or can edit: Hasura-style write permissions for everyone with dataset access, current policy revision, table columns and dependent actions. Policies constrain writes; they do not filter reads.',
+  description:'Owners and editors: a dataset\'s Hasura-style version 3 permissions as {policy, revision, source, report, roles, templates, tables, readBack, warnings}. policy is the stored v3 document, or the v3 reading of an older stored policy (source v1, v2 or none; report lists what does not carry over). Rules name source columns; tables[].root and tables[].columns[].field are the GraphQL names the dataset API serves. readBack is the plain-language summary of who can see and change what. Owner and editors always have full access; rules name viewer (shared viewers), signed_in (signed-in link holders) and anonymous.',
   input:{id:z.string()}, annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
-  async run(ctx,input){return fromResponse(await readDatasetPolicy(ctx.actor,String(input.id)));},
+  async run(ctx,input){const r=await readDatasetPermissions(ctx.actor,String(input.id));return reply(r.body,r.status);},
 };
 const setDatasetPolicyOp: Operation = {
-  name:'set_dataset_policy',title:'Set dataset access policies',
+  name:'set_dataset_policy',title:'Set dataset permissions',
   http:{method:'PUT',path:'/api/artifacts/{id}/policy'},
-  description:'Editors and owners: replace version 1 dataset write policy with revision compare-and-swap. Use Hasura insert_permissions/update_permissions/delete_permissions entries with role, permission, columns, filter, check and set. Use role viewer for everyone with dataset view access, including commenters, editors and owners. Sharing controls the audience; there is no separate mutation grant. Unsupported fields fail explicitly. Set policy to null to restore legacy editor-only writes.',
-  input:{id:z.string(),policy:z.record(z.string(),z.unknown()).nullable(),expectedPolicyRevision:z.number().int().min(0)},
-  annotations:{},example:{input:{id:'aB3xK9',expectedPolicyRevision:0,policy:{version:1,enforcement:'enabled',tables:[]}}},
-  errors:[NOT_FOUND,{status:400,code:'invalid_policy',fix:'correct the field identified in detail'},{status:409,code:'policy_changed',fix:'read the current policy and revision before saving'}],
-  async run(ctx,input){return fromResponse(await writeDatasetPolicy(ctx.actor,String(input.id),input));},
+  description:'Owners and editors: replace a dataset\'s version 3 permissions, Hasura metadata shape: tables[] of {table:{schema,name}, select_permissions, insert_permissions, update_permissions, delete_permissions}, each entry {role, permission} with role viewer, signed_in or anonymous (one entry per role per operation; owner and editors always have full access and take no entries). select: columns ("*" or source names), filter, limit, allow_aggregations. insert: columns, check, set. update: columns, filter, check, set. delete: filter. backend_only:true limits a write to the owner\'s saved programs. Session values are X-Hasura-User-Id, X-Hasura-Page-Id and X-Hasura-Role. configuration (GraphQL names) is server-owned: omit it or send it unchanged. dryRun:true validates and answers the read-back without saving; a save needs expectedPolicyRevision from GET. Every problem is listed in errors by JSON path. Templates: get_dataset_policy_templates.',
+  input:{id:z.string(),policy:z.record(z.string(),z.unknown()).nullable(),expectedPolicyRevision:z.number().int().min(0).optional(),dryRun:z.boolean().optional()},
+  annotations:{},example:{input:{id:'aB3xK9',expectedPolicyRevision:0,policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'viewer',permission:{columns:'*',filter:{}}}]}]}}},
+  errors:[NOT_FOUND,POLICY_INVALID,{status:409,code:'policy_changed',fix:'GET the policy again, reapply your change and send the revision it answers'}],
+  async run(ctx,input){const r=await writeDatasetPermissions(ctx.actor,String(input.id),input);return reply(r.body,r.status);},
+};
+const getDatasetPolicyTemplatesOp: Operation = {
+  name:'get_dataset_policy_templates',title:'List dataset permission templates',
+  http:{method:'GET',path:'/api/artifacts/{id}/policy/templates'},
+  description:'Owners and editors: the three starting version 3 policies built for this dataset\'s tables, each {name, ok, policy, readBack, warnings} or {name, ok:false, errors}, plus the current revision. read-only: everyone who reaches the dataset reads; only owner and editors write. own-rows (needs ownerColumn): everyone reads; viewer and signed_in add rows stamped with their user ID in ownerColumn and change or delete only their own. editors-only: no rule; only owner and editors read or write. Save one with set_dataset_policy.',
+  input:{id:z.string(),ownerColumn:z.string().optional()}, annotations:{readOnly:true},example:{input:{id:'aB3xK9',ownerColumn:'created_by'}},errors:[NOT_FOUND],
+  async run(ctx,input){const r=await datasetPermissionTemplates(ctx.actor,String(input.id),typeof input.ownerColumn==='string'&&input.ownerColumn?input.ownerColumn:undefined);return reply(r.body,r.status);},
 };
 
 const mutateDatasetOp: Operation = {
@@ -769,6 +777,6 @@ const queryDatasetGraphqlOp:Operation={
 export const OPERATIONS: Operation[] = [
   ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];
