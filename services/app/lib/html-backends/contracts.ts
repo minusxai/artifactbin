@@ -1,5 +1,6 @@
-import type {HtmlJson} from '@artifactbin/contracts';
-export interface PreparedHtmlBackend {name:string;source:string;typeDefs:string;compiled:string;secretBindings?:string[]}
+import type {HtmlJson,ResolverApi,ResolverSecretHosts} from '@artifactbin/contracts';
+/** `api` defaults to 1 and `secretHosts` to none, the meaning of every version published before resolvers. */
+export interface PreparedHtmlBackend {name:string;source:string;typeDefs:string;compiled:string;secretBindings?:string[];secretHosts?:ResolverSecretHosts;api?:ResolverApi}
 export interface HtmlBackendVersionRecord extends PreparedHtmlBackend {backendId:string;pageId:string;version:string;ownerId:string}
 export interface HtmlBackendStoreValue {value:HtmlJson|null;version:number}
 export interface HtmlBackendStoreWrite {ok:boolean;version:number}

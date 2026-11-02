@@ -1,0 +1,37 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/api-reference/metadata-api/permission.mdx",
+  "note": "pg_create_insert_permission args as a tables entry.",
+  "columns": [
+    "author_id",
+    "category",
+    "is_reviewed",
+    "name"
+  ],
+  "table": {
+    "table": {
+      "schema": "public",
+      "name": "article"
+    },
+    "insert_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "check": {
+            "author_id": "X-HASURA-USER-ID",
+            "$or": [
+              {
+                "category": "editorial",
+                "is_reviewed": false
+              },
+              {
+                "category": {
+                  "$neq": "editorial"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

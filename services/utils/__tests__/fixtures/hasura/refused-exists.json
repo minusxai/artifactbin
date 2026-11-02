@@ -1,0 +1,55 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/auth/authorization/permissions/row-level-permissions.mdx",
+  "note": "YAML converted to JSON.",
+  "columns": [
+    "id",
+    "name",
+    "description",
+    "price",
+    "manufacturer",
+    "category",
+    "image",
+    "added_by_user_id"
+  ],
+  "table": {
+    "table": {
+      "schema": "public",
+      "name": "products"
+    },
+    "insert_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "check": {
+            "_exists": {
+              "_where": {
+                "_and": [
+                  {
+                    "id": {
+                      "_eq": "X-Hasura-User-Id"
+                    }
+                  },
+                  {
+                    "allow_product_create": {
+                      "_eq": true
+                    }
+                  }
+                ]
+              },
+              "_table": {
+                "schema": "public",
+                "name": "users"
+              }
+            }
+          },
+          "columns": [
+            "id",
+            "name",
+            "price",
+            "description"
+          ]
+        }
+      }
+    ]
+  }
+}

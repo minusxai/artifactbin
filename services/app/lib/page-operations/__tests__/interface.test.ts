@@ -57,6 +57,33 @@ describe('compilePageBackend', () => {
     await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secret_bindings');
   });
 
+  it('binds a secrets map to hosts, records the resolver api and refuses mixing it with legacy secretBindings', async () => {
+    const plain = 'export const secrets = {SHEETS_KEY: "sheets.googleapis.com"}; export default { n: (a, p, caps) => caps.fetch("https://sheets.googleapis.com") };';
+    setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secrets: { SHEETS_KEY: 'sheets.googleapis.com' } }) });
+    expect(await compilePageBackend(plain)).toMatchObject({ secretBindings: ['SHEETS_KEY'], secretHosts: { SHEETS_KEY: 'sheets.googleapis.com' }, api: 2, test: false });
+    setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }' }) });
+    expect(await compilePageBackend('export default { n: () => 1 };')).toMatchObject({ secretBindings: [], secretHosts: {}, api: 2 });
+    for (const legacy of ['export default { n: async (a, p, caps) => (await caps.store.get()).value };', 'export default { n: async (a, p, {store}) => store.set(1, {expected: 0}) };', 'export default { n: (a, p, caps) => caps.secrets.get("TOKEN") };', 'export const secretBindings = []; export default {};'])
+      expect((await compilePageBackend(legacy)).api).toBe(1);
+    setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secretBindings: ['TOKEN'], secrets: { KEY: 'api.example.com' } }) });
+    await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secrets');
+    for (const secrets of [['KEY'], { KEY: 'https://api.example.com' }, { KEY: 'sk_live_value' }, { key: 'api.example.com' }]) {
+      setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secrets }) });
+      await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secrets');
+    }
+  });
+
+  it('accepts an optional owner-only test query field and refuses any other test shape', async () => {
+    for (const typeDefs of ['type Query { n: Int test: String! @auth(role: OWNER) }', 'type Query { test(verbose: Boolean): String! @auth(role: OWNER) }']) {
+      setServices({ runner: fakeRunner({ typeDefs }) });
+      expect((await compilePageBackend('export default {}')).test).toBe(true);
+    }
+    for (const typeDefs of ['type Query { test: Boolean! @auth(role: OWNER) }', 'type Query { test: String @auth(role: OWNER) }', 'type Query { test: [String!]! @auth(role: OWNER) }', 'type Query { test: String! }', 'type Query { test: String! @auth(role: EDITOR) }', 'type Query { test: String! @auth(signedIn: true) }', 'type Query { test(id: ID!): String! @auth(role: OWNER) }', 'type Query { n: Int } type Mutation { test: String! @auth(role: OWNER) }']) {
+      setServices({ runner: fakeRunner({ typeDefs }) });
+      await expect(compilePageBackend('export default {}'), typeDefs).rejects.toThrow('invalid_test_field');
+    }
+  });
+
   it('stops at once when the caller has already cancelled', async () => {
     setServices({ runner: fakeRunner({ typeDefs: 'type Query { a: Int }' }) });
     const aborted = new AbortController(); aborted.abort();

@@ -7,6 +7,7 @@ import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/l
 import { identityForUser } from '@/lib/accounts';
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>{
  if(source==='bad')throw Error('invalid backend schema');
+ if(source==='resolver')return {typeDefs:'type Query { greeting: String test: String! @auth(role: OWNER) }',compiled:source,secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},api:2,test:true};
  return {typeDefs:'type Query { greeting: String }',compiled:source};
 }}));
 const harness=useAppHarness();
@@ -37,4 +38,15 @@ it('invalid backend or unresolved HTML links leave no partial artifacts or backe
  const invalid=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html,backendSources:{db:'bad'}}}));expect(invalid.status).toBe(400);
  const missing=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html}}));expect(missing.status).toBe(400);
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(0);expect((await db.query<{n:number}>('SELECT count(*)::int n FROM html_backend_versions')).rows[0]?.n).toBe(0);
+});
+it('publishes af-resolver links from resolverSources and keeps each version\'s api and secret host bindings',async()=>{
+ const actor=await mintAccountToken('resolver');
+ const page='<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"><link rel="af-backend" data-af-name="db" href="./db.ts"></head><body><p>Hi</p></body></html>';
+ const published=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:page,resolverSources:{api:'resolver',db:'legacy'}}}));expect(published.status).toBe(201);
+ const links=(await readHtmlPage(identityForUser(actor.userId,actor.id),(await published.json()).id)).links;
+ const version=async(name:string)=>{const link=links.find(entry=>entry.name===name);if(link?.kind!=='backend')throw Error('missing '+name);return getHtmlBackendVersion(link.backendId,link.version);};
+ expect(await version('api')).toMatchObject({source:'resolver',api:2,secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'}});
+ expect(await version('db')).toMatchObject({source:'legacy',api:1,secretBindings:[],secretHosts:{}});
+ const both=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:page,resolverSources:{api:'resolver',db:'legacy'},backendSources:{api:'resolver',db:'legacy'}}}));
+ expect(both.status).toBe(400);expect((await both.json()).error).toBe('conflicting_resolver_sources');
 });

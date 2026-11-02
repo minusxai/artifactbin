@@ -1,0 +1,27 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/auth/authorization/permissions/row-level-permissions.mdx",
+  "note": "The docs show only the filter; columns \"*\" completes the select entry.",
+  "columns": [
+    "user_id",
+    "title"
+  ],
+  "table": {
+    "table": {
+      "schema": "public",
+      "name": "articles"
+    },
+    "select_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "columns": "*",
+          "filter": {
+            "user_id": {
+              "_in": "X-Hasura-Allowed-Ids"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

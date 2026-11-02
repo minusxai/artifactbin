@@ -1,0 +1,49 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/api-reference/metadata-api/permission.mdx",
+  "note": "pg_create_update_permission args as a tables entry.",
+  "columns": [
+    "title",
+    "content",
+    "category",
+    "author_id",
+    "updated_at"
+  ],
+  "table": {
+    "table": {
+      "schema": "public",
+      "name": "article"
+    },
+    "update_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "columns": [
+            "title",
+            "content",
+            "category"
+          ],
+          "filter": {
+            "author_id": "X-HASURA-USER-ID"
+          },
+          "check": {
+            "content": {
+              "_ne": ""
+            }
+          },
+          "set": {
+            "updated_at": "NOW()"
+          },
+          "validate_input": {
+            "type": "http",
+            "definition": {
+              "forward_client_headers": true,
+              "headers": [],
+              "timeout": 10,
+              "url": "http://www.somedomain.com/validateUser"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

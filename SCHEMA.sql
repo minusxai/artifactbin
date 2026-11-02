@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS app.html_backend_versions (
   compiled TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
+  secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb,
+  api SMALLINT NOT NULL DEFAULT 1,
   PRIMARY KEY (backend_id, version)
 );
 
@@ -118,6 +120,10 @@ ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS compiled TEXT NOT
 ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
 
 ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS api SMALLINT NOT NULL DEFAULT 1;
 
 CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
 

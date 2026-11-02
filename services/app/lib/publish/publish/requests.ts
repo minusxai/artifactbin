@@ -46,6 +46,8 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
 }
 
 async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
+ // preparePublicationBundle folds resolverSources into backendSources for every html save.
+ if(body.resolverSources!==undefined&&typeof body.html!=='string')return json({error:'invalid_backend_sources'},400);
  if(body.backendSources===undefined){
   if(creating&&typeof body.html==='string'&&htmlBackendNames(body.html).length)return json({error:'unresolved_backend_link'},400);
   return undefined;
