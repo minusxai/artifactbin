@@ -128,12 +128,12 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/design-systems.mjs` | Generate the design-system registry and agent references from `design-systems/specs`. | `npm run generate:design-systems` |
 | `scripts/generate-design-system-previews.mjs` | Render the picker and docs thumbnails from the design-system covers. | `npm run generate:design-system-previews` |
 | `scripts/register-yaml.cjs` | `tsx -r` preload that lets Node import `.yaml` modules outside the bundler. | tests |
-| `scripts/lib/native-migration-disposable-provider.ts` | Open a reviewed disposable migration lifecycle with isolated local storage. | Migration lifecycle adapter configuration |
-| `scripts/lib/native-migration-production-authority.ts` | Prepare and verify reviewed production migration authority bindings. | Migration operator preparation |
-| `scripts/migration_batch/reader-preflight.mjs` | Verify sealed reader inputs and expected bindings before apply, then actual receipt scope before preservation readback. | Reviewed migration host jobs |
-| `scripts/migration_batch/refresh-selection.mjs` | Create an immutable current-source selection for the same agreed artifact IDs with verified source identity and provenance. | Reviewed migration preparation |
-| `scripts/native-migration-production.mjs` | Plan or apply a reviewed latest-head migration using explicit operator approvals. | Migration operator |
-| `scripts/lib/native-migration-camera.mjs` | Adapt reviewed source-bound recipes to the existing migration capture and comparison contract. | Migration verification callers |
+
+## Worker isolation
+
+| File | Purpose | Run by |
+|---|---|---|
+| `scripts/runner-os-boundary.mjs` | Verify product worker network, filesystem, privilege and resource restrictions. | `runner-design.yml` |
 
 ## Downstream release tooling
 
@@ -143,6 +143,3 @@ Kept for artifactbin-server's CI (see the contract above); nothing in this repos
 |---|---|---|
 | `scripts/lib/ci-artifact-wait.mjs` | Wait for and extract a run's artifacts. | artifactbin-server CI |
 | `scripts/ci/link-npm-acceptance.mjs` | Link the native acceptance tooling's `node_modules`. | artifactbin-server CI |
-
-
-For disposable migration QA across mapped owners, set the lifecycle configuration's `runtimeAuthority` to `{mode: "disposable-scoped-tokens", ttlMs: 3600000}`. Set the pipeline authority runtime to the same mode and map each reviewed source owner to `{userId: targetUserId}`; omit token IDs. The local provider provisions credentials after the reviewed identities exist, preserves source token provenance, and revokes its credentials on cleanup. This mode requires local PGlite and local object storage. The private `runtime-actors.json` cleanup receipt contains token ID hashes and expiry/revocation state, never bearer credentials.

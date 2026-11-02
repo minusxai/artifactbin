@@ -23,13 +23,10 @@ export default {
         'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
-        'scripts/native-migration-production.mjs', // Reviewed operator entry; dry-run by default.
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
-        // Explicit fast local framed-browser regression (not part of browser-free PR unit jobs).
-        'scripts/__tests__/native-migration-browser-context.browser.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
@@ -85,9 +82,6 @@ export default {
         /^@fontsource(-variable)?\//,
         // Loaded through createRequire: the S3 presigner (lib/object-store) and HarfBuzz's wasm (lib/mermaid-images/fonts).
         '@aws-sdk/s3-request-presigner', 'harfbuzzjs',
-        // runner-page-boundary.test.ts bundles proposal .txt fixtures through esbuild.
-        // These runtime imports are inside retained source strings, not the application graph.
-        'preact', '@preact/signals',
         // Plugins of the root vite/vitest configs this workspace's build and test scripts run.
         '@rollup/plugin-yaml', '@tailwindcss/vite',
         // Type-only imports of @types/mdast, @types/hast and Vite's bundler types, installed with remark and Vite.
@@ -108,9 +102,6 @@ export default {
     'services/events': { entry: ['src/server.ts'] },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'] },
   },
-  // Independently installed proposal, previously excluded via ignoreWorkspaces.
-  // Product tests still import its fixtures; its own manifest owns their dependencies.
-  ignore: ['docs/proposals/runner-validation/**'],
   ignoreIssues: {
     // A route answers HEAD (or another method) with the same handler: `export { GET as HEAD }`.
     'services/app/app/**/route.ts': ['duplicates'],

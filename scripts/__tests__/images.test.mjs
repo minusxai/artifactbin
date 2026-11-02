@@ -210,24 +210,13 @@ it('Vite implicitly loads the app PostCSS config from the web root', async () =>
   expect(css.code.includes('text-decoration-line: underline')).toBe(true);
 });
 
-it('keeps the proposal install separate and test-support owned by its test consumers', () => {
+it('keeps test-support owned by its test consumers and product worker proofs in CI', () => {
   const readPkg = file => JSON.parse(readFileSync(path.join(REPO_ROOT, file), 'utf8'));
-  expect(readPkg('package.json').workspaces).not.toContain('docs/proposals/runner-validation');
-  const lock = readPkg('package-lock.json');
-  for (const key of ['docs/proposals/runner-validation', 'node_modules/artifactbin-runner-design-validation']) {
-    expect(lock.packages, key).not.toHaveProperty(key);
-  }
-  // App boundary tests bundle the retained native-page fixture outside the proposal workflow.
-  const app = readPkg('services/app/package.json');
-  for (const name of ['preact', '@preact/signals']) {
-    expect(app.devDependencies[name]).toBe(readPkg('docs/proposals/runner-validation/package.json').dependencies[name]);
-    expect(app.dependencies).not.toHaveProperty(name);
-  }
   for (const service of ['events', 'runner']) {
     const manifest = readPkg(`services/${service}/package.json`);
     expect(manifest.devDependencies['@artifactbin/test-support']).toBe('0.1.0');
     expect(manifest.dependencies).not.toHaveProperty('@artifactbin/test-support');
   }
   const workflow = readFileSync(path.join(REPO_ROOT, '.github/workflows/runner-design.yml'), 'utf8');
-  for (const command of ['npm ci --prefix docs/proposals/runner-validation', 'docker build -t runner-design-worker docs/proposals/runner-validation', 'postgres-proof.mjs', 'prove-postgres.ts', 'os-boundary.mjs artifactbin-worker']) expect(workflow).toContain(command);
+  for (const command of ['prove-postgres.ts', 'scripts/runner-os-boundary.mjs artifactbin-worker']) expect(workflow).toContain(command);
 });
