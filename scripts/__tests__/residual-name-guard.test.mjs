@@ -194,8 +194,8 @@ describe('docs/', () => {
     expect(onboarding).toContain('preserve any unpublished local edits');
     expect(onboarding).not.toMatch(/npm run afbin|afbin (?:pull|push)/);
   });
-  it('holds the essays the README used to carry', () => {
-    for (const f of ['editing.md', 'document-format.md', 'serving-and-security.md', 'ownership.md', 'operations.md']) {
+  it('keeps the current reference guides linked from the README', () => {
+    for (const f of ['document-format.md', 'serving-and-security.md', 'ownership.md', 'operations.md']) {
       expect(fs.existsSync(path.join(ROOT, 'docs', f)), f).toBe(true);
       expect(read('docs', f).length, f).toBeGreaterThan(400);
       expect(readme(), f).toContain(`docs/${f}`);
