@@ -1,19 +1,5 @@
 name: runner design validation
 on:
-  pull_request:
-    paths:
-      - 'scripts/runner-os-boundary.mjs'
-      - 'services/test-support/src/runner-model.mjs'
-      - 'services/runner/**'
-      - 'services/app/**/runner*'
-      - 'services/app/**/lambda*'
-      - 'services/app/**/hosted*'
-      - 'services/utils/src/runner-client.ts'
-      - 'services/app/server/__tests__/retired-execution.test.ts'
-      - 'services/app/__tests__/page-graphql.test.ts'
-      - 'services/app/lib/page-operations/**'
-      - 'services/app/__tests__/runner-page-boundary.test.ts'
-      - '.github/workflows/runner-design.yml'
   push:
     branches: [ main ]
   workflow_dispatch:

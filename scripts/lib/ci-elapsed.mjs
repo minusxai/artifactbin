@@ -58,7 +58,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(text);
     if (summaryFile) appendFileSync(summaryFile, `\n## CI end-to-end wall clock\n\n${text}\n`);
     if (result.status === 'failed') { console.log(`::error::${text}`); process.exitCode = 1; }
-    else if (result.status === 'slow') console.log(`::warning::${text}`);
+    else if (result.status === 'slow' || (lane === 'pr' && result.status === 'normal')) console.log(`::warning::${text}`);
   } catch (error) {
     console.error(`::error::${error.message}`);
     process.exitCode = 1;
