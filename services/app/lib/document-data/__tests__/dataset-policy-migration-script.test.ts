@@ -3,6 +3,7 @@
  * (named reader and writer) and a no-policy dataset written as stored rows, then `--dry-run` (exit 0, report
  * file, nothing written), `--apply` (v3 stored, shares added) and a second `--apply` (nothing left to do).
  */
+// harness-exempt: reset the migration script runs in a child process against an on-disk PGLite directory, which this file seeds and reopens itself
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
