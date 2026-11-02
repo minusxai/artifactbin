@@ -121,7 +121,8 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  */
 const CONTENT_FIELDS = {
   publicationBundle:z.object({entryPath:z.string(),files:z.array(z.object({path:z.string(),contentType:z.string(),base64:z.string()})).max(99),mappings:z.record(z.string(),z.object({kind:z.enum(['asset','dataset']),id:z.string(),revision:z.string(),state:z.string().regex(/^[a-f0-9]{64}$/).optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional()})).optional()}).optional(),
-  backendSources:z.record(z.string(),z.string()).optional().describe('Named backend TypeScript files, validated and published atomically with html.'),
+  resolverSources:z.record(z.string(),z.string()).optional().describe('Named resolver TypeScript files, one per <link rel="af-resolver" data-af-name>, validated and published atomically with html.'),
+  backendSources:z.record(z.string(),z.string()).optional().describe('Legacy alias of resolverSources; send one of them, never both.'),
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   program: z.union([z.record(z.string(),z.unknown()),z.string()]).optional().describe('Native program definition JSON: {version:1,command:[executable,...args],compute?,env?}. Execution is owner-only. Store only nonsecret configuration; common credential environment names and runtime overrides are rejected. Credentials cannot be detected in arbitrary argument strings.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
@@ -200,7 +201,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, optional backendSources, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
+  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, optional resolverSources, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
   input: { ...CONTENT_FIELDS, destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {

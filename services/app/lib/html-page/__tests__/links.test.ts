@@ -9,3 +9,11 @@ it('refuses duplicate namespaces across backend and dataset links',()=>{
 it('refuses fake origins, invalid IDs, modes and pinned revisions',()=>{
  for(const attrs of ['href="https://fake.invalid/ref:abc123"','href="ref:a"','href="ref:abc123" data-af-mode="once"','href="ref:abc123" data-af-mode="pinned"','href="ref:abc123" data-af-mode="pinned" data-af-revision="0"','href="ref:abc123" data-af-mode="pinned" data-af-revision="9007199254740992"','href="ref:abc123" data-af-revision="2"'])expect(()=>htmlPageDeclarations(`<link rel="af-dataset" data-af-name="db" ${attrs}>`)).toThrow();
 });
+it('declares resolvers with af-resolver and keeps af-backend as a permanent alias',()=>{
+ expect(htmlPageDeclarations('<link rel="af-resolver" data-af-name="budget" href="./budget.ts"><link rel="af-backend" data-af-name="garden" href="./garden.ts">').backends).toEqual(['budget','garden']);
+});
+it('refuses one resolver name declared under both rels, on one link or two',()=>{
+ expect(()=>htmlPageDeclarations('<link rel="af-resolver af-backend" data-af-name="db">')).toThrow('A link declares one namespace kind');
+ expect(()=>htmlPageDeclarations('<link rel="af-resolver" data-af-name="db"><link rel="af-backend" data-af-name="db">')).toThrow('Duplicate');
+ expect(()=>htmlPageDeclarations('<link rel="af-resolver af-dataset" data-af-name="db" href="ref:abc123">')).toThrow('A link declares one namespace kind');
+});

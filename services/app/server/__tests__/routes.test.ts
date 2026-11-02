@@ -80,7 +80,7 @@ describe('handlers through Hono', () => {
     const setBody = await set.text();
     expect(JSON.parse(setBody)).toEqual({ names: ['TOKEN'] });
     expect(setBody).not.toContain('private-route-value');
-    expect(await (await app.request(url, { headers: auth })).json()).toEqual({ names: ['TOKEN'] });
+    expect(await (await app.request(url, { headers: auth })).json()).toEqual({ names: ['TOKEN'], secrets: {}, test: false, api: 1 });
     const revoked = await app.request(url, { method: 'DELETE', headers: auth, body: JSON.stringify({ name: 'TOKEN' }) });
     expect(revoked.status).toBe(200);
     expect(await revoked.json()).toEqual({ names: [] });
