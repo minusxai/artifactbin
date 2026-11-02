@@ -108,3 +108,40 @@ describe('resolver time limits',()=>{
   }finally{vi.useRealTimers();}
  });
 });
+describe('owner-only resolver failure detail',()=>{
+ const call={namespace:'shop',fileId:'backend1',version:'v1',operation:'query' as const,field:'test',args:{},principal:{tenant:'page1',subject:'owner1'},signal:new AbortController().signal};
+ const SECRET='s3cr3t+/value=';
+ const failing=(reason:string|null,requests:{status:number|null}[]=[])=>({start:async()=>({runId:'run1'}),getRun:async()=>({runId:'run1',status:'failed',output:null,receipt:{reason,requests:requests.map(r=>({service:'fetch',operation:'artifactbin.pageBackend.fetch',durationMs:1,requestId:null,...r}))}}),cancel:async()=>{}}) as unknown as RunnerService;
+ const invoke=(reason:string|null,requests?:{status:number|null}[])=>createBackendInvoker(failing(reason,requests),async()=>({...record,secretBindings:['KEY','GONE']}),{readSecret:async(_b,name)=>{if(name==='GONE')throw Error('backend_secret_unavailable');return SECRET;}})(call).then(()=>{throw Error('completed');},(e:FieldFailed)=>e);
+ it('passes caps.fetch refusal codes and runner reasons through under backend_failed',async()=>{
+  expect(await invoke('secret_host_forbidden: KEY')).toMatchObject({name:'FieldFailed',code:'backend_failed',detail:'secret_host_forbidden: KEY'});
+  expect((await invoke('timeout')).detail).toBe('timeout');
+  expect((await invoke(null)).detail).toBeUndefined();
+ });
+ it('names the upstream HTTP status the resolver threw on',async()=>{
+  expect((await invoke('Upstream refused',[{status:200},{status:401}])).detail).toBe('HTTP 401: Upstream refused');
+  expect((await invoke('bad shape',[{status:200}])).detail).toBe('bad shape');
+ });
+ it('redacts secret values in every encoded form, URL queries and header values, and never includes a stack',async()=>{
+  const b64=Buffer.from(SECRET).toString('base64');
+  const detail=(await invoke(`leaked ${SECRET} ${encodeURIComponent(SECRET)} ${b64} at https://user:pw@api.example.com/v1/items?key=abc#frag Authorization: Bearer tok123 x-api-key=k9 access_token=at7 cookie: sid=c0\n    at test (resolver.js:1:2)\n    at run (worker.mjs:9:9)`)).detail!;
+  expect(detail).not.toContain(SECRET);expect(detail).not.toContain(encodeURIComponent(SECRET));expect(detail).not.toContain(b64);
+  expect(detail).toContain('[redacted]');expect(detail).toContain('https://api.example.com/v1/items');
+  for(const leak of ['key=abc','frag','user:pw','tok123','k9','at7','c0','resolver.js','\n'])expect(detail).not.toContain(leak);
+ });
+ it('redacts before truncating, so no secret prefix survives the length bound',async()=>{
+  const detail=(await invoke(`${'x'.repeat(190)}${SECRET}`)).detail!;
+  expect(detail).not.toContain(SECRET.slice(0,6));
+  // Prose that merely mentions a token keeps its words.
+  expect((await invoke('GitHub refused the token: Bad credentials')).detail).toBe('GitHub refused the token: Bad credentials');expect(detail.length).toBeLessThanOrEqual(300);
+ });
+ it('shows the detail to the page owner only',async()=>{
+  const schema=composePageSchema([{name:'shop',fileId:'backend1',version:'v1',typeDefs:'type Query { test: String }'}]);
+  const run=createBackendInvoker(failing(`401 from upstream with ${SECRET}`,[{status:401}]),async()=>({...record,secretBindings:['KEY']}),{readSecret:async()=>SECRET});
+  const errorFor=async(role:'owner'|'editor'|'viewer'|'anonymous'|null)=>(await executePageOperation({schema,request:{query:'query ResolverTest { shop { test } }'},caller:{pageId:'page1',subject:role===null||role==='anonymous'?null:'u1',role},invoke:run,signal:new AbortController().signal})).errors?.[0];
+  expect((await errorFor('owner'))?.extensions).toEqual({code:'backend_failed',detail:'HTTP 401: 401 from upstream with [redacted]'});
+  for(const role of ['editor','viewer','anonymous'] as const)expect((await errorFor(role))?.extensions).toEqual({code:'backend_failed'});
+  // No page role is refused before the resolver runs: no detail either.
+  expect((await errorFor(null))?.extensions?.detail).toBeUndefined();
+ });
+});
