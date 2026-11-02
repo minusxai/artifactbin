@@ -27,6 +27,10 @@ export const RESOLVER_LIMITS = Object.freeze({
   /** How long the app waits for a run: wall time plus one second. */
   appWaitMs: 16_000,
   maxRequests: 32,
+  /** One api 2 `caps.query` GraphQL document. */
+  queryDocumentBytes: 16 * 1024,
+  /** One api 2 `caps.query` answer's `data`. */
+  queryResultBytes: 1024 * 1024,
 });
 /** What a run receipt records for one `caps.fetch`: never a query string, header value or body. */
 export interface ResolverFetchReceipt {

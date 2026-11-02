@@ -1,3 +1,4 @@
+import type { DatasetRole } from './dataset-permissions';
 /**
  * WHO IS CALLING. Resolved from a bearer token, a human session or a document-bound Pages
  * session, and handed to the app with the request — in-process by reference (utils attachActor),
@@ -18,8 +19,17 @@ export interface Actor {
   /** Non-secret identity row reference; never the session bearer token. */
   sessionId?: string;
   /** Runner-host attestation, absent from browser/token authentication. */
-  runner?: { pageBackendOperation?: 'query' | 'mutation'; runId: string; artifactId: string; version: string; editId: string; sourceHash: string; callId: number };
+  runner?: { pageBackendOperation?: 'query' | 'mutation'; runId: string; artifactId: string; version: string; editId: string; sourceHash: string; callId: number;
+    /**
+     * Who called the resolver: the subject and page role the app decided when it admitted the run, signed with
+     * the rest of the pin (resolver code cannot reach it). Absent from runners that predate it and from runs
+     * that are not a resolver call; `caps.query` refuses a pin without one.
+     */
+    caller?: RunnerCaller };
 }
+
+/** The caller a resolver run was admitted for (`PageResolverPrincipal` without the tenant). */
+export interface RunnerCaller { subject: string | null; role: DatasetRole }
 
 export const ANONYMOUS: Actor = { credential: 'none' };
 

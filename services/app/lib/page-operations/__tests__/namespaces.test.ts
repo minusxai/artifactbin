@@ -12,7 +12,8 @@ describe('page resolver isolation and authority',()=>{
  });
  it('does not replay an unknown mutation and still runs the next mutation serially',async()=>{
   const calls:string[]=[];const schema=composePageSchema(sources);
-  const result=await executePageOperation({schema,request:{query:'mutation { tasks { first:save(n:1) second:save(n:2) } }'},caller:{pageId:'page1',subject:'user1',role:'editor'},invoke:async c=>{calls.push(c.field);expect(c.principal).toEqual({tenant:'page1',subject:'user1'});if(c.args.n===1)throw new FieldFailed('deadline');return 2;},signal});
+  // The principal carries the caller's page role (resolvers plan PR 5).
+  const result=await executePageOperation({schema,request:{query:'mutation { tasks { first:save(n:1) second:save(n:2) } }'},caller:{pageId:'page1',subject:'user1',role:'editor'},invoke:async c=>{calls.push(c.field);expect(c.principal).toEqual({tenant:'page1',subject:'user1',role:'editor'});if(c.args.n===1)throw new FieldFailed('deadline');return 2;},signal});
   expect(calls).toEqual(['save','save']);expect(result.extensions?.outcomes).toEqual({'tasks.first':'unknown','tasks.second':'committed'});
  });
  it('keeps duplicate file type names in private namespaces',()=>{

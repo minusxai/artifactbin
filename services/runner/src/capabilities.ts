@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { RESOLVER_LIMITS, type Actor, type RunnerJson, type Upstream } from '@artifactbin/contracts';
+import { DATASET_ROLES, RESOLVER_LIMITS, type Actor, type RunnerCaller, type RunnerJson, type Upstream } from '@artifactbin/contracts';
 import type { CapabilityContext, RunnerOptions } from './local';
 import { readModel, openaiMessages, boundedJson } from './model.mjs';
 export interface HostCapabilitiesOptions {
@@ -95,7 +95,16 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
 /** Identity and snapshot binding are chosen outside the program, on both transports. */
 export function runnerIdentity(context: CapabilityContext): Actor {
     const {request, runId, callId} = context;
-    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{pageBackendOperation:request.pageBackendOperation,runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex')}} : {})};
+    const caller = admittedCaller(request.input);
+    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{pageBackendOperation:request.pageBackendOperation,runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex'),...(caller ? {caller} : {})}} : {})};
+}
+/** The caller the app admitted a resolver call for (`input.principal`, part of the run's fingerprint); never program output. */
+function admittedCaller(input: RunnerJson): RunnerCaller | undefined {
+    if (!input || typeof input !== 'object' || Array.isArray(input) || input.kind !== 'invoke') return undefined;
+    const p = input.principal;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return undefined;
+    if (!(p.subject === null || typeof p.subject === 'string') || typeof p.role !== 'string' || !(DATASET_ROLES as readonly string[]).includes(p.role)) return undefined;
+    return { subject: p.subject, role: p.role as RunnerCaller['role'] };
 }
 /** A refusal the app may hand back to resolver code: a code, optionally with a short printable detail. */
 const REFUSAL = /^[a-z][a-z_]{0,63}(?:: [\x20-\x7e]{1,200})?$/;

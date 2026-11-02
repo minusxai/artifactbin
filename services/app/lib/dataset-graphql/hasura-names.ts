@@ -58,7 +58,7 @@ export function hasuraColumnNames(columns: readonly string[], prior: Readonly<Re
 const SHARED_TYPES = ['Query', 'Mutation', 'Subscription', 'String', 'Float', 'Int', 'Boolean', 'ID', 'order_by', 'String_comparison_exp', 'Float_comparison_exp', 'Boolean_comparison_exp', 'ID_comparison_exp', 'dataset_meta', 'dataset_person'];
 
 /** Every field and type name a root generates, today's reads and the planned mutations and extensions. */
-function generated(root: string): string[] {
+export function hasuraGeneratedNames(root: string): string[] {
   const types = ['bool_exp', 'order_by', 'select_column', 'aggregate', 'aggregate_fields', 'sum_fields', 'avg_fields', 'min_fields', 'max_fields', 'insert_input', 'set_input', 'inc_input', 'pk_columns_input', 'mutation_response', 'groups', 'group_keys', 'meta', 'people', 'by_pk'];
   return [root, ...types.map((t) => `${root}_${t}`), ...['insert', 'update', 'delete'].map((verb) => `${verb}_${root}`), `insert_${root}_one`, `update_${root}_by_pk`, `delete_${root}_by_pk`];
 }
@@ -82,8 +82,8 @@ export function hasuraRootNames(tables: readonly DatasetTableName[], options: Ha
     const base = typeof stored === 'string' && VALID.test(stored) && !stored.startsWith('__') ? stored
       : tables.length === 1 ? normalizeGraphqlName(options.title?.trim() ?? '', 'data')
       : VALID.test(table.name) && !table.name.startsWith('__') ? table.name : normalizeGraphqlName(table.name, 'table');
-    const root = suffixed(base, (name) => generated(name).every((n) => !used.has(n)));
-    for (const name of generated(root)) used.add(name);
+    const root = suffixed(base, (name) => hasuraGeneratedNames(name).every((n) => !used.has(n)));
+    for (const name of hasuraGeneratedNames(root)) used.add(name);
     return root;
   });
 }

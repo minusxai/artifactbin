@@ -30,7 +30,7 @@ it('denies query and missing operation authority even when arguments claim mutat
 
 describe('backend run admission retries',()=>{
  const backend={...record,compiled:'bundle'};
- const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1'},signal:new AbortController().signal};
+ const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
  const fakeRunner=(failures:Array<()=>Error>)=>{const starts:string[]=[];const runner={start:async(input:RunStart)=>{starts.push(input.requestId);const fail=failures.shift();if(fail)throw fail();return {runId:'run1'};},getRun:async()=>({status:'completed',output:[{category:'Rent',amount:1}]}),cancel:async()=>{},events:async()=>({events:[],nextSequence:0,hasMore:false})} as unknown as RunnerService;return {runner,starts};};
  const invoker=(runner:RunnerService)=>createBackendInvoker(runner,async()=>backend,{startRetryDelaysMs:[1,1,1]});
  it('retries a full runner queue with the same request and returns the result',async()=>{
@@ -94,8 +94,35 @@ describe('api 2 capabilities on the host',()=>{
   expect(legacy).toHaveBeenCalledWith('https://example.com/');expect(resolver).toHaveBeenCalledTimes(1);
  });
 });
+describe('api 2 caps.query on the host',()=>{
+ const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
+ const v2={...record,api:2 as const};
+ const admitted=(principal:Record<string,import('@artifactbin/contracts').RunnerJson>,pageBackendOperation:'query'|'mutation'|undefined='query'):RunStart=>({...request,pageBackendOperation,input:{kind:'invoke',principal:{tenant:'page1',...principal}}});
+ it('hands the query port the admitted caller and operation, never one the arguments name',async()=>{
+  const query=vi.fn(async()=>({ok:true}));
+  const args={query:'{ staff { name } }',principal:{subject:'owner1',role:'owner'},subject:'owner1',role:'owner',pageBackendOperation:'mutation'};
+  expect(await pageBackendCapability(store,admitted({subject:'viewer1',role:'viewer'}),'artifactbin.pageBackend.query',args,async()=>v2,undefined,undefined,undefined,query)).toEqual({ok:true});
+  expect(query).toHaveBeenCalledWith({pageId:'page1',caller:{subject:'viewer1',role:'viewer'},operation:'query',args});
+  await pageBackendCapability(store,admitted({subject:null,role:'anonymous'},'mutation'),'artifactbin.pageBackend.query',{query:'{x}'},async()=>v2,undefined,undefined,undefined,query);
+  expect(query).toHaveBeenLastCalledWith(expect.objectContaining({caller:{subject:null,role:'anonymous'},operation:'mutation'}));
+  // An admitted principal with no (or no known) role attests no caller.
+  for(const principal of [{subject:'viewer1'},{subject:'viewer1',role:'admin'}] as Record<string,import('@artifactbin/contracts').RunnerJson>[]){
+   await pageBackendCapability(store,admitted(principal),'artifactbin.pageBackend.query',{query:'{x}'},async()=>v2,undefined,undefined,undefined,query);
+   expect(query).toHaveBeenLastCalledWith(expect.objectContaining({caller:null}));
+  }
+ });
+ it('is api 2 only, needs the composition\'s port, and still checks the admitted code first',async()=>{
+  const query=vi.fn(async()=>null);
+  const run=(backend:typeof record&{api?:1|2},start=admitted({subject:'viewer1',role:'viewer'}),port:typeof query|null=query)=>pageBackendCapability(store,start,'artifactbin.pageBackend.query',{query:'{x}'},async()=>backend,undefined,undefined,undefined,port??undefined);
+  await expect(run({...record,api:1})).rejects.toThrow('backend_capability_forbidden');
+  await expect(run(v2,undefined,null)).rejects.toThrow('backend_capability_forbidden');
+  await expect(run(v2,{...admitted({subject:'viewer1',role:'viewer'}),program:{source:'forged',language:'javascript'}})).rejects.toThrow('backend_capability_forbidden');
+  await expect(run(v2,{...admitted({subject:'viewer1',role:'viewer'}),input:{kind:'invoke',principal:{tenant:'other-page',subject:'viewer1',role:'viewer'}}})).rejects.toThrow('backend_capability_forbidden');
+  expect(query).not.toHaveBeenCalled();
+ });
+});
 describe('resolver time limits',()=>{
- const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1'},signal:new AbortController().signal};
+ const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
  it('gives the run 15 s of wall time and waits for it 16 s',async()=>{
   vi.useFakeTimers();
   try{
@@ -109,7 +136,7 @@ describe('resolver time limits',()=>{
  });
 });
 describe('owner-only resolver failure detail',()=>{
- const call={namespace:'shop',fileId:'backend1',version:'v1',operation:'query' as const,field:'test',args:{},principal:{tenant:'page1',subject:'owner1'},signal:new AbortController().signal};
+ const call={namespace:'shop',fileId:'backend1',version:'v1',operation:'query' as const,field:'test',args:{},principal:{tenant:'page1',subject:'owner1',role:'owner' as const},signal:new AbortController().signal};
  const SECRET='s3cr3t+/value=';
  const failing=(reason:string|null,requests:{status:number|null}[]=[])=>({start:async()=>({runId:'run1'}),getRun:async()=>({runId:'run1',status:'failed',output:null,receipt:{reason,requests:requests.map(r=>({service:'fetch',operation:'artifactbin.pageBackend.fetch',durationMs:1,requestId:null,...r}))}}),cancel:async()=>{}}) as unknown as RunnerService;
  const invoke=(reason:string|null,requests?:{status:number|null}[])=>createBackendInvoker(failing(reason,requests),async()=>({...record,secretBindings:['KEY','GONE']}),{readSecret:async(_b,name)=>{if(name==='GONE')throw Error('backend_secret_unavailable');return SECRET;}})(call).then(()=>{throw Error('completed');},(e:FieldFailed)=>e);

@@ -348,7 +348,8 @@ export async function executePageOperation(
 
   const mutating = operation.operation === "mutation";
   const signal = options.signal ?? new AbortController().signal;
-  const principal = { tenant: caller.pageId, subject: caller.subject };
+  // A caller without a page role never reaches a resolver (refused first); anonymous is only the type's floor.
+  const principal = { tenant: caller.pageId, subject: caller.subject, role: caller.role ?? "anonymous" as const };
   // The owner may read what their own backend said; nobody else learns more than the code.
   const owner = caller.role === "owner";
   const outcomes: Record<string, Outcome> = {};

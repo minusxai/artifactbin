@@ -2,8 +2,11 @@
 
 A backend exports `typeDefs` (GraphQL SDL) and a default object of field resolvers.
 Each resolver receives `(args, principal, caps)`. The trusted server derives
-`principal.tenant` from the page ID and `principal.subject` from its authenticated
-account; page variables cannot grant identity or authority.
+`principal.tenant` from the page ID, `principal.subject` from its authenticated
+account and `principal.role` from the caller's page role (below); page variables
+cannot grant identity or authority. A remote runner calls back with that caller in
+its signed pin (`Actor.runner.caller`, from the admitted request), and the app
+rebuilds the principal from the pin, never from resolver arguments.
 
 ## Field authorization: `@auth`
 
@@ -48,7 +51,7 @@ accepted. The response provides `ok`, `status`, `url`, a `headers` object
 containing `content-type`, and asynchronous `text()` and `json()` methods.
 
 api 2 code (a `secrets` map such as `{API_KEY: 'api.example.com'}`) gets `caps`
-with `fetch` only: `caps.fetch(url, {method, headers, body})` (`public-fetch.ts`).
+with `fetch` and `query` only (below): `caps.fetch(url, {method, headers, body})` (`public-fetch.ts`).
 The app performs the request. It fills `{{NAME}}` in the URL (percent-encoded),
 header values and body only for a declared name whose bound host (exact, or any
 subdomain under one leading `*.`) matches the request host. Anything else is
@@ -70,6 +73,25 @@ values; failures are `auth_key_invalid` or `auth_failed`. Size and time limits a
 `services/contracts`: 2 MiB response, 256 KiB request body and 10 s per fetch,
 4 MiB per runner message and remote callback reply, 15 s wall time and a 16 s app
 wait.
+
+## `caps.query` (api 2)
+
+`await caps.query(graphql, variables?)` returns `data` from the generated
+Hasura-style API (`lib/dataset-graphql/hasura.ts` `executeLinkedDatasetGraphql`)
+over the datasets the page links, under their page names: a single-table dataset's
+root is the link name, a multi-table dataset's are `<name>_<table root>`. It runs as
+the caller: the dataset role is each dataset's own sharing under the page audience
+rule (a reader with no sharing of their own is signed_in or anonymous), never the
+page owner's rights. A dataset the role reads nothing of is absent, as if unlinked;
+resolver namespaces are never reachable. A failure throws an `Error` whose `code` is
+`validation_failed`, `permission_denied`, `conflict`, `unavailable`,
+`result_too_large` or `caller_unavailable` (a run whose pin attests no caller).
+Mutations are refused in query resolvers (`permission_denied`) and, until generated
+dataset mutations are served to resolvers, in mutation resolvers too
+(`mutations_unavailable`). A document is at most 16 KiB and an answer 1 MiB
+(`RESOLVER_LIMITS`); each call counts toward the 32-request limit. An api 2
+resolver's live revision is a hash of the page's linked live dataset revisions
+(`lib/html-backends/live.ts`), so a dataset write refreshes its reads.
 
 Author code runs in the existing bounded isolated runner, never in the app process.
 Imports use the runner compiler's fixed bundled allowlist:
