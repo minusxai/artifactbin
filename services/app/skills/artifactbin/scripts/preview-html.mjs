@@ -100,7 +100,7 @@ export function previewDatasetLinks(source){
   if(node.nodeName==='base'&&baseHref===undefined)baseHref=attrs.href;
 if(node.nodeName==='link'&&(attrs.rel??'').split(/\s+/).includes('af-dataset')&&attrs[
     'data-af-name'])links.push({name:attrs['data-af-name'],href:attrs.href??'',table:attrs[
-    'data-af-table'],schema:attrs['data-af-schema']});
+    'data-af-table'],schema:attrs['data-af-schema'],api:attrs['data-af-api']});
   for(const child of node.childNodes??[])visit(child);
  }visit(document);return {links,baseHref};
 }

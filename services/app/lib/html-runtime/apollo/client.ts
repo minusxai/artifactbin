@@ -208,10 +208,14 @@ function subDocument(op: Operation, fields: FieldNode[]): { query: string; varia
   return { query: print(document), variables };
 }
 
-/** Response paths of every mutation field inside the given namespaces: "billing.pay". */
-function outcomeKeys(op: Operation, fields: FieldNode[]): string[] {
+/**
+ * Response paths of every mutation field inside the given namespaces: "billing.pay". A generated dataset root is
+ * itself the mutation field: its outcome is keyed by its own response key ("insert_orders_one").
+ */
+function outcomeKeys(op: Operation, fields: FieldNode[], flat: (field: FieldNode) => boolean = () => false): string[] {
   const keys: string[] = [];
   for (const field of fields) {
+    if (flat(field)) { keys.push(responseKey(field)); continue; }
     const children = field.selectionSet ? fieldsOf(field.selectionSet, op) : [];
     for (const child of children) keys.push(`${responseKey(field)}.${responseKey(child)}`);
   }
@@ -219,6 +223,13 @@ function outcomeKeys(op: Operation, fields: FieldNode[]): string[] {
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** A fresh Idempotency-Key: a random UUID, or 32 random hex digits where randomUUID is unavailable. */
+function randomKey(): string {
+  const crypto = globalThis.crypto;
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 /* ---------------------------------------------------------------- client */
 
@@ -233,13 +244,15 @@ async function runRemote(
   op: Operation,
   fields: FieldNode[],
   kind: "query" | "mutation",
+  flat?: (field: FieldNode) => boolean,
+  idempotencyKey?: string,
 ): Promise<RemoteSettlement> {
   const keys = fields.map(responseKey);
   const settled = (outcome: Outcome | null, reason: string): RemoteSettlement => {
     const data: AfJsonObject = {};
     for (const key of keys) data[key] = null;
     const outcomes: Record<string, Outcome> = {};
-    if (outcome && kind === "mutation") for (const key of outcomeKeys(op, fields)) outcomes[key] = outcome;
+    if (outcome && kind === "mutation") for (const key of outcomeKeys(op, fields, flat)) outcomes[key] = outcome;
     return { data, errors: keys.map((key) => ({ message: reason, path: [key] })), outcomes };
   };
   if (!remote) return settled("rejected", "This page has no backend connection");
@@ -252,7 +265,7 @@ async function runRemote(
   const request = subDocument(op, fields);
   let reply: Awaited<ReturnType<RemotePort["execute"]>>;
   try {
-    reply = await execute({ query: request.query, variables: request.variables, operation: kind });
+    reply = await execute({ query: request.query, variables: request.variables, operation: kind, ...(idempotencyKey ? { idempotencyKey } : {}) });
   } catch (error) {
     if (error instanceof RemoteUnreachable) return settled("offline", "offline: nothing was sent");
     // Sent, then lost: the backend may have run it. Never retried.
@@ -263,7 +276,7 @@ async function runRemote(
   const outcomes: Record<string, Outcome> = { ...(reply?.extensions?.outcomes ?? {}) };
   // A reply without data means the server refused the whole request before running any field.
   if (kind === "mutation")
-    for (const key of outcomeKeys(op, fields)) outcomes[key] ??= reply?.data === null ? "rejected" : "unknown";
+    for (const key of outcomeKeys(op, fields, flat)) outcomes[key] ??= reply?.data === null ? "rejected" : "unknown";
   return {
     data,
     errors: Array.isArray(reply?.errors) ? reply.errors : [],
@@ -286,7 +299,19 @@ export function createClient(options: ClientOptions): AfClient {
   if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) throw new TypeError("maxAttempts must be a positive integer");
   const resolvers = new Map<string, LocalResolver>();
   const invalidations=new Set<(reason?:QueryInvalidation)=>void>();let remoteWatches=0;
-  const isBackend = (field: FieldNode) => backends().has(field.name.value);
+  const datasetNames=options.datasets;
+  /**
+   * A generated-API dataset link's roots are top-level remote fields: its name, `<name>_…` and
+   * `insert_|update_|delete_<name>…` (a multi-table dataset's are `<name>_<table>…`). Legacy links stay namespaces.
+   */
+  const isDatasetRoot = (field: FieldNode) => {
+    const names = typeof datasetNames === "function" ? datasetNames() : datasetNames ?? [];
+    if (!names.length) return false;
+    const bare = field.name.value.replace(/^(?:insert|update|delete)_/, "");
+    return names.some((name) => bare === name || bare.startsWith(`${name}_`) || field.name.value === name || field.name.value.startsWith(`${name}_`));
+  };
+  const isBackend = (field: FieldNode) => backends().has(field.name.value) || isDatasetRoot(field);
+  const newKey = options.idempotencyKey ?? randomKey;
 
   function localOnly(document: DocumentNode, variables: Variables | undefined, what: string) {
     const op = operation(document, variables);
@@ -427,6 +452,8 @@ export function createClient(options: ClientOptions): AfClient {
     const errors: ResultError[] = [];
     const outcomes: Record<string, Outcome> = {};
     let anyRemote = false;
+    const mutationKey = newKey();
+    let requests = 0;
     for (let index = 0; index < fields.length; ) {
       const field = fields[index]!;
       if (!isBackend(field)) {
@@ -444,7 +471,8 @@ export function createClient(options: ClientOptions): AfClient {
       const group: FieldNode[] = [];
       while (index < fields.length && isBackend(fields[index]!)) group.push(fields[index++]!);
       anyRemote = true;
-      const settled = await runRemote(remote, op, group, "mutation");
+      // One Idempotency-Key per client.mutate; each request it sends names its own (a key names one request).
+      const settled = await runRemote(remote, op, group, "mutation", isDatasetRoot, `${mutationKey}${requests++ ? `_${requests}` : ""}`);
       Object.assign(data, settled.data);
       errors.push(...settled.errors);
       Object.assign(outcomes, settled.outcomes);

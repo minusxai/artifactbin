@@ -42,7 +42,7 @@ import { ID_COLUMN, rowIdsForObject, tableIdentity } from './model';
 import { retainedDatasetGraphqlPort } from './retained';
 import { hasuraSdl, type HasuraColumn, type HasuraScalar, type HasuraTableModel, type HasuraWriteModel } from './hasura-schema';
 import { hasuraGeneratedNames, hasuraNames, storedConfiguration, type HasuraTableNames } from './hasura-names';
-import { datasetBindingCatalog, DatasetBindingUnsupportedError } from './authority';
+import { datasetBindingCatalog, DatasetBindingUnsupportedError, resolveDatasetBinding } from './authority';
 import { compileAggregate, compileRows, HasuraReadError, type HasuraAggregate, type HasuraReadArgs } from './hasura-read';
 import { compileMutation, HasuraWriteError, mutationRoots, type HasuraMutationKind } from './hasura-write';
 import type { DatasetSnapshot, DatasetStatement } from './types';
@@ -58,6 +58,9 @@ const notFound = () => new Error('dataset_not_found');
 
 interface LoadedTable { model: HasuraTableModel; tableId: string; declared: DatasetTable }
 interface Loaded {
+  datasetId: string;
+  /** Through a page: the link it was loaded for (its page name). */
+  link?: HtmlDatasetLink;
   /** The caller's read snapshot, or null when the role selects nothing (it may still write). */
   snapshot: DatasetSnapshot | null;
   tables: LoadedTable[];
@@ -82,34 +85,43 @@ function writeModel(decision: WriteDecision, table: DatasetTable, names: HasuraT
   return { ...(insert ? { insert: named(insert) } : {}), ...(update ? { update: named(update) } : {}), ...(del ? { delete: true } : {}) };
 }
 
-/**
- * The caller's read snapshot and, directly (`direct`: the dataset's own sharing decides the role), its write
- * decision, and the table models they give. Through a page (a resolver's caps.query) the page audience rule
- * applies (a reader with no sharing of their own is signed_in or anonymous) and only reads are generated (page
- * mutations arrive with the page composition). Throws `dataset_not_found` when the role may neither read nor
- * write (the uniform 404).
- */
 const columnsOf = (table: DatasetTable, names: HasuraTableNames): HasuraColumn[] =>
   table.columns.map((c) => ({ field: names.columns[c.name] ?? (() => { throw notFound(); })(), source: c.name, type: scalarOf(c.type) }));
 
-async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortSignal, direct: boolean): Promise<Loaded> {
+/** How a load reaches the dataset: directly (its own sharing decides), or through a page (the page audience rule). */
+interface LoadMode {
+  direct: boolean;
+  /** Through a page: the page the session names (`X-Hasura-Page-Id`). */
+  pageId?: string;
+  /** Through a page: each read fence is also handed to the page request's own final check. */
+  retainReadFence?: (verify: () => Promise<void>) => void;
+}
+
+/**
+ * The caller's read snapshot and write decision, and the table models they give. Directly the dataset's own
+ * sharing decides the role; through a page (page GraphQL, a resolver's caps.query) the page audience rule applies
+ * (a reader with no sharing of their own is signed_in or anonymous) and the session names the page. A pinned link
+ * reads its recorded revision and never writes. Throws `dataset_not_found` when the role may neither read nor
+ * write (the uniform 404).
+ */
+async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortSignal, mode: LoadMode): Promise<Loaded> {
   const fences: Array<() => Promise<void>> = [];
-  const port = retainedDatasetGraphqlPort({ direct, retainReadFence: (verify) => { fences.push(verify); } });
-  if (!direct) {
-    // Through a page: reads only, exactly the tables of the snapshot the binding resolves (a pinned link's revision).
+  const port = retainedDatasetGraphqlPort({ direct: mode.direct, ...(mode.pageId ? { pageId: mode.pageId } : {}), retainReadFence: (verify) => { fences.push(verify); mode.retainReadFence?.(verify); } });
+  if (binding.mode === 'pinned') {
+    // A pinned link: reads only, exactly the tables of the snapshot its recorded revision resolves.
     const read = await port.snapshot(actor, binding, signal);
     const tables = read.catalog.tables.map((table): LoadedTable => {
       const tableId = tableIdentity(table), names = read.names?.[tableId] ?? (() => { throw notFound(); })();
       return { model: { root: names.root, table: { schema: table.schema, name: table.name }, columns: columnsOf(table, names), aggregations: read.aggregatable?.[tableId] ?? false }, tableId, declared: table };
     });
     if (!tables.length) throw notFound();
-    return { snapshot: read, tables, port, fences };
+    return { datasetId: binding.datasetId, snapshot: read, tables, port, fences };
   }
   let snapshot: DatasetSnapshot | null = null;
   try { snapshot = await port.snapshot(actor, binding, signal); } catch (e) { if (!(e instanceof Error) || e.message !== 'dataset_not_found') throw e; }
   const row = await getArtifactById(binding.datasetId);
   if (!row || row.format !== 'dataset') throw notFound();
-  const decision = await datasetWriteAccess(row, actor, { throughPage: false });
+  const decision = await datasetWriteAccess(row, actor, writeOptions(mode));
   // Nothing is said about a dataset the role can neither read nor write, not even that it is unsupported.
   if (!snapshot && !decision.allowed) throw notFound();
   const declared = datasetBindingCatalog(row);
@@ -130,8 +142,10 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
     return [{ model, tableId, declared: table }];
   });
   if (!tables.length) throw notFound();
-  return { snapshot, tables, port, fences };
+  return { datasetId: binding.datasetId, snapshot, tables, port, fences };
 }
+
+const writeOptions = (mode: LoadMode) => (mode.direct ? { throughPage: false } : { throughPage: true, ...(mode.pageId ? { pageId: mode.pageId } : {}) });
 
 async function fenced(loaded: Loaded): Promise<void> {
   for (const verify of loaded.fences) await verify();
@@ -141,7 +155,7 @@ async function fenced(loaded: Loaded): Promise<void> {
 const directBinding = (datasetId: string): HtmlDatasetLink => ({ kind: 'dataset', name: 'data', datasetId, mode: 'live' });
 
 export async function datasetGraphqlSchema(actor: AccessActor, datasetId: string, signal: AbortSignal): Promise<DatasetGraphqlSchemaReply> {
-  const loaded = await load(actor, directBinding(datasetId), signal, true);
+  const loaded = await load(actor, directBinding(datasetId), signal, { direct: true });
   const sdl = hasuraSdl(loaded.tables.map((t) => t.model));
   await fenced(loaded);
   if (loaded.snapshot) return { sdl, revision: loaded.snapshot.revision, role: loaded.snapshot.role! };
@@ -214,14 +228,14 @@ function schemaFor(sdl: string): GraphQLSchema {
 
 /** POST: run one query against the caller's schema. Throws `dataset_not_found` when the role reads nothing. */
 export async function executeDatasetGraphql(actor: AccessActor, datasetId: string, request: DatasetGraphqlRequest, signal: AbortSignal): Promise<DatasetGraphqlReply> {
-  const loaded = await load(actor, directBinding(datasetId), signal, true);
+  const loaded = await load(actor, directBinding(datasetId), signal, { direct: true });
   const parsed = parsedOperation(request);
   if ('errors' in parsed) return parsed;
   if (parsed.operation.operation === 'mutation') {
     const schema = schemaFor(hasuraSdl(loaded.tables.map((t) => t.model)));
     const invalid = validate(schema, parsed.document);
     if (invalid.length) return { errors: invalid.slice(0, 20).map((e) => error(e.message, 'validation_failed')) };
-    return executeMutation(actor, datasetId, loaded, schema, parsed.document, request);
+    return executeMutation(actor, [loaded], schema, parsed.document, request);
   }
   if (parsed.operation.operation !== 'query') return { errors: [error(`this dataset's schema has no ${parsed.operation.operation} root`, 'validation_failed')] };
   return run(actor, [loaded], parsed.document, request, signal, DATASET_GRAPHQL_READ_LIMITS.resultBytes);
@@ -237,15 +251,12 @@ function parsedOperation(request: DatasetGraphqlRequest): { document: DocumentNo
 }
 
 /** Validate against the loaded tables' schema, run, fence every dataset, then bound the answer. */
-async function run(actor: AccessActor, loaded: readonly Loaded[], document: DocumentNode, request: DatasetGraphqlRequest, signal: AbortSignal, resultBytes: number, mutations?: HasuraMutationHook): Promise<DatasetGraphqlReply> {
-  const models = loaded.flatMap((l) => l.tables.map((t) => t.model));
-  const schema = schemaFor(hasuraSdl(models) + (mutations ? `\n${mutations.sdl(models)}` : ''));
+async function run(actor: AccessActor, loaded: readonly Loaded[], document: DocumentNode, request: DatasetGraphqlRequest, signal: AbortSignal, resultBytes: number): Promise<DatasetGraphqlReply> {
+  const schema = schemaFor(hasuraSdl(loaded.flatMap((l) => l.tables.map((t) => t.model))));
   const invalid = validate(schema, document);
   if (invalid.length) return { errors: invalid.slice(0, 20).map((e) => error(e.message, 'validation_failed')) };
   const budget = { statements: 0 }, root: Record<string, unknown> = {};
   for (const l of loaded) rootValue(actor, l, signal, budget, root);
-  // Through a page every loaded dataset was read (no write-only tables): its snapshot is present.
-  if (mutations) Object.assign(root, mutations.root(actor, loaded.flatMap((l) => l.tables.map((t) => ({ ...t, snapshot: l.snapshot! }))), signal));
   const result = await execute({ schema, document, rootValue: root, variableValues: request.variables ?? {}, ...(request.operationName ? { operationName: request.operationName } : {}) });
   // Results leave only if the role, policy and head the reads were decided for still hold.
   for (const l of loaded) await fenced(l);
@@ -256,31 +267,53 @@ async function run(actor: AccessActor, loaded: readonly Loaded[], document: Docu
   return { ...(result.data !== undefined ? { data: result.data as Record<string, unknown> | null } : {}), ...(errors?.length ? { errors } : {}) };
 }
 
-/**
- * Where generated mutations plug in (Hasura PR 5): the mutation root's SDL for the linked tables and its resolvers,
- * which write as `actor` under each dataset's insert/update/delete rules. A resolver's caps.query runs outside any
- * transaction; the hook's own commits must keep the PGlite rule (no out-of-transaction query inside a transaction
- * callback) and notify after commit.
- */
-interface HasuraMutationHook {
-  sdl(tables: readonly HasuraTableModel[]): string;
-  root(actor: AccessActor, tables: ReadonlyArray<{ model: HasuraTableModel; tableId: string; snapshot: DatasetSnapshot }>, signal: AbortSignal): Record<string, unknown>;
+/** Where a page's datasets are read from: the page (its audience rule and `X-Hasura-Page-Id`) and its request's fences. */
+interface PageScope {
+  pageId?: string;
+  retainReadFence?: (verify: () => Promise<void>) => void;
 }
+
+/**
+ * THE PAGE'S DATASETS AS ONE GENERATED API: every given link under its page name (a single-table dataset's root
+ * is the link name; a multi-table dataset's are `<name>_<table root>`), for the caller's role through the page. A
+ * dataset the role can neither read nor write is absent, as if unlinked. Two links generating one name refuse the
+ * page (`graphql_root_collision`; publishing refuses it first).
+ */
+async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope, signal: AbortSignal): Promise<Loaded[]> {
+  const loaded: Loaded[] = [];
+  for (const link of links) {
+    let one: Loaded;
+    try { one = await load(actor, link, signal, { direct: false, ...scope }); } catch (e) {
+      if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) continue;
+      throw e;
+    }
+    loaded.push({ ...one, link, tables: one.tables.map((t) => ({ ...t, model: { ...t.model, root: linkedRoot(link.name, one.tables.length, t.model.root) } })) });
+  }
+  const names = new Map<string, string>();
+  for (const l of loaded) for (const { model } of l.tables) for (const name of hasuraGeneratedNames(model.root)) {
+    const other = names.get(name);
+    if (other !== undefined) throw new GraphQLError(`graphql_root_collision: links ${other} and ${l.link!.name} both generate ${name}; rename a link`);
+    names.set(name, l.link!.name);
+  }
+  return loaded;
+}
+
+/** A linked table's root in the page: the link name for a single-table dataset, `<name>_<table root>` otherwise. */
+const linkedRoot = (name: string, tables: number, root: string) => (tables === 1 ? name : `${name}_${root}`);
 
 interface LinkedDatasetGraphqlOptions {
   /** The resolver operation the call runs inside: mutations only inside a mutation resolver. */
   operation: 'query' | 'mutation' | undefined;
   /** Serialized `data` bytes the answer may carry. */
   resultBytes: number;
-  /** Generated mutations; absent until they ship, and a mutation is refused `mutations_unavailable`. */
-  mutations?: HasuraMutationHook;
+  /** The page whose resolver calls (`X-Hasura-Page-Id`). */
+  pageId?: string;
 }
 
 /**
- * THE PAGE'S DATASETS AS ONE HASURA-STYLE API, for a resolver's `caps.query`: every dataset the page links, under
- * its page name (a single-table dataset's root is the link name; a multi-table dataset's are `<name>_<table root>`).
- * The role is the page audience rule over each dataset's own sharing (never owner rights): a dataset the caller's
- * role reads nothing of is absent, as if unlinked.
+ * THE PAGE'S DATASETS FOR A RESOLVER'S `caps.query`, run as the caller (never owner rights): reads always; writes
+ * only inside a mutation resolver, through the one generated mutation path under each dataset's rules for the
+ * caller's role through the page.
  */
 export async function executeLinkedDatasetGraphql(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: LinkedDatasetGraphqlOptions, signal: AbortSignal): Promise<DatasetGraphqlReply> {
   const parsed = parsedOperation(request);
@@ -288,24 +321,108 @@ export async function executeLinkedDatasetGraphql(actor: AccessActor, links: rea
   const kind = parsed.operation.operation;
   if (kind === 'subscription') return { errors: [error('caps.query has no subscription root', 'validation_failed')] };
   if (kind === 'mutation' && options.operation !== 'mutation') return { errors: [error('a dataset mutation runs only inside a mutation resolver', 'permission_denied')] };
-  if (kind === 'mutation' && !options.mutations) return { errors: [error('dataset mutations are not available to resolvers yet', 'mutations_unavailable')] };
-  const loaded: Loaded[] = [];
-  for (const link of links) {
-    let one: Loaded;
-    try { one = await load(actor, link, signal, false); } catch (e) {
-      if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) continue;
-      throw e;
-    }
-    const single = one.tables.length === 1;
-    loaded.push({ ...one, tables: one.tables.map((t) => ({ ...t, model: { ...t.model, root: single ? link.name : `${link.name}_${t.model.root}` } })) });
-  }
-  const names = new Set<string>();
-  for (const { model } of loaded.flatMap((l) => l.tables)) for (const name of hasuraGeneratedNames(model.root)) {
-    if (names.has(name)) return { errors: [error(`two linked datasets generate the name ${name}; rename a link`, 'validation_failed')] };
-    names.add(name);
+  let loaded: Loaded[];
+  try { loaded = await loadLinked(actor, links, options.pageId ? { pageId: options.pageId } : {}, signal); } catch (e) {
+    if (e instanceof GraphQLError) return { errors: [error(e.message, 'validation_failed')] };
+    throw e;
   }
   if (!loaded.length) return { errors: [error('no linked dataset is readable', 'dataset_not_found')] };
-  return run(actor, loaded, parsed.document, request, signal, options.resultBytes, kind === 'mutation' ? options.mutations : undefined);
+  if (kind === 'mutation') return linkedMutation(actor, loaded, parsed.document, request, options.pageId);
+  return run(actor, loaded, parsed.document, request, signal, options.resultBytes);
+}
+
+/** A mutation over linked datasets: validated against their joint schema, written as one dataset's step. */
+async function linkedMutation(actor: AccessActor, loaded: readonly Loaded[], document: DocumentNode, request: DatasetGraphqlRequest, pageId: string | undefined): Promise<DatasetGraphqlReply> {
+  const schema = schemaFor(hasuraSdl(loaded.flatMap((l) => l.tables.map((t) => t.model))));
+  const invalid = validate(schema, document);
+  if (invalid.length) return { errors: invalid.slice(0, 20).map((e) => error(e.message, 'validation_failed')) };
+  return executeMutation(actor, loaded, schema, document, request, pageId);
+}
+
+/**
+ * Every root and type name a generated-API link would put in the page schema, from the dataset's declared tables
+ * (role-independent, so publishing can refuse a collision no reader would otherwise see until their request).
+ */
+export async function pageDatasetRoots(actor: AccessActor, link: HtmlDatasetLink): Promise<string[]> {
+  const row = await resolveDatasetBinding(actor, link);
+  const declared = datasetBindingCatalog(row);
+  const roots = hasuraNames(declared.tables, { title: row.title, configuration: storedConfiguration(row.dataset_policy) });
+  return roots.flatMap(({ root }) => hasuraGeneratedNames(linkedRoot(link.name, roots.length, root)));
+}
+
+/** One hasura link's composition source: its role's SDL, mounted flat at the top of the page schema. */
+interface PageDatasetSource {
+  name: string;
+  fileId: string;
+  version: string;
+  typeDefs: string;
+  /** Root field → the table root it reads or writes and its kind (the `@dataset` directive's `table` and `field`). */
+  roots: Readonly<Record<string, { table: string; field: string }>>;
+}
+
+/** The page request's view of its hasura-linked datasets: composition sources, query roots and the mutation door. */
+export interface PageDatasets {
+  sources: readonly PageDatasetSource[];
+  /** Query root resolvers by field name; failures carry `extensions.code` and never row data. */
+  queryRoots(): Record<string, unknown>;
+  /** One mutation operation over these datasets (all its fields one dataset's): one atomic, idempotent step. */
+  mutate(request: DatasetGraphqlRequest): Promise<DatasetGraphqlReply>;
+}
+
+/** A failure inside a page query root as a GraphQL error the page passes on with its code. */
+function codedError(e: unknown): GraphQLError {
+  if (e instanceof GraphQLError && typeof e.extensions?.code === 'string') return e;
+  const coded = e instanceof HasuraReadError ? error(e.message, 'validation_failed')
+    : e instanceof Error && e.message === 'dataset_changed' ? error('the dataset or your access changed during the request; retry', 'dataset_changed')
+    : e instanceof GraphQLError ? error(e.message, 'validation_failed')
+    : error('the read failed', 'unexpected');
+  return new GraphQLError(coded.message, { extensions: { code: coded.extensions.code } });
+}
+/** Every resolver function in a root value (the aggregate's leaves included), its failures coded. */
+function coded(value: unknown): unknown {
+  if (typeof value === 'function') return async (...args: unknown[]) => { try { return coded(await (value as (...a: unknown[]) => unknown)(...args)); } catch (e) { throw codedError(e); } };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, coded(v)]));
+}
+
+/**
+ * THE PAGE COMPOSITION'S DATASET SIDE (Hasura PR 6): the hasura-api links of one page for one caller, loaded once
+ * per request. Their roots mount flat in the page schema; reads run through the read compiler under the role's
+ * select rules, writes through the one mutation path under its insert/update/delete rules, both with the page as
+ * `X-Hasura-Page-Id`. A pinned link is read-only (no mutation roots).
+ */
+export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { idempotencyKey?: string }, signal: AbortSignal): Promise<PageDatasets> {
+  const loaded = await loadLinked(actor, links, scope, signal);
+  const sources = loaded.map((l): PageDatasetSource => {
+    const link = l.link!;
+    const models = l.tables.map((t) => t.model);
+    const roots: Record<string, { table: string; field: string }> = {};
+    for (const m of models) if (m.select !== false) {
+      roots[m.root] = { table: m.root, field: 'select' };
+      roots[`${m.root}_by_pk`] = { table: m.root, field: 'select_by_pk' };
+      if (m.aggregations) roots[`${m.root}_aggregate`] = { table: m.root, field: 'select_aggregate' };
+    }
+    for (const [field, { model, kind }] of mutationRoots(models)) roots[field] = { table: model.root, field: kind };
+    return { name: link.name, fileId: link.datasetId, version: link.mode === 'pinned' ? link.revision : 'live', typeDefs: hasuraSdl(models), roots };
+  });
+  let root: Record<string, unknown> | undefined;
+  return {
+    sources,
+    queryRoots() {
+      if (!root) {
+        const budget = { statements: 0 }, all: Record<string, unknown> = {};
+        for (const l of loaded) rootValue(actor, l, signal, budget, all);
+        root = coded(all) as Record<string, unknown>;
+      }
+      return root;
+    },
+    async mutate(request) {
+      const parsed = parsedOperation(request);
+      if ('errors' in parsed) return parsed;
+      if (parsed.operation.operation !== 'mutation') return { errors: [error('not a mutation', 'validation_failed')] };
+      return linkedMutation(actor, loaded, parsed.document, { ...request, ...(scope.idempotencyKey ? { idempotencyKey: scope.idempotencyKey } : {}) }, scope.pageId);
+    },
+  };
 }
 
 const reply = (result: ExecutionResult): DatasetGraphqlReply => {
@@ -351,8 +468,8 @@ function returned(loaded: Loaded, table: LoadedTable, kind: HasuraMutationKind, 
  * A mutation operation: record its root fields, compile them, write once (durably, under the idempotency key),
  * and answer the selection from the committed steps.
  */
-async function executeMutation(actor: AccessActor, datasetId: string, loaded: Loaded, schema: GraphQLSchema, document: DocumentNode, request: DatasetGraphqlRequest): Promise<DatasetGraphqlReply> {
-  const roots = mutationRoots(loaded.tables.map((t) => t.model));
+async function executeMutation(actor: AccessActor, datasets: readonly Loaded[], schema: GraphQLSchema, document: DocumentNode, request: DatasetGraphqlRequest, pageId?: string): Promise<DatasetGraphqlReply> {
+  const roots = mutationRoots(datasets.flatMap((l) => l.tables.map((t) => t.model)));
   const options = { schema, document, variableValues: request.variables ?? {}, ...(request.operationName ? { operationName: request.operationName } : {}) };
   // Pass 1: each root field's coerced arguments, by response key; nothing is written.
   const recorded: Array<{ key: string; field: string; args: Record<string, unknown> }> = [];
@@ -361,9 +478,14 @@ async function executeMutation(actor: AccessActor, datasetId: string, loaded: Lo
   if (first.errors?.length) return reply({ errors: first.errors });
   if (!recorded.length) return reply(first);
 
+  // The written dataset: every field one dataset's (one atomic version step).
+  const owners = new Set(recorded.map((r) => datasets.find((l) => l.tables.some((t) => t.model === roots.get(r.field)!.model))!));
+  if (owners.size > 1) return { errors: [error('one mutation writes one dataset; send one mutation per linked dataset', 'one_dataset_per_mutation')] };
+  const [loaded] = [...owners] as [Loaded], datasetId = loaded.datasetId;
   const key = request.idempotencyKey ?? randomUUID();
   if (!IDEMPOTENCY_KEY.test(key)) return { errors: [error('the Idempotency-Key must be 16 to 128 letters, digits, - or _', 'validation_failed')] };
-  const seed = digest(['dataset-graphql', datasetId, key]);
+  // Directly and through each page the key names its own receipt.
+  const seed = digest(pageId ? ['dataset-graphql', datasetId, key, pageId] : ['dataset-graphql', datasetId, key]);
   let calls: Call[];
   try {
     calls = recorded.map((r, i) => {
@@ -394,7 +516,7 @@ async function executeMutation(actor: AccessActor, datasetId: string, loaded: Lo
   if (!statements.length) return answer([]);
 
   let committed: DatasetGraphqlReply | null = null;
-  const payload = { datasetId, query: request.query, variables: request.variables ?? null, operationName: request.operationName ?? null };
+  const payload = { datasetId, ...(pageId ? { pageId } : {}), query: request.query, variables: request.variables ?? null, operationName: request.operationName ?? null };
   const outcome = await durableMutation(actor, 'https://dataset.invalid', seed, payload, async (receipt) => {
     const head = await getArtifactById(datasetId);
     if (!head || head.format !== 'dataset') return { status: 200, body: { errors: [error('the dataset no longer exists', 'dataset_not_found')] } };
@@ -402,7 +524,7 @@ async function executeMutation(actor: AccessActor, datasetId: string, loaded: Lo
     const result = await mutateDataset(head, actor, firstStatement!.sql, firstStatement!.params, {
       target: { schema: table.model.table.schema, table: table.model.table.name },
       statements,
-      directPolicy: true,
+      ...(pageId ? { pagePolicy: pageId } : { directPolicy: true }),
       casRetries: DATASET_GRAPHQL_WRITE_LIMITS.casRetries,
       maxAffected: DATASET_GRAPHQL_WRITE_LIMITS.rows,
       trace: true,

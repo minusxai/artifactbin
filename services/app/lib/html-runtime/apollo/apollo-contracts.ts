@@ -146,6 +146,8 @@ export interface RemotePort {
     query: string;
     variables: Variables;
     operation: "query" | "mutation";
+    /** Mutations: the client.mutate's Idempotency-Key (the transport sends it as that header). */
+    idempotencyKey?: string;
   }): Promise<{
     data: AfJsonObject | null;
     errors?: ResultError[];
@@ -156,6 +158,10 @@ export interface RemotePort {
 export interface ClientOptions {
   /** The page's `data-af-name`s. */
   backends: readonly string[] | (() => readonly string[]);
+  /** The dataset links on the generated API: their flat roots (`orders`, `orders_aggregate`, `insert_orders_one`…) are remote. */
+  datasets?: readonly string[] | (() => readonly string[]);
+  /** A fresh Idempotency-Key per client.mutate (default crypto.randomUUID). */
+  idempotencyKey?: () => string;
   state: StatePort;
   /** Omitted when the page links no backends. */
   remote?: RemotePort;

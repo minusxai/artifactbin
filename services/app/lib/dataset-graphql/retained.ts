@@ -18,28 +18,30 @@ interface RetainedReadOptions {
  retainReadFence?:(verify:()=>Promise<void>)=>void;
  /** The dataset's own GraphQL endpoint: the dataset's sharing alone decides the role (no page audience). */
  direct?:boolean;
+ /** Through a page's generated API: the page (`X-Hasura-Page-Id`) the read's session names. */
+ pageId?:string;
 }
 const authorityIdentity=(row:ArtifactRow)=>JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision,catalogOf(row)]);
 /** The head's identity and the reader's role view (role, policy, session, rules): any change refuses a continuation. */
-async function readIdentity(actor:import('@/lib/accounts').AccessActor,id:string,direct=false){
- const read=await authorizedDatasetRead(actor,id,{throughPage:!direct});
+async function readIdentity(actor:import('@/lib/accounts').AccessActor,id:string,direct=false,pageId?:string){
+ const read=await authorizedDatasetRead(actor,id,{throughPage:!direct,...(pageId?{pageId}:{})});
  return {...read,identity:JSON.stringify([authorityIdentity(read.row),read.decision.identity])};
 }
 export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):DatasetGraphqlPort {
  return {
   async people(actor,snapshot,ids,signal){
-   const verify=async()=>{signal.throwIfAborted();if((await readIdentity(actor,snapshot.id,options.direct)).identity!==snapshot.policyIdentity)throw Error('dataset_changed');};
+   const verify=async()=>{signal.throwIfAborted();if((await readIdentity(actor,snapshot.id,options.direct,options.pageId)).identity!==snapshot.policyIdentity)throw Error('dataset_changed');};
    options.retainReadFence?.(verify);
    // Only rows the reader may see vouch for a person.
    return readDatasetPeople(snapshot,ids,{verify,rows:async table=>{if(!table.objectKey)throw unavailable();const rows=await loadDatasetRows({meta:{objectKey:table.objectKey}});return snapshot.view?snapshot.view.rows(table,rows):rows;},cards:async ids=>people(await getDb(),ids)},signal);
   },
   async snapshot(actor,binding,signal){
    signal.throwIfAborted();
-   const {decision,identity:policyIdentity}=await readIdentity(actor,binding.datasetId,options.direct);
-   const row=await resolveDatasetBinding(actor,binding,async(reader,id)=>(await authorizedDatasetRead(reader,id,{throughPage:!options.direct})).row);
+   const {decision,identity:policyIdentity}=await readIdentity(actor,binding.datasetId,options.direct,options.pageId);
+   const row=await resolveDatasetBinding(actor,binding,async(reader,id)=>(await authorizedDatasetRead(reader,id,{throughPage:!options.direct,...(options.pageId?{pageId:options.pageId}:{})})).row);
    // The reader's role view: tables they cannot select and hidden columns leave the schema; rows are filtered at execution.
    const declared=datasetBindingCatalog(row),view=datasetView(decision),catalog=viewCatalog(decision,declared);
-   const verify=async()=>{signal.throwIfAborted();if((await readIdentity(actor,row.id,options.direct)).identity!==policyIdentity)throw new Error('dataset_changed');};
+   const verify=async()=>{signal.throwIfAborted();if((await readIdentity(actor,row.id,options.direct,options.pageId)).identity!==policyIdentity)throw new Error('dataset_changed');};
    options.retainReadFence?.(verify);
    const rowIds:Record<string,readonly string[]>={},sources:Record<string,DatasetSourceInfo>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
@@ -64,7 +66,7 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
    if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
    const source=objectStore();
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
-   const authorize=async()=>{if(snapshot.policyIdentity!==(await readIdentity(actor,snapshot.id,options.direct)).identity)throw new Error('dataset_changed');};
+   const authorize=async()=>{if(snapshot.policyIdentity!==(await readIdentity(actor,snapshot.id,options.direct,options.pageId)).identity)throw new Error('dataset_changed');};
    const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,timeoutMs:5000,actor,datasetId:snapshot.id,signal,authorize,view:snapshot.view??null,
     objects:{get:async key=>{
      const bytes=await source.get(key);if(key!==table.objectKey)return bytes;

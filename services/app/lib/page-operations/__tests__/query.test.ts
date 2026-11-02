@@ -13,9 +13,10 @@ describe('createResolverQuery', () => {
   it('runs as the caller\'s bare account over the page\'s links, with the resolver result cap', async () => {
     const { execute, query } = port({ data: { staff: [] } });
     expect(await query(call({ subject: 'u1', role: 'viewer' }, { query: '{ staff { name } }', variables: { a: 1 }, operationName: 'Q' }))).toEqual({ staff: [] });
-    expect(execute).toHaveBeenCalledWith({ userId: 'u1', tokenId: null, email: null, documentEditor: false }, links, { query: '{ staff { name } }', variables: { a: 1 }, operationName: 'Q' }, { operation: 'query', resultBytes: 1024 * 1024 }, expect.any(AbortSignal));
-    await query(call({ subject: null, role: 'anonymous' }, { query: '{ x }' }, 'mutation'));
-    expect(execute).toHaveBeenLastCalledWith({ userId: null, tokenId: null, email: null, documentEditor: false }, links, { query: '{ x }' }, { operation: 'mutation', resultBytes: 1024 * 1024 }, expect.any(AbortSignal));
+    expect(execute).toHaveBeenCalledWith({ userId: 'u1', tokenId: null, email: null, documentEditor: false }, links, { query: '{ staff { name } }', variables: { a: 1 }, operationName: 'Q' }, { operation: 'query', resultBytes: 1024 * 1024, pageId: 'page1' }, expect.any(AbortSignal));
+    // The page names itself to the dataset rules (X-Hasura-Page-Id); a mutation's Idempotency-Key reaches the receipt.
+    await query(call({ subject: null, role: 'anonymous' }, { query: '{ x }', idempotencyKey: 'resolver_key_0001' }, 'mutation'));
+    expect(execute).toHaveBeenLastCalledWith({ userId: null, tokenId: null, email: null, documentEditor: false }, links, { query: '{ x }', idempotencyKey: 'resolver_key_0001' }, { operation: 'mutation', resultBytes: 1024 * 1024, pageId: 'page1' }, expect.any(AbortSignal));
   });
   it('refuses a run without an attested caller and malformed arguments before reaching a dataset', async () => {
     const { execute, query } = port({ data: {} });
@@ -29,7 +30,7 @@ describe('createResolverQuery', () => {
     expect(await refused({ errors: [{ message: 'Cannot query field "x"\non type Query', extensions: { code: 'validation_failed' } }] })).toEqual(['validation_failed', 'validation_failed: Cannot query field "x"']);
     expect(await refused({ errors: [{ message: 'retry', extensions: { code: 'dataset_changed' } }] })).toEqual(['conflict', 'conflict: retry']);
     expect(await refused({ errors: [{ message: 'none', extensions: { code: 'dataset_not_found' } }] })).toEqual(['unavailable', 'unavailable: none']);
-    expect(await refused({ errors: [{ message: 'later', extensions: { code: 'mutations_unavailable' } }] })).toEqual(['mutations_unavailable', 'mutations_unavailable: later']);
+    expect(await refused({ errors: [{ message: 'later', extensions: { code: 'one_dataset_per_mutation' } }] })).toEqual(['one_dataset_per_mutation', 'one_dataset_per_mutation: later']);
     expect(await refused(new Error('dataset_changed'))).toEqual(['conflict', 'conflict']);
     expect(await refused(new Error('connection reset with row data'))).toEqual(['unavailable', 'unavailable']);
   });

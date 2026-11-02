@@ -66,6 +66,8 @@ export function urlValuesOf(data: unknown): string | null {
 const KEPT_HEADERS = ['content-type', 'retry-after'];
 /** The request headers a relayed request may carry. */
 const SENT_HEADERS = ['content-type'];
+/** A mutation's Idempotency-Key (@afbin/apollo, one per client.mutate): relayed for mutations only, in its own shape. */
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 
 const sameOriginFetch = (win: Window) => (path: string, init: RequestInit): Promise<Response> =>
   win.fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
@@ -79,6 +81,7 @@ export function relayedRequest(win: Window, id: string, request: { path: unknown
   const graphql = url.pathname === `/api/artifacts/${encodeURIComponent(id)}/graphql` && request.method === 'POST' && !url.search && !url.hash;
   if (!graphql) return null;
   let graphqlBody: string | undefined;
+  let mutation = false;
   if (graphql) {
     if (!htmlContext?.revision || typeof request.body !== 'string' || request.body.length > 1_000_000) return null;
     try {
@@ -86,6 +89,7 @@ export function relayedRequest(win: Window, id: string, request: { path: unknown
       if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
       const body = input as Record<string, unknown>;
       if (typeof body.query !== 'string' || !['query', 'mutation'].includes(String(body.operation)) || htmlContext.readOnly && body.operation !== 'query') return null;
+      mutation = body.operation === 'mutation';
       graphqlBody = JSON.stringify({ ...body, revision: htmlContext.revision });
     } catch { return null; }
   }
@@ -93,6 +97,7 @@ export function relayedRequest(win: Window, id: string, request: { path: unknown
   if (request.headers && typeof request.headers === 'object') {
     for (const [name, value] of Object.entries(request.headers as Record<string, unknown>)) {
       if (SENT_HEADERS.includes(name.toLowerCase()) && typeof value === 'string') headers[name] = value;
+      else if (mutation && name.toLowerCase() === 'idempotency-key' && typeof value === 'string' && IDEMPOTENCY_KEY.test(value)) headers['Idempotency-Key'] = value;
     }
   }
   const body = graphqlBody ?? (request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined);

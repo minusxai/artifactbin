@@ -35,7 +35,7 @@ export interface ResolverQueryPorts {
   /** The datasets the page links now (its head), live and pinned. */
   links(pageId: string): Promise<readonly HtmlDatasetLink[]>;
   /** lib/dataset-graphql `executeLinkedDatasetGraphql`: the page audience rule over each dataset's own sharing. */
-  execute(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: { operation: 'query' | 'mutation' | undefined; resultBytes: number }, signal: AbortSignal): Promise<DatasetGraphqlReply>;
+  execute(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: { operation: 'query' | 'mutation' | undefined; resultBytes: number; pageId: string }, signal: AbortSignal): Promise<DatasetGraphqlReply>;
 }
 
 
@@ -50,12 +50,14 @@ export function createResolverQuery(ports: ResolverQueryPorts): ResolverQuery {
     if (Buffer.byteLength(args.query) > RESOLVER_LIMITS.queryDocumentBytes) throw new ResolverQueryError('validation_failed', `a query document is at most ${RESOLVER_LIMITS.queryDocumentBytes} bytes`);
     if (args.variables !== undefined && args.variables !== null && !isObject(args.variables)) throw new ResolverQueryError('validation_failed', 'variables must be an object');
     if (args.operationName !== undefined && args.operationName !== null && typeof args.operationName !== 'string') throw new ResolverQueryError('validation_failed', 'operationName must be a string');
-    const request: DatasetGraphqlRequest = { query: args.query, ...(isObject(args.variables) ? { variables: args.variables } : {}), ...(typeof args.operationName === 'string' ? { operationName: args.operationName } : {}) };
+    if (args.idempotencyKey !== undefined && args.idempotencyKey !== null && typeof args.idempotencyKey !== 'string') throw new ResolverQueryError('validation_failed', 'idempotencyKey must be a string');
+    // A mutation's key names its durable receipt (a retried resolver replays it); without one the server makes one.
+    const request: DatasetGraphqlRequest = { query: args.query, ...(isObject(args.variables) ? { variables: args.variables } : {}), ...(typeof args.operationName === 'string' ? { operationName: args.operationName } : {}), ...(typeof args.idempotencyKey === 'string' ? { idempotencyKey: args.idempotencyKey } : {}) };
     // The caller's account, nothing more: no token, email or host grant reaches the dataset decision.
     const actor = identityForUser(caller.subject);
     let reply: DatasetGraphqlReply;
     try {
-      reply = await ports.execute(actor, await ports.links(pageId), request, { operation, resultBytes: RESOLVER_LIMITS.queryResultBytes }, signal ?? new AbortController().signal);
+      reply = await ports.execute(actor, await ports.links(pageId), request, { operation, resultBytes: RESOLVER_LIMITS.queryResultBytes, pageId }, signal ?? new AbortController().signal);
     } catch (e) {
       if (e instanceof Error && (e.message === 'dataset_changed' || e.message === 'dataset_not_found')) throw new ResolverQueryError(CODES[e.message]!);
       throw new ResolverQueryError('unavailable');

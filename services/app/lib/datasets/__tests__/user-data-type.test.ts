@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {nativeDatasetClient} from '@/__tests__/native-dataset-http';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
@@ -54,7 +55,7 @@ describe('native user fields',()=>{
  it('freezes current on first report attachment and supplies typed member choices',async()=>{
   const a=await account('owner'), b=await account('member');
   const dataset=await create(a.token,{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]},access:'readwrite'});
-  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Assigned work</h1></body></html>`;
+  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Assigned work</h1></body></html>`;
   const report=await create(a.token,{html,shares:[{email:b.user.email,role:'viewer'}]});
   expect((await getArtifactById(dataset.id))!.version).toBe(2);
   const archived=await (await getDb()).query<{meta:{columns:Array<{constraints?:{memberOf:string[]}}>}}> ('SELECT meta FROM artifact_versions WHERE artifact_id=$1 AND version=1',[dataset.id]);
@@ -75,7 +76,7 @@ describe('native user fields',()=>{
   const owner=await account('scope-owner'),other=await account('scope-other');
   const dataset=await create(owner.token,{dataset:[{who:null}],columns:[{name:'who',type:'user',constraints:{memberOf:['current']}}],access:'readwrite'});
   const before=await getArtifactById(dataset.id);
-  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Foreign scope</h1></body></html>`;
+  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Foreign scope</h1></body></html>`;
   const response=await createRoute(request('/api/artifacts',{method:'POST',token:other.token,json:{html}}));
   expect(response.status,await response.clone().text()).toBe(403);
   const after=await getArtifactById(dataset.id);
@@ -105,7 +106,7 @@ describe('native user fields',()=>{
  it('executes a native row update as its caller and refuses a forged self identity',async()=>{
   const a=await account('owner'),b=await account('editor');
   const dataset=await create(a.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite',shares:[{email:b.user.email,role:'editor'}]});
-  const report=await create(a.token,{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Tasks</h1></body></html>`});
+  const report=await create(a.token,{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Tasks</h1></body></html>`});
   const client=nativeDatasetClient(report.id),schema=await client.schema({token:b.token});
   expect(schema.body.errors).toBeUndefined();const table=schema.body.data!.records!.schema.tables[0]!;
   const rows=await client.rows(table.id,{token:b.token});const row=rows.body.data!.records!.rows.rows[0]!;

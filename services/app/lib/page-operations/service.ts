@@ -1,5 +1,6 @@
 import type { DatasetRole, HtmlPageVersion, PageNamespaceSource, PageOperations, PageResolverInvoker } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
+import type { PageDatasetPort } from './contracts';
 import {composePageSchema,executePageOperation} from './namespaces';
 export interface PageOperationPorts {
  readPage(actor:AccessActor,pageId:string,revision:string):Promise<HtmlPageVersion>;
@@ -7,6 +8,8 @@ export interface PageOperationPorts {
  role(actor:AccessActor,pageId:string):Promise<DatasetRole|null>;
  sources(actor:AccessActor,page:HtmlPageVersion,signal?:AbortSignal):Promise<readonly PageNamespaceSource[]>;
  invoke:PageResolverInvoker['invoke'];
+ /** The page's generated-API dataset links for this caller (the same load `sources` composed), when it has any. */
+ datasets?(actor:AccessActor,page:HtmlPageVersion,signal?:AbortSignal):Promise<PageDatasetPort|undefined>;
 }
 export function createPageOperations(ports:PageOperationPorts):PageOperations<AccessActor>{
  return {
@@ -17,7 +20,8 @@ export function createPageOperations(ports:PageOperationPorts):PageOperations<Ac
   const role=await ports.role(actor,page.pageId);
   if(!role)throw Error('forbidden');
   const schema=composePageSchema(await ports.sources(actor,page,signal));
-  return executePageOperation({schema,request,caller:{pageId:page.pageId,subject:actor.userId,role},signal,invoke:ports.invoke});
+  const datasets=await ports.datasets?.(actor,page,signal);
+  return executePageOperation({schema,request,caller:{pageId:page.pageId,subject:actor.userId,role},signal,invoke:ports.invoke,...(datasets?{datasets}:{})});
  }
  };
 }

@@ -4,7 +4,7 @@ const attr=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;'
 /** Stored datasets are linked by ID; tables and columns are discovered through the namespace. */
 export function datasetQuerySnippet(id:string,catalog?:DatasetCatalog,name='data'):string {
  if(catalog?.kind==='postgres')return 'Connected PostgreSQL sources cannot be linked through the native dataset GraphQL adapter. Import stored CSV or JSON rows to use an af-dataset namespace.';
- return `<link rel="af-dataset" data-af-name="${attr(name)}" href="ref:${attr(id)}" data-af-mode="live">`;
+ return `<link rel="af-dataset" data-af-name="${attr(name)}" data-af-api="legacy" href="ref:${attr(id)}" data-af-mode="live">`;
 }
 function usage(id:string,catalog?:DatasetCatalog):string {
  if(catalog?.kind==='postgres')return datasetQuerySnippet(id,catalog);

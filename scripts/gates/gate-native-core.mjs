@@ -15,7 +15,7 @@ const publish=async body=>{const res=await fetch(base+'/api/artifacts',{method:'
 const dataset=await publish({dataset:[{value:7}]});
 const body='<p data-af-id="words">The reader works before the author engine loads.</p><button id="start">Load client</button><output id="count"></output><button id="remote">Read shared data</button><output id="status"></output>';
 const script=`document.querySelector('#start').onclick=async()=>{const {client,gql}=await import('@afbin/apollo');const query=gql\`{count}\`;await client.updateQuery({query},({count})=>({count:count+1}));document.querySelector('#count').textContent=(await client.query({query})).data.count;document.querySelector('#remote').onclick=async()=>{document.querySelector('#status').textContent=JSON.stringify(await client.query({query:gql\`{orders{rows{value}}}\`}))}}`;
-const html=`<!doctype html><html><head><script data-af="core" src="/af/core.js"></script><script type="application/json" data-af="state">{"count":3}</script><link rel="af-dataset" data-af-name="orders" href="ref:${dataset.id}"></head><body>${body}<script>${script}</script></body></html>`;
+const html=`<!doctype html><html><head><script data-af="core" src="/af/core.js"></script><script type="application/json" data-af="state">{"count":3}</script><link rel="af-dataset" data-af-name="orders" data-af-api="legacy" href="ref:${dataset.id}"></head><body>${body}<script>${script}</script></body></html>`;
 try{
  const doc=await publish({html}),page=await browser.newPage();let authorRequests=0,relayRequests=0;
  page.on('request',request=>{if(new URL(request.url()).pathname==='/af/apollo.js')authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/graphql`))relayRequests++;});

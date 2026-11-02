@@ -29,6 +29,8 @@ export interface DatasetWriteOptions {
   throughPage?: boolean;
   /** A saved-document program carrying the write: provenance always, program trust for backend_only. */
   document?: GrantDocument;
+  /** The page whose GraphQL carries the write (its `X-Hasura-Page-Id`); implies `throughPage`. */
+  pageId?: string;
   /** Upload trust (its own saved-link proof); a document program uses `document` instead. */
   trust?: (db: Queryable) => Promise<DatasetGrantContext>;
   /** Decide inside this transaction (the commit's lock), never on the shared connection. */
@@ -118,7 +120,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   const revision = row.policy_revision ?? 0;
   const read = permissionsOf(row);
   const v2 = read?.source === 'v2' || (!read && !!row.dataset_policy && (row.dataset_policy as { version?: unknown }).version === 2);
-  const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.document });
+  const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.document || !!options.pageId });
   if (row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres' || (!v2 && row.access !== 'readwrite')) return { allowed: false, role, revision, reason: 'dataset_read_only' };
   if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
@@ -139,7 +141,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   const session: Record<string, Scalar> = {
     'x-hasura-role': role,
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
-    ...(options.document ? { 'x-hasura-page-id': options.document.id } : {}),
+    ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
   return { allowed: true, admin: false, role, revision, permissions: read.policy, trusted: isTrusted, session, ...(read.execution ? { execution: read.execution } : {}) };
 }

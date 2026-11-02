@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Native dataset writes retain dataset authority, CAS and typed-column validation.
  * Retired JSX Value/row-action compiler tests are removed; authored controls use these HTTP operations. */
 import type {Actor} from '@artifactbin/contracts';
@@ -17,7 +18,7 @@ async function fixture(data:Record<string,unknown>={dataset:[{n:1}],access:'read
  const owner=await mintAccountToken('owner'),user=await createUser({email:'mxmx_test_dataset_friend@example.com'}),friend=await mintAccountToken('friend',user.id);
  const publish=async(body:object)=>{const response=await publishRoute(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',...body}}));expect(response.status,await response.clone().text()).toBe(201);return (await response.json()).id as string;};
  const dataset=await publish(data);
- const page=await publish({html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset}" data-af-mode="live"></head><body><h1>Shared rows</h1></body></html>`});
+ const page=await publish({html:`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="records" href="ref:${dataset}" data-af-mode="live"></head><body><h1>Shared rows</h1></body></html>`});
  const actor:Actor={credential:'session',userId:user.id,email:user.email!,emailVerified:true},client=nativeDatasetClient(page);
  const schema=await client.schema({token:owner.token});expect(schema.body.errors).toBeUndefined();const table=schema.body.data!.records!.schema.tables[0]!;
  let serial=0;

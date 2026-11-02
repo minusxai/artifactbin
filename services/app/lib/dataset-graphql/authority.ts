@@ -27,10 +27,11 @@ async function authorizedDataset(actor:AccessActor,id:string){
  * Through a page linking it (the default), a reader without sharing of their own is signed_in or anonymous;
  * directly (`throughPage:false`, the dataset's own GraphQL endpoint), the dataset's sharing alone decides.
  */
-export async function authorizedDatasetRead(actor:AccessActor,id:string,options:{throughPage:boolean}={throughPage:true}):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{
+export async function authorizedDatasetRead(actor:AccessActor,id:string,options:{throughPage:boolean;pageId?:string}={throughPage:true}):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{
  const row=await getArtifactById(id);
  if(!row||row.format!=='dataset')throw unavailable();
- const decision=await datasetReadAccess(row,actor,{throughPage:options.throughPage});
+ // Through a page's generated API the page names itself (`X-Hasura-Page-Id`); never directly.
+ const decision=await datasetReadAccess(row,actor,{throughPage:options.throughPage,...(options.throughPage&&options.pageId?{pageId:options.pageId}:{})});
  if(!decision.allowed)throw unavailable();
  return {row,decision};
 }

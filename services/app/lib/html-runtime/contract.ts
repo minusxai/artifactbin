@@ -8,6 +8,8 @@ export interface HtmlRuntimeConfig {
   /** Source-owned identities, supplied by assembly before author code runs. */
   savedNodeIds?: readonly string[];
   backends: readonly string[];
+  /** Dataset links on the generated API: their roots are flat remote fields (apollo `datasets`); the rest of `backends` are namespaces. */
+  datasets?: readonly string[];
   /** Namespace -> immutable linked resource ID, for backend invalidation notifications. */
   bindings?: Readonly<Record<string, string>>;
   /** Exact platform origin. Never a credential or a URL carrying one. */

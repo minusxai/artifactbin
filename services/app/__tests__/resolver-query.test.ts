@@ -17,6 +17,7 @@ import { getHtmlBackendVersion, htmlLiveLinks, htmlSharedRevisions } from '@/lib
 import { localPageBackendCapability, pageBackendOperation } from '@/lib/page-operations';
 import { resolverDatasetQuery } from '@/lib/page-graphql';
 import { getArtifactById } from '@/lib/artifacts';
+import { loadDatasetRows } from '@/lib/datasets';
 
 vi.mock('@/lib/page-operations', async (original) => ({
   ...await original<typeof import('@/lib/page-operations')>(),
@@ -94,13 +95,24 @@ it('sees only the page\'s linked datasets under their page names', async () => {
   expect(await inProcess(f, owner, '{ staff_aggregate { aggregate { count } } }')).toEqual({ staff_aggregate: { aggregate: { count: 3 } } });
 });
 
-it('refuses mutations in query resolvers; in mutation resolvers they wait for generated mutations', async () => {
+it('refuses mutations in query resolvers; in mutation resolvers they write as the caller under the dataset rules', async () => {
   const f = await fixture();
+  // Other accounts (signed_in through the page) may add a row, stamped with the page and themselves.
+  const db = await getDb();
+  const policy = { ...POLICY, tables: [{ ...POLICY.tables[0]!, insert_permissions: [{ role: 'signed_in', permission: { columns: ['name'], check: {}, set: { team: 'X-Hasura-Page-Id', salary: 0 } } }] }] };
+  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [f.staff, JSON.stringify(policy)]);
   const owner = { subject: f.owner.userId, role: 'owner' };
-  const write = 'mutation { insert_staff_one(object: {name: "zed"}) { _id } }';
-  await expect(inProcess(f, owner, write, 'query')).rejects.toThrow(/^permission_denied: /);
-  await expect(inProcess(f, owner, write, 'mutation')).rejects.toThrow(/^mutations_unavailable: /);
-  expect(names(await inProcess(f, owner, READ))).toEqual(['ada', 'bo', 'cy']);
+  const write = (name: string) => `mutation { insert_staff_one(object: {name: "${name}"}) { _id } }`;
+  await expect(inProcess(f, owner, write('zed'), 'query')).rejects.toThrow(/^permission_denied: /);
+  expect(await inProcess(f, owner, write('dee'), 'mutation')).toEqual({ insert_staff_one: { _id: expect.any(String) } });
+  // Written; the row it returns is outside the signed_in select rule's 2-row window, so the role sees null (as in Hasura).
+  expect(await inProcess(f, { subject: f.other.userId, role: 'viewer' }, write('eve'), 'mutation')).toEqual({ insert_staff_one: null });
+  // The viewer share has no insert rule: the caller's schema has no insert root.
+  await expect(inProcess(f, { subject: f.viewer.userId, role: 'viewer' }, write('fay'), 'mutation')).rejects.toThrow(/^validation_failed: /);
+  await expect(inProcess(f, { subject: null, role: 'anonymous' }, write('gus'), 'mutation')).rejects.toThrow(/^unavailable/);
+  const rows = await loadDatasetRows((await getArtifactById(f.staff))!);
+  expect(rows.map((r) => r.name)).toEqual(['ada', 'bo', 'cy', 'dee', 'eve']);
+  expect(rows.find((r) => r.name === 'eve')).toMatchObject({ team: f.pageId, salary: 0 });
 });
 
 it('refuses a run that does not attest its caller, and bounds the document', async () => {

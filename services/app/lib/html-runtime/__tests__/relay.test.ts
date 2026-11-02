@@ -18,3 +18,11 @@ it('refuses GraphQL without trusted HTML context and refuses mutations in archiv
   expect(relayedRequest(win, 'p1', payload, { revision: '2', readOnly: true })).toBeNull();
   expect(relayedRequest(win, 'p1', { ...payload, body: 'not JSON' }, { revision: '2', readOnly: false })).toBeNull();
 });
+it('relays a mutation\'s Idempotency-Key in its own shape, and never a query\'s', () => {
+  const key = 'k_0123456789abcdef';
+  const relay = (operation: string, value: string) => relayedRequest(win, 'p1', { path: '/api/artifacts/p1/graphql', method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': value }, body: JSON.stringify({ query: `${operation} { insert_orders_one(object: {}) { _id } }`, operation, variables: {} }) }, { revision: '7', readOnly: false });
+  expect(relay('mutation', key)?.init.headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': key });
+  expect(relay('query', key)?.init.headers).toEqual({ 'content-type': 'application/json' });
+  expect(relay('mutation', 'short')?.init.headers).toEqual({ 'content-type': 'application/json' });
+  expect(relay('mutation', `${key}\r\nx-evil: 1`)?.init.headers).toEqual({ 'content-type': 'application/json' });
+});

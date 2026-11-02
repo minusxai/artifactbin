@@ -117,6 +117,8 @@ export async function mutateDataset(
     nativePolicy?:boolean;
     /** The dataset's own GraphQL endpoint: a declared native write whose role is the dataset's sharing alone (no page). */
     directPolicy?:boolean;
+    /** A page's generated dataset API: a declared native write through the page (its audience rule), naming the page as `X-Hasura-Page-Id`. */
+    pagePolicy?:string;
     /** Re-runs after a lost CAS (default WRITE_CAS_RETRIES). */
     casRetries?:number;
     /** Rows all statements together may change; above it nothing is written (`too_many_rows`). */
@@ -131,8 +133,8 @@ export async function mutateDataset(
   const db = await getDb();
   // One write decision (lib/dataset-permissions) for every door: the role, the v3 rules, program trust and
   // the carrying document's provenance. Asked before each attempt and again inside the commit transaction.
-  const door=guard.document??guard.nativePolicy??false;
-  const access:DatasetWriteOptions={throughPage:!!(guard.document||guard.nativePolicy)&&!guard.directPolicy,...(guard.document?{document:guard.document}:{})};
+  const door=guard.document??(guard.pagePolicy?{pageId:guard.pagePolicy}:undefined)??guard.nativePolicy??false;
+  const access:DatasetWriteOptions={throughPage:!!(guard.document||guard.nativePolicy||guard.pagePolicy)&&!guard.directPolicy,...(guard.document?{document:guard.document}:guard.pagePolicy?{pageId:guard.pagePolicy}:{})};
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{
     try{await recheckMutation(dataset,actor,door);}catch{throw new DatasetError('Mutation permission changed',403);}
   }});
@@ -253,7 +255,7 @@ export async function mutateDataset(
       if(!locked||artifactState(locked)!==guard.expectedState)return undefined;
      }
      const committed=await commitDatasetWrite(tx,{current,actor,meta,...(guard.document?{document:{id:guard.document.id,editId:guard.document.editId}}:{}),
-      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy||!!guard.directPolicy)&&!!policy,granted:true});
+      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy||!!guard.directPolicy||!!guard.pagePolicy)&&!!policy,granted:true});
      if(committed){
       await guard.commitEffect?.(tx,{row:committed,affected:out.affected,rowCount:out.rows.length,...(trace?{steps}:{})});
       if(guard.receipt){

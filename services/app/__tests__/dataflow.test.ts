@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Native pages bind dataset namespaces; typed requests validate at execution, never at JSX compile time. */
 import { expect, it } from "vitest";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
@@ -60,7 +61,7 @@ async function fixture() {
     visibility: "public",
   });
   const html = nativeHtml(
-    `<link rel="af-dataset" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/core.js" data-af="core"></script>`,
+    `<link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/core.js" data-af="core"></script>`,
   );
   const id = await publish({ html, visibility: "public" });
   const run = async (
@@ -191,7 +192,7 @@ it("refuses inaccessible and non-dataset bindings before publication", async () 
         token: stranger.token,
         json: {
           html: nativeHtml(
-            `<link rel="af-dataset" data-af-name="sales" href="ref:${ref}"><p>Data</p>`,
+            `<link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${ref}"><p>Data</p>`,
           ),
         },
       }),
@@ -215,7 +216,7 @@ it("applies the same binding validation to full HTML replacements", async () => 
         expectedVersion: head.version,
         expectedState: head.state,
         html: nativeHtml(
-          '<link rel="af-dataset" data-af-name="sales" href="ref:missing"><p>Invalid</p>',
+          '<link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:missing"><p>Invalid</p>',
         ),
       },
     }),

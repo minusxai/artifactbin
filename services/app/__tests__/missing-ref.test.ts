@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Deleting a linked dataset refuses its GraphQL namespace without losing the native page. */
 import {expect,it} from 'vitest';
 import {DELETE as remove,GET as read} from '@/app/api/artifacts/[id]/route';
@@ -11,7 +12,7 @@ it('a deleted dataset is unavailable while its page and immutable source remain 
  const token=await mintAccountToken('missing-dataset');
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',dataset:[{region:'EU',revenue:837}]}}));
  expect(made.status).toBe(201);const dataset=await made.json();
- const page=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="sales" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Revenue</h1></body></html>`}}));
+ const page=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Revenue</h1></body></html>`}}));
  expect(page.status).toBe(201);const document=await page.json(),original=(await getArtifactById(document.id))!;
  const query=async()=>{
   const response=await graphql(request(`/api/artifacts/${document.id}/graphql`,{method:'POST',token:token.token,json:{revision:'1',query:'{ sales { schema { revision } } }'}}),params(document.id));

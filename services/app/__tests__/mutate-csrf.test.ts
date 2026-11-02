@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /**
  * Account session writes require a same-site Origin. Legacy token cookies no
  * longer authorize browser access. Bearer writes remain independent of Origin,
@@ -32,7 +33,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 const ROWS = [{ choice: 'ramen' }];
-const DOC=(ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${ds}" data-af-mode="live"></head><body><h1>Vote</h1></body></html>`;
+const DOC=(ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="records" href="ref:${ds}" data-af-mode="live"></head><body><h1>Vote</h1></body></html>`;
 const documents=new Map<string,{datasetId:string;tableId:string;columnId:string}>();
 async function bind(token:string,ds:string,visibility:string){
  const doc=(await create(token,{html:DOC(ds),visibility})).id;

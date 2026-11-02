@@ -86,9 +86,11 @@ page owner's rights. A dataset the role reads nothing of is absent, as if unlink
 resolver namespaces are never reachable. A failure throws an `Error` whose `code` is
 `validation_failed`, `permission_denied`, `conflict`, `unavailable`,
 `result_too_large` or `caller_unavailable` (a run whose pin attests no caller).
-Mutations are refused in query resolvers (`permission_denied`) and, until generated
-dataset mutations are served to resolvers, in mutation resolvers too
-(`mutations_unavailable`). A document is at most 16 KiB and an answer 1 MiB
+Mutations are refused in query resolvers (`permission_denied`); in mutation resolvers
+they run through the generated mutation path as the caller, under each dataset's rules
+for the caller's role through the page (`X-Hasura-Page-Id` is the page), one dataset
+per mutation (`one_dataset_per_mutation`), with `idempotencyKey` naming the durable
+receipt when the resolver passes one. A document is at most 16 KiB and an answer 1 MiB
 (`RESOLVER_LIMITS`); each call counts toward the 32-request limit. An api 2
 resolver's live revision is a hash of the page's linked live dataset revisions
 (`lib/html-backends/live.ts`), so a dataset write refreshes its reads.

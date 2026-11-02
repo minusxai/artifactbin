@@ -18,7 +18,7 @@ const state = createViewerState({
   observe(listener) { const changed = (event: StorageEvent) => { if (event.key === key) listener(); }; addEventListener('storage', changed); return () => removeEventListener('storage', changed); },
   ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => Promise.resolve(navigator.locks.request(key, work)) } : {}),
 });
-export const client=createClient({backends:()=>config.backends??[],state,remote});
+export const client=createClient({backends:()=>config.backends??[],datasets:()=>config.datasets??[],state,remote});
 
 // Authors explicitly choose UI fields suitable for sharing beside a comment.
 const viewBlock=document.querySelector('[data-af="state"][data-af-comment-fields][data-af-comment-version]');

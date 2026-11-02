@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 import {expect,it} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -14,7 +15,7 @@ it('returns actual cards only for linked typed user references and refuses revok
  const published=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{booked_by:user.id,note:outsider.id}],columns:[{name:'booked_by',type:'user',constraints:{self:true}}],visibility:'public'}}));
  expect(published.status,await published.clone().text()).toBe(201);
  const dataset=await published.json();
- const pageResponse=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeHtml('<h1>People</h1>').replace('</head>',`<link rel="af-dataset" data-af-name="bookings" href="ref:${dataset.id}" data-af-mode="live"></head>`),visibility:'public'}}));
+ const pageResponse=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeHtml('<h1>People</h1>').replace('</head>',`<link rel="af-dataset" data-af-api="legacy" data-af-name="bookings" href="ref:${dataset.id}" data-af-mode="live"></head>`),visibility:'public'}}));
  expect(pageResponse.status,await pageResponse.clone().text()).toBe(201);
  const page=await pageResponse.json();
  const query=async()=>graphql(request(`/api/artifacts/${page.id}/graphql`,{method:'POST',json:{revision:'1',query:'query($ids:[ID!]!){bookings{people(ids:$ids){id name handle image}}}',variables:{ids:[user.id,outsider.id,'usr_missing']}}}),{params:Promise.resolve({id:page.id})});

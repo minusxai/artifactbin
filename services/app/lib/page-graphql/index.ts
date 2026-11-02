@@ -1,7 +1,7 @@
 import {registeredMutationPlan,registeredMutationInvoker} from '@/lib/registered-page-mutations';
 import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import {type HtmlBackendVersionRecord, getHtmlBackendVersion} from '@/lib/html-backends';
-import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import {datasetLinkApi,type HtmlDatasetLink,type HtmlPageLink} from '@artifactbin/contracts';
 import type {HtmlBackendLink} from '@artifactbin/contracts';
 import {registeredPlan, registeredQueryInvoker} from '@/lib/registered-page-queries';
 import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-queries';
@@ -12,7 +12,7 @@ import { getArtifactById, getArtifactHeaderById, accessMoved, readableArtifactHe
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind} from '@/lib/page-operations';
-import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql, executeLinkedDatasetGraphql} from '@/lib/dataset-graphql';
+import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql, executeLinkedDatasetGraphql, loadPageDatasets, type PageDatasets} from '@/lib/dataset-graphql';
 import {services} from '@/lib/platform';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
@@ -22,21 +22,32 @@ function registeredPrograms(page:HtmlPageVersion,link:HtmlBackendLink,backend:Ht
  if(!query&&!mutation&&backend.compiled.startsWith('!registered-page-'))throw Error('registered_program_unsupported');
  return {query,mutation};
 }
-async function sources(_actor:AccessActor,page:HtmlPageVersion):Promise<readonly PageNamespaceSource[]>{
- const backends=await Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
+/** The page's dataset links by API: generated roots (flat) or the frozen generic namespace. */
+const datasetLinks=(page:HtmlPageVersion,api:'hasura'|'legacy')=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&datasetLinkApi(link)===api);
+async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[]>{
+ return Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
   const backend=await getHtmlBackendVersion(link.backendId,link.version);
   if(!backend||backend.pageId!==page.pageId)throw Error('backend_link_mismatch');
   registeredPrograms(page,link,backend);
   return {name:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs};
  }));
- return [...backends,...datasetNamespaceSources(page.links.filter(link=>link.kind==='dataset'))];
 }
-function operations(actor:AccessActor,page:HtmlPageVersion,revalidateActor:()=>Promise<AccessActor>,retainReadFence?:(verify:()=>Promise<void>)=>void){
+interface OperationScope{revalidateActor:()=>Promise<AccessActor>;retainReadFence?:(verify:()=>Promise<void>)=>void;idempotencyKey?:string;signal?:AbortSignal}
+function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope){
+ const {revalidateActor,retainReadFence}=scope;
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
- const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql({retainReadFence}));
+ const legacy=datasetLinks(page,'legacy'),hasura=datasetLinks(page,'hasura');
+ const dataset=createDatasetNamespaceInvoker(actor,legacy,createRetainedDatasetGraphql({retainReadFence}));
+ // The generated-API links load once per request, for this reader's role through this page: the composed SDL and the execution share it.
+ let loaded:Promise<PageDatasets>|undefined;
+ const datasets=()=>loaded??=loadPageDatasets(actor,hasura,{pageId:page.pageId,...(retainReadFence?{retainReadFence}:{}),...(scope.idempotencyKey?{idempotencyKey:scope.idempotencyKey}:{})},scope.signal??new AbortController().signal);
+ const sources=async(_actor:AccessActor,current:HtmlPageVersion):Promise<readonly PageNamespaceSource[]>=>[
+  ...await backendSources(current),...datasetNamespaceSources(legacy),
+  ...(hasura.length?(await datasets()).sources.map(source=>({...source,kind:'dataset-hasura' as const})):[]),
+ ];
  // The page this request already read for this reader and revision is not read again (its source is the costly part).
  const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
- return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,invoke:async call=>{
+ return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>hasura.length?datasets():undefined,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   if(!link)throw Error('namespace_not_linked');
   if(link.kind==='backend'){
@@ -58,6 +69,7 @@ export const resolverDatasetQuery=createResolverQuery({
  links:async pageId=>{const row=await getArtifactById(pageId);return !row||row.format!=='html'?[]:((row.meta as {htmlLinks?:HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');},
  execute:executeLinkedDatasetGraphql,
 });
+const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Original request identity and ACLs guard both SDL and executions. */
 export async function pageGraphql(request:Request,pageId:string):Promise<Response>{
  const actor=await requestOrSessionActor(request);
@@ -77,12 +89,15 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   if(request.method==='GET'){
    const revision=new URL(request.url).searchParams.get('revision')??undefined;
    const page=await readHtmlPage(actor,pageId,revision);
-   const sdl=await operations(actor,page,()=>requestOrSessionActor(request,{revalidate:true})).schema(actor,pageId,page.revision);
+   const sdl=await operations(actor,page,{revalidateActor:()=>requestOrSessionActor(request,{revalidate:true}),signal:request.signal}).schema(actor,pageId,page.revision);
    await verifyPage(page.revision);
    return json({sdl,revision:page.revision},200,readHeaders);
   }
   const body=await readJson(request);
   if(!body||typeof body.query!=='string'||typeof body.revision!=='string'||(body.operationName!==undefined&&typeof body.operationName!=='string')||(body.variables!==undefined&&(!body.variables||typeof body.variables!=='object'||Array.isArray(body.variables))))return json({error:'invalid_graphql_request'},400);
+  // One Idempotency-Key per client mutation (@afbin/apollo): a generated-API write replays its receipt under it.
+  const idempotencyKey=request.headers.get('idempotency-key')??undefined;
+  if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400);
   const operationKind=pageOperationKind(body.query,typeof body.operationName==='string'?body.operationName:undefined);
   if(!operationKind||(body.operation!==undefined&&body.operation!==operationKind))return json({error:'invalid_graphql_operation'},400);
   const head=await readHtmlPage(actor,pageId);
@@ -92,7 +107,7 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   const operation:PageOperationRequest={pageId,revision:body.revision,query:body.query,...(body.variables?{variables:body.variables as HtmlJsonObject}:{}),...(typeof body.operationName==='string'?{operationName:body.operationName}:{})};
   // Mutations conserve their durable receipts; this final fence only withholds read results.
   const readFences:Array<()=>Promise<void>>=[];
-  const result=await operations(actor,page,()=>requestOrSessionActor(request,{revalidate:true}),operationKind==='query'?verify=>{readFences.push(verify);}:undefined).execute(actor,operation,request.signal);
+  const result=await operations(actor,page,{revalidateActor:()=>requestOrSessionActor(request,{revalidate:true}),signal:request.signal,...(operationKind==='query'?{retainReadFence:(verify:()=>Promise<void>)=>{readFences.push(verify);}}:{}),...(idempotencyKey?{idempotencyKey}:{})}).execute(actor,operation,request.signal);
   if(operationKind==='query'){
    for(const verify of readFences)await verify();
    await verifyPage(page.revision);
