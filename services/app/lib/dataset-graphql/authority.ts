@@ -23,13 +23,14 @@ async function authorizedDataset(actor:AccessActor,id:string){
  return row;
 }
 /**
- * A page reader's read of a linked dataset (page GraphQL): the head and the reader's role view
- * (lib/dataset-permissions). Without sharing of their own the reader is signed_in or anonymous.
+ * A read of a dataset's rows through GraphQL: the head and the reader's role view (lib/dataset-permissions).
+ * Through a page linking it (the default), a reader without sharing of their own is signed_in or anonymous;
+ * directly (`throughPage:false`, the dataset's own GraphQL endpoint), the dataset's sharing alone decides.
  */
-export async function authorizedDatasetRead(actor:AccessActor,id:string):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{
+export async function authorizedDatasetRead(actor:AccessActor,id:string,options:{throughPage:boolean}={throughPage:true}):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{
  const row=await getArtifactById(id);
  if(!row||row.format!=='dataset')throw unavailable();
- const decision=await datasetReadAccess(row,actor,{throughPage:true});
+ const decision=await datasetReadAccess(row,actor,{throughPage:options.throughPage});
  if(!decision.allowed)throw unavailable();
  return {row,decision};
 }

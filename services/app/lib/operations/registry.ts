@@ -28,6 +28,7 @@ import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
+import { DatasetBindingUnsupportedError, executeDatasetGraphql } from '@/lib/dataset-graphql';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
@@ -739,8 +740,31 @@ const queryResourceOp:Operation={
  async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
 };
 
+/**
+ * A dataset's generated GraphQL API, read side (Hasura v2 subset). The role is the dataset's own sharing; the
+ * schema and every read are that role's view. GET on the same path answers {sdl, revision, role} (the route).
+ */
+const queryDatasetGraphqlOp:Operation={
+ name:'query_dataset_graphql',title:'Query a dataset through its generated GraphQL API',http:{method:'POST',path:'/api/artifacts/{id}/graphql'},
+ description:'Run a GraphQL query against one dataset\'s generated, Hasura-style API. Each table you may read has <name>(where, order_by, limit, offset), <name>_by_pk(_id) and, when its rules allow aggregations, <name>_aggregate{aggregate{count sum avg min max} nodes}. The schema is your role\'s (GET the same path for {sdl, revision, role}): your role comes from the dataset\'s own sharing, and columns or rows its rules hide do not exist for you. Lists answer 100 rows unless limit says otherwise, at most 1000, ordered with _id last. Answers {data} and/or {errors}, each error with extensions.code (validation_failed, dataset_changed, result_too_large); check errors even on HTTP 200. Reads only.',
+ input:{id:z.string(),query:z.string(),variables:z.record(z.string(),z.unknown()).optional(),operationName:z.string().optional()},
+ annotations:{readOnly:true},example:{input:{id:'aB3xK9',query:'{ orders(where: {region: {_eq: "west"}}, order_by: {amount: desc}, limit: 10) { _id region amount } }'}},
+ errors:[NOT_FOUND,{status:400,code:'invalid_graphql_request',fix:'send {"query": "...", "variables": {...}} with variables an object'},{status:400,code:'dataset_stable_identity_unavailable',fix:'only stored CSV/JSON datasets have a GraphQL API; import the rows into a stored dataset'}],
+ async run(ctx,input){
+  const variables=input.variables;
+  if(typeof input.query!=='string'||(variables!==undefined&&(!variables||typeof variables!=='object'||Array.isArray(variables)))||(input.operationName!==undefined&&typeof input.operationName!=='string'))return {status:400,body:{error:'invalid_graphql_request'}};
+  try{
+   const reply=await executeDatasetGraphql(ctx.actor,String(input.id),{query:input.query,...(variables?{variables:variables as Record<string,unknown>}:{}),...(typeof input.operationName==='string'?{operationName:input.operationName}:{})},ctx.request.signal);
+   return {status:200,body:reply as Record<string,unknown>,headers:{'Cache-Control':'no-store'}};
+  }catch(error){
+   if(error instanceof DatasetBindingUnsupportedError)return {status:400,body:{error:error.code,hint:error.hint}};
+   return {status:404,body:{error:'not_found'}};
+  }
+ },
+};
+
 export const OPERATIONS: Operation[] = [
-  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
+  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
