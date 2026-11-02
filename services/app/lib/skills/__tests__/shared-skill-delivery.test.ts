@@ -89,6 +89,8 @@ describe('installable shared skill folder',()=>{
    // The archive carries no runtime, library or component bundles: the preview fetches them from the selected server.
    for(const retired of ['preview-runtime.mjs','preview-libraries.mjs'])expect(existsSync(path.join(dir,'artifactbin/scripts',retired)),retired).toBe(false);
    const installedParser=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/preview-html.mjs')).href);
+   expect(expected['scripts/preview-export.mjs']).toBeUndefined();
+   expect(await installedParser.packPreviewExport({html:'<!doctype html><html><head><title>Saved</title></head><body><p>Retained</p></body></html>',pathname:'/index.html',load:async()=>{throw Error('No external resources');}})).toContain('Retained');
    expect(installedParser.previewHtml('<!doctype html><html><head><script>check()</script></head><body>Source</body></html>','')).toContain('<html data-af-private-preview="true">');
    const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
