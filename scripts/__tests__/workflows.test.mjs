@@ -26,7 +26,7 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'codeql.yml', 'page-speed.yml']) {
+    for (const file of ['ci.yml', 'pr-fast.yml', 'codeql.yml', 'page-speed.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
       expect(refs.length, file).toBeGreaterThan(0);
@@ -239,4 +239,25 @@ describe('native credential verification stays outside the fast PR budget',()=>{
   for(const file of ['credential-storage.test.ts','credential-process.test.ts'])expect(fast.some(entry=>entry.endsWith(file))).toBe(false);
   expect(native.on.push.paths).toEqual(native.on.pull_request.paths);
  });
+});
+
+
+describe('whole-install cache equivalence', () => {
+  it('shares one complete fingerprint, payload and cold install policy across readers and warmers', () => {
+    const jobs = ['ci.yml', 'pr-fast.yml', 'page-speed.yml'].flatMap(file => Object.values(workflow(file).jobs));
+    const installs = jobs.flatMap(job => (job.steps ?? []).filter(step => step.id === 'install'));
+    expect(installs.length).toBeGreaterThan(10);
+    for (const job of jobs) {
+      const install = job.steps?.find(step => step.id === 'install');
+      if (!install) continue;
+      expect(install.with).toEqual(installs[0].with);
+      expect(install.with.key).toContain("hashFiles('.ci-cache-key/install.json')");
+      const index = job.steps.indexOf(install);
+      expect(job.steps.slice(0, index).some(step => step.run === 'node scripts/ci/ci.mjs lock-fingerprint')).toBe(true);
+      expect(job.steps.some(step => /^npm ci(?: |$)/.test(step.run ?? '') && step.if?.includes("steps.install.outputs.cache-hit != 'true'"))).toBe(true);
+      expect(job.steps.some(step => step.with?.cache === 'npm')).toBe(false);
+    }
+    const base = workflow('page-speed.yml').jobs.report.steps.find(step => step.name === 'Check out base build');
+    expect(base.run).toContain('cmp -s .ci-cache-key/install.json .perf-base/.ci-cache-key/install.json');
+  });
 });
