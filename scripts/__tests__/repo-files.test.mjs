@@ -47,7 +47,7 @@ describe('lockfile-orphans', () => {
       const orphans = [...byName.keys()]
         .filter((n) => !reached.has(n))
         .filter((n) => !workspaces.has(`packages/${n.split('/').pop()}`) && !n.startsWith('@artifactbin/'))
-        // A workspace outside services/ (docs/proposals/runner-validation) is linked under its own name.
+        // Workspace links are resolved by directory rather than an assumed package name.
         .filter((n) => !(byName.get(n) ?? []).every((meta) => meta.link && workspaces.has(meta.resolved)));
 
       expect(orphans, 'in the lockfile, reachable from nothing — `npm ci` installs these anyway').toEqual([]);

@@ -57,13 +57,13 @@ From repository root:
 ```
 npm ci
 npm run validate
-npm test -- --files services/app/__tests__/runner-design.test.ts
-npm run benchmark -w docs/proposals/runner-validation
+npm ci --prefix docs/proposals/runner-validation
+npm test -- --files services/runner/__tests__/scheduler.test.ts services/events/__tests__/delivery.test.ts
 ```
 
-Repository policy keeps Docker integration in CI. Workflow `runner-design.yml` repeats the same handler/agent tests inside restricted Linux workers, tests the OS boundary independently of V8, tests PostgreSQL17 concurrency, and asserts no workers leak. This package is a root npm workspace, so the root `npm ci` installs it; its own package-lock stays for the worker Dockerfile. Scripts require Node22.
+Repository policy keeps full builds and Docker proofs in CI. Workflow `runner-design.yml` installs both trees, builds the proposal worker from this directory and the product worker from the repository root, verifies both OS boundaries, runs both PostgreSQL transaction proofs, and asserts no workers leak. This package is excluded from root workspaces; its own lockfile also supplies the worker Dockerfile. Scripts require Node22. The independent benchmark command is `npm run benchmark --prefix docs/proposals/runner-validation`.
 
-`services/app/__tests__/runner-design.test.ts` exercises real handlers with PGLite and signed HTTP forwarding. Deterministic OpenAI fixture uses actual HTTP/SSE, split every three bytes, and actual Pi tool execution. Assertions check database comments/work phase/history, not just promise resolution. It covers reply retry, seeded next-comment history, cross-owner denial, missing tokenId, the working user-only operation adapter, managed redirect rejection, truncated stream, native capability absence/identity spoof, synchronous/post-await loops, output/request limits, cancellation and crash checkpoint recovery.
+The retained `services/app/__tests__/runner-page-boundary.test.ts` imports this proposal's page fixtures and runner. In CI it checks cold-ready synchronization, real SQL reads and mutations, undeclared imports, error propagation and simultaneous-run state isolation. Product runner orchestration imports `fixtureModel` from `path.mjs` for deterministic HTTP/SSE model responses. These source imports remain unchanged by install separation. The workflow separately exercises product service, container lifecycle, orchestration and page operation tests; no proof or coverage gate is removed.
 
 `postgres-proof.mjs` exercises 16 simultaneous admissions, 20 competing finalizations, rollback and 16 competing schedule claims using true independent PostgreSQL transactions. `scheduler.mjs` proves the occurrence/outbox algorithm, coalescing, overlap serialization and timezone/DST decisions. `os-boundary.mjs` intentionally bypasses V8 to verify the outer worker restrictions, cgroups and OOM kill. `benchmark.mjs` measures fresh contexts with the full shimmed Pi bundle in a warm host. Committed benchmark-results.json is local macOS evidence, not production performance.
 
@@ -126,3 +126,5 @@ Do not turn these snapshots or the fixture store into product code. `page-fixtur
 5. Integrate 2a: real extractor + restricted compiler + real DataflowStore binding + authenticated data operations. Cold-load race, rapid changes, errors, cancelled waiters, mutation invalidation, policies/notifications and browser/Lambda separation are the release gate. This is the only dependency on the syntax branch.
 
 **Decision:** proceed with runner/coordinator implementation on a new branch. The known 2a issues do not block that work, but do block declaring JSX Lambda integration complete. Production throughput, warm-pool acquisition and real-provider billing require deployment evidence; this validation makes no latency SLA or security-certification claim.
+
+This directory is an independent npm install, excluded from root workspaces. Its lockfile and Docker build context remain local to this directory. Run the repository root install as well for the product fixture imports (`@artifactbin/utils`, HTTP transport and PostgreSQL driver); runner-design CI installs both trees before the product/proposal worker, OS and transaction proofs.

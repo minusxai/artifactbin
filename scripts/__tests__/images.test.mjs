@@ -16,6 +16,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { resolveConfig, preprocessCSS, searchForWorkspaceRoot } from 'vite';
 import { describe, expect, it } from 'vitest';
 
 /** The repository root — these tests read the repository, not any one package. */
@@ -196,4 +197,31 @@ describe('public authentication assembly', () => {
       expect(read(file).exports).not.toHaveProperty('./rate-limits');
     }
   });
+});
+
+// preprocessCSS invokes Vite's CSS pipeline without executing the Tailwind Vite plugin.
+// This exercises implicit ancestor discovery, rather than merely reading the config text.
+it('Vite implicitly loads the app PostCSS config from the web root', async () => {
+  const config = await resolveConfig({ configFile: path.join(REPO_ROOT, 'vite.config.mts') }, 'build');
+  expect(config.root).toBe(path.join(REPO_ROOT, 'services/app/web'));
+  expect(config.css.postcss).toBeUndefined();
+  expect(searchForWorkspaceRoot(config.root)).toBe(REPO_ROOT);
+  const css = await preprocessCSS('@import "tailwindcss"; @source inline("underline");', path.join(config.root, 'audit.css'), config);
+  expect(css.code.includes('text-decoration-line: underline')).toBe(true);
+});
+
+it('keeps the proposal install separate and test-support owned by its test consumers', () => {
+  const readPkg = file => JSON.parse(readFileSync(path.join(REPO_ROOT, file), 'utf8'));
+  expect(readPkg('package.json').workspaces).not.toContain('docs/proposals/runner-validation');
+  const lock = readPkg('package-lock.json');
+  for (const key of ['docs/proposals/runner-validation', 'node_modules/artifactbin-runner-design-validation', 'node_modules/@preact/signals', 'node_modules/preact']) {
+    expect(lock.packages, key).not.toHaveProperty(key);
+  }
+  for (const service of ['events', 'runner']) {
+    const manifest = readPkg(`services/${service}/package.json`);
+    expect(manifest.devDependencies['@artifactbin/test-support']).toBe('0.1.0');
+    expect(manifest.dependencies).not.toHaveProperty('@artifactbin/test-support');
+  }
+  const workflow = readFileSync(path.join(REPO_ROOT, '.github/workflows/runner-design.yml'), 'utf8');
+  for (const command of ['npm ci --prefix docs/proposals/runner-validation', 'docker build -t runner-design-worker docs/proposals/runner-validation', 'postgres-proof.mjs', 'prove-postgres.ts', 'os-boundary.mjs artifactbin-worker']) expect(workflow).toContain(command);
 });

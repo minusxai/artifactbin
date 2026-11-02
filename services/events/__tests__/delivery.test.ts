@@ -1,11 +1,9 @@
 import {randomUUID} from 'node:crypto';
-import {PGlite} from '@electric-sql/pglite';
-import {afterAll, expect, it} from 'vitest';
+import {testDb} from '@artifactbin/test-support/db';
+import {expect, it} from 'vitest';
 import {createEvents} from '../src/local';
 import type {EventEnvelope, Queryable} from '@artifactbin/contracts';
-const pg = new PGlite();
-const db: Queryable = {query: async <T>(sql:string, params:unknown[]=[]) => ({rows:(await pg.query<T>(sql,params)).rows})};
-afterAll(()=>pg.close());
+const db: Queryable = testDb();
 const event=():EventEnvelope=>({id:randomUUID(),at:new Date().toISOString(),source:'app',subject_kind:'user',subject_id:'alice',object_kind:'artifact',object_id:'doc',verb:'liked',payload:{}});
 it('retries durable subscribers after restart without replaying successful delivery',async()=>{
  let fail=true; const seen:string[]=[];

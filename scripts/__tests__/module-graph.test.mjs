@@ -442,3 +442,14 @@ describe('module graph', () => {
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 });
+
+it('permits test-support in package tests while rejecting it in product code', () => {
+  const testImport = "import { testDb } from '@artifactbin/test-support/db';";
+  for (const name of ['events', 'runner']) {
+    const root = tree({ [`services/${name}/__tests__/db.test.ts`]: testImport });
+    expect(checkModuleGraph(scanModuleGraph(root), allowList([])).violations).toEqual([]);
+    fs.mkdirSync(path.join(root, `services/${name}/src`));
+    fs.writeFileSync(path.join(root, `services/${name}/src/index.ts`), testImport);
+    expect(checkModuleGraph(scanModuleGraph(root), allowList([])).violations.join('\n')).toContain(`Package pkg/${name} may import only`);
+  }
+});

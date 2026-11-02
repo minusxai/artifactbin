@@ -105,7 +105,9 @@ export default {
     'services/events': { entry: ['src/server.ts'] },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'] },
   },
-  ignoreWorkspaces: ['docs/proposals/runner-validation'],
+  // Independently installed proposal, previously excluded via ignoreWorkspaces.
+  // Product tests still import its fixtures; its own manifest owns their dependencies.
+  ignore: ['docs/proposals/runner-validation/**'],
   ignoreIssues: {
     // A route answers HEAD (or another method) with the same handler: `export { GET as HEAD }`.
     'services/app/app/**/route.ts': ['duplicates'],
