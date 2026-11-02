@@ -131,7 +131,10 @@ sharing and deliberate ownership moves.
   `--resolve --expected-revision R` when done). Anchors are described at the top of
   `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
-- **Watch, always.** Finish every page and edit in the current request before starting a watch.
+- **Watch after publishing or editing page content.** Group membership, invitations, sharing and
+  ownership moves alone do not require a comment watch. Verify those changes, report the requested
+  result and finish, unless the user also requested monitoring or page-content work.
+  Finish every page and edit in the current request before starting a watch.
   For a multi-page request, finish and report all requested pages first; monitoring must never
   block the remaining work. After completing the request, write your full reply (link, Built with,
   Tested) as message text first, then run `node scripts/comment.mjs watch ID --next`: the user
