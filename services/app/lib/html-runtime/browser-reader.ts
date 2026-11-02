@@ -12,6 +12,7 @@ import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session'
 import type {HtmlCommentViewCommand} from '../html-bridge';
 import {startHtmlPresence} from '../html-bridge/presence';
 import type {PresencePaint} from '../html-presence';
+import {refuseFileNavigation} from './frame-file-drops';
 import {followAppLinks} from '@/lib/html-runtime/frame-links';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {HtmlRuntimeConfig} from './contract';
@@ -98,6 +99,7 @@ remote.execute = async (request) => {
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
 export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions): FrameBridgeSession {
+  const stopFileNavigation = refuseFileNavigation(win);
   const stopLinks = config.appOrigin ? followAppLinks(win, config.appOrigin) : () => {};
   const nonce = runtimeId();
   let call = 0;
@@ -204,6 +206,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     },
     dispose() {
       stopLinks();
+      stopFileNavigation();
       uploadSession.dispose();if(uploads===uploadSession){uploads=undefined;uploadContext.update({state:'unavailable',scope:nonce+':closed'});}
       relay = null;
       observation.dispose();

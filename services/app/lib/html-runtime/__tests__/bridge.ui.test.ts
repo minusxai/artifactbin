@@ -242,3 +242,32 @@ it('applies reader appearance through the authenticated frame command session', 
   document.documentElement.removeAttribute('data-af-dark');
   document.documentElement.style.colorScheme = '';
 });
+
+it('prevents unclaimed file navigation for the native frame session and releases the guard on dispose', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [] });
+  const { startFrameBridge } = await import('../browser-client');
+  document.body.innerHTML = '<p data-af-id="words">Keep this selection</p><input type="file"><div id="drop-zone"></div>';
+  const words = document.querySelector('p')!;
+  const range = document.createRange(); range.selectNodeContents(words);
+  window.getSelection()!.addRange(range);
+  const drag = (target: Element, type: 'dragover' | 'drop', types = ['Files']) => {
+    const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(event, 'dataTransfer', { value: { types, dropEffect: 'move' } });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const bridge = startFrameBridge({ win: window, post: () => {}, attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+  bridges.push(bridge);
+  const over = drag(words, 'dragover');
+  expect(over.defaultPrevented).toBe(true);
+  expect(over.dataTransfer!.dropEffect).toBe('none');
+  expect(drag(words, 'drop').defaultPrevented).toBe(true);
+  expect(window.getSelection()!.toString()).toBe('Keep this selection');
+  expect(drag(words, 'drop', ['text/plain']).defaultPrevented).toBe(false);
+  expect(drag(document.querySelector('input')!, 'drop').defaultPrevented).toBe(false);
+  const zone = document.querySelector('#drop-zone')!;
+  zone.addEventListener('dragover', event => { event.preventDefault(); (event as DragEvent).dataTransfer!.dropEffect = 'copy'; });
+  expect(drag(zone, 'dragover').dataTransfer!.dropEffect).toBe('copy');
+  bridge.dispose();
+  expect(drag(words, 'drop').defaultPrevented).toBe(false);
+});

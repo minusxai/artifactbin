@@ -12,7 +12,7 @@ clipboard), drop an image file anywhere on the new-comment composer or a reply b
 use the always-present "Attach image" button. It replaces the draft's image (one image per
 comment, root or reply) and opens in the same brush editor. A clipboard holding text as well
 as a picture pastes as text. A file dropped elsewhere on the page is refused rather than opened,
-and so is one dropped on the framed document itself (`lib/story-runtime/frame-bridge/file-drops.ts`),
+and so is one dropped on the framed document itself (`lib/html-runtime/frame-file-drops.ts`),
 unless something there claims it first.
 
 ## Boundaries
