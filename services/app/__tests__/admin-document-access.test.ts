@@ -189,7 +189,7 @@ it('does not turn an ordinary verified account into an editor of native HTML',as
  expect((await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PATCH',json:{title:'Denied',expectedState:artifactState(row)}})).status).toBe(404);
 });
 it('applies the same link-bounded grant to group HTML without granting group ownership or private access',async()=>{
- const db=await harness.db();await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('admin_group','admin-group','Group','usr_owner')");
+ const db=await harness.db();await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('admin_group','admin_group','Group','usr_owner')");
  await db.query("UPDATE artifacts SET group_id='admin_group',user_id=NULL WHERE id=ANY($1::text[])",[[UNLISTED.id,PRIVATE.id]]);
  const page=(await getArtifactById(UNLISTED.id))!;
  const write=await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PUT',json:{html:SOURCE.replace('Before','Group repair'),expectedVersion:page.version,expectedState:artifactState(page)}});expect(write.status,await write.clone().text()).toBe(200);

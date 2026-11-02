@@ -14,7 +14,7 @@ export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, type AccessAc
 
 /** Users and handles. */
 export { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, replaceUserImageKey, setAutoAcceptMentions, setUsername } from './users';
-export { RESERVED_HANDLES, reserveHandle } from './handles';
+export { HANDLE_RE, isValidHandle, RESERVED_HANDLES, reserveHandle } from './handles';
 export { lockMembershipUsers } from './membership-lock';
 export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } from './profiles';
 

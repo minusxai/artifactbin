@@ -17,8 +17,8 @@ describe('username rules', () => {
   // Pure: no rows, so the describe skips the per-test wipe.
   harness.shared(async () => undefined);
   it('USERNAME_RE: 3–32 lowercase letters, digits and underscores', () => {
-    for (const ok of ['abc', 'a_1', '___', 'a'.repeat(32)]) expect(USERNAME_RE.test(ok), ok).toBe(true);
-    for (const bad of ['', 'ab', 'a'.repeat(33), 'Abc', 'a-b', 'a.b', 'a b', 'é_ab']) expect(USERNAME_RE.test(bad), bad).toBe(false);
+    for (const ok of ['abc', 'a_1', 'a'.repeat(32)]) expect(USERNAME_RE.test(ok), ok).toBe(true);
+    for (const bad of ['', '_ab', 'ab_', '___', 'ab', 'a'.repeat(33), 'Abc', 'a-b', 'a.b', 'a b', 'é_ab']) expect(USERNAME_RE.test(bad), bad).toBe(false);
   });
 
   it('usernameFromEmail: sanitized local part, +tags dropped, at most 20 characters, never empty', () => {

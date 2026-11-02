@@ -58,10 +58,10 @@ it('offers the author skill and links to installation instructions',()=>{
 });
 
 it('company setup panel copies shared recipient defaults and preserves explicit Personal starter destination',async()=>{
- const fetcher=vi.fn(async (url:string)=>url==='/api/deployment'?Response.json({mode:'company',setup_complete:true,is_owner:false,default_group:{id:'grp_team',handle:'company-team',name:'Company',description:'',role:null}}):new Promise<Response>(()=>{}));
+ const fetcher=vi.fn(async (url:string)=>url==='/api/deployment'?Response.json({mode:'company',setup_complete:true,is_owner:false,default_group:{id:'grp_team',handle:'company_team',name:'Company',description:'',role:null}}):new Promise<Response>(()=>{}));
  vi.stubGlobal('fetch',fetcher);render(()=> <GetStarted destination={{type:'personal'}}/>);
  await screen.findByRole('button',{name:'Copy deployment setup instructions'});
- expect(document.body.textContent).toContain('GET /api/groups/company-team');expect(document.body.textContent).toContain('PUT /api/me/preferences');expect(document.body.textContent).not.toContain('grp_team');
+ expect(document.body.textContent).toContain('GET /api/groups/company_team');expect(document.body.textContent).toContain('PUT /api/me/preferences');expect(document.body.textContent).not.toContain('grp_team');
  fireEvent.click(screen.getByRole('button',{name:'Create a live document for my agent'}));
  expect(fetcher).toHaveBeenCalledWith('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:{type:'personal'}})});
 });

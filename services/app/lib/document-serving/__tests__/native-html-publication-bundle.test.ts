@@ -171,13 +171,13 @@ it('delegates private dependencies when the page is shared later and revokes wit
  expect((await read(readerActor)).status).toBe(404);await updateSharingFor(ownerIdentity,saved.id,{shares:[{email:reader.email!,role:'viewer'}]});expect((await read(readerActor)).status).toBe(200);
  expect((await rawGet(request('/a/'+child.id+'/raw',{actor:readerActor}),{params:Promise.resolve({id:child.id})})).status).toBe(404);
  await updateSharingFor(ownerIdentity,saved.id,{shares:[]});expect((await read(readerActor)).status).toBe(404);expect((await read(ownerActor)).status).toBe(200);
- const group=await createGroup(user.id,{handle:'bundle-new-owner',name:'New owner'});await transferArtifact(ownerIdentity,saved.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(404);
+ const group=await createGroup(user.id,{handle:'bundle_new_owner',name:'New owner'});await transferArtifact(ownerIdentity,saved.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(404);
  await transferArtifact(ownerIdentity,child.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(200);
  const db=await harness.db();await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[child.id]);expect((await read(ownerActor)).status).toBe(404);
 });
 it('supports group membership granted after private bundle publication without broadening direct child URLs',async()=>{
  const {createUser}=await import('@/lib/accounts');const {createGroup,setGroupMember,removeGroupMember}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
- const user=await createUser({email:'mxmx_test_bundle_group_owner@example.com'}),member=await createUser({email:'mxmx_test_bundle_group_member@example.com'});const actor=await mintAccountToken('bundle-group-share',user.id);const group=await createGroup(user.id,{handle:'bundle-group-access',name:'Bundle access'});
+ const user=await createUser({email:'mxmx_test_bundle_group_owner@example.com'}),member=await createUser({email:'mxmx_test_bundle_group_member@example.com'});const actor=await mintAccountToken('bundle-group-share',user.id);const group=await createGroup(user.id,{handle:'bundle_group_access',name:'Bundle access'});
  const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_group_share_create'},json:{visibility:'private',destination:{type:'group',id:group.id},html:'<img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status,JSON.stringify(saved)).toBe(201);const child=saved.dependencyReceipts[0],params={params:Promise.resolve({id:saved.id})};
  const read=()=>assetGet(request(`/a/${saved.id}/assets?dependency=${child.id}&revision=1`,{actor:{credential:'session',userId:member.id,email:member.email!,emailVerified:true}}),params);
  expect((await read()).status).toBe(404);await setGroupMember(user.id,group.id,member.id,'viewer');expect((await read()).status).toBe(200);await removeGroupMember(user.id,group.id,member.id);expect((await read()).status).toBe(404);

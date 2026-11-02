@@ -666,12 +666,12 @@ async function groupUiLeg() {
       await loginViaEmail(page, BASE, sink, `mxmx_test_group_ui_${stamp}@example.com`);
       await page.goto(`${BASE}/groups`);
       await page.getByLabel('Group name', { exact: true }).fill('Design team');
-      await page.getByLabel('Group handle', { exact: true }).fill(`design-${stamp}`);
+      await page.getByLabel('Group handle', { exact: true }).fill(`design_${stamp}`);
       await page.getByRole('button', { name: 'Create group', exact: true }).click();
       await page.getByRole('heading', { name: 'Design team', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Set as default', exact: true }).click();
       await page.getByRole('button', { name: 'Remove default', exact: true }).waitFor();
-      must(new URL(page.url()).pathname === `/@design-${stamp}`, 'saving a default confirms inline without redirect');
+      must(new URL(page.url()).pathname === `/@design_${stamp}`, 'saving a default confirms inline without redirect');
       await page.goto(`${BASE}/`);
       await page.getByRole('heading', { name: 'Design team', exact: true }).waitFor();
       await page.reload();

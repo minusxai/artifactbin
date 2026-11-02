@@ -217,6 +217,8 @@ describe('module graph', () => {
   describe('lib/accounts row as shipped (DEEP_MODULES)', () => {
     const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
     const accounts = {
+      'services/app/lib/accounts/handles.ts': '',
+      'services/app/lib/serving/handles.ts': "import { HANDLE_RE } from '../accounts/handles';\n",
       'services/app/lib/accounts/index.ts': '', 'services/app/lib/accounts/tokens.ts': '', 'services/app/lib/accounts/viewer.ts': '', 'services/app/lib/accounts/actors.ts': '',
       'services/app/lib/serving/a.ts': "import { sessionActor, type TokenActor } from '@/lib/accounts';\n",
       'services/app/lib/listings/b.ts': "import { LIVE_TOKEN_SQL } from '../accounts/tokens';\n",

@@ -21,7 +21,7 @@ describe('destinations and transfer', () => {
     expect(parseArtifactDestination({ type: 'personal' })).toEqual({ type: 'personal' });
     expect(parseArtifactDestination({ type: 'group', id: 'g' })).toEqual({ type: 'group', id: 'g' });
     for (const bad of [null, [], { type: 'group' }, { type: 'personal', id: 'x' }, { type: 'team' }]) expect(() => parseArtifactDestination(bad)).toThrow('Invalid destination');
-    const group = await createGroup(owner.userId, { handle: 'dest-team', name: 'Dest' });
+    const group = await createGroup(owner.userId, { handle: 'dest_team', name: 'Dest' });
     const teamFolder = await folder(owner, 'Team', [], { destination: { type: 'group', id: group.id } });
     expect(await newArtifactDestination(owner, undefined, teamFolder.id)).toEqual({ type: 'group', id: group.id });
     expect(await newArtifactDestination(owner)).toEqual({ type: 'personal' });
@@ -35,7 +35,7 @@ describe('destinations and transfer', () => {
   it('transfers a whole owner closure atomically; refuses mixed owners, outside dependents and non-editors', async () => {
     const owner = await account('owner@example.test');
     const stranger = await account('stranger@example.test');
-    const group = await createGroup(owner.userId, { handle: 'xfer-team', name: 'Xfer' });
+    const group = await createGroup(owner.userId, { handle: 'xfer_team', name: 'Xfer' });
     const box = await folder(owner);
     const child = await mine(owner, 'Child', { ancestor_ids: [box.id] });
     await expect(transferArtifact(identityForUser(null, 'tok'), box.id, { type: 'personal' })).rejects.toThrow('Sign in');

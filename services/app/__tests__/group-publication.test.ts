@@ -35,7 +35,7 @@ describe('publication uses shared account destination through the real HTTP hand
   expect(response.status).toBe(400);
  });
  it('keeps an explicitly Personal starter personal even with a saved group default',async()=>{
-  const a=await account('starter');const group=await createGroup(a.user.id,{handle:'starter-group',name:'Starter group'});
+  const a=await account('starter');const group=await createGroup(a.user.id,{handle:'starter_group',name:'Starter group'});
   await setAccountPreferences(a.user.id,{type:'group',id:group.id});
   const grouped=await start(request('/api/start',{method:'POST',token:a.token}));
   expect(grouped.status).toBe(201);expect(await owner((await grouped.json()).id)).toMatchObject({group_id:group.id});

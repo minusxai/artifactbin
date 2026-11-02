@@ -15,6 +15,10 @@ describe('shared recipient setup instructions',()=>{
   expect(text).toContain('http://app.lvh.me:8201/llms.txt');expect(text).not.toContain('--set-default');
   expect(text).toContain('reuse saved credentials');expect(text).toContain('/llms/http-auth');
  });
+ it('uses shared handle rules',()=>{
+  for(const groupHandle of ['a-b','_ab','ab_','___']) expect(()=>buildGroupSetupInstructions({serverOrigin:'https://team.example',groupHandle})).toThrow();
+  for(const groupHandle of ['a_b','abc','a1'.repeat(16)]) expect(buildGroupSetupInstructions({serverOrigin:'https://team.example',groupHandle})).toContain(`GET /api/groups/${groupHandle}`);
+ });
  it('rejects handle injection and non-origin URLs',()=>{
   expect(()=>buildGroupSetupInstructions({serverOrigin:'https://team.example',groupHandle:"research'; evil"})).toThrow();
   expect(()=>buildSetupInstructions({serverOrigin:'javascript:evil'})).toThrow();

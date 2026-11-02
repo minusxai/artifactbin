@@ -36,7 +36,7 @@ async function world() {
   const token = await mintAccountToken('owner', owner.id);
   const stranger = await createUser({ email: STRANGER_EMAIL });
   const member = await createUser({ email: MEMBER_EMAIL });
-  const group = await createGroup(owner.id, { handle: 'payload-access', name: 'Payload access' });
+  const group = await createGroup(owner.id, { handle: 'payload_access', name: 'Payload access' });
   await setGroupMember(owner.id, group.id, member.id, 'viewer');
   const make = async (visibility: 'private' | 'unlisted', grouped: boolean) => {
     await setAccountPreferences(owner.id, grouped ? { type: 'group', id: group.id } : { type: 'personal' });

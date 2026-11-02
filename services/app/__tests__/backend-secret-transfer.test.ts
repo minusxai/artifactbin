@@ -17,7 +17,7 @@ it('revokes immutable former-owner secret access on transfer while preserving co
  await backendSecrets.put({ownerId:owner.userId!,backendId:backend.backendId},'TOKEN','former-owner-secret');
  const admitted={requestId:'r',userId:backend.ownerId,pageBackendOperation:'query' as const,artifactId:backend.backendId,artifactVersion:backend.version,program:{source:backend.compiled,language:'javascript' as const},input:{kind:'invoke',principal:{tenant:page.pageId,subject:null}}};
  expect(await localPageBackendCapability(admitted,'artifactbin.pageBackend.secrets.get',{name:'TOKEN'})).toBe('former-owner-secret');
- await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('secret_transfer','secret-transfer','Transfer',$1)",[owner.userId]);
+ await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('secret_transfer','secret_transfer','Transfer',$1)",[owner.userId]);
  for(const user of [owner,next])await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES('secret_transfer',$1,'editor')",[user.userId]);
  expect(await transferArtifact(actor,page.pageId,{type:'group',id:'secret_transfer'})).not.toBeNull();
  await expect(localPageBackendCapability(admitted,'artifactbin.pageBackend.secrets.get',{name:'TOKEN'})).rejects.toThrow('unavailable');

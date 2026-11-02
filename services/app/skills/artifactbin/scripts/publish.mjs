@@ -17,7 +17,7 @@ Flags: --type html|dataset|asset (inferred from unambiguous extensions); --root 
 Examples:
   node scripts/publish.mjs ./project/index.html           # first publish; prints the receipt and
                                                             any autofix: changes
-  node scripts/publish.mjs page.html --group design-team  # new page in a group you edit
+  node scripts/publish.mjs page.html --group design_team  # new page in a group you edit
   node scripts/publish.mjs page.html                      # after: node scripts/read.mjs ID
                                                             --output page.html
   node scripts/publish.mjs --resume JOURNAL               # after exit 5 (unknown outcome);
