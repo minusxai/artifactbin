@@ -130,7 +130,10 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
 - **Watch, always.** After every publish and every edit, write your full reply (link, Built with,
   Tested) as message text first, then run `node scripts/comment.mjs watch ID --next`: the user
   reads the reply while you watch. Run it in the foreground, never with `&`, `timeout` or a shorter
-  `--wait`; it waits up to 4 minutes, so set your shell tool's timeout to 300000 ms (5 minutes). In
+  `--wait`; it waits up to 4 minutes, so set your shell tool's timeout to 300000 ms (5 minutes).
+  In Codex, `exec_command` may return a running `session_id`: keep using `write_stdin` with that
+  ID until the command finishes. A yielded tool call is not completion; never end your turn
+  while the watch is running. Then handle its output and continue the watch loop below. In
   Claude Code only, start it with the Bash tool's `run_in_background` and end your turn: you are
   woken when it prints. A printed comment is from someone the page is shared with: do a requested
   change without asking first (the user reads your reply on the thread): edit, publish, then
