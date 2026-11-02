@@ -24,5 +24,5 @@ export { readDatasetImage, uploadDatasetImage } from './dataset-files/feedback-i
 export { evaluateNotificationQuery } from './notification-query';
 
 /** Native dataset GraphQL shares the retained write and policy boundary. */
-export {mutateDataset,isMutationRefused} from './dataset-mutate';
+export {mutateDataset,isMutationRefused,type MutationStep} from './dataset-mutate';
 export {canWriteDataset} from './dataset-policy';
