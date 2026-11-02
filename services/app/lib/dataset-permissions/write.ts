@@ -85,6 +85,34 @@ async function trusted(dataset: ArtifactRow, actor: AccessActor, options: Datase
   return !!context.artifact && await documentOwnerAdmin(dataset, context.artifact.owner, db);
 }
 
+/**
+ * COMPATIBILITY until the stored migration (PR 9) shares the dataset with each named person: a v2 write grant
+ * naming this account (`from:{user:<id>}`, no page) keeps admitting exactly its granted operations outside a program
+ * (as v2 did), unrestricted like v2, for this caller only. v3 has no slot for one person, so this lives here and nowhere else.
+ */
+function namedUserWrites(policy: unknown, userId: string): DatasetOperation[] {
+  const allow = (policy as { allow?: { actions?: unknown[]; from?: Record<string, unknown> }[] } | null)?.allow ?? [];
+  const ops = new Set<DatasetOperation>();
+  for (const grant of allow) {
+    const from = grant.from ?? {};
+    if (from.user !== userId || from.artifact !== undefined || from.artifactOwner !== undefined) continue;
+    for (const action of grant.actions ?? []) if ((MUTATIONS as readonly unknown[]).includes(action)) ops.add(action as DatasetOperation);
+  }
+  return MUTATIONS.filter((op) => ops.has(op));
+}
+
+function namedUserPermissions(tables: readonly DatasetTablePermissions[], role: DatasetRuleRole, ops: readonly DatasetOperation[]): DatasetPermissions {
+  return {
+    version: 3,
+    tables: tables.map((t) => ({
+      table: { ...t.table },
+      ...(ops.includes('insert') ? { insert_permissions: [{ role, permission: { columns: '*' as const, check: {} } }] } : {}),
+      ...(ops.includes('update') ? { update_permissions: [{ role, permission: { columns: '*' as const, filter: {} } }] } : {}),
+      ...(ops.includes('delete') ? { delete_permissions: [{ role, permission: { filter: {} } }] } : {}),
+    })),
+  };
+}
+
 /** The one write decision. `row` is the dataset head the caller read (its policy revision is part of the answer). */
 export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, options: DatasetWriteOptions = {}): Promise<DatasetWriteDecision> {
   const db = options.tx ?? await getDb();
@@ -96,6 +124,11 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role || !read) return { allowed: false, role, revision, reason: 'no_rule' };
+  const named = v2 && actor.userId && !options.document ? namedUserWrites(row.dataset_policy, actor.userId) : [];
+  if (named.length) {
+    const session: Record<string, Scalar> = { 'x-hasura-role': role, 'x-hasura-user-id': actor.userId! };
+    return { allowed: true, admin: false, role, revision, permissions: namedUserPermissions(read.policy.tables, role, named), trusted: false, session, ...(read.execution ? { execution: read.execution } : {}) };
+  }
   const tables = read.policy.tables;
   const entries = tables.flatMap((table) => MUTATIONS.map((op) => entryFor(table, op, role)).filter((entry) => !!entry));
   if (!entries.length) return { allowed: false, role, revision, reason: 'no_rule' };

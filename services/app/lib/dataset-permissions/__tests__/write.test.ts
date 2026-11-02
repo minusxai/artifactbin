@@ -38,6 +38,19 @@ describe('datasetWriteAccess', () => {
     }
   });
 
+  it('keeps a stored v2 write grant naming one person working until migration shares the dataset with them', async () => {
+    const f = await fixture({ version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
+    const named = { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }, { actions: ['insert', 'update'], from: { user: f.stranger.userId } }] };
+    await sql('UPDATE artifacts SET dataset_policy=$2 WHERE id=$1', [f.data.id, JSON.stringify(named)]);
+    const decision = await datasetWriteAccess(await head(f.data.id), f.stranger);
+    expect(decision).toMatchObject({ allowed: true, admin: false, session: { 'x-hasura-user-id': f.stranger.userId } });
+    const policy = tableMutationPolicy(decision, ROWS)!;
+    expect(policy.operations).toEqual(['insert', 'update']);
+    expect(policy.table.delete_permissions).toBeUndefined();
+    // Anyone else still has no rule.
+    expect(await datasetWriteAccess(await head(f.data.id), f.member)).toMatchObject({ allowed: false, reason: 'no_rule' });
+  });
+
   it('gives a page member backend_only entries only through a trusted program, with the page in the session', async () => {
     const f = await fixture();
     expect(await datasetWriteAccess(f.data, f.member, { throughPage: true })).toMatchObject({ allowed: false, role: 'signed_in', reason: 'no_rule' });

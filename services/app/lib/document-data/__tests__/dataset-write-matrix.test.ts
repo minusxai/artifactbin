@@ -38,7 +38,7 @@ const SHAPES:Shape[]=[
 ];
 
 /** The v3 decision, written out from the plan's role table and toV3 mapping rows. */
-function expected(shape:Shape,caller:Caller,door:Door):boolean {
+function expected(shape:Shape,caller:Caller,door:Door,op:Op):boolean {
  const admin=caller==='owner'||caller==='editor';
  // The access ceiling stays on datasets without v2 grants, for every caller.
  if(shape.access==='read'&&!shape.name.startsWith('v2/'))return false;
@@ -55,8 +55,9 @@ function expected(shape:Shape,caller:Caller,door:Door):boolean {
   case 'v2/default':case 'v2/artifact':return door==='program'&&caller==='member';
   // v2 user:* writes become normal entries for viewer and signed_in.
   case 'v2/users':return caller!=='anonymous';
-  // v2 user:<id> is reported with no entry: the named person keeps access only through a share.
-  case 'v2/named':return false;
+  // v2 user:<id> has no v3 slot; until the stored migration shares the dataset with that person, the write
+  // decision keeps admitting exactly their granted operations outside a program (write.ts namedUserWrites).
+  case 'v2/named':return caller==='viewer'&&op==='insert'&&door!=='program';
   default:return false;
  }
 }
@@ -102,7 +103,7 @@ it('decides every policy shape × caller × door × operation as its v3 reading 
    const reason=refusal(result);
    expect(['dataset_read_only','policy_denied',null],`${key}: ${JSON.stringify(result)}`).toContain(reason);
    // The baseline run (pre-v3 code) expects exactly the listed cells to differ.
-   actual[key]=reason===null;want[key]=BASELINE&&CHANGED.has(key)?!expected(shape,caller,door):expected(shape,caller,door);
+   actual[key]=reason===null;want[key]=BASELINE&&CHANGED.has(key)?!expected(shape,caller,door,op):expected(shape,caller,door,op);
   }
  }
  expect(actual).toEqual(want);
