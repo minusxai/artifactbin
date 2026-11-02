@@ -74,8 +74,9 @@ describe('one installable native HTML author skill',()=>{
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
   expect(members.some(name=>/^components\/(?:deck-gl|mermaid)/.test(name))).toBe(false);
   // 1.6 MiB: the data-driven examples, their steps files and the generator are worth more to agents than the bytes.
+  // 1.65 MiB since #1014: local preview bundles the generated Hasura dataset API (preview-datasets.mjs, ~25 KB).
   process.stdout.write(`Stored native skill ZIP bytes: ${archive.byteLength}\n`);
-  expect(archive.byteLength).toBeLessThan(1.6*1024*1024);
+  expect(archive.byteLength).toBeLessThan(1.65*1024*1024);
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);

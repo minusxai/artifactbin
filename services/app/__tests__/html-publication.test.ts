@@ -38,7 +38,7 @@ it('authorizes dataset declarations and snapshots explicit live and pinned bindi
  const source=`<html><head><link rel="af-dataset" data-af-name="live" href="ref:${dataset.id}"><link rel="af-dataset" data-af-name="old" href="ref:${dataset.id}" data-af-mode="pinned" data-af-revision="1"></head><body>Data</body></html>`;
  const denied=await POST(request('/api/artifacts',{method:'POST',token:outsider.token,json:{html:source}}));expect(denied.status).toBe(400);
  const saved=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:source}}));expect(saved.status).toBe(201);const page=await saved.json();
- const db=await harness.db();const row=(await db.query<{meta:{htmlLinks:unknown[]}}>('SELECT meta FROM artifacts WHERE id=$1',[page.id])).rows[0];expect(row?.meta.htmlLinks).toEqual([{kind:'dataset',name:'live',datasetId:dataset.id,mode:'live'},{kind:'dataset',name:'old',datasetId:dataset.id,mode:'pinned',revision:'1'}]);
+ const db=await harness.db();const row=(await db.query<{meta:{htmlLinks:unknown[]}}>('SELECT meta FROM artifacts WHERE id=$1',[page.id])).rows[0];expect(row?.meta.htmlLinks).toEqual([{kind:'dataset',name:'live',datasetId:dataset.id,api:'hasura',mode:'live'},{kind:'dataset',name:'old',datasetId:dataset.id,api:'hasura',mode:'pinned',revision:'1'}]); // #1014: a new link without legacy query code mounts the generated API
 });
 it('serializes concurrent HTML saves at one observed head',async()=>{
  const actor=await mintAccountToken('concurrent-html');const created=await (await publish(actor.token)).json();

@@ -40,7 +40,8 @@ if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(link.name))throw failure(400,
    const table=link.table??filename.replace(/\.(csv|json)$/i,'');
 const files=grouped.get(link.name)??[];files.push({path,table,...(link.schema?{schema:link.schema}:{
      })});grouped.set(link.name,files);
-   // data-af-api="legacy" keeps the generic namespace; otherwise the generated API, as publishing a new link.
+   // data-af-api="legacy" keeps the generic namespace; otherwise the generated API, as when
+   // publishing a new link.
    if(link.api==='legacy')legacyNames.add(link.name);
   }
   if(!grouped.size)return undefined;
