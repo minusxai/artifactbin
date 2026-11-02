@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser } from '@/lib/accounts';
-import { assertGrantCommit, attestRegisteredHtmlMutation, attestSavedHtmlUpload, can, capabilityRefusal, grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, readThrough, refusalFor, uploadGrantContext, verifyRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
+import { attestRegisteredHtmlMutation, attestSavedHtmlUpload, can, capabilityRefusal, grantContext, grantsOf, grantsPermitRead, readThrough, refusalFor, uploadGrantContext, verifyRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
 import { canReadArtifact, capabilityGuard } from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { account, dataset, head, mine, personOfKind, sql } from '@/__tests__/artifact-fixtures';
@@ -36,21 +36,13 @@ describe('dataset grants', () => {
     expect(await grantsPermitRead({ ...closed, dataset_policy: null }, owner)).toBe(false);
   });
 
-  it('write grants: the owner, never a stranger or a guest; a stale policy revision refuses the commit', async () => {
+  // Write decisions (and their commit-time recheck) are lib/dataset-permissions'; grants supply program trust.
+  it('a grant context: the owner, never a guest', async () => {
     const owner = await account('owner@example.test');
-    const stranger = await account('stranger@example.test');
     const guest = await personOfKind('guest');
     const data = await dataset(owner, ownerWrites);
-    expect(await grantsPermitWrite(data, owner)).toBe(true);
-    expect(await grantsPermitWrite(data, stranger)).toBe(false);
-    expect(await grantsPermitWrite({ ...data, dataset_policy: null }, owner)).toBe(false);
     await expect(grantContext(data, guest)).rejects.toThrow('Sign in to change data');
     expect(await grantContext(data, owner)).toMatchObject({ owner: { userId: owner.userId }, callerEditorGroupIds: [] });
-    const db = await harness.db();
-    await db.transaction(tx => assertGrantCommit(tx, data, owner));
-    await expect(db.transaction(tx => assertGrantCommit(tx, data, stranger))).rejects.toThrow('Mutation permission changed');
-    await sql('UPDATE artifacts SET policy_revision=policy_revision+1 WHERE id=$1', [data.id]);
-    await expect(db.transaction(tx => assertGrantCommit(tx, data, owner))).rejects.toThrow('Mutation permission changed');
   });
 
   it('a document context needs a host proof for HTML, the head edit, and an accepted join', async () => {
@@ -67,8 +59,6 @@ describe('dataset grants', () => {
     await expect(grantContext(data, owner, { id: doc.id, editId: doc.edit_id })).rejects.toThrow('Document access or action changed');
     await expect(grantContext(data, owner, { ...document, editId: 'stale' })).rejects.toThrow('Document access or action changed');
     await expect(grantContext(data, reader, document)).rejects.toThrow('Join this artifact');
-    expect(await grantsPermitWrite(data, owner, document)).toBe(true);
-    expect(await grantsPermitWrite(data, reader, document)).toBe(false);
     expect(await verifyRegisteredHtmlMutation({ ...document, editId: 'other' }, await harness.db())).toBe(false);
     expect(await verifyRegisteredHtmlMutation({ id: doc.id, editId: doc.edit_id, registeredHtml: {} }, await harness.db())).toBe(false);
     // An upload proof is its own authority, bound to the dataset it names.

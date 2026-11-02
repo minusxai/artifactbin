@@ -5,7 +5,7 @@
  */
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, getArtifactFor, readableArtifact, type MutationReceipt } from '@/lib/artifacts';
-import { grantsOf, grantsPermitWrite, ownsArtifact } from '@/lib/artifact-access';
+import { grantsOf, ownsArtifact } from '@/lib/artifact-access';
 import { parseExpectedVersion } from '@/lib/artifact-wire';
 import { bindParams, bindTypes, parseMutationRequest, platformValues, type Scalar } from '@/lib/dataflow';
 import { rewriteBuiltinFields } from '@/lib/dataflow/server';
@@ -45,7 +45,9 @@ export async function respondToMutate(
 ): Promise<Response> {
   if (body && typeof body.name === 'string') return respondToDeclaredMutation(actor, id, body);
   const found = await getArtifactById(id);
-  const dataset = found&&grantsOf(found)&&(await grantsPermitWrite(found,actor)||await readableArtifact(actor,id))?found:await getArtifactFor(actor,id);
+  // A dataset the caller may write (owner, editor, or a v3 rule for its role) resolves, and so does a readable
+  // grant-governed one (its refusal names grants); anything else is the uniform 404.
+  const dataset = found&&(await canWriteDataset(found,actor)===null||(grantsOf(found)&&await readableArtifact(actor,id)))?found:await getArtifactFor(actor,id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 
   const refusal = await canWriteDataset(dataset, actor);

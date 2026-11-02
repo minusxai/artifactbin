@@ -439,7 +439,6 @@
    "services/app/lib/datasets/__tests__/dataset-usage.test.ts": 6,
    "services/app/lib/datasets/__tests__/definition.test.ts": 17,
    "services/app/lib/datasets/__tests__/execute-cache.test.ts": 8041,
-   "services/app/lib/datasets/__tests__/image-upload-policy.test.ts": 8,
    "services/app/lib/datasets/__tests__/image-upload.test.ts": 4880,
    "services/app/lib/datasets/__tests__/input.test.ts": 10,
    "services/app/lib/datasets/__tests__/interface.test.ts": 6008,

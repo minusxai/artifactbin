@@ -1,10 +1,11 @@
-import { verifyRegisteredHtmlMutation, grantsOf, assertGrantCommit, type GrantDocument } from '@/lib/artifact-access';
-import { getArtifactById, artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted } from '@/lib/artifacts';
+import { verifyRegisteredHtmlMutation, type GrantDocument } from '@/lib/artifact-access';
+import { assertWriteCommit, datasetWriteAccess, tableMutationPolicy, type DatasetWriteOptions } from '@/lib/dataset-permissions';
+import { artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import {completeDocumentMutationReceipt} from './mutation-operation';
-import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy } from './dataset-policy';
+import { recheckMutation } from './dataset-policy';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';
 import {sqlExtensions, isQueryFailure, runMutation, type MutationInput} from '@/lib/sql';
@@ -114,11 +115,16 @@ export async function mutateDataset(
 ): Promise<MutationApplied | MutationRefused> {
   if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
+  // One write decision (lib/dataset-permissions) for every door: the role, the v3 rules, program trust and
+  // the carrying document's provenance. Asked before each attempt and again inside the commit transaction.
+  const door=guard.document??guard.nativePolicy??false;
+  const access:DatasetWriteOptions={throughPage:!!(guard.document||guard.nativePolicy),...(guard.document?{document:guard.document}:{})};
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{
-    if(guard.nativePolicy){const current=await getArtifactById(dataset.id);if(!current||(current.policy_revision??0)!==(dataset.policy_revision??0)||await canWriteDataset(current,actor,true)||!await canUseDataPolicy(current,actor))throw new DatasetError('Dataset policy access changed',403);}
-    else await recheckMutation(dataset,actor,guard.document);
+    try{await recheckMutation(dataset,actor,door);}catch{throw new DatasetError('Mutation permission changed',403);}
   }});
-  if((guard.document||guard.nativePolicy) && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
+  const admitted=await datasetWriteAccess(dataset,actor,access);
+  // Every write a rule admits (not the owner's or an editor's) is rate-limited per dataset, signed-out writes included.
+  if(admitted.allowed&&!admitted.admin){
     try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}
   }
 
@@ -132,9 +138,8 @@ export async function mutateDataset(
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
     if(guard.expectedState&&artifactState(current)!==guard.expectedState)return {reason:'row_changed',detail:'The dataset changed since the operation was prepared. Read the current state before proposing a new mutation.'};
-    if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,guard.document??guard.nativePolicy??false)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
-
-    if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
+    const decision=(current.policy_revision??0)===(dataset.policy_revision??0)?await datasetWriteAccess(current,actor,access):null;
+    if (!decision?.allowed) return {reason:'dataset_read_only',detail:decision&&!decision.allowed&&decision.reason==='document_changed'?'Document access or mutation changed':'You no longer have edit access to a writable dataset.'};
     const catalog=catalogOf(current);
     let selected:import('@/lib/datasets').DatasetTable;
     let schema:string;
@@ -157,7 +162,7 @@ export async function mutateDataset(
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
     try{
-      policy=await mutationPolicy(current,actor,selected,guard.document??guard.nativePolicy??false);
+      policy=tableMutationPolicy(decision,selected);
       // Identity allocation is platform-owned; users cannot select this column in their schema.
       if(identity&&policy)policy={...policy,table:{...policy.table,insert_permissions:policy.table.insert_permissions?.map(entry=>({...entry,permission:{...entry.permission,...(Array.isArray(entry.permission.columns)?{columns:[...entry.permission.columns,identity.column]}:{})}}))}};
       const statements=guard.statements??[{sql,params}];
@@ -210,21 +215,22 @@ export async function mutateDataset(
     // ONE guarded statement (lib/artifacts commitDatasetWrite): swap the pointer if and only if the rows
     // we read are still the rows on disk, archive the previous state (coalesced, like the edit protocol),
     // and wake every document reading this dataset.
-    const v2=!!grantsOf(current);
     const commit=async(tx:Queryable)=>{
      if(guard.document?.registeredHtml){
       // Same transaction/row lock as the dataset CAS: no page/source change can race it.
       await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([current.id,guard.document.id])]]);
       if(!await verifyRegisteredHtmlMutation(guard.document,tx))throw new DatasetError('Registered page action changed',403);
      }
-     if(v2)await assertGrantCommit(tx,current,actor,guard.document);
+     // Under the row lock: the same role, rules, trust and document provenance, or no commit. A changed
+     // decision is answered like a lost CAS: the next attempt re-reads the head and decides again.
+     try{await assertWriteCommit(tx,current,actor,decision,access);}catch(error){if(error instanceof DatasetError)return undefined;throw error;}
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
       const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
       if(!locked||artifactState(locked)!==guard.expectedState)return undefined;
      }
      const committed=await commitDatasetWrite(tx,{current,actor,meta,...(guard.document?{document:{id:guard.document.id,editId:guard.document.editId}}:{}),
-      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy)&&!!policy,granted:v2});
+      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy)&&!!policy,granted:true});
      if(committed){
       await guard.commitEffect?.(tx,{row:committed,affected:out.affected,rowCount:out.rows.length});
       if(guard.receipt){
@@ -235,7 +241,7 @@ export async function mutateDataset(
      return committed;
     };
     let row;
-    try { row=v2||guard.commitEffect||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    try { row=await db.transaction(commit); }
     catch(error) {
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
      throw error;

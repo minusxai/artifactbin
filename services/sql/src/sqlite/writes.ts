@@ -94,6 +94,8 @@ function admit(p: DatasetMutationPolicy, op: DatasetOperation, analysis: Stateme
   if (!p.operations.includes(op)) refuse('operation is not permitted');
   const entries = p.table[`${op}_permissions`] as Array<{ role: string; permission: Permission }> | undefined;
   const permission = entries?.find((e) => e.role === p.role)?.permission ?? refuse('no matching role permission');
+  // A backend_only entry is for the owner's programs (a verified saved document); generic callers never match it.
+  if (permission.backend_only && !p.trusted) refuse('this operation is only available through the owner\'s page programs');
   if (names.some((n) => n.toLowerCase().startsWith('__policy_')) || Object.keys(params).some((n) => n.toLowerCase().startsWith('__policy_'))) refuse('reserved policy identifier');
   if (op === 'update') permitted(permission, analysis.writes[0]?.columns ?? []);
   const deny = new Set((p.execution?.functions?.deny ?? []).map((s) => s.toLowerCase()));

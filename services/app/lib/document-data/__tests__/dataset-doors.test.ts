@@ -11,7 +11,7 @@ import {artifactState,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
 import {loadDatasetRows} from '@/lib/datasets';
 import {account,datasetFixture,type Db} from './dataset-fixture';
-import {canUseDataPolicy,datasetPolicyRequest,readDatasetPolicy,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
+import {canWriteDataset,datasetPolicyRequest,readDatasetPolicy,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
 
 useAppHarness();
 let db:Db;
@@ -51,17 +51,17 @@ it('routes a policy request by method and refuses a body that is not JSON',async
  expect((await saved.json()).revision).toBe(1);
 });
 
-it('lets the data policy serve only readers of the current revision',async()=>{
+it('lets the data policy admit a page reader only while the dataset is readable through its link',async()=>{
  const f=await fixture(),reader=await account('reader');
  const stale=(await getArtifactById(f.id))!;
- expect(await canUseDataPolicy(stale,reader.actor)).toBe(false);
+ expect(await canWriteDataset(stale,reader.actor,true)).toBe('dataset_read_only');
  await writeDatasetPolicy(f.owner.actor,f.id,{policy,expectedPolicyRevision:0});
- const current=(await getArtifactById(f.id))!;
- expect(await canUseDataPolicy(current,reader.actor)).toBe(true);
- expect(await canUseDataPolicy({...current,policy_revision:0},reader.actor)).toBe(false);
+ expect(await canWriteDataset((await getArtifactById(f.id))!,reader.actor,true)).toBeNull();
+ // Private: the v1 entries reach shared viewers only, never a signed-in page reader.
  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
- expect(await canUseDataPolicy(current,reader.actor)).toBe(false);
- expect(await canUseDataPolicy(current,f.owner.actor)).toBe(true);
+ const current=(await getArtifactById(f.id))!;
+ expect(await canWriteDataset(current,reader.actor,true)).toBe('dataset_read_only');
+ expect(await canWriteDataset(current,f.owner.actor,true)).toBeNull();
 });
 
 it('answers the direct write door with the refusal shapes its callers read',async()=>{

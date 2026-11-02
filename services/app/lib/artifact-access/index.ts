@@ -11,10 +11,10 @@ export {
   LIVE_ARTIFACT_SQL, SHARE_PREDICATE, annotationScope, commentMonitorScope, editorScope, groupMemberPredicate, ownerPredicate, ownerScope,
   policyReaderSql, reactionScope, writerFor,
 } from './scopes';
-export { documentEditorReaches, effectiveRole, holdsCreatingToken, linkRoleOf, ownsArtifact, roleWithoutLink } from './access';
+export { documentEditorReaches, effectiveRole, holdsCreatingToken, linkRoleOf, ownsArtifact, reachesAsAccount, roleWithoutLink } from './access';
 export { liveAccessFacts, preloadAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
-export { assertGrantCommit, grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, readThrough, uploadGrantContext } from './grants';
+export { grantContext, grantsOf, grantsPermitRead, readThrough, uploadGrantContext } from './grants';
 export type { GrantDocument, ReadRow } from './grants';
 export { attestRegisteredHtmlMutation, verifyRegisteredHtmlMutation } from './registered-html-mutation';
 export { attestSavedHtmlUpload } from './saved-html-upload';

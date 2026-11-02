@@ -70,6 +70,7 @@
   "services/utils/__tests__/dataset-grants.test.ts",
   "services/utils/__tests__/dataset-permissions.test.ts",
   "services/utils/__tests__/dataset-policy.test.ts",
+  "services/app/lib/dataset-permissions/__tests__/to-v3.test.ts",
   "services/utils/__tests__/runner-native-client.test.ts",
   "services/utils/__tests__/timestamp.test.ts",
   "services/utils/src/__tests__/artifact-name.test.ts",

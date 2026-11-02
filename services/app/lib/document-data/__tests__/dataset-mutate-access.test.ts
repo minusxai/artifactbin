@@ -30,16 +30,22 @@ it('writes only a readwrite dataset, and only as one of its editors',async()=>{
  expect(await f.rows()).toEqual([{n:1},{n:2}]);
 });
 
-it('lets a viewer write through a document only what the viewer policy permits',async()=>{
+it('lets a viewer write, directly or through a document, only what the viewer policy permits',async()=>{
  const f=await fixture(),viewer=await account('reader'),doc=await document(f.db,'doc_policy',f.owner);
  const policy={version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:'*',check:{n:{_gt:0}}}}]}]};
  expect((await writeDatasetPolicy(f.owner.actor,f.id,{policy,expectedPolicyRevision:0})).status).toBe(200);
  const target={schema:'public',table:'rows'};
- expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (2)'))).toBe('dataset_read_only');
+
+ // The direct door runs the same v3 rules on the statement's effect (before v3 it refused every non-editor).
+ expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (-1)'))).toBe('policy_denied');
  expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (2)',{document:doc,target}))).toBeNull();
  expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (-1)',{document:doc,target}))).toBe('policy_denied');
  expect(refusal(await write(await f.row(),viewer.actor,'delete from public.rows',{document:doc,target}))).toBe('policy_denied');
  // A document saved since the caller loaded it no longer vouches for the write.
  expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (3)',{document:{...doc,editId:'old'},target}))).toBe('dataset_read_only');
+ // A document by someone who does not administer the dataset never carries a write, not even the owner's.
+ const foreign=await document(f.db,'doc_foreign',viewer);
+ expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (4)',{document:foreign,target}))).toBe('dataset_read_only');
+ expect(refusal(await write(await f.row(),f.owner.actor,'insert into public.rows values (4)',{document:foreign,target}))).toBe('dataset_read_only');
  expect(await f.rows()).toEqual([{n:1},{n:2}]);
 });

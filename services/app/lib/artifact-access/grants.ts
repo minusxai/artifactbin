@@ -1,7 +1,8 @@
 /**
- * DATASET GRANTS (policy version 2): who may read and write a governed dataset, directly or through a saved document,
- * decided inside the caller's transaction when it has one. The rows a decision consults are read here by their
- * access columns alone: no document, no content.
+ * DATASET GRANTS (policy version 2): who may read a governed dataset, and the saved-document context (program
+ * trust) a write through a document carries. Write decisions themselves are lib/dataset-permissions', which reads
+ * stored grants as v3 rules. Decided inside the caller's transaction when it has one. The rows a decision consults
+ * are read here by their access columns alone: no document, no content.
  */
 import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from './saved-html-upload';
 import {verifyRegisteredHtmlMutation} from './registered-html-mutation';
@@ -59,16 +60,6 @@ async function savedGrantContext(dataset:GrantDataset,actor:AccessActor,document
  }
  context.artifact={id:doc.id,owner:principalOf(doc)};
  return context;
-}
-export async function grantsPermitWrite(dataset:GrantDataset,actor:AccessActor,document?:GrantDocument,tx?:Queryable):Promise<boolean>{
- const policy=grantsOf(dataset);if(!policy)return false;
- try {const context=await grantContext(dataset,actor,document,tx);return (['insert','update','delete'] as const).some(op=>datasetGrantAllows(policy,op,context));}catch{return false;}
-}
-/** Lock the document with the dataset so membership/access revocation cannot race the commit. */
-export async function assertGrantCommit(tx:Queryable,dataset:GrantDataset,actor:AccessActor,document?:GrantDocument):Promise<void>{
- await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([dataset.id,...(document?[document.id]:[])])]]);
- const current=(await tx.query<GrantDataset>(`SELECT ${ACCESS_COLUMNS} FROM artifacts WHERE id=$1 AND deleted_at IS NULL`,[dataset.id])).rows[0];
- if(!current||(current.policy_revision??0)!==(dataset.policy_revision??0)||!(await grantsPermitWrite(current,actor,document,tx)))throw new DatasetError('Mutation permission changed',403);
 }
 
 /** Read grants use the actual caller and saved artifact; membership only gates mutations. */
