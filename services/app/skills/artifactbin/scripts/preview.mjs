@@ -115,8 +115,8 @@ if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(sel
      file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString(
      'utf8'))).html;const revision=await revisions.current({fresh:true});const local=
      await sessions.prepare(html,pathname,revision);const config={pageId:'local:'+pathname,revision,
-     backends:local?local.names:[],...(local?.datasets?.length?{datasets:local.datasets}:{}),offline:true,libraries:await platform.importMap().catch(
-     ()=>({})),...(local?{localPreview:{
+     backends:local?local.names:[],...(local?.datasets?.length?{datasets:local.datasets}:{}),
+     offline:true,libraries:await platform.importMap().catch(()=>({})),...(local?{localPreview:{
      endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:{})};const body=previewHtml(
      html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:
 local.names}:undefined),config,await platformCss(html).catch(()=>null));res.setHeader(

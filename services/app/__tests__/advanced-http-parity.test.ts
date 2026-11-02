@@ -25,7 +25,7 @@ describe('advanced HTTP parity',()=>{
 
     const got = await operationHttp(t.token, 'get_artifact', { id: story.data.id as string });
     expect(got.data.html).toContain(`href="ref:${ds.data.id}"`);
-    expect((await getArtifactById(String(story.data.id)))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'rows_data',datasetId:ds.data.id,mode:'live'}]);
+    expect((await getArtifactById(String(story.data.id)))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'rows_data',datasetId:ds.data.id,api:'hasura',mode:'live'}]); // #1014: a new link without legacy query code mounts the generated API
 
     const updated = await operationHttp(t.token, 'update_artifact', {
       id: story.data.id as string,

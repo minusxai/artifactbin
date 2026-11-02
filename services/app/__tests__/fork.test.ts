@@ -471,7 +471,7 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     const w=await world();const ds=await create(w.ta.token,{dataset:[{choice:'ramen'}],visibility:'public'});
     const doc=await create(w.ta.token,{html:`<html><head><link rel="af-dataset" data-af-name="votes" href="ref:${ds.id}"></head><body>Votes</body></html>`,visibility:'public'});
     const res=await bearerFork(doc.id,w.tb.token);expect(res.status).toBe(201);const body=await res.json();expect(body.datasets).toEqual([]);
-    const copy=await head(body.id);expect(copy.source).toContain(`ref:${ds.id}`);expect(copy.meta.htmlLinks).toEqual([{kind:'dataset',name:'votes',datasetId:ds.id,mode:'live'}]);
+    const copy=await head(body.id);expect(copy.source).toContain(`ref:${ds.id}`);expect(copy.meta.htmlLinks).toEqual([{kind:'dataset',name:'votes',datasetId:ds.id,api:'hasura',mode:'live'}]); // #1014: the fork keeps the source link's generated API
   });
 
   it('native dry_run creates neither a page nor dataset copies',async()=>{

@@ -236,6 +236,6 @@ describe('native dataset declarations',()=>{
   const token=await mintToken('native-refs');const ds=await create(token.token,{dataset:ROWS});
   const html=`<html><head><link rel="af-dataset" data-af-name="sales" href="ref:${ds.body.id}"></head><body>Sales</body></html>`;
   const page=await create(token.token,{html});expect(page.status).toBe(201);
-  expect((await getArtifactById(page.body.id))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'sales',datasetId:ds.body.id,mode:'live'}]);
+  expect((await getArtifactById(page.body.id))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'sales',datasetId:ds.body.id,api:'hasura',mode:'live'}]); // #1014: a new link without legacy query code mounts the generated API
  });
 });
