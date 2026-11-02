@@ -43,7 +43,7 @@
     "better-auth": "1.7.14",
     "hono": "4.13.14",
     "kysely": "0.28.17",
-    "pg": "8.17.1",
+    "pg": "8.23.0",
     "@artifactbin/runner": "0.1.0"
   },
   "devDependencies": {
@@ -51,7 +51,7 @@
     "@rollup/plugin-yaml": "5.0.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
-    "@types/pg": "8.16.0",
+    "@types/pg": "8.23.1",
     "babel-preset-solid": "1.9.15",
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
@@ -59,7 +59,7 @@
     "picomatch": "4.0.7",
     "playwright": "1.62.1",
     "sharp": "0.35.5",
-    "tailwindcss": "4.2.1",
+    "tailwindcss": "4.3.3",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vega-scenegraph": "5.3.0",
