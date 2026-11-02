@@ -129,8 +129,15 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
  return carried;
 }
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
+/**
+ * Field shapes only the legacy dataset API has (`schema{revision|tables…}`, `rows(tableId…)`, `writeRows(…)`).
+ * A new link on a page written against them keeps that API: installed skills that predate the generated API (and
+ * stale manual installs) still write these queries and name no `data-af-api`.
+ */
+const LEGACY_DATASET_QUERY=/\bschema\s*\{\s*(?:revision|tables)\b|\brows\s*\(\s*tableId\b|\bwriteRows\s*\(/;
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const names=new Set<string>();
+ const legacyQueries=LEGACY_DATASET_QUERY.test(html);
  for(const element of allElements(html).all){
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
@@ -150,7 +157,7 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
   // data-af-api names the dataset API explicitly; absent, publishing decides (lib/artifacts resolveDatasetApis).
   const declaredApi=attribute(element,'data-af-api');
   if(declaredApi!==null&&declaredApi!=='hasura'&&declaredApi!=='legacy')throw new Error('Dataset link data-af-api must be hasura or legacy');
-  const api=declaredApi===null?{}:{api:declaredApi as 'hasura'|'legacy'};
+  const api=declaredApi!==null?{api:declaredApi as 'hasura'|'legacy'}:legacyQueries?{api:'legacy' as const}:{};
   if(mode==='live'&&revision===null)datasets.push({kind:'dataset',name,datasetId:match[1]!,...api,mode:'live'});
   else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,...api,mode:'pinned',revision});
   else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
