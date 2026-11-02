@@ -1,8 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
- * One right panel for the whole edit session, on a window wide
- * enough to hold it beside the document (lib/story-ui/edit-bar's EDIT_PANEL_BREAKPOINT; narrower windows
- * get bottom sheets instead).
+ * A right panel frame for Selection, History and Comments.
+ * The caller owns placement and availability.
  *
  * The frame is tabs, the dot, collapse. What each tab shows is the caller's.
  *
@@ -41,7 +40,7 @@ export default function EditPanel(props: {
   selectionDot: boolean;
   /** Only someone who may comment gets the Comments tab. */
   commentsAvailable: boolean;
-  /** History is a backend capability; without it the tab stays, disabled, saying why. See DEVIATION above. */
+  /** History is a backend capability; without it the tab stays, disabled, saying why. */
   historyUnavailable?: string | null;
   /** The active tab's body. */
   children: JSX.Element;

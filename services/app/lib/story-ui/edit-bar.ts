@@ -17,15 +17,3 @@ export const RIGHT_RAIL_W = 320;
  * strip of their icons this wide when the viewer collapsed it.
  */
 export const EDIT_PANEL_STRIP_W = 44;
-
-/**
- * The narrowest document the panel may sit beside. Below
- * RIGHT_RAIL_W + this (960px) there is no side panel at all: the document keeps
- * the full width and the panel's tabs open as bottom sheets instead.
- */
-const EDIT_PANEL_MIN_DOC_W = 640;
-export const EDIT_PANEL_BREAKPOINT = RIGHT_RAIL_W + EDIT_PANEL_MIN_DOC_W;
-
-/** By innerWidth, like isPhoneViewport: readable anywhere, settable by a test. */
-export const isWideEditViewport = (width = typeof window === 'undefined' ? 0 : window.innerWidth) =>
-  width >= EDIT_PANEL_BREAKPOINT;
