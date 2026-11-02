@@ -90,7 +90,7 @@ describe('removeGroupInvitation', () => {
     expect((await getGroupDetail(owner.id, group.id))?.invitations).toHaveLength(1);
     await removeGroupInvitation(owner.id, group.id, invitation.id);
     expect((await getGroupDetail(owner.id, group.id))?.invitations).toEqual([]);
-    await expect(removeGroupInvitation(owner.id, group.id, invitation.id)).resolves.toBeUndefined();
+    await expect(removeGroupInvitation(owner.id, group.id, invitation.id)).rejects.toMatchObject({code:'not_found',status:404});
     await expect(removeGroupInvitation(owner.id, 'grp_missing', invitation.id)).rejects.toMatchObject({ code: 'not_found' });
   });
 });

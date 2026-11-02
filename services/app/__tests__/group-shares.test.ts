@@ -33,7 +33,7 @@ it('real routes preserve owner, admit shared reads/raw/offline/feeds, and revoke
  const browser={credential:'session' as const,userId:member.userId!,email:member.email!};
  expect((await authorizeStream(request(`/a/${page.id}/events/authorize`,{actor:browser}),rowParams)).status).toBe(200);
  expect(await readCommentChangesFor(identityForUser(member.userId!,member.id),page.id,{after:'now',limit:10,waitSeconds:0,signal:new AbortController().signal})).not.toBeNull();
- expect((await (await list(request(`/api/artifacts?group_id=${group.id}`,{token:member.token}))).json()).artifacts).toMatchObject([{id:page.id}]);
+ expect((await (await list(request(`/api/artifacts?group_id=${group.id}`,{token:member.token}))).json()).artifacts).toMatchObject([{id:page.id,owner:{type:'personal'},group_id:null}]);
  expect((await leave(request(`/api/groups/${group.id}/members/me`,{method:'DELETE',token:member.token}),context({id:group.id}))).status).toBe(200);
  for(const handler of [raw,download,exportImage])expect((await handler(request(`/a/${page.id}/raw`,{token:member.token}),rowParams)).status).toBe(404);
  expect((await authorizeStream(request(`/a/${page.id}/events/authorize`,{actor:browser}),rowParams)).status).toBe(404);
