@@ -1,5 +1,6 @@
+import {testDb} from '@artifactbin/test-support/db';
 import {PGlite} from '@electric-sql/pglite';
-import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import {beforeAll,describe,expect,it} from 'vitest';
 import type { Queryable, Table } from '@artifactbin/contracts';
 import {ensureTable,renderSchema} from '@artifactbin/utils';
 import {serviceSecretForServer} from '../src/service-auth';
@@ -7,9 +8,10 @@ import {serviceSecretForServer} from '../src/service-auth';
 /** Schema as data → additive, idempotent DDL; applied twice it changes nothing; a new column appears on the next boot. */
 
 const T: Table = { name: 'widgets', columns: [{ name: 'id', type: 'TEXT' }, { name: 'n', type: 'INTEGER', notNull: true, default: '0' }, { name: 'old', type: 'TEXT', retired: true }], primaryKey: ['id'], indexes: [{ name: 'idx_widgets_n', columns: ['n'], where: 'n > 0' }] };
-let pg: PGlite; let db: Queryable;
-beforeAll(async () => { pg = new PGlite(); await pg.exec('CREATE SCHEMA app'); db = { query: async (sql, params) => ({ rows: (await pg.query(sql, params as unknown[])).rows as never }) }; });
-afterAll(() => pg.close());
+const { pg: engine, query } = testDb();
+const pg = engine();
+const db: Queryable = { query };
+beforeAll(async () => { await pg.exec('CREATE SCHEMA IF NOT EXISTS app'); });
 
 describe('renderSchema', () => {
   it('relaxes an existing required email column for guest users without losing registered rows', async () => {

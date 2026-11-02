@@ -1,3 +1,4 @@
+import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
@@ -23,7 +24,7 @@ export function repairCoreScript(input:string):{html:string;changed:boolean;remo
  html=applyEdits(html,[atHeadStart(document,[coreTag(retained)])]);
  return {html,changed:true,removed:cores};
 }
-const coreTag=(id?:string|null)=>`<script src="${CORE}"${id?` data-af-id="${id.replaceAll('&','&amp;').replaceAll('"','&quot;')}"`:''}></script>`;
+const coreTag=(id?:string|null)=>`<script src="${CORE}"${id?` data-af-id="${escapeSourceAttribute(id)}"`:''}></script>`;
 
 /** The persisted source is the authoring source. Runtime wrappers never enter it. */
 export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions={}):CanonicalHtmlPage {
@@ -199,7 +200,7 @@ export function rewriteHtmlAssetUrls(html:string,replacements:ReadonlyMap<string
  const edits:import('./html-source').Edit[]=[];
  for(const element of parseSource(html).elements)for(const name of assetAttributes(element)){
   const value=attribute(element,name),next=value&&replacements.get(value),location=element.sourceCodeLocation?.attrs?.[name];
-  if(next&&location)edits.push({start:location.startOffset,end:location.endOffset,text:`${name}="${next.replaceAll('&','&amp;').replaceAll('"','&quot;')}"`});
+  if(next&&location)edits.push({start:location.startOffset,end:location.endOffset,text:`${name}="${escapeSourceAttribute(next)}"`});
  }
  return applyEdits(html,edits);
 }
