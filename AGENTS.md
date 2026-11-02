@@ -11,8 +11,8 @@
 
 - **Finish on FAST, then SLOW once.** Never push, poll CI or gate per edit.
 - **Full gates belong to main PR and post-merge CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
-- **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
-  the exact user scenario verified end to end on the built artifact → merge.
+- **Pre-merge:** FAST checks → commit/push once → bounded fast PR CI green → merge.
+  Full builds/browser/container suites run after merge and gate release, not PR approval.
 - **PRs into `main`: ONLY use squash and merge** (`gh pr merge --squash`). NEVER land all
   branch commits via the PR methods "Create a merge commit" (`gh pr merge --merge`) or
   "Rebase and merge" (`gh pr merge --rebase`). Each PR lands as one squashed commit on `main`.
@@ -23,9 +23,9 @@
 
 For PRs targeting **`main`**, the required check is `pr fast` (`.github/workflows/pr-fast.yml`):
 validate, workflow lint, JavaScript syntax and the fast module list on three runners. Aim for
-**40 seconds**; the limit is **60 seconds**, from `run_started_at` to the last job, and each job's final
+**under 40 seconds**, warn at **40 seconds**, and fail above **60 seconds**, from `run_started_at` to the last job, and each job's final
 step fails the PR past it (`scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`).
-Never raise it. On a PR, `ci.yml` (affected modules) and `page speed` are informational.
+Never raise it. Full `ci.yml`, page-speed, credential-platform and runner-design suites run on main/manual, not automatic PRs. Never add an unbounded extra PR workflow or wait for full release checks before merging. This 40/60 policy applies consistently to application, proxy, evaluator and deployment repositories.
 
 For the **full post-merge chain** (and `ci.yml` on a PR), measure from `run_started_at` through
 final rollup, including runner setup, dependency waits and uploads. Aim below **3 minutes**; normal

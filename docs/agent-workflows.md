@@ -1,3 +1,9 @@
+## Pull-request timing policy
+
+Across application, proxy, evaluator and deployment repositories, automatic PR verification targets under40 seconds, warns from40 seconds and fails above60 seconds. Measure from the workflow attempt start through its final clock, including setup/install/network/prerequisite waits. Do not raise budgets, subtract waits or retry unchanged failures. Keep clear workflow comments and boundary tests.
+
+Merge after the fast PR lane passes; do not wait for full release suites on PRs. Complete type/build/runtime/browser/security coverage remains on main and gates deployment for the exact revision. Fast PR success must never be treated as tested-release evidence.
+
 # Agent handoffs
 
 Use the active harness and user-selected model. Old version-specific launch commands and model

@@ -198,10 +198,8 @@ if (mode === 'plan') {
     }
   }
   const plan = planCi(paths ?? [], {
-    // A push with diff evidence is judged like a PR: the modules it changed and their dependents
-    // (planCi still widens to everything for manifests, shared packages, CI config or unclassified
-    // paths). Only a push with no usable base — a first push, a forced one — runs the full suite.
-    full: !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
+    // Full coverage runs on main after the bounded PR lane; fast PR checks mint no tested receipts.
+    full: env.CI__EVENT !== 'pull_request',
     testedRun,
     testedPatch,
   });

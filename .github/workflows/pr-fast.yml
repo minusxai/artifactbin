@@ -78,15 +78,23 @@ jobs:
       # actionlint reads every workflow and shellchecks every `run:` block; it runs beside the lint half.
       - if: matrix.part == 'lint'
         name: Lint the workflows and validate the rest
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
-          docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color & lint=$!
+          # A pinned executable preserves the same workflow/shell checks without a Docker pull/start.
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl --max-time 15 -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/$archive" actionlint
+          "$RUNNER_TEMP/actionlint" -color & lint=$!
           rc=0
           node scripts/ci/check-local.mjs validate --part=lint || rc=1
           wait "$lint" || rc=1
           exit "$rc"
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
-      - name: PR CI clock (aim for 40s; fails over 60s)
+      - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}

@@ -228,7 +228,7 @@ describe('native credential verification stays outside the fast PR budget',()=>{
   const native=workflow('credential-platform.yml'),job=native.jobs.credentials;
   expect(job.strategy.matrix.os).toEqual(['ubuntu-latest','macos-latest','windows-latest']);
   expect(job.strategy['fail-fast']).toBe(false);
-  expect(native.on.pull_request.paths).toContain('services/utils/**');
+  expect(native.on).not.toHaveProperty('pull_request');
   expect(native.on).toHaveProperty('workflow_dispatch');
   expect(native.permissions).toEqual({contents:'read'});
   expect(job.steps.find(step=>step.uses?.startsWith('actions/setup-node@')).with['node-version']).toBe(22);
@@ -237,7 +237,7 @@ describe('native credential verification stays outside the fast PR budget',()=>{
   expect(readFileSync(path.join(root,'.github/workflows/pr-fast.yml'),'utf8')).not.toContain('credential-platform');
   const fast=JSON.parse(readFileSync(path.join(root,'scripts/ci/fast-tests.json'),'utf8'));
   for(const file of ['credential-storage.test.ts','credential-process.test.ts'])expect(fast.some(entry=>entry.endsWith(file))).toBe(false);
-  expect(native.on.push.paths).toEqual(native.on.pull_request.paths);
+  expect(native.on.push.paths).toContain('services/utils/**');
  });
 });
 
@@ -261,3 +261,7 @@ describe('whole-install cache equivalence', () => {
     expect(base.run).toContain('cmp -s .ci-cache-key/install.json .perf-base/.ci-cache-key/install.json');
   });
 });
+
+ it('keeps every slow suite on main rather than automatic PR waits',()=>{
+  for(const name of ['ci.yml','page-speed.yml','credential-platform.yml','runner-design.yml'])expect(workflow(name).on).not.toHaveProperty('pull_request');
+ });
