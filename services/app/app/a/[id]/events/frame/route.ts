@@ -8,6 +8,7 @@ import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform';
 import { liveFrameFor } from '@/lib/publish';
 import { sessionActor } from '@/lib/authentication';
+import { datasetReadAccess, datasetRowsFor } from '@/lib/dataset-permissions';
 
 /**
  * A FRESH object per response, never this one. The Node server writes the
@@ -40,5 +41,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * nothing to carry, so it gets the uniform 404 `raw` already gives it.
    */
   if (row.format === 'folder') return new Response('not found', { status: 404 });
+  // A dataset's rows travel in its frame: the reader's role view (lib/dataset-permissions). The shared frame
+  // cache holds whole datasets only; a restricted view is built for this reader and never cached.
+  if (row.format === 'dataset') {
+    const decision = await datasetReadAccess(row, actor);
+    if (!decision.allowed) return new Response('not found', { status: 404 });
+    if (!decision.full) return new Response(JSON.stringify(await liveFrameFor(row, await datasetRowsFor(decision, row))), { headers: headers() });
+  }
   return new Response(JSON.stringify(await liveFrameFor(row)), { headers: headers() });
 }

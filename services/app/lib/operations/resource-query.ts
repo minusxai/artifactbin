@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import { artifactState, readableArtifact } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {catalogOf, executeCatalog, DatasetError} from '../datasets';
+import {datasetReadAccess, datasetView, viewCatalog} from '../dataset-permissions';
 import {json, parseQueryRequest} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
@@ -16,6 +17,9 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
  await checkActor?.();
  const readable=await readableArtifact(actor,id);if(!readable)return json({error:'not_found'},404);
  const {row}=readable;const state=artifactState(row);
+ // A dataset is queried over the caller's role view (lib/dataset-permissions): the rows and columns their select rule shows.
+ const decision=row.format==='dataset'?await datasetReadAccess(row,actor):null;
+ if(decision&&!decision.allowed)return json({error:'not_found'},404);
  const fingerprint=createHash('sha256').update(JSON.stringify([id,state,body.sql??null,body.name??null,parsed.values??{},limit])).digest('hex');
  let offset=0;
  if(body.cursor!==undefined){
@@ -29,16 +33,18 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
  const authorize=async()=>{
   signal?.throwIfAborted();await checkActor?.();const current=await readableArtifact(actor,id);
   if(!current||artifactState(current.row)!==state)throw new DatasetError('Query access or resource changed',404);
+  if(decision?.allowed){const now=await datasetReadAccess(current.row,actor);if(!now.allowed||now.identity!==decision.identity)throw new DatasetError('Query access or resource changed',404);}
  };
  const result=(name:string,table:TableResult)=>({id,name,execution:'remote',...table,rows:table.rows.slice(0,Number(limit)),next_cursor:table.rows.length>Number(limit)?Buffer.from(JSON.stringify({fingerprint,offset:offset+Number(limit)})).toString('base64url'):null});
  try{
   if(row.format==='dataset'){
-   const catalog=catalogOf(row);if(!catalog)return json({error:'not_a_dataset'},400);
+   const stored=catalogOf(row);if(!stored)return json({error:'not_a_dataset'},400);
+   const catalog=decision?.allowed?viewCatalog(decision,stored):stored;
    const selected=typeof body.name==='string'?catalog.tables.find(table=>table.name===body.name||`${table.schema}.${table.name}`===body.name):catalog.tables.length===1?catalog.tables[0]:undefined;
    if(body.name&&!selected||!body.sql&&!selected)return json({error:'unknown_table',hint:'Select a table with --name.',names:catalog.tables.map(table=>`${table.schema}.${table.name}`)},400);
    const quote=(value:string)=>'"'+value.replaceAll('"','""')+'"';
    const sql=typeof body.sql==='string'?body.sql:`select * from ${quote(selected!.schema)}.${quote(selected!.name)}`;
-   const table=await executeCatalog(catalog,sql,parsed.values,{datasetId:id,limit:Number(limit)+1,offset,refresh:body.refresh===true,authorize,signal});
+   const table=await executeCatalog(stored,sql,parsed.values??{},{datasetId:id,view:decision?.allowed?datasetView(decision):null,limit:Number(limit)+1,offset,refresh:body.refresh===true,authorize,signal});
    await authorize();return json({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
   }
   if(body.sql!==undefined)return json({error:'invalid_query',hint:'Use --name for a declared document query; --input SQL applies to datasets.'},400);

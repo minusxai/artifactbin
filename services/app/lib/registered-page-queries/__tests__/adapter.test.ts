@@ -157,6 +157,7 @@ it("executes real page GraphQL with result-only document authority and viewer fi
       resolveImport: async (doc, id, actor) => {
         calls.push([doc.id, id, actor.userId]);
         return {
+          view: null,
           artifact: artifact as any,
           catalog: {
             kind: "stored",

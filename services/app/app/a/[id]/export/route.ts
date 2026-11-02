@@ -6,6 +6,7 @@ import { canReadArtifact, getArtifactById, refusingUnservable } from '@/lib/arti
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { exportImageResponse } from '@/lib/export';
+import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { canEdit } from '@artifactbin/contracts';
@@ -30,7 +31,8 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   // hold, an unfurler with neither. Direct token ownership counts — an
   // unclaimed token's doc has no viewer.userId to match.
   const actor = await requestOrSessionActor(request);
-  const authorized = holdsCreatingToken(artifact, actor) || (await canReadArtifact(artifact, actor));
+  // A dataset's image renders every row (a keyed render): only for a role that sees it whole (lib/dataset-permissions).
+  const authorized = holdsCreatingToken(artifact, actor) || (artifact.format === 'dataset' ? datasetExportable(await datasetReadAccess(artifact, actor)) : await canReadArtifact(artifact, actor));
   if (!authorized) return json({ error: 'not_found' }, 404);
   const q = new URL(request.url).searchParams;
   /*

@@ -8,6 +8,7 @@
 import { MembershipError, type MutationReceipt, type ArtifactRow, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
 import { artifactToWire } from '@/lib/artifact-wire';
 import type { AccessActor } from '@/lib/accounts';
+import { datasetReadAccess, viewDatasetWire } from '@/lib/dataset-permissions';
 import { json } from '../http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, setCommentReactionFor, type AnnotationAction, type AnnotationEdit } from './store';
@@ -39,7 +40,11 @@ export async function readArtifactSnapshot(actor: AccessActor, id: string, base:
   const head = await snapshotHeadFor(actor, id);
   if (!head) return null;
   const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId);
-  return snapshotForReader(wire, head.row, head.role);
+  const narrowed = snapshotForReader(wire, head.row, head.role);
+  // A dataset answers with the reader's role view: the rows, columns and counts their select rule shows.
+  if (head.row.format !== 'dataset') return narrowed;
+  const decision = await datasetReadAccess(head.row, actor);
+  return decision.allowed ? viewDatasetWire(decision, head.snapshot, narrowed) : null;
 }
 
 /** Body → action; null = malformed (neither field, or wrong types). */

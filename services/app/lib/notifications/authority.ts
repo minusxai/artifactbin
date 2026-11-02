@@ -2,7 +2,8 @@
 import {getGroupRole} from '@/lib/groups';
 import {notificationRuleSourceIds,notificationRevision as hash} from './context';
 import {explicitNotificationMemberships} from './membership';
-import { grantsOf, grantsPermitRead, readThrough, type ReadRow, liveAccessFacts, preloadAccessFacts, type AccessFacts, documentEditorReaches } from '@/lib/artifact-access';
+import { grantsOf, readThrough, type ReadRow, liveAccessFacts, preloadAccessFacts, type AccessFacts, documentEditorReaches } from '@/lib/artifact-access';
+import { datasetReadAccess } from '@/lib/dataset-permissions';
 import { type ArtifactRow } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import { identityForUser, liveTokenSql, type AccessActor } from '@/lib/accounts';
@@ -56,7 +57,9 @@ async function connectionAvailable(tx:Queryable,row:ReadableArtifact):Promise<vo
 async function sourceReadable(tx:Queryable,source:{row:ReadableArtifact},document:{row:ReadRow},identity:Identity,facts:AccessFacts=liveAccessFacts(identity.actor,tx),connection:(row:ReadableArtifact)=>Promise<void>=row=>connectionAvailable(tx,row)):Promise<boolean>{
  if(source.row.format!=='dataset'||!await readThrough(tx,document.row,identity.actor,facts))return false;
  await connection(source.row);
- return grantsOf(source.row)?grantsPermitRead(source.row,identity.actor,document.row,tx,facts):readThrough(tx,source.row,identity.actor,facts);
+ // The dataset read decision (lib/dataset-permissions): any select rule. A v2 grant may name this page (as before);
+ // otherwise the recipient reads the dataset directly.
+ return (await datasetReadAccess(source.row as ArtifactRow,identity.actor,{tx,facts,...(grantsOf(source.row)?{document:document.row}:{})})).allowed;
 }
 export async function notificationExecutionFence(tx:Queryable,input:MutationNotificationJobInput):Promise<MutationNotificationPlan['executionFence']>{
  const principal=await notificationPrincipal(tx,input.initiator.principal),document=await notificationArtifactAuthority(tx,input.origin.documentId);

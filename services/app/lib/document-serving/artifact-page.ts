@@ -3,6 +3,7 @@ import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
 import { publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
+import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-permissions';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -229,6 +230,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // when one was asked for, the artifact itself otherwise. A document's comes
   // Source stays on the runner origin; independent shell reads run beside one another.
   const viewerId = actor.userId;
+  // A dataset page shows the reader's role view (lib/dataset-permissions); its creating token and an export read whole.
+  const datasetDecision = artifact.format === 'dataset' && !exporting && !holdsCreatingToken(artifact, actor) ? await datasetReadAccess(artifact, actor) : null;
+  if (datasetDecision && !datasetDecision.allowed) return notFound();
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
   const social = Promise.all([
@@ -243,7 +247,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
     artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
     isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
-    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
+    artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
@@ -330,7 +334,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     }),
     dataPreview,
     columns: meta.columns ?? [],
-    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:publicCatalogOf(artifact)!}:{}),
+    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:datasetDecision?.allowed?viewCatalog(datasetDecision,publicCatalogOf(artifact)!):publicCatalogOf(artifact)!}:{}),
     // A stored FILE is not a document the app renders: its page shows the two
     // facts a person picks a file by, the link that opens it, and the browser's viewer.
     ...(artifact.format === 'pdf' || artifact.format === 'file' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),

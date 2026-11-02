@@ -25,6 +25,7 @@ import {DatasetError} from '@/lib/datasets';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
+import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
@@ -562,7 +563,8 @@ const exportArtifactOp: Operation = {
     // The URL's own rule, readable = exportable, applied to the tool's actor:
     // the publishing token reaches its own document directly; a claimed
     // token's account reaches whatever the account may read.
-    const authorized = holdsCreatingToken(artifact, ctx.actor) || (await canReadArtifact(artifact, ctx.actor));
+    // A dataset's image renders every row: only for a role that sees it whole (lib/dataset-permissions).
+    const authorized = holdsCreatingToken(artifact, ctx.actor) || (artifact.format === 'dataset' ? datasetExportable(await datasetReadAccess(artifact, ctx.actor)) : await canReadArtifact(artifact, ctx.actor));
     if (!authorized) return reply({ error: 'not_found' }, 404);
     void trackEvent('export', artifact.id, { userId: ctx.actor.userId ?? null });
     const res = await exportImageResponse(artifact, {

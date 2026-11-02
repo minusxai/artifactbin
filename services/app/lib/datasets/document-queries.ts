@@ -1,11 +1,12 @@
 /** Shared execution boundary for rendered, headless and durable document queries. */
 import { executeCatalog } from '@/lib/datasets/execute';
 import { DatasetError } from '@/lib/datasets/errors';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { CatalogRowView, DatasetCatalog } from '@/lib/datasets/types';
 import type { AccessActor } from '@/lib/accounts';
 import { type CompiledDataflow, importRef, selectQueries, type ImportTables } from '@/lib/dataflow';
 import { runDataflow, type RunDataflowOptions } from '../sql';
-export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog };
+/** `view`: the reader's role view of the dataset (lib/dataset-permissions); `tables` are already read through it. */
+export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog; view?: CatalogRowView | null };
 export type DocumentQuerySourceMode = 'import' | 'catalog' | 'verify';
 interface DocumentQueryOptions extends RunDataflowOptions {
   actor?: AccessActor;
@@ -35,19 +36,20 @@ async function withDocumentSources<T>(flow: CompiledDataflow, resolve: (ref: str
     usedSources.add(ref!);
   }
   const state = await execute(imports, async (query, params, paramTypes, page, timeoutMs) => {
-    const catalog = (await data(query.source!,'catalog'))?.catalog;
+    const source = await data(query.source!,'catalog'), catalog = source?.catalog;
     if (!catalog) throw new DatasetError('Dataset source is unavailable', 404);
+    const view = source?.view ?? null;
     usedSources.add(query.source!);
-    return executeCatalog(catalog, query.sql, params, { actor:opts.actor, datasetId:query.source!, limit:page?.limit ?? opts.limit, offset:page?.offset, sort:page?.sort, signal:opts.signal, refresh:opts.refresh, timeoutMs:timeoutMs ?? opts.timeoutMs, paramTypes, authorize:async()=>{
+    return executeCatalog(catalog, query.sql, params, { view, actor:opts.actor, datasetId:query.source!, limit:page?.limit ?? opts.limit, offset:page?.offset, sort:page?.sort, signal:opts.signal, refresh:opts.refresh, timeoutMs:timeoutMs ?? opts.timeoutMs, paramTypes, authorize:async()=>{
       await opts.authorize?.();
       const current=await resolve(query.source!,'verify');
-      if (!current || (!opts.sourceFence && JSON.stringify(current.catalog)!==JSON.stringify(catalog))) throw new DatasetError('Dataset source is unavailable',404);
+      if (!current || (current.view?.identity ?? null) !== (view?.identity ?? null) || (!opts.sourceFence && JSON.stringify(current.catalog)!==JSON.stringify(catalog))) throw new DatasetError('Dataset source is unavailable',404);
     }});
   });
   // A resolver rechecks authority, independently of the rows' content revision.
   for (const ref of usedSources) {
     const current=await resolve(ref,'verify');
-    if (!current || (!opts.sourceFence && JSON.stringify(current.catalog ?? null)!==JSON.stringify(resolved.get(ref)?.catalog ?? null))) throw new DatasetError('Dataset source is unavailable',404);
+    if (!current || (current.view?.identity ?? null) !== (resolved.get(ref)?.view?.identity ?? null) || (!opts.sourceFence && JSON.stringify(current.catalog ?? null)!==JSON.stringify(resolved.get(ref)?.catalog ?? null))) throw new DatasetError('Dataset source is unavailable',404);
   }
   await opts.authorize?.();
   return { state, sourceIds:[...usedSources] };

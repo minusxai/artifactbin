@@ -1,14 +1,15 @@
 import {JOIN_RELATIONS} from '@/lib/social';
 import { type ArtifactHeader, type ArtifactRow, getArtifactById, getArtifactFor, getLinkReadableArtifact, childrenTableFor } from '@/lib/artifacts';
-import { writerFor, grantsOf, grantsPermitRead } from '@/lib/artifact-access';
+import { writerFor, grantsOf } from '@/lib/artifact-access';
+import { datasetReadAccess, datasetView } from '@/lib/dataset-permissions';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { type DocumentQuerySourceMode } from '../datasets';
 import { type PersonCard } from '@artifactbin/contracts';
 import { type ImportTables } from '@/lib/dataflow';
-import { people, catalogOf, importedRows } from '@/lib/datasets';
+import { people, catalogOf, importedRows, importedTables, type CatalogRowView } from '@/lib/datasets';
 import { getDb } from '../platform';
 
-type RefData = {tables:ImportTables[string];catalog?:import('@/lib/datasets').DatasetCatalog};
+type RefData = {tables:ImportTables[string];catalog?:import('@/lib/datasets').DatasetCatalog;view?:CatalogRowView|null};
 type DatasetResolver = (id:string,mode?:DocumentQuerySourceMode)=>Promise<RefData|null>;
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
@@ -19,12 +20,18 @@ export async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | n
     return { tables: { rows: await childrenTableFor(r, viewer) } };
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
-  if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??ANONYMOUS_ACTOR,document)))return null;
+  // The reader's dataset role through this document, and its role view (lib/dataset-permissions).
+  const decision=await datasetReadAccess(r,viewer??ANONYMOUS_ACTOR,document?{document}:{});
+  if(!decision.allowed)return null;
+  const view=datasetView(decision);
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
-  if(!loadRows||catalog.kind==='postgres')return { tables: {}, catalog };
+  if(!loadRows||catalog.kind==='postgres')return { tables: {}, catalog, view };
   try {
-    return { tables: await importedRows(catalog), catalog };
+    const tables=await importedRows(catalog);
+    // Rows the select rule keeps, and only the columns it shows (the viewed catalog's).
+    if(view)for(const table of importedTables(view.catalog(catalog))){const loaded=tables[table.name];if(loaded)tables[table.name]={rows:view.rows(table,loaded.rows),columns:table.columns};}
+    return { tables, catalog, view };
   } catch { return null; } // the query reports the missing table
 }
 
@@ -34,7 +41,7 @@ export async function registeredQueryImportForRow(row:ArtifactRow,id:string,view
  const artifact=await importedArtifactFor(row,id);
  const data=await tableForRef(artifact,viewer,row,false);
  if(!artifact||artifact.format!=='dataset'||!data?.catalog)throw Error('query_source_unavailable');
- return {artifact,catalog:data.catalog};
+ return {artifact,catalog:data.catalog,view:data.view??null};
 }
 
 /** The artifact a document's import names, by the document's own reach. */

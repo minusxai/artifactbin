@@ -25,6 +25,19 @@ export interface DatasetCatalog {
   tables: DatasetTable[];
   refreshSeconds: number;
 }
+/**
+ * THE ROLE VIEW a catalog read runs over (lib/dataset-permissions `datasetView` builds it): the catalog
+ * with the columns this caller may not see removed, and each stored table's rows as they may see them.
+ * `executeCatalog` requires one, or an explicit null (owner, editor, a role that reads everything, or a
+ * host-owned read such as model probing), so no door reads rows without deciding.
+ */
+export interface CatalogRowView {
+  /** The role, policy revision, session and rules this view applies: part of every cache key over it. */
+  identity: string;
+  /** Throws the uniform 404 when the catalog cannot be viewed (a connected source under a restricting rule). */
+  catalog(catalog: DatasetCatalog): DatasetCatalog;
+  rows(table: DatasetTable, rows: Record<string, unknown>[]): Record<string, unknown>[];
+}
 export interface CatalogInput {
   kind: 'postgres' | 'stored';
   connection?: DatasetConnection;
