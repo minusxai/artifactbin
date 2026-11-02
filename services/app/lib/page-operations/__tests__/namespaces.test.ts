@@ -20,6 +20,15 @@ describe('page resolver isolation and authority',()=>{
   expect(schema.sdl).toContain('tasks__Thing');expect(schema.sdl).toContain('other__Thing');
  });
 });
+it('shows a failed resolver field\'s detail to the page owner only',async()=>{
+ const schema=composePageSchema([{name:'conn',fileId:'backend1',version:'v1',typeDefs:'type Query { test: String }'}]);
+ const run=(role:DatasetRole)=>executePageOperation({schema,request:{query:'query ResolverTest { conn { test } }'},caller:{pageId:'page1',subject:role==='anonymous'?null:'u1',role},signal,invoke:async()=>{throw new FieldFailed('backend_failed','upstream 401: Error: unauthorized');}});
+ expect((await run('owner')).errors?.[0]?.extensions).toEqual({code:'backend_failed',detail:'upstream 401: Error: unauthorized'});
+ for(const role of ['editor','viewer','signed_in','anonymous'] as const){
+  const extensions=(await run(role)).errors?.[0]?.extensions;
+  expect(extensions).toEqual({code:'backend_failed'});expect(extensions).not.toHaveProperty('detail');
+ }
+});
 it('preflights the actual bounded operation rather than trusting a page label',async()=>{
  const {pageOperationKind}=await import('../index');
  expect(pageOperationKind('mutation { tasks { save(n:2) } }')).toBe('mutation');

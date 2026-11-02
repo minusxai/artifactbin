@@ -75,12 +75,12 @@ function validate(input:RunnerJson):Validated{
  return {url:o.url as string,method,headers,...(o.body===undefined?{}:{body:o.body as string}),...(auth?{auth}:{})};
 }
 /** The value, its URL-encoded and base64 forms, longest first so a longer form is never half-replaced. */
-function secretForms(values:readonly string[]):string[]{
+export function secretForms(values:readonly string[]):string[]{
  const forms=new Set<string>();
  for(const v of values){const b=Buffer.from(v);for(const f of [v,encodeURIComponent(v),b.toString('base64'),b.toString('base64').replace(/=+$/,''),b.toString('base64url')])if(f)forms.add(f);}
  return [...forms].sort((a,b)=>b.length-a.length);
 }
-const redact=(text:string,forms:readonly string[])=>forms.reduce((t,f)=>t.split(f).join('[redacted]'),text);
+export const redact=(text:string,forms:readonly string[])=>forms.reduce((t,f)=>t.split(f).join('[redacted]'),text);
 const ingestCode=(code:string)=>code==='too_large'?'response_limit':code==='bad_status'||code==='unsupported_type'||code==='forbidden_host'?'fetch_failed':code;
 
 /**

@@ -1,11 +1,11 @@
 import { transform } from 'esbuild';
 import { randomUUID } from 'node:crypto';
-import { RESOLVER_LIMITS, type HtmlJson, type PageResolverFieldCall, type ResolverApi, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson } from '@artifactbin/contracts';
+import { RESOLVER_LIMITS, type HtmlJson, type RunReceipt, type PageResolverFieldCall, type ResolverApi, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
-import {secretBindingNames,secretHostMap} from '@/lib/html-backend-secrets';
-import { FieldFailed, FieldNotExecuted } from './contracts';
-import type { ResolverFetcher } from './public-fetch';
+import {readPinnedBackendSecret,secretBindingNames,secretHostMap} from '@/lib/html-backend-secrets';
+import { FieldFailed, FieldNotExecuted, boundedDetail } from './contracts';
+import { redact, secretForms, type ResolverFetcher } from './public-fetch';
 /** `secretBindings` lists every declared secret name; `secretHosts` binds api 2 names to hosts. */
 export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[];secretHosts?:ResolverSecretHosts;api?:ResolverApi;test?:boolean}
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}
@@ -63,7 +63,26 @@ async function admit(runner:RunnerService,request:RunStart,signal:AbortSignal|un
  if(BUSY.has(code))throw new FieldNotExecuted('Runner refused admission','retryable',`${code} after ${tries} attempts`);
  throw new FieldFailed('backend_unavailable',`runner start failed after ${tries} attempts`);
 }
-async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,delays:readonly number[]=START_RETRY_DELAYS_MS):Promise<RunnerJson>{
+type SecretReader=(backend:PageBackendRecord,name:string)=>Promise<string>;
+/**
+ * What a failed run's receipt says, made safe for the page owner (namespaces shows `detail` to role owner only):
+ * the first line of the runner's reason (a caps.fetch refusal code, `timeout`, or the resolver's thrown message),
+ * prefixed with the last fetch's status when that was not 2xx. Every form of the backend's secret values, URL
+ * query strings and fragments, and credential-looking header values are removed before the bound is applied.
+ */
+async function failureDetail(receipt:RunReceipt|null|undefined,backend:PageBackendRecord,readSecret:SecretReader):Promise<string|undefined>{
+ const reason=typeof receipt?.reason==='string'?receipt.reason.split(/\r?\n/,1)[0]!.trim():'';
+ const last=[...(Array.isArray(receipt?.requests)?receipt.requests:[])].reverse().find(r=>r?.service==='fetch');
+ const status=typeof last?.status==='number'&&(last.status<200||last.status>299)?`upstream ${last.status}`:'';
+ if(!reason&&!status)return undefined;
+ const values=await Promise.all((backend.secretBindings??[]).map(name=>readSecret(backend,name).catch(()=>'')));
+ const safe=redact(reason,secretForms(values.filter(Boolean)))
+  .replace(/\b(https?:\/\/[^\s?#]*)[?#]\S*/gi,'$1')
+  .replace(/\b(bearer|basic)\s+[^\s,;]+/gi,'$1 [redacted]')
+  .replace(/\b(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api[-_]?key|access[-_]?token|password)(\s*[:=]\s*)[^\s,;]+/gi,'$1$2[redacted]');
+ return boundedDetail([status,safe].filter(Boolean).join(': '));
+}
+async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,delays:readonly number[]=START_RETRY_DELAYS_MS,explain?:(receipt:RunReceipt|null)=>Promise<string|undefined>):Promise<RunnerJson>{
  const runId=await admit(runner,request,signal,delays);
  const lookup={runId,userId:request.userId};
  const deadline=Date.now()+RESOLVER_LIMITS.appWaitMs;
@@ -71,7 +90,7 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
   if(signal?.aborted||Date.now()>deadline){await runner.cancel(lookup).catch(()=>{});throw new FieldFailed('deadline');}
   let snapshot;try{snapshot=await runner.getRun(lookup);}catch{throw new FieldFailed('backend_unavailable');}
   if(snapshot.status==='completed')return snapshot.output;
-  if(!['queued','running'].includes(snapshot.status))throw new FieldFailed('backend_failed');
+  if(!['queued','running'].includes(snapshot.status))throw new FieldFailed('backend_failed',await explain?.(snapshot.receipt).catch(()=>undefined));
   await new Promise(resolve=>setTimeout(resolve,10));
  }
 }
@@ -88,10 +107,12 @@ export function createBackendCompiler(runner:RunnerService){return async(source:
  return {compiled,typeDefs:result.typeDefs,secretBindings,secretHosts,api,test};
 };}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
-export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[]}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
+/** `readSecret` supplies the owner's values only to redact a failed run's detail (default: the pinned secret store). */
+export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[];readSecret?:SecretReader}={}){
+ const readSecret=options.readSecret??readPinnedBackendSecret;return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
  const backend=await load(call.fileId,call.version);
  if(!backend||backend.backendId!==call.fileId||backend.version!==call.version||backend.pageId!==call.principal.tenant)throw new FieldNotExecuted('Backend link mismatch','forbidden');
- return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs);
+ return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs,receipt=>failureDetail(receipt,backend,readSecret));
 };}
 /** Called only by trusted runner composition using its admitted request snapshot. */
 export async function pageBackendCapability(store:PageBackendStore,request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,fetcher?:PageBackendFetcher,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>,resolverFetch?:ResolverFetcher):Promise<RunnerJson>{

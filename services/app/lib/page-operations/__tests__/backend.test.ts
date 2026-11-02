@@ -108,3 +108,33 @@ describe('resolver time limits',()=>{
   }finally{vi.useRealTimers();}
  });
 });
+
+describe('a failed resolver run explains itself (the page owner sees the detail)',()=>{
+ const SECRET='tok/+&en-9f8e7d6c5b4a';
+ const backend={...record,compiled:'bundle',secretBindings:['KEY','UNSET'],secretHosts:{KEY:'api.example.com',UNSET:'api.example.com'}};
+ const call={namespace:'conn',fileId:'backend1',version:'v1',operation:'query' as const,field:'test',args:{},principal:{tenant:'page1',subject:'owner1'},signal:new AbortController().signal};
+ const failing=(reason:string|null,requests:unknown[]=[])=>({start:async()=>({runId:'run1'}),getRun:async()=>({runId:'run1',status:'failed',output:null,receipt:{status:'failed',reason,requests}}),cancel:async()=>{}}) as unknown as RunnerService;
+ const readSecret=async(_b:unknown,name:string)=>name==='KEY'?SECRET:Promise.reject(Error('backend_secret_unavailable'));
+ const fail=(runner:RunnerService)=>createBackendInvoker(runner,async()=>backend,{readSecret}).call(null,call).then(()=>{throw Error('resolved');},(e:FieldFailed)=>e);
+ const fetched=(status:number)=>({service:'fetch',operation:'artifactbin.pageBackend.fetch',durationMs:3,status,requestId:null});
+ it('names the upstream status of the last fetch when the resolver threw on it',async()=>{
+  const error=await fail(failing('Error: GitHub said no',[fetched(200),fetched(401)]));
+  expect(error).toBeInstanceOf(FieldFailed);expect(error.code).toBe('backend_failed');
+  expect(error.detail).toBe('upstream 401: Error: GitHub said no');
+ });
+ it('passes a caps.fetch refusal code and the runner timeout through',async()=>{
+  expect((await fail(failing('Error: secret_host_forbidden: placeholders belong in the path, query, headers or body'))).detail).toBe('Error: secret_host_forbidden: placeholders belong in the path, query, headers or body');
+  expect((await fail(failing('timeout'))).detail).toBe('timeout');
+ });
+ it('redacts the owner\'s secret values in every form, strips query strings, and keeps no stack',async()=>{
+  const b64=Buffer.from(SECRET).toString('base64');
+  const reason=`Error: bad ${SECRET} ${encodeURIComponent(SECRET)} ${b64} at https://api.example.com/v1/x?key=abc#frag Bearer abc.def\n    at test (backend.js:1:2)\n    at run`;
+  const {detail}=await fail(failing(reason));
+  for(const form of [SECRET,encodeURIComponent(SECRET),b64,'key=abc','abc.def','backend.js'])expect(detail).not.toContain(form);
+  expect(detail).toBe('Error: bad [redacted] [redacted] [redacted] at https://api.example.com/v1/x Bearer [redacted]');
+ });
+ it('bounds a long message to printable text within 200 characters',async()=>{
+  const {detail}=await fail(failing(`Error: ${'x\u0007'.repeat(300)}`));
+  expect(detail!.length).toBeLessThanOrEqual(200);expect(detail).not.toMatch(/\p{Cc}/u);
+ });
+});

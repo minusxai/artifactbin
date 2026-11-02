@@ -66,3 +66,25 @@ it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB 
   expect(JSON.stringify(receipts)).not.toMatch(/k=|Bearer|s3cr3t/);
  }finally{await runner.close();await db.close();await server.close();}
 },30000);
+it('api 2: a resolver that throws on an upstream 401 fails with the status and its message, redacted, as the detail',async()=>{
+ const {withHttpServer}=await import('@artifactbin/test-support/net');
+ const {useLoopbackLookup}=await import('@artifactbin/utils/node/loopback-lookup');
+ const {createResolverFetch}=await import('../public-fetch');
+ const {FieldFailed}=await import('../contracts');
+ useLoopbackLookup();
+ const KEY='k3y-value-0123';
+ const server=await withHttpServer((_req,res)=>{res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({message:`Bad credentials ${KEY}`}));});
+ const db=new PGlite();let record:PageBackendRecord;
+ const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
+ const read=async(_backend:PageBackendRecord,name:string)=>name==='KEY'?KEY:Promise.reject(Error('backend_secret_unavailable'));
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(store,context.request,operation,args,async()=>record,undefined,read,createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}))});
+ try{
+  // The upstream echoes nothing secret here (caps.fetch already redacts it); the resolver leaks the value itself.
+  const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { test: String! @auth(role: OWNER) }"; export default {
+   test: async(args,principal,caps)=>{const r=await caps.fetch("http://api.localhost:${server.port}/user?key={{KEY}}",{headers:{authorization:"Bearer {{KEY}}"}});if(!r.ok)throw new Error("GitHub said "+(await r.json()).message+" using ${KEY}");return "ok";} };`;
+  record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend3',pageId:'page1',version:'v1',ownerId:'owner1'};
+  const error=await createBackendInvoker(runner,async()=>record,{readSecret:read})({namespace:'conn',fileId:'backend3',version:'v1',operation:'query',field:'test',args:{},principal:{tenant:'page1',subject:'owner1'},signal:new AbortController().signal}).catch(e=>e);
+  expect(error).toBeInstanceOf(FieldFailed);
+  expect(error).toMatchObject({code:'backend_failed',detail:'upstream 401: GitHub said Bad credentials [redacted] using [redacted]'});
+ }finally{await runner.close();await db.close();await server.close();}
+},30000);
