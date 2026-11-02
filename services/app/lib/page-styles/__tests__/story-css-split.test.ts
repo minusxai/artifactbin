@@ -87,14 +87,15 @@ describe('splitStoryCss', () => {
     const segments = splitStoryCss(full, base)!;
     const rules = applied(segments);
     const own = rules.findIndex((unit) => unit.startsWith('.px-\\[13px\\]'));
-    const later = rules.findIndex((unit, at) => at > own && variantOf(unit) !== '' && declaredProperties(unit).has('padding-inline'));
+    const later = rules.findIndex((unit, at) => at > own && unit.includes('@container') && declaredProperties(unit).has('padding-inline'));
     expect(own).toBeGreaterThan(-1);
     expect(later).toBeGreaterThan(own);
     // Every pair the union's order puts one way is still that way round.
     const original = bodyUnits(full);
+    const facts = original.map((unit) => ({ variant: variantOf(unit), properties: declaredProperties(unit) }));
     const pairs: Array<[string, string]> = [];
-    for (let a = 0; a < original.length; a += 3) for (let b = a + 1; b < original.length; b += 17) {
-      if (orderMatters({ variant: variantOf(original[a]!), properties: declaredProperties(original[a]!) }, { variant: variantOf(original[b]!), properties: declaredProperties(original[b]!) })) pairs.push([original[a]!, original[b]!]);
+    for (let a = 0; a < original.length; a++) for (let b = a + 1; b < original.length; b++) {
+      if (orderMatters(facts[a]!, facts[b]!)) pairs.push([original[a]!, original[b]!]);
     }
     expect(pairs.length).toBeGreaterThan(50);
     for (const [first, second] of pairs) expect(rules.indexOf(first)).toBeLessThan(rules.lastIndexOf(second));
@@ -127,7 +128,9 @@ describe('splitStoryCss', () => {
   it('refuses a block the document restates with a different value, which the union\'s own statement would not agree with', async () => {
     const full = await compile('mt-auto tracking-[0.3em]');
     expect(splitStoryCss(full, base)).not.toBeNull();
-    expect(splitStoryCss(full.replace('--font-sans: ui-sans-serif', '--font-sans: Comic Sans'), base)).toBeNull();
+    const changed = full.replace(/--font-sans:[^;]+;/, '--font-sans: Comic Sans;');
+    expect(changed).not.toBe(full);
+    expect(splitStoryCss(changed, base)).toBeNull();
   });
 
   it('does not share a union whose compile does not end with the theme blocks', () => {
