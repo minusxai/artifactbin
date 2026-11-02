@@ -1,10 +1,5 @@
-import type { ArtifactRole } from './sharing';
+import type { DatasetRole } from './dataset-permissions';
 import type { HtmlJson, HtmlJsonObject } from './html-page';
-export type PageResolverRole = 'VIEWER' | 'EDITOR' | 'OWNER';
-/** Annotation permission stays in the original lattice; commenter is not resolver EDITOR. */
-export function pageResolverRole(role: ArtifactRole): PageResolverRole | null {
-  switch(role) { case 'owner': return 'OWNER'; case 'editor': return 'EDITOR'; case 'commenter': case 'viewer': return 'VIEWER'; default: return null; }
-}
 export type PageMutationOutcome = 'committed' | 'rejected' | 'unknown' | 'offline';
 export interface PageOperationRequest { pageId: string; revision: string; query: string; variables?: HtmlJsonObject; operationName?: string }
 export interface PageOperationResponse {
@@ -26,7 +21,8 @@ export interface PageResolverFieldCall {
 export interface PageResolverInvoker { invoke(call:PageResolverFieldCall):Promise<HtmlJson> }
 /** Schemas are composed with names private to each link, so duplicate backend type names are safe. */
 export interface PageNamespaceSource { name:string; fileId:string; version:string; typeDefs:string }
-export interface PageCaller { pageId:string; subject:string|null; role:PageResolverRole|null }
+/** `role` is the caller's page role (`datasetRoleFrom` over the page's sharing); null cannot read the page. */
+export interface PageCaller { pageId:string; subject:string|null; role:DatasetRole|null }
 export interface PageSchema { sdl:string; namespaces:readonly string[] }
 export interface PageNamespaceExecutor {
   compose(sources:readonly PageNamespaceSource[]):PageSchema;

@@ -24,7 +24,7 @@ export async function createLocalPreviewDatasets(root:string,declarations:readon
  }
  return {dirty:namespaces.length>0,namespaces};
  },
- execute:(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>,signal:AbortSignal)=>executePageOperation({schema,request,signal,caller:{pageId:'local-preview',subject:null,role:'OWNER'},invoke:call=>{
+ execute:(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>,signal:AbortSignal)=>executePageOperation({schema,request,signal,caller:{pageId:'local-preview',subject:null,role:'owner'},invoke:call=>{
  const entry=entries.find(e=>e.binding.name===call.namespace);if(!entry)throw new Error('local_dataset_namespace');return entry.invoke(call);
  }}),
  export:(namespace:string)=>{const entry=entries.find(e=>e.binding.name===namespace);if(!entry)throw new Error('local_dataset_namespace');return entry.dataset.export();}

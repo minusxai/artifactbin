@@ -17,7 +17,7 @@ it('public typed descriptor executes through the real page GraphQL composer and 
  const context={...plan.registration,subject:'viewer',callerKey:'credential'},descriptor=registeredMutationDescriptor('actions',program);
  const invoke=registeredMutationInvoker(context,plan,async(_context,_plan,input)=>{expect(input).toEqual({requestId:'request_1234567890',values:{body:'Hello'}});return {requestId:'request_1234567890',outcome:'rejected',revision:null,affected:null,reset:[]};});
  const schema=composePageSchema([{name:'actions',fileId:'backend',version:prepared.link.version,typeDefs:prepared.backend.typeDefs}]);
- const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:'Hello'}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke,signal:new AbortController().signal});
+ const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:'Hello'}}},caller:{pageId:'page',subject:'viewer',role:'viewer'},invoke,signal:new AbortController().signal});
  expect(result.errors).toBeUndefined();expect(result.extensions?.outcomes).toEqual({'actions.run':'rejected'});expect(result.data).toMatchObject({actions:{run:{outcome:'rejected',reset:[]}}});
 });
 
@@ -28,9 +28,9 @@ it('GraphQL applies immutable scalar defaults when defaulted non-null inputs are
  const descriptor=registeredMutationDescriptor('actions',defaulted);
  const schema=composePageSchema([{name:'actions',fileId:'backend',version:'v1',typeDefs:registeredMutationSchema(defaulted)}]);
  let calls=0;
- const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async call=>{calls++;expect(call.args.values).toEqual({body,count:0,enabled:false,optional:null});return {requestId:'request_1234567890',outcome:'committed',revision:'2',affected:1,reset:[]};},signal:new AbortController().signal});
+ const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{}}},caller:{pageId:'page',subject:'viewer',role:'viewer'},invoke:async call=>{calls++;expect(call.args.values).toEqual({body,count:0,enabled:false,optional:null});return {requestId:'request_1234567890',outcome:'committed',revision:'2',affected:1,reset:[]};},signal:new AbortController().signal});
  expect(result.errors).toBeUndefined();expect(calls).toBe(1);expect(result.data).toMatchObject({actions:{run:{outcome:'committed'}}});
- const invalid=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:null}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async()=>{calls++;return null;},signal:new AbortController().signal});
+ const invalid=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:null}}},caller:{pageId:'page',subject:'viewer',role:'viewer'},invoke:async()=>{calls++;return null;},signal:new AbortController().signal});
  expect(invalid.errors?.length).toBeGreaterThan(0);expect(calls).toBe(1);
 });
 
@@ -42,7 +42,7 @@ it('keeps legacy registration bytes and exposes only the opt-in nullable refusal
  const plan=registeredMutationPlan(saved,prepared.link,record)!;expect(plan.refusalReasons).toBe('conflict-v1');
  const schema=composePageSchema([{name:'actions',fileId:'backend',version:prepared.link.version,typeDefs:prepared.backend.typeDefs}]),descriptor=registeredMutationDescriptor('actions',declared);
  for(const reason of ['row_changed','row_not_unique',null]){
-  const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_reason_123456',values:{body:'x'}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async()=>({requestId:'request_reason_123456',outcome:'rejected',revision:null,affected:null,reset:[],reason}),signal:new AbortController().signal});
+  const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_reason_123456',values:{body:'x'}}},caller:{pageId:'page',subject:'viewer',role:'viewer'},invoke:async()=>({requestId:'request_reason_123456',outcome:'rejected',revision:null,affected:null,reset:[],reason}),signal:new AbortController().signal});
   expect(result.errors).toBeUndefined();expect(result.data).toMatchObject({actions:{run:{reason}}});
  }
 });

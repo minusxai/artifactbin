@@ -33,7 +33,7 @@ describe('one installable native HTML author skill',()=>{
   const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
   expect(query).toBeTruthy();
   const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);
-  const response=await executePageOperation({schema,request:{query:query!,variables:{items:[{category:'Food',amount:200}]}},caller:{pageId:'PAGE12',subject:'test-user',role:'OWNER'},signal:new AbortController().signal,invoke:async call=>{expect(call.args.items).toEqual([{category:'Food',amount:200}]);return true;}});
+  const response=await executePageOperation({schema,request:{query:query!,variables:{items:[{category:'Food',amount:200}]}},caller:{pageId:'PAGE12',subject:'test-user',role:'owner'},signal:new AbortController().signal,invoke:async call=>{expect(call.args.items).toEqual([{category:'Food',amount:200}]);return true;}});
   expect(response.errors).toBeUndefined();expect(response.data).toEqual({budget:{save:true}});
  });
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
