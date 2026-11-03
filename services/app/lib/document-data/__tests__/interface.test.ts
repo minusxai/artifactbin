@@ -10,7 +10,7 @@ import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import {
-  datasetResolverForActor, nameablePeople, readFileRequest, referencedArtifactForRow, registeredQueryImportForRow,
+  datasetResolverForActor, nameablePeople, readFileRequest, referencedArtifactForRow,
   uploadFileRequest,
 } from '@/lib/document-data';
 import { account, datasetFixture } from './dataset-fixture';
@@ -25,16 +25,6 @@ async function documentImporting(owner: { id: string; tokenId: string }, _datase
     [id, owner.tokenId, owner.id, source, JSON.stringify({ refs })]);
   return (await getArtifactById(id))!;
 }
-
-describe('held imports', () => {
-  it('answers a registered query\'s dataset and catalog, and refuses a source that is not a readable dataset', async () => {
-    const f = await datasetFixture();
-    const doc = await documentImporting(f.owner, f.id);
-    expect(await registeredQueryImportForRow(doc, f.id, f.owner.actor)).toMatchObject({ artifact: { id: f.id, format: 'dataset' }, catalog: { kind: 'stored' } });
-    await expect(registeredQueryImportForRow(doc, doc.id, f.owner.actor)).rejects.toThrow('query_source_unavailable');
-    await expect(registeredQueryImportForRow(doc, 'nosuchid', f.owner.actor)).rejects.toThrow('query_source_unavailable');
-  });
-});
 
 describe('refs', () => {
   it('reaches only an artifact the document declares, and draws a viz ref and skips a deleted or dataset ref', async () => {

@@ -41,12 +41,6 @@
     "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
       "../../html-components/markdown"
     ],
-    "services/app/lib/registered-page-queries/__tests__/adapter.test.ts": [
-      "@/lib/page-graphql/registered-queries"
-    ],
-    "services/app/lib/registered-page-queries/__tests__/members.test.ts": [
-      "@/lib/page-graphql/registered-queries"
-    ],
     "services/app/lib/skills/__tests__/production-image.test.ts": [
       "../../libraries/components.server"
     ],

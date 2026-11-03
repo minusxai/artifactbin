@@ -154,20 +154,6 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  return {backends,datasets};
 }
 export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
-/**
- * KEPT UNTIL THE REGISTERED-PAGE MIGRATION: the names links with the removed rel="af-backend" give (the saved HTML of
- * the live registered-query pages declares `queries` and `actions_*` that way). It declares nothing by itself: the
- * replace door (lib/artifacts/store) keeps only a name whose current head link is a registered program of that page.
- */
-export function htmlRetiredBackendNames(html:string):string[]{
- const names:string[]=[];
- for(const element of allElements(html).all){
-  if(element.tagName!=='link')continue;
-  const rel=(attribute(element,'rel')??'').split(/\s+/),name=attribute(element,'data-af-name');
-  if(rel.includes('af-backend')&&!rel.includes('af-resolver')&&!rel.includes('af-dataset')&&name&&!names.includes(name))names.push(name);
- }
- return names;
-}
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{
  const document=parseSource(html);let title:string|null=null,description:string|null=null;

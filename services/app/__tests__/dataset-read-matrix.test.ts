@@ -3,8 +3,7 @@
  * functions themselves and compared with the decision lib/dataset-permissions/read writes down (datasetRole, the
  * stored select rules and the private visibility ceiling).
  * Doors: `direct` (canReadArtifact: raw, content, query, events, exports), `tables` (the /a/:id/tables SQL
- * route, which decides exactly as `direct`), `page` (page GraphQL through a page link) and `program` (a page's
- * registered queries, by the page owner's reach).
+ * route, which decides exactly as `direct`) and `page` (page GraphQL through a page link).
  */
 import {expect,it} from 'vitest';
 import {useAppHarness,mintAccountToken,request} from './harness';
@@ -14,14 +13,13 @@ import {getDb} from '@/lib/platform';
 import {canReadArtifact,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
 import {linkedGql,errorCode} from './linked-datasets';
-import {registeredQueryImportForRow} from '@/lib/document-data';
 
 useAppHarness();
 
 type Caller='owner'|'editor'|'viewer'|'signedIn'|'anonymous';
-type Door='direct'|'page'|'program'|'tables';
+type Door='direct'|'page'|'tables';
 const CALLERS:Caller[]=['owner','editor','viewer','signedIn','anonymous'];
-const DOORS:Door[]=['direct','page','program','tables'];
+const DOORS:Door[]=['direct','page','tables'];
 const select=(...roles:string[])=>({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:roles.map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]});
 
 interface Shape {name:string;policy:unknown;visibility:'unlisted'|'private'}
@@ -45,9 +43,9 @@ function expected(shape:Shape,caller:Caller,door:Door):boolean {
  if(!role)return false;
  switch(shape.name){
   // No stored policy reads as select for viewer, signed_in and anonymous. The visibility ceiling keeps a private
-  // dataset's link roles out, except through a page whose owner administers the dataset (the page owner's reach).
+  // dataset's link roles out.
   case 'none/unlisted':case 'everyone/unlisted':return true;
-  case 'none/private':case 'everyone/private':return role==='viewer'||door==='program';
+  case 'none/private':case 'everyone/private':return role==='viewer';
   case 'viewers':return role==='viewer';
   case 'signed-in':return role!=='anonymous';
   default:return false;
@@ -68,20 +66,18 @@ it('decides every policy shape × caller × read door as the stored rules say',a
  const actors:Record<Caller,AccessActor>={owner:owner.actor,editor:editor.actor,viewer:viewer.actor,signedIn:signedIn.actor,anonymous:ANONYMOUS_ACTOR};
  const tokens:Record<Caller,string|null>={owner:owner.token,editor:editor.token,viewer:viewer.token,signedIn:signedIn.token,anonymous:null};
  const actual:Record<string,boolean>={},want:Record<string,boolean>={};
- let n=0;
  for(const shape of SHAPES){
   const created=await createArtifactFromBody({dataset:[{n:1}],access:'readwrite',visibility:shape.visibility},{...owner.actor,tokenId:owner.tokenId},'http://localhost:3000');
   expect(created.status,await created.clone().text()).toBe(201);
-  const id=(await created.json()).id as string,doc=`readdoc${++n}`;
-  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,edit_id) VALUES($1,$2,$3,'html','public',$4)",[doc,owner.tokenId,owner.id,`${doc}-edit`]);
+  const id=(await created.json()).id as string;
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor'),($1,$4,$5,'viewer')",[id,editor.id,editor.email,viewer.id,viewer.email]);
   await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[id,JSON.stringify(shape.policy)]);
   const binding={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const};
   for(const caller of CALLERS)for(const door of DOORS){
    const actor=actors[caller],key=`${shape.name}|${caller}|${door}`;
-   const row=(await getArtifactById(id))!,page=(await getArtifactById(doc))!;
+   const row=(await getArtifactById(id))!;
    const sql=()=>tables(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select 1 as one'},...(tokens[caller]?{token:tokens[caller]}:{})}),{params:Promise.resolve({id})}).then(r=>r.status===200);
-   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedGql(actor,binding,'{ data(limit: 1) { _id } }');if(reply.errors?.length)throw Error(errorCode(reply)??'refused');}:door==='tables'?sql:()=>registeredQueryImportForRow(page,id,actor));
+   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedGql(actor,binding,'{ data(limit: 1) { _id } }');if(reply.errors?.length)throw Error(errorCode(reply)??'refused');}:sql);
    want[key]=expected(shape,caller,door);
   }
  }

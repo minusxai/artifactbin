@@ -1,10 +1,9 @@
 import type {ContentObjects} from '@/lib/object-store';
-import type { AccessActor } from '@/lib/accounts';
 import type { StoredContent } from '@/lib/document';
 import {json} from '@/lib/http';
 import {publishDataset} from '@/lib/datasets/data-tiers';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import type {DatasetCatalog,DatasetConnection,DatasetHost,DatasetTable,PostgresConfig} from './types';
+import type {DatasetCatalog,DatasetHost,DatasetTable} from './types';
 import {DatasetError} from './errors';
 import {executeCatalog} from './execute';
 import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
@@ -21,13 +20,6 @@ export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
 export function publicCatalogOf(row:{meta:unknown}):DatasetCatalog|null {
  const catalog=catalogOf(row);if(!catalog)return null;
  return {kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,tables:catalog.tables.map(({schema,name,columns})=>({schema,name,columns}))};
-}
-/**
- * RETIRED: connected Postgres datasets have no credentials to resolve. Only lib/page-graphql's registered queries
- * still call this, for a `postgres` catalog nothing can create; it goes with them.
- */
-export async function resolveDatasetConnection(_connection:DatasetConnection,_actor?:AccessActor,_datasetId?:string):Promise<PostgresConfig>{
- throw new DatasetError('Dataset credentials are unavailable',403);
 }
 const key=(table:{schema:string;name:string})=>JSON.stringify([table.schema,table.name]);
 /**

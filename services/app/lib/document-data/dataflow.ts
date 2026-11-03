@@ -1,4 +1,4 @@
-import { type ArtifactHeader, type ArtifactRow, getArtifactFor, getLinkReadableArtifact, childrenTableFor } from '@/lib/artifacts';
+import { type ArtifactRow, getArtifactFor, getLinkReadableArtifact, childrenTableFor } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
 import { datasetReadAccess, datasetView } from '@/lib/dataset-permissions';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
@@ -12,20 +12,20 @@ type RefData = {tables:ImportTables[string];catalog?:import('@/lib/datasets').Da
 type DatasetResolver = (id:string,mode?:DocumentQuerySourceMode)=>Promise<RefData|null>;
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
-async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
+async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, loadRows=true): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
     if (!loadRows) return {tables:{}};
     return { tables: { rows: await childrenTableFor(r, viewer) } };
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
-  // The reader's dataset role through this document, and its role view (lib/dataset-permissions).
-  const decision=await datasetReadAccess(r,viewer??ANONYMOUS_ACTOR,document?{document}:{});
+  // The reader's dataset role, and its role view (lib/dataset-permissions).
+  const decision=await datasetReadAccess(r,viewer??ANONYMOUS_ACTOR);
   if(!decision.allowed)return null;
   const view=datasetView(decision);
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
-  if(!loadRows||catalog.kind==='postgres')return { tables: {}, catalog, view };
+  if(!loadRows)return { tables: {}, catalog, view };
   try {
     const tables=await importedRows(catalog);
     // Rows the select rule keeps, and only the columns it shows (the viewed catalog's).
@@ -33,19 +33,6 @@ async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, do
     return { tables, catalog, view };
   } catch { return null; } // the query reports the missing table
 }
-
-/** Host-only registered query imports retain the original document reach / viewer grants split.
- * Returns metadata only; the caller windows stored sources through executeCatalog. */
-export async function registeredQueryImportForRow(row:ArtifactRow,id:string,viewer:AccessActor){
- const artifact=await importedArtifactFor(row,id);
- const data=await tableForRef(artifact,viewer,row,false);
- if(!artifact||artifact.format!=='dataset'||!data?.catalog)throw Error('query_source_unavailable');
- return {artifact,catalog:data.catalog,view:data.view??null};
-}
-
-/** The artifact a document's import names, by the document's own reach. */
-const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<ArtifactRow | null> =>
-  (await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id));
 
 /** A native reader may request its own person card, never arbitrary identities. */
 export async function nameablePeople(_row:ArtifactRow,viewer:AccessActor|null,ids?:string[]):Promise<Record<string,PersonCard>> {
@@ -55,7 +42,7 @@ export async function nameablePeople(_row:ArtifactRow,viewer:AccessActor|null,id
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
 export const datasetResolverForActor = (actor: AccessActor): DatasetResolver => async (id,mode) =>
-  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { ...actor },undefined,mode===undefined||mode==='import');
+  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { ...actor },mode===undefined||mode==='import');
 
 /** Resolve an admitted asset using the document owner's normal reference scope. */
 export async function referencedArtifactForRow(row: ArtifactRow, id: string): Promise<ArtifactRow | null> {

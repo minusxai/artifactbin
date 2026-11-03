@@ -11,8 +11,7 @@ import { getDb } from '@/lib/platform';
 import { getArtifactById, canReadArtifact } from '@/lib/artifacts';
 import { createArtifactFromBody } from '@/lib/publish';
 import { linkedGql, liveLink, errorCode } from './linked-datasets';
-import { datasetResolverForActor, registeredQueryImportForRow } from '@/lib/document-data';
-import { executeCatalog } from '@/lib/datasets';
+import { datasetResolverForActor } from '@/lib/document-data';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { POST as tables } from '@/app/a/[id]/tables/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
@@ -125,18 +124,9 @@ it('page GraphQL: generated columns and rows read the view; aggregates need allo
   expect((await linkedGql(owner.actor, link, '{ data_aggregate { aggregate { count } } }')).data).toEqual({ data_aggregate: { aggregate: { count: 3 } } });
 });
 
-it('markup imports and registered page queries read the reader\'s view through the page', async () => {
+it('markup imports read the reader\'s view', async () => {
   const { owner, viewer, id } = await setup();
   const imported = async (actor: AccessActor) => JSON.stringify((await datasetResolverForActor(actor)(id, 'import'))?.tables ?? null);
   sees(await imported(owner.actor), true);
   sees(await imported(viewer.actor), false);
-  const db = await getDb();
-  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,edit_id) VALUES('doorspage',$1,$2,'html','public','doorspage-edit')", [owner.id, owner.userId]);
-  const page = (await getArtifactById('doorspage'))!;
-  for (const [actor, whole] of [[owner.actor, true], [viewer.actor, false]] as const) {
-    const source = await registeredQueryImportForRow(page, id, actor);
-    expect(source.view === null).toBe(whole);
-    const result = await executeCatalog(source.catalog, 'select * from rows', {}, { view: source.view, datasetId: id, actor });
-    sees(JSON.stringify(result), whole);
-  }
 });

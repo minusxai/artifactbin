@@ -1,7 +1,6 @@
-import type { GrantDocument } from '@/lib/artifact-access';
 import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
 import type { DatasetPermissions } from '@artifactbin/contracts';
-import { validateDatasetPolicyForRow, catalogOf } from '@/lib/datasets';
+import { validateDatasetPolicyForRow } from '@/lib/datasets';
 import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
 import { getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
@@ -15,18 +14,17 @@ export async function setDatasetPolicy(
   { revision: number; policy: DatasetPermissions | null } | { conflict: true } | null
 > {
   const row = await getArtifactFor(actor, id);
-  if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres')
-    return null;
+  if (!row || row.format !== 'dataset') return null;
   if (!Number.isSafeInteger(revision) || revision < 0)
     throw new Error('expectedPolicyRevision must be a nonnegative integer');
   const policy = validateDatasetPolicyForRow(row,value);
   const committed = await commitDatasetPolicy(await getDb(), actor, row, policy, revision);
   return committed === null ? { conflict: true } : { revision: committed, policy };
 }
-/** How a write door reaches the dataset: false = the direct door, true = through a page that names no page id, a document = its program, a page id = the page's generated API. */
-export type WriteDoor = boolean | GrantDocument | { pageId: string };
+/** How a write door reaches the dataset: false = the direct door, true = through a page that names no page id, a page id = the page's generated API. */
+export type WriteDoor = boolean | { pageId: string };
 const doorOptions = (declared: WriteDoor): DatasetWriteOptions =>
-  typeof declared !== 'object' ? { throughPage: declared } : 'pageId' in declared ? { pageId: declared.pageId, throughPage: true } : { document: declared, throughPage: true };
+  typeof declared !== 'object' ? { throughPage: declared } : { pageId: declared.pageId, throughPage: true };
 
 /** Re-read the head: the same policy revision, and the caller may still write through this door. */
 export async function recheckMutation(

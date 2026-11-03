@@ -1,12 +1,14 @@
 /**
  * THE WRITE DECISION: owner and editor are admin-equivalent; other roles get only their v3 entries;
- * backend_only entries need program trust (proof, membership, a page owner who administers the dataset);
- * the commit transaction decides again under the row lock and refuses any change.
+ * backend_only entries need program trust (an upload's saved-page proof, membership, a page owner who
+ * administers the dataset); the commit transaction decides again under the row lock and refuses any change.
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { account, dataset, head, mine, sql, type Account } from '@/__tests__/artifact-fixtures';
-import { attestRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
+import { attestSavedHtmlUpload, uploadGrantContext, type ArtifactRow } from '@/lib/artifact-access';
+import type { Queryable } from '@artifactbin/contracts';
+import type { AccessActor } from '@/lib/accounts';
 import { changeMembership, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
@@ -23,6 +25,13 @@ const DEFAULT = { version: 3, tables: [{ table: ROWS,
   delete_permissions: ['viewer', 'signed_in'].map((role) => ({ role, permission: { filter: {}, backend_only: true } })),
 }] };
 
+/** Program trust as an upload through `page` carries it: its saved-page proof, minted for `data`. */
+const programOn = (page: ArtifactRow, data: ArtifactRow) => (actor: AccessActor) => {
+  const authority = { id: page.id, editId: page.edit_id, version: page.version, datasetId: data.id };
+  const document = { ...authority, uploadProof: attestSavedHtmlUpload(authority, async () => {}) };
+  return { throughPage: true, trust: (q: Queryable) => uploadGrantContext(data, actor, document, q) };
+};
+
 async function fixture(policy: unknown = DEFAULT) {
   const owner = await account('owner@example.test'), member = await account('member@example.test'), stranger = await account('stranger@example.test');
   const data = await dataset(owner, policy, { visibility: 'unlisted' });
@@ -30,9 +39,8 @@ async function fixture(policy: unknown = DEFAULT) {
   await updateSharingFor(owner, doc.id, { visibility: 'unlisted' });
   await changeMembership(member, doc.id, { action: 'join' });
   await changeMembership(owner, doc.id, { action: 'approve', userId: member.userId });
-  const page = await head(doc.id);
-  const program = { id: page.id, editId: page.edit_id, registeredHtml: attestRegisteredHtmlMutation(page.id, page.edit_id, async () => {}) };
-  return { owner, member, stranger, data: await head(data.id), page, program };
+  const page = await head(doc.id), stored = await head(data.id);
+  return { owner, member, stranger, data: stored, page, program: programOn(page, stored) };
 }
 
 describe('datasetWriteAccess', () => {
@@ -46,26 +54,27 @@ describe('datasetWriteAccess', () => {
     }
   });
 
-  it('gives a page member backend_only entries only through a trusted program, with the page in the session', async () => {
+  it('gives a page member backend_only entries only through a trusted program', async () => {
     const f = await fixture();
     expect(await datasetWriteAccess(f.data, f.member, { throughPage: true })).toMatchObject({ allowed: false, role: 'signed_in', reason: 'no_rule' });
-    const decision = await datasetWriteAccess(f.data, f.member, { document: f.program });
-    expect(decision).toMatchObject({ allowed: true, admin: false, role: 'signed_in', trusted: true, session: { 'x-hasura-role': 'signed_in', 'x-hasura-user-id': f.member.userId, 'x-hasura-page-id': f.page.id } });
+    const decision = await datasetWriteAccess(f.data, f.member, f.program(f.member));
+    expect(decision).toMatchObject({ allowed: true, admin: false, role: 'signed_in', trusted: true, session: { 'x-hasura-role': 'signed_in', 'x-hasura-user-id': f.member.userId } });
     const policy = tableMutationPolicy(decision, ROWS)!;
     expect(policy).toMatchObject({ role: 'signed_in', trusted: true, operations: ['insert', 'update', 'delete'] });
     expect(policy.table.insert_permissions).toEqual([{ role: 'signed_in', permission: { columns: '*', check: {}, backend_only: true } }]);
     expect(canInsert(decision)).toBe(true);
-    // Not a member: the same document proves nothing.
-    expect(await datasetWriteAccess(f.data, f.stranger, { document: f.program })).toMatchObject({ allowed: false, reason: 'no_rule' });
+    // Not a member: the same page proves nothing.
+    expect(await datasetWriteAccess(f.data, f.stranger, f.program(f.stranger))).toMatchObject({ allowed: false, reason: 'no_rule' });
   });
 
-  it('refuses a program whose page owner does not administer the dataset, and a stale document edit', async () => {
+  it('refuses a program whose page owner does not administer the dataset, and a page saved since', async () => {
     const f = await fixture();
     const theirs = await head((await mine(f.stranger, 'Theirs')).id);
     await updateSharingFor(f.stranger, theirs.id, { visibility: 'unlisted' });
-    const foreign = { id: theirs.id, editId: theirs.edit_id, registeredHtml: attestRegisteredHtmlMutation(theirs.id, theirs.edit_id, async () => {}) };
-    expect(await datasetWriteAccess(f.data, f.owner, { document: foreign })).toMatchObject({ allowed: false, reason: 'document_changed' });
-    expect(await datasetWriteAccess(f.data, f.member, { document: { ...f.program, editId: 'stale' } })).toMatchObject({ allowed: false, reason: 'document_changed' });
+    await changeMembership(f.member, theirs.id, { action: 'join' });
+    await changeMembership(f.stranger, theirs.id, { action: 'approve', userId: f.member.userId });
+    expect(await datasetWriteAccess(f.data, f.member, programOn(await head(theirs.id), f.data)(f.member))).toMatchObject({ allowed: false, reason: 'no_rule' });
+    expect(await datasetWriteAccess(f.data, f.member, programOn({ ...f.page, edit_id: 'stale' }, f.data)(f.member))).toMatchObject({ allowed: false, reason: 'no_rule' });
   });
 
   it('keeps the access ceiling, owner included', async () => {
@@ -98,12 +107,11 @@ describe('datasetWriteAccess', () => {
     expect(await datasetReadAccess(data, ANONYMOUS_ACTOR, { throughPage: true })).toMatchObject({ allowed: false });
     // A shared viewer keeps its rules.
     expect(await datasetWriteAccess(data, f.member)).toMatchObject({ allowed: true, role: 'viewer' });
-    // Through the owner's page: reads by the page owner's reach, and only backend_only writes.
+    // Through the owner's page: no read, and only backend_only writes.
     await updateSharingFor(f.owner, f.data.id, { shares: [] });
     const unshared = await head(f.data.id);
-    const page = { ...f.page, format: 'html' as const };
-    expect(await datasetReadAccess(unshared, f.member, { document: page })).toMatchObject({ allowed: true, role: 'signed_in' });
-    const trusted = await datasetWriteAccess(unshared, f.member, { document: f.program });
+    expect(await datasetReadAccess(unshared, f.member, { throughPage: true })).toMatchObject({ allowed: false });
+    const trusted = await datasetWriteAccess(unshared, f.member, programOn(f.page, unshared)(f.member));
     expect(trusted).toMatchObject({ allowed: true, role: 'signed_in', trusted: true });
     expect(tableMutationPolicy(trusted, ROWS)!.operations).toEqual(['update']);
   });
@@ -128,7 +136,7 @@ describe('datasetWriteAccess', () => {
 
   it('throws for a table the role has no entry for', async () => {
     const f = await fixture();
-    const decision = await datasetWriteAccess(f.data, f.member, { document: f.program });
+    const decision = await datasetWriteAccess(f.data, f.member, f.program(f.member));
     expect(() => tableMutationPolicy(decision, { schema: 'public', name: 'other' })).toThrow('No policy permits writes to this table');
   });
 });
@@ -139,10 +147,10 @@ describe('assertWriteCommit', () => {
 
   it('commits the same decision and refuses revoked membership, a revoked share and a new policy revision', async () => {
     const f = await fixture();
-    const before = await datasetWriteAccess(f.data, f.member, { document: f.program });
-    await commit(f.data, f.member, before, { document: f.program });
+    const before = await datasetWriteAccess(f.data, f.member, f.program(f.member));
+    await commit(f.data, f.member, before, f.program(f.member));
     await changeMembership(f.member, f.page.id, { action: 'leave' });
-    await expect(commit(f.data, f.member, before, { document: f.program })).rejects.toThrow('Mutation permission changed');
+    await expect(commit(f.data, f.member, before, f.program(f.member))).rejects.toThrow('Mutation permission changed');
 
     await updateSharingFor(f.owner, f.data.id, { shares: [{ email: f.stranger.email!, role: 'editor' }] });
     const editor = await datasetWriteAccess(await head(f.data.id), f.stranger);

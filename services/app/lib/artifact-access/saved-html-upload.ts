@@ -1,5 +1,5 @@
 import type {Queryable} from '@artifactbin/contracts';
-/** Separate from registered SQL mutation authority; never accepted from a page. */
+/** Upload authority only, never SQL mutation authority; never accepted from a page. */
 export interface SavedHtmlUploadDocument {id:string;editId:string;version:number;datasetId:string;uploadProof:object}
 type Authority=Omit<SavedHtmlUploadDocument,'uploadProof'>;
 const proofs=new WeakMap<object,{authority:Authority;verify:(tx:Queryable)=>Promise<void>}>();

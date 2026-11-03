@@ -54,8 +54,8 @@ export interface DatasetMutationPolicy {
   /** Function allow/deny lists the engine enforces. Nothing in this tree sets them (version 3 has no slot); the deployment's generation extension reads `extensions`. */
   execution?: DatasetPolicy['execution'];
   /**
-   * A verified owner program (markup `<Mutation>` or a registered page mutation with its saved-document
-   * proof, on a page whose owner holds owner or editor on the dataset). Only then do `backend_only` entries apply.
+   * A verified owner program (an upload with its saved-page proof, on a page whose owner holds owner or editor on
+   * the dataset). Only then do `backend_only` entries apply.
    */
   trusted?: boolean;
 }
