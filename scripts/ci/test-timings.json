@@ -702,7 +702,7 @@
    "services/app/lib/skills/__tests__/comment-reactions-toolbox.test.ts": 276,
    "services/app/lib/skills/__tests__/deck-steps.test.ts": 1957,
    "services/app/lib/skills/__tests__/font-delivery.test.ts": 1983,
-   "services/app/lib/skills/__tests__/garden-conflict.test.ts": 7,
+   "services/app/lib/skills/__tests__/budget-resolver.test.ts": 7,
    "services/app/lib/skills/__tests__/interface.test.ts": 781,
    "services/app/lib/skills/__tests__/production-image.test.ts": 209,
    "services/app/lib/skills/__tests__/setup-instructions.test.ts": 8,

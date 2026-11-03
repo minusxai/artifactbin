@@ -38,6 +38,11 @@ const type=values.type?enumValue(values.type,['html','dataset','asset'],'type'):
    extension]?'asset':null;
 if(!type)throw new ToolError('type_required',
    'Ambiguous file type: supply --type html|dataset|asset.',2);
+if(values.template!==undefined)enumValue(values.template,TEMPLATES,'template');
+if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='dataset'||
+   !values.template))throw new ToolError('template_requires_dataset',
+   '--template (with --owner-column for own-rows) sets the permissions of a new dataset.',2,
+   'For an existing dataset use policy.mjs template and set.');
  let baseline=null,source=bytes.toString('utf8');
  const sidecar=await optionalFile(values.baseline??file+'.af.json');
  if(!values.create&&sidecar){
@@ -63,6 +68,9 @@ if(values.artifact){if(!baseline||!values.baseline)throw new ToolError('baseline
    await import('./toolbox-client.mjs');if(resolveTarget(values.artifact,
    server).id!==baseline.id)throw new ToolError('identity_mismatch',
    'Artifact and baseline IDs differ.',2);}
+if(values.template&&baseline)throw new ToolError('template_not_for_update',
+   '--template applies only when a dataset is created.',2,
+   'Use policy.mjs template ID and policy.mjs set ID for an existing dataset.');
 if(values.baseline&&!baseline&&!values.create)throw new ToolError('baseline_missing',
    'The explicitly selected baseline is unavailable.',2);
 if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=
@@ -155,6 +163,8 @@ intent.source.output=path.join(path.dirname(file),path.basename(file,
  const journal=await createJournal(intent,{file:values.request,root:client.root,project:root});
  const done=await watched(client,await finishPublication(await resumeJournal(journal,client,
   'publish')),options);
+ if(type==='dataset'&&values.template)return {...done,permissions:await applyTemplate(client,
+  done.id,values.template,values['owner-column'])};
  if(!fixed)return done;
 const {autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=await import(
    './preview-html.mjs');
@@ -169,7 +179,41 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'utf8'))-ids(bytes.toString('utf8'));
  const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} `+
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
- return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},report)};
+ const legacy=legacyDatasetLinks(body.html);for(const name of legacy)log(`deprecated: link "${name}" `+
+  'uses the legacy dataset API; move its queries to the generated API (references/datasets.md) '+
+  'and set data-af-api="hasura".\n');
+ return {...done,...(rewritten?{rewritten}:{}),...(legacy.length?{deprecated:legacy.map(name=>
+  `link "${name}" uses the legacy dataset API`)}:{}),autofix:autofixDetail({...fixed,routine},
+  report)};
+}
+const TEMPLATES=['read-only','own-rows','editors-only'];
+/** The shapes only the legacy dataset namespace has; a link without data-af-api on such a page stays
+ * on it, as the server decides (lib/html-page resolveDatasetApis). */
+const LEGACY_QUERY=/\bschema\s*\{\s*(?:revision|tables)\b|\brows\s*\(\s*tableId\b|\bwriteRows\s*\(/;
+/** Names of the page's dataset links that mount the legacy API: data-af-api="legacy", or no
+ * data-af-api on a page written against the legacy shapes. */
+export function legacyDatasetLinks(html){
+ const legacyQueries=LEGACY_QUERY.test(html),names=[];
+ for(const [tag] of String(html??'').matchAll(/<link\b[^>]*>/gi)){
+  if(!/\brel\s*=\s*["'][^"']*\baf-dataset\b/i.test(tag))continue;
+  const name=tag.match(/\sdata-af-name\s*=\s*["']([^"']+)["']/i)?.[1],api=tag.match(
+   /\sdata-af-api\s*=\s*["']([^"']+)["']/i)?.[1];
+  if(name&&(api==='legacy'||api===undefined&&legacyQueries))names.push(name);
+ }
+ return names;
+}
+/** --template: the named starting permissions, applied right after the dataset is created. */
+async function applyTemplate(client,id,name,owner){
+ const route=`/api/artifacts/${id}/policy`,listed=await client.request(`${route}/templates${owner?
+  '?ownerColumn='+encodeURIComponent(owner):''}`),found=listed.templates.find(t=>t.name===name);
+ if(!found?.ok)throw new ToolError('invalid_template',
+  `Dataset ${id} was created, but the ${name} template does not fit it; its permissions are unchanged.`,
+  2,`Fix details.errors, then policy.mjs template ${name} ${id} … and policy.mjs set.`,
+  {id,errors:found?.errors??[]});
+ const saved=await client.request(route,{method:'PUT',body:{policy:found.policy,
+  expectedPolicyRevision:listed.revision},unsafe:true,safeToRepeat:false});
+ return {template:name,revision:saved.revision,readBack:String(saved.readBack??'').split('\n')
+  .filter(Boolean)};
 }
 /** A publish resets the quiet time of the page's comment watch; it never fails the publish. */
 async function watched(client,done,{now}={}){await noteWatchActivity(client.root,client.server,

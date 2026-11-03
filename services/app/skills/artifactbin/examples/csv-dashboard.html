@@ -1,15 +1,15 @@
 <!doctype html>
 <!--
-Example: a chart computed from a linked dataset's discovered table and column IDs, all result
-pages and one consistent revision. Goes with examples/repairs.csv.
+Example: a chart computed from every row of a linked dataset, read through its generated GraphQL
+API (repairs(order_by, limit, offset)). Goes with examples/repairs.csv.
 Next: in this copy replace only the [bracketed] text and the data (no drafts elsewhere, no new
   layouts or controls), write steps.mjs, then run: node scripts/publish.mjs index.html &&
   node scripts/check.mjs index.html --steps steps.mjs
 Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset), then
 replace the placeholder after ref: in the dataset link below with the returned dataset ID and
 publish this page (node scripts/publish.mjs examples/csv-dashboard.html).
-Gotchas: never publish the placeholder. Verify chart values against the source cells, including
-empty or missing values. Copy it as index.html and replace only the [bracketed] text and the
+Gotchas: never publish the placeholder. Field names are the CSV's column names (graphql.mjs schema ID
+lists them). Verify chart values against the source cells, including empty values. Copy it as index.html and replace only the [bracketed] text and the
 data; keep its CSS, JS and layout, and add no new controls.
 -->
 <html lang="en">
@@ -17,7 +17,7 @@ data; keep its CSS, JS and layout, and add no new controls.
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="phosphor">
 <title>[Page title: Repair bench capacity]</title>
-<link rel="af-dataset" data-af-name="repairs" data-af-api="legacy" href="ref:DATASET_ID">
+<link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID">
 <style>
 *{box-sizing:border-box}body{line-height:1.6}
 main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}
@@ -51,8 +51,7 @@ week</h2><svg id="chart" viewBox="0 0 640 300" role="img"
 aria-labelledby="chart-title chart-description">
 <desc id="chart-description">The chart loads from the linked CSV dataset.</desc></svg></section>
 <aside><h2 class="t-title">How to read this</h2>
-<p>Figures below are calculated only after every row page has loaded at the same dataset
-revision.</p><p id="summary" class="number"></p>
+<p>Figures below are calculated only after every page of rows has loaded.</p><p id="summary" class="number"></p>
 <p class="muted">Illustrative data. Weekly snapshots of waiting work are not summed as a backlog
 total.</p></aside></div><table><caption>Source rows used in this chart</caption><thead><tr>
 <th scope="col">Week</th><th scope="col">Completed</th><th scope="col">Waiting</th></tr></thead>
@@ -61,15 +60,11 @@ total.</p></aside></div><table><caption>Source rows used in this chart</caption>
 <script type="module">
 import {client,gql} from '@afbin/apollo';
 const preference=gql`{metric}`;
-// Discover table and column IDs from the schema instead of hard-coding them.
-const schemaQuery=gql`{repairs{schema{revision tables{id label
-  source{truncated totalRows storedRows} columns{id label type nullable sourceType}}}}}`;
-const rowsQuery=gql`query
-  Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision
-  source{truncated totalRows storedRows} columns{id label type nullable}
-  rows{id cells{columnId value{type string number boolean json}}}
-  pageInfo{hasNextPage endCursor}}}}`;
-let rows=[],sourceNote='';
+// Generated API: the link name is the root and the CSV's columns are its fields; up to 1000 rows
+// per page, ordered by week (and _id), so offset paging is stable.
+const PAGE=1000,rowsQuery=gql`query Rows($offset:Int!){
+  repairs(order_by:{week:asc},limit:1000,offset:$offset){_id week completed waiting}}`;
+let rows=[];
 const status=document.querySelector('#status');
 function render(metric){
  document.querySelector('#metric').value=metric;
@@ -96,7 +91,6 @@ function render(metric){
  document.querySelector('#summary').textContent=metric==='completed'
   ?`${rows.reduce((n,row)=>n+row.completed,0)} repairs completed across ${rows.length} weeks.`
   :`${rows.at(-1)?.waiting??0} repairs waiting in the latest loaded week.`;
- if(sourceNote)document.querySelector('#summary').textContent+=' '+sourceNote;
  const body=document.querySelector('#rows');body.replaceChildren();
  for(const row of rows){
   const tr=document.createElement('tr');tr.dataset.afId='repair-row-'+row.id;
@@ -109,43 +103,25 @@ function render(metric){
 }
 async function refresh(){
  const button=document.querySelector('#refresh');button.disabled=true;
- status.textContent='Reading dataset schema and rows…';
+ status.textContent='Reading dataset rows…';
  try{
-  const schemaResult=await client.query({query:schemaQuery});
-  if(schemaResult.errors?.length)throw Error(schemaResult.errors[0].message);
-  const tables=schemaResult.data.repairs.schema.tables;
-  const table=tables.find(table=>['week','completed','waiting']
-   .every(label=>table.columns.some(column=>column.label===label)));
-  if(!table)throw Error('Dataset needs week, completed and waiting columns.');
-  const ids=Object.fromEntries(table.columns.map(column=>[column.label,column.id]));
-  const loaded=[];let after=null,revision=null;
-  // Read every page; all pages must share one revision or the totals would mix versions.
-  do{
-   const result=await client.query({query:rowsQuery,variables:{table:table.id,after}});
+  const loaded=[];
+  // Read every page: a page shorter than PAGE is the last one.
+  for(let offset=0;;offset+=PAGE){
+   const result=await client.query({query:rowsQuery,variables:{offset}});
    if(result.errors?.length)throw Error(result.errors[0].message);
-   const page=result.data.repairs.rows;
-   if(revision!==null&&revision!==page.revision)
-    throw Error('Dataset changed during reading. Refresh to try again.');
-   revision=page.revision;
-   for(const row of page.rows){
-    const cells=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));
-    const week=cells[ids.week]?.string,completed=cells[ids.completed]?.number,
-     waiting=cells[ids.waiting]?.number;
+   const page=result.data.repairs;
+   for(const row of page){
+    const {week,completed,waiting}=row;
     if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))
      throw Error('A row has missing or nonnumeric repair values.');
-    loaded.push({id:row.id,week,completed,waiting});
+    loaded.push({id:row._id,week,completed,waiting});
    }
-   after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
-   if(page.pageInfo.hasNextPage&&!after)throw Error('Dataset returned no continuation cursor.');
-  }while(after);
-  // A truncated source means only stored rows were loaded; say so next to the totals.
-  sourceNote=table.source.truncated
-   ?`Stored sample: ${table.source.storedRows??'unknown'} of ${table.source.totalRows??'unknown'}`+
-    ' source rows. Totals cover stored rows only.'
-   :'';
-  rows=loaded.sort((a,b)=>a.week.localeCompare(b.week));
+   if(page.length<PAGE)break;
+  }
+  rows=loaded;
   const {data}=await client.query({query:preference});render(data.metric);
-  status.textContent=`Loaded ${rows.length} sample rows at revision ${revision}.`;
+  status.textContent=`Loaded ${rows.length} sample rows.`;
  }catch(error){status.textContent=error.message||'Could not read this dataset.';}
  finally{button.disabled=false;}
 }

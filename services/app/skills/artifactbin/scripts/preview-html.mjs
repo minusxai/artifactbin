@@ -109,7 +109,7 @@ if(node.nodeName==='link'&&(attrs.rel??'').split(/\s+/).includes('af-dataset')&&
  * binding. */
 export function previewBackendLinks(source){
 const found=[];function walk(node){if(node.tagName==='link'&&node.attrs.some(attr=>
-   attr.name==='rel'&&attr.value.split(/\s+/).includes('af-backend'))){const value=name=>
+   attr.name==='rel'&&attr.value.split(/\s+/).some(rel=>rel==='af-resolver'||rel==='af-backend'))){const value=name=>
    node.attrs.find(attr=>attr.name===name)?.value;found.push({name:value('data-af-name'),href:value(
    'href')??''});}for(const child of node.childNodes??[])walk(child);if(node.content)walk(
    node.content);}walk(parse(source));return found;

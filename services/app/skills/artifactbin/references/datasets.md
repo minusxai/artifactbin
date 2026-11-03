@@ -1,77 +1,109 @@
 ---
 name: datasets
-description: CSV import, dataset schema discovery, stable IDs and permission-aware GraphQL reads and writes.
+description: CSV and JSON datasets, linking them into pages and the generated GraphQL API for reads, aggregates and writes.
 ---
 ## Read first
 
-Create a dataset through the retained artifact API, then link it from the page. The native dataset namespace supports stored CSV/JSON rows with platform row identities. Connected PostgreSQL catalogs and SQL-backed tables are not supported by this namespace: page publication and replacement reject these links with HTTP 400 `dataset_stable_identity_unavailable` and a hint to import stored CSV/JSON rows. Schema discovery, reads and writes enforce the same stored-row requirement if a catalog changes later. Import stored rows for native pages. The separate retained PostgreSQL dataset query API remains read-only under its original permissions. Use an origin-bound bearer outside HTML:
+A dataset is stored CSV or JSON rows. Create it, link it from a page, then query its generated
+GraphQL API (Hasura's shape). `node scripts/publish.mjs rows.csv --type dataset --title T` creates one
+(`.json`: a bare array of row objects); save the returned `id`. Direct HTTP: `POST [[ base ]]/api/artifacts`
+with a durable `Idempotency-Key` and an origin-bound bearer, never from page HTML:
 
 ```json
-{"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n2026-W03,21,3\n","title":"Repair bench sample","visibility":"unlisted","access":"readwrite"}
+{"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n","title":"Repair bench sample","visibility":"unlisted"}
 ```
 
-Send this JSON to `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key`; save its returned dataset `id`. `dataset` also accepts an array of row objects. `node scripts/publish.mjs rows.csv --type dataset --title T` does this (`.json`: a bare row array). These are sample figures, not measured results. Page source contains only the dataset reference:
+These are sample figures. A dataset needs at least one data row. New datasets are readable by
+anyone who can open them; only the owner and editors change rows. To let readers add or edit rows,
+set rules: [permissions](permissions.md). Only stored CSV/JSON rows can be linked: connected
+PostgreSQL catalogs are refused with HTTP 400 `dataset_stable_identity_unavailable`.
 
 ```html
-<link rel="af-dataset" data-af-name="repairs" data-af-api="legacy" href="ref:DATASET_ID" data-af-mode="live">
+<link rel="af-dataset" data-af-name="orders" href="ref:DATASET_ID">
 ```
 
-Replace `DATASET_ID` with the returned ID before publication. `data-af-name` is unique across dataset and backend links. `live` is the default: a historical page with a live binding continues reading live data. A pinned binding uses `data-af-mode="pinned" data-af-revision="2"`, where revision is a positive original dataset version. A pinned dataset is read-only. Keep the original dataset’s read/write policy; page readability grants no dataset writes.
+Replace `DATASET_ID` before publishing. `data-af-name` is unique across a page's links. Live is the
+default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version and is read-only.
+Legacy pages: pages written against the old `schema`/`rows(tableId…)`/`writeRows` namespace keep
+working unchanged; to move one to this API, rewrite its queries and add `data-af-api="hasura"`.
 
-## Discover before querying
+## Contents
 
-Import `client,gql` from `@afbin/apollo`, then discover the namespace’s stable table/column IDs:
+[Names](#names-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
+
+## Names: discover before querying
+
+`node scripts/graphql.mjs schema PAGE_ID` (or `DATASET_ID`) prints the exact SDL your role sees, and
+for a dataset your role. In a page the root is the link's `data-af-name` (`orders`); queried directly
+it comes from the title (or `data`). A column keeps its name when it is a valid GraphQL name;
+otherwise it is lower-cased with `_` for other characters (`Created By` → `created_by`). Every row
+has `_id: ID!`, the stable row ID (a CSV `id` column stays ordinary). Types: number → `Float`,
+boolean → `Boolean`, text, dates and user IDs → `String`; every column is nullable.
+
+## Read
+
+Import `client,gql` from `@afbin/apollo`:
 
 ```js
-const {data}=await client.query({query:gql`{
- repairs{schema{revision tables{id label source{truncated totalRows storedRows} columns{id label type nullable sourceType}}}}
-}`});
+const {data,errors}=await client.query({query:gql`query West($r:String!){
+ orders(where:{region:{_eq:$r}},order_by:{date:desc},limit:50){_id date region amount}
+ orders_aggregate(where:{region:{_eq:$r}}){aggregate{count sum{amount} avg{amount}}}
+}`,variables:{r:'West'}});
+if(errors?.length)throw Error(errors[0].message);
 ```
 
-Select tables and columns by their discovered labels for this task, then address them with the returned opaque IDs. Never hard-code a display label as a table or column ID. Dates/timestamps use STRING cells; `sourceType` preserves their source meaning.
+- `orders(where,order_by,limit,offset)`: `limit` defaults to 100, at most 1000; `_id` is always the
+  last sort key, so `offset` paging is stable. Read pages until one is shorter than `limit`.
+- `orders_by_pk(_id:ID!)` returns null when the row is missing or hidden from you.
+- `orders_aggregate{aggregate{count(columns,distinct) sum avg min max} nodes}` takes the same
+  arguments; it exists only when your rule allows aggregations. There is no group-by: group the
+  rows you read, or run one aggregate per group with `where`.
+- `where`: `_and _or _not`; per column `_eq _neq _gt _gte _lt _lte _in _nin _is_null`, plus
+  `_like _ilike _nlike _nilike` on strings. `order_by`: `asc desc` and their `_nulls_first`/`_last`.
 
-Every schema table and rows/query result carries `source:{truncated,totalRows,storedRows}`. If `truncated` is true, chart totals cover only stored rows: label them as a stored sample, for example “10,000 of 10,003 source rows.” Result pagination and source truncation are independent; fetching every page cannot recover rows discarded during import. Normal complete datasets have matching total/stored counts.
+Totals and charts come from every row: read all pages first, or use `orders_aggregate`.
 
-The constant dataset schema exposes `rows(tableId,columnIds,filters,order,first,after)` and `writeRows(tableId,expectedRevision,requestId,changes)`. Use GraphQL variables:
+## Write
 
 ```graphql
-query Rows($table:ID!,$after:String){
- repairs{rows(tableId:$table,first:100,after:$after){
-  revision source{truncated totalRows storedRows} columns{id label type nullable}
-  rows{id cells{columnId value{type string number boolean json}}}
-  pageInfo{hasNextPage endCursor}
- }}
-}
+mutation Add($o:orders_insert_input!){insert_orders_one(object:$o){_id amount}}
+mutation Fix($id:ID!){update_orders_by_pk(pk_columns:{_id:$id},_set:{amount:13}){_id amount}}
+mutation Bump($id:ID!){update_orders(where:{_id:{_eq:$id}},_inc:{votes:1}){affected_rows}}
+mutation Drop($id:ID!){delete_orders_by_pk(_id:$id){_id}}
 ```
 
-`first` is 1–100. Follow `endCursor` until `hasNextPage:false`. Calculate totals or chart series only after collecting every page at the same revision; restart if the revision changes. Otherwise label the result as a partial page.
+`insert_orders(objects)` takes up to 100 rows; `update_`/`delete_orders(where)` return
+`affected_rows`. One mutation operation is atomic, writes one dataset and changes at most 100 rows.
+It applies to the current rows: for compare-and-set put the old values in `where` and treat
+`affected_rows:0` as "changed meanwhile". There is no upsert: read the row, then `update_…_by_pk`
+or `insert_…_one`. `_id` is generated and never set. Returned rows need a select rule.
 
-## Server queries and aggregates
+`client.mutate` sends one `Idempotency-Key` per call, so a retried request applies once.
+`graphql.mjs mutate DATASET_ID --document m.graphql` prints its `idempotencyKey`; after exit 5
+(unknown outcome) repeat with `--idempotency-key KEY` (it applies at most once). Errors carry
+`extensions.code`: `permission_denied`, `check_violation`, `validation_failed`, `too_many_rows`,
+`one_dataset_per_mutation`, `outcome_unknown`, `dataset_not_found`. Only the owner and editors write
+until [permissions](permissions.md) allow more; a page link never grants writes.
 
-For grouped charts or totals, use the namespace’s `query` field. It filters and aggregates the whole stored dataset before paginating the resulting rows. Source truncation still applies: aggregate totals never include discarded upload rows. It accepts `tableId`, `columnIds`, `filters`, `parameters`, `groupBy`, `aggregates`, `order`, `first` and `after`. Use discovered column IDs. An aggregate is `{id:"total",operation:SUM,columnId:"<amount column ID>"}`; operations are COUNT, SUM, AVG, MIN and MAX. COUNT without a column counts all filtered rows; with a column it counts non-null cells. SUM requires a numeric column. Its `id` becomes the output column ID; grouped source columns retain their IDs. Order by the resulting metric, for example `{columnId:"total",direction:DESC}`. Read the same typed Rows result and follow its output cursor as needed.
+## Live views
 
-Filters may reference a named parameter: `{columnId:"<amount ID>",operator:GTE,parameter:"minimum"}`, paired with `parameters:[{name:"minimum",value:{type:NUMBER,number:0}}]`. Parameter values are typed cells, never SQL strings. No arbitrary SQL endpoint exists. Use schema discovery to inspect available input enums before constructing a new operation.
+`client.watchQuery({query}).subscribe(...)` refetches after committed writes and when the dataset
+changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Use these rather
+than polling. The installed `examples/csv-dashboard.html` reads every page and charts it;
+`examples/shared-app.html` writes through a resolver ([resolvers](resolvers.md)).
 
-CSV import infers ordinary numeric values. To preserve exact lexical values such as identifiers or high-precision quantities, supply top-level `columns:[{name:"amount",type:"string"}]` with the dataset create request; an explicit `type:"number"` requests numeric conversion and can round.
+## CSV import
 
-## Typed cells and writes
-
-Cell values carry one matching slot: `{type:"STRING",string:"oak"}`, `{type:"NUMBER",number:12}`, `{type:"BOOLEAN",boolean:true}` or `{type:"JSON",json:{...}}`. A typed null uses the matching slot set to null. Stable `row.id` is separate from cell values.
-
-`changes` accepts up to 100 INSERT, UPDATE or DELETE items atomically:
-
-```json
-{"kind":"UPDATE","rowId":"<stable row ID>","cells":[{"columnId":"<stable column ID>","value":{"type":"NUMBER","number":13}}]}
-```
-
-INSERT supplies cells; DELETE supplies rowId. Send the observed dataset revision as `expectedRevision` and keep one nonempty `requestId` for that intended mutation. Receipts return `outcome` (`committed`, `rejected` or `unknown`), `revision` and `rowIds`. Only committed is success. Reconcile conflicts or unknown results before another write. Dataset permission is checked for every write; a page link does not bypass it.
-
-See the installed CSV dashboard example for discovery, pagination, revision consistency and a chart computed from typed cells.
-
-CSV empty-cell rules: an unquoted empty field (or a missing trailing field) becomes null. A quoted empty field (`""`) is an empty string and keeps its column textual by default, including when other rows look numeric. Literal `null`/`NULL` remain text. An explicit non-string column type overrides inference and converts empty text to null; declare `type:"string"` to preserve it.
+Numbers are inferred. To keep exact text (IDs, long decimals), send
+`columns:[{name:"amount",type:"string"}]` with the create request; `type:"number"` converts and can
+round. An unquoted empty field becomes null; a quoted `""` is an empty string and keeps the column
+textual; literal `null` stays text.
 
 ## Files attached to a dataset
 
-The retained media HTTP doors accept files for a stored dataset declared by a live native page binding. A page link or accepted page membership never grants upload permission: the caller needs explicit dataset insert authority (a caller or group insert grant, or dataset editor authority on a writable dataset). Private dataset reads still require current dataset and page readership. Pinned bindings cannot upload.
-
-For signed-in browser image uploads use `POST /a/PAGE_ID/datasets/DATASET_ID/images` with the image bytes and image Content-Type. HTTP agents can upload images through the generic file door using an image filename. For generic files use `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files`, the file bytes and Content-Type, plus an `X-Filename` containing the percent-encoded filename. Both require `X-Edit-Id` from the observed page head and a unique `Idempotency-Key`; replay the identical bytes and key after an uncertain response. Requests use supported HTTP account authentication, never a token embedded in page HTML. The response returns the stored ref and read URL; read that URL under the same current permissions. Revoked upload permission refuses even a cached replay. File and image size, type, count and stored-byte limits still apply. These are HTTP media uploads, not GraphQL mutations.
+A live page binding may upload files to its dataset when the caller may insert rows. Signed-in
+browser images: `POST /a/PAGE_ID/datasets/DATASET_ID/images` with the bytes and image Content-Type.
+Other files: `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files` with the bytes, Content-Type and
+a percent-encoded `X-Filename`. Both need `X-Edit-Id` from the page head and a unique
+`Idempotency-Key` (replay the same bytes and key after an uncertain response). The response returns
+the stored ref and a read URL under the same permissions. Pinned bindings cannot upload.

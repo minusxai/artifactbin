@@ -17,13 +17,13 @@ export function sourceIdentity(source){const all=[...source.matchAll(marker)];if
   all.length>1)throw new ToolError('ambiguous_identity','Source has multiple authoring identities.',
   2);if(!all.length)return null;try{return JSON.parse(Buffer.from(all[0][1],'base64url').toString(
   ));}catch{throw new ToolError('invalid_identity','Source identity is malformed.',2);}}
-/** Canonical HTML drops backend hrefs; put the author's local path back so later backend edits are
+/** Canonical HTML drops resolver (af-resolver, alias af-backend) hrefs; put the author's local path back so later backend edits are
  * published. */
 export function restoreBackendHrefs(source,links){
 const hrefs=new Map((links??[]).filter(link=>link.name&&link.href).map(link=>[link.name,
    link.href]));if(!hrefs.size)return source;
  return source.replace(/<link\b[^>]*>/gi,tag=>{
-  if(!/\brel\s*=\s*["'][^"']*\baf-backend\b/i.test(tag)||/\shref\s*=/i.test(tag))return tag;
+  if(!/\brel\s*=\s*["'][^"']*\baf-(?:resolver|backend)\b/i.test(tag)||/\shref\s*=/i.test(tag))return tag;
   const name=tag.match(/\sdata-af-name\s*=\s*["']([^"']+)["']/i)?.[1],href=name&&hrefs.get(name);
 return href?tag.replace(/^<link\b/i,'<link href="'+href.replace(/&/g,'&amp;').replace(/"/g,
     '&quot;')+'"'):tag;

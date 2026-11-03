@@ -28,7 +28,8 @@ export async function prepareSample(name, server, datasetId) {
     if (name === 'csv-dashboard' || name === 'shared-app') {
       if (!/^[A-Za-z0-9]{6,}$/.test(datasetId ?? ''))
         throw Error('This sample requires the real returned dataset ID.');
-      html = html.replace('ref:DATASET_ID', `ref:${datasetId}`);
+      // The deprecated sample flow names one dataset; the shared app's targets link reuses it.
+      html = html.replace('ref:DATASET_ID', `ref:${datasetId}`).replace('ref:TARGETS_ID', `ref:${datasetId}`);
     }
     const snapshot = await prepareBundle({
       root,
@@ -47,7 +48,7 @@ export async function prepareSample(name, server, datasetId) {
     };
     if (name === 'shared-app') {
       const backend = snapshot.body.publicationBundle.files.find(
-        file => file.path === 'examples/garden.ts'
+        file => file.path === 'examples/budget.ts'
       );
       if (!backend) throw Error('Sample backend is missing from its publication snapshot.');
       body.backendSources = {budget: Buffer.from(backend.base64, 'base64').toString('utf8')};
