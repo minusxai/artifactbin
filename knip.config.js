@@ -71,10 +71,10 @@ export default {
       ignoreDependencies: [
         // Installed font binaries copied by path (scripts/copy-assets.mjs, scripts/system-font-packages.mjs).
         /^@fontsource(-variable)?\//,
-        // Loaded through createRequire: the S3 presigner (lib/object-store) and HarfBuzz's wasm (lib/mermaid-images/fonts).
-        '@aws-sdk/s3-request-presigner', 'harfbuzzjs',
+        // Loaded through createRequire: the S3 presigner (lib/object-store).
+        '@aws-sdk/s3-request-presigner',
         // Plugins of the root vite/vitest configs this workspace's build and test scripts run.
-        '@rollup/plugin-yaml', '@tailwindcss/vite',
+        '@tailwindcss/vite',
         // Type-only imports of @types/mdast, @types/hast and Vite's bundler types, installed with remark and Vite.
         'mdast', 'rolldown',
       ],

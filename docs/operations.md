@@ -107,9 +107,8 @@ Test accounts use the `mxmx_test_*` prefix and disposable state.
 
 ## CI reruns and required checks
 
-- A new push to a pull request cancels that PR's earlier, unfinished CI runs through the `supersede` job
-  (`scripts/lib/ci-supersede.mjs`). Nothing waits for the cancellation, so the new run starts at once. A
-  workflow-level `concurrency` group would hold it pending until the old run had fully stopped.
+- Pull requests run only `pr fast` (`.github/workflows/pr-fast.yml`). The full `ci` workflow runs on each
+  push to main and by manual dispatch; a push whose exact tree a green run already tested selects no jobs.
 - `page speed report` (`.github/workflows/page-speed.yml`) runs on every pull request so it always
   reports and can be a required check. A `scope` job compares the PR with its merge base against the
   push trigger's paths; when none changed, the report job only writes "No relevant changes" to the

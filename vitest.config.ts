@@ -1,7 +1,6 @@
 import { globSync, readFileSync } from 'node:fs';
 import path from 'path';
 import { defineConfig } from 'vitest/config';
-import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 import { suiteEnv } from './scripts/lib/suite-env.mjs';
@@ -67,7 +66,6 @@ const solidJsdom = () => ({
 
 export default defineConfig({
   root: import.meta.dirname,
-  plugins: [yaml()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'services/app'),
