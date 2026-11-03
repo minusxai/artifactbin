@@ -10,7 +10,6 @@
     ".": "./src/index.ts",
     "./node/atomic-file": "./src/atomic-file.ts",
     "./shape": "./src/shape.ts",
-    "./dataset-grants": "./src/dataset-grants.ts",
     "./dataset-policy": "./src/dataset-policy.ts",
     "./dataset-permissions": "./src/dataset-permissions.ts",
     "./artifact-reference": "./src/artifact-reference.ts",

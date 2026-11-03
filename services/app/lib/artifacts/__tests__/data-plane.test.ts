@@ -39,7 +39,7 @@ describe('dataset commits', () => {
   it('a policy commit needs the exact head and policy revision, and an editor', async () => {
     const { row, actor } = await storedDataset();
     const stranger = await account('stranger@example.test');
-    const policy = { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] };
+    const policy = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer', permission: { columns: '*', filter: {} } }] }] };
     const db = await harness.db();
     expect(await commitDatasetPolicy(db, stranger, row, policy, 0)).toBeNull();
     expect(await commitDatasetPolicy(db, actor, row, policy, 3)).toBeNull();

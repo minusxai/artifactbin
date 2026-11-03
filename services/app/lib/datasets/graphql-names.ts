@@ -105,7 +105,7 @@ export function hasuraRootNames(tables: readonly DatasetTableName[], options: Ha
   });
 }
 
-/** The configuration a stored v3 policy carries per table; nothing for v1/v2/no policy (until the stored rewrite). */
+/** The configuration a stored v3 policy carries per table; nothing for no policy (or anything that is not version 3). */
 export function storedConfiguration(policy: unknown): (table: DatasetTableName) => DatasetTableConfiguration | undefined {
   const tables = policy && typeof policy === 'object' && (policy as { version?: unknown }).version === 3 ? (policy as { tables?: unknown }).tables : undefined;
   const list = Array.isArray(tables) ? tables as Array<{ table?: Partial<DatasetTableName>; configuration?: unknown }> : [];

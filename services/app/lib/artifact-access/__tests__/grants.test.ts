@@ -1,46 +1,39 @@
 /**
- * DATASET GRANTS AND CAPABILITIES through the interface: read and write grants (the private ceiling, the policy
- * revision a commit re-checks), a saved document's context and its host-only proofs, and the capability table.
+ * DATASET ACCESS AND CAPABILITIES through the interface: the private ceiling on a read rule, the policy
+ * revision a commit re-checks, a saved document's context and its host-only proofs, and the capability table.
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser } from '@/lib/accounts';
-import { attestRegisteredHtmlMutation, attestSavedHtmlUpload, can, capabilityRefusal, grantContext, grantsOf, grantsPermitRead, readThrough, refusalFor, uploadGrantContext, verifyRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
+import { attestRegisteredHtmlMutation, attestSavedHtmlUpload, can, capabilityRefusal, grantContext, readThrough, refusalFor, uploadGrantContext, verifyRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
 import { canReadArtifact, capabilityGuard } from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
-import { account, dataset, head, mine, personOfKind, sql } from '@/__tests__/artifact-fixtures';
+import { account, dataset, head, mine, personOfKind, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
-const grants = (allow: unknown[]) => ({ version: 2, allow });
 
 describe('dataset grants', () => {
-  const ownerWrites = grants([{ actions: ['read'], from: { user: '*' } }, { actions: ['insert'], from: { user: '$owner' } }]);
+  const readable = readAllPolicy();
 
-  it('grantsOf reads only a version-2 policy; read grants honour a private ceiling', async () => {
+  it('a read rule honours the private ceiling', async () => {
     const owner = await account('owner@example.test');
     const stranger = await account('stranger@example.test');
-    const data = await dataset(owner, ownerWrites);
-    expect(grantsOf(data)).toMatchObject({ version: 2 });
-    expect(grantsOf({ dataset_policy: null })).toBeNull();
-    expect(grantsOf({ dataset_policy: { version: 1 } })).toBeNull();
+    const data = await dataset(owner, readable);
     expect(data.visibility).toBe('unlisted');
-    expect(await grantsPermitRead(data, stranger)).toBe(true);
     expect(await canReadArtifact(data, stranger)).toBe(true);
     await updateSharingFor(owner, data.id, { visibility: 'private' });
     const closed = await head(data.id);
-    expect(await grantsPermitRead(closed, stranger)).toBe(false);
     expect(await canReadArtifact(closed, stranger)).toBe(false);
-    expect(await grantsPermitRead(closed, owner)).toBe(true);
+    expect(await canReadArtifact(closed, owner)).toBe(true);
     expect(await readThrough(await harness.db(), closed, stranger)).toBe(false);
     expect(await readThrough(await harness.db(), closed, owner)).toBe(true);
-    expect(await grantsPermitRead({ ...closed, dataset_policy: null }, owner)).toBe(false);
   });
 
   // Write decisions (and their commit-time recheck) are lib/dataset-permissions'; grants supply program trust.
   it('a grant context: the owner, never a guest', async () => {
     const owner = await account('owner@example.test');
     const guest = await personOfKind('guest');
-    const data = await dataset(owner, ownerWrites);
+    const data = await dataset(owner, readable);
     await expect(grantContext(data, guest)).rejects.toThrow('Sign in to change data');
     expect(await grantContext(data, owner)).toMatchObject({ owner: { userId: owner.userId }, callerEditorGroupIds: [] });
   });
@@ -48,7 +41,7 @@ describe('dataset grants', () => {
   it('a document context needs a host proof for HTML, the head edit, and an accepted join', async () => {
     const owner = await account('owner@example.test');
     const reader = await account('reader@example.test');
-    const data = await dataset(owner, grants([{ actions: ['insert'], from: { artifact: '*' } }]));
+    const data = await dataset(owner, readAllPolicy());
     const doc = await mine(owner, 'App');
     await updateSharingFor(owner, doc.id, { visibility: 'unlisted' });
     const verified: string[] = [];

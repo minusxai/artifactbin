@@ -24,8 +24,14 @@ type Session={credential:'session';userId:string;email:string;emailVerified:bool
 const imageParams=(id:string,datasetId:string,imageId:string)=>({params:Promise.resolve({id,datasetId,imageId})});
 const imageCount=async(datasetId:string)=>(await (await getDb()).query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[datasetId])).rows[0]?.count;
 
-/** v3: the shared viewer may insert (and read, unless `read` is false); the named-user v2 grant this replaces admits no one now. */
-const viewerInsert=(read=true)=>({version:3,tables:[{table:{schema:'public',name:'rows'},...(read?{select_permissions:[{role:'viewer',permission:{columns:'*',filter:{},allow_aggregations:true}}]}:{}),insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]});
+const ROWS={schema:'public',name:'rows'};
+const READ_ALL={columns:'*',filter:{},allow_aggregations:true};
+/** The shared viewer may insert (and read, unless `read` is false). */
+const viewerInsert=(read=true)=>({version:3,tables:[{table:ROWS,...(read?{select_permissions:[{role:'viewer',permission:READ_ALL}]}:{}),insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]});
+/** Only shared viewers read; nobody below editor writes. */
+const viewerRead=()=>({version:3,tables:[{table:ROWS,select_permissions:[{role:'viewer',permission:READ_ALL}]}]});
+/** Everyone reads; `programs`: viewers and signed-in page members insert only through a trusted program (an upload proof). */
+const everyoneReads=(programs=false)=>({version:3,tables:[{table:ROWS,select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:READ_ALL})),...(programs?{insert_permissions:['viewer','signed_in'].map(role=>({role,permission:{columns:'*',check:{},backend_only:true}}))}:{})}]});
 /** An owner's private dataset, a public document that imports it with an insert grant, and an approved reporter. */
 async function world(){
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
@@ -112,35 +118,35 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
     expect(get).not.toHaveBeenCalled();
   } finally { get.mockRestore(); }
   expect((await read(ownerSession)).status).toBe(200);
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:ownerActor.userId}}]},2);
+  await setDatasetPolicy(ownerActor,dataset.id,viewerRead(),2);
   expect((await filePost()).status).toBe(403);
   await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[dataset.id]);
   expect((await read(ownerSession)).status).toBe(404);
   expect(await imageCount(dataset.id)).toBe(6);
 });
 
-it('rechecks the insert grant after storing the object and before committing the receipt',async()=>{
+it('rechecks the insert rule after storing the object and before committing the receipt',async()=>{
   const {ownerActor,dataset,filePost}=await world();
   const put=vi.spyOn(objectStore(),'put').mockImplementationOnce(async()=>{
-    await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},1);
+    await setDatasetPolicy(ownerActor,dataset.id,everyoneReads(),1);
   });
   try {
     const revoked=await filePost('note.txt','hello','revoked-operation-123');
     expect(revoked.status,await revoked.clone().text()).toBe(403);
-    expect((await revoked.json()).detail).toMatch(/insert grant/);
+    expect((await revoked.json()).detail).toMatch(/does not grant file uploads/);
     expect(put).toHaveBeenCalledTimes(1);
   } finally { put.mockRestore(); }
   expect(await imageCount(dataset.id)).toBe(0);
 });
 
-it('requires an explicit artifact grant and rechecks accepted participation on replay, except for the dataset owner',async()=>{
+it('requires an insert rule (here: backend_only, through the page\'s upload proof) and rechecks accepted participation on replay, except for the dataset owner',async()=>{
  const {ownerActor,reporter,ownerSession,dataset,document,filePost}=await world();
- await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},1);
+ await setDatasetPolicy(ownerActor,dataset.id,everyoneReads(),1);
  const put=vi.spyOn(objectStore(),'put');
  try {
-  // A real link plus accepted participation is provenance, not an insert grant.
+  // A real link plus accepted participation is provenance, not an insert rule.
   expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(0);
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},2);
+  await setDatasetPolicy(ownerActor,dataset.id,everyoneReads(true),2);
   const member=await filePost();expect(member.status,await member.clone().text()).toBe(201);const stored=await member.json();
   expect((await (await filePost()).json()).ref).toBe(stored.ref);expect(await imageCount(dataset.id)).toBe(1);
   const bytes=await sharp({create:{width:40,height:24,channels:3,background:'#c0392b'}}).png().toBuffer();

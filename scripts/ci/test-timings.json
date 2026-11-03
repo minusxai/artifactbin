@@ -794,7 +794,6 @@
    "services/utils/__tests__/atomic-file.test.ts": 143,
    "services/utils/__tests__/clients.test.ts": 669,
    "services/utils/__tests__/codes.test.ts": 3461,
-   "services/utils/__tests__/dataset-grants.test.ts": 10,
    "services/utils/__tests__/dataset-policy.test.ts": 16,
    "services/utils/__tests__/env.test.ts": 6,
    "services/utils/__tests__/fakes.test.ts": 8,

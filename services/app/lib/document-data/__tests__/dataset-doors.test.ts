@@ -16,8 +16,9 @@ import {canWriteDataset,respondToMutate,writeDatasetPolicy} from '@/lib/document
 useAppHarness();
 let db:Db;
 beforeEach(async()=>{db=await getDb();});
-// The door sets version 3 only (the stored migration); this is what the old v1 viewer-insert policy reads as.
+// Every rule role reads and inserts.
 const policy={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',check:{}}}))}]};
+// A retired version 1 body: every policy door refuses it.
 const legacy={version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]};
 
 const fixture=()=>datasetFixture();
@@ -49,10 +50,9 @@ it('lets the data policy admit a page reader only while the dataset is readable 
  const f=await fixture(),reader=await account('reader');
  const stale=(await getArtifactById(f.id))!;
  expect(await canWriteDataset(stale,reader.actor,true)).toBe('dataset_read_only');
- // A stored v1 policy (seeded: no door sets v1/v2 since the stored migration): its entries follow the visibility.
- await setDatasetPolicy(f.owner.actor,f.id,legacy,0);
+ await setDatasetPolicy(f.owner.actor,f.id,policy,0);
  expect(await canWriteDataset((await getArtifactById(f.id))!,reader.actor,true)).toBeNull();
- // Private: the v1 entries reach shared viewers only, never a signed-in page reader.
+ // Private: signed_in and anonymous rules never apply, so a signed-in page reader cannot write.
  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
  const current=(await getArtifactById(f.id))!;
  expect(await canWriteDataset(current,reader.actor,true)).toBe('dataset_read_only');

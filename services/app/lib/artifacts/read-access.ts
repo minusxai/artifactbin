@@ -3,7 +3,7 @@
  * snapshot a reader is answered with, and the route gate for a capability. Decided by the access rule
  * (@/lib/artifact-access) over the rows this module reads.
  */
-import { can, capabilityRefusal, effectiveRole, grantsOf, grantsPermitRead, type ArtifactRow } from '@/lib/artifact-access';
+import { can, capabilityRefusal, effectiveRole, type ArtifactRow } from '@/lib/artifact-access';
 import type { Capability } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
@@ -58,7 +58,6 @@ async function readableRow<T extends ArtifactHeader>(actor:AccessActor,row:T|nul
  if(!row)return null;
  const role=await effectiveRole(row,actor);
  if(row.format==='dataset')return (await datasetReadAccess(row,actor)).allowed?{row,role:role==='none'?'viewer':role}:null;
- if(grantsOf(row))return await grantsPermitRead(row,actor)?{row,role:role==='none'?'viewer':role}:null;
  return canRead(role)?{row,role}:null;
 }
 /** Read access never implies access to the editable governance or connection definition. */

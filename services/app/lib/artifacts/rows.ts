@@ -4,10 +4,8 @@
  * (./table). Below access and the write path, so both can read a row without a cycle.
  */
 import type { AccessActor } from '@/lib/accounts';
-import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { getDb } from '../platform';
 import { artifactQuery, loadArtifactDocument } from './document';
-import { grantsOf, grantsPermitRead } from '@/lib/artifact-access';
 import { servableDocument } from './servable';
 import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 
@@ -109,9 +107,7 @@ export async function getLinkReadableArtifacts(ids: readonly string[]): Promise<
   if (!ids.length) return [];
   const db = await getDb();
   const rows = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`, [[...ids]])).rows;
-  const readable: ArtifactRow[] = [];
-  for (const row of rows) if (grantsOf(row) ? await grantsPermitRead(row, ANONYMOUS_ACTOR) : row.visibility !== 'private') readable.push(row);
-  return readable;
+  return rows.filter((row) => row.visibility !== 'private');
 }
 
 const SHARES_PROJECTION="COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=artifacts.id),'[]'::jsonb) AS shares";
@@ -143,7 +139,7 @@ export async function getEditableArtifactFor(actor: AccessActor, id: string): Pr
  */
 export async function getLinkReadableArtifact(id: string): Promise<ArtifactRow | null> {
   const row = await getArtifactById(id);
-  return row && (grantsOf(row)?await grantsPermitRead(row,ANONYMOUS_ACTOR):row.visibility !== 'private') ? row : null;
+  return row && row.visibility !== 'private' ? row : null;
 }
 
 /** The actor's REACH: what they own, and what they are named editor on. */

@@ -12,7 +12,7 @@ import {patchMetadata} from './conditional-request';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {nativeDatasetClient} from './native-dataset-http';
 useAppHarness();
-/** The v1 viewers-write policy as version 3 (metadata PATCH refuses v1/v2 since the stored migration): every role reads and writes every row. */
+/** Every role reads and writes every row (metadata PATCH takes version 3 only). */
 const ROLES=['viewer','signed_in','anonymous'];
 const VIEWERS_WRITE={version:3,tables:[{table:{schema:'public',name:'rows'},
  select_permissions:ROLES.map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),

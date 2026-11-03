@@ -1,14 +1,10 @@
-import type {DatasetAccessPolicy,DatasetPermissions,DatasetPermissionsIssue,DatasetPermissionsShape,Scalar} from '@artifactbin/contracts';
-import {parseDatasetAccessPolicy,compilePolicyPredicate} from '@artifactbin/utils';
+import type {DatasetPermissions,DatasetPermissionsIssue,DatasetPermissionsShape} from '@artifactbin/contracts';
 import {datasetPermissionsTemplate,validateDatasetPermissions} from '@artifactbin/utils/dataset-permissions';
 import type {DatasetHost} from '@/lib/datasets/types';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {storedConfiguration} from '@/lib/datasets/graphql-names';
 
-/** A policy as stored: version 3, or a version 1/2 one written before the stored migration. */
-export type StoredDatasetPolicy = DatasetAccessPolicy | DatasetPermissions;
-
-/** The refusal a version 1/2 body gets from every policy-setting door. Stored ones keep working until migrated. */
+/** The refusal a retired version 1/2 body (any object that is not version 3) gets from every policy-setting door. */
 export const LEGACY_POLICY_REFUSED = 'Version 1 and 2 dataset policies can no longer be set: send a version 3 policy, {"version":3,"tables":[{"table":{"schema":"public","name":"rows"},"select_permissions":[{"role":"viewer","permission":{"columns":"*","filter":{}}}]}]}, with Hasura permission entries for the roles viewer, signed_in and anonymous (owner and editors always have full access). GET the policy for the dataset\'s tables and current rules.';
 
 type PolicyRow = Pick<DatasetHost,'format'|'meta'|'dataset_policy'>;
@@ -83,75 +79,13 @@ function clearedPolicy(row:PolicyRow):DatasetPermissions|null {
  return keepDatasetConfiguration(readOnlyDatasetPolicy(row),row.dataset_policy).policy;
 }
 
-/** The STORED policy still fits this row's catalog (a replacement keeps every table and column it names): any version. */
-export function validateStoredDatasetPolicy(row:PolicyRow,value:unknown):StoredDatasetPolicy|null {
+/**
+ * The STORED policy still fits this row's catalog (a replacement keeps every table and column it names). Anything
+ * stored that is not version 3 is refused, naming what it is: only version 3 is read.
+ */
+export function validateStoredDatasetPolicy(row:PolicyRow,value:unknown):DatasetPermissions|null {
  requireStoredDataset(row);
  if(value===null)return null;
- if(isV3(value))return validateV3(row,value);
- return validateLegacy(row,value);
-}
-
-function validateLegacy(row:PolicyRow,value:unknown):DatasetAccessPolicy {
-  const policy = parseDatasetAccessPolicy(value);
-  {
-    const tables = tablesOf(row);
-    for (const t of policy.tables ?? []) {
-      const target = tables.find(
-        (x) => x.schema === t.table.schema && x.name === t.table.name,
-      );
-      // NAME what is missing: this message is the `detail` of both a refused
-      // policy edit and a refused replacement, and "something does not fit" is
-      // not a thing anyone can act on.
-      if (!target)
-        throw new Error(
-          `Policy table is not in this dataset: ${t.table.schema}.${t.table.name}`,
-        );
-      const columns = target.columns.map((c) => c.name);
-      for (const entry of [
-        ...(t.insert_permissions ?? []),
-        ...(t.update_permissions ?? []),
-        ...(t.delete_permissions ?? []),
-      ]) {
-        if (entry.role !== 'viewer')
-          throw new Error(
-            'Data policies use the viewer role for everyone with dataset access',
-          );
-        const p = entry.permission;
-        if (
-          'columns' in p &&
-          p.columns !== undefined &&
-          p.columns !== '*' &&
-          p.columns.some((c) => !columns.includes(c))
-        )
-          throw new Error(
-            `Unknown permission column in ${t.table.schema}.${t.table.name}: ${p.columns.filter((c) => !columns.includes(c)).join(', ')}`,
-          );
-        for (const field of ['filter', 'check'] as const)
-          if (field in p && p[field as keyof typeof p]) {
-            // Validate field names now; trusted session values are available only at execution.
-            const session: Record<string, Scalar> = {
-              'x-hasura-user-id': 'validation',
-              'x-hasura-role': entry.role,
-            };
-            compilePolicyPredicate(
-              (
-                p as {
-                  filter?: Record<string, unknown>;
-                  check?: Record<string, unknown>;
-                }
-              )[field]!,
-              columns,
-              session,
-            );
-          }
-        if (
-          'set' in p &&
-          p.set &&
-          Object.keys(p.set).some((c) => !columns.includes(c))
-        )
-          throw new Error('Unknown preset column');
-      }
-    }
-  }
- return policy;
+ if(!isV3(value))throw new Error(`The stored dataset policy is not version 3: only version 3 is read. Save a version 3 policy (PUT /api/artifacts/ID/policy) or clear it with null first.`);
+ return validateV3(row,value);
 }

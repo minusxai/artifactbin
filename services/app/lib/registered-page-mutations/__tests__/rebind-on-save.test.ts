@@ -46,7 +46,7 @@ async function migratedPage() {
   };
   const datasetId = await make({ dataset: [{ body: "seed" }], visibility: "private" }),
     pageId = await make({ html: html("<p>Migrated</p>", false), visibility: "public" });
-  await setDatasetPolicy(actor, datasetId, { version: 2, allow: [{ actions: ["read", "insert"], from: { user: "$owner" } }] }, 0);
+  await setDatasetPolicy(actor, datasetId, { version: 3, tables: [] }, 0);
   await changeMembership(actor, pageId, { action: "join" });
   const db = await getDb();
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor')", [

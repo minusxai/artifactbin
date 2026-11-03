@@ -2,10 +2,7 @@ import type { Scalar } from './sql';
 
 /** Hasura v2 permission entries; extensions live outside those entries. */
 export type PolicyPredicate = { [field: string]: unknown };
-/**
- * `backend_only` is refused in stored v1 policies (parseDatasetPolicy); a v3 entry handed to the engine may
- * carry `true`, which admits only a trusted program (`DatasetMutationPolicy.trusted`).
- */
+/** A v3 entry handed to the engine may carry `backend_only: true`, which admits only a trusted program (`DatasetMutationPolicy.trusted`). */
 export interface InsertPermission {
   backend_only?: boolean;
   columns?: '*' | string[];
@@ -35,6 +32,10 @@ export interface DatasetTablePolicy {
   update_permissions?: PermissionEntry<UpdatePermission>[];
   delete_permissions?: PermissionEntry<DeletePermission>[];
 }
+/**
+ * The retired version 1 policy shape. Nothing in this tree reads it; it stays exported (with `parseDatasetPolicy`)
+ * only because the deployment repository still imports both (app/__tests__/downstream-exports.test.ts).
+ */
 export interface DatasetPolicy {
   version: 1;
   enforcement: 'enabled';
@@ -50,12 +51,27 @@ export interface DatasetMutationPolicy {
   role: string;
   session: Record<string, Scalar>;
   operations: DatasetOperation[];
+  /** Function allow/deny lists the engine enforces. Nothing in this tree sets them (version 3 has no slot); the deployment's generation extension reads `extensions`. */
   execution?: DatasetPolicy['execution'];
   /**
    * A verified owner program (markup `<Mutation>` or a registered page mutation with its saved-document
    * proof, on a page whose owner holds owner or editor on the dataset). Only then do `backend_only` entries apply.
    */
   trusted?: boolean;
+}
+export interface DatasetPrincipal {
+  groupId?: string | null;
+  userId: string | null;
+  tokenId: string | null;
+}
+
+/** Program trust for a write through a saved document. Constructed by the server; never request input. */
+export interface DatasetGrantContext {
+  caller: DatasetPrincipal;
+  /** Server-authorized editor memberships only; viewers never satisfy owner writes. */
+  callerEditorGroupIds?: string[];
+  owner: DatasetPrincipal;
+  artifact?: { id: string; owner: DatasetPrincipal };
 }
 export interface MutationAnalysis {
   operation: DatasetOperation;

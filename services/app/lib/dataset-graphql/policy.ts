@@ -3,15 +3,17 @@
  * get_dataset_policy_templates): what the dataset's GraphQL API lets each role do, as owners and editors read
  * and set it.
  *
- * Read: the stored v3 policy, or the in-memory v3 reading of a stored v1/v2/no policy (lib/dataset-permissions
- * `toV3`, the same dual read every door enforces) with its report; each table's generated root and column names
- * (./hasura-names, so the names agents see are the names the API serves); and the plain-language read-back.
+ * Read: the stored v3 policy, or the default when none is stored (lib/dataset-permissions `storedPolicy`, the
+ * reading every door enforces); a stored policy that does not read (not version 3, or invalid) answers
+ * `source: "unreadable"` with the reason in `report`, so an owner can save over it; each table's generated root
+ * and column names (./hasura-names, so the names agents see are the names the API serves); and the
+ * plain-language read-back.
  *
  * Write: a v3 body is validated against the dataset's own tables and columns, every problem by JSON path; a dry
  * run answers the read-back and saves nothing; a save is a compare-and-swap on the policy revision
  * (lib/artifacts `commitDatasetPolicy`, which also fences content and sharing). `configuration` names the API,
- * so it is server-owned: a body omits it (the stored one is kept) or sends it unchanged. A version 1/2 body (any
- * object that is not version 3), dry run or save, is refused with LEGACY_POLICY_REFUSED, the refusal every policy
+ * so it is server-owned: a body omits it (the stored one is kept) or sends it unchanged. Any object that is not
+ * version 3 (a retired version 1 or 2 body), dry run or save, is refused with LEGACY_POLICY_REFUSED, the refusal every policy
  * door gives; a null save clears the stored policy (read as the read-only template) through lib/document-data
  * `writeDatasetPolicy`.
  *
@@ -29,7 +31,7 @@ import {
 import { datasetPermissionsTemplate, readBackDatasetPermissions, validateDatasetPermissions } from '@artifactbin/utils/dataset-permissions';
 import type { AccessActor } from '@/lib/accounts';
 import { commitDatasetPolicy, getArtifactFor, type ArtifactRow } from '@/lib/artifacts';
-import { toV3 } from '@/lib/dataset-permissions';
+import { storedPolicy, type StoredPolicy } from '@/lib/dataset-permissions';
 import { catalogOf, keepDatasetConfiguration, LEGACY_POLICY_REFUSED, type DatasetTable } from '@/lib/datasets';
 import { writeDatasetPolicy } from '@/lib/document-data';
 import { getDb } from '@/lib/platform';
@@ -67,12 +69,13 @@ export async function readDatasetPermissions(actor: AccessActor, id: string): Pr
   if (!found) return NOT_FOUND;
   const { row, tables } = found;
   const names = hasuraNames(tables, { title: row.title, configuration: storedConfiguration(row.dataset_policy) });
-  let reading: ReturnType<typeof toV3> | null = null;
-  try { reading = toV3({ policy: row.dataset_policy ?? null, visibility: row.visibility, tables: tables.map(({ schema, name }) => ({ schema, name })) }); } catch { /* reported below */ }
+  let reading: StoredPolicy | null = null, unreadable = '';
+  try { reading = storedPolicy({ policy: row.dataset_policy, tables: tables.map(({ schema, name }) => ({ schema, name })) }); }
+  catch (error) { unreadable = error instanceof Error ? error.message : String(error); }
   return ok({
     revision: row.policy_revision ?? 0,
     source: reading?.source ?? 'unreadable',
-    report: reading?.report ?? [{ code: 'unreadable', message: 'The stored policy does not parse: no rule applies until a version 3 policy is saved.' }],
+    report: reading ? [] : [{ code: 'unreadable', message: `${unreadable} Until then nobody below editor can use the data.` }],
     policy: reading?.policy ?? null,
     roles: { rules: DATASET_RULE_ROLES, admin: DATASET_ADMIN_ROLES },
     templates: DATASET_PERMISSION_TEMPLATES,

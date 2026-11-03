@@ -1,6 +1,6 @@
 import {JOIN_RELATIONS} from '@/lib/social';
-import { type ArtifactHeader, type ArtifactRow, getArtifactById, getArtifactFor, getLinkReadableArtifact, childrenTableFor } from '@/lib/artifacts';
-import { writerFor, grantsOf } from '@/lib/artifact-access';
+import { type ArtifactHeader, type ArtifactRow, getArtifactFor, getLinkReadableArtifact, childrenTableFor } from '@/lib/artifacts';
+import { writerFor } from '@/lib/artifact-access';
 import { datasetReadAccess, datasetView } from '@/lib/dataset-permissions';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { type DocumentQuerySourceMode } from '../datasets';
@@ -46,7 +46,7 @@ export async function registeredQueryImportForRow(row:ArtifactRow,id:string,view
 
 /** The artifact a document's import names, by the document's own reach. */
 const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<ArtifactRow | null> =>
-  getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id)));
+  (await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id));
 
 /** A native reader may request its own person card, never arbitrary identities. */
 export async function nameablePeople(_row:ArtifactRow,viewer:AccessActor|null,ids?:string[]):Promise<Record<string,PersonCard>> {

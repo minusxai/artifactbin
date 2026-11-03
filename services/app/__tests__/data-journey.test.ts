@@ -43,10 +43,14 @@ describe('a dataset under an access policy', () => {
     const o = await owner();
     const ds = await o.created({ dataset: [{ branch: 'root' }], access: 'readwrite' });
     const actor = identityForUser(o.t.userId, o.t.id);
+    const roles = ['viewer', 'signed_in', 'anonymous'];
     await setDatasetPolicy(actor, ds, {
-      version: 1,
-      enforcement: 'enabled',
-      tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'viewer', permission: { columns: '*', check: { branch: { _neq: 'blocked' } } } }] }],
+      version: 3,
+      tables: [{
+        table: { schema: 'public', name: 'rows' },
+        select_permissions: roles.map((role) => ({ role, permission: { columns: '*', filter: {}, allow_aggregations: true } })),
+        insert_permissions: roles.map((role) => ({ role, permission: { columns: '*', check: { branch: { _neq: 'blocked' } } } })),
+      }],
     }, 0);
     const reader = await mintToken('data-journey-reader');
     const raw = await mutateDataset(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: reader.token, json: { sql: 'delete from public.rows' } }), params(ds));

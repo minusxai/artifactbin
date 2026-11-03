@@ -1,7 +1,7 @@
 import type {HtmlPageVersion,HtmlBackendLink,Queryable} from '@artifactbin/contracts';
 import { liveTokenSql, type AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor, canReadArtifact, durableMutation, pinMutationContext, artifactState, type ArtifactRow, type MutationReceipt } from '@/lib/artifacts';
-import { writerFor, grantsOf, grantContext, can, attestRegisteredHtmlMutation } from '@/lib/artifact-access';
+import { writerFor, can, attestRegisteredHtmlMutation } from '@/lib/artifact-access';
 import {canWriteDataset,mutateDataset,isMutationRefused} from '@/lib/document-data';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,type HtmlBackendVersionRecord} from '@/lib/html-backends';
@@ -33,8 +33,8 @@ export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPage
    const actual=await getHtmlBackendVersion(link.backendId,link.version);if(!actual||actual.ownerId!==backend.ownerId||!registeredMutationPlan(saved,link,actual))throw unavailable();
    if(registered.builtins.some(value=>value.name==='_me.id')&&!await can(actor,'write_as_me',live))throw unavailable();
    doc=live;document={id:live.id,editId:live.edit_id,registeredHtml:attestRegisteredHtmlMutation(live.id,live.edit_id,verifyTransaction)};
-   const candidate=await getArtifactById(registered.target.datasetId);dataset=candidate&&grantsOf(candidate)?candidate:await getArtifactFor(writerFor(live),registered.target.datasetId)??undefined;
-   if(!dataset)throw unavailable();if(grantsOf(dataset))await grantContext(dataset,actor,document);
+   dataset=await getArtifactFor(writerFor(live),registered.target.datasetId)??undefined;
+   if(!dataset)throw unavailable();
    if(await canWriteDataset(dataset,actor,document))throw unavailable();
   },
   async durable(_context,key,fingerprint,work){

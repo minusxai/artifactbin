@@ -45,10 +45,7 @@ async function fixture() {
   await setDatasetPolicy(
     actor,
     datasetId,
-    {
-      version: 2,
-      allow: [{ actions: ["read", "insert"], from: { user: "$owner" } }],
-    },
+    { version: 3, tables: [] },
     0,
   );
   await changeMembership(actor, pageId, { action: "join" });
@@ -169,8 +166,7 @@ it("requires both accepted page membership and explicit writer grant, and denies
   ).json();
   expect(denied.errors?.length).toBeGreaterThan(0);
   expect(await f.rows()).toHaveLength(1);
-  // A v2 grant naming the writer no longer admits them (the compatibility is removed); the migration made
-  // such a person an editor, so the explicit grant is that share. Accepted page membership is still required.
+  // One named writer is an editor share on the dataset. Accepted page membership is still required.
   await updateSharingFor(f.actor, f.datasetId, {
     shares: [{ email: f.writer.email!, role: "editor" }],
   });

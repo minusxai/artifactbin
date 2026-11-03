@@ -7,7 +7,6 @@ import {expect,it,vi} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {ANONYMOUS_ACTOR} from '@/lib/accounts';
 import {datasetPermissionsTemplate} from '@artifactbin/utils/dataset-permissions';
-import {viewersWritePolicy} from '@artifactbin/utils';
 import {account,datasetFixture,refusal,write} from './dataset-fixture';
 
 useAppHarness();
@@ -33,9 +32,10 @@ it('enforces a stored own-rows policy: presets the writer, scopes update and del
  expect(await f.rows()).toEqual([{name:'owned',created_by:'someone'},{name:'owned',created_by:alice.id}]);
 });
 
-it('keeps the signed-out writes a v1 policy allowed, rate-limited to 30 a minute per dataset',async()=>{
- const f=await datasetFixture();
- await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[f.id,JSON.stringify(viewersWritePolicy())]);
+it('rate-limits rule-admitted signed-out writes to 30 a minute per dataset',async()=>{
+ const f=await datasetFixture(),roles=['viewer','signed_in','anonymous'];
+ const everyoneWrites={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:roles.map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:roles.map(role=>({role,permission:{columns:'*',check:{}}}))}]};
+ await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[f.id,JSON.stringify(everyoneWrites)]);
  // The limiter counts per wall-clock minute: hold the clock mid-minute so the 31 writes share one bucket.
  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-11-03T12:00:30Z'));
  try{

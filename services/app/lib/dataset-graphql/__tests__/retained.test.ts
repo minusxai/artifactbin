@@ -40,7 +40,8 @@ it('requires dataset permission separately from page readability and enforces th
  expect((await f.gql(viewer,'{ data { amount } }')).data!.data).toHaveLength(3);
  const add=(amount:number)=>f.gql(viewer,'mutation($a:Float){ insert_data_one(object:{amount:$a}){ _id } }',{a:amount});
  expect((await add(2)).data?.insert_data_one??null).toBeNull();
- await setDatasetPolicy(f.actor,f.id,{version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:['amount'],check:{amount:{_gt:0}}}}]}]},0);
+ const roles=['viewer','signed_in','anonymous'];
+ await setDatasetPolicy(f.actor,f.id,{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:roles.map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:roles.map(role=>({role,permission:{columns:['amount'],check:{amount:{_gt:0}}}}))}]},0);
  expect((await add(2)).errors).toBeUndefined();
  expect((await add(-1)).errors?.length).toBeGreaterThan(0);
  expect((await getArtifactById(f.id))!.version).toBe(2);

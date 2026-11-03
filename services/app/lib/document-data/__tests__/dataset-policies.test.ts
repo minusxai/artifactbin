@@ -28,7 +28,7 @@ async function fixture() {
   };
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
   const doc = await publish({html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
-  // Version 3 (the door refuses v1/v2 since the stored migration): what the old v1 viewer-insert entry reads as.
+  // Version 3 (the door refuses v1/v2): every rule role reads and inserts.
   const policy = {
     version: 3,
     tables: [

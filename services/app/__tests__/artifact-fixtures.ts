@@ -19,8 +19,10 @@ export async function personOfKind(kind: 'guest' | 'testuser'): Promise<Account>
 export const page = (title: string, extra: Record<string, unknown> = {}) => ({ format: 'html' as const, source: nativeHtml(`<p>${title}</p>`), meta: {}, title, ...extra });
 export const mine = (actor: Account, title = 'Doc', extra: Record<string, unknown> = {}, atCreation: Parameters<typeof createArtifact>[3] = {}) =>
   createArtifact(null, actor.userId, page(title, extra), atCreation);
-/** A stored dataset row with no rows of its own; `policy` is the v2 grant policy it carries (none: `access` only). */
+/** A stored dataset row with no rows of its own, `readwrite`; `policy` is the version 3 policy it carries (none: no stored policy). */
 export const dataset = (actor: Account, policy?: unknown, extra: Record<string, unknown> = {}) =>
-  createArtifact(null, actor.userId, { format: 'dataset', source: null, meta: {}, title: 'Data', access: policy ? undefined : 'readwrite', ...extra }, policy ? { datasetPolicy: { policy, revision: 0 } } : {});
+  createArtifact(null, actor.userId, { format: 'dataset', source: null, meta: {}, title: 'Data', access: 'readwrite', ...extra }, policy ? { datasetPolicy: { policy, revision: 0 } } : {});
+/** Version 3: every rule role (viewer, signed_in, anonymous) reads all of `public.rows`; nobody below editor writes. */
+export const readAllPolicy = () => ({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({ role, permission: { columns: '*', filter: {}, allow_aggregations: true } })) }] });
 export const sql = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => (await (await getDb()).query<T>(text, params)).rows;
 export const head = async (id: string) => (await sql<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1', [id]))[0]!;

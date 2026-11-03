@@ -12,7 +12,7 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
-import type { DocumentGraph } from '@artifactbin/contracts';
+import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import {
   newEditId,
@@ -27,7 +27,6 @@ import { artifactState } from './state';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
-import type { StoredDatasetPolicy as DatasetPolicy } from '../datasets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json, thrownMessage } from '../http';
@@ -859,7 +858,7 @@ export function revertArtifactFor(actor: AccessActor, id: string, version: numbe
 
 /** What a METADATA write may change: policy ABOUT a row, never its content. */
 export interface MetadataPatch {
-  policy?:DatasetPolicy|null;
+  policy?:DatasetPermissions|null;
   shares?:ShareEntry[];
   title?: string | null;
   description?: string | null;
@@ -903,7 +902,7 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     if(patch.shares!==undefined)Object.assign(updated,await writeShares(tx,id,patch.shares));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     if(policy!==undefined){
-     const changed=await tx.query<{dataset_policy:DatasetPolicy|null;policy_revision:number}>(`WITH changed AS (
+     const changed=await tx.query<{dataset_policy:DatasetPermissions|null;policy_revision:number}>(`WITH changed AS (
       UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1 RETURNING *
      ), audit AS (
       INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)

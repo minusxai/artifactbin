@@ -1,5 +1,5 @@
 import {groupQuota,recordGroupMutation,GroupError,getGroupRole} from '../groups';
-import { ownerScope,editorScope, grantsOf, type ArtifactRow } from '@/lib/artifact-access';
+import { ownerScope,editorScope, type ArtifactRow } from '@/lib/artifact-access';
 import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
@@ -52,7 +52,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     groupShares:(await db.query<import('@artifactbin/contracts').GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
     canPrivate: !!(row.user_id||row.group_id),
     ...(row.format === 'dataset'
-      ? { access: row.access, policyVersion:(row.dataset_policy as {version?:unknown}|null)?.version===3?3:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: [] }
+      ? { access: row.access, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: [] }
       : {}),
   };
 }

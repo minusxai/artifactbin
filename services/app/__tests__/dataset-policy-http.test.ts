@@ -1,7 +1,7 @@
 /**
  * THE AGENT POLICY DOOR for v3 dataset permissions (`GET/PUT /api/artifacts/:id/policy`, `GET …/policy/templates`):
- * owners and editors read the stored v3 policy (or the in-memory v3 reading of a stored v1/v2/no policy, with its
- * report), its generated GraphQL names and the plain-language read-back; a PUT validates against the dataset's
+ * owners and editors read the stored v3 policy (the default when none is stored; `unreadable`, with the reason, for
+ * anything else stored), its generated GraphQL names and the plain-language read-back; a PUT validates against the dataset's
  * tables and columns, reports every problem by path, and saves only with the current revision; a dry run saves
  * nothing. `configuration` is server-owned. Everyone else gets the uniform 404.
  */
@@ -70,14 +70,15 @@ it('reads a dataset with no stored policy as v3, with its GraphQL names, roles, 
   expect(await read('nOsUcH1d', f.owner)).toEqual({ status: 404, body: { error: 'not_found' } });
 });
 
-it('reads a stored v1 policy through the dual read and reports what does not carry over', async () => {
+it('answers a stored policy that is not version 3 as unreadable, naming it, and lets the owner save a version 3 policy over it', async () => {
   const f = await fixture();
   await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1', [f.id, JSON.stringify({ version: 1, enforcement: 'enabled', tables: [{ table: ROWS, insert_permissions: [{ role: 'viewer', permission: { columns: '*', check: {} } }] }] })]);
-  const { body } = await read(f.id, f.owner);
-  expect(body.source).toBe('v1');
-  expect(body.report.map((r: { code: string }) => r.code)).toEqual(['anonymous_write']);
-  expect(body.policy.tables[0].insert_permissions.map((e: { role: string }) => e.role)).toEqual(['viewer', 'signed_in', 'anonymous']);
-  expect(body.warnings.map((w: { code: string }) => w.code)).toEqual(['anonymous_write']);
+  const { status, body } = await read(f.id, f.owner);
+  expect(status).toBe(200);
+  expect(body).toMatchObject({ source: 'unreadable', policy: null, revision: 0, readBack: '' });
+  expect(body.report).toEqual([{ code: 'unreadable', message: expect.stringMatching(/^The stored dataset policy is version 1: only version 3 is read\./) }]);
+  expect(await put(f.id, f.owner, { policy: OWN_ROWS, expectedPolicyRevision: 0 })).toMatchObject({ status: 200, body: { revision: 1, policy: OWN_ROWS } });
+  expect((await read(f.id, f.owner)).body).toMatchObject({ source: 'v3', report: [], policy: OWN_ROWS });
 });
 
 it('dry-runs: every problem by path naming the role, table or column, and the read-back of a valid policy, saving nothing', async () => {

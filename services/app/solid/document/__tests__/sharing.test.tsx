@@ -202,7 +202,7 @@ it('does not disclose dependency guidance or request ACLs to ordinary readers', 
 });
 
 it('chooses a dataset\'s writes from a pressed-state group, and re-pressing the current choice sends nothing', async () => {
-  const state = { visibility: 'public', linkRole: 'viewer', shares: [], access: 'read', datasetKind: 'stored', policyVersion: 1, writtenBy: [] as Array<{ id: string; title: string | null; mutations: string[] }> };
+  const state = { visibility: 'public', linkRole: 'viewer', shares: [], access: 'read', datasetKind: 'stored', writtenBy: [] as Array<{ id: string; title: string | null; mutations: string[] }> };
   const puts: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
     if (init?.method === 'PUT') { const patch = JSON.parse(String(init.body)); puts.push(patch); Object.assign(state, patch); }

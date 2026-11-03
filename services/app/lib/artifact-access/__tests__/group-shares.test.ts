@@ -45,7 +45,7 @@ describe('group principal lattice',()=>{
   const owner=await account('mxmx_test_owner@example.com'),member=await account('mxmx_test_member@example.com');
   const first=await createGroup(owner.userId,{handle:'first_team',name:'First'}),second=await createGroup(owner.userId,{handle:'second_team',name:'Second'});
   await admitGroupMember(owner.userId,second.id,member.userId,'viewer');await setGroupLink(owner.userId,second.id,first.id,true);
-  const row=await dataset(owner,{version:2,allow:[]},{visibility:'private'});
+  const row=await dataset(owner,{version:3,tables:[]},{visibility:'private'});
   await setArtifactGroupShare(owner,row.id,first.id,'editor');
   expect(await effectiveRole(row,member)).toBe('none');
   await setArtifactGroupShare(owner,row.id,second.id,'viewer');

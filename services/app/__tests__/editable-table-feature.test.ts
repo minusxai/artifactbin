@@ -11,7 +11,7 @@ useAppHarness();
 async function fixture(){
  const owner=await mintAccountToken('native-row-controls'),actor=identityForUser(owner.userId,owner.id);
  const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{id:1,status:'backlog'},{id:1,status:'backlog'}],access:'readwrite'}}));expect(response.status).toBe(201);const {id}=await response.json();
- await setDatasetPolicy(actor,id,{version:2,allow:[{actions:['read','insert','update','delete'],from:{user:owner.userId}}]},0);
+ await setDatasetPolicy(actor,id,{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'viewer',permission:{columns:'*',filter:{},allow_aggregations:true}}]}]},0);
  const link=liveLink(id,'tasks');
  const rows=(await linkedGql(actor,link,'{ tasks { _id status } }')).data!.tasks as Array<{_id:string;status:string}>;
  const update=(rowId:string,set:Record<string,unknown>={status:'active'})=>linkedGql(actor,link,'mutation($id: ID!, $set: tasks_set_input!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: $set) { _id status } }',{variables:{id:rowId,set}});
