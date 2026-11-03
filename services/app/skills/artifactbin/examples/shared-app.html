@@ -147,14 +147,15 @@ function render(){if(!rows.length)return;
   void drawCharts(list);
 }
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-async function chart(key,values,mark,x,color,y){
+async function chart(key,values,mark,x,color,y,[xTitle,colorTitle,yTitle]){
   views[key]?.finalize();const ink=token('--foreground'),sumY={aggregate:'sum',field:y,
     type:'quantitative'},sort=key==='trend'?null:'ascending'; // trend: data (month) order
   const spec=compile({width:'container',height:200,autosize:{type:'fit',contains:'padding'},
     background:'transparent',data:{values},mark:{type:mark,point:mark==='line'},encoding:{
       x:{field:x,type:'ordinal',sort,title:null,axis:{labelAngle:0}},color:{field:color,
         type:'nominal',title:null},y:{...sumY,title:null,axis:{format:',.0f'}},tooltip:[{field:x,
-        type:'nominal'},{field:color,type:'nominal'},{...sumY,format:',.2f'}]},config:{view:{
+        type:'nominal',title:xTitle},{field:color,type:'nominal',title:colorTitle},
+        {...sumY,title:yTitle,format:',.2f'}]},config:{view:{
       stroke:null},axis:{labelColor:ink,domainColor:ink,tickColor:ink,gridColor:token('--border')},
       legend:{labelColor:ink,titleColor:ink,orient:'bottom'},range:{category:[token('--primary'),
         token('--chart-2'),token('--chart-3'),token('--chart-4'),token('--chart-5'),ink]}}}).spec;
@@ -163,7 +164,8 @@ async function chart(key,values,mark,x,color,y){
 }
 const drawCharts=list=>Promise.all([chart('trend',months().flatMap(m=>[{month:m,series:'Spent',
   value:sum(inMonth(m))},{month:m,series:'Budget',value:budget()}]),'line','month','series',
-  'value'),chart('payer',list,'bar','payer','category','amount')]);
+  'value',['Month','Series','Amount']),chart('payer',list,'bar','payer','category','amount',
+  ['Paid by','Category','Amount'])]);
 const applyDark=dark=>{if(typeof dark==='boolean')document.documentElement.dataset.afDark=dark;
   $('#dark').setAttribute('aria-pressed',document.documentElement.dataset.afDark==='true');};
 // Local state holds this viewer's saved choices from the first read; write only on a viewer action.
