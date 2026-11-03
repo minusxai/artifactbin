@@ -3,7 +3,7 @@
 `lib/dataflow` turns a document's `<Helmet>` declarations into a `CompiledDataflow` and answers every
 pure question about one: reference syntax (`$name`, `ref:`), built-ins, placement, mutation requests,
 URL values, reference data and the publish-time reference checks. Both realms use it: the server,
-the islands, the story runtime and the CLI.
+the islands and the story runtime.
 
 - It sits below the recorded cycle and imports only itself, `lib/jsx`, `lib/validation` (types),
   `@artifactbin/contracts`, `@artifactbin/utils` and `@artifactbin/sql`. `npm run validate` fails

@@ -24,7 +24,7 @@ describe('main validation', () => {
     const ci = workflow('ci.yml');
     expect(ci.on.push.branches).toEqual(['main']);
     expect(ci.on).not.toHaveProperty('pull_request');
-    for (const job of [ci.jobs.plan, ci.jobs.test, ci.jobs['cli-pack']]) expect(admitted(job.if, 'push', '')).toBe(true);
+    for (const job of [ci.jobs.plan, ci.jobs.test]) expect(admitted(job.if, 'push', '')).toBe(true);
     expect(workflow('runner-design.yml').on).not.toHaveProperty('pull_request');
   });
   it('runs every deployment gate and the server pin on each push to main', () => {

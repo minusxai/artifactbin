@@ -26,10 +26,6 @@ export default {
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.
         'scripts/fixtures/**/*.{mjs,jsx}',
-        // Run by minusxai/artifactbin-server's CI (services/app/__tests__/downstream-script-paths.test.ts).
-        'scripts/gate-cli-conformance.mjs', 'scripts/ci/link-npm-acceptance.mjs',
-        // The CLI retirement build: @afbin/cli's npm bin (services/cli/package.json), packed by ci.yml `cli-pack`.
-        'services/cli/bin/afbin.mjs',
         // Imported by the evals repository (evals/lib re-exports them).
         'scripts/lib/{credential,env,slug}.ts',
       ],
@@ -100,7 +96,5 @@ export default {
   ignoreIssues: {
     // A route answers HEAD (or another method) with the same handler: `export { GET as HEAD }`.
     'services/app/app/**/route.ts': ['duplicates'],
-    // Packages the test writes into a temporary node_modules and requires.
-    'scripts/__tests__/npm-acceptance-tooling.test.mjs': ['unlisted'],
   },
 };

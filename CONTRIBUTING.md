@@ -54,8 +54,8 @@ npm run dev                              # then open http://app.lvh.me:<port>
 ```
 
 `lvh.me` and every name under it resolve to 127.0.0.1 in public DNS, so no hosts-file edit is needed;
-the login outbox and the CLI's device mint treat them as loopback. Node never asks DNS for them (nor for
-`localhost` and its names): the CLI, the server and the gate tooling resolve them to loopback themselves
+the login outbox treats them as loopback. Node never asks DNS for them (nor for
+`localhost` and its names): the server and the gate tooling resolve them to loopback themselves
 (`@artifactbin/utils/node/loopback-lookup`), and the gates' WebKit connects through a loopback proxy, so a
 machine or container without a network still reaches its own server. `npm run setup -- --pages-host <host>`
 names another host (production over https: preferably a registrable domain of its own, such as `example-content.com`). The dev

@@ -16,10 +16,10 @@ OSS combines authentication, the app and local services in one host. It contains
 
 The app's `createAppHost` entry does not open a socket or load native engines. The production build resolves shared imports from the pinned submodule and installs each service's external dependencies independently. SQL and browser service images receive their respective engines; the app image receives neither. Production copies the shared reader/editor/runtime assets into its app image.
 
-Customization uses existing narrow interfaces: HTTP/local service adapters, authentication session providers, event sinks, a document-editor policy over authenticated claims, and mutation extension hooks. Shared artifact permissions remain authoritative. Production does not import the CLI executable or its client configuration.
+Customization uses existing narrow interfaces: HTTP/local service adapters, authentication session providers, event sinks, a document-editor policy over authenticated claims, and mutation extension hooks. Shared artifact permissions remain authoritative.
 
 For a coordinated change, commit the toolkit change, update production's submodule pin, then run production checks. The production commit and exact toolkit SHA identify the build. Development may test a local submodule branch before committing that pin; CI always checks the committed revision.
 
 ## Verification
 
-The packaged npm and standalone CLI forms run the same conformance scenarios against a host. Production independently builds each source-based service image, checks that the app dependency closure excludes Playwright and any native SQL engine, and runs its real Postgres/container conformance checks.
+Production independently builds each source-based service image, checks that the app dependency closure excludes Playwright and any native SQL engine, and runs its real Postgres/container conformance checks.

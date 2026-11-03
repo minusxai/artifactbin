@@ -76,7 +76,7 @@ no Node imports, so the server, the runtime bundle and the offline file run the 
 `loadSqlite(wasmBytes?)` answers an engine whose `run`/`mutate`/`dryRun`/`dryRunMutations` take already-clamped
 bounds, `analyze(sql, relations)` answers a `StatementAnalysis`, and `open()` a guarded database for callers that
 orchestrate their own statements. `createSqliteSql(caps)` in `./sqlite` is the `SqlService` over it, with the same
-caps rule as the server pool. It is the only engine: the app, the CLI and the offline file all run it.
+caps rule as the server pool. It is the only engine: the app and the offline file both run it.
 
 - **Tables** load by `{schema, table, columns, rows}`: `main` for document tables and query results, an attached
   in-memory schema per import (`bookings.rows`). Columns are STRICT (`string`/`date`/`timestamp`/`user` TEXT,
