@@ -32,6 +32,28 @@ interface Prepared<Program, Origin> {
   envelope: Envelope<Program, Origin>;
 }
 export const pageSourceDigest = (html: string) => createHash('sha256').update(html).digest('hex');
+/**
+ * KEPT FOR EXISTING PAGES ONLY (118 live pages on 3 Nov 2026 serve registered queries or mutations). No page gains a
+ * registered program any more: a fork would copy one onto a new page (planHtmlClone) and a revert could restore one to
+ * a head that no longer carries it (rebind's `held`); both refuse with this error. A page that carries one today
+ * keeps serving, saving and re-binding it until a migration removes them.
+ */
+export const isRegisteredPageProgram = (compiled: string): boolean => compiled.startsWith('!registered-page-');
+/** KEPT UNTIL THE REGISTERED-PAGE MIGRATION: the names among `links` (a locked head's) that are registered programs of
+ * that page, so a save whose HTML still declares them with the removed af-backend rel keeps and re-binds them. */
+export async function registeredProgramNames(tx: Queryable, links: readonly HtmlBackendLink[]): Promise<Set<string>> {
+  const names = new Set<string>();
+  for (const link of links) if ((await backendRecord(tx, link))?.compiled.startsWith('!registered-page-')) names.add(link.name);
+  return names;
+}
+export class NewRegistrationRefused extends Error {
+  readonly body: { error: 'registered_programs_retired'; namespace: string; details: string[] };
+  constructor(readonly namespace: string) {
+    super(`'${namespace}' would add a registered query or mutation program to a page that has none`);
+    this.body = { error: 'registered_programs_retired', namespace, details: [`Pages no longer register queries or mutations: ${this.message}. ` +
+      `Read and write data through a dataset and its generated GraphQL API, or supply a <link rel="af-resolver"> backend in resolverSources.`] };
+  }
+}
 const digest = (value: unknown) => pageSourceDigest(JSON.stringify(value));
 const contentVersion = (source: string, typeDefs: string, compiled: string) => digest([source, typeDefs, compiled, []]);
 const backendRecord = async (tx: Queryable, link: HtmlBackendLink) => (await tx.query<HtmlBackendVersionRecord>(
@@ -39,7 +61,8 @@ const backendRecord = async (tx: Queryable, link: HtmlBackendLink) => (await tx.
   [link.backendId, link.version],
 )).rows[0];
 
-/** Immutable registered backend lifecycle, used only by the query and mutation adapters.
+/** Immutable registered backend lifecycle, used only by the query and mutation adapters (the publication doors import
+ * only isRegisteredPageProgram and NewRegistrationRefused above).
  * Adapters own program validation, SDL, required provenance and their public rebind error.
  * Every database operation uses the supplied transaction; no independent DB access or effects. */
 export function registeredPageLifecycle<Program, Origin extends Provenance>(adapter: {
@@ -121,14 +144,24 @@ export function registeredPageLifecycle<Program, Origin extends Provenance>(adap
   }
 
   type Rebind = { ownerId: string; prepared: Prepared<Program, Origin> };
+  const carriesRegistration = async (tx: Queryable, link: HtmlBackendLink, held: readonly HtmlBackendLink[]) => {
+    for (const head of held) {
+      if (head.backendId !== link.backendId) continue;
+      if (head.version === link.version || (await backendRecord(tx, head))?.compiled.startsWith(prefix)) return true;
+    }
+    return false;
+  };
   /** Under the page write lock, before writing next. Program/provenance come from the original
    * migration, not HTML: declared namespaces with no replacement source carry forward unchanged.
-   * A failed verification refuses the save, rather than publishing a namespace that silently 404s. */
-  async function rebind(tx: Queryable, next: BoundPage, carried: readonly HtmlBackendLink[], pageOwnerId: string | null) {
+   * A failed verification refuses the save, rather than publishing a namespace that silently 404s.
+   * `held` is the locked head's backend links: a program is re-bound only where the head carries a registered
+   * program under the same backend ID today (NewRegistrationRefused otherwise, so a revert cannot restore one). */
+  async function rebind(tx: Queryable, next: BoundPage, carried: readonly HtmlBackendLink[], pageOwnerId: string | null, held: readonly HtmlBackendLink[]) {
     const links: HtmlBackendLink[] = [], rebinds: Rebind[] = [];
     for (const link of carried) {
       const backend = await backendRecord(tx, link);
       if (!backend?.compiled.startsWith(prefix)) { links.push(link); continue; }
+      if (!await carriesRegistration(tx, link, held)) throw new NewRegistrationRefused(link.name);
       let prepared: Prepared<Program, Origin>;
       try {
         const envelope = verifiedEnvelope(next.pageId, link, backend)!;
@@ -160,7 +193,7 @@ export function registeredPageLifecycle<Program, Origin extends Provenance>(adap
       if (envelope && envelope.pageVersion !== head.version) stale.push(link);
     }
     if (!stale.length) return null;
-    const planned = await rebind(tx, page, stale, head.user_id);
+    const planned = await rebind(tx, page, stale, head.user_id, stale);
     const links = all.map(link => (link.kind === 'backend' && planned.links.find(next => next.name === link.name)) || link);
     return { links, async commit() {
       await commitRebinds(tx, page, planned.rebinds);

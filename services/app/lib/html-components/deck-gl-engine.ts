@@ -1,7 +1,12 @@
 /**
- * Internal: lazily loaded WebGL engine behind af-deck-gl (deck.gl plus optional MapLibre basemap).
- * Used by: deck-gl.ts via import('./deck-gl-engine'). The build re-bundles this file as a closed
- *   graph, so its helpers live in deck-gl-model.ts, never in a new module.
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with deck-gl.ts, deck-gl-model.ts,
+ * ../viz/deck-engine-core.ts, their tests, the `deck-gl` entry of hosted.json `legacy`, the deck-gl-engine path in
+ * scripts/lib/html-components-build.mjs and the deck-engine-core type re-export in lib/viz/index.ts once no live page
+ * uses af-deck-gl.
+ *
+ * The WebGL engine behind af-deck-gl (deck.gl plus an optional MapLibre basemap), loaded lazily by deck-gl.ts. The
+ * build re-bundles this file as a closed graph, so its helpers live in deck-gl-model.ts, never in a new module.
  */
 import { Deck } from "@deck.gl/core";
 import { MapLibreOverlay } from "@deck.gl/maplibre";
@@ -12,13 +17,12 @@ import {
 } from "../viz/deck-engine-core";
 import {
   DeckViewModel, DECK_CONTROLS, basemapMode, controlButton, createDeckChrome, legendEntry,
-  tooltipText, type DeckGLOptions,
+  tooltipText, type DeckGLAdapter, type DeckGLOptions,
 } from "./deck-gl-model";
-import type { DeckGLAdapter } from "./deck-gl";
 
 /** Street styles and tiles are external network resources.
  * basemap:none and supplied boundaries need no map service. */
-export const DECK_BASEMAP_NETWORK_NOTICE =
+const DECK_BASEMAP_NETWORK_NOTICE =
   "Street basemap uses external OpenFreeMap tiles.";
 export const DECK_BASEMAP_UNAVAILABLE =
   "Street map unavailable: this browser has no WebGL2.";

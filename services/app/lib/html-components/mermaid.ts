@@ -1,27 +1,25 @@
 /**
- * <af-mermaid>: legacy wrapper for a Mermaid diagram (new diagrams: references/diagrams.md);
- *   bundled renderer with visible errors and an image fallback.
- * Usage: import '/af/components/mermaid.js';  (legacy, served by URL only;
- *   this .ts is the readable contract)
- * Props: code, title, colorMode (auto|light|dark), storedImage={src,type,width,height}; retry().
- * Examples:
- *   document.querySelector('af-mermaid').code="graph TD; A-->B";
- * Gotchas: the renderer loads lazily on first draw; a stored image is dropped when the source,
- *   theme or font changes.
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with ../mermaid-images/reader-draw.ts,
+ * ../mermaid-images/mermaid-render.ts, ../mermaid-images/mermaid-fonts.ts, ../mermaid-images/svg-text.ts,
+ * ../html-component-specs/mermaid-source.ts, their tests, the `mermaid` entry of hosted.json `legacy` and the reader-draw path in
+ * scripts/lib/html-components-build.mjs once no live page uses af-mermaid.
+ *
+ * <af-mermaid>: the element existing pages set `code` (or the code attribute, or literal text), title, colorMode and
+ * storedImage on. It draws lazily through reader-draw, shows refusals and errors visibly, and drops a stored image
+ * when the source, theme or font changes.
  */
 import { registerComponent } from './register-component';
 import type { MermaidImage } from '../mermaid-images';
-/** Property code takes precedence over the code attribute, then initial literal text.
- * A stored image belongs to the current source; source/theme/font changes invalidate it. */
-export interface MermaidContract { code: string; title: string; colorMode: 'light' | 'dark' |
-  'auto'; storedImage: MermaidImage | null; retry(): void }
 import { mermaidSourceError } from '../html-component-specs/mermaid-source';
 /** Intentional lazy browser engine boundary; bundled from the pinned reader renderer,
  * never a CDN. */
 const draw = async (element:HTMLElement,code:string,dark:boolean,live:()=>boolean) => {
   const renderer=await import('../mermaid-images/reader-draw');return live(
   ) ? renderer.drawForReader(element,code,dark,live) : null;};
-export class AfMermaid extends HTMLElement implements MermaidContract {
+/** Property code takes precedence over the code attribute, then initial literal text.
+ * A stored image belongs to the current source; source/theme/font changes invalidate it. */
+export class AfMermaid extends HTMLElement {
  static observedAttributes=['code','title','color-mode'];
  private source: string | undefined;
  private literalSource = "";

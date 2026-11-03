@@ -1,10 +1,13 @@
 /**
- * THE `<DeckGL>` ENGINE'S FRAMEWORK-FREE HALF: everything the map draws that is not a view. Every layer
- * is built from the lib/jsx/deck-spec contract (allowlisted types and props, interpreted accessors),
- * never from the authored JSON directly. The compiled page's Solid island (lib/islands/kit/embed) draws it,
- * so a map is the same map on every reader.
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with ../html-components/deck-gl.ts,
+ * ../html-components/deck-gl-engine.ts, ../html-components/deck-gl-model.ts, their tests, the `deck-gl` entry of hosted.json `legacy`, the deck-gl-engine path in
+ * scripts/lib/html-components-build.mjs and the deck-engine-core type re-export in lib/viz/index.ts once no live page
+ * uses af-deck-gl.
  *
- * Browser-only (deck.gl and h3-js): imported by the lazily loaded engines, never by a first paint.
+ * af-deck-gl's framework-free engine half: everything the map draws that is not a view. Every layer is built from
+ * the lib/html-component-specs/deck-spec contract (allowlisted types and props, interpreted accessors), never from
+ * the authored JSON directly. Browser-only (deck.gl and h3-js): imported only by the lazily loaded deck-gl-engine.
  */
 import { WebMercatorViewport, type MapViewState, type PickingInfo } from '@deck.gl/core';
 import { ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, PolygonLayer } from '@deck.gl/layers';

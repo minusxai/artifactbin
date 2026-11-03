@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {htmlPageDeclarations} from '../index';
+import {htmlPageDeclarations,htmlRetiredBackendNames} from '../index';
 it('declares live by default and records an explicit pinned dataset revision',()=>{
  expect(htmlPageDeclarations('<link rel="af-dataset" data-af-name="live" href="ref:abc123"><link rel="af-dataset" data-af-name="old" href="ref:def456" data-af-mode="pinned" data-af-revision="2">').datasets).toEqual([{kind:'dataset',name:'live',datasetId:'abc123',mode:'live'},{kind:'dataset',name:'old',datasetId:'def456',mode:'pinned',revision:'2'}]);
 });
@@ -12,6 +12,10 @@ it('refuses fake origins, invalid IDs, modes and pinned revisions',()=>{
 it('declares resolvers with af-resolver only: the removed af-backend rel declares nothing',()=>{
  expect(htmlPageDeclarations('<link rel="af-resolver" data-af-name="budget" href="./budget.ts"><link rel="af-resolver" data-af-name="garden" href="./garden.ts">').backends).toEqual(['budget','garden']);
  expect(htmlPageDeclarations('<link rel="af-backend" data-af-name="garden" href="./garden.ts">').backends).toEqual([]);
+});
+it('lists the retired af-backend names separately, for the registered pages that still declare them so',()=>{
+ expect(htmlRetiredBackendNames('<link rel="af-backend" data-af-name="queries" href="https://x/api/artifacts/A/graphql"><link rel="af-resolver" data-af-name="budget"><link rel="af-backend" data-af-name="actions_1"><link rel="af-backend" data-af-name="queries"><link rel="af-backend af-dataset" data-af-name="db">')).toEqual(['queries','actions_1']);
+ expect(htmlRetiredBackendNames('<link rel="af-resolver" data-af-name="budget">')).toEqual([]);
 });
 it('refuses one resolver name declared twice, or one link declaring two kinds',()=>{
  expect(()=>htmlPageDeclarations('<link rel="af-resolver" data-af-name="db"><link rel="af-resolver" data-af-name="db">')).toThrow('Duplicate');

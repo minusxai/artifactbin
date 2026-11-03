@@ -1,7 +1,12 @@
 /**
- * Internal: options type, view/generation state and framework-free DOM chrome for af-deck-gl.
- * Used by: deck-gl.ts and deck-gl-engine.ts. Type-only imports from deck-engine-core keep deck.gl
- *   out of deck-gl.js; the engine passes formatters in instead.
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with deck-gl.ts, deck-gl-engine.ts,
+ * ../viz/deck-engine-core.ts, their tests, the `deck-gl` entry of hosted.json `legacy`, the deck-gl-engine path in
+ * scripts/lib/html-components-build.mjs and the deck-engine-core type re-export in lib/viz/index.ts once no live page
+ * uses af-deck-gl.
+ *
+ * af-deck-gl's options type, view/generation state and framework-free DOM chrome. Type-only imports from
+ * deck-engine-core keep deck.gl out of deck-gl.js; the engine passes formatters in instead.
  */
 import type { MapViewState, Feature, Row, ColorScale } from "../viz";
 export interface DeckGLOptions {
@@ -16,6 +21,11 @@ export interface DeckGLOptions {
   height?: number;
   /** Geometry supplied by the author or bundled with the document; never fetched implicitly. */
   boundaries?: Readonly<Record<string, Feature[]>>;
+}
+/** What deck-gl.ts drives once the lazy engine has mounted. */
+export interface DeckGLAdapter {
+  update(options: DeckGLOptions): void;
+  dispose(): void;
 }
 /** Fit follows data and size until a reader gesture; reset resumes fitting. */
 export class DeckViewModel {
@@ -45,7 +55,7 @@ export class DeckGeneration {
   }
 }
 /** Map chrome CSS scoped to `af-deck-gl figure[part=map]`; tokens fall back to built-ins. */
-export const DECK_GL_CSS =
+const DECK_GL_CSS =
   '\n    af-deck-gl figure[part="map"] .maplibregl-canvas{position:absolute;left:0;top:0}\n' +
   '    af-deck-gl figure[part="map"] .maplibregl-canvas-container{position:absolute;inset:0}\n' +
   '    af-deck-gl figure[part="map"] .maplibregl-interactive{cursor:grab}\n' +

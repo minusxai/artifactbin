@@ -43,12 +43,16 @@ import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession
 import { runWithRequest } from '@/lib/platform';
 import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
+import { LEGACY_CORE_PATH } from '@/lib/html-page';
 import { compressDynamic } from './content-encoding';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
 /** Public, content-addressed (or static) bytes any origin may load: the runtime, fonts, boundaries, images. */
-const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph)\.js$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:core\.js|(?:apollo|reader)\/[a-f0-9]{64})$|^\/af\/styles\.css$/;
+const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph)\.js$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:apollo|reader)\/[a-f0-9]{64}$|^\/af\/styles\.css$/;
+
+/** STATIC, or the legacy core address existing pages still load (lib/html-page LEGACY_CORE_PATH). */
+const isStatic = (pathname: string): boolean => STATIC.test(pathname) || pathname === LEGACY_CORE_PATH;
 
 const NO_STORE = { 'cache-control': 'no-store' };
 
@@ -177,7 +181,7 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
     const hostId = idFromPagesHost(host, site);
     const originId = idFromPagesOrigin(origin, site);
     if (hostId) {
-      if (STATIC.test(pathname)) return next();
+      if (isStatic(pathname)) return next();
       // Its own origin, or none (a same-origin GET): any other caller is refused before a cookie is read.
       if (origin !== null && originId !== hostId) return forbidden(origin, `may not call the document at ${pagesOriginFor(hostId, site)}`);
       if (pathname === '/') return page(request, hostId);
@@ -193,7 +197,7 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
       return notFound();
     }
     if (originId) {
-      if (STATIC.test(pathname)) return next();
+      if (isStatic(pathname)) return next();
       const target = /^\/a\/([^/]+)\//.exec(pathname)?.[1];
       if (target && target !== originId) return forbidden(origin, `may not call the document ${target}`);
       if (doorOf(pathname, originId)) return door(c, next, originId, origin);

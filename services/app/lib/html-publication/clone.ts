@@ -1,6 +1,7 @@
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import type {PreparedHtmlBackend,HtmlBackendVersionRecord} from '@/lib/html-backends';
+import {isRegisteredPageProgram,NewRegistrationRefused} from '@/lib/registered-page-lifecycle';
 /** A clone contains code and authorized references only; runtime stores and credentials never cross pages. */
 export interface HtmlClonePlan {htmlBackends:readonly PreparedHtmlBackend[];htmlDatasets:readonly HtmlDatasetLink[]}
 export interface HtmlClonePorts {
@@ -13,6 +14,8 @@ export async function planHtmlClone(actor:AccessActor,pageId:string,links:readon
   if(link.kind==='dataset'){await ports.authorizeDataset(actor,link);htmlDatasets.push(link.mode==='pinned'?{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'pinned',revision:link.revision}:{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'live'});continue;} // Only the link's own fields: a stored link may carry retired keys.
   const backend=await ports.backend(link.backendId,link.version);
   if(!backend||backend.pageId!==pageId||backend.name!==link.name)throw Error('backend_link_mismatch');
+  // A registered program is bound to the original page: a copy would give a new page one (no new registrations).
+  if(isRegisteredPageProgram(backend.compiled))throw new NewRegistrationRefused(link.name);
   // Declaration names are immutable code metadata; secret rows are scoped to the fresh backend ID.
   // Never spread owner authority, credential values, or store state.
   htmlBackends.push({name:link.name,source:backend.source,typeDefs:backend.typeDefs,compiled:backend.compiled,...(backend.secretBindings?{secretBindings:[...backend.secretBindings]}:{}),...(backend.secretHosts?{secretHosts:{...backend.secretHosts}}:{})});

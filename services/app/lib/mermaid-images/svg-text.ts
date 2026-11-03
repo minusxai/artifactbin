@@ -1,4 +1,10 @@
 /**
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with ../html-components/mermaid.ts, reader-draw.ts,
+ * mermaid-render.ts, mermaid-fonts.ts, ../html-component-specs/mermaid-source.ts, their tests, the `mermaid` entry of hosted.json `legacy` and the reader-draw path in
+ * scripts/lib/html-components-build.mjs once no live page uses af-mermaid.
+ */
+/**
  * WHICH FONT FILES A MERMAID DRAWING NEEDS TO CARRY — pure, shared by the
  * harvest (lib/mermaid-images/fonts: subsets of the bundled files) and the
  * kit's engine path in the browser (lib/mermaid-images/mermaid-fonts: the files
