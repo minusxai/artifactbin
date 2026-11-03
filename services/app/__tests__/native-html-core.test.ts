@@ -4,6 +4,7 @@ import {GET as apollo} from '@/app/af/v1/apollo/[digest]/route';
 import {expect,it} from 'vitest';
 import {Hono} from 'hono';
 import {GET,HEAD} from '@/app/af/core.js/route';
+import {GET as legacyCore} from '@/app/af/v1/core.js/route';
 import {GET as flatApollo} from '@/app/af/apollo.js/route';
 import {GET as flatReader,HEAD as flatReaderHead} from '@/app/af/reader.js/route';
 import {GET as flatMorph} from '@/app/af/morph.js/route';
@@ -18,10 +19,12 @@ it('serves the documented public core with credential-free conditional GET and H
  const request=new Request('https://app.example.test/af/core.js',{headers:{authorization:'Bearer ignored-test-value',cookie:'ignored=test'}});const get=await GET(request);expect(get.status).toBe(200);expect(get.headers.get('content-type')).toContain('javascript');expect(get.headers.get('set-cookie')).toBeNull();expect(get.headers.get('cache-control')).toBe('no-cache');const source=await get.text();expect(source).toContain('@afbin/apollo');expect(()=>new Function(source)).not.toThrow();const tag=get.headers.get('etag')!;expect(tag).toBeTruthy();
  const head=await HEAD(new Request(request,{method:'HEAD'}));expect(head.status).toBe(200);expect(await head.text()).toBe('');expect(head.headers.get('etag')).toBe(tag);expect(Number(head.headers.get('content-length'))).toBe(new TextEncoder().encode(source).byteLength);
  const unchanged=await GET(new Request(request,{headers:{'if-none-match':tag}}));expect(unchanged.status).toBe(304);expect(await unchanged.text()).toBe('');expect(unchanged.headers.get('etag')).toBe(tag);
+ // The pre-D17 address stays an alias for pages and caches that still name it.
+ const legacy=await legacyCore(new Request('https://app.example.test/af/v1/core.js'));expect(await legacy.text()).toBe(source);expect(legacy.headers.get('etag')).toBe(tag);
 });
 it('permits only the exact public runtime path on a page runner origin',async()=>{
- const site=pagesSiteFor('pages.example.test','https://app.example.test')!;const origin=pagesOriginFor('ABC123',site);const app=new Hono();app.use('*',pagesHost(site));app.get('/af/core.js',c=>GET(c.req.raw));
- expect((await app.request(origin+'/af/core.js')).status).toBe(200);expect((await app.request(origin+'/af/v1/core.js')).status).toBe(404);expect((await app.request(origin+'/af/core.js/private')).status).toBe(404);
+ const site=pagesSiteFor('pages.example.test','https://app.example.test')!;const origin=pagesOriginFor('ABC123',site);const app=new Hono();app.use('*',pagesHost(site));app.get('/af/core.js',c=>GET(c.req.raw));app.get('/af/v1/core.js',c=>GET(c.req.raw));
+ expect((await app.request(origin+'/af/core.js')).status).toBe(200);expect((await app.request(origin+'/af/v1/core.js')).status).toBe(200);expect((await app.request(origin+'/af/core.js/private')).status).toBe(404);
 });
 
 it('serves the flat runtime modules at stable addresses, revalidated by ETag, each guarded against another build\'s core',async()=>{

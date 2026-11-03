@@ -19,9 +19,10 @@ const MAX_BYTES=8_000_000;
 const RUNTIME_MODULES={core:'/af/core.js',apollo:'/af/apollo.js',reader:'/af/reader.js',chrome:
   '/af/chrome.js',portableEngine:'/af/portable.js',morph:'/af/morph.js'};
 
-/** True for a path this module may answer. */
-export const isPlatformModulePath=pathname=>RUNTIME.test(pathname)||LIBRARY.test(pathname)||
-  COMPONENT.test(pathname);
+/** True for a path this module may answer. `/af/v1/core.js` is kept: saved pages still load it
+ * (see services/app/app/af/v1/core.js/route.ts). */
+export const isPlatformModulePath=pathname=>pathname==='/af/v1/core.js'||RUNTIME.test(pathname)||
+  LIBRARY.test(pathname)||COMPONENT.test(pathname);
 
 /** A source checkout's own build outputs (absent in the installed archive). */
 async function checkoutModule(pathname){
@@ -62,6 +63,7 @@ if(bytes.length>MAX_BYTES||!check(response.headers.get('content-type')??''))thro
  /** The bytes of one platform module path, or null when the path is not one or neither source
   * has it. */
  async function module(pathname){
+  if(pathname==='/af/v1/core.js')pathname='/af/core.js';
   if(!isPlatformModulePath(pathname))return null;
   return explicit.get(pathname)??await checkoutModule(pathname)??await remote(pathname,javascript);
  }

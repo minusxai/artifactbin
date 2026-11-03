@@ -136,7 +136,7 @@ test('platform modules come only from closed /af/, /libraries/ and /af/component
  const server=await withHttpServer((incoming,reply)=>{requests.push(incoming.url);const body=files[incoming.url];reply.writeHead(body===undefined?404:200,{'content-type':incoming.url.endsWith('.json')?'application/json':'text/javascript'});reply.end(body??'missing');});
  try{
   const platform=platformModules({origin:server.base});
-  assert.equal(String(await platform.module('/af/core.js')),'core()');assert.equal(await platform.module('/af/v1/core.js'),null);
+  assert.equal(String(await platform.module('/af/core.js')),'core()');assert.equal(String(await platform.module('/af/v1/core.js')),'core()');
   assert.equal(String(await platform.module('/af/components/chunk-abc.js')),'export {};');
   for(const refused of ['/af/../secret.js','/af/components/nested/x.js','/libraries/fixture/index.js','/index.html','/af/styles.css'])assert.equal(await platform.module(refused),null,refused);
   assert.equal(await platform.module('/af/components/absent.js'),null);
