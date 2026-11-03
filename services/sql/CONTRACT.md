@@ -76,7 +76,8 @@ a miss answers every query `{ rowsRequired: true }` and the caller resends the s
 The engine derives an entry's identity from the default schema, every table's schema, name and columns, every
 model's SQL and every key — a view with fewer columns, other rows or an emptied model never reads another's
 entry. Keys are content addresses, so nothing is invalidated: a write makes a new key and the old entry ages out.
-Each read runs in a transaction that is rolled back, so a kept database stays exactly as built.
+Each read runs in a transaction that is rolled back, so a kept database stays exactly as built. The worker pool
+sends a keyed read to the thread its database was last sent to when that thread is idle, else to any idle one.
 `__tests__/prepared-cache.test.ts` covers hits, resends, the byte cap and isolation, over every shape.
 
 

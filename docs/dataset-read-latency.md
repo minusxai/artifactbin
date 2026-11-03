@@ -40,3 +40,32 @@ fresh SQLite database. Times are in ms.
 | owner aggregate | 28 | 28 | 30 | 56 | 78 |
 | viewer list | 13 | 13 | 14 | 55 | 181 |
 | viewer aggregate | 26 | 17 | 32 | 43 | 57 |
+
+## After: prepared databases, keys first, pool affinity, 2026-11-04
+
+Main `606b8f219` plus this change (the app sending keys first and the pool's affinity), the same machine and
+session, same options. A repeated read sends each table's content key alone; the engine thread that prepared
+the database for those keys answers from it, so the object is neither read, parsed, filtered, sent nor loaded
+again. Cold still builds (and includes thread start); the 8-concurrent p95 includes the first read on threads
+the batch starts, which build their own copy.
+
+### pool (RSS after: 562 MB)
+
+| read | cold | warm p50 | warm p95 | concurrent p50 | concurrent p95 |
+|---|---|---|---|---|---|
+| owner list | 226 | 3.6 | 4.0 | 10 | 234 |
+| owner aggregate | 3.7 | 3.3 | 3.6 | 3.6 | 6.9 |
+| viewer list | 12 | 1.6 | 1.7 | 3.7 | 18 |
+| viewer aggregate | 1.1 | 1.0 | 1.1 | 1.7 | 2.3 |
+
+### http (RSS after: 572 MB)
+
+| read | cold | warm p50 | warm p95 | concurrent p50 | concurrent p95 |
+|---|---|---|---|---|---|
+| owner list | 251 | 4.2 | 5.1 | 16 | 244 |
+| owner aggregate | 4.3 | 3.7 | 4.1 | 6.1 | 10 |
+| viewer list | 14 | 2.2 | 2.5 | 5.3 | 31 |
+| viewer aggregate | 1.6 | 1.4 | 1.5 | 2.4 | 3.5 |
+
+Warm p50 of the owner's 5,000-row list: 25 → 3.6 ms in process, 29 → 4.2 ms over HTTP; the viewer's
+11 → 1.6 ms and 13 → 2.2 ms.

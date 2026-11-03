@@ -18,7 +18,7 @@ import { Worker } from 'node:worker_threads';
 import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput, SqlService } from '@artifactbin/contracts';
 import { queryBounds } from './bounds';
 import { DEFAULT_CAPS, type SqlCaps } from './caps';
-import type { ReadBounds, WriteBounds } from './sqlite/index';
+import { preparedKey, type ReadBounds, type WriteBounds } from './sqlite/index';
 
 export type PoolRequest =
   | { id: number; method: 'run'; input: RunInput; bounds: ReadBounds }
@@ -51,7 +51,10 @@ function workerEntry(): { url: URL; execArgv?: string[] } {
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-interface Task { request: PoolRequest; deadlineMs: number; settle: (answer: PoolAnswer) => void }
+/** `prepared`: the identity of the catalog database a keyed read mounts (./sqlite/prepared), for affinity. */
+interface Task { request: PoolRequest; deadlineMs: number; prepared: string | null; settle: (answer: PoolAnswer) => void }
+/** How many prepared databases the pool remembers a thread for. */
+const AFFINITY_ENTRIES = 1024;
 interface Thread { retiring?:Promise<void>; worker: Worker; ready: Promise<void>; task: Task | null; timer: ReturnType<typeof setTimeout> | null }
 
 export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptions = {}): SqlService & { close(): Promise<void> } {
@@ -61,6 +64,12 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
   const entry = pool.workerUrl ? { url: pool.workerUrl } : workerEntry();
   const threads: Thread[] = [];
   const queue: Task[] = [];
+  /**
+   * AFFINITY: the thread each prepared catalog database was last sent to, so a repeated keyed read lands where
+   * its database is kept. Only a preference: when that thread is busy the read takes any idle one, which at
+   * worst answers `rowsRequired` and builds its own copy — never a wait behind another call.
+   */
+  const affinity = new Map<string, Thread>();
   let ids = 0;
   let closed = false;
 
@@ -92,6 +101,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     if(thread.retiring)return thread.retiring;
     if(thread.timer)clearTimeout(thread.timer);
     thread.task=null;
+    for (const [key, held] of affinity) if (held === thread) affinity.delete(key);
     // Keep the retiring thread counted against capacity until terminate confirms exit.
     thread.retiring=thread.worker.terminate().then(()=>{const i=threads.indexOf(thread);if(i>=0)threads.splice(i,1);});
     return thread.retiring;
@@ -110,9 +120,16 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
   // Twin of services/app/lib/publish/prepared/draft-compile-pool.ts's pump; this one adds a per-task deadline and retires a timed-out thread.
   const pump = () => {
     while (queue.length && !closed) {
-      const idle = threads.find((t) => !t.task&&!t.retiring) ?? (threads.length < size ? spawn() : null);
+      const preferred = queue[0]!.prepared === null ? undefined : affinity.get(queue[0]!.prepared);
+      const idle = (preferred && !preferred.task && !preferred.retiring && threads.includes(preferred) ? preferred : null)
+        ?? threads.find((t) => !t.task&&!t.retiring) ?? (threads.length < size ? spawn() : null);
       if (!idle) return;
       const task = queue.shift()!;
+      if (task.prepared !== null) {
+        affinity.delete(task.prepared);
+        affinity.set(task.prepared, idle);
+        if (affinity.size > AFFINITY_ENTRIES) affinity.delete(affinity.keys().next().value!);
+      }
       idle.task = task;
       idle.worker.ref();
       void idle.ready.then(() => {
@@ -131,7 +148,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     return new Promise<T>(resolve=>{
       let done=false;
       const settle=(answer:PoolAnswer)=>{if(done)return;done=true;resolve(answer.ok?answer.result as T:onError(answer.error));};
-      queue.push({request:{...request,id:++ids} as PoolRequest,deadlineMs,settle});pump();
+      queue.push({request:{...request,id:++ids} as PoolRequest,deadlineMs,prepared:request.method==='run'?preparedKey(request.input):null,settle});pump();
     });
   };
 
