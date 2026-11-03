@@ -1,4 +1,5 @@
 import type { AccessActor } from '@/lib/accounts';
+import type { ArtifactRow } from '@/lib/artifacts';
 import type { CatalogRowView, DatasetCatalog } from '@/lib/datasets';
 import type { DatasetRole, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
 import type { HasuraTableNames } from './hasura-names';
@@ -13,6 +14,8 @@ export interface DatasetSnapshot {
  aggregatable?:Readonly<Record<string,boolean>>;
  /** The role the view was decided for (lib/dataset-permissions `datasetRole`). */
  role?:DatasetRole;
+ /** The dataset head the read was authorized on (a pinned link's too): the write decision reads it rather than again. */
+ head?:ArtifactRow;
  /** Per table: the generated GraphQL root and column names (lib/dataset-graphql/hasura-names), for every declared table. */
  names?:Readonly<Record<string,HasuraTableNames>>;
 }

@@ -94,7 +94,12 @@ export function requestAccessFacts(request: Request, actor: AccessActor): Access
   return facts;
 }
 
-function memoAccessFacts(facts: AccessFacts): AccessFacts {
+/**
+ * The facts asked once each, for one decision's span (a request's page view above, a dataset GraphQL request's one
+ * authorization): each fact's PROMISE is held, a failed read is asked again. A check that must see revocations made
+ * since (a final fence, a commit under lock) never reads through one it did not create itself.
+ */
+export function memoAccessFacts(facts: AccessFacts): AccessFacts {
   const memo = new Map<string, Promise<unknown>>();
   const once = <T>(name: string, arg: string | null | undefined, ask: () => Promise<T>): Promise<T> => {
     const key = `${name}\u0000${arg ?? ''}`;

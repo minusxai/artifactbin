@@ -14,7 +14,7 @@
  */
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { liveAccessFacts, writerFor, type ArtifactRow } from '@/lib/artifact-access';
+import { liveAccessFacts, writerFor, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
@@ -31,6 +31,8 @@ export interface DatasetWriteOptions {
   trust?: (db: Queryable) => Promise<DatasetGrantContext>;
   /** Decide inside this transaction (the commit's lock), never on the shared connection. */
   tx?: Queryable;
+  /** The request's facts (lib/artifact-access `memoAccessFacts`), for a decision outside a transaction; `tx` decides on its own. */
+  facts?: AccessFacts;
 }
 
 export type DatasetWriteDecision =
@@ -91,7 +93,9 @@ function privateCeiling(row: Pick<ArtifactRow, 'visibility'>, role: DatasetRuleR
 export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, options: DatasetWriteOptions = {}): Promise<DatasetWriteDecision> {
   const db = options.tx ?? await getDb();
   const revision = row.policy_revision ?? 0;
-  const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.pageId });
+  // Under the commit's lock only that transaction's own facts decide, never a request's memo.
+  const facts = options.tx ? liveAccessFacts(actor, options.tx) : options.facts ?? liveAccessFacts(actor, db);
+  const role = await datasetRole(row, actor, { facts, throughPage: options.throughPage || !!options.pageId });
   if (row.format !== 'dataset' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role) return { allowed: false, role, revision, reason: 'no_rule' };
