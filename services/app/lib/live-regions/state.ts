@@ -22,8 +22,18 @@ export function liveDocument(state: Uint8Array): Y.Doc {
   return doc;
 }
 
-/** The merged tree, read through the schema. Reading may drop elements the schema refuses, so callers read a copy. */
-export const readDocument = (kind: RegionKind, doc: Y.Doc): PMNode => yXmlFragmentToProseMirrorRootNode(regionFragment(doc), regionSchema(kind));
+/**
+ * The merged tree, read through the schema, always a valid document: concurrent deletions can leave a rich region
+ * with no block at all (it reads as one empty paragraph). Reading may drop elements the schema refuses, so callers
+ * read a copy.
+ */
+export function readDocument(kind: RegionKind, doc: Y.Doc): PMNode {
+  const schema = regionSchema(kind);
+  const read = yXmlFragmentToProseMirrorRootNode(regionFragment(doc), schema);
+  if (read.type.contentMatch.matchFragment(read.content)?.validEnd) return read;
+  if (kind === 'text') return schema.topNodeType.create(null, schema.nodes.textblock!.create(null, read.textContent ? schema.text(read.textContent) : null));
+  return read.type.createAndFill(null, read.content) ?? read.type.createAndFill()!;
+}
 
 /**
  * THE ONE CALL OF `updateYFragment`. y-prosemirror marks it `@private @unstable`; the package is pinned exactly and
