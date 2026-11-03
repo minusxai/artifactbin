@@ -13,10 +13,9 @@ import { createArtifact, parseArtifactDestination } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 import {artifactStarter} from '@/lib/workspace';
-import {canUseDeploymentIdentity} from '@/lib/deployment';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
-import { withAccountToken } from '@/lib/accounts';
+import { canUseDeploymentIdentity, withAccountToken } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish';
 import {DatasetError} from '@/lib/datasets';
 

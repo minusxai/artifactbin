@@ -1,4 +1,4 @@
-import {canUseDeploymentIdentity} from '../deployment';
+import {canUseDeploymentIdentity} from './deployment-identity';
 /**
  * Agent bearer tokens: prefix + 256 random bits, shown exactly once, only the
  * sha256 stored in a unique-indexed column, soft revoke via deleted_at —

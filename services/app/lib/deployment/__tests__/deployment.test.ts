@@ -2,7 +2,8 @@ import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb,type Queryable} from '@/lib/platform/db';
 import {overrideConfig} from '@/lib/platform/config';
-import {DeploymentError,admitDeploymentIdentity,canUseDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
+import {canUseDeploymentIdentity} from '@/lib/accounts';
+import {DeploymentError,admitDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
 useAppHarness();
 const identity=(userId:string,email:string)=>({userId,email,emailVerified:true});
 describe('company admission',()=>{

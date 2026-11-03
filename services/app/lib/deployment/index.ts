@@ -1,5 +1,5 @@
-import {recordGroupMutation} from '../group-mutations';
-import {authenticatingTestParent} from '../user-kinds';
+import {canUseDeploymentIdentity} from '../accounts';
+import {recordGroupMutation} from '../groups';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
 import { getDb, type Queryable, deploymentConfig, env } from '../platform';
@@ -49,8 +49,7 @@ async function settledAdmission(db:Queryable,identity:{userId:string;emailVerifi
  const s=(await db.query<State>('SELECT owner_user_id,default_group_id,setup_complete FROM deployment_state WHERE id=$1',[ID])).rows[0];
  if(!s)return undefined;
  if(s.owner_user_id===identity.userId)return true;
- if((await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[identity.userId])).rows.length)return true;
- if(await canUseDelegatedDeploymentIdentity(identity.userId,db))return true;
+ if(await canUseDeploymentIdentity(identity.userId,db))return true;
  if(!email||identity.emailVerified!==true)return false;
  if(!s.owner_user_id&&email===config.ownerEmail&&matches(email))return undefined;
  if(!s.setup_complete||!matches(email))return false;
@@ -65,8 +64,7 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
  return db.transaction(async tx=>{
   const s=await state(tx,true);
   if(s.owner_user_id===identity.userId)return true;
-  if((await tx.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[identity.userId])).rows.length)return true;
-  if(await canUseDelegatedDeploymentIdentity(identity.userId,tx))return true;
+  if(await canUseDeploymentIdentity(identity.userId,tx))return true;
   if(!email||identity.emailVerified!==true)return false;
   if(!s.owner_user_id&&email===config.ownerEmail&&policy.matches(email)){
    await tx.query('UPDATE deployment_state SET owner_user_id=$2 WHERE id=$1',[ID,identity.userId]);
@@ -81,18 +79,4 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
   if(!previous||(previous==='viewer'&&invitation?.role==='editor'))await recordGroupMutation(tx,identity.userId,s.default_group_id!,'joined',{previous_role:previous,role:previous==='editor'?'editor':invitation?.role??'viewer'},[]);
   await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
  });
-}
-
-/** Credential IDs already admitted remain valid when policy or defaults change. */
-export async function canUseDeploymentIdentity(userId:string|null|undefined,query?:Queryable):Promise<boolean> {
- if(deploymentConfig().mode==='public')return true;
- if(!userId)return false;
- const db=query??await getDb();
- return (await db.query('SELECT user_id FROM deployment_members WHERE user_id=$1',[userId])).rows.length>0||await canUseDelegatedDeploymentIdentity(userId,db);
-}
-
-async function canUseDelegatedDeploymentIdentity(userId:string,db:Queryable):Promise<boolean> {
- const parent=await authenticatingTestParent(userId,db);
- if(!parent)return false;
- return (await db.query('SELECT m.user_id FROM deployment_members m JOIN deployment_state s ON s.id=$2 WHERE m.user_id=$1 AND s.setup_complete=true',[parent,ID])).rows.length>0;
 }

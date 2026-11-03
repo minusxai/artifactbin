@@ -6,7 +6,8 @@ import { identityForUser, createUser, mintToken, resolveToken, createTestUser } 
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import {getDb} from '@/lib/platform/db';
 import {overrideConfig} from '@/lib/platform/config';
-import {admitDeploymentIdentity,canUseDeploymentIdentity,setupDeployment} from '@/lib/deployment';
+import {canUseDeploymentIdentity} from '../deployment-identity';
+import {admitDeploymentIdentity,setupDeployment} from '@/lib/deployment';
 import {createGroup,getGroupRole} from '@/lib/groups';
 useAppHarness();
 describe('company delegated test identities',()=>{

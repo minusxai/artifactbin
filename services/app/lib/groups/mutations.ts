@@ -20,5 +20,3 @@ export async function recordGroupMutation(tx:Queryable,userId:string,groupId:str
  await tx.query('INSERT INTO group_audit(id,group_id,actor_user_id,actor_token_id,client_harness,action,details) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)',[id,groupId,userId,token?.id??null,token?.client_harness??null,action,JSON.stringify(details)]);
  await recordEvent(tx,{kind:'user',id:userId},'changed',{kind:'group',id:groupId},{action,audit_id:id,recipients:[...new Set(recipients)],...(typeof details.invitation_id==='string'?{invitation_id:details.invitation_id}:{})});
 }
-
-export {GroupError} from './errors';

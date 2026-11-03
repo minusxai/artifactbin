@@ -1,12 +1,12 @@
-import {GroupError} from '../group-mutations';
-import {groupAttempt,recordGroupMutation,type GroupMutationActor} from '../group-mutations';
+import {GroupError} from './errors';
+import {groupAttempt,recordGroupMutation,type GroupMutationActor} from './mutations';
 /** Independent owners. Membership and links never derive authority from accounts or artifacts; users and groups share accounts' handle namespace. */
 import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupDetail,GroupInvitation,GroupMember,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
 import {isTestDomainEmail} from '@artifactbin/contracts';
 import { TEST_DOMAIN, getDb, type Queryable, generateInternalId } from '../platform';
 import { reserveHandle, isValidHandle } from '../accounts';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;}
-export {GroupError} from '../group-mutations';
+export {GroupError} from './errors';
 const roleValid=(role:unknown):role is GroupRole=>role==='editor'||role==='viewer';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role});
 export async function getGroupById(id:string,query?:ContractQueryable):Promise<GroupRecord|null>{return (await (query??await getDb()).query<GroupRecord>('SELECT * FROM groups WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0]??null;}
@@ -112,4 +112,4 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
  });
 }
 
-export {recordGroupMutation,groupQuota} from '../group-mutations';
+export {recordGroupMutation,groupQuota} from './mutations';
