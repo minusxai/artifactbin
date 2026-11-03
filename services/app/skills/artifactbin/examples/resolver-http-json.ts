@@ -28,7 +28,7 @@ async function get(caps: Caps, query = ''): Promise<Array<Record<string, unknown
     headers: { Authorization: 'Bearer {{API_KEY}}', Accept: 'application/json' },
   });
   if (!res.ok)
-    throw Error(HOST + ' answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    throw Error(HOST + ' answered ' + res.status);
   const body = await res.json() as { data?: unknown } | unknown[];
   const list = Array.isArray(body) ? body : body?.data;
   return Array.isArray(list) ? list : [];

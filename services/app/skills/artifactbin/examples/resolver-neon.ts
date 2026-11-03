@@ -37,7 +37,7 @@ async function sql(caps: Caps, query: string, params: unknown[] = []): Promise<R
     body: JSON.stringify({ query, params }),
   });
   if (!res.ok)
-    throw Error('Neon answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    throw Error('Neon answered ' + res.status);
   return ((await res.json()) as { rows?: Row[] }).rows ?? [];
 }
 
