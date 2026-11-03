@@ -127,7 +127,12 @@ async function readContent(input:{actor:AccessActor;documentId:string;datasetId:
   const initialDoc=await getArtifactById(documentId);
   if(!initialDoc||initialDoc.format!=='html'||!(await readThrough(await getDb(),initialDoc,actor))||!await declaredDataset(initialDoc,datasetId))return null;
   const db=await getDb();
-  return db.transaction(async tx=>{
+  /*
+   * The transaction makes the decision — the authorization and the file's row are one consistent read. The bytes are
+   * content-addressed and never deleted, so they are fetched after it commits: a store that itself asks the database
+   * (PGLite holds one serialized connection) would otherwise wait on this very transaction forever.
+   */
+  const found=await db.transaction(async tx=>{
     await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[[datasetId,documentId]]);
     const rows=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[ [datasetId,documentId] ])).rows;
     let dataset:ArtifactRow,doc:ArtifactRow;
@@ -137,6 +142,9 @@ async function readContent(input:{actor:AccessActor;documentId:string;datasetId:
     if(!row||(imageOnly&&row.meta.format&&row.meta.format!=='image'))return null;
     const objectKey=row.meta?.objectKey;
     if(typeof objectKey!=='string'||!objectKey)return null;
-    return {filename:downloadFilename(row),image:!row.meta.format||row.meta.format==='image',body:await objectStore().get(objectKey),contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
+    return {objectKey,filename:downloadFilename(row),image:!row.meta.format||row.meta.format==='image',contentType:typeof row.meta.contentType==='string'?row.meta.contentType:'application/octet-stream'};
   });
+  if(!found)return null;
+  const {objectKey,...file}=found;
+  return {...file,body:await objectStore().get(objectKey)};
 }

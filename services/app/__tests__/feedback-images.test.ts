@@ -160,3 +160,27 @@ it('requires an insert rule (here: backend_only, through the page\'s upload proo
   expect((await ownerPost()).status).toBe(201);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(2);
  }finally{put.mockRestore();}
 });
+
+it('decides inside the transaction and loads the bytes after it commits, so a store that queries cannot deadlock the one connection',async()=>{
+ const {document,dataset,pageActor,post,filePost}=await world();
+ const bytes=await sharp({create:{width:16,height:16,channels:3,background:'#2980b9'}}).png().toBuffer();
+ const created=await post(bytes,'deadlock-operation-123');expect(created.status,await created.clone().text()).toBe(201);
+ const image=await created.json() as {ref:string;url:string};
+ const stored=await filePost('notes.txt','after commit','deadlock-file-123');expect(stored.status,await stored.clone().text()).toBe(201);
+ const file=await stored.json() as {ref:string;url:string};
+ // An S3 store, a cache or a tracer may ask the database while reading: on PGLite's single connection a query
+ // from inside the decision's transaction waits for that transaction forever.
+ const store=objectStore(),original=store.get.bind(store);
+ const get=vi.spyOn(store,'get').mockImplementation(async(...args:Parameters<typeof store.get>)=>{await (await getDb()).query('SELECT 1');return original(...args);});
+ const settled=<T,>(work:Promise<T>)=>Promise.race([work,new Promise<'deadlocked'>(resolve=>setTimeout(()=>resolve('deadlocked'),2000))]);
+ try {
+  const shown=await settled(readImage(request(image.url,{actor:pageActor}),imageParams(document.id,dataset.id,image.ref.slice('dimg:'.length))));
+  expect(shown).not.toBe('deadlocked');
+  expect((shown as Response).status).toBe(200);
+  expect(Buffer.from(await (shown as Response).arrayBuffer()).length).toBeGreaterThan(0);
+  const downloaded=await settled(readFile(request(file.url,{actor:pageActor}),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:file.ref.slice('dfile:'.length)})}));
+  expect(downloaded).not.toBe('deadlocked');
+  expect(await (downloaded as Response).text()).toBe('after commit');
+  expect(get).toHaveBeenCalledTimes(2);
+ } finally { get.mockRestore(); }
+});

@@ -13,7 +13,7 @@ export type { ArtifactRow } from '@/lib/artifact-access';
 
 /** Reads (every server caller): the one read decision and the route gate, the reader snapshot, the lookups, versions and listings, and the state digest. */
 export { canReadArtifact, capabilityGuard, readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';
-export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
+export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
 export type { ArtifactHeader, ArtifactIdentity } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';

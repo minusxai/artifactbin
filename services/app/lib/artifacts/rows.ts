@@ -48,6 +48,13 @@ export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader 
   return (await db.query<ArtifactHeader>(`SELECT ${HEADER_SELECT} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
 }
 
+/** {@link getArtifactHeaderById} for several ids in one read (`id = ANY`): the live headers, in the order the database returns them. */
+export async function getArtifactHeadersByIds(ids: readonly string[]): Promise<ArtifactHeader[]> {
+  if (!ids.length) return [];
+  const db = await getDb();
+  return (await db.query<ArtifactHeader>(`SELECT ${HEADER_SELECT} FROM artifacts WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`, [[...ids]])).rows;
+}
+
 /** The columns a read-access decision consults (./read-access canReadArtifact) plus the revision: no content, no metadata. */
 const ARTIFACT_ACCESS_COLUMNS = ['id', 'token_id', 'user_id', 'group_id', 'visibility', 'link_role', 'format', 'version'] as const satisfies readonly (keyof ArtifactHeader)[];
 export type ArtifactAccessRow = Pick<ArtifactHeader, typeof ARTIFACT_ACCESS_COLUMNS[number]>;
