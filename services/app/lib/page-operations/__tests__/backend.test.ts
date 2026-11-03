@@ -116,7 +116,7 @@ describe('resolver time limits',()=>{
    const outcome=createBackendInvoker(runner,async()=>({...record,compiled:'bundle'}))(call).then(()=>'completed',(e:FieldFailed)=>e.code);
    await vi.advanceTimersByTimeAsync(15_900);expect(cancelled).toBe(0);
    await vi.advanceTimersByTimeAsync(200);expect(await outcome).toBe('deadline');expect(cancelled).toBe(1);
-   expect(limits).toMatchObject({timeoutMs:15_000,maxRequests:32,maxOutputBytes:1024*1024});
+   expect(limits).toMatchObject({timeoutMs:15_000,maxRequests:32,maxOutputBytes:RESOLVER_LIMITS.outputBytes});
   }finally{vi.useRealTimers();}
  });
 });
