@@ -1,11 +1,11 @@
+import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
-import pg from 'pg';
-import { SERVING_POOL, withPoolErrors } from '../db';
+import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
 
 // An idle client's error during a database restart or failover must not take the process down.
 it('a lost idle connection is logged, not thrown', () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-  const pool = withPoolErrors(new pg.Pool({ ...SERVING_POOL }));
+  const pool = withPoolErrors(new EventEmitter());
   expect(() => pool.emit('error', new Error('terminating connection due to administrator command'))).not.toThrow();
   expect(log).toHaveBeenCalledWith('[db] idle connection lost:', 'terminating connection due to administrator command');
   log.mockRestore();

@@ -14,6 +14,7 @@ export { renderSchema, renderDroppedTables, ensureTable } from './schema';
 export { PROTECTED_RESOURCE_PATH, wwwAuthenticate } from './http-helpers';
 export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, type EventsClientOptions } from './clients';
 export { serviceSecretForServer } from './service-auth';
+export { SERVING_POOL, withPoolErrors } from './pool';
 export { envelope, type EventSubject, type EventObject } from './events';
 export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './assets-origin';
 
