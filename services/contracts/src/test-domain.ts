@@ -13,7 +13,7 @@
  */
 export interface TestDomainSignIn { domain: string; code: string }
 
-export const TEST_DOMAIN_CODE_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
+const TEST_DOMAIN_CODE_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
 const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 
 /**

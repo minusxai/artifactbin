@@ -13,8 +13,8 @@ import type { BrowserSessions } from './browser-sessions';
  * modes. `card` is a measure→resize→measure→clip dance inside one page load
  * and is therefore a named mode, not a client recipe.
  */
-export type RenderFormat = 'png' | 'jpg';
-export interface RenderCardCrop {
+type RenderFormat = 'png' | 'jpg';
+interface RenderCardCrop {
   /** Top-left coordinates relative to the selected surface. */
   x: number;
   y: number;

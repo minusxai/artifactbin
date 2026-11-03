@@ -3,7 +3,7 @@
  * EXPLICIT refusal ("service_unavailable"), never a silent empty result — a
  * chart drawn from silence is the failure the real caps exist to avoid.
  */
-import type { Actor, BrowserService, EventEnvelope, EventsService, QueryFailure, RenderResult, SqlService, TableResult } from '@artifactbin/contracts';
+import type { BrowserService, EventEnvelope, EventsService, QueryFailure, RenderResult, SqlService, TableResult } from '@artifactbin/contracts';
 
 const UNAVAILABLE: QueryFailure = { error: 'service_unavailable' };
 
@@ -38,7 +38,6 @@ export function fakeBrowser(result: RenderResult = { ok: true, mime: 'image/png'
   const calls: unknown[] = [];
   return { calls, render: async (r) => { calls.push(r); return result; } };
 }
-export const fakeActor = (partial: Partial<Actor> = {}): Actor => ({ credential: 'bearer', userId: 'usr_test', tokenId: 'tok_test', ...partial });
 
 /** The events noop: nothing leaves the box. Silence IS the documented shape when no service is configured — the log is telemetry. */
 export function noopEvents(): EventsService {

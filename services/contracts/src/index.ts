@@ -15,17 +15,16 @@ export * from './agent';
 export * from './routes';
 export { DEFAULT_SERVER } from './default-server';
 export { isLoopbackName } from './loopback-names';
-export { SERVER_IDENTITY_PATH, isLocalDevelopmentHost, normalizeOrigin, parseAliasOrigins, parseServerIdentityDocument, type ServerIdentityDocument } from './server-identity';
+export { isLocalDevelopmentHost, normalizeOrigin, parseAliasOrigins, type ServerIdentityDocument } from './server-identity';
 export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, ClaimResult, CodeStore } from './identity';
-export type { Column, Index, Table } from './schema';
+export type { Column, Table } from './schema';
 export * from './dataset-policy';
 export * from './dataset-permissions';
 export * from './dataset-hasura';
 
 export * from './cli-auth';
-export * from './resource-file';
 
 export * from './account-resource';
 
@@ -35,39 +34,34 @@ export * from './font-sources';
 
 export * from './membership';
 
-export * from './document-operation';
 
 export * from './document-update';
-export type { StoredMermaidImage } from './mermaid-image';
 
 export * from './mutation-operations';
 
-export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunWait, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
+export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunWait, RunEvent, RunReceipt, RunSnapshot, RunnerService } from './runner';
 
 export type {ResolverFetchReceipt} from './runner';
 export {RESOLVER_LIMITS} from './runner';
-export * from './preview-connect';
 
 // Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
 // makes esbuild's split reader graph load that chunk through unrelated contract imports.
-export type {CommentViewState, ReviewJson} from './comment-view-state';
+export type {CommentViewState} from './comment-view-state';
 
 export type { DatasetUploadResult, UploadContext } from './dataset-upload';
 
 export * from './artifact-format';
 export * from './live-channels';
 export { BASEMAP_PATH } from './basemap';
-export { DOMAIN_FOOTER_TEXT } from './domain-footer';
 export { MAX_PEOPLE_IDS } from './query-request';
 export * from './sign-in-required';
 
 export * from './comment-changes';
 export * from './agent-guidance';
 export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
-export { BLANK_REPORT_MARKUP, EMPTY_ARTIFACT_MARKUP, isStartPlaceholder, START_PLACEHOLDER_MARKUP } from './start-placeholder';
-export type { AnnotationAuthor, AnnotationCommentWire, AnnotationWireAuthor, CommentReactionKind, CommentReactionSummary, CommentReactionInput, CommentReactor } from './annotation-comment';
+export { isStartPlaceholder, START_PLACEHOLDER_MARKUP } from './start-placeholder';
+export type { AnnotationAuthor, AnnotationCommentWire, CommentReactionKind, CommentReactionSummary, CommentReactionInput, CommentReactor } from './annotation-comment';
 export { COMMENT_TARGET_UNSAVED, COMMENT_REACTORS_MAX } from './annotation-comment';
-export * from './deny';
 
 export * from "./groups";
 

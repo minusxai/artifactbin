@@ -43,11 +43,6 @@ async function projection(server:string,root:string,create=false):Promise<Return
  }
  return paths;
 }
-export async function credentialLocation(server:string,root:string){
- const paths=await projection(server,root);let readable=false;
- try{readable=(await lstat(paths.directory)).isSymbolicLink();}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
- return {...paths,path:readable?paths.path:paths.backingPath,readable};
-}
 export async function readCredentials(server:string,root:string):Promise<Credentials|null>{
  const paths=credentialPaths(server,root);const saved:Record<string,string>={};
  // Validate the controlled ancestors before following the normalized origin projection or reading secrets.
@@ -86,20 +81,8 @@ async function writeCredentials(connection:Credentials,root:string):Promise<void
  await atomicWrite(paths.backingPath,Object.entries(values).filter(([,value])=>value!==undefined).map(([key,value])=>`${key}=${value}\n`).join(''),{prepare:preparePrivateCredentialFile});
  await projection(connection.server,root,true);
 }
-export async function observedCredentialAccount(connection:Credentials,root:string):Promise<{account:string;observedAt:string}|null>{
- const paths=await projection(connection.server,root);
- try{const value=JSON.parse(await readFile(join(paths.backingDirectory,'profile.json'),'utf8')).credentialAccount;
- return value?.credential===digest(connection.token)&&typeof value.account==='string'&&typeof value.observedAt==='string'?{account:value.account,observedAt:value.observedAt}:null;
- }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
-}
-export async function observeCredentialAccount(connection:Credentials,account:string,root:string):Promise<void>{
- const paths=await projection(connection.server,root);await privateDirectory(paths.backingDirectory);
- const path=join(paths.backingDirectory,'profile.json');let profile:Record<string,unknown>={url:paths.origin};
- try{profile=JSON.parse(await readFile(path,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
- await atomicWrite(path,JSON.stringify({...profile,credentialAccount:{account,credential:digest(connection.token),observedAt:new Date().toISOString()}},null,2)+'\n');
-}
-export class CredentialRefreshError extends Error {}
-export class CredentialRefreshUnavailableError extends Error {
+class CredentialRefreshError extends Error {}
+class CredentialRefreshUnavailableError extends Error {
  readonly code='refresh_unavailable';
  constructor(message:string,readonly status?:number){super(message);}
 }
@@ -124,26 +107,4 @@ export async function refreshCredentials(connection:Credentials,root:string,opti
   const refreshed={...connection,server:origin,token:data.access_token,refreshToken:data.refresh_token,expiresAt};
   await saveCredentials(refreshed,root);return refreshed;
  },{reentrant:false,signal:options.signal}),{signal:options.signal});
-}
-/** HTTP fallback shares the CLI's grant, lock and binding; secrets never enter URLs. */
-export async function credentialRequest(server:string,root:string,path:string,options:{method?:string;body?:string;account?:string;fetch?:typeof fetch;signal?:AbortSignal;timeoutMs?:number}={}):Promise<Response>{
- options.signal?.throwIfAborted();
- const origin=credentialOrigin(server);if(!path.startsWith('/api/')||path.includes('\\')||path.includes('#'))throw new Error('Use a path inside /api/.');
- const url=new URL(path,origin);if(url.origin!==origin||!url.pathname.startsWith('/api/'))throw new Error('Use a path inside /api/.');
- let connection=await readCredentials(origin,root);if(!connection)throw new Error('auth_required: no saved credentials for this origin.');
- const transport=options.fetch??fetch;
- const observed=await observedCredentialAccount(connection,root);
- if(options.account&&observed&&options.account!==observed.account)throw new Error('account_mismatch: saved credentials belong to another account.');
- const account=options.account??observed?.account;
- for(let attempt=0;attempt<2;attempt++){
-  options.signal?.throwIfAborted();
-  const headers:Record<string,string>={Authorization:`Bearer ${connection.token}`};if(options.body!==undefined)headers['Content-Type']='application/json';
-  if(account)headers['X-Artifactbin-Account']=account;
-  const response=await transport(url,{method:options.method??'GET',headers,body:options.body,redirect:'error',signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs??30000)]):AbortSignal.timeout(options.timeoutMs??30000)});
-  if(response.status===401&&attempt===0&&connection.refreshToken&&connection.clientId){await response.body?.cancel();connection=await refreshCredentials(connection,root,{fetch:transport,signal:options.signal});continue;}
-  const actual=response.headers.get('X-Artifactbin-Account');if(response.ok&&account&&actual&&actual!==account)throw new Error('account_mismatch: the response belongs to another account.');
-  if(response.ok&&actual)try{await observeCredentialAccount(connection,actual,root);}catch{/* Advisory observations never change a confirmed outcome. */}
-  return response;
- }
- throw new Error('auth_required: sign in again.');
 }

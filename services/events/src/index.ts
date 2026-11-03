@@ -15,9 +15,9 @@ import { createEvents, ensureEventsSchema } from './local';
 import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
 export type * from '@artifactbin/contracts';
-export { EVENTS_ROUTES, EVENT_VERBS, eventName } from '@artifactbin/contracts';
-export { eventsClient, type EventsClientOptions } from '@artifactbin/utils';
-export { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLE, EVENTS_TABLES } from './schema';
+export { eventName } from '@artifactbin/contracts';
+export { eventsClient } from '@artifactbin/utils';
+export { EVENTS_TABLES } from './schema';
 
 /** The one GET a shell answers — the liveness/readiness probe for whatever orchestrates the service. */
 const HEALTH = '/health';

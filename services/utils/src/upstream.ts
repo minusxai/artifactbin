@@ -29,7 +29,7 @@ export const UPSTREAM_TIMEOUTS = { headersTimeoutMs: 300_000, bodyTimeoutMs: 300
 export interface UpstreamTimeouts { headersTimeoutMs?: number; bodyTimeoutMs?: number }
 
 /** A bound the upstream exceeded: `UPSTREAM_HEADERS_TIMEOUT` or `UPSTREAM_BODY_TIMEOUT`. */
-export class UpstreamTimeoutError extends Error {
+class UpstreamTimeoutError extends Error {
   constructor(readonly code: 'UPSTREAM_HEADERS_TIMEOUT' | 'UPSTREAM_BODY_TIMEOUT', ms: number) {
     super(code === 'UPSTREAM_HEADERS_TIMEOUT'
       ? `upstream sent no response headers within ${ms} ms`

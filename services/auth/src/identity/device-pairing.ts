@@ -76,4 +76,3 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
     },
   };
 }
-export type DevicePairing = ReturnType<typeof createDevicePairing>;

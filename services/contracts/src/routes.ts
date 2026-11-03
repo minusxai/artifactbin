@@ -1,4 +1,3 @@
-/** The OAuth breadcrumb (`wwwAuthenticate`, `PROTECTED_RESOURCE_PATH`) lives in @artifactbin/utils. */
 
 /**
  * THE INTERNAL SURFACE. Everything under this prefix is the app answering the
@@ -14,8 +13,6 @@
  */
 const INTERNAL_API_PREFIX = '/api/internal';
 export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;
-/** API audience allows an existing CLI connection to request an additional grant. */
-export const ARTIFACT_APPROVAL_PATH = '/api/agent-approvals';
 export function isInternalApiPath(pathname: string): boolean {
   return pathname === INTERNAL_API_PREFIX || pathname.startsWith(`${INTERNAL_API_PREFIX}/`);
 }
@@ -30,7 +27,6 @@ export function isInternalApiPath(pathname: string): boolean {
  * CSP and a set of links pointing at an origin an attacker picked. The proxy
  * sets both from what it actually received and discards whatever arrived.
  */
-export const FORWARDED_FOR = 'x-forwarded-for';
 export const FORWARDED_HOST = 'x-forwarded-host';
 export const FORWARDED_PROTO = 'x-forwarded-proto';
 /** Shared-secret header for optional authentication of split internal services. */

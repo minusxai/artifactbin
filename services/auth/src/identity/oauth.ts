@@ -3,9 +3,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
-/** The first-party CLI's no-click loopback sign-in: a sentinel client id, never a registered row, and a one-minute code. */
-export const LOOPBACK_CLIENT_ID = 'afbin';
-export const LOOPBACK_CODE_TTL_MS = 60 * 1000;
 // Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
 export const ACCESS_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -24,18 +21,6 @@ export function isAllowedRedirectUri(uri: string): boolean {
   if (url.hash || url.username || url.password) return false;
   if (url.protocol === 'https:') return true;
   return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
-}
-
-/**
- * RFC 8252 loopback redirect for the first-party CLI, and nothing wider: plain HTTP to the IP literal
- * 127.0.0.1 or [::1] with an explicit port and a path, written canonically (so an exact string
- * comparison at exchange is meaningful). No `localhost`, no other host, no HTTPS, no query, no fragment.
- */
-export function isLoopbackRedirectUri(uri: string): boolean {
-  let url: URL;
-  try { url = new URL(uri); } catch { return false; }
-  return url.href === uri && url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')
-    && url.port !== '' && !url.username && !url.password && !url.search && !url.hash && uri.length <= 512;
 }
 
 export const isValidCodeChallenge = (value: string): boolean => /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -277,5 +262,4 @@ export const protectedResourceMetadata = (base: string): Record<string, unknown>
   scopes_supported: [ARTIFACT_SCOPE],
   bearer_methods_supported: ['header'],
 });
-export { wwwAuthenticate } from '@artifactbin/utils';
 export const s256 = (verifier: string): string => createHash('sha256').update(verifier).digest('base64url');

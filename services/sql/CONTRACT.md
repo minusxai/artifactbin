@@ -42,8 +42,7 @@ Entry points: `@artifactbin/sql` is the contract, the client and the server shel
 SQLite engine (what the publish compiler analyses with); `./sqlite` is that engine as a `SqlService` in the calling
 thread (a CLI, a test); `./local` is the same engine in a small pool of `worker_threads` for a server — no statement
 runs on the process's event loop, a deadline is enforced inside the thread, and a thread that stays silent past its
-call's deadline is terminated and replaced (`__tests__/pool.test.ts`, including `/health` answering under load);
-`./shape` is the pure column inference, safe in a browser bundle.
+call's deadline is terminated and replaced (`__tests__/pool.test.ts`, including `/health` answering under load).
 
 Conformance: `__tests__/contract.test.ts` runs one suite in this thread and in worker threads, each in process and
 through `sqlClient(serveSql(…))`; the policy, editable-row and typed-parameter suites do the same.

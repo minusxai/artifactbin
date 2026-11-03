@@ -70,7 +70,7 @@ function predicate(value: unknown, path: string, depth = 0) {
 }
 /**
  * The retired version 1 policy parser. Nothing in this tree calls it; it stays exported only because the
- * deployment repository still imports it (app/__tests__/downstream-exports.test.ts). Delete it with that import.
+ * deployment repository still imports it (__tests__/downstream-exports.test.ts). Delete it with that import.
  */
 export function parseDatasetPolicy(value: unknown): DatasetPolicy {
   if (JSON.stringify(value)?.length > 64_000)

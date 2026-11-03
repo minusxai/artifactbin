@@ -115,10 +115,10 @@ export const EVENT_VERBS = {
   door: ['denied'],
   route: ['failed'],
 } as const satisfies { readonly [K in ObjectKind]: readonly EventVerb<K>[] };
-type AssertComplete<T extends true> = T;
-export type CompleteEventVerbs = AssertComplete<{
+// Every verb of every kind is listed above: a missing one fails the type check here.
+(null as unknown as {
   [K in ObjectKind]: Exclude<EventVerb<K>, (typeof EVENT_VERBS)[K][number]> extends never ? true : false
-}[ObjectKind]>;
+}[ObjectKind]) satisfies true;
 
 /** One row of the log — the sentence plus what history needs. Flat, because it IS the row and the wire. */
 export interface EventEnvelope {

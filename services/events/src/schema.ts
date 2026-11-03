@@ -21,7 +21,7 @@ export const DEFAULT_EVENTS_SCHEMA = 'events';
  */
 export const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
-export const EVENTS_TABLE: Table = {
+const EVENTS_TABLE: Table = {
   name: 'events',
   columns: [
     /** Emitter-minted uuid — the dedupe key: a retried batch inserts ON CONFLICT DO NOTHING. */

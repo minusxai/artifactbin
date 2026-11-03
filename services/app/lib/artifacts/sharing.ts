@@ -6,7 +6,7 @@ import { getArtifactFor } from './rows';
 import { writeShares } from './store';
 import { artifactQuery } from './document';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
-import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
+import { type DatasetAccess, type GroupShare, type GroupShareRole, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 
 // ── Sharing (the private tier's ACL surface) ─────────────────────────────────
 
@@ -18,7 +18,7 @@ export interface SharingState {
   linkRole: ShareRole;
   /** The named people, by email, with their role — sorted by email. */
   shares: ShareEntry[];
-  groupShares?:import('@artifactbin/contracts').GroupShare[];
+  groupShares?:GroupShare[];
   /** Datasets: the write ACL, and the documents that would stop working if it were closed. */
   access?: DatasetAccess;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
@@ -47,7 +47,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     canPublic: ALLOW_PUBLIC_VISIBILITY,
     linkRole: (row.link_role ?? 'viewer') as ShareRole,
     shares: shares.rows,
-    groupShares:(await db.query<import('@artifactbin/contracts').GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
+    groupShares:(await db.query<GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
     canPrivate: !!(row.user_id||row.group_id),
     ...(row.format === 'dataset'
       ? { access: row.access, writtenBy: [] }
@@ -108,7 +108,7 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
 }
 
 /** Separate group ACL: full-replace email edits never erase these rows. Governance, not shared edit access. */
-export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:string,role:import('@artifactbin/contracts').GroupShareRole|null):Promise<{changed:boolean}|null>{
+export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:string,role:GroupShareRole|null):Promise<{changed:boolean}|null>{
  if(!actor.userId) return null;
  if(role!==null&&!['viewer','commenter','editor'].includes(role))throw new GroupError('invalid_role');
  const db=await getDb();

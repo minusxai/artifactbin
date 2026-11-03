@@ -24,7 +24,7 @@ export interface Column {
    */
   compression?: 'lz4';
 }
-export interface Index {
+interface Index {
   name: string;
   /**
    * Index columns. A plain name is a column; anything else is emitted VERBATIM

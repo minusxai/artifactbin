@@ -2,7 +2,7 @@
 import type { Queryable, Table } from '@artifactbin/contracts';
 import { ensureTable } from '@artifactbin/utils';
 
-export const AUTH_TABLES: Table[] = [
+const AUTH_TABLES: Table[] = [
   {
     name: 'clients',
     columns: [

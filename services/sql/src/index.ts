@@ -8,17 +8,13 @@
 import type { SqlService } from '@artifactbin/contracts';
 import { SQL_ROUTES } from '@artifactbin/contracts';
 import { jsonServer, type JsonServer } from '@artifactbin/utils';
-import { DEFAULT_CAPS, type SqlCaps } from './caps';
 
 export type * from '@artifactbin/contracts';
-export { isQueryFailure, SQL_ROUTES } from '@artifactbin/contracts';
-export { inferColumns } from './dataset-shape';
-export { queryBounds } from './bounds';
+export { SQL_ROUTES } from '@artifactbin/contracts';
 // `sqlClient` lives in @artifactbin/utils; re-exported here so a caller can take the
 // client from the same package as the shell it speaks to. That is how this package's
 // own tests and the app's story tests reach it; app product code imports utils directly.
 export { sqlClient } from '@artifactbin/utils';
-export { DEFAULT_CAPS, type SqlCaps };
 
 /** The one GET a shell answers — the liveness/readiness probe for whatever orchestrates the service. */
 const HEALTH = '/health';

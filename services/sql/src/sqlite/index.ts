@@ -13,13 +13,10 @@ import { dryRunQueries, heldDatabase, runManyQueries, runQueries, type HeldDatab
 import { dryRunMutations, runMutation, type WriteBounds } from './writes';
 import { loadSqliteModule, type Sqlite3 } from './wasm';
 import type { SqlExtensions } from '../extensions';
-export { provideSqliteWasm } from './wasm';
-export { DEFAULT_CAPS, type SqlCaps } from '../caps';
 
-export { CORE_FUNCTIONS, SqliteDatabase, Refused, TimedOut, type Prepared, type Relation, type StatementMode, type TableData } from './database';
-export type { HeldDatabase, ReadBounds } from './reads';
+export { SqliteDatabase, type Relation } from './database';
+export type { ReadBounds } from './reads';
 export type { WriteBounds } from './writes';
-export type { Sqlite3 } from './wasm';
 export type { SqlExtensions } from '../extensions';
 
 export interface SqliteEngine {

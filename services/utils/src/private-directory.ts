@@ -11,7 +11,7 @@ const execute=promisify(execFile);
  * contents. The script travels UTF-16 base64 encoded (about 2.7 times its length) under Windows' 32K command line,
  * room for about a hundred paths; callers pass a handful. Each path gets its own DirectorySecurity: persisting one
  * clears its modified flags, so reusing it would silently write nothing to every path after the first. */
-export async function protectWindowsDirectories(paths:readonly string[]):Promise<void>{
+async function protectWindowsDirectories(paths:readonly string[]):Promise<void>{
  const quoted=paths.map(path=>"'"+path.replace(/'/g,"''")+"'").join(',');
  const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User; $paths=@(${quoted}); foreach($path in $paths) { $acl=New-Object Security.AccessControl.DirectorySecurity; $acl.SetOwner($user); $acl.SetAccessRuleProtection($true,$false); foreach($sid in @($user,(New-Object Security.Principal.SecurityIdentifier('S-1-5-18')))) { $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'); $acl.AddAccessRule($rule) }; [IO.Directory]::SetAccessControl($path,$acl) }`;
  await execute('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:30000,windowsHide:true});

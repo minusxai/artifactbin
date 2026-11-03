@@ -1,4 +1,4 @@
-export interface HtmlAnnotationSegment {
+interface HtmlAnnotationSegment {
   nodeId: string; quote: string;
   /** Preserve a migrated end at the next canonical character, including inline boundaries. */
   endAffinity?: 'forward';
@@ -14,10 +14,6 @@ export interface HtmlNodeAnchor {
   /** Trusted migrated selection parts. Empty means the original selection is stale. */
   segments?: HtmlAnnotationSegment[];
   range?: { start: number; end: number; length: number; fingerprint: string };
-}
-export interface HtmlSelection {
-  anchor: HtmlNodeAnchor;
-  rect: { x: number; y: number; width: number; height: number };
 }
 /** Decode only after the original runtime endpoint verifies window/origin/session nonce. */
 export function parseHtmlNodeAnchor(value: unknown): HtmlNodeAnchor | null {

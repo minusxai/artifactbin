@@ -1,18 +1,17 @@
 export { assemble } from './assemble';
-export { serve, type Listening } from './serve';
-export { attachActor, actorOf, inProcess, overHttp, actorReceiver, UPSTREAM_TIMEOUTS, UpstreamTimeoutError, type UpstreamTimeouts } from './upstream';
-export { signActor, verifyActor, timingSafeEqualUsed } from './actor-sign';
-export { createEnv, type Env, type EnvOptions } from './env';
-export { httpClient, jsonServer, postServer, type HttpClient, type JsonRoutes, type JsonServer } from './http';
+export { serve } from './serve';
+export { attachActor, actorOf, inProcess, overHttp, actorReceiver, UPSTREAM_TIMEOUTS } from './upstream';
+export { signActor, verifyActor } from './actor-sign';
+export { createEnv } from './env';
+export { httpClient, jsonServer, postServer, type JsonServer } from './http';
 export { log } from './log';
-export { BodyTooLargeError, readBody, collectNodeBody } from './body';
-export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, fakeActor, type FakeSql, type FakeEvents } from './fakes';
+export { BodyTooLargeError, readBody } from './body';
+export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, type FakeEvents } from './fakes';
 export { TOKEN_RE, hashToken } from './tokens';
 export { createCodeStore } from './codes';
-export { AGENT_COOKIE, cookieName, clearCookieHeader, readCookie } from './agent-session';
+export { cookieName, clearCookieHeader, readCookie } from './agent-session';
 export { renderSchema, renderDroppedTables, ensureTable } from './schema';
-export { PROTECTED_RESOURCE_PATH, wwwAuthenticate } from './http-helpers';
-export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, type EventsClientOptions } from './clients';
+export { sqlClient, browserClient, eventsClient, queryBounds } from './clients';
 export { serviceSecretForServer } from './service-auth';
 export { SERVING_POOL, withPoolErrors } from './pool';
 export { envelope, type EventSubject, type EventObject } from './events';
@@ -20,13 +19,9 @@ export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './
 
 export * from './dataset-policy';
 export {parseSharingEntries} from './sharing';
-export { sha256Hex } from './sha256';
-export { runtimeId } from './runtime-id';
-export {artifactIdFromSegment,artifactIdFromPath,artifactIdFromPathPrefix,artifactFileName,titleSlug} from './artifact-reference';
 
 export { isBuildAssetPath, buildAssetRequest, buildAssetResponse } from './build-assets';
 export { renderConnectionPage } from './connection-page';
-export { tableQueryInput } from './table-query';
 
 export {runnerClient} from "./runner-client";
 export {humanSessionClient} from './human-session';

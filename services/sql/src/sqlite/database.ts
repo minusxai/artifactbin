@@ -54,7 +54,7 @@ const TABLE_FUNCTIONS = new Set(['json_each', 'json_tree']);
  * internals, `subtype`, `unknown`, `load_extension`. `random`/`randomblob`
  * are here and refused in reads by `MUTATION_ONLY_FUNCTIONS`.
  */
-export const CORE_FUNCTIONS: ReadonlySet<string> = new Set([
+const CORE_FUNCTIONS: ReadonlySet<string> = new Set([
   '->', '->>', 'abs', 'acos', 'acosh', 'asin', 'asinh', 'atan', 'atan2', 'atanh', 'avg', 'ceil', 'ceiling', 'char', 'coalesce', 'concat', 'concat_ws',
   'cos', 'cosh', 'count', 'cume_dist', 'current_date', 'current_time', 'current_timestamp', 'date', 'datetime', 'degrees', 'dense_rank', 'exp',
   'first_value', 'floor', 'format', 'glob', 'group_concat', 'hex', 'if', 'ifnull', 'iif', 'instr', 'json', 'json_array', 'json_array_insert',

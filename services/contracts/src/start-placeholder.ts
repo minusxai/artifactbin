@@ -22,8 +22,6 @@ const ACTIONABLE_LINE = 'Paste what you copied into your coding agent.';
  * text only on its first version; never show setup over an agent's first edit. */
 export const isStartPlaceholder = (source: string | null, version: number): boolean =>
   version === 1 && !!source && ((source.includes(AGENT_LINE) || source.includes(EARLIER_AGENT_LINE)) && source.includes(WAITING_LINE) || /^<article\s+id="artifact-starter"\s*(?:\/>|>\s*<\/article>)$/.test(source.trim()));
-/** No setup UI is saved in a typed starter. The app owns its agent instructions. */
-export const EMPTY_ARTIFACT_MARKUP = '<article id="artifact-starter"></article>';
 export const START_PLACEHOLDER_MARKUP =
   '<div data-design="tw" className="@container flex min-h-[var(--mx-vh,760px)] flex-col items-center justify-center gap-4 px-6 text-center">' +
   '<h1 className="text-2xl font-semibold tracking-tight">Untitled</h1>' +
@@ -32,5 +30,3 @@ export const START_PLACEHOLDER_MARKUP =
   '<span className="ml-1.5 inline-block h-4 w-2 align-middle animate-caret-blink bg-emerald-500"></span>' +
   `</p><p className="sr-only">${AGENT_LINE}</p></div>`;
 
-/** Ordinary editable prose, shared by creation and the optional starter transition. */
-export const BLANK_REPORT_MARKUP = '<article data-design="tw" className="mx-auto max-w-3xl px-6 py-12"><h1 className="text-4xl font-semibold tracking-tight">Untitled report</h1><Markdown className="mt-6 text-lg leading-relaxed">{`Start writing here.`}</Markdown></article>';

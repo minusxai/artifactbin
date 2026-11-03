@@ -79,7 +79,6 @@ export const DATASET_SESSION_VARIABLES = [
   'X-Hasura-Page-Id',
   'X-Hasura-Role',
 ] as const;
-export type DatasetSessionVariable = (typeof DATASET_SESSION_VARIABLES)[number];
 
 /** Column comparison operators (the query `where` grammar). `_id` takes only the ID subset. */
 export const DATASET_COLUMN_OPERATORS = [
@@ -112,7 +111,7 @@ export const DATASET_PERMISSION_LIMITS = {
   selectLimit: 1000,
 } as const;
 
-export type DatasetColumnComparison = {
+type DatasetColumnComparison = {
   [operator in DatasetColumnOperator]?: Scalar | Scalar[] | boolean;
 };
 /** `{}` is true; `_and`/`_or`/`_not` combine; any other key is a source column name. */
@@ -124,7 +123,7 @@ export interface DatasetBoolExp {
 }
 
 /** Column presets: a static value or a session variable name. */
-export type DatasetColumnPresets = Record<string, Scalar>;
+type DatasetColumnPresets = Record<string, Scalar>;
 
 export interface DatasetSelectPermission {
   columns: '*' | string[];
@@ -133,20 +132,20 @@ export interface DatasetSelectPermission {
   limit?: number;
   allow_aggregations?: boolean;
 }
-export interface DatasetInsertPermission {
+interface DatasetInsertPermission {
   columns?: '*' | string[];
   check: DatasetBoolExp;
   set?: DatasetColumnPresets;
   backend_only?: boolean;
 }
-export interface DatasetUpdatePermission {
+interface DatasetUpdatePermission {
   columns: '*' | string[];
   filter: DatasetBoolExp;
   check?: DatasetBoolExp | null;
   set?: DatasetColumnPresets;
   backend_only?: boolean;
 }
-export interface DatasetDeletePermission {
+interface DatasetDeletePermission {
   filter: DatasetBoolExp;
   backend_only?: boolean;
 }

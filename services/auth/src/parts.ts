@@ -102,7 +102,6 @@ export function session(o: AuthOptions): Part<AuthEnv> {
   };
 }
 
-
 export function internalBoundary(): Part<AuthEnv> {
   return {
     name: 'internalBoundary',
@@ -178,8 +177,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
   };
 }
 
-
-export function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
+function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
   return {
     name: 'publicBuildAssets',
     mount: app => app.use('*', async (c, next) => {
@@ -198,7 +196,6 @@ export function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
     }),
   };
 }
-
 
 async function resolveBearer(request:Request,o:BearerAdmissionOptions):Promise<Actor|null>{
   const auth = request.headers.get('authorization') ?? '';
@@ -238,7 +235,6 @@ function tokenFitsRequest(token: { audience?: string; scope?: string }, request:
   const artifactRead = /^\/a\/[A-Za-z0-9_-]+\/(?:download|export)$/.test(path);
   return (path === '/api' || path.startsWith('/api/') || artifactRead) && origins.some((origin) => token.audience === `${origin}/api`) && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
 }
-
 
 export function authParts(o:AuthOptions):Part<AuthEnv>[] {
  return [sessionAuthority(o),publicBuildAssets(o),session(o),internalBoundary(),loginRoutes(o),oauthRoutes(o),{name:'application',mount:app=>app.all('*',c=>o.upstream(c.req.raw,c.get('actor')))}];
