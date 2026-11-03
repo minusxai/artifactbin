@@ -115,3 +115,47 @@ it('does not wait for the background updater lock before running a command',asyn
   expect(result).toEqual({code:0,out:'ran\n'});expect(performance.now()-start).toBeLessThan(1000);
  }finally{await rm(base,{recursive:true,force:true});}
 },20000);
+
+/** A stored release built without the server packager, whose member list is step 2's switch (it still refuses resolvers/). */
+function storedRelease(files:Record<string,string>,origin:string){
+ const version=createHash('sha256').update(JSON.stringify([origin,Object.entries(files).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+ const all={...files,'release.json':JSON.stringify({schemaVersion:1,origin,version})+'\n'};
+ const local:Buffer[]=[],central:Buffer[]=[];let offset=0;
+ for(const [relative,content] of Object.entries(all).sort(([a],[b])=>a.localeCompare(b))){
+  const name=Buffer.from('artifactbin/'+relative),data=Buffer.from(content);let crc=0xffffffff;
+  for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
+  const head=Buffer.alloc(30);head.writeUInt32LE(0x04034b50);head.writeUInt16LE(0x800,6);head.writeUInt32LE(crc,14);head.writeUInt32LE(data.length,18);head.writeUInt32LE(data.length,22);head.writeUInt16LE(name.length,26);
+  const entry=Buffer.alloc(46);entry.writeUInt32LE(0x02014b50);entry.writeUInt32LE(crc,16);entry.writeUInt32LE(data.length,20);entry.writeUInt16LE(name.length,28);entry.writeUInt32LE(offset,42);
+  local.push(head,name,data);central.push(entry,name);offset+=30+name.length+data.length;
+ }
+ const index=Buffer.concat(central),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(central.length/2,10);end.writeUInt32LE(index.length,12);end.writeUInt32LE(offset,16);
+ const bytes=Buffer.concat([...local,index,end]);
+ return {bytes,manifest:{schemaVersion:1,origin,version,url:origin+'/skills/artifactbin.zip',sha256:createHash('sha256').update(bytes).digest('hex')}};
+}
+
+it('verifies and installs the resolvers/ library folder and still refuses unknown folders',async()=>{
+ const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
+ const {update}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
+ const resolver='export const resolvers = {};\n';
+ const sample=storedRelease({'SKILL.md':'library','resolvers/ab.ts':resolver},'https://example.test');
+ expect(decodeRelease(sample.bytes,sample.manifest)['resolvers/ab.ts']).toBe(resolver);
+ for(const name of ['pluginsxx/ab.ts','resolvers/a.mjs','resolvers/a/b.ts']){
+  const bad=storedRelease({'SKILL.md':'library',[name]:resolver},'https://example.test');
+  expect(()=>decodeRelease(bad.bytes,bad.manifest)).toThrow('Unsafe archive member');
+ }
+ const base=await mkdtemp(path.join(tmpdir(),'skill-resolvers-'));
+ const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ let release:ReturnType<typeof storedRelease>;
+ const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):release.bytes);});
+ try{
+  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:server.base,version:'0'.repeat(64)}));
+  release=storedRelease({'SKILL.md':'first','resolvers/ab.ts':resolver},server.base);
+  expect((await update(root)).status).toBe('activated');
+  expect(await readFile(path.join(base,'artifactbin','resolvers/ab.ts'),'utf8')).toBe(resolver);
+  release=storedRelease({'SKILL.md':'second','resolvers/ab.ts':resolver+'// second\n'},server.base);
+  expect((await update(root)).status).toBe('activated');
+  // Rollback re-verifies the previous release's installed tree, resolvers/ included.
+  expect((await update(root,{rollback:true})).status).toBe('rolled-back');
+  expect(await readFile(path.join(base,'artifactbin','SKILL.md'),'utf8')).toBe('first');
+ }finally{await server.close();await rm(base,{recursive:true,force:true});}
+});

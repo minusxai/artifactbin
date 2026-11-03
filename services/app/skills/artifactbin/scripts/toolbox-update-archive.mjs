@@ -6,7 +6,7 @@ export const hex = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test
 export const member = new RegExp(
   '^(?:SKILL\\.md|release\\.json|references/[a-z0-9-]+\\.md|' +
   'scripts/[a-z0-9-]+\\.mjs|examples/[a-z0-9-]+\\.(?:html|csv|ts|mjs)|' +
-  'design-systems/[a-z0-9-]+\\.css|components/[a-z0-9-]+\\.ts)$'
+  'design-systems/[a-z0-9-]+\\.css|components/[a-z0-9-]+\\.ts|resolvers/[a-z0-9-]+\\.ts)$'
 );
 export function decodeRelease(bytes, manifest) {
   if (bytes.length > limit || !hex(manifest.sha256) || hash(bytes) !== manifest.sha256)
