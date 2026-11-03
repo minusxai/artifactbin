@@ -11,14 +11,12 @@ import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, artifactState } from '@/lib/artifacts';
 import { publishDataset } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
-// A stored v1 policy, seeded through the harness (no door sets v1/v2 since the stored migration).
 import { mintAccountToken as mintToken, setDatasetPolicy } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 const POLICY = {
-  version: 1,
-  enforcement: 'enabled',
+  version: 3,
   tables: [{
     table: { schema: 'public', name: 'rows' },
     insert_permissions: [{ role: 'viewer', permission: { columns: ['n'], check: { n: { _gt: 0 } } } }],
@@ -44,7 +42,7 @@ it('lets the owner replace the rows and add a column while the policy still fits
   expect(response.status, await response.clone().text()).toBe(200);
   const row = (await getArtifactById(f.ds))!;
   expect(row.version).toBe(2);
-  expect(row.dataset_policy).toMatchObject({ enforcement: 'enabled' });
+  expect(row.dataset_policy).toMatchObject(POLICY);
   // The REVISION too: `canUseDataPolicy` and `recheckMutation` both compare it, so moving it on a
   // content write would revoke every viewer's permission mid-session.
   expect(row.policy_revision).toBe(1);

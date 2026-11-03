@@ -94,7 +94,7 @@ it('explicit creation destination beats preferences and group viewers cannot wri
  const made=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{dataset:[{n:1}],destination:{type:'group',id:'grp_ownership'}}}));expect(made.status,await made.clone().text()).toBe(201);
  const row=(await getArtifactById((await made.json()).id))!;expect(row.group_id).toBe('grp_ownership');
  expect(await canWriteDataset(row,identityForUser(f.viewer.id, f.c.id))).toBe('dataset_read_only');
- await f.db.query("UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1",[row.id,JSON.stringify({version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:'$owner'}}]})]);
+ await f.db.query("UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1",[row.id,JSON.stringify({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]})]);
  const writable=(await getArtifactById(row.id))!;
  expect(await canWriteDataset(writable,identityForUser(f.editor.id, f.b.id))).toBeNull();
  expect(await canWriteDataset(writable,identityForUser(f.viewer.id, f.c.id))).toBe('dataset_read_only');

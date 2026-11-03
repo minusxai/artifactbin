@@ -123,7 +123,7 @@ describe('cli-policy-metadata', () => {
   });
 
   it('refuses unsupported content and policy combinations before creating or replacing data',async()=>{
-   const token=await mintToken('mxmx_test_combined_policy'),policy={version:1,enforcement:'enabled',tables:[]};
+   const token=await mintToken('mxmx_test_combined_policy'),policy={version:3,tables:[]};
    const refused=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],policy}}));expect(refused.status).toBe(400);
    expect((await (await getDb()).query('SELECT id FROM artifacts WHERE token_id=$1',[token.id])).rows).toEqual([]);
    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));const doc=await initial.json();

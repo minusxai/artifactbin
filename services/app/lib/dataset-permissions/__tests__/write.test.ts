@@ -15,7 +15,13 @@ import { assertWriteCommit, canInsert, datasetWriteAccess, tableMutationPolicy }
 
 const harness = useAppHarness();
 const ROWS = { schema: 'public', name: 'rows' };
-const DEFAULT = { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }, { actions: ['insert', 'update', 'delete'], from: { artifactOwner: '$owner' } }] };
+/** Everyone reads; shared viewers and signed-in page readers write only through the owner's trusted programs. */
+const DEFAULT = { version: 3, tables: [{ table: ROWS,
+  select_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({ role, permission: { columns: '*', filter: {}, allow_aggregations: true } })),
+  insert_permissions: ['viewer', 'signed_in'].map((role) => ({ role, permission: { columns: '*', check: {}, backend_only: true } })),
+  update_permissions: ['viewer', 'signed_in'].map((role) => ({ role, permission: { columns: '*', filter: {}, check: {}, backend_only: true } })),
+  delete_permissions: ['viewer', 'signed_in'].map((role) => ({ role, permission: { filter: {}, backend_only: true } })),
+}] };
 
 async function fixture(policy: unknown = DEFAULT) {
   const owner = await account('owner@example.test'), member = await account('member@example.test'), stranger = await account('stranger@example.test');
@@ -30,24 +36,14 @@ async function fixture(policy: unknown = DEFAULT) {
 }
 
 describe('datasetWriteAccess', () => {
-  it('admits owner and editor with no rules, even when the v2 grants name neither', async () => {
-    const f = await fixture({ version: 2, allow: [] });
+  it('admits owner and editor with no rules, even when the policy names no role', async () => {
+    const f = await fixture({ version: 3, tables: [] });
     await updateSharingFor(f.owner, f.data.id, { shares: [{ email: f.stranger.email!, role: 'editor' }] });
     for (const actor of [f.owner, f.stranger]) {
       const decision = await datasetWriteAccess(await head(f.data.id), actor);
       expect(decision).toMatchObject({ allowed: true, admin: true });
       expect(tableMutationPolicy(decision, ROWS)).toBeUndefined();
     }
-  });
-
-  // The named-user write compatibility is gone (production migrated to v3): such a grant now admits no one.
-  it('refuses a stored v2 write grant naming one person: v3 has no entry for them, the migration shares instead', async () => {
-    const f = await fixture({ version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
-    const named = { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }, { actions: ['insert', 'update'], from: { user: f.stranger.userId } }] };
-    await sql('UPDATE artifacts SET dataset_policy=$2 WHERE id=$1', [f.data.id, JSON.stringify(named)]);
-    expect(await datasetWriteAccess(await head(f.data.id), f.stranger)).toMatchObject({ allowed: false, reason: 'no_rule' });
-    // Anyone else still has no rule.
-    expect(await datasetWriteAccess(await head(f.data.id), f.member)).toMatchObject({ allowed: false, reason: 'no_rule' });
   });
 
   it('gives a page member backend_only entries only through a trusted program, with the page in the session', async () => {
@@ -72,7 +68,7 @@ describe('datasetWriteAccess', () => {
     expect(await datasetWriteAccess(f.data, f.member, { document: { ...f.program, editId: 'stale' } })).toMatchObject({ allowed: false, reason: 'document_changed' });
   });
 
-  it('keeps the access ceiling for datasets without v2 grants, owner included', async () => {
+  it('keeps the access ceiling, owner included', async () => {
     const owner = await account('owner@example.test');
     const data = await dataset(owner);
     expect(await datasetWriteAccess(await head(data.id), owner)).toMatchObject({ allowed: true, admin: true });
@@ -80,8 +76,8 @@ describe('datasetWriteAccess', () => {
     expect(await datasetWriteAccess(await head(data.id), owner)).toMatchObject({ allowed: false, reason: 'dataset_read_only' });
   });
 
-  // Plan §3/§8: on a private dataset signed_in and anonymous rules never apply (stored v3 included; the
-  // stored migration and the new-dataset default would otherwise open private datasets to page readers).
+  // Plan §3/§8: on a private dataset signed_in and anonymous rules never apply (the new-dataset default would
+  // otherwise open private datasets to page readers).
   it('keeps a private dataset\'s signed_in and anonymous rules out, except backend_only ones through a trusted program', async () => {
     const roles = ['viewer', 'signed_in', 'anonymous'];
     const policy = { version: 3, tables: [{ table: ROWS,

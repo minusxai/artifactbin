@@ -8,7 +8,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken } from '@/lib/accounts';
 import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
-import { account, dataset, mine, page, sql } from '@/__tests__/artifact-fixtures';
+import { account, dataset, mine, page, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
 
 useAppHarness();
 
@@ -52,17 +52,17 @@ describe('row lookups', () => {
     expect(await getEditableArtifactFor(editor, b.id)).toBeNull();
   });
 
-  it('the link-readable cut: never private, and a governed dataset by its read grant', async () => {
+  it('the link-readable cut: never private, a dataset included', async () => {
     const owner = await account('owner@example.test');
     const priv = await mine(owner, 'Private');
     const open = await mine(owner, 'Open');
     await updateSharingFor(owner, open.id, { visibility: 'unlisted' });
-    const ownerOnly = await dataset(owner, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] });
-    const everyone = await dataset(owner, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
+    const closed = await dataset(owner, readAllPolicy(), { visibility: 'private' });
+    const everyone = await dataset(owner, readAllPolicy());
     expect(await getLinkReadableArtifact(priv.id)).toBeNull();
     expect(await getLinkReadableArtifact(open.id)).toMatchObject({ id: open.id });
-    expect(await getLinkReadableArtifact(ownerOnly.id)).toBeNull();
-    expect((await getLinkReadableArtifacts([priv.id, open.id, ownerOnly.id, everyone.id])).map(r => r.id).sort()).toEqual([open.id, everyone.id].sort());
+    expect(await getLinkReadableArtifact(closed.id)).toBeNull();
+    expect((await getLinkReadableArtifacts([priv.id, open.id, closed.id, everyone.id])).map(r => r.id).sort()).toEqual([open.id, everyone.id].sort());
     expect(await getLinkReadableArtifacts([])).toEqual([]);
   });
 
@@ -102,7 +102,7 @@ describe('reader admission', () => {
     await updateSharingFor(owner, row.id, { visibility: 'unlisted', linkRole: 'commenter' });
     expect((await readableArtifact(stranger, row.id))!.role).toBe('commenter');
     expect(await readableArtifactHeader(stranger, row.id)).toMatchObject({ role: 'commenter', row: { id: row.id } });
-    const data = await dataset(owner, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
+    const data = await dataset(owner, readAllPolicy());
     await updateSharingFor(owner, data.id, { linkRole: 'viewer' });
     await sql("UPDATE artifacts SET visibility='unlisted' WHERE id=$1", [data.id]);
     expect((await readableArtifact(stranger, data.id))!.role).toBe('viewer');

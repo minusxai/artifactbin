@@ -17,7 +17,7 @@ async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedA
  const owner=await mintAccountToken('mxmx_test_registered_mutation_acceptance'),actor=identityForUser(owner.userId,owner.id);
  const make=async(json:object)=>{const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json}));expect(response.status).toBe(201);return (await response.json()).id as string;};
  const datasetId=await make({dataset:[{body:'seed'},{body:'other'}],visibility:'private'});
- await setDatasetPolicy(actor,datasetId,{version:2,allow:[{actions:['read','insert','update','delete'],from:{user:'$owner'}}]},0);
+ await setDatasetPolicy(actor,datasetId,{version:3,tables:[]},0);
  const pageId=await make({html:'<html><body>Registered actions</body></html>',visibility:'private'});
  await changeMembership(actor,pageId,{action:'join'});
  const original=await readHtmlPage(actor,pageId),page={...original,version:original.version+1,revision:String(original.version+1)};
@@ -64,7 +64,7 @@ it('real UPDATE uses dataset policies and exact count rollback, and unrestricted
 it('the dataset owner is admin-equivalent: a policy without update never refuses the owner\'s UPDATE',async()=>{
  const f=await fixture('update'),before=(await getArtifactById(f.datasetId))!;
  if(typeof before.policy_revision!=='number')throw Error('missing fixture policy revision');
- expect(await setDatasetPolicy(f.actor,f.datasetId,{version:2,allow:[{actions:['read','insert','delete'],from:{user:'$owner'}}]},before.policy_revision)).toMatchObject({revision:before.policy_revision+1});
+ expect(await setDatasetPolicy(f.actor,f.datasetId,{version:3,tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}],delete_permissions:[{role:'viewer',permission:{filter:{}}}]}]},before.policy_revision)).toMatchObject({revision:before.policy_revision+1});
  expect(await f.run('request_update_owner_123456','changed')).toMatchObject({outcome:'committed',affected:1});expect(await f.rows()).toEqual([{body:'changed'},{body:'other'}]);expect((await getArtifactById(f.datasetId))!.version).toBe(before.version+1);
 });
 

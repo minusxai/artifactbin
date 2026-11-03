@@ -11,7 +11,7 @@ import { artifactChannel } from '@artifactbin/contracts';
 import { afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
 import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, repairRegisteredMutationHead, repairRegisteredQueryHead, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
-import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
+import { account, dataset, head, mine, page, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 const folder = (actor: { userId: string }, title = 'Folder', ancestor_ids: string[] = []) =>
@@ -100,7 +100,7 @@ describe('replace and revert', () => {
   it('a governed dataset is its owner\'s to replace and nobody\'s to revert', async () => {
     const owner = await account('owner@example.test');
     const editor = await account('editor@example.test');
-    const data = await dataset(owner, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
+    const data = await dataset(owner, readAllPolicy());
     await updateSharingFor(owner, data.id, { shares: [{ email: 'editor@example.test', role: 'editor' }] });
     const locked = await replaceArtifactFor(editor, data.id, { format: 'dataset', source: null, meta: {} }) as Response;
     expect([locked.status, (await locked.json()).error]).toEqual([409, 'policy_locked']);
@@ -151,8 +151,8 @@ describe('metadata', () => {
 
   it('a policy write needs the policy revision it observed; a move swaps the whole subtree\'s trail', async () => {
     const owner = await account('owner@example.test');
-    const data = await dataset(owner, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
-    // A metadata write sets version 3 (version 1 and 2 bodies are refused since the stored migration); a stored v2 policy is replaced.
+    const data = await dataset(owner, readAllPolicy());
+    // A metadata write replaces the stored version 3 policy.
     const policy = { version: 3 as const, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer' as const, permission: { columns: '*' as const, filter: {} } }] }] };
     expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 5 })).toMatchObject({ conflict: true, reason: 'state_conflict' });
     expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 0 })).toMatchObject({ policy_revision: 1, dataset_policy: policy });

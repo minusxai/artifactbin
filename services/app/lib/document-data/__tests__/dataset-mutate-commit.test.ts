@@ -10,15 +10,15 @@ import {account,datasetFixture as fixture,document,refusal,write} from './datase
 
 useAppHarness();
 
-it('honours a cross-document grant only for members acting through a trusted program of a dataset admin',async()=>{
+it('honours a backend_only rule only for members acting through a trusted program of a dataset admin',async()=>{
  const f=await fixture(),member=await account('member'),granted=await document(f.db,'docGranted',f.owner),other=await document(f.db,'docOther',f.owner);
- const policy={version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:granted.id}}]};
- // A stored v2 policy (seeded: no door sets v1/v2 since the stored migration).
+ // Everyone reads; viewers and signed-in page members insert only through a trusted program.
+ const policy={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:['viewer','signed_in'].map(role=>({role,permission:{columns:'*',check:{},backend_only:true}}))}]};
  expect(await setDatasetPolicy(f.owner.actor,f.id,policy,0)).toMatchObject({revision:1});
  const target={schema:'public',table:'rows'},sql='insert into public.rows values (7)';
  expect(refusal(await write(await f.row(),member.actor,sql,{document:granted,target}))).toBe('dataset_read_only');
  await seedOwnerJoin(f.db,granted.id,member.id);await seedOwnerJoin(f.db,other.id,member.id);
- // Plan §312 (toV3 write_page_scoped): artifact:X becomes backend_only entries, so any trusted program on a page the dataset owner owns writes, not X alone.
+ // Plan §312: backend_only entries admit any trusted program on a page the dataset owner owns, not one page alone.
  expect(refusal(await write(await f.row(),member.actor,sql,{document:other,target}))).toBeNull();
  expect(refusal(await write(await f.row(),member.actor,sql))).toBe('dataset_read_only');
  expect(refusal(await write(await f.row(),member.actor,sql,{document:granted,target}))).toBeNull();

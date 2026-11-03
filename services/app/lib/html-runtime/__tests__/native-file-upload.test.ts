@@ -22,7 +22,7 @@ it.each(['legacy','grants','direct'])('the native upload port composes with real
  expect((await membershipState(identityForUser(owner.id),document.id)).self?.status).toBe('accepted');
  if(mode==='direct'){
   await changeMembership(identityForUser(owner.id),document.id,{action:'leave'});
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify({version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:owner.id}}]})]);
+  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]})]);
  }
  let actor:Actor={credential:'session',userId:owner.id,email:owner.email??undefined,emailVerified:true},loseResponse=true;
  const uploader=createFileUploader({readOnly:()=>false,datasetId:name=>name==='attachments'?dataset.id:undefined,async send(payload){

@@ -57,7 +57,9 @@ async function avatar() {
   return { user, version, at: (query: string) => getAvatar(request(`/api/users/${user.id}/avatar${query}`), ctx(user.id)) };
 }
 
-/** v3: the shared viewer may insert (and read, unless `read` is false); the named-user v2 grant this replaces admits no one now. */
+/** Everyone reads; nobody below editor writes. */
+const EVERYONE_READS={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]};
+/** The shared viewer may insert (and read, unless `read` is false). */
 const viewerInsert=(read=true)=>({version:3,tables:[{table:{schema:'public',name:'rows'},...(read?{select_permissions:[{role:'viewer',permission:{columns:'*',filter:{},allow_aggregations:true}}]}:{}),insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]});
 /** A document whose member uploads an image and files into a private dataset (the feedback-form shape). */
 async function datasetUploads() {
@@ -75,7 +77,7 @@ async function datasetUploads() {
   await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
   await changeMembership(identityForUser(reporter.id,null),document.id,{action:'join'});
   await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},0);
+  await setDatasetPolicy(ownerActor,dataset.id,EVERYONE_READS,0);
   const pageActor: Actor = { credential: 'session', userId: reporter.id, email: reporter.email!, emailVerified: true };
   // A declared link and accepted membership alone never grant dataset writes.
   const deniedBytes=new Uint8Array(await png(40,24));
@@ -93,7 +95,7 @@ async function datasetUploads() {
     return () => readDatasetFile(request(stored.url, { actor: pageActor }), { params: Promise.resolve({ id: document.id, datasetId: dataset.id, fileId: stored.ref.slice('dfile:'.length) }) });
   };
   return {
-    revokeUpload:async()=>{const current=(await getArtifactById(dataset.id))!;await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},current.policy_revision??0);},
+    revokeUpload:async()=>{const current=(await getArtifactById(dataset.id))!;await setDatasetPolicy(ownerActor,dataset.id,EVERYONE_READS,current.policy_revision??0);},
     image: async (expectedStatus=201) => {
       const made = await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`, { method: 'POST', actor: pageActor, headers: { 'Content-Type': 'image/png', 'X-Edit-Id': document.edit_id, 'Idempotency-Key': 'upload-operation-123' }, body: new Uint8Array(bytes) }), params);
       expect(made.status, await made.clone().text()).toBe(expectedStatus);
