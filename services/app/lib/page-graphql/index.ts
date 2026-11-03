@@ -32,6 +32,8 @@ async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[
   return {name:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs};
  }));
 }
+/** How many times a read raced by a linked dataset's write runs before the request is refused. */
+const RACED_READ_ATTEMPTS=3;
 interface OperationScope{revalidateActor:()=>Promise<AccessActor>;retainReadFence?:(verify:()=>Promise<void>)=>void;idempotencyKey?:string;signal?:AbortSignal}
 function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope){
  const {revalidateActor,retainReadFence}=scope;
@@ -102,14 +104,21 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   // The head just read is this revision when the request names it: one read of the page's source, not two.
   const page=body.revision===head.revision?head:await readHtmlPage(actor,pageId,body.revision);
   const operation:PageOperationRequest={pageId,revision:body.revision,query:body.query,...(body.variables?{variables:body.variables as HtmlJsonObject}:{}),...(typeof body.operationName==='string'?{operationName:body.operationName}:{})};
-  // Mutations conserve their durable receipts; this final fence only withholds read results.
-  const readFences:Array<()=>Promise<void>>=[];
-  const result=await operations(actor,page,{revalidateActor:()=>requestOrSessionActor(request,{revalidate:true}),signal:request.signal,...(operationKind==='query'?{retainReadFence:(verify:()=>Promise<void>)=>{readFences.push(verify);}}:{}),...(idempotencyKey?{idempotencyKey}:{})}).execute(actor,operation,request.signal);
-  if(operationKind==='query'){
-   for(const verify of readFences)await verify();
-   await verifyPage(page.revision);
-   return json(result,200,readHeaders);
+  const scope={revalidateActor:()=>requestOrSessionActor(request,{revalidate:true}),signal:request.signal};
+  if(operationKind==='mutation')return json(await operations(actor,page,{...scope,...(idempotencyKey?{idempotencyKey}:{})}).execute(actor,operation,request.signal));
+  // A read's fences withhold its result when a linked dataset moved while it ran (another reader's write, say).
+  // Reads have no effects, so a moved dataset re-runs the whole read on the new head, a bounded number of times.
+  for(let attempt=1;;attempt++){
+   const readFences:Array<()=>Promise<void>>=[];
+   try{
+    const result=await operations(actor,page,{...scope,retainReadFence:verify=>{readFences.push(verify);}}).execute(actor,operation,request.signal);
+    for(const verify of readFences)await verify();
+    await verifyPage(page.revision);
+    return json(result,200,readHeaders);
+   }catch(error){
+    if(attempt<RACED_READ_ATTEMPTS&&error instanceof Error&&error.message==='dataset_changed'&&!request.signal.aborted)continue;
+    throw error;
+   }
   }
-  return json(result);
  }catch{return json({error:'page_operation_unavailable'},404);}
 }

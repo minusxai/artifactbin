@@ -1,3 +1,4 @@
 [
-  "services/app/lib/html-backends/__tests__/native-acceptance.test.ts"
+  "services/app/lib/html-backends/__tests__/native-acceptance.test.ts",
+  "services/app/lib/page-graphql/__tests__/raced-read.test.ts"
 ]

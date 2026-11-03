@@ -36,6 +36,17 @@ describe('HTML page client', () => {
     expect(state.read()).toEqual({ tab: 'all' });
   });
 
+  it('reports a reply that carries neither data nor errors as an error, never as a silent null', async () => {
+    const remote: RemotePort = { online: () => true, execute: async () => ({ error: 'rate_limited' }) as never };
+    const client = createClient({ backends: [], datasets: ['orders'], state: createLocalStore(), remote });
+    const read = await client.query({ query: gql`{ orders { _id } }` });
+    expect(read.data).toEqual({ orders: null });
+    expect(read.errors).toEqual([{ message: 'rate_limited', path: ['orders'] }]);
+    const written = await client.mutate({ mutation: gql`mutation { insert_orders_one(object: {}) { _id } }` });
+    expect(written.errors).toEqual([{ message: 'rate_limited', path: ['insert_orders_one'] }]);
+    expect(written.extensions?.outcomes).toEqual({ insert_orders_one: 'rejected' });
+  });
+
   it('treats a generated-API dataset link\'s flat roots as remote fields and keys their outcomes by root', async () => {
     const sent: Array<{ query: string; operation: string; idempotencyKey?: string }> = [];
     const remote: RemotePort = { online: () => true, execute: async (request): ReturnType<RemotePort['execute']> => {

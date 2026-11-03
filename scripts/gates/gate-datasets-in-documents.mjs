@@ -68,7 +68,10 @@ try {
     await a.frame.getByRole("button", { name: "Save 1", exact: true }).click();
     check(await outcome(a.frame) === "committed", "owner cell edit commits real dataset row");
     await b.frame.getByRole("button", { name: "Save 1", exact: true }).click();
-    check(await outcome(b.frame) === "rejected", "stale reader update (conditional on the values it edited) reports a conflict");
+    const staleOutcome = await outcome(b.frame);
+    const refreshError = await b.frame.locator("#refresh-error").textContent();
+    check(staleOutcome === "rejected", `stale reader update (conditional on the values it edited) reports a conflict${staleOutcome === "rejected" ? "" : ` (got ${JSON.stringify(staleOutcome)}; refresh: ${JSON.stringify(refreshError)})`}`);
+    if (refreshError) console.log(`  ·   live refresh after the other tab's commit failed: ${refreshError}`);
     check(await b.frame.getByLabel("item 1", { exact: true }).inputValue() === "My pending draft", "conflict preserves viewer intent");
     check(bMutations.length === 1, "conflicting mutation is sent once without automatic retry");
     await b.page.reload({ waitUntil: "domcontentloaded" });
