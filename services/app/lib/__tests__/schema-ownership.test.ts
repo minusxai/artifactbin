@@ -64,9 +64,14 @@ it('membership and its notifications belong to the app',()=>{for(const name of [
 
 it('notification outbox and subscriber receipts stay with their existing owners',()=>{expect(declared()['app.event_outbox']).toBe('app');expect(declared()['events.deliveries']).toBe('events');});
 
-it('retired custom domains are not active schema and are not destructively dropped',()=>{
- expect(declared()['app.custom_domains']).toBeUndefined();
- expect(renderedSchema().schema).not.toMatch(/(?:CREATE|ALTER|DROP) TABLE(?: IF (?:NOT )?EXISTS)? app\.custom_domains/);
+it('retired storage is not declared and is dropped from existing databases',()=>{
+ const sql=renderedSchema().schema;
+ for(const name of ['custom_domains','html_backend_stores','browser_test_users','webfonts','login_codes','oauth_codes','remote_agents','remote_work']){
+  expect(declared()['app.'+name]).toBeUndefined();
+  expect(sql).toContain(`DROP TABLE IF EXISTS app.${name};`);
+  expect(sql).not.toMatch(new RegExp(`(?:CREATE|ALTER) TABLE(?: IF NOT EXISTS)? app\\.${name}\\b`));
+ }
+ expect(sql).toContain('ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;');
 });
 
 it('canonical document storage belongs to artifact heads and archived versions',()=>{

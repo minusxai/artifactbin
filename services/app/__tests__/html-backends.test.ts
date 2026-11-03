@@ -7,7 +7,7 @@ import {getHtmlBackendVersion} from '@/lib/html-backends';
 import { identityForUser } from '@/lib/accounts';
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>{
  if(source==='bad')throw Error('invalid backend schema');
- if(source==='resolver')return {typeDefs:'type Query { greeting: String test: String! @auth(role: OWNER) }',compiled:source,secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},test:true};
+ if(source==='resolver')return {typeDefs:'type Query { greeting: String test: String! @auth(role: owner) }',compiled:source,secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},test:true};
  return {typeDefs:'type Query { greeting: String }',compiled:source};
 }}));
 const harness=useAppHarness();

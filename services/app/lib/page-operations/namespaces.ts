@@ -65,15 +65,8 @@ const BACKEND_DIRECTIVE =
 /** A generated dataset root's mount (the counterpart of @backend): its link, dataset, version, table root and kind. */
 const DATASET_DIRECTIVE =
   "directive @dataset(link: String!, file: String!, version: String!, table: String!, field: String!) on FIELD_DEFINITION\n";
-/**
- * Legacy uppercase `@auth(role:)` values keep their original meaning for immutable published code:
- * `VIEWER` was any reader of the page (a guest on a public link included), so it is `anonymous`.
- */
-const LEGACY_AUTH_ROLES: Readonly<Record<'OWNER' | 'EDITOR' | 'VIEWER', DatasetRole>> = Object.freeze({ OWNER: 'owner', EDITOR: 'editor', VIEWER: 'anonymous' });
 const authRole = (value: unknown): DatasetRole | null =>
-  typeof value !== 'string' ? null
-    : Object.hasOwn(LEGACY_AUTH_ROLES, value) ? LEGACY_AUTH_ROLES[value as keyof typeof LEGACY_AUTH_ROLES]
-    : (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
+  typeof value === 'string' && (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
 
 /**
  * THE RESOLVER FIELD DECISION: why a caller with this page role may not run a field carrying this

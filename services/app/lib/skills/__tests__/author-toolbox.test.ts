@@ -262,7 +262,7 @@ it('autofix.mjs fixes in place, --dry-run writes nothing, and the report starts 
 });
 it('serve runs autofix on the served bytes and leaves the file alone unless asked to write',async()=>{
  const {mkdtemp,readFile,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
- const startPreview=(await import('../../../skills/artifactbin/scripts/preview.mjs')).startPreview as (options:any)=>Promise<{url:string;close():Promise<void>}>;
+ const startPreview=(await import('../../../skills/artifactbin/scripts/preview-server.mjs')).startPreview as (options:any)=>Promise<{url:string;close():Promise<void>}>;
  const root=await mkdtemp(path.join(tmpdir(),'author-serve-autofix-'));
  try{
   const file=path.join(root,'index.html'),source='<!doctype html><html><head><title>T</title></head><body><h1 id="x">Hi</h1><p id="x"></p></body></html>';await writeFile(file,source);

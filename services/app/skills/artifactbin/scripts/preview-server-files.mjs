@@ -1,7 +1,7 @@
 /**
  * Internal: file helpers for the private preview server: content types, platform font lookup,
  * root containment and the per-request autofix of served pages.
- * Used by: preview.mjs, preview-source-routes.mjs.
+ * Used by: preview-server.mjs, preview-source-routes.mjs.
  */
 import {readFile,readdir} from 'node:fs/promises';
 import {statSync} from 'node:fs';

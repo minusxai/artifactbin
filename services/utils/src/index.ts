@@ -10,7 +10,7 @@ export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, fak
 export { TOKEN_RE, hashToken, createTokenReader } from './tokens';
 export { createCodeStore } from './codes';
 export { AGENT_COOKIE, cookieName, clearCookieHeader, readCookie } from './agent-session';
-export { renderSchema, ensureTable } from './schema';
+export { renderSchema, renderDroppedTables, ensureTable } from './schema';
 export { PROTECTED_RESOURCE_PATH, wwwAuthenticate } from './http-helpers';
 export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, type EventsClientOptions } from './clients';
 export { serviceSecretForServer } from './service-auth';

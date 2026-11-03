@@ -3,7 +3,7 @@
  * and dataset/backend link discovery, platform styles, and re-exported autofix and export packing.
  * The downloadable archive bundles this parser (buildPreviewParser); installed previews need only
  * Node.
- * Used by: preview.mjs, preview-*.mjs, publication-bundle.mjs, toolbox-platform.mjs,
+ * Used by: preview-server.mjs, preview-*.mjs, toolbox-platform.mjs,
  *   toolbox-publish.mjs, autofix.mjs, the skill ZIP route and several parser tests.
  */
 export {packPreviewExport} from './preview-export.mjs';

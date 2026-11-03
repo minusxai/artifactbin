@@ -1,12 +1,12 @@
 import {expect,it} from 'vitest';
-import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import type {BrowserSessionResult} from '@artifactbin/contracts';
 
 it('prepares a conditional project update with retained mappings and a fresh immutable write key',async()=>{
- const {prepareBundleUpdate,sendBundleFile}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
+ const {prepareBundleUpdate}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
  const root=await mkdtemp(join(tmpdir(),'author-update-'));
  try{
   await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="./theme.css"><h1>Changed</h1>');
@@ -18,18 +18,11 @@ it('prepares a conditional project update with retained mappings and a fresh imm
   expect(saved.idempotencyKey).not.toBe(next.idempotencyKey);expect(saved.body).not.toHaveProperty('visibility');
   expect(saved.body.publicationBundle.files[0].path).toBe('theme.css');
   await expect(prepareBundleUpdate({...options,head:{id:'PAGE12',version:0,state:''}})).rejects.toThrow();
-  const request=join(root,'request.json');await writeFile(request,JSON.stringify(saved));
-  const calls:unknown[]=[];
-  const fetcher=async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{calls.push(init);return Response.json({id:'PAGE12',version:5,dependencyReceipts:[{path:'theme.css',kind:'asset',id:'ASSET1',revision:'4',state:'new-state'}]});};
-  const env={ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'test-token'};
-  await sendBundleFile(request,env,fetcher);await sendBundleFile(request,env,fetcher);
-  expect(calls[0]).toEqual(calls[1]);
-  expect(JSON.parse(await readFile(request+'.receipt.json','utf8')).mappings['theme.css']).toMatchObject({revision:'4',state:'new-state'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('provides help without reading project files or credentials',()=>{
- for(const script of ['publication-bundle','publish','preview','check'])expect(execFileSync(process.execPath,[new URL('../../../skills/artifactbin/scripts/'+script+'.mjs',import.meta.url).pathname,'--help'],{encoding:'utf8'})).toContain('Usage:');
+ for(const script of ['publish','serve','check'])expect(execFileSync(process.execPath,[new URL('../../../skills/artifactbin/scripts/'+script+'.mjs',import.meta.url).pathname,'--help'],{encoding:'utf8'})).toContain('Usage:');
 });
 
 it('builds bounded smoke checks and refuses remote URLs in the private preview mode',async()=>{

@@ -2,7 +2,7 @@
  * Internal: in-memory local dataset sessions for the preview: loads a page's declared local data
  * files, keeps unsaved edits per session (bounded count, size and age) and recovers them when the
  * page file disappears.
- * Used by: preview.mjs, preview-dataset-route.mjs (through the sessions object).
+ * Used by: preview-server.mjs, preview-dataset-route.mjs (through the sessions object).
  */
 import {randomBytes,createHash} from 'node:crypto';
 import {resolve,relative,sep} from 'node:path';

@@ -9,7 +9,7 @@ it('executes a compiled immutable resolver through the retained isolated runner,
   const source='export const typeDefs="type Query { double(n:Int!):Int! caps:String! store:String! } type Mutation { add(n:Int!):Int! @auth(role:editor) }"; export default { double:async({n})=>n*2, caps:async(args,principal,caps)=>Object.keys(caps).sort().join(","), store:async(args,principal,caps)=>typeof caps.store+" "+typeof caps.secrets, add:async({n})=>n+1 };';
   record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend1',pageId:'page1',version:'v1',ownerId:'owner1'};
   expect(record).toMatchObject({secretBindings:[],secretHosts:{},test:false});
-  expect(await createBackendCompiler(runner)('export const secrets={API_KEY:"api.example.com"}; export const typeDefs="type Query { test: String! @auth(role: OWNER) }"; export default { test:()=>"ok" };')).toMatchObject({secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},test:true});
+  expect(await createBackendCompiler(runner)('export const secrets={API_KEY:"api.example.com"}; export const typeDefs="type Query { test: String! @auth(role: owner) }"; export default { test:()=>"ok" };')).toMatchObject({secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},test:true});
   const invoke=createBackendInvoker(runner,async()=>record);
   const call={namespace:'tasks',fileId:'backend1',version:'v1',operation:'query' as const,field:'double',args:{n:2},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
   expect(await invoke(call)).toBe(4);

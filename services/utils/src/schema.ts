@@ -2,8 +2,8 @@
  * Schema as data → idempotent DDL: CREATE TABLE IF NOT EXISTS + per-column ADD COLUMN IF NOT EXISTS
  * (so a database built from an older declaration gains new columns) + DROP NOT NULL for retired
  * columns + DROP COLUMN IF EXISTS for dropped ones + CREATE [UNIQUE] INDEX IF NOT EXISTS (with an
- * optional access method and expression columns), optionally schema-qualified. Every statement
- * individually executable, in order.
+ * optional access method and expression columns), optionally schema-qualified, + DROP TABLE IF
+ * EXISTS for tables no declaration carries any more. Every statement individually executable, in order.
  */
 import type { Column, Queryable, Table } from '@artifactbin/contracts';
 
@@ -108,6 +108,14 @@ export function renderSchema(tables: Table[], o: { schema?: string } = {}): stri
   // the schema the connection is actually in rather than assume `public`.
   const schemaExpr = o.schema ? `'${o.schema}'` : 'current_schema()';
   return tables.flatMap((t) => renderTable(t, qualified, schemaExpr));
+}
+
+/**
+ * Tables a package no longer declares: `DROP TABLE IF EXISTS`, idempotent, so the boot is the whole
+ * migration. Use it only for genuinely dead data: a drop cannot be undone by a boot.
+ */
+export function renderDroppedTables(names: readonly string[], o: { schema?: string } = {}): string[] {
+  return names.map((name) => `DROP TABLE IF EXISTS ${o.schema ? `${o.schema}.${name}` : name}`);
 }
 
 /** Apply renderSchema's statements, in order, on every boot. */

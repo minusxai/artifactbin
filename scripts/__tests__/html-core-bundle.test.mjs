@@ -55,7 +55,7 @@ it('serves every actual immutable runtime asset after relocating the server bund
  const served=new Map([['/af/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]);
  const {withHttpServer}=await import('../../services/test-support/src/net.ts');
  const platform=await withHttpServer((request,reply)=>{const body=served.get(request.url);reply.writeHead(body===undefined?404:200,{'content-type':'text/javascript'});reply.end(body??'');});cleanup.push(()=>platform.close());
- const {startPreview}=await import(pathToFileURL(path.join(installed,'preview.mjs')).href);const preview=await startPreview({root:project,platformOrigin:platform.base});cleanup.push(()=>preview.close());
+ const {startPreview}=await import(pathToFileURL(path.join(installed,'preview-server.mjs')).href);const preview=await startPreview({root:project,platformOrigin:platform.base});cleanup.push(()=>preview.close());
  for(const [resource,source] of [['/af/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]){const response=await fetch(new URL(resource,preview.url));expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);}
 
 });

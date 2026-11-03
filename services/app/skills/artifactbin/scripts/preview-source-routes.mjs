@@ -1,7 +1,7 @@
 /**
  * Internal: the preview server's page-source endpoints: /__af_preview/export-source (self-contained
  * export), /__af_preview/source (raw page HTML) and /__af_preview/autofix (autofix report).
- * Used by: preview.mjs.
+ * Used by: preview-server.mjs.
  */
 import {lstat} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';

@@ -42,11 +42,11 @@ export function boundedSchema(source: string, limit = 65536) {
 }
 /**
  * Supplied by the platform to every backend file; authors never declare these. `Role` holds the Hasura
- * role names (`@auth(role:)` means "at least", namespaces.ts `resolverFieldRefusal`); the uppercase
- * values are legacy and keep their original meaning for immutable published code.
+ * role names (`@auth(role:)` means "at least", namespaces.ts `resolverFieldRefusal`).
  */
 export const BACKEND_PLATFORM_SDL =
-  "directive @auth(signedIn: Boolean, role: Role) on FIELD_DEFINITION\nenum Role { owner editor viewer signed_in anonymous OWNER EDITOR VIEWER }\n";
+  "directive @auth(signedIn: Boolean, role: Role) on FIELD_DEFINITION\nenum Role { owner editor viewer signed_in anonymous }\n";
+const AUTH_ROLES = ["owner", "editor", "viewer", "signed_in", "anonymous"];
 const MISSING_QUERY = "Query root type must be provided.";
 /**
  * One backend file's schema, written as if the file were alone: the platform
@@ -67,6 +67,19 @@ export function boundedBackendSchema(typeDefs: string): GraphQLSchema {
       throw Error("Root types are always Query and Mutation");
     if (definition.kind === Kind.DIRECTIVE_DEFINITION)
       throw Error("Backend files cannot declare directives");
+    // graphql-js builds an SDL without checking directive argument values, so a role name outside
+    // `Role` would build and then refuse every caller; it is refused here, at publish.
+    if ("fields" in definition && definition.fields)
+      for (const field of definition.fields)
+        for (const directive of field.directives ?? []) {
+          const role = directive.name.value === "auth"
+            ? directive.arguments?.find((argument) => argument.name.value === "role")?.value
+            : undefined;
+          if (role?.kind === Kind.ENUM && !AUTH_ROLES.includes(role.value))
+            throw Error(
+              `@auth(role: ${role.value}) on ${definition.name.value}.${field.name.value} is not a role; use one of ${AUTH_ROLES.join(", ")}`,
+            );
+        }
     // @auth guards a call before it runs, so it belongs on Query and Mutation fields only.
     if (
       "fields" in definition &&
@@ -101,7 +114,7 @@ export function boundedBackendSchema(typeDefs: string): GraphQLSchema {
 }
 /**
  * The optional Test connection field. When present it must be the owner-only
- * Query field `test: String! @auth(role: owner)` (or legacy `OWNER`) with no required arguments.
+ * Query field `test: String! @auth(role: owner)` with no required arguments.
  */
 export function resolverTestField(schema: GraphQLSchema): boolean {
   const field = schema.getQueryType()?.getFields().test;
@@ -114,7 +127,7 @@ export function resolverTestField(schema: GraphQLSchema): boolean {
     String(field.type) !== "String!" ||
     field.args.some(isRequiredArgument) ||
     role?.kind !== Kind.ENUM ||
-    role.value.toLowerCase() !== "owner"
+    role.value !== "owner"
   )
     throw Error(
       "invalid_test_field: declare it on Query as test: String! @auth(role: owner), with no required arguments",

@@ -10,8 +10,6 @@ export interface PreviewOptions {
   runtimeDir?: string;
   /** Origin supplying the platform files a source checkout lacks; defaults to the archive's selected server, null for none. */
   platformOrigin?: string | null;
-  /** Older name of platformOrigin. */
-  fontOrigin?: string | null;
   /** Trusted source-owned pinned browser modules (tests); never read from page markup. */
   libraryAssets?: Readonly<Record<string,string>>;
   /** Short shared content-scan cache; tests may set zero. */

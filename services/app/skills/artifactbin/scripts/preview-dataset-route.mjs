@@ -1,7 +1,7 @@
 /**
  * Internal: the preview server's local dataset endpoints (/__af_preview/datasets/ID[/status|export|
  * discard]): bounded GraphQL operations against the in-memory session, plus export and discard.
- * Used by: preview.mjs.
+ * Used by: preview-server.mjs.
  */
 export const DATASET_ROUTE=new RegExp('^/__af_preview/datasets/([A-Za-z0-9_-]+)'+
   '(?:/(export|status|discard)(?:/([A-Za-z_][A-Za-z0-9_]*))?)?$');

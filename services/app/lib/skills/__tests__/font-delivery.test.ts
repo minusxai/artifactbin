@@ -42,7 +42,7 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
   }
   const html='<html data-af-design-system="almanac" data-af-dark="true"><head><link data-af="design-system" rel="stylesheet" href="./design-systems/almanac.css"></head><body class="t-body">Portable type</body></html>';
   writeFileSync(path.join(installed,'index.html'),html);
-  const {startPreview}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/preview.mjs')).href);
+  const {startPreview}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/preview-server.mjs')).href);
   const preview=await startPreview({root:installed,port:0,revisionIntervalMs:0,platformOrigin:origin.base});
   try{
    const page=await fetch(preview.url);expect(page.status).toBe(200);
@@ -58,9 +58,8 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
    expect((await fetch(new URL(face.url,preview.url))).status).toBe(200);
    expect((await fetch(new URL('/af/fonts/not-a-font.woff2',preview.url))).status).toBe(404);
   }finally{await preview.close();}
-  const output=path.join(root,'publication.json');
-  execFileSync(process.execPath,[path.join(installed,'scripts/publication-bundle.mjs'),installed,'index.html','https://publish.example',output],{stdio:'pipe'});
-  const request=JSON.parse(readFileSync(output,'utf8'));
+  const {prepareBundle}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
+  const request=await prepareBundle({root:installed,entry:'index.html',server:'https://publish.example'});
   const plan=planPublicationBundle(html,request.body.publicationBundle);
   // Platform font addresses are absolute: a publication uploads the stylesheet, never font bytes.
   expect(plan.dependencies.map(dep=>dep.path)).toEqual(['design-systems/almanac.css']);

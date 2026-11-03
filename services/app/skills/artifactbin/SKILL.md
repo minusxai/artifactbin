@@ -243,5 +243,4 @@ Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT
 `node scripts/check.mjs http://127.0.0.1:PORT/ --playwright-module FILE` (the preview adds a 76px
 toolbar and needs the network; see the top of `scripts/serve.mjs`).
 
-Scripts are helpers inside this skill, not global commands; `preview.mjs` and
-`publication-bundle.mjs` are compatibility shims.
+Scripts are helpers inside this skill, not global commands.

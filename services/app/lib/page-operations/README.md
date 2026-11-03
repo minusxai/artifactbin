@@ -28,11 +28,10 @@ Dataset rules differ: they match exactly one role per request, as in Hasura.
 | none | anyone who can read the page (anonymous) |
 | `@auth(signedIn: true)`, `@auth(role: signed_in)` | at least signed_in |
 | `@auth(role: viewer)` | at least viewer |
-| `@auth(role: editor)`, legacy `@auth(role: EDITOR)` | at least editor |
-| `@auth(role: owner)`, legacy `@auth(role: OWNER)` | owner |
-| legacy `@auth(role: VIEWER)` | any reader, a guest on a public link included (anonymous) |
+| `@auth(role: editor)` | at least editor |
+| `@auth(role: owner)` | owner |
 
-The uppercase values exist only so immutable published code keeps its meaning.
+Any other role name, an uppercase one included, is refused at publish (`boundedBackendSchema`).
 An anonymous caller refused a field that needs signed_in gets `Sign in required`;
 every other refusal is `Not allowed`.
 

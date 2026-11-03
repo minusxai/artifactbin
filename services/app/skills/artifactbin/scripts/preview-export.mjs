@@ -140,7 +140,7 @@ const attr=name=>element.attrs.find(attr=>attr.name===name),get=name=>attr(name)
   const src=get('src'),type=get('type'),platform=get('data-af');
   if(element.tagName==='script'){
 if(!src&&['runtime','apollo','reader','chrome','portable-engine','portable','core'].includes(
-     platform)||src==='/af/core.js'||src==='/af/v1/core.js'||type==='importmap'||type&&
+     platform)||src==='/af/core.js'||type==='importmap'||type&&
      type!=='module'&&!JS.has(type))continue;
 if(src){if(type==='module'){const alias=await module(resolve(src,pathname));set('src',data(
      'text/javascript',Buffer.from('import '+JSON.stringify(alias)+';')));}else{const url=resolve(

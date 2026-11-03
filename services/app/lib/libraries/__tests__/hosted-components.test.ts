@@ -60,7 +60,7 @@ it('embeds a page’s components and the chunks they import in the offline copy'
 
 it('tells a publish naming a missing local component copy to import the hosted module',async()=>{
  const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');
- const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
  const root=mkdtempSync(path.join(tmpdir(),'missing-component-'));
  try{
   writeFileSync(path.join(root,'index.html'),'<script type="module">import {registerTabs} from "./components/tabs.js";registerTabs();</script>');

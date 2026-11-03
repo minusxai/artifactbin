@@ -28,9 +28,9 @@ describe('autofix rules',()=>{
    expect(canonicalizeHtmlPage(result.html).html.replace(/ data-af-id="[^"]+"/g,'')).toBe(result.html);
   }
  });
- it('keeps a stored page\'s legacy /af/v1/core.js script: it is still the core, served as an alias',()=>{
+ it('does not take a /af/v1/core.js script for the core: the page gets the core added',()=>{
   const html=page('<meta charset="utf-8"><meta name="viewport" content="x"><script src="/af/v1/core.js"></script>');
-  const result=autofixHtml(html);expect(result.fixes).toEqual([]);expect(result.routine).toEqual([]);expect(result.html).toBe(html);
+  const result=autofixHtml(html);expect(result.routine).toEqual(['added core script']);expect(result.html).toContain('<script src="/af/core.js"></script>');
  });
  it('adds a missing core as routine, not as an author fix',()=>{
   const result=autofixHtml(page('<meta charset="utf-8"><meta name="viewport" content="x">'));

@@ -13,7 +13,7 @@ it('executes a fork\'s copied resolver under the fork\'s own page identity and o
  const runner=await createRunner({db:await harness.db(),capabilities:(context,operation,args)=>localPageBackendCapability(context.request,operation,args)});setServices({runner});
  try{
  const owner=await mintAccountToken('original');const viewer=await mintAccountToken('copy');
- const source='export const typeDefs="type Query { page:String! } type Mutation { add:Int! @auth(role:OWNER) }"; export default {page:async(a,p)=>p.tenant,add:async()=>1};';
+ const source='export const typeDefs="type Query { page:String! } type Mutation { add:Int! @auth(role: owner) }"; export default {page:async(a,p)=>p.tenant,add:async()=>1};';
  const created=await (await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="db" href="./db.ts"></head><body>Counter</body></html>',resolverSources:{db:source}}}))).json();
  const call=async(id:string,token:string,query:string)=>await (await graphql(request(`/api/artifacts/${id}/graphql`,{method:'POST',token,json:{revision:'1',query}}),{params:Promise.resolve({id})})).json();
  expect(await call(created.id,owner.token,'mutation { db { add } }')).toMatchObject({data:{db:{add:1}}});

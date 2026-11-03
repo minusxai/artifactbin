@@ -1,7 +1,7 @@
 import {it,expect} from 'vitest';
-it('runs the installed native helper with Node alone and refuses project symlinks',async()=>{
- const {mkdtemp,mkdir,writeFile,readFile,symlink,rm}=await import('node:fs/promises');
- const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');
+it('prepares a bundle with the installed helper module alone and refuses project symlinks',async()=>{
+ const {mkdtemp,mkdir,writeFile,symlink,rm}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');const {pathToFileURL}=await import('node:url');
  const dir=await mkdtemp(join(tmpdir(),'bundle-fresh-'));
  try{
   await mkdir(join(dir,'project'));
@@ -11,10 +11,10 @@ it('runs the installed native helper with Node alone and refuses project symlink
   execFileSync('unzip',['-q',zip,'-d',dir]);
   await writeFile(join(dir,'project','index.html'),'<img src="./logo.svg"><script type="module">import "./main.js";</script>');await writeFile(join(dir,'project','logo.svg'),'<svg/>');
   await writeFile(join(dir,'project','main.js'),'export const lazy=()=>import("./chunk.js");');await writeFile(join(dir,'project','chunk.js'),'export const value=42;');
-  execFileSync(process.execPath,[join(dir,'artifactbin/scripts/publication-bundle.mjs'),join(dir,'project'),'index.html','https://example.test',join(dir,'request.json')]);
-  const request=JSON.parse(await readFile(join(dir,'request.json'),'utf8'));expect(request.body.publicationBundle.files[0].path).toBe('logo.svg');expect(request).not.toHaveProperty('token');expect(request.body.publicationBundle.files.map((file:{path:string})=>file.path)).toEqual(['logo.svg','main.js','chunk.js']);
-  await rm(join(dir,'project/logo.svg'));await symlink(join(dir,'request.json'),join(dir,'project/logo.svg'));
-  expect(()=>execFileSync(process.execPath,[join(dir,'artifactbin/scripts/publication-bundle.mjs'),join(dir,'project'),'index.html','https://example.test',join(dir,'other.json')],{stdio:'pipe'})).toThrow();
+  const {prepareBundle}=await import(pathToFileURL(join(dir,'artifactbin/scripts/toolbox-publication-bundle.mjs')).href);
+  const request=await prepareBundle({root:join(dir,'project'),entry:'index.html',server:'https://example.test'});expect(request.body.publicationBundle.files[0].path).toBe('logo.svg');expect(request).not.toHaveProperty('token');expect(request.body.publicationBundle.files.map((file:{path:string})=>file.path)).toEqual(['logo.svg','main.js','chunk.js']);
+  await writeFile(join(dir,'outside.svg'),'<svg/>');await rm(join(dir,'project/logo.svg'));await symlink(join(dir,'outside.svg'),join(dir,'project/logo.svg'));
+  await expect(prepareBundle({root:join(dir,'project'),entry:'index.html',server:'https://example.test'})).rejects.toThrow();
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
