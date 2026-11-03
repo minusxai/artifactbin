@@ -85,9 +85,13 @@ See [runner configuration](../services/runner/README.md) and
 
 ## Dataset policy migration (stored v1/v2 → v3)
 
-Dataset permissions are version 3 (Hasura metadata shape). Every door already reads a stored
-version 1 or 2 policy as v3; `scripts/migrate-dataset-policies.ts` rewrites the stored rows so that
-compatibility can be removed. Nothing changes what any door enforces, except the cases it reports.
+Dataset permissions are version 3 (Hasura metadata shape). Every door still reads a stored
+version 1 or 2 policy as v3; `scripts/migrate-dataset-policies.ts` rewrites the stored rows.
+**Self-hosted operators: run it with `--apply` before (or right after) upgrading past the removal
+of the v2 grant compatibility.** Until it runs, a v2 grant naming one person (`from:{user:<id>}`) or
+one page (`from:{artifact:<id>}`) admits only what its v3 reading allows: the named person loses
+access (the rewrite shares the dataset with them), and signed-out readers lose a page-scoped read.
+The server does not run it at boot: it creates shares and reports items an operator reviews.
 
 1. **Dry run** (the default; one `READ ONLY` transaction, a read-only database role is enough):
    `node --import tsx scripts/migrate-dataset-policies.ts --database "$URL" --json report.json`.
@@ -126,8 +130,9 @@ What the rewrite decides beyond the plain mapping:
   loses its signed-in and signed-out select rules.
 - Connected PostgreSQL datasets carry no stored policy and are skipped.
 
-After `--apply` has run everywhere, remove the named-user compatibility (`namedUserWrites` in
-`lib/dataset-permissions/write.ts`, the v2 branch in `read.ts`) and the harness's v1/v2 seeding.
+The named-user and page-scoped grant compatibility was removed after the production run. The dual
+read of stored v1/v2 policies (`lib/dataset-permissions/to-v3.ts`) stays for self-hosted databases
+that have not run the rewrite.
 
 ## Verification
 

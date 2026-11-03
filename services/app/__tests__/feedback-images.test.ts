@@ -24,6 +24,8 @@ type Session={credential:'session';userId:string;email:string;emailVerified:bool
 const imageParams=(id:string,datasetId:string,imageId:string)=>({params:Promise.resolve({id,datasetId,imageId})});
 const imageCount=async(datasetId:string)=>(await (await getDb()).query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[datasetId])).rows[0]?.count;
 
+/** v3: the shared viewer may insert (and read, unless `read` is false); the named-user v2 grant this replaces admits no one now. */
+const viewerInsert=(read=true)=>({version:3,tables:[{table:{schema:'public',name:'rows'},...(read?{select_permissions:[{role:'viewer',permission:{columns:'*',filter:{},allow_aggregations:true}}]}:{}),insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]});
 /** An owner's private dataset, a public document that imports it with an insert grant, and an approved reporter. */
 async function world(){
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
@@ -33,7 +35,7 @@ async function world(){
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});
   const document=await make({visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="feedback" href="ref:${dataset.id}"></head><body><p>Feedback</p></body></html>`});
   await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:reporter.id}}]},0);
+  await setDatasetPolicy(ownerActor,dataset.id,viewerInsert(),0);
   await changeMembership(identityForUser(reporter.id, null),document.id,{action:'join'});
   await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
   const pageActor:Session={credential:'session',userId:reporter.id,email:reporter.email!,emailVerified:true};
@@ -45,7 +47,7 @@ async function world(){
 }
 
 it('uploads through a real pages actor, replays safely, and rechecks the current dataset read grant',async()=>{
-  const {ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost,reporter}=await world();
+  const {ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost}=await world();
   const bytes=await sharp({create:{width:40,height:24,channels:3,background:'#c0392b'}}).png().toBuffer();
   const created=await post(bytes);expect(created.status,await created.clone().text()).toBe(201);const uploaded=await created.json() as {ref:string;url:string};
   expect(uploaded.ref).toMatch(/^dimg:/);expect(uploaded.url).toContain(`/a/${document.id}/datasets/${dataset.id}/images/`);
@@ -100,8 +102,8 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const replayedImage=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
   expect(await replayedImage.json()).toMatchObject({...imageFile,replayed:true});
   expect(await metaOf(imageFile.ref)).toMatchObject({filename:'proof.png',format:'image'});
-  // Deliberate (dataset permissions v3, toV3): a v2 read naming one person is a viewer select, so shared viewers keep reading; revoke reads with no read grant at all.
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['insert'],from:{user:reporter.id}}]},1);
+  // Revoke reads: the viewer keeps only its insert rule.
+  await setDatasetPolicy(ownerActor,dataset.id,viewerInsert(false),1);
   // The read grant is checked on every request, before any bytes are loaded.
   const get=vi.spyOn(objectStore(),'get');
   try {

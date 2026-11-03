@@ -3,7 +3,7 @@ import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb, services } from "@/lib/platform";
-import { getArtifactById, changeMembership } from "@/lib/artifacts";
+import { getArtifactById, changeMembership, updateSharingFor } from "@/lib/artifacts";
 import { setDatasetPolicy } from "@/__tests__/harness";
 import { catalogOf, loadDatasetRows } from "@/lib/datasets";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
@@ -169,21 +169,11 @@ it("requires both accepted page membership and explicit writer grant, and denies
   ).json();
   expect(denied.errors?.length).toBeGreaterThan(0);
   expect(await f.rows()).toHaveLength(1);
-  const dataset = (await getArtifactById(f.datasetId))!;
-  await setDatasetPolicy(
-    f.actor,
-    f.datasetId,
-    {
-      version: 2,
-      allow: [
-        { actions: ["read", "insert"], from: { user: "$owner" } },
-        // A stored v2 grant naming the writer keeps working through this trusted program until migration
-        // (write.ts namedUserWrites); accepted page membership is still required, as in v2.
-        { actions: ["insert"], from: { user: f.writer.userId } },
-      ],
-    },
-    dataset.policy_revision ?? 0,
-  );
+  // A v2 grant naming the writer no longer admits them (the compatibility is removed); the migration made
+  // such a person an editor, so the explicit grant is that share. Accepted page membership is still required.
+  await updateSharingFor(f.actor, f.datasetId, {
+    shares: [{ email: f.writer.email!, role: "editor" }],
+  });
   const written = await (
     await f.call(f.writer.token, "after_grant_1234567890", "writer")
   ).json();

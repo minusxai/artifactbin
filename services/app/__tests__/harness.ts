@@ -253,7 +253,8 @@ export function testPagesSite(host: string, publicBaseUrl: string): PagesSite {
  *
  * A version 1 or 2 body is no longer accepted by any door (it is refused with LEGACY_POLICY_REFUSED): it is STORED
  * here as a pre-migration row, with the same editor, revision and catalog checks and the same audit row, so tests
- * of how stored v1/v2 policies are still enforced keep their fixtures. Remove with the stored-policy compatibility.
+ * of how stored v1/v2 policies are still enforced keep their fixtures. Production stores only v3; the dual read (and
+ * this seeding) stays for self-hosted databases that have not run scripts/migrate-dataset-policies.ts.
  */
 export async function setDatasetPolicy(actor: AccessActor, id: string, policy: unknown, expectedPolicyRevision: number): Promise<{ revision: number; policy: unknown } | { conflict: true } | null> {
   const version = policy && typeof policy === 'object' ? (policy as { version?: unknown }).version : undefined;

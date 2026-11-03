@@ -117,7 +117,8 @@ describe('migrateDatasetPolicies', () => {
     expect((await head(f.ids.invalid)).dataset_policy).toEqual({ version: 2, allow: 'everyone' });
   });
 
-  it('keeps every named person\'s access through the share once the policy is v3', async () => {
+  // The named-user compatibility is removed: before the rewrite a v2 user:<id> grant admits that person nothing; the share it creates restores it.
+  it('gives every named person their access through the share once the policy is v3', async () => {
     const f = await fixture();
     const decisions = async (who: Account) => ({
       read: (await datasetReadAccess(await head(f.ids.v2Named), who)).allowed,
@@ -127,9 +128,11 @@ describe('migrateDatasetPolicies', () => {
     const pre = await Promise.all(people.map(decisions));
     await migrateDatasetPolicies(await db(), { apply: true });
     expect((await head(f.ids.v2Named)).dataset_policy).toMatchObject({ version: 3 });
-    expect(await Promise.all(people.map(decisions))).toEqual(pre);
-    expect(pre[2]).toEqual({ read: true, write: true });
-    expect(pre[1]).toEqual({ read: true, write: false });
+    const post = await Promise.all(people.map(decisions));
+    expect([pre[0], pre[3]]).toEqual([post[0], post[3]]);
+    expect([pre[1], pre[2]]).toEqual([{ read: false, write: false }, { read: false, write: false }]);
+    expect(post[2]).toEqual({ read: true, write: true });
+    expect(post[1]).toEqual({ read: true, write: false });
   });
 
   it('is idempotent: a second apply changes nothing and lists only what it still cannot rewrite', async () => {

@@ -61,7 +61,7 @@ it('keeps a private dataset and its grants unchanged when its native owner page 
  expect((await getArtifactById(ds))?.visibility).toBe('private');expect((await getArtifactById(ds))?.dataset_policy).toEqual(originalPolicy);
  expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();
 });
-it('does not treat page membership as dataset authority, and a named-user write grant keeps working until it becomes a share',async()=>{
+it('does not treat page membership as dataset authority, and a named-user write grant admits no one until it becomes a share',async()=>{
  const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql');
  const owner=await mintToken('grant-owner'),bob=await mintToken('grant-reader');const actor=identityForUser(owner.userId,owner.id),reader=identityForUser(bob.userId,bob.id);
  const ds=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],access:'readwrite',visibility:'public'}}))).json();
@@ -73,8 +73,8 @@ it('does not treat page membership as dataset authority, and a named-user write 
  await changeMembership(reader,page.id,{action:'join'});await changeMembership(actor,page.id,{action:'approve',userId:bob.userId!});
  expect((await write('after-membership')).outcome).toBe('rejected');
  await setDatasetPolicy(actor,ds.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:bob.userId}}]},0);
- // COMPATIBILITY (write.ts namedUserWrites): a v2 user:<id> write grant keeps admitting that person's granted ops until the stored migration shares the dataset with them.
- expect((await write('explicit-user-grant')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
+ // The named-user compatibility is gone: a stored v2 user:<id> write grant has no v3 entry; the migration made that person an editor instead.
+ expect((await write('explicit-user-grant')).outcome).toBe('rejected');expect((await getArtifactById(ds.id))?.version).toBe(1);
  await updateSharingFor(actor,ds.id,{shares:[{email:bob.email!,role:'editor'}]});
- expect((await write('shared-editor','2')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(3);
+ expect((await write('shared-editor')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
 });

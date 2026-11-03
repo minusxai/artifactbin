@@ -40,15 +40,12 @@ describe('datasetWriteAccess', () => {
     }
   });
 
-  it('keeps a stored v2 write grant naming one person working until migration shares the dataset with them', async () => {
+  // The named-user write compatibility is gone (production migrated to v3): such a grant now admits no one.
+  it('refuses a stored v2 write grant naming one person: v3 has no entry for them, the migration shares instead', async () => {
     const f = await fixture({ version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
     const named = { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }, { actions: ['insert', 'update'], from: { user: f.stranger.userId } }] };
     await sql('UPDATE artifacts SET dataset_policy=$2 WHERE id=$1', [f.data.id, JSON.stringify(named)]);
-    const decision = await datasetWriteAccess(await head(f.data.id), f.stranger);
-    expect(decision).toMatchObject({ allowed: true, admin: false, session: { 'x-hasura-user-id': f.stranger.userId } });
-    const policy = tableMutationPolicy(decision, ROWS)!;
-    expect(policy.operations).toEqual(['insert', 'update']);
-    expect(policy.table.delete_permissions).toBeUndefined();
+    expect(await datasetWriteAccess(await head(f.data.id), f.stranger)).toMatchObject({ allowed: false, reason: 'no_rule' });
     // Anyone else still has no rule.
     expect(await datasetWriteAccess(await head(f.data.id), f.member)).toMatchObject({ allowed: false, reason: 'no_rule' });
   });

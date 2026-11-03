@@ -5,7 +5,8 @@
  *
  *  - The role is the dataset's own sharing (./role). Owner and editor are admin-equivalent: no rule
  *    applies to them. Every other role writes only what a v3 entry for it allows (./to-v3 reads stored
- *    v1/v2 policies as v3).
+ *    v1/v2 policies as v3; a v2 grant naming one person has no v3 entry, so it admits no one: the stored
+ *    migration shared the dataset with them instead).
  *  - `backend_only` entries apply only to a trusted program: a saved-document proof that passes the
  *    program-trust checks (signed in, accepted page membership, saved edit, registered attestation) on a
  *    page whose owner holds owner or editor on the dataset. The engine refuses them otherwise.
@@ -88,36 +89,6 @@ async function trusted(dataset: ArtifactRow, actor: AccessActor, options: Datase
 }
 
 /**
- * COMPATIBILITY until the stored migration (scripts/migrate-dataset-policies.ts) has been APPLIED everywhere: it shares
- * the dataset with each named person (editor) and stores v3, after which no row reaches this. Remove it, the
- * read-side twin in ./read and the harness's v1/v2 seeding then (docs/operations.md). Until then: a v2 write grant
- * naming this account (`from:{user:<id>}`, no page) keeps admitting exactly its granted operations outside a program, and through
- * a trusted program (as v2 did with accepted membership), unrestricted like v2, for this caller only. v3 has no slot for one person, so this lives here and nowhere else.
- */
-function namedUserWrites(policy: unknown, userId: string): DatasetOperation[] {
-  const allow = (policy as { allow?: { actions?: unknown[]; from?: Record<string, unknown> }[] } | null)?.allow ?? [];
-  const ops = new Set<DatasetOperation>();
-  for (const grant of allow) {
-    const from = grant.from ?? {};
-    if (from.user !== userId || from.artifact !== undefined || from.artifactOwner !== undefined) continue;
-    for (const action of grant.actions ?? []) if ((MUTATIONS as readonly unknown[]).includes(action)) ops.add(action as DatasetOperation);
-  }
-  return MUTATIONS.filter((op) => ops.has(op));
-}
-
-function namedUserPermissions(tables: readonly DatasetTablePermissions[], role: DatasetRuleRole, ops: readonly DatasetOperation[]): DatasetPermissions {
-  return {
-    version: 3,
-    tables: tables.map((t) => ({
-      table: { ...t.table },
-      ...(ops.includes('insert') ? { insert_permissions: [{ role, permission: { columns: '*' as const, check: {} } }] } : {}),
-      ...(ops.includes('update') ? { update_permissions: [{ role, permission: { columns: '*' as const, filter: {} } }] } : {}),
-      ...(ops.includes('delete') ? { delete_permissions: [{ role, permission: { filter: {} } }] } : {}),
-    })),
-  };
-}
-
-/**
  * THE PRIVATE CEILING (plan §3/§8: "dataset is private: signed_in and anonymous rules never apply"). On a private
  * dataset a signed_in or anonymous caller (a page reader without a share) keeps only its `backend_only` entries,
  * which already need a trusted program on a page whose owner administers the dataset. Stored v1 entries are
@@ -150,14 +121,6 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role || !read) return { allowed: false, role, revision, reason: 'no_rule' };
-  // Outside a program as v2 did; through a program only when it is trusted (the caller's accepted page membership
-  // and saved-page proof, as v2's grant context required).
-  const granted = v2 && actor.userId ? namedUserWrites(row.dataset_policy, actor.userId) : [];
-  const named = granted.length && (!options.document || await trusted(row, actor, options, db)) ? granted : [];
-  if (named.length) {
-    const session: Record<string, Scalar> = { 'x-hasura-role': role, 'x-hasura-user-id': actor.userId! };
-    return { allowed: true, admin: false, role, revision, permissions: namedUserPermissions(read.policy.tables, role, named), trusted: false, session, ...(read.execution ? { execution: read.execution } : {}) };
-  }
   const policy = privateCeiling(row, role, read.policy);
   const tables = policy.tables;
   const entries = tables.flatMap((table) => MUTATIONS.map((op) => entryFor(table, op, role)).filter((entry) => !!entry));

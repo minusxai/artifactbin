@@ -57,6 +57,8 @@ async function avatar() {
   return { user, version, at: (query: string) => getAvatar(request(`/api/users/${user.id}/avatar${query}`), ctx(user.id)) };
 }
 
+/** v3: the shared viewer may insert (and read, unless `read` is false); the named-user v2 grant this replaces admits no one now. */
+const viewerInsert=(read=true)=>({version:3,tables:[{table:{schema:'public',name:'rows'},...(read?{select_permissions:[{role:'viewer',permission:{columns:'*',filter:{},allow_aggregations:true}}]}:{}),insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]});
 /** A document whose member uploads an image and files into a private dataset (the feedback-form shape). */
 async function datasetUploads() {
   const owner = await createUser({ email: 'mxmx_test_media_headers_owner@example.test' });
@@ -80,7 +82,7 @@ async function datasetUploads() {
   const denied=await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'membership-not-authority'},body:deniedBytes}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   expect(denied.status).toBe(403);
   const policy=(await getArtifactById(dataset.id))!;
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:reporter.id}}]},policy.policy_revision??0);
+  await setDatasetPolicy(ownerActor,dataset.id,viewerInsert(),policy.policy_revision??0);
   const reporterToken = await mintAccountToken('media-headers-reporter', reporter.id);
   const params = { params: Promise.resolve({ id: document.id, datasetId: dataset.id }) };
   const bytes = await sharp({ create: { width: 40, height: 24, channels: 3, background: '#c0392b' } }).png().toBuffer();
