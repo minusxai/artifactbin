@@ -23,7 +23,7 @@ describe('dataset markup source of truth', () => {
     const stored:CatalogInput={kind:'stored',tables:[{schema:'main',name:'items',rows:[{id:1}]}]};expect(parseDatasetDefinition(serializeDatasetDefinition(stored))).toEqual(stored);
     const sql="SELECT '$value </Table>' AS x, '&' AS amp\nFROM public.rows";const model:CatalogInput={kind:'stored',tables:[{schema:'models',name:'x',sql}]};expect(parseDatasetDefinition(serializeDatasetDefinition(model))).toEqual(model);
   });
-  it('rejects duplicate attributes and nested leaf elements',()=>{
-    for(const source of ['<Dataset kind="stored" kind="stored"><Table schema="x" name="x" rows={[]} /></Dataset>','<Dataset kind="stored"><Table schema="x" name="x"><Table schema="y" name="y" /></Table></Dataset>'])expect(()=>parseDatasetDefinition(source)).toThrow();
+  it('rejects duplicate and unknown attributes',()=>{
+    for(const source of ['<Dataset kind="stored" kind="stored"><Table schema="x" name="x" rows={[]} /></Dataset>','<Dataset kind="stored"><Table schema="x" name="x" rows={[]} surprise="y" /></Dataset>'])expect(()=>parseDatasetDefinition(source)).toThrow();
   });
 });

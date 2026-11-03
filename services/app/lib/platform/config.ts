@@ -248,7 +248,7 @@ export let ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_U
  * Comma-separated origins, validated with the one origin rule the CLI's
  * `normalizeServer` uses (HTTPS, or HTTP on a local development host; no path,
  * query, fragment or credentials). A malformed entry throws at module load,
- * like DATASET__DNS_SERVERS: half a list is worse than a refused boot, because
+ * because half a list is worse than a refused boot:
  * the missing half is a name that silently stops being the same server.
  */
 export { parseAliasOrigins };

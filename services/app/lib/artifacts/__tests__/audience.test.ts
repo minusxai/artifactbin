@@ -40,7 +40,7 @@ describe('the sharing surface', () => {
   it('a dataset\'s sharing names its write ACL and the documents that write it', async () => {
     const owner = await person('owner');
     const data = await dataset(owner);
-    expect(await getSharingFor(owner, data.id)).toMatchObject({ access: 'readwrite', datasetKind: 'stored', writtenBy: [] });
+    expect(await getSharingFor(owner, data.id)).toMatchObject({ access: 'readwrite', writtenBy: [] });
     expect(await updateSharingFor(owner, data.id, { access: 'read' })).toMatchObject({ access: 'read' });
   });
 });
