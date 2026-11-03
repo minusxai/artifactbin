@@ -3,7 +3,6 @@ export { VIEW_SERIES_DAYS, dailyViewsByUser, eventsTablePresent, forkCountByUser
 export { crumbsFor } from './breadcrumb';
 export { accountWorkspaceCoreFor, accountWorkspaceFor, accountWorkspaceInsightsFor } from './dashboard';
 export { homeBootstrapFor } from './home';
-export { formatJsxPreview } from './format-jsx-preview';
 export { listAccountTokenRows, listArtifactsByUser, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail } from './listings';
 export type { SharedArtifactSummary } from './listings';
 export { workspaceAssetsFor } from './inventory';
