@@ -3,7 +3,7 @@
  * naming what it found; no rule is ever guessed from it.
  */
 import { describe, expect, it } from 'vitest';
-import { storedPolicy } from '@/lib/dataset-permissions';
+import { storedPolicy } from '../stored-policy';
 
 const ROWS = { schema: 'public', name: 'rows' };
 const READ_ALL = { columns: '*', filter: {}, allow_aggregations: true };
