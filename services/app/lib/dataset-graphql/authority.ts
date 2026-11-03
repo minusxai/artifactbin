@@ -1,6 +1,6 @@
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, getVersionFor, type ArtifactRow } from '@/lib/artifacts';
-import { writerFor } from '@/lib/artifact-access';
+import { writerFor, type AccessFacts } from '@/lib/artifact-access';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import {catalogOf} from '@/lib/datasets';
 import {datasetReadAccess,type DatasetReadDecision} from '@/lib/dataset-permissions';
@@ -25,13 +25,14 @@ async function authorizedDataset(actor:AccessActor,id:string){
 /**
  * A read of a dataset's rows through GraphQL: the head and the reader's role view (lib/dataset-permissions).
  * Through a page linking it (the default), a reader without sharing of their own is signed_in or anonymous;
- * directly (`throughPage:false`, the dataset's own GraphQL endpoint), the dataset's sharing alone decides.
+ * directly (`throughPage:false`, the dataset's own GraphQL endpoint), the dataset's sharing alone decides. `facts`
+ * is the request's memo of the caller's access facts; without it every fact is asked live.
  */
-export async function authorizedDatasetRead(actor:AccessActor,id:string,options:{throughPage:boolean;pageId?:string}={throughPage:true}):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{
+export async function authorizedDatasetRead(actor:AccessActor,id:string,options:{throughPage:boolean;pageId?:string;facts?:AccessFacts}={throughPage:true}):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{
  const row=await getArtifactById(id);
  if(!row||row.format!=='dataset')throw unavailable();
  // Through a page's generated API the page names itself (`X-Hasura-Page-Id`); never directly.
- const decision=await datasetReadAccess(row,actor,{throughPage:options.throughPage,...(options.throughPage&&options.pageId?{pageId:options.pageId}:{})});
+ const decision=await datasetReadAccess(row,actor,{throughPage:options.throughPage,...(options.throughPage&&options.pageId?{pageId:options.pageId}:{}),...(options.facts?{facts:options.facts}:{})});
  if(!decision.allowed)throw unavailable();
  return {row,decision};
 }

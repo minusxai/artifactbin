@@ -35,7 +35,8 @@ const sharedRead = createSharedReads<Record<string, unknown>[]>();
 const WINDOW = 10000;
 
 export async function readLinkedDatasetTables(actor: AccessActor, links: readonly HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal): Promise<LinkedSqlTable[]> {
-  const loaded = await loadLinked(actor, links, { pageId: options.pageId }, signal);
+  // Fenced: every retained fence is checked below, before any table leaves.
+  const loaded = await loadLinked(actor, links, { pageId: options.pageId, fenced: true }, signal);
   const out: LinkedSqlTable[] = [];
   let remaining = options.maxRows;
   for (const l of loaded) {

@@ -249,3 +249,27 @@ Apple M5 Pro, Node 22.22.3, 20,000 rows. Times in ms.
 
 Each engine statement re-reads the dataset row three times (and, for a viewer, the four role queries with
 each), so cost grows per statement rather than per request.
+
+### One authorization per request, 2026-11-04
+
+Before is `e216958ff` (main: the engine threads keep each prepared database and are sent keys first, #1076 and
+#1078), after is this change; same session, same machine. The request authorizes the dataset once (its row, and
+for a viewer the role facts once each through a per-request memo), every engine statement runs under that
+authorization, and one fresh final fence (the head and the facts asked again) is checked before the reply
+leaves. A page's schema GET and every mutation load keep their checks after loading and around each statement.
+Times in ms.
+
+| caller | query | statements before → after | p50 before → after | p95 before → after |
+|---|---|---|---|---|
+| owner | list (100 rows) | 14 → 8 | 37 → 38 | 43 → 40 |
+| owner | 2 roots (list + count) | 17 → 8 | 39 → 34 | 43 → 35 |
+| owner | count + sum + nodes | 20 → 8 | 35 → 33 | 36 → 34 |
+| viewer | list (100 rows) | 46 → 14 | 37 → 30 | 40 → 47 |
+| viewer | 2 roots (list + count) | 61 → 14 | 37 → 29 | 39 → 31 |
+| viewer | count + sum + nodes | 76 → 14 | 39 → 34 | 43 → 38 |
+
+On in-process PGLite a statement costs well under a millisecond, so these times understate the saving;
+production Postgres round trips weigh more per statement. With the engine's prepared databases most of what
+remains is the snapshot: it parses each stored object to count its rows and derives every row's ID. Through a
+page the same reads cost 14 / 32 statements (owner / viewer), down from 20 / 64; the rest of a page request
+reads the page itself.

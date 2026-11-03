@@ -34,6 +34,7 @@ import {
   type HtmlDatasetLink,
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
+import { liveAccessFacts, memoAccessFacts, type AccessFacts } from '@/lib/artifact-access';
 import { completeMutationReceipt, durableMutation, getArtifactById, getArtifactHeaderById, type ArtifactRow } from '@/lib/artifacts';
 import { datasetWriteAccess, tableMutationPolicy } from '@/lib/dataset-permissions';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
@@ -91,6 +92,10 @@ const columnsOf = (table: DatasetTable, names: HasuraTableNames): HasuraColumn[]
 /** How a load reaches the dataset: directly (its own sharing decides), or through a page (the page audience rule). */
 interface LoadMode {
   direct: boolean;
+  /** The caller checks the load's fences before anything read leaves: the load's one authorization holds until then. */
+  fenced: boolean;
+  /** The request's memo of the caller's access facts, shared by every dataset it loads; fences never read it. */
+  facts?: AccessFacts;
   /** Through a page: the page the session names (`X-Hasura-Page-Id`). */
   pageId?: string;
   /** Through a page: each read fence is also handed to the page request's own final check. */
@@ -102,11 +107,12 @@ interface LoadMode {
  * sharing decides the role; through a page (page GraphQL, a resolver's caps.query) the page audience rule applies
  * (a reader with no sharing of their own is signed_in or anonymous) and the session names the page. A pinned link
  * reads its recorded revision and never writes. Throws `dataset_not_found` when the role may neither read nor
- * write (the uniform 404).
+ * write (the uniform 404). One authorization: the read and write decisions share the head and the request's facts.
  */
 async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortSignal, mode: LoadMode): Promise<Loaded> {
   const fences: Array<() => Promise<void>> = [];
-  const port = retainedDatasetGraphqlPort({ direct: mode.direct, ...(mode.pageId ? { pageId: mode.pageId } : {}), retainReadFence: (verify) => { fences.push(verify); mode.retainReadFence?.(verify); } });
+  const facts = mode.facts ?? memoAccessFacts(liveAccessFacts(actor));
+  const port = retainedDatasetGraphqlPort({ direct: mode.direct, fenced: mode.fenced, facts, ...(mode.pageId ? { pageId: mode.pageId } : {}), retainReadFence: (verify) => { fences.push(verify); mode.retainReadFence?.(verify); } });
   if (binding.mode === 'pinned') {
     // A pinned link: reads only, exactly the tables of the snapshot its recorded revision resolves.
     const read = await port.snapshot(actor, binding, signal);
@@ -119,9 +125,9 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
   }
   let snapshot: DatasetSnapshot | null = null;
   try { snapshot = await port.snapshot(actor, binding, signal); } catch (e) { if (!(e instanceof Error) || e.message !== 'dataset_not_found') throw e; }
-  const row = await getArtifactById(binding.datasetId);
+  const row = snapshot?.head ?? await getArtifactById(binding.datasetId);
   if (!row || row.format !== 'dataset') throw notFound();
-  const decision = await datasetWriteAccess(row, actor, writeOptions(mode));
+  const decision = await datasetWriteAccess(row, actor, { ...writeOptions(mode), facts });
   // Nothing is said about a dataset the role can neither read nor write, not even that it is unsupported.
   if (!snapshot && !decision.allowed) throw notFound();
   const declared = datasetBindingCatalog(row);
@@ -155,7 +161,7 @@ async function fenced(loaded: Loaded): Promise<void> {
 const directBinding = (datasetId: string): HtmlDatasetLink => ({ kind: 'dataset', name: 'data', datasetId, mode: 'live' });
 
 export async function datasetGraphqlSchema(actor: AccessActor, datasetId: string, signal: AbortSignal): Promise<DatasetGraphqlSchemaReply> {
-  const loaded = await load(actor, directBinding(datasetId), signal, { direct: true });
+  const loaded = await load(actor, directBinding(datasetId), signal, { direct: true, fenced: true });
   const sdl = hasuraSdl(loaded.tables.map((t) => t.model));
   await fenced(loaded);
   if (loaded.snapshot) return { sdl, revision: loaded.snapshot.revision, role: loaded.snapshot.role! };
@@ -228,8 +234,9 @@ function schemaFor(sdl: string): GraphQLSchema {
 
 /** POST: run one query against the caller's schema. Throws `dataset_not_found` when the role reads nothing. */
 export async function executeDatasetGraphql(actor: AccessActor, datasetId: string, request: DatasetGraphqlRequest, signal: AbortSignal): Promise<DatasetGraphqlReply> {
-  const loaded = await load(actor, directBinding(datasetId), signal, { direct: true });
+  // Parsed first only to know whether the reply is fenced (a query's is); a refusal still answers before any parse error.
   const parsed = parsedOperation(request);
+  const loaded = await load(actor, directBinding(datasetId), signal, { direct: true, fenced: !('errors' in parsed) && parsed.operation.operation === 'query' });
   if ('errors' in parsed) return parsed;
   if (parsed.operation.operation === 'mutation') {
     const schema = schemaFor(hasuraSdl(loaded.tables.map((t) => t.model)));
@@ -279,11 +286,13 @@ interface PageScope {
  * dataset the role can neither read nor write is absent, as if unlinked. Two links generating one name refuse the
  * page (`graphql_root_collision`; publishing refuses it first).
  */
-export async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope, signal: AbortSignal): Promise<Loaded[]> {
+export async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { fenced: boolean }, signal: AbortSignal): Promise<Loaded[]> {
   const loaded: Loaded[] = [];
+  // One authorization per request: every link's decisions read the caller's facts once.
+  const facts = memoAccessFacts(liveAccessFacts(actor));
   for (const link of links) {
     let one: Loaded;
-    try { one = await load(actor, link, signal, { direct: false, ...scope }); } catch (e) {
+    try { one = await load(actor, link, signal, { direct: false, ...scope, facts }); } catch (e) {
       if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) continue;
       throw e;
     }
@@ -322,7 +331,7 @@ export async function executeLinkedDatasetGraphql(actor: AccessActor, links: rea
   if (kind === 'subscription') return { errors: [error('caps.query has no subscription root', 'validation_failed')] };
   if (kind === 'mutation' && options.operation !== 'mutation') return { errors: [error('a dataset mutation runs only inside a mutation resolver', 'permission_denied')] };
   let loaded: Loaded[];
-  try { loaded = await loadLinked(actor, links, options.pageId ? { pageId: options.pageId } : {}, signal); } catch (e) {
+  try { loaded = await loadLinked(actor, links, { ...(options.pageId ? { pageId: options.pageId } : {}), fenced: kind === 'query' }, signal); } catch (e) {
     if (e instanceof GraphQLError) return { errors: [error(e.message, 'validation_failed')] };
     throw e;
   }
@@ -392,7 +401,8 @@ function coded(value: unknown): unknown {
  * `X-Hasura-Page-Id`. A pinned link is read-only (no mutation roots).
  */
 export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { idempotencyKey?: string }, signal: AbortSignal): Promise<PageDatasets> {
-  const loaded = await loadLinked(actor, links, scope, signal);
+  // Only a page request that checks its read fences (a query) is fenced; its schema GET and mutations are not.
+  const loaded = await loadLinked(actor, links, { ...scope, fenced: !!scope.retainReadFence }, signal);
   const sources = loaded.map((l): PageDatasetSource => {
     const link = l.link!;
     const models = l.tables.map((t) => t.model);
