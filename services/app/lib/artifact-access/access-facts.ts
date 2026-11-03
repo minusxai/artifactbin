@@ -75,6 +75,47 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
   };
 }
 
+/**
+ * THE PAGE VIEW'S FACTS, asked once each per request: a page view decides the same row more than once — admission
+ * (lib/artifacts canReadArtifact, in server/app documentPreparation and lib/document-serving artifact-page) and the
+ * chrome's role (effectiveRole) — and each decision would ask the actor's kind, named shares and group shares again.
+ * The memo holds each fact's PROMISE (decisions run concurrently), for this request and this actor only; the next
+ * request asks the database again, so a share revoked between two requests is refused on the second. Only page-view
+ * reads use it: a request that writes shares or memberships decides on live facts.
+ */
+const pageViewFacts = new WeakMap<Request, Map<string, AccessFacts>>();
+export function requestAccessFacts(request: Request, actor: AccessActor): AccessFacts {
+  // Every fact reads the actor's account id and session address, and nothing else of it.
+  const key = `${actor.userId ?? ''}\u0000${sessionEmail(actor)}`;
+  let byActor = pageViewFacts.get(request);
+  if (!byActor) pageViewFacts.set(request, byActor = new Map());
+  let facts = byActor.get(key);
+  if (!facts) byActor.set(key, facts = memoAccessFacts(liveAccessFacts(actor)));
+  return facts;
+}
+
+function memoAccessFacts(facts: AccessFacts): AccessFacts {
+  const memo = new Map<string, Promise<unknown>>();
+  const once = <T>(name: string, arg: string | null | undefined, ask: () => Promise<T>): Promise<T> => {
+    const key = `${name}\u0000${arg ?? ''}`;
+    let found = memo.get(key) as Promise<T> | undefined;
+    if (!found) {
+      memo.set(key, found = ask());
+      // A failed read is not remembered: the next decision asks again.
+      found.catch(() => memo.delete(key));
+    }
+    return found;
+  };
+  return {
+    groupShareRole: (artifactId) => once('groupShareRole', artifactId, () => facts.groupShareRole(artifactId)),
+    groupRole: (groupId) => once('groupRole', groupId, () => facts.groupRole(groupId)),
+    userKind: (userId) => once('userKind', userId, () => facts.userKind(userId)),
+    sharedWith: (artifactId) => once('sharedWith', artifactId, () => facts.sharedWith(artifactId)),
+    namedRole: (artifactId) => once('namedRole', artifactId, () => facts.namedRole(artifactId)),
+    editorGroupIds: () => once('editorGroupIds', null, () => facts.editorGroupIds()),
+  };
+}
+
 export interface PreloadedAccessFacts extends AccessFacts {
   /** Apply the share resolutions the decisions asked for (one statement, or none). */
   settle(): Promise<void>;

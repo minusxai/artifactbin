@@ -1,7 +1,7 @@
 import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, getArtifactById, UnservableDocument } from '@/lib/artifacts';
-import { effectiveRole } from '@/lib/artifact-access';
+import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
@@ -512,9 +512,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const key = url.searchParams.get('key');
     if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
     const actor = await sessionActor(request).catch(() => null);
+    // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
+    const facts = actor ? requestAccessFacts(request, actor) : undefined;
     const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
-    if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor)))) return { status: 404 };
-    if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR))) return { status: 404 };
+    if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
+    if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
     // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
     if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
     const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));

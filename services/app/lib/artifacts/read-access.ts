@@ -3,7 +3,7 @@
  * snapshot a reader is answered with, and the route gate for a capability. Decided by the access rule
  * (@/lib/artifact-access) over the rows this module reads.
  */
-import { can, capabilityRefusal, effectiveRole, type ArtifactRow } from '@/lib/artifact-access';
+import { can, capabilityRefusal, effectiveRole, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import type { Capability } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
@@ -19,6 +19,8 @@ import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contra
 export async function canReadArtifact(
   row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
   actor: AccessActor,
+  /** Where the decision reads groups, kinds and shares (lib/artifact-access access facts): live by default. */
+  facts?: AccessFacts,
 ): Promise<boolean> {
   // Bare-token ownership is not consulted here — sound because `private` requires an account to anchor its
   // ACL (getSharingFor's canPrivate), so a token-owned document is never private. The reader is the account.
@@ -32,7 +34,7 @@ export async function canReadArtifact(
     if(dataset.format==='dataset')return (await datasetReadAccess(dataset,reader)).allowed;
   }
   // One decision, asked one way: reading is simply the bottom of the lattice.
-  return canRead(await effectiveRole({ ...row, token_id: '' }, reader));
+  return canRead(await effectiveRole({ ...row, token_id: '' }, reader, facts));
 }
 
 /**
