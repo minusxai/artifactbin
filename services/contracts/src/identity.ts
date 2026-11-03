@@ -1,5 +1,3 @@
-import type { Queryable } from './db';
-
 /**
  * THE PROXY'S ONE READ OF AN APP-OWNED TABLE. The app owns `tokens` and every write to it; the proxy
  * resolves a presented credential through this reader and nothing else — one indexed SELECT per request
@@ -19,21 +17,6 @@ export interface TokenRecord {
 export interface TokenReader {
   /** The bearer path. Refuses a value that is not token-shaped BEFORE hashing or touching the database. */
   byToken(presented: string): Promise<TokenRecord | null>;
-  /** Token-reference liveness lookup; callers establish the request authority. */
-  byId(id: string): Promise<TokenRecord | null>;
-  /** Composition-root hook: the app's revoke calls this in the full image; across a network the bound is the TTL. */
-  invalidate(id?: string): void;
-}
-export interface TokenReaderOptions {
-  db: Queryable;
-  /** Owning service's bearer admission policy, rechecked even on cache hits. */
-  admitBearer?: (token: TokenRecord) => Promise<boolean>;
-  /** Where `tokens` lives (APP__SCHEMA). Interpolated — validated as a plain identifier. */
-  schema?: string;
-  ttlMs?: number;
-  negativeTtlMs?: number;
-  maxEntries?: number;
-  now?: () => number;
 }
 
 /** ONE implementation of an app-owned one-time-code store; auth credentials have their own broader lifecycle. */

@@ -30,7 +30,7 @@ export interface BearerReaderOptions {
 
 interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; email: string | null; email_verified: boolean | null }
 
-export function createBearerReader(o: BearerReaderOptions): Pick<TokenReader, 'byToken'> {
+export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
   const tokens = `${o.appSchema ? `${identifier(o.appSchema, 'app schema')}.` : ''}tokens`;
   const sql = `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
