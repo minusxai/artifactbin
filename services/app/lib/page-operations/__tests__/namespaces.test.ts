@@ -154,3 +154,47 @@ describe('generated dataset roots (dataset-hasura sources)', () => {
     expect(refused).toEqual({ data: null, errors: [{ message: 'no', extensions: { code: 'permission_denied' } }], extensions: { outcomes: { delete_orders: 'rejected' } } });
   });
 });
+
+/**
+ * THE BUILT-IN VIEWER: every composed page answers `{ viewer { signedIn id name } }` with no link. Signed in is the
+ * `@auth(signedIn: true)` decision over the caller (and an account); the name comes from the lazy port only when
+ * selected; nothing else about the reader is in the payload. Its root and type names are reserved.
+ */
+describe('built-in viewer query',()=>{
+ const query='{ viewer { signedIn id name } }';
+ const run=(caller:{subject:string|null;role:DatasetRole},viewerName?:(subject:string)=>Promise<string|null>,request=query)=>
+  executePageOperation({schema:composePageSchema([]),request:{query:request},caller:{pageId:'page1',...caller},signal,invoke:async()=>{throw Error('no resolver runs');},...(viewerName?{viewerName}:{})});
+ it('answers a page with no links: a signed-in caller reads its own subject and display name, never an email',async()=>{
+  const asked:string[]=[];
+  const result=await run({subject:'usr_1',role:'signed_in'},async subject=>{asked.push(subject);return 'Ada Lovelace';});
+  expect(result).toEqual({data:{viewer:{signedIn:true,id:'usr_1',name:'Ada Lovelace'}}});
+  expect(asked).toEqual(['usr_1']);
+  expect(JSON.stringify(result)).not.toMatch(/@|email|token/i);
+  for(const role of ['viewer','editor','owner'] as const)expect((await run({subject:'usr_1',role},async()=>'Ada')).data).toEqual({viewer:{signedIn:true,id:'usr_1',name:'Ada'}});
+ });
+ it('answers signed out with nulls and no error: no account, an anonymous role with a subject (a guest), or no subject at any role',async()=>{
+  const name=async():Promise<string|null>=>{throw Error('a signed-out caller is never looked up');};
+  for(const caller of [{subject:null,role:'anonymous'},{subject:'usr_guest',role:'anonymous'},{subject:null,role:'owner'}] as const)
+   expect(await run(caller,name)).toEqual({data:{viewer:{signedIn:false,id:null,name:null}}});
+ });
+ it('reads the name only when the query selects it, and mounts beside linked namespaces',async()=>{
+  let asked=0;
+  const linked=[{name:'tasks',fileId:'backend1',version:'v1',typeDefs:'type Query { value: Int }'}];
+  const result=await executePageOperation({schema:composePageSchema(linked),request:{query:'{ me: viewer { signedIn id } tasks { value } }'},caller:{pageId:'page1',subject:'usr_1',role:'viewer'},signal,invoke:async()=>7,viewerName:async()=>{asked++;return 'Ada';}});
+  expect(result).toEqual({data:{me:{signedIn:true,id:'usr_1'},tasks:{value:7}}});
+  expect(asked).toBe(0);
+ });
+ it('answers a signed-in name as null when no lookup is wired, and is not a mutation root',async()=>{
+  expect((await run({subject:'usr_1',role:'signed_in'})).data).toEqual({viewer:{signedIn:true,id:'usr_1',name:null}});
+  expect((await run({subject:'usr_1',role:'owner'},undefined,'mutation { viewer { signedIn } }')).errors?.length).toBe(1);
+  expect(composePageSchema([]).sdl).toMatch(/type Viewer \{\s+signedIn: Boolean!\s+id: ID\s+name: String\s+\}/);
+ });
+ it('refuses a link named viewer or a dataset generating the viewer root or Viewer type, so nothing can shadow it',()=>{
+  expect(()=>composePageSchema([{name:'viewer',fileId:'backend1',version:'v1',typeDefs:'type Query { signedIn: Boolean }'}])).toThrow(/viewer.*reserved/);
+  const generated=(name:string)=>({name,fileId:`ds_${name}`,version:'live',kind:'dataset-hasura' as const,typeDefs:`type ${name} { _id: ID! }\ntype Query {\n  ${name}: [${name}!]!\n}\n`,roots:{[name]:{table:name,field:'select'}}});
+  expect(()=>composePageSchema([generated('viewer')])).toThrow(/graphql_root_collision: link viewer generates viewer, the built-in viewer query/);
+  expect(()=>composePageSchema([generated('Viewer')])).toThrow(/graphql_root_collision: link Viewer generates the type Viewer, the built-in viewer query/);
+  // A resolver's own Viewer type stays private to its namespace.
+  expect(composePageSchema([{name:'people',fileId:'backend1',version:'v1',typeDefs:'type Viewer { n: Int } type Query { me: Viewer }'}]).sdl).toContain('people__Viewer');
+ });
+});

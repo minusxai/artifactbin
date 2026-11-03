@@ -36,6 +36,19 @@ describe('HTML page client', () => {
     expect(state.read()).toEqual({ tab: 'all' });
   });
 
+  it('asks the page for the built-in viewer with no link declared, even over a local state key of that name', async () => {
+    const sent: unknown[] = [];
+    const remote: RemotePort = { online: () => true, execute: async (request) => {
+      sent.push(request);
+      return { data: { viewer: { signedIn: false, id: null, name: null } } };
+    } };
+    const state = createLocalStore({ viewer: { signedIn: true, id: 'forged', name: 'Forged' }, tab: 'all' });
+    const client = createClient({ backends: [], state, remote });
+    expect((await client.query({ query: gql`{ tab viewer { signedIn id name } }` })).data).toEqual({ tab: 'all', viewer: { signedIn: false, id: null, name: null } });
+    expect(sent).toEqual([{ query: '{\n  viewer {\n    signedIn\n    id\n    name\n  }\n}', variables: {}, operation: 'query' }]);
+    await expect(client.updateQuery({ query: gql`{ viewer { signedIn } }` }, (data) => data)).rejects.toThrow('viewer is a backend');
+  });
+
   it('reports a reply that carries neither data nor errors as an error, never as a silent null', async () => {
     const remote: RemotePort = { online: () => true, execute: async () => ({ error: 'rate_limited' }) as never };
     const client = createClient({ backends: [], datasets: ['orders'], state: createLocalStore(), remote });

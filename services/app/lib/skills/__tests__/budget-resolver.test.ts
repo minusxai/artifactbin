@@ -42,6 +42,9 @@ it('refuses a bad value before writing anything', async () => {
 it('declares signed-in writes in a schema the platform accepts', () => {
   expect(typeDefs).toContain('@auth(role:signed_in)');
   expect(declaresResolverTest(typeDefs)).toBe(false);
-  expect(budget.signedIn({}, {subject: null})).toBe(false);
-  expect(budget.signedIn({}, {subject: 'acct'})).toBe(true);
+});
+
+it('leaves sign-in state to the built-in viewer query rather than a resolver field', () => {
+  expect(typeDefs).not.toMatch(/signedIn|type Query/);
+  expect(Object.keys(budget).sort()).toEqual(['clearTarget', 'setTarget']);
 });

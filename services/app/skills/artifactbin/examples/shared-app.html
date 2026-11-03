@@ -82,7 +82,7 @@ const preference=gql`{dark month category}`;
 const q=text=>gql([text]),D=APP.dataset,T=APP.targets,B=APP.resolver,PAGE=1000;
 const rowsQuery=q(`query Rows($o:Int!){${D}(order_by:{${C.date}:asc},limit:${PAGE},offset:$o){`+
   `_id ${Object.values(C).join(' ')}}}`);
-const targetsQuery=q(`{${T}{category amount} ${B}{signedIn}}`);
+const targetsQuery=q(`{${T}{category amount} viewer{signedIn}}`);
 const setTarget=q(`mutation S($c:String!,$a:Float!){${B}{setTarget(category:$c,amount:$a){`+
   'amount}}}'),clear=q(`mutation C($c:String!){${B}{clearTarget(category:$c)}}`);
 let rows=[],targets={},signedIn=false,state={dark:null,month:'',category:''},views={};
@@ -100,9 +100,10 @@ async function loadRows(){const out=[];
     if(page.length<PAGE)break;
   }
   rows=out.filter(row=>row.date);}
-// Saved targets (one row per category) override APP.defaultTargets; signedIn comes from budget.ts.
+// Saved targets (one row per category) override APP.defaultTargets; every page answers viewer.
 async function loadTargets(){const result=await client.query({query:targetsQuery});
-  if(result.errors?.length)throw Error(result.errors[0].message);signedIn=result.data[B].signedIn;
+  if(result.errors?.length)throw Error(result.errors[0].message);
+  signedIn=result.data.viewer.signedIn;
   targets={...APP.defaultTargets};for(const t of result.data[T])if(t.amount>=0)targets[t.category]=
     t.amount;}
 const unique=list=>[...new Set(list)].sort(),months=()=>unique(rows.map(r=>r.date.slice(0,7)));
@@ -183,7 +184,7 @@ $('#editor').onsubmit=async event=>{
 };
 new MutationObserver(()=>{if(rows.length)void drawCharts(inMonth());})
   .observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
-// A shared change from another reader refreshes the numbers but leaves #status alone.
+// A shared change, or signing in or out, refreshes the numbers and Save but leaves #status alone.
 onResolverChange(names=>{if(names.includes(T)||names.includes(B))void loadTargets().then(render);});
 try{await Promise.all([loadRows(),loadTargets()]);render();
   status.textContent=`Loaded ${rows.length} sample transactions across ${months().length} months.`;

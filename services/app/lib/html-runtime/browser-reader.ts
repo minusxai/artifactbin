@@ -1,6 +1,6 @@
 import {applyHtmlReaderAppearance} from '../html-bridge/reader';
 import {createUploadContext,bindUploadControl} from './upload-context';
-import type {UploadContext} from '@artifactbin/contracts';
+import {PAGE_VIEWER_ROOT,type UploadContext} from '@artifactbin/contracts';
 import type {PlatformUploadControl} from './upload-contract';
 import {createFileUploader} from './upload';
 import {createUploadRelay} from './upload-relay';
@@ -108,11 +108,17 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const nonce = runtimeId();
   let call = 0;
   let uploadSession=createUploadRelay(post,()=>++call);uploads=uploadSession;
+  /** The last settled session the parent reported: the first one is what this document's first reads ran under. */
+  let session:'signed-in'|'signed-out'|undefined;
   const updateUploadContext=(context:UploadContext)=>{
     if(uploads!==uploadSession)return;
     const old=uploadContext.read();
     if(old.scope!==context.scope||old.state!==context.state){uploadSession.dispose();uploadSession=createUploadRelay(post,()=>++call);uploads=uploadSession;}
     uploadContext.update(context);
+    if(context.state!=='signed-in'&&context.state!=='signed-out')return;
+    const changed=session!==undefined&&session!==context.state;session=context.state;
+    // Signing in or out changes who reads the page: the built-in viewer and every remote read answer again.
+    if(changed)for(const listener of invalidationListeners)try{listener([...config.backends,PAGE_VIEWER_ROOT],'authority');}catch{/* Independent subscriptions. */}
   };
   updateUploadContext(attach?.uploadContext??{state:'unavailable',scope:nonce});
   let canAnnotate = false;

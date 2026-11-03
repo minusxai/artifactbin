@@ -13,7 +13,8 @@ import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind} from '@/lib/page-operations';
 import {executeLinkedDatasetGraphql, loadPageDatasets, type PageDatasets} from '@/lib/dataset-graphql';
-import {services} from '@/lib/platform';
+import {getDb,services} from '@/lib/platform';
+import {people} from '@/lib/datasets';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 /** Reserved host programs are validated before discovery or invocation; unknown kinds never reach the runner. */
@@ -48,7 +49,9 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
  ];
  // The page this request already read for this reader and revision is not read again (its source is the costly part).
  const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
- return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>linked.length?datasets():undefined,invoke:async call=>{
+ // The built-in viewer's name is the reader's own person card (never another person's, never an email).
+ const viewerName=async(subject:string)=>(await people(await getDb(),[subject]))[subject]?.name??null;
+ return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>linked.length?datasets():undefined,viewerName,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   // Dataset roots never reach invoke: page operations run them through `datasets`.
   if(link?.kind!=='backend')throw Error('namespace_not_linked');

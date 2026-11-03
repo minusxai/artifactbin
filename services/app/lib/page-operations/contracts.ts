@@ -10,7 +10,11 @@ export interface PageDatasetPort {
   queryRoots():Record<string,unknown>;
   mutate(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>):Promise<{data?:Record<string,unknown>|null;errors?:ReadonlyArray<{message:string;path?:readonly (string|number)[];extensions:{code:string}}>}>;
 }
-export interface ExecuteOptions { schema:PageSchema; request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>; caller:PageCaller; invoke(call:PageResolverFieldCall):Promise<HtmlJson>; signal?:AbortSignal; datasets?:PageDatasetPort }
+export interface ExecuteOptions {
+  schema:PageSchema; request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>; caller:PageCaller; invoke(call:PageResolverFieldCall):Promise<HtmlJson>; signal?:AbortSignal; datasets?:PageDatasetPort;
+  /** A signed-in caller's display name for the built-in viewer (lib/datasets `people`), read only when a query selects it. */
+  viewerName?(subject:string):Promise<string|null>;
+}
 export function boundedDetail(text:unknown):string|undefined { if(typeof text!=='string')return; return text.split(/\r?\n/,1)[0]!.replace(/\p{Cc}/gu,' ').trim().slice(0,200).trim()||undefined; }
 export const FIELD_ERROR_CODE = /^[a-z][a-z_]{0,63}$/;
 

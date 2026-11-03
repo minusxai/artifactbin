@@ -8,13 +8,14 @@
  *   rows (examples/shared-app-policy.mjs writes them).
  * Gotchas: there is no upsert: read the row, then update it by _id or insert one. Plain reads need
  *   no resolver (the page reads targets directly); use one for checks, derived values or external
- *   data. A saved row overrides the page's APP.defaultTargets; clearing deletes it.
+ *   data. Sign-in state needs none either: the page reads the built-in {viewer{signedIn}};
+ *   @auth enforces it on every write. A saved row overrides APP.defaultTargets; clearing
+ *   deletes it.
  */
 interface Target {category:string;amount:number}
 interface Caps {query(graphql:string,variables?:Record<string,unknown>):Promise<any>}
 export const typeDefs=`
  type Target { category:String! amount:Float! }
- type Query { signedIn:Boolean! }
  type Mutation {
   setTarget(category:String!,amount:Float!):Target! @auth(role:signed_in)
   clearTarget(category:String!):Int! @auth(role:signed_in)
@@ -27,8 +28,6 @@ const INSERT=`mutation Insert($o:targets_insert_input!){insert_targets_one(objec
  category amount}}`;
 const CLEAR=`mutation Clear($c:String!){delete_targets(where:{category:{_eq:$c}}){affected_rows}}`;
 export default {
- // Lets the page show guests why they can't edit; @auth still enforces it on every write.
- signedIn:(_args:unknown,principal:{subject:string|null})=>principal?.subject!=null,
  async setTarget(args:Target,_principal:unknown,caps:Caps):Promise<Target>{
   const category=args.category.trim();
   if(!category||category.length>60||!Number.isFinite(args.amount)||args.amount<0||args.amount>1e7)
