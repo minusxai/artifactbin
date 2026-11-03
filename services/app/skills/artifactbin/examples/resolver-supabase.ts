@@ -29,7 +29,7 @@ async function select(caps: Caps, query: string): Promise<Array<Record<string, u
     headers: { apikey: '{{SUPABASE_KEY}}', Authorization: 'Bearer {{SUPABASE_KEY}}' },
   });
   if (!res.ok)
-    throw Error('Supabase answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    throw Error('Supabase answered ' + res.status);
   return (await res.json()) as Array<Record<string, unknown>>;
 }
 

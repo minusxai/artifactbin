@@ -38,7 +38,7 @@ async function query(caps: Caps, sql: string, params: Record<string, string> = {
         parameterType: { type: 'STRING' }, parameterValue: { value } })) }),
   });
   if (!res.ok)
-    throw Error('BigQuery answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    throw Error('BigQuery answered ' + res.status);
   const body = (await res.json()) as Result;
   if (!body.jobComplete) throw Error('BigQuery did not finish in time');
   const names = body.schema?.fields.map(f => f.name) ?? [];
