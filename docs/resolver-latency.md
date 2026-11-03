@@ -218,3 +218,34 @@ after each fix.
 6. **Not recommended: dropping `--no-node-snapshot`.** It measured about 20 ms faster to `ready`, but
    isolated-vm requires the flag on Node 20 and later (its README). A run that works without it does not
    prove it is safe.
+
+## Dataset GraphQL
+
+What a generated-API read costs through the dataset's own endpoint (`POST /api/artifacts/<id>/graphql`), for the
+owner and for a viewer whose select rule filters half the rows and hides a column. The benchmark is
+[`scripts/dataset-graphql-latency.ts`](../scripts/dataset-graphql-latency.ts): the real route handler in process,
+an in-memory PGLite, and the server's SQL worker pool (`--sql thread` runs the engine on the calling thread, as
+the test suite does). Statements are one warm request's (lib/platform `measureQueries`); times are 30 sequential
+requests after 3 warm-ups; RSS is the process peak, sampled every 10 ms. The statement budgets are pinned by
+`services/app/lib/dataset-graphql/__tests__/dataset-graphql-budget.test.ts`.
+
+```sh
+node --import tsx scripts/dataset-graphql-latency.ts                 # 20,000 rows, worker pool
+node --import tsx scripts/dataset-graphql-latency.ts --rows 2000 --sql thread --json out.json
+```
+
+### Before one authorization per request, 2026-11-04, `54e81686b`
+
+Apple M5 Pro, Node 22.22.3, 20,000 rows. Times in ms.
+
+| caller | query | statements | p50 | p95 | peak RSS MiB |
+|---|---|---|---|---|---|
+| owner | list (100 rows) | 14 | 124 | 132 | 1414 |
+| owner | 2 roots (list + count) | 17 | 127 | 131 | 1603 |
+| owner | count + sum + nodes | 20 | 159 | 169 | 1620 |
+| viewer | list (100 rows) | 46 | 87 | 104 | 1622 |
+| viewer | 2 roots (list + count) | 61 | 98 | 112 | 1614 |
+| viewer | count + sum + nodes | 76 | 126 | 133 | 1447 |
+
+Each engine statement re-reads the dataset row three times (and, for a viewer, the four role queries with
+each), so cost grows per statement rather than per request.

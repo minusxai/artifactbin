@@ -33,6 +33,7 @@ check that fails when one moves: `services/app/__tests__/downstream-script-paths
 | `scripts/agent-dev-flow.mjs` | A disposable exercise of the agent check policy against fake remotes. | by hand |
 | `scripts/resolver-latency.ts` | Benchmark one trivial resolver call by stage (bundle, process, isolate, polling), cold and warm, through the runner, its HTTP client and the dev app's page GraphQL; never run by CI. Results: `docs/resolver-latency.md`. | by hand (`node --import tsx scripts/resolver-latency.ts`) |
 | `scripts/dataset-read-latency.ts` | Benchmark a repeated read of one stored dataset table (5k rows by default) through `executeCatalog` and the SQL worker pool, in process and over HTTP, as owner and as a filtered viewer; never run by CI. Results: `docs/dataset-read-latency.md`. | by hand (`node --import tsx scripts/dataset-read-latency.ts`) |
+| `scripts/dataset-graphql-latency.ts` | Benchmark dataset GraphQL reads (list, two roots, count + sum + nodes) for an owner and a filtered viewer through the real route on an in-process database: statements per request, p50/p95 and peak RSS; never run by CI. Results: `docs/resolver-latency.md`. | by hand (`node --import tsx scripts/dataset-graphql-latency.ts`) |
 
 ## Local checks
 

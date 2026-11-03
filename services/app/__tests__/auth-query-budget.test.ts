@@ -11,30 +11,13 @@ import { describe, expect, it } from 'vitest';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { GET as sessionRoute } from '@/app/api/page/session/route';
 import { GET as artifactsRoute } from '@/app/api/artifacts/route';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, recordStatements, request, useAppHarness } from '@/__tests__/harness';
 import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
 import { revokeToken } from '@/lib/accounts';
-import { getDb, measureQueries, runWithRequest } from '@/lib/platform';
-import type { Queryable } from '@/lib/platform/db';
+import { getDb, runWithRequest } from '@/lib/platform';
 
 useAppHarness();
 
-/** Every statement the database sees while `work` runs, and how many transactions it opened. */
-async function recorded<T>(work: () => Promise<T>) {
-  const db = await getDb();
-  const query = db.query.bind(db), transaction = db.transaction.bind(db);
-  const sql: string[] = [];
-  let transactions = 0;
-  db.query = (async <R,>(text: string, params?: unknown[]) => { sql.push(text); return query<R>(text, params); }) as typeof db.query;
-  db.transaction = (async <R,>(fn: (tx: Queryable) => Promise<R>) => {
-    transactions++;
-    return transaction((tx) => fn({ query: async <U,>(text: string, params?: unknown[]) => { sql.push(text); return tx.query<U>(text, params); } }));
-  }) as typeof db.transaction;
-  try {
-    const { value, stats } = await measureQueries(work);
-    return { value, sql, transactions, count: stats.count };
-  } finally { db.query = query; db.transaction = transaction; }
-}
 const touching = (sql: string[], table: string) => sql.filter((text) => new RegExp(`\\b(FROM|JOIN|UPDATE|INTO)\\s+${table}\\b`, 'i').test(text));
 
 const verified = (userId: string, email: string): Actor => ({ credential: 'session', userId, email, emailVerified: true });
@@ -43,7 +26,7 @@ describe('a verified-email browser request', () => {
   it('with no pending invitation opens no transaction and takes no lock', async () => {
     const actor = verified('usr_budget', 'budget@example.com');
     await sessionActor(request('/api/my/artifacts', { actor }));
-    const { value, sql, transactions, count } = await recorded(() => sessionActor(request('/api/my/artifacts', { actor })));
+    const { value, sql, transactions, count } = await recordStatements(() => sessionActor(request('/api/my/artifacts', { actor })));
     console.info('[budget] verified-email cookie request, no invitation: statements=%d transactions=%d', count, transactions);
     expect(value).toMatchObject({ userId: 'usr_budget' });
     expect(transactions).toBe(0);
@@ -57,7 +40,7 @@ describe('a verified-email browser request', () => {
     const db = await getDb();
     await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('g1','crew','Crew','usr_invited')");
     await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_1','g1','invited@example.com','editor','usr_invited')");
-    const { transactions, sql } = await recorded(() => sessionActor(request('/api/my/artifacts', { actor })));
+    const { transactions, sql } = await recordStatements(() => sessionActor(request('/api/my/artifacts', { actor })));
     expect(transactions).toBe(1);
     expect(sql.some((text) => /FOR UPDATE OF g,i/.test(text))).toBe(true);
     expect((await db.query("SELECT role FROM group_members WHERE group_id='g1' AND user_id='usr_invited'")).rows).toEqual([{ role: 'editor' }]);
@@ -71,7 +54,7 @@ describe('GET /api/page/session', () => {
   it('authenticates once and reads the account row once', async () => {
     const actor = verified('usr_chrome', 'chrome@example.com');
     await get(actor);
-    const { value, sql, transactions, count } = await recorded(() => get(actor));
+    const { value, sql, transactions, count } = await recordStatements(() => get(actor));
     console.info('[budget] GET /api/page/session: statements=%d transactions=%d invitations=%d users=%d', count, transactions, touching(sql, 'group_invitations').length, touching(sql, 'users').length);
     expect(transactions).toBe(0);
     expect(touching(sql, 'group_invitations')).toHaveLength(1);
@@ -95,7 +78,7 @@ describe('a bearer-token operation request', () => {
   it('resolves the token and its hosted authority once each', async () => {
     const { token } = await mintAccountToken('budget');
     expect((await call(token)).status).toBe(200);
-    const { sql, count } = await recorded(() => call(token));
+    const { sql, count } = await recordStatements(() => call(token));
     console.info('[budget] bearer GET /api/artifacts: statements=%d resolve=%d authority=%d', count, sql.filter((text) => /FROM tokens WHERE token_hash/.test(text)).length, sql.filter((text) => /request_authority/.test(text)).length);
     expect(sql.filter((text) => /FROM tokens WHERE token_hash/.test(text))).toHaveLength(1);
     expect(sql.filter((text) => /request_authority/.test(text))).toHaveLength(1);
@@ -125,7 +108,7 @@ describe('one request, one identity', () => {
     const actor = verified('usr_once', 'once@example.com');
     await sessionActor(request('/api/my/artifacts', { actor }));
     const req = request('/api/my/artifacts', { actor });
-    const inside = await recorded(() => runWithRequest(req, async () => {
+    const inside = await recordStatements(() => runWithRequest(req, async () => {
       const first = await sessionActor(req), second = await sessionActor(req), third = await requestOrSessionActor(req);
       return [first, second, third];
     }));
@@ -133,7 +116,7 @@ describe('one request, one identity', () => {
     expect(inside.value[2]).toBe(inside.value[0]);
     expect(touching(inside.sql, 'group_invitations')).toHaveLength(1);
     // Off the request (a direct call) nothing is remembered: each ask is its own.
-    const outside = await recorded(async () => { await sessionActor(req); await sessionActor(req); });
+    const outside = await recordStatements(async () => { await sessionActor(req); await sessionActor(req); });
     expect(touching(outside.sql, 'group_invitations')).toHaveLength(2);
   });
 
