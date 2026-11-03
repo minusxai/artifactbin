@@ -77,6 +77,7 @@ import {
   credentialRoot
 } from './toolbox-client.mjs';
 import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
+import {watchNext} from './toolbox-watch-state.mjs';
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an
 // uncertain result can be resumed.
 export async function commentCommand({sub, values, positionals}, options = {}) {
@@ -192,6 +193,7 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     {file: values.request, root: client.root}
   );
   const result = await resumeJournal(journal, client, 'comment');
-  return {thread: result.receipt, journal};
+  if (sub !== 'reply') return {thread: result.receipt, journal};
+  return {thread: result.receipt, journal, next: watchNext(id)};
 }
 await runTool('comment', import.meta.url, commentCommand);

@@ -85,13 +85,16 @@ describe('installed native author examples',()=>{
    expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first.baseline).toBe(first.source+'.af.json');
    // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
    expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
+   // A page publish ends on the next step: reply and start the comment watch in one response.
+   const next=`Next: when the request is done, send your reply (the URL as asked) and, in that same response, run node scripts/comment.mjs watch ${first.id} --next.`;
+   expect(first.next).toBe(next);
    const canonical=await readFile(first.source,'utf8'),baseline=JSON.parse(await readFile(first.baseline,'utf8'));expect(canonical).toContain('href="./theme.css"');expect(baseline.dependencyReceipts).toHaveLength(1);
    const nodeId=/data-af-id="([^"]+)"[^>]*>One/.exec(canonical)?.[1];expect(nodeId).toBeTruthy();
    const anchor=path.join(dir,'anchor.json'),bodyFile=path.join(dir,'comment.txt');await writeFile(anchor,JSON.stringify({kind:'html-node',v:1,revision:'1',nodeId,quote:'One'}));await writeFile(bodyFile,'Review this heading');
    const comment=await commentCommand({sub:'add',values:{server,anchor,'body-file':bodyFile},positionals:[first.id]},options);
    const comments=await commentCommand({sub:'list',values:{server,status:'all'},positionals:[first.id]},options);expect(comments.annotations).toHaveLength(1);
    const thread=comments.annotations[0];await writeFile(bodyFile,'Checked the source');
-   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');
+   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(next);expect(comment.next).toBeUndefined();
    expect((await commentCommand({sub:'reply',values:{server,resume:replied.journal},positionals:[]},options)).thread.revision).toBe(replied.thread.revision);
    expect(comment.journal).toBeTruthy();
    await writeFile(first.source,canonical.replace('>One<','>Two<'));await writeFile(path.join(project,'theme.css'),'body{color:blue}');
