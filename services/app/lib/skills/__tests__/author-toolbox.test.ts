@@ -470,6 +470,30 @@ it('publish --template applies a new dataset\'s starting permissions after the c
   await expect(publishCommand({values:{server,template:'read-only'},positionals:[csv]},options)).rejects.toMatchObject({code:'template_not_for_update'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('publish --name sends a new dataset\'s GraphQL root in the create body, and only then',async()=>{
+ const {mkdtemp,writeFile,rm,mkdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'publish-name-')),server='https://example.test';
+ try{
+  const project=path.join(root,'project');await mkdir(project);const csv=path.join(project,'orders.csv'),page=path.join(project,'index.html');
+  await writeFile(csv,'item,amount\ntea,3\n');await writeFile(page,'<!doctype html><html><head><title>T</title></head><body><h1>Hi</h1></body></html>');
+  const seen:Array<{method:string;path:string;body?:any}>=[];
+  const fetcher=async(url:any,init:any)=>{
+   const {pathname}=new URL(String(url)),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):undefined;seen.push({method,path:pathname,body});
+   if(pathname==='/api/artifacts'&&method==='POST')return Response.json({id:'DATA12',url:server+'/a/DATA12',version:1,state:'a'.repeat(64),format:'dataset'},{status:201});
+   return Response.json({error:'unexpected'},{status:500});
+  };
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher,log:()=>{}};
+  await expect(publishCommand({values:{server,name:'orders'},positionals:[page]},options)).rejects.toMatchObject({code:'name_requires_dataset',exit:2});
+  expect(seen).toEqual([]);
+  await publishCommand({values:{server,name:'orders'},positionals:[csv]},options);
+  expect(seen.map(r=>r.method+' '+r.path)).toEqual(['POST /api/artifacts']);
+  expect(seen[0]!.body).toMatchObject({name:'orders',visibility:'unlisted'});
+  // The name is fixed at creation: an update never sends one.
+  await expect(publishCommand({values:{server,name:'renamed'},positionals:[csv]},options)).rejects.toMatchObject({code:'name_not_for_update',exit:2});
+  expect(seen).toHaveLength(1);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('names the dataset links that publish puts on the legacy API, as the server decides',async()=>{
  const {legacyDatasetLinks}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
  const link=(name:string,api='')=>`<link rel="af-dataset" data-af-name="${name}" href="ref:abcdef"${api}>`;

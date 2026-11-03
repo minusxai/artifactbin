@@ -35,7 +35,8 @@ working unchanged; to move one to this API, rewrite its queries and add `data-af
 
 `node scripts/graphql.mjs schema PAGE_ID` (or `DATASET_ID`) prints the exact SDL your role sees, and
 for a dataset your role. In a page the root is the link's `data-af-name` (`orders`); queried directly
-it comes from the title (or `data`). A column keeps its name when it is a valid GraphQL name;
+it comes from the title (or `data`); `publish.mjs` `--name orders` (create body `name`) fixes it at
+creation, and it never changes afterwards. A column keeps its name when it is a valid GraphQL name;
 otherwise it is lower-cased with `_` for other characters (`Created By` → `created_by`). Every row
 has `_id: ID!`, the stable row ID (a CSV `id` column stays ordinary). Types: number → `Float`,
 boolean → `Boolean`, text, dates and user IDs → `String`; every column is nullable.

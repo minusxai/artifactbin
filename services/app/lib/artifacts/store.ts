@@ -157,7 +157,7 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
+  atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; graphqlName?: string; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
@@ -243,8 +243,11 @@ async function insertArtifact(
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   // A new stored dataset that names no access gets the read-only template (v3) and `readwrite` access: every
   // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
-  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres';
-  const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input) : null);
+  // A GraphQL name (validated by the create door) is stored in that template's configuration, whatever the access.
+  const named = atCreation.graphqlName !== undefined;
+  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset' && catalog?.kind!=='postgres';
+  if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
+  const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
   if(input.format==='html'&&input.htmlBackends){
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');

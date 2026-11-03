@@ -30,7 +30,7 @@ import { datasetPermissionsTemplate, readBackDatasetPermissions, validateDataset
 import type { AccessActor } from '@/lib/accounts';
 import { commitDatasetPolicy, getArtifactFor, type ArtifactRow } from '@/lib/artifacts';
 import { toV3 } from '@/lib/dataset-permissions';
-import { catalogOf, LEGACY_POLICY_REFUSED, type DatasetTable } from '@/lib/datasets';
+import { catalogOf, keepDatasetConfiguration, LEGACY_POLICY_REFUSED, type DatasetTable } from '@/lib/datasets';
 import { writeDatasetPolicy } from '@/lib/document-data';
 import { getDb } from '@/lib/platform';
 import { hasuraNames, storedConfiguration } from './hasura-names';
@@ -42,7 +42,6 @@ const invalid = (errors: DatasetPermissionsIssue[]): PolicyReply => ({
   status: 400,
   body: { error: 'invalid_policy', detail: errors.map((e) => `${e.path}: ${e.message}`).join('; '), errors },
 });
-const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const graphqlType = (type: DatasetColumn['type']) => (type === 'number' ? 'Float' : type === 'boolean' ? 'Boolean' : 'String');
 
 /** A stored dataset the actor edits or owns, with its catalog tables; null for everything else. */
@@ -86,22 +85,6 @@ export async function readDatasetPermissions(actor: AccessActor, id: string): Pr
   });
 }
 
-/**
- * The stored configuration kept: a table omitting it takes the stored one, a table sending one must send it
- * unchanged (a stored v1/v2/no policy has none). Problems are reported with the validator's.
- */
-function keepConfiguration(policy: DatasetPermissions, stored: unknown): { policy: DatasetPermissions; errors: DatasetPermissionsIssue[] } {
-  const configuration = storedConfiguration(stored), errors: DatasetPermissionsIssue[] = [];
-  const tables = policy.tables.map((t, i) => {
-    const kept = configuration(t.table);
-    if (t.configuration === undefined) return kept ? { ...t, configuration: structuredClone(kept) } : t;
-    if (!sameJson(t.configuration, kept))
-      errors.push({ path: `tables[${i}].configuration`, message: `server-owned (it names the GraphQL API): omit it or send it unchanged, ${JSON.stringify(kept ?? null)}` });
-    return t;
-  });
-  return { policy: { ...policy, tables }, errors };
-}
-
 /** PUT: validate a v3 policy against the dataset; a dry run answers the read-back, a save needs the current revision. */
 export async function writeDatasetPermissions(actor: AccessActor, id: string, body: Record<string, unknown>): Promise<PolicyReply> {
   const value = body.policy, dryRun = body.dryRun === true;
@@ -124,7 +107,7 @@ export async function writeDatasetPermissions(actor: AccessActor, id: string, bo
     return invalid([{ path: 'expectedPolicyRevision', message: 'expected the nonnegative integer revision GET answered' }]);
   const checked = validateDatasetPermissions(value, shapeOf(tables));
   if (!checked.ok) return invalid(checked.errors);
-  const kept = keepConfiguration(checked.policy, row.dataset_policy);
+  const kept = keepDatasetConfiguration(checked.policy, row.dataset_policy);
   if (kept.errors.length) return invalid(kept.errors);
   const current = row.policy_revision ?? 0;
   if (dryRun) return ok({ dryRun: true, saved: false, revision: current, policy: kept.policy, ...readBack(kept.policy, row) });
@@ -144,7 +127,7 @@ export async function datasetPermissionTemplates(actor: AccessActor, id: string,
     templates: DATASET_PERMISSION_TEMPLATES.map((name) => {
       const built = datasetPermissionsTemplate(name, shape, ownerColumn ? { ownerColumn } : {});
       if (!built.ok) return { name, ok: false, errors: built.errors };
-      const policy = keepConfiguration(built.policy, row.dataset_policy).policy;
+      const policy = keepDatasetConfiguration(built.policy, row.dataset_policy).policy;
       return { name, ok: true, policy, ...readBack(policy, row) };
     }),
   });

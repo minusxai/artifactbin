@@ -63,6 +63,23 @@ export function hasuraGeneratedNames(root: string): string[] {
   return [root, ...types.map((t) => `${root}_${t}`), ...['insert', 'update', 'delete'].map((verb) => `${verb}_${root}`), `insert_${root}_one`, `update_${root}_by_pk`, `delete_${root}_by_pk`];
 }
 
+/** The longest root name a dataset may be given at creation. */
+const DATASET_GRAPHQL_NAME_MAX = 64;
+
+/**
+ * Why `name` cannot be a dataset's GraphQL root, or null when it can: a valid GraphQL name of at most 64
+ * characters, not reserved (`__*`, `_id`, `_and`, `_or`, `_not`, the literals) and generating no field or type a
+ * shared type already names (`dataset` would generate `dataset_meta`). Checked once, at creation: the name is stored
+ * and never recomputed, so a name that would be suffixed later is refused now.
+ */
+export function graphqlRootNameProblem(name: unknown): string | null {
+  if (typeof name !== 'string' || !VALID.test(name) || name.length > DATASET_GRAPHQL_NAME_MAX)
+    return `name must match ^[A-Za-z][A-Za-z0-9_]*$ and be at most ${DATASET_GRAPHQL_NAME_MAX} characters`;
+  if (reservedField(name)) return `${name} is reserved in GraphQL`;
+  const shadowed = hasuraGeneratedNames(name).find((generated) => SHARED_TYPES.includes(generated));
+  return shadowed ? `${name} would generate ${shadowed}, a shared GraphQL type` : null;
+}
+
 export interface HasuraRootOptions {
   /** The dataset's title: a flat dataset's root without a stored `custom_name`. */
   title?: string | null;
