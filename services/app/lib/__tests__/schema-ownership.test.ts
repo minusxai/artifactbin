@@ -93,10 +93,8 @@ it('artifact heads and archived versions have no content column',()=>{
  }
 });
 
-it('mutation run jobs and one recipient result per run belong to the app',()=>{
- for(const name of ['notification_jobs','mutation_notifications'])expect(declared()['app.'+name]).toBe('app');
- expect(renderedSchema().schema).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_jobs_run ON app.notification_jobs (mutation_run_id)');
- expect(renderedSchema().schema).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_mutation_notifications_run_recipient ON app.mutation_notifications (mutation_run_id, recipient_id)');
+it('retired mutation-notification storage is declared by nobody and dropped on boot',()=>{
+ for(const name of ['notification_jobs','mutation_notifications']){expect(declared()['app.'+name]).toBeUndefined();expect(renderedSchema().schema).toContain('DROP TABLE IF EXISTS app.'+name);}
  expect(renderedSchema().schema).toContain('context JSONB');
 });
 it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});
