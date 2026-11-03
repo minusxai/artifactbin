@@ -1,6 +1,6 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {followHtmlVersion,followPublication} from '../follow-html-version';
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
 
 /** A frame controller that answers the version command with `answer` (or stays silent). */
 function frame(answer?:(command:{type:string;version:number})=>unknown){
@@ -15,7 +15,12 @@ describe('followHtmlVersion',()=>{
   await expect(followHtmlVersion({version:7,frame:controller,refresh,reload})).resolves.toBe('morphed');
   expect(controller.sent).toEqual([{type:HTML_VERSION_MESSAGE,version:7}]);expect(refresh).toHaveBeenCalledWith(7,'7');expect(reload).not.toHaveBeenCalled();
  });
- it('reloads when the frame refuses (scripts changed, edit not inert, morph threw)',async()=>{
+ it('follows a frame that rebuilds its own document (scripts changed, edit not inert): the trusted revision moves, the page does not reload',async()=>{
+  const reload=vi.fn(),refresh=vi.fn(async()=>true),controller=frame(command=>({type:HTML_VERSION_REBUILT,revision:String(command.version)}));
+  await expect(followHtmlVersion({version:7,frame:controller,refresh,reload})).resolves.toBe('rebuilt');
+  expect(refresh).toHaveBeenCalledWith(7,'7');expect(reload).not.toHaveBeenCalled();
+ });
+ it('reloads when the frame refuses (it could read no valid new version)',async()=>{
   const reload=vi.fn();
   await expect(followHtmlVersion({version:7,frame:frame(()=>({type:HTML_VERSION_REFUSED,reason:'the new version runs different scripts'})),refresh:async()=>true,reload})).resolves.toBe('reloaded');
   expect(reload).toHaveBeenCalledOnce();
@@ -41,10 +46,10 @@ describe('followPublication',()=>{
   const show=vi.fn(),reload=vi.fn(),answers:Array<()=>void>=[];
   const listeners=new Set<(event:unknown)=>void>();
   const controller={update:vi.fn(),subscribe:(listener:(event:unknown)=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},
-   send:vi.fn((command:{version:number})=>{answers.push(()=>listeners.forEach(listener=>listener({type:HTML_VERSION_APPLIED,revision:String(command.version)})));})};
+   send:vi.fn((command:{version:number})=>{answers.push(()=>listeners.forEach(listener=>listener({type:command.version===5?HTML_VERSION_REBUILT:HTML_VERSION_APPLIED,revision:String(command.version)})));})};
   const five=followPublication({version:5,editId:'five',frame:controller,show,reload});
   await vi.waitFor(()=>expect(answers).toHaveLength(1));
-  // Announced while 5 is being drawn: 6 is overtaken by 7 before its turn.
+  // Announced while 5 is being drawn (rebuilt, which keeps following): 6 is overtaken by 7 before its turn.
   const six=followPublication({version:6,editId:'six',frame:controller,show,reload});
   const seven=followPublication({version:7,editId:'seven',frame:controller,show,reload});
   answers[0]!();await five;

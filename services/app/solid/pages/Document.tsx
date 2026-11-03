@@ -195,8 +195,9 @@ export function DocumentPage(): JSX.Element {
       }
       if (page.surface?.format === 'html') runtimeRef.current?.invalidate?.(event.datasets);
     },
-    // The frame draws an inert edit in place and this page moves its trusted revision with it; anything else reloads
-    // the original server shell and its ticketed frame together, while viewer state stays in browser storage.
+    // The frame draws an inert edit in place, or rebuilds its own document from any other version keeping the reader's
+    // place, and this page moves its trusted revision with it; only a version the frame could not read reloads the
+    // original server shell and its ticketed frame together, while viewer state stays in browser storage.
     // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
     onPublication: page.surface.format === 'html' ? (version, editId) => import('../document/follow-html-version').then(({ followPublication }) => followPublication({
       version, editId, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,

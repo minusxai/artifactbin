@@ -34,6 +34,7 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door.ts',import.meta.url)))};
 import {startNativeHtmlTableScroll} from ${JSON.stringify(fileURLToPath(new URL('./table-scroll.ts',import.meta.url)))};
+import {restoreReadingPlace} from ${JSON.stringify(fileURLToPath(new URL('./reading-place.ts',import.meta.url)))};
 globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})]=${JSON.stringify(buildId)};
 const platformNonce=document.currentScript?.nonce;
 const supplied=document.querySelector('[data-af="runtime"]');
@@ -55,6 +56,8 @@ const chromeBlock=document.querySelector('[data-af="chrome"]');
 const chrome=chromeBlock?blob(JSON.parse(chromeBlock.textContent)):new URL(${JSON.stringify(chromePath)},document.currentScript.src||location.href).href;
 const live=config.appOrigin&&!config.offline&&window.parent!==window;
 // The source this document loaded, before its deferred and module scripts run: what a new version is compared against (./live-morph LOADED_SOURCE).
+// A framed page rebuilt from a new version (./live-morph rebuild) puts the reader back where the previous document left them.
+if(live)restoreReadingPlace(window,config.pageId);
 if(live){const keep=()=>{if(document.readyState==='loading')return;document.removeEventListener('readystatechange',keep);window[Symbol.for('afbin.loaded-source')]='<!doctype html>'+document.documentElement.outerHTML;};document.addEventListener('readystatechange',keep);}
 if(!config.publishOrigin&&document.currentScript.src)config.publishOrigin=new URL(document.currentScript.src,location.href).origin;
 const sharedBlock=config.offline?document.querySelector('[data-af="offline-modules"]'):null;

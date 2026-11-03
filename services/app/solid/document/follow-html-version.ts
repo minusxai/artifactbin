@@ -1,6 +1,6 @@
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
 
-/** How long the frame has to draw a new version in place before the page reloads instead. */
+/** How long the frame has to draw a new version in place (or start rebuilding from it) before the page reloads instead. */
 const HTML_VERSION_TIMEOUT_MS=3000;
 
 interface VersionFrame {send(command:unknown):void;subscribe(listener:(event:unknown)=>void):()=>void}
@@ -17,23 +17,25 @@ export interface FollowHtmlVersionOptions {
 
 /**
  * A NEW PUBLISHED VERSION OF AN OPEN HTML PAGE (D9): the framed document draws it in place (lib/html-runtime/live-morph)
- * when the edit is inert and its scripts are unchanged; this page then refreshes its own trusted revision. A refusal, an
- * error, a mismatched refresh or a frame silent for `timeoutMs` reloads, exactly as every version did before.
- * Resolves 'morphed' or 'reloaded'.
+ * when the edit is inert and its scripts are unchanged, or else rebuilds its own document from it, keeping the reader's
+ * place ('rebuilt'; the bridge re-attaches to the new document as it opens). Either way this page then refreshes its own
+ * trusted revision. A refusal (no valid version was read), an error, a mismatched refresh or a frame silent for
+ * `timeoutMs` reloads the whole page. Resolves 'morphed', 'rebuilt' or 'reloaded'.
  */
-export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<'morphed'|'reloaded'>{
+type Outcome='morphed'|'rebuilt'|'reloaded';
+export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<Outcome>{
  const {frame,version}=options;
  if(!frame){options.reload();return Promise.resolve('reloaded');}
  return new Promise(resolve=>{
   let settled=false;
-  const finish=(outcome:'morphed'|'reloaded')=>{if(settled)return;settled=true;clearTimeout(timer);stop();if(outcome==='reloaded')options.reload();resolve(outcome);};
+  const finish=(outcome:Outcome)=>{if(settled)return;settled=true;clearTimeout(timer);stop();if(outcome==='reloaded')options.reload();resolve(outcome);};
   const stop=frame.subscribe(event=>{
    const data=event as {type?:unknown;revision?:unknown}|null;
    if(data?.type===HTML_VERSION_REFUSED){finish('reloaded');return;}
-   if(data?.type!==HTML_VERSION_APPLIED)return;
+   if(data?.type!==HTML_VERSION_APPLIED&&data?.type!==HTML_VERSION_REBUILT)return;
    stop();
-   const revision=String(data.revision??'');
-   void options.refresh(version,revision).then(ok=>finish(ok?'morphed':'reloaded'),()=>finish('reloaded'));
+   const revision=String(data.revision??''),drawn:Outcome=data.type===HTML_VERSION_REBUILT?'rebuilt':'morphed';
+   void options.refresh(version,revision).then(ok=>finish(ok?drawn:'reloaded'),()=>finish('reloaded'));
   });
   const timer=setTimeout(()=>finish('reloaded'),options.timeoutMs??HTML_VERSION_TIMEOUT_MS);
   try{frame.send({type:HTML_VERSION_MESSAGE,version});}catch{finish('reloaded');}
@@ -61,5 +63,5 @@ export function followPublication(options:{
    if(!Number.isInteger(shown)||shown<drawn)return false;
    options.show({version:shown,editId:options.editId??''});
    return true;
-  }}).then(outcome=>outcome==='morphed'?undefined:new Promise<never>(()=>{/* the page is reloading: nothing follows it */})));
+  }}).then(outcome=>outcome!=='reloaded'?undefined:new Promise<never>(()=>{/* the page is reloading: nothing follows it */})));
 }
