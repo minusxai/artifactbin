@@ -11,6 +11,8 @@ export default {
         'server.ts',
         // The fast lane ci.yml runs on main pushes and its independent Vitest configuration.
         'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
+        // pr fast's guard tier: tests that read the repository's files by path (scripts/ci/guard-tests.json).
+        'vitest.guard.config.ts',
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
         // Retained downstream build entry (downstream-script-paths.test.ts).
@@ -64,6 +66,8 @@ export default {
         // Native browser assets are reached through explicit build and HTTP entry points.
         'lib/mermaid-images/mermaid-render.ts',
         // Test fixtures run as their own tsx processes by the tests beside them.
+        // The setup file of pr fast's guard tier (vitest.guard.config.ts at the root).
+        'test/setup/guard.setup.ts',
       ],
       project: ['**/*.{ts,tsx,mjs,js,jsx,css}', '!public/**', '!skills/artifactbin/components/*.ts'],
       ignoreDependencies: [

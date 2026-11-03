@@ -5,14 +5,17 @@ name: pr fast
 # (scripts/lib/ci-elapsed.mjs --pr). Do not raise the budget: fix the critical path instead.
 #
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
-# UI-primitive guards), the workflow lint, JavaScript syntax and the fast module test list
-# (scripts/ci/fast-tests.json) on three runners at once, each restoring main's install cache. The root type
+# UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
+# (scripts/ci/fast-tests.json) and the guard tests (scripts/ci/guard-tests.json) on four runners at once, each
+# restoring main's install cache. The guard tests read the repository's own files by path (workflows, package
+# scripts, the skill tree), so no import graph selects them and the fast list's capability audit refuses them; each
+# guards a contract whose break once reached main. WHEN MAIN GOES RED, find why this lane missed it and add a
+# deterministic guard here (either list, or a contract test) within the budget. The root type
 # check uses TypeScript 7's native compiler (scripts/lib/type-check.mjs): about 7s cold on a runner where tsc 5
 # took 30s, and longer still from stale build info, so no diff size can push it past the limit. It starts from
 # the newest incremental build info any run uploaded.
-# The full suite stays in ci.yml: it runs on every push to main and gates deploys there, and on a pull
-# request it still runs, selected by affected modules, as an informational check that also records the
-# tested tree main's push reuses. page-speed.yml is informational too.
+# The full suite stays in ci.yml: it runs on every push to main (and on demand) and gates deploys there; it does
+# not run on pull requests. page-speed.yml is informational.
 #
 # No workflow-level `concurrency` group: cancel-in-progress holds a new run pending until the old one
 # stops (ci.yml's header has the measurements), which alone would cost more than this lane's budget.
@@ -38,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [ types, lint, tests ]
+        part: [ types, lint, tests, guards ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -121,6 +124,8 @@ jobs:
           exit "$rc"
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
+      - if: matrix.part == 'guards'
+        run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:

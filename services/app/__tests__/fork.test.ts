@@ -30,6 +30,7 @@ import { getArtifactById, getSharingFor } from '@/lib/artifacts';
 import { listArtifactsFor } from '@/lib/artifacts/testing';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { firstSaveLinks } from '@/__tests__/stored-links';
 import { identityForUser, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
@@ -469,9 +470,11 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
    */
   it('native dataset links retain their original live identity and grant no copied write authority', async () => {
     const w=await world();const ds=await create(w.ta.token,{dataset:[{choice:'ramen'}],visibility:'public'});
-    const doc=await create(w.ta.token,{html:`<html><head><link rel="af-dataset" data-af-name="votes" href="ref:${ds.id}"></head><body>Votes</body></html>`,visibility:'public'});
+    const html=`<html><head><link rel="af-dataset" data-af-name="votes" href="ref:${ds.id}"></head><body>Votes</body></html>`;
+    const doc=await create(w.ta.token,{html,visibility:'public'});
     const res=await bearerFork(doc.id,w.tb.token);expect(res.status).toBe(201);const body=await res.json();expect(body.datasets).toEqual([]);
-    const copy=await head(body.id);expect(copy.source).toContain(`ref:${ds.id}`);expect(copy.meta.htmlLinks).toEqual([{kind:'dataset',name:'votes',datasetId:ds.id,api:'hasura',mode:'live'}]); // #1014: the fork keeps the source link's generated API
+    // The fork keeps the source's stored links (API included), which are the first save's.
+    const copy=await head(body.id);expect(copy.source).toContain(`ref:${ds.id}`);expect(copy.meta.htmlLinks).toEqual((await head(doc.id)).meta.htmlLinks);expect(copy.meta.htmlLinks).toEqual(firstSaveLinks(html));
   });
 
   it('native dry_run creates neither a page nor dataset copies',async()=>{
