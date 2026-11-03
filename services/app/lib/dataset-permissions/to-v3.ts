@@ -1,7 +1,8 @@
 /**
  * DUAL READ: a stored dataset policy (none, v1 entries, v2 grants, or v3) read as v3 permissions in memory.
- * Every write decision reads this; the stored rewrite (a later migration) runs the same function, so it
- * changes no behaviour. Each mapping row is the plan's table; anything that does not carry over exactly
+ * Every read and write decision reads this; the stored rewrite (scripts/migrate-dataset-policies.ts) runs the
+ * same function, so it changes no behaviour. Production stores only v3; the dual read stays for self-hosted
+ * databases that have not run that rewrite yet (docs/operations.md). Each mapping row is the plan's table; anything that does not carry over exactly
  * is listed in `report`.
  */
 import {

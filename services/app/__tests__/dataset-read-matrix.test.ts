@@ -1,7 +1,7 @@
 /**
  * THE READ EQUIVALENCE MATRIX: every stored policy shape (none, v1, v2) × caller × read door, run through the
  * door functions themselves and compared with what the v3 reading of that policy decides (datasetRole +
- * toV3, the legacy visibility ceiling and the v2 read-grant compatibility in lib/dataset-permissions/read).
+ * toV3 and the legacy visibility ceiling in lib/dataset-permissions/read; the v2 read-grant compatibility is removed).
  * Doors: `direct` (canReadArtifact: raw, content, query, events, exports), `tables` (the /a/:id/tables SQL
  * route, which decides exactly as `direct` now), `page` (page GraphQL through a page link) and `program` (a page's
  * registered queries, by the page owner's reach).
@@ -58,10 +58,10 @@ function expected(shape:Shape,caller:Caller,door:Door):boolean {
   // v2 grants keep their own ceiling: a private dataset admits its shares only, through any page.
   case 'v2/private':return role==='viewer';
   case 'v2/owner-only':case 'v2/locked':return false;
-  // toV3: viewer only; the named person keeps reading through the compat (grantsPermitRead) until migration.
-  case 'v2/named':return role==='viewer'||caller==='named';
-  // toV3: viewer and signed_in; anonymous keeps reading through that page (the compat), never elsewhere.
-  case 'v2/page':return role!=='anonymous'||door==='program';
+  // toV3: viewer only; the named person reads only once shared (the compat is removed; the migration shares).
+  case 'v2/named':return role==='viewer';
+  // toV3: viewer and signed_in; anonymous no longer reads through that page (the compat is removed).
+  case 'v2/page':return role!=='anonymous';
   default:return false;
  }
 }
@@ -81,6 +81,9 @@ const CHANGED=new Set<string>([
  ...(['direct','page','program'] as const).map(d=>`v2/named|viewer|${d}`),
  // v2 artifact:X maps to viewer and signed_in selects (toV3, reported): they read directly too.
  ...(['viewer','named','signedIn'] as const).flatMap(c=>['direct','page'].map(d=>`v2/page|${c}|${d}`)),
+ // The v2 read-grant compatibility is removed: a named person who is not shared, and anonymous readers of a page-scoped grant, are refused.
+ ...(['direct','page','program'] as const).map(d=>`v2/named|named|${d}`),
+ 'v2/page|anonymous|program',
 ]);
 
 const BASELINE=process.env.DATASET_READ_MATRIX_BASELINE==='1';

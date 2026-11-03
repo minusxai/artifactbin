@@ -38,7 +38,7 @@ const SHAPES:Shape[]=[
 ];
 
 /** The v3 decision, written out from the plan's role table and toV3 mapping rows. */
-function expected(shape:Shape,caller:Caller,door:Door,op:Op):boolean {
+function expected(shape:Shape,caller:Caller,door:Door,_op:Op):boolean {
  const admin=caller==='owner'||caller==='editor';
  // The access ceiling stays on datasets without v2 grants, for every caller.
  if(shape.access==='read'&&!shape.name.startsWith('v2/'))return false;
@@ -55,9 +55,8 @@ function expected(shape:Shape,caller:Caller,door:Door,op:Op):boolean {
   case 'v2/default':case 'v2/artifact':return door==='program'&&caller==='member';
   // v2 user:* writes become normal entries for viewer and signed_in.
   case 'v2/users':return caller!=='anonymous';
-  // v2 user:<id> has no v3 slot; until the stored migration shares the dataset with that person, the write
-  // decision keeps admitting exactly their granted operations outside a program (write.ts namedUserWrites).
-  case 'v2/named':return caller==='viewer'&&op==='insert'&&door!=='program';
+  // v2 user:<id> has no v3 slot and its compatibility is removed (the migration shares instead): refused.
+  case 'v2/named':return false;
   default:return false;
  }
 }

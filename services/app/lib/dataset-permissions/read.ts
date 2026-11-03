@@ -9,10 +9,8 @@
  *    to a reader arriving through a document whose owner holds owner or editor on the dataset (stored v2
  *    grants excepted: their private ceiling admits shares only): a page's <Query>/<Import> and registered
  *    queries read by the page owner's reach.
- *  - Stored v2 policies keep today's read outcomes until the stored rewrite (scripts/migrate-dataset-policies.ts):
- *    · A v2 read grant that admits this caller today (`grantsPermitRead`: a named person, a page-scoped
- *      grant through that page) keeps admitting them to the whole dataset. v3 has no slot for one
- *      person or one page, so this compatibility lives here and nowhere else, as the write one does.
+ *  - A stored v2 grant naming one person or one page has no v3 slot: it admits only what its v3 reading
+ *    allows (the stored migration, scripts/migrate-dataset-policies.ts, shared the dataset with named people).
  *  - The decision's `identity` names the role, the policy revision, the session and the rules, for
  *    cursors and read fences: any change refuses a continuation.
  */
@@ -25,7 +23,7 @@ import {
   type Scalar,
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { grantsOf, grantsPermitRead, liveAccessFacts, type AccessFacts, type ArtifactRow, type ReadRow } from '@/lib/artifact-access';
+import { liveAccessFacts, type AccessFacts, type ArtifactRow, type ReadRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole, type DatasetRoleRow } from './role';
@@ -100,11 +98,6 @@ export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor,
   };
   if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
   const read = permissionsOf(row);
-  // v2 compatibility: a grant admitting this caller today keeps admitting them, whole. Remove once the stored
-  // migration (scripts/migrate-dataset-policies.ts) has been applied everywhere: named readers are shares by then.
-  if ((read?.source === 'v2' || (!read && grantsOf(row))) && await grantsPermitRead(row as ReadRow, actor, options.document, options.tx, facts)) {
-    return admitted(row, role, all, session, false);
-  }
   if (!read) return { allowed: false, role };
   if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) {
     // v2 grants never let a page reach past a private dataset's shares (grantsPermitRead's ceiling).
