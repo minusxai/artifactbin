@@ -1,10 +1,5 @@
-import {registeredMutationPlan,registeredMutationInvoker} from '@/lib/registered-page-mutations';
-import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
-import {type HtmlBackendVersionRecord, getHtmlBackendVersion} from '@/lib/html-backends';
+import {getHtmlBackendVersion} from '@/lib/html-backends';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
-import type {HtmlBackendLink} from '@artifactbin/contracts';
-import {registeredPlan, registeredQueryInvoker} from '@/lib/registered-page-queries';
-import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-queries';
 import type { AccessActor } from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
@@ -17,27 +12,20 @@ import {getDb,services} from '@/lib/platform';
 import {people} from '@/lib/datasets';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
-/** Reserved host programs are validated before discovery or invocation; unknown kinds never reach the runner. */
-function registeredPrograms(page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord){
- const query=registeredPlan(page,link,backend),mutation=registeredMutationPlan(page,link,backend);
- if(!query&&!mutation&&backend.compiled.startsWith('!registered-page-'))throw Error('registered_program_unsupported');
- return {query,mutation};
-}
 /** The page's dataset links: each mounts its dataset's generated roots flat at the top of the page schema. */
 const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
 async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[]>{
  return Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
   const backend=await getHtmlBackendVersion(link.backendId,link.version);
   if(!backend||backend.pageId!==page.pageId)throw Error('backend_link_mismatch');
-  registeredPrograms(page,link,backend);
   return {name:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs};
  }));
 }
 /** How many times a read raced by a linked dataset's write runs before the request is refused. */
 const RACED_READ_ATTEMPTS=3;
-interface OperationScope{revalidateActor:()=>Promise<AccessActor>;retainReadFence?:(verify:()=>Promise<void>)=>void;idempotencyKey?:string;signal?:AbortSignal}
+interface OperationScope{retainReadFence?:(verify:()=>Promise<void>)=>void;idempotencyKey?:string;signal?:AbortSignal}
 function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope){
- const {revalidateActor,retainReadFence}=scope;
+ const {retainReadFence}=scope;
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
  const linked=datasetLinks(page);
  // The dataset links load once per request, for this reader's role through this page: the composed SDL and the execution share it.
@@ -55,11 +43,6 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
   const link=page.links.find(link=>link.name===call.namespace);
   // Dataset roots never reach invoke: page operations run them through `datasets`.
   if(link?.kind!=='backend')throw Error('namespace_not_linked');
-  const record=await getHtmlBackendVersion(link.backendId,link.version);
-  if(!record)throw Error('backend_link_mismatch');
-  const {query:plan,mutation}=registeredPrograms(page,link,record);
-  if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{readPage,retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
-  if(mutation){const adapter=createRetainedRegisteredMutation(actor,page,link,record,revalidateActor);return registeredMutationInvoker(adapter.context,adapter.plan,(_context,_plan,args,signal)=>adapter.execute(args,signal))(call);}
   return backend(call);
  }});
 }
@@ -94,7 +77,7 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   if(request.method==='GET'){
    const revision=new URL(request.url).searchParams.get('revision')??undefined;
    const page=await readHtmlPage(actor,pageId,revision);
-   const sdl=await operations(actor,page,{revalidateActor:()=>requestOrSessionActor(request,{revalidate:true}),signal:request.signal}).schema(actor,pageId,page.revision);
+   const sdl=await operations(actor,page,{signal:request.signal}).schema(actor,pageId,page.revision);
    await verifyPage(page.revision);
    return json({sdl,revision:page.revision},200,readHeaders);
   }
@@ -110,7 +93,7 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   // The head just read is this revision when the request names it: one read of the page's source, not two.
   const page=body.revision===head.revision?head:await readHtmlPage(actor,pageId,body.revision);
   const operation:PageOperationRequest={pageId,revision:body.revision,query:body.query,...(body.variables?{variables:body.variables as HtmlJsonObject}:{}),...(typeof body.operationName==='string'?{operationName:body.operationName}:{})};
-  const scope={revalidateActor:()=>requestOrSessionActor(request,{revalidate:true}),signal:request.signal};
+  const scope={signal:request.signal};
   if(operationKind==='mutation')return json(await operations(actor,page,{...scope,...(idempotencyKey?{idempotencyKey}:{})}).execute(actor,operation,request.signal));
   // A read's fences withhold its result when a linked dataset moved while it ran (another reader's write, say).
   // Reads have no effects, so a moved dataset re-runs the whole read on the new head, a bounded number of times.

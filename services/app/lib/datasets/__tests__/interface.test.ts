@@ -14,7 +14,7 @@ import {
   DatasetError, catalogOf, executeDocumentQueries, datasetResponse, importedRows, importedTables, loadDatasetRows,
   publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
   readFileUpload, resolveUserColumnScope, retainUserScope, serveStoredFile,
-  storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, storedRowStats, throttlePublicMutation, uploadedSha256,
+  storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256,
   userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
 
@@ -23,14 +23,11 @@ useAppHarness();
 const failure = async (result: unknown) => (result instanceof Response ? { status: result.status, ...(await result.json()) } : result);
 
 describe('stored catalogs and rows', () => {
-  it('stores rows by content, reads them back, counts them once, and refuses to parse an object past the cap', async () => {
+  it('stores rows by content and reads them back', async () => {
     const rows = [{ n: 1 }, { n: 2 }, { n: 3 }];
     const { objectKey } = await storeDatasetRows(rows);
     expect(await loadDatasetRows({ meta: { objectKey } })).toEqual(rows);
     expect(await loadDatasetRows({ meta: null })).toEqual([]);
-    expect(await storedRowStats(objectKey, 1_000_000)).toEqual({ rows: 3, bytes: JSON.stringify(rows).length });
-    const big = await storeDatasetRows([{ text: 'x'.repeat(100) }]);
-    expect(await storedRowStats(big.objectKey, 10)).toEqual({ rows: Number.POSITIVE_INFINITY, bytes: expect.any(Number) });
   });
 
   it('exposes only the default schema\'s stored tables to an import, empty when never written, and hides internals from readers', async () => {

@@ -1,12 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries';
-import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations';
-import { isRegisteredPageProgram, NewRegistrationRefused, registeredProgramNames } from '../registered-page-lifecycle';
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
-import { canonicalizeHtmlPage, htmlBackendNames, htmlRetiredBackendNames, type HtmlIdentityLedger } from '../html-page';
+import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
@@ -248,9 +245,6 @@ async function insertArtifact(
   if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
   const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
   if(input.format==='html'&&input.htmlBackends){
-    // A new page never starts with a registered program (forks refuse earlier, in planHtmlClone).
-    const registered=input.htmlBackends.find(backend=>isRegisteredPageProgram(backend.compiled));
-    if(registered)throw new NewRegistrationRefused(registered.name);
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
     const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
@@ -336,30 +330,6 @@ interface VersionSummary {
   created_at: string;
 }
 
-/** Registered programs carried to a new page version: what to commit once that version is written. */
-interface CarriedRebinds {queries:readonly RegisteredQueryRebind[];mutations:readonly RegisteredMutationRebind[]}
-const NO_REBINDS:CarriedRebinds={queries:[],mutations:[]};
-/** Plans the re-binding of carried registered query and mutation programs, or the explicit refusal when one cannot be re-bound
- * or the locked head (`held`, its backend links) carries no registered program under that backend ID today. Nothing is written. */
-async function rebindCarriedPrograms(tx:Queryable,next:{pageId:string;version:number;html:string},carried:readonly HtmlBackendLink[],pageOwnerId:string|null,held:readonly HtmlBackendLink[]):Promise<{links:HtmlBackendLink[];rebinds:CarriedRebinds}|Response>{
-  try{
-    const queries=await planRegisteredQueryRebinds(tx,next,carried,pageOwnerId,held);
-    // A query link re-bound above names a version not yet stored, so the mutation plan passes it through unchanged.
-    const mutations=await planRegisteredMutationRebinds(tx,next,queries.links,pageOwnerId,held);
-    return {links:mutations.links,rebinds:{queries:queries.rebinds,mutations:mutations.rebinds}};
-  }
-  catch(error){
-    if(error instanceof NewRegistrationRefused)return json(error.body,409);
-    if(error instanceof RegisteredQueryRebindError)return json({error:'registered_queries_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement resolver for '${error.namespace}' in resolverSources, or remove its <link rel="af-resolver">.`]},409);
-    if(error instanceof RegisteredMutationRebindError)return json({error:'registered_mutations_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement resolver for '${error.namespace}' in resolverSources, or remove its <link rel="af-resolver">.`]},409);
-    throw error;
-  }
-}
-async function commitCarriedRebinds(tx:Queryable,page:{pageId:string;version:number;html:string},rebinds:CarriedRebinds):Promise<void>{
-  await commitRegisteredQueryRebinds(tx,page,rebinds.queries);
-  await commitRegisteredMutationRebinds(tx,page,rebinds.mutations);
-}
-
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(
     `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
@@ -407,7 +377,7 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
 
 /** The locked whole-document write, scoped to ONE transaction and its authorized head.
  * Doors own refusal/policy decisions and content preparation. Publication always archives,
- * bumps/stamps the head, moves any folder subtree, then commits carried programs atomically.
+ * bumps/stamps the head and moves any folder subtree.
  * No notification/telemetry outside tx may run here (PGLite has one serialized connection). */
 async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) {
   const scope = editorScope(actor);
@@ -420,7 +390,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
     async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
       await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
     },
-    async publish(content: ArtifactInput, rebinds: CarriedRebinds): Promise<ArtifactRow> {
+    async publish(content: ArtifactInput): Promise<ArtifactRow> {
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -439,7 +409,6 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);
       }
-      await commitCarriedRebinds(tx, { pageId: id, version: updated.version, html: updated.source ?? '' }, rebinds);
       return updated;
     },
   };
@@ -559,17 +528,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     try { await write.validateContent(target); }
     catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
-    // A reverted page names the registered programs of the version it restores; those the head still carries are re-bound like any save; one it no longer carries is refused (no new registrations).
-    let rebinds: CarriedRebinds = NO_REBINDS;
-    if(target.format==='html'){
-      const restored=(target.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[];
-      const backends=(links:readonly (HtmlBackendLink|HtmlDatasetLink)[])=>links.filter((link):link is HtmlBackendLink=>link.kind==='backend');
-      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:target.source??''},backends(restored),current.user_id,backends((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]));
-      if(carried instanceof Response)return {notArchived:true,refusal:carried};
-      rebinds=carried.rebinds;
-      target={...target,meta:{...target.meta,htmlLinks:restored.map(link=>link.kind==='backend'?carried.links.find(next=>next.name===link.name)??link:link)}};
-    }
-    const updated = await write.publish(target, rebinds);
+    const updated = await write.publish(target);
     await logWholeDocumentWrite(tx, current, updated);
     await reconcileSourceIds(tx, updated, 'restore');
     return updated;
@@ -622,7 +581,6 @@ async function replaceScoped(
   let moved: { from: string | null; to: string | null } | null = null;
   let unchanged = false;
   const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
-    let rebinds: CarriedRebinds = NO_REBINDS;
     const write = await lockArtifactWrite(tx, actor, id);
     if (!write) return null;
     const { current } = write;
@@ -668,22 +626,14 @@ async function replaceScoped(
     }
     if(input.format==='html'){
       const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
-      const declared=htmlBackendNames(input.source??'');
-      // KEPT UNTIL THE REGISTERED-PAGE MIGRATION: a head's registered program still declared with the removed af-backend rel stays declared.
-      const retired=htmlRetiredBackendNames(input.source??'').filter(name=>!declared.includes(name));
-      const registered=retired.length?await registeredProgramNames(tx,previous):new Set<string>();
-      const names=[...declared,...retired.filter(name=>registered.has(name))];
+      const names=htmlBackendNames(input.source??'');
       if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
       if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
       const backendOwner=current.user_id??current.token_id;
       if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
       const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
       const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
-      // A registered query or mutation program carried forward (declared again, no replacement source in this save) is re-bound to the new version (registered-page-queries/registry, registered-page-mutations/registry).
-      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id,previous);
-      if(carried instanceof Response)return carried;
-      rebinds=carried.rebinds;
-      input={...input,meta:{...input.meta,htmlLinks:[...links.map(link=>carried.links.find(next=>next.name===link.name)??link),...(input.htmlDatasets??[])]}};
+      input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
     }
     input=retainUserScope(input,current);
     /*
@@ -703,7 +653,7 @@ async function replaceScoped(
     const source = input.source;
     const updated = await write.publish({
       ...input, source, meta: input.meta,
-    }, rebinds);
+    });
     if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     await bindCurrentUserScopes(tx,updated);

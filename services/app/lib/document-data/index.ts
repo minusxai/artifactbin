@@ -6,7 +6,7 @@
  */
 
 /** Reader runs (offline, publish/prepared, routes, runner, serving, export). */
-export { registeredQueryImportForRow, datasetResolverForActor, nameablePeople, referencedArtifactForRow } from './dataflow';
+export { datasetResolverForActor, nameablePeople, referencedArtifactForRow } from './dataflow';
 
 /** Writes (the mutate route, operations, runner). */
 export { respondToMutate } from './mutate-http';

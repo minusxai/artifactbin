@@ -9,7 +9,7 @@ import { mintToken } from '@/lib/accounts';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
 import { artifactChannel } from '@artifactbin/contracts';
 import { afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
-import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, repairRegisteredMutationHead, repairRegisteredQueryHead, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
+import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
 
@@ -225,7 +225,7 @@ describe('quotas, state and after-commit', () => {
     warn.mockRestore();
   });
 
-  it('the owner\'s listing and the header columns; a registered-program repair leaves an unregistered page alone', async () => {
+  it('the owner\'s listing and the header columns', async () => {
     const owner = await account('owner@example.test');
     const editor = await account('editor@example.test');
     const a = await mine(owner, 'A');
@@ -234,11 +234,5 @@ describe('quotas, state and after-commit', () => {
     expect(await listArtifactsFor(editor)).toEqual([]);
     const header = (await getArtifactHeaderById(a.id))!;
     expect(Object.keys(header).sort()).toEqual([...ARTIFACT_HEADER_COLUMNS].sort());
-    const db = await harness.db();
-    expect(await db.transaction(tx => repairRegisteredQueryHead(tx, a.id))).toEqual([]);
-    expect(await db.transaction(tx => repairRegisteredMutationHead(tx, a.id))).toEqual([]);
-    await expect(db.transaction(tx => repairRegisteredQueryHead(tx, 'missing'))).rejects.toThrow('page_unavailable');
-    const data = await dataset(owner);
-    await expect(db.transaction(tx => repairRegisteredMutationHead(tx, data.id))).rejects.toThrow('page_unavailable');
   });
 });

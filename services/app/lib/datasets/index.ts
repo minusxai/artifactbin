@@ -1,7 +1,7 @@
 /** The datasets module's interface: what code outside lib/datasets imports (rule 4, scripts/ci/module-graph.mjs). */
-export { catalogOf, importedRows, importedTables, prepareCatalog, publicCatalogOf, resolveDatasetConnection } from './catalog';
+export { catalogOf, importedRows, importedTables, prepareCatalog, publicCatalogOf } from './catalog';
 export { publishDataset, publishImage, publishPdf, publishVizRecipe, storeImageContent, storePdfContent } from './data-tiers';
-export { loadDatasetRows, storeDatasetRows, storedRowStats } from './dataset-store';
+export { loadDatasetRows, storeDatasetRows } from './dataset-store';
 export { datasetCreateFields } from './dataset-usage';
 export { parseDatasetDefinition, serializeDatasetDefinition } from './definition';
 export { executeDocumentQueries } from './document-queries';

@@ -1,6 +1,5 @@
 import {planHtmlClone} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
-import {NewRegistrationRefused} from '@/lib/registered-page-lifecycle';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
 import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
@@ -164,7 +163,6 @@ async function forkInput(
       return {...carried,format:'html',source:source.source,meta,...plan};
     }catch(error){
       if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
-      if(error instanceof NewRegistrationRefused)return json(error.body,409);
       if(error instanceof Error&&error.message==='dataset_not_found')return json({error:'dataset_not_found'},400);
       throw error;
     }

@@ -51,7 +51,6 @@ async function editable(actor: AccessActor, id: string): Promise<{ row: Artifact
   const row = await getArtifactFor(actor, id);
   if (!row || row.format !== 'dataset') return null;
   const catalog = catalogOf(row);
-  if (catalog?.kind === 'postgres') return null;
   const flat = { schema: 'public', name: 'rows', columns: (row.meta.columns ?? []) as DatasetColumn[] };
   return { row, tables: catalog?.tables ?? [flat] };
 }
