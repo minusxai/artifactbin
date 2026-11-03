@@ -1,5 +1,5 @@
 import {getDeploymentState} from '@/lib/deployment';
-import { advertisedCliVersion, cliRetirementEnabled, PUBLIC_BASE_URL, ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
+import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, getArtifactById, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
@@ -31,7 +31,7 @@ import { projectNotifications } from '@/lib/notifications';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { ANONYMOUS_ACTOR, ownerUsername, AGENT_COOKIE } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { canEdit, isRetiredCliRequest, retiredCliResponse } from '@artifactbin/contracts';
+import { canEdit } from '@artifactbin/contracts';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
@@ -334,13 +334,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // CLI__RETIREMENT=on: every request an afbin 0.5.x-or-earlier CLI makes is answered with the retirement refusal it
-  // prints as `cli_retired: …` and a fix (contracts/cli-retirement). First, so a stale saved token is never a 401 that
-  // sends the CLI to sign in again. Its sign-in paths are the auth layer's (auth routes/oauth retiredCliAnswer).
-  app.use('*', async (c, next) => {
-    if (!cliRetirementEnabled() || !isRetiredCliRequest(c.req.raw.headers)) return next();
-    return retiredCliResponse(new URL(PUBLIC_BASE_URL).origin);
-  });
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
   // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
   // Transport identity must be attached before any app middleware or route
@@ -544,15 +537,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
-  // `afbin update` reads this pointer: it names the same version as X-Artifactbin-CLI-Version, so the CLI
-  // retirement release stays unadvertised until CLI__RETIREMENT is on (lib/platform/config.ts).
-  app.get('/chat/release.json', c => {
-    let pointer: Record<string, unknown>;
-    try { pointer = JSON.parse(readFileSync(path.join(publicDir, 'chat', 'release.json'), 'utf8')); } catch { return c.notFound(); }
-    if (typeof pointer.version === 'string') pointer.version = advertisedCliVersion(pointer.version);
-    c.header('cache-control', 'public, max-age=300');
-    return c.json(pointer);
-  });
   app.all('/chat/*', async c => c.notFound());
   app.all('/install.sh', async c => c.notFound());
   app.all('/login/cli', async c => c.notFound());

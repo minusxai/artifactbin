@@ -126,11 +126,11 @@ it('loads named ESM and CommonJS Playwright exports and distinguishes invalid mo
   await expect(loadChromium(invalid)).rejects.toMatchObject({code:'browser_module_invalid'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('keeps check diagnostics top-level on failure and preserves the legacy details alias',async()=>{
+it('keeps check diagnostics top-level on failure, without a details copy',async()=>{
  const {toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const {ToolError}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const diagnostics={smokePassed:false,checks:[{error:'fixture'}],unverified:['visual appearance'],note:'Smoke only'};
- expect(toolFailure('check',new ToolError('check_failed','Failed',1,'Inspect',diagnostics))).toMatchObject({...diagnostics,ok:false,details:diagnostics});
+ expect(toolFailure('check',new ToolError('check_failed','Failed',1,'Inspect',diagnostics))).toMatchObject({...diagnostics,ok:false});expect(toolFailure('check',new ToolError('check_failed','Failed',1,'Inspect',diagnostics))).not.toHaveProperty('details');
  expect(toolFailure('check',new ToolError('invalid_viewport','Invalid',2))).toMatchObject({ok:false,smokePassed:false,checks:[]});
  expect(toolFailure('read',new ToolError('refused','Refused'))).not.toHaveProperty('checks');
 });

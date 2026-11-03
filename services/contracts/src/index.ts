@@ -26,7 +26,6 @@ export * from './dataset-permissions';
 export * from './dataset-hasura';
 
 export * from './cli-auth';
-export * from './cli-retirement';
 export * from './resource-file';
 
 export * from './account-resource';

@@ -22,7 +22,6 @@ Gotchas: use an email the user gave you; never invent an identity, and never sea
   the selected origin's /llms/http-auth guide. logout ends the saved grant on the server, then
   removes it locally; unconfirmed revocation fails with serverRevoked:false and keeps the
   saved grant for retry. --local only removes the saved grant and leaves the server grant active.
-  --revoke names the default and is kept for compatibility.
   An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
   Every other script reuses this grant and refreshes an expired access token itself (the refresh
   token is single-use and serialized across processes, so never refresh by hand or copy the

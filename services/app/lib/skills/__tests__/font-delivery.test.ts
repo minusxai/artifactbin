@@ -54,8 +54,8 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
    expect(hostedFont.status).toBe(200);expect(hostedFont.headers.get('content-type')).toContain('font/woff2');
    const face=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===hosted.replace('/af',''))!;
    expect(Buffer.from(await hostedFont.arrayBuffer())).toEqual(readFileSync(path.resolve('public',face.url.slice(1))));
-   // The legacy hashed name still resolves, and an unknown name does not.
-   expect((await fetch(new URL(face.url,preview.url))).status).toBe(200);
+   // Only the /af/fonts/ name resolves: neither the stored hashed file name nor an unknown name does.
+   expect((await fetch(new URL(face.url,preview.url))).status).toBe(404);
    expect((await fetch(new URL('/af/fonts/not-a-font.woff2',preview.url))).status).toBe(404);
   }finally{await preview.close();}
   const {prepareBundle}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
