@@ -29,7 +29,7 @@ The authoritative schemas and operation descriptions are in `services/app/lib/op
 
 A minimal CSV create body is `{"dataset":"name,value\nExample,2","title":"Example"}`. To replace that dataset, first read its current head and send `{"dataset":"name,value\nExample,3","expectedVersion":1,"expectedState":"<observed 64-character state>"}` to PUT. Use the actual observed values; a changed head/state produces a conflict instead of silently overwriting somebody else's work.
 
-Native HTML saves use the same conditional replacement door. Read the canonical `html`, `version` and `state`, preserve surviving `data-af-id` attributes, then PUT `{"html":"<complete edited HTML>","expectedVersion":1,"expectedState":"<observed state>"}`. The accepted response supplies the next head. `markup`, `jsx`, `markdown` and `document_update` inputs return `native_html_required`; there is no prepared graph edit step.
+Native HTML saves use the same conditional replacement door. Read the canonical `html`, `version` and `state`, preserve surviving `data-af-id` attributes, then PUT `{"html":"<complete edited HTML>","expectedVersion":1,"expectedState":"<observed state>"}`. The accepted response supplies the next head. Any content field other than `html` returns `native_html_required`.
 
 History uses `GET /api/artifacts/ID/versions`, `GET /api/artifacts/ID/versions/VERSION` and `POST /api/artifacts/ID/revert` with `version`, `expectedVersion` and `expectedState`. Revert archives the current head and creates a new one. Metadata PATCH requires `expectedState` and does not archive content or change its version.
 

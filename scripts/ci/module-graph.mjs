@@ -178,7 +178,6 @@ const BUNDLED_LEAVES = {
   'lib/page-operations': ['namespaces'],
   'lib/remote': ['session-mentions'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
-  'lib/source-editor': [],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/story-ui': [
     'comment-target', ],
