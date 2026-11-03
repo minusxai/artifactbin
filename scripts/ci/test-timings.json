@@ -655,7 +655,7 @@
    "services/app/lib/registered-page-queries/__tests__/rebind.test.ts": 5927,
    "services/app/lib/registered-page-queries/__tests__/service.test.ts": 873,
    "services/app/lib/registered-page-queries/__tests__/source-catalog.test.ts": 6,
-   "services/app/lib/remote/__tests__/session-mentions.test.ts": 8,
+   "services/app/lib/annotations/__tests__/session-mentions.test.ts": 8,
    "services/app/lib/runtime/__tests__/background-tasks.test.ts": 4135,
    "services/app/lib/runtime/__tests__/dev-server.test.ts": 11,
    "services/app/lib/runtime/__tests__/health.test.ts": 10,

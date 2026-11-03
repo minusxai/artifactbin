@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MoveToFolderDialog } from '../MoveToFolderDialog';
-import type { ShelfRow } from '@/lib/workspace/shelf';
+import type { ShelfRow } from '@/lib/shelf';
 
 const folder = (id: string, title: string, ancestor_ids: string[] = []): ShelfRow => ({id, title, ancestor_ids, format: 'folder', url: `/a/${id}`, version: 1, updated_at: ''});
 const folders = [folder('reports', 'Reports'), folder('year', '2026', ['reports']), folder('drafts', 'Drafts', ['reports', 'year']), folder('design', 'Design')];

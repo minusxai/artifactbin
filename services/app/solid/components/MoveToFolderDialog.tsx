@@ -5,7 +5,7 @@ import Folder from 'lucide-solid/icons/folder';
 import FolderOpen from 'lucide-solid/icons/folder-open';
 import House from 'lucide-solid/icons/house';
 import Check from 'lucide-solid/icons/check';
-import { parentOfRow, type ShelfRow } from '@/lib/workspace/shelf';
+import { parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { rowTitle } from '@/lib/document/display-title';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';

@@ -4,7 +4,7 @@ import path from 'node:path';
 import {admitRuntimeModuleImports} from './runtime-module-imports';
 import {fileContentType} from '@artifactbin/contracts';
 import {initSync,parse as parseImports} from 'es-module-lexer';
-import {parseCss,walkCss} from '@/lib/css';
+import {parseCss,walkCss} from './css';
 initSync();
 import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext,AuthoringHtmlOptions} from './contracts';

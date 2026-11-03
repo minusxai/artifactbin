@@ -14,7 +14,7 @@ import {
   workspaceAssetsFor,
 } from '@/lib/workspace';
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
-import { parentOfRow } from '@/lib/workspace/shelf';
+import { parentOfRow } from '@/lib/shelf';
 import { VISIBILITY_ICON_NODES, sharingIconFor } from '@/lib/workspace/visibility-icons';
 
 useAppHarness();

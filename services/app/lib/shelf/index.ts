@@ -1,5 +1,5 @@
 /**
- * HOW A FLAT LIST OF ARTIFACTS BECOMES A DRIVE-LIKE SHELF.
+ * HOW A FLAT LIST OF ARTIFACTS BECOMES A DRIVE-LIKE SHELF: pure policy shared by app listings and anonymous homes.
  *
  * Documents stay in one recency-ranked collection so the renderer can switch
  * between a uniform icon grid and a dense list without changing the data.
