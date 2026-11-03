@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import yaml from '@rollup/plugin-yaml';
 import { defineConfig } from 'vitest/config';
 import { suiteEnv } from './scripts/lib/suite-env.mjs';
 
@@ -14,7 +13,6 @@ const enrolled = (list: string) => JSON.parse(readFileSync(new URL(`./scripts/ci
 //    handlers, a database and the resolver runner, so they take the full suite's environment and setup file.
 export default defineConfig({
   root: import.meta.dirname,
-  plugins: [yaml()],
   resolve: { alias: { '@': new URL('./services/app', import.meta.url).pathname } },
   test: {
     globals: true,

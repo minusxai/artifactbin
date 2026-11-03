@@ -26,7 +26,7 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'pr-fast.yml', 'codeql.yml', 'page-speed.yml']) {
+    for (const file of ['ci.yml', 'pr-fast.yml', 'v3-codeql.yml', 'page-speed.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
       expect(refs.length, file).toBeGreaterThan(0);
@@ -131,30 +131,31 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
 const workflow = (file) => yaml.parse(readFileSync(path.join(root, '.github/workflows', file), 'utf8'));
 
 describe('code scanning runs after merge, not on every pull request', () => {
-  it('analyses JavaScript/TypeScript and Actions weekly here (v3-codeql.yml scans each push to main), never on a pull request', () => {
-    const codeql = workflow('codeql.yml');
+  it('analyses JavaScript/TypeScript and Actions on each push to main and weekly, never on a pull request', () => {
+    const codeql = workflow('v3-codeql.yml');
     expect(codeql.on).not.toHaveProperty('pull_request');
-    expect(codeql.on).not.toHaveProperty('push');
-    expect(codeql.on.schedule).toHaveLength(1);
+    expect(codeql.on.push.branches).toEqual(['main']);
+    // The weekly rescan of an unchanged main against new query packs.
+    expect(codeql.on.schedule).toEqual([{ cron: '23 6 * * 1' }]);
+    expect(codeql.on).toHaveProperty('workflow_dispatch');
     const analyze = codeql.jobs.analyze;
     expect(analyze.strategy.matrix.language).toEqual(['actions', 'javascript-typescript']);
     expect(analyze.permissions['security-events']).toBe('write');
     const uses = analyze.steps.map((step) => step.uses ?? '');
     expect(uses.some((use) => use.startsWith('github/codeql-action/init@'))).toBe(true);
     expect(uses.some((use) => use.startsWith('github/codeql-action/analyze@'))).toBe(true);
+    expect(existsSync(path.join(root, '.github/workflows/codeql.yml'))).toBe(false);
   });
 });
 
 describe('CodeQL avoids redundant post-merge work without narrowing analysis',()=>{
  it('cancels superseded push scans while retaining scheduled/manual scans',()=>{
-  const scan=workflow('codeql.yml');
-  expect(scan.on.schedule).toHaveLength(1);
-  expect(scan.on).toHaveProperty('workflow_dispatch');
+  const scan=workflow('v3-codeql.yml');
   expect(scan.concurrency.group).toContain('github.event_name');
   expect(scan.concurrency['cancel-in-progress']).toBe("${{ github.event_name == 'push' }}");
  });
  it('uploads the same complete findings while omitting optional push database archives',()=>{
-  const steps=workflow('codeql.yml').jobs.analyze.steps;
+  const steps=workflow('v3-codeql.yml').jobs.analyze.steps;
   const init=steps.find(step=>step.uses?.startsWith('github/codeql-action/init@'));
   const analyze=steps.find(step=>step.uses?.startsWith('github/codeql-action/analyze@'));
   expect(analyze.with['upload-database']).toBe("${{ github.event_name != 'push' }}");

@@ -46,7 +46,6 @@
     "@artifactbin/runner": "0.1.0"
   },
   "devDependencies": {
-    "@rollup/plugin-yaml": "5.0.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
     "@types/pg": "8.23.1",

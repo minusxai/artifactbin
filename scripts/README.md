@@ -6,9 +6,7 @@ no row; read the entry point that imports them.
 
 An **entry point** is a code file under `scripts/` (outside `__tests__/` and `fixtures/`) that a
 package.json script or a workflow step runs, that starts with a shebang, or that no other non-test file
-imports. `scripts/__tests__/scripts-index.test.mjs` derives that set from the tree and fails when a
-program has no row here or a row names a file that is gone or is now only a library: add the row in the
-same change as the file.
+imports. Add its row in the same change as the file.
 
 **Run by** names the caller: an `npm run` script (root `package.json` unless a workspace is named), a
 workflow job (`ci.yml`, `page-speed.yml`), another script, an agent, or a person by hand.
@@ -52,10 +50,9 @@ check that fails when one moves: `services/app/__tests__/downstream-script-paths
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): plan, build key, lock fingerprint, roll-up. | `ci.yml`, `page-speed.yml` |
+| `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): tested-tree plan, build key, lock fingerprint, roll-up. | `ci.yml`, `page-speed.yml` |
 | `scripts/ci/test-timings.mjs` | Refresh `ci/test-timings.json`, the per-file times test shards are packed by. | by hand, with a CI run id |
 | `scripts/lib/ci-elapsed.mjs` | Measure the required-check chain's elapsed time for the job summary. | `ci.yml` |
-| `scripts/lib/ci-supersede.mjs` | Cancel a pull request's earlier, unfinished CI runs without making the new run wait for them. | `ci.yml` (`supersede`) |
 
 ## Browser gate runner
 

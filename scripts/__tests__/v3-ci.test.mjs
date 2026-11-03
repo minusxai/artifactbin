@@ -35,7 +35,6 @@ describe('main validation', () => {
     expect(workflow('v3-codeql.yml').on.push['paths-ignore']).toBeUndefined();
     expect(workflow('page-speed.yml').on.push.branches).toContain('main');
     expect(workflow('page-speed.yml').on.push.paths).toContain('**');
-    expect(workflow('codeql.yml').on).not.toHaveProperty('push');
     const pin = workflow('v3-server-pin.yml');
     expect(pin.on.push.branches).toEqual(['main']);
     const script = pin.jobs.pin.steps[0].run;

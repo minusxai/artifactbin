@@ -220,7 +220,6 @@
    "services/app/__tests__/html-backends.test.ts": 3379,
    "services/app/__tests__/html-fork.test.ts": 6482,
    "services/app/__tests__/live-events-open-race.test.ts": 5199,
-   "services/app/__tests__/mermaid-subsetter-missing.test.ts": 5571,
    "services/app/__tests__/public-visibility.test.ts": 6036,
    "services/app/__tests__/skill-examples.test.ts": 10918
   },
@@ -277,7 +276,6 @@
    "scripts/__tests__/residual-name-guard.test.mjs": 593,
    "scripts/__tests__/runtime-package-root.test.mjs": 3712,
    "scripts/__tests__/script-paths.test.mjs": 333,
-   "scripts/__tests__/scripts-index.test.mjs": 238,
    "scripts/__tests__/server-runtime-dependencies.test.mjs": 128,
    "scripts/__tests__/setup-plan.test.mjs": 706,
    "scripts/__tests__/shell-graph.test.mjs": 7,

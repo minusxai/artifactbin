@@ -10,7 +10,7 @@
 **SLOW — once at completion before merge, never mid-task/per edit:** gate containers, PR CI push, bare `npm test`.
 
 - **Finish on FAST, then SLOW once.** Never push, poll CI or gate per edit.
-- **Full gates belong to main PR and post-merge CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
+- **Full gates belong to main PR and post-merge CI** (9 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge:** FAST checks → commit/push once → bounded fast PR CI green → merge.
   Full builds/browser/container suites run after merge and gate release, not PR approval.
 - **PRs into `main`: ONLY use squash and merge** (`gh pr merge --squash`). NEVER land all
@@ -126,17 +126,12 @@ From repo root.
   `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
 - CI-only, never a deferral bypass: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
 - `npm run build:reader -w services/app` — the hosted native HTML components and server reader assets.
-- Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
+- Generated inputs: `npm run generate:routes`, `render:schema`,
   `generate:og`, `generate:design-systems` (runtime registry and agent
   references from `design-systems/specs`; `-- pages`: specimen pages into `tmp/`).
 
 ## Change checks
 
-- Kit renderer changes, including inline wrapper styles and any `EXTRA_CLASS_SOURCES` input
-  (such as `compiled-page/compiler.ts`): run `npm run generate-story-ui-classes`
-  and review the generated diff before final CI. The FAST regression check is
-  `services/app/lib/story-ui/__tests__/recipe-classes.test.ts`; types do not catch drift.
-- A tree PR CI passed is not re-tested on merge.
 - Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
   setup planner's snapshot via `npm run generate:env-snapshot` (its test fails on drift).

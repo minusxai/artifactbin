@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 
-/** CI boundary: repo-relative changed paths -> selected jobs and Node test roots.
- * Dependencies include test/composition edges, not just package dependencies.
- * Unknown paths and shared configuration must select everything.
+/** CI boundary: the jobs ci.yml runs after a merge. Every push to main runs all of them, unless a green run
+ * already tested this exact tree (scripts/ci/ci.mjs `plan`), which selects none.
  */
 /**
  * Every conditional job in ci.yml, each one runner set the `test` roll-up requires when selected. `integration`
@@ -11,76 +10,10 @@ import { createHash } from 'node:crypto';
  */
 export const CI_JOBS = ['checks', 'node', 'integration', 'ui', 'build', 'api', 'gates'];
 
-// Workspace edges plus integration-test consumers. The app's test boundary
-// composes the real services. Script contract tests read across modules, so
-// they run for every code change. (The agent evals are a private repository
-// checked out at evals/ for a run; they are not a module of this one.)
-export const CI_MODULES = {
-  contracts: [],
-  utils: ['contracts', 'test-support'],
-  'test-support': [],
-  sql: ['contracts', 'utils'],
-  browser: ['contracts', 'utils', 'test-support'],
-  events: ['contracts', 'utils', 'test-support'],
-  runner: ['contracts', 'utils', 'test-support'],
-  auth: ['contracts', 'utils', 'test-support'],
-  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'auth', 'runner', 'test-support'],
-};
-
-/** Repo-relative changed paths to the selected jobs and Node test roots. */
-export function planCi(paths, { full = false, testedRun = null, testedPatch = false } = {}) {
-  const nothing = Object.fromEntries(CI_JOBS.map((job) => [job, false]));
-  // A TREE THIS REPOSITORY ALREADY TESTED. PR CI recorded it under its own hash when every selected
-  // job passed; the push that merges it is the same bytes, so there is nothing left to learn — not
-  // even `checks`, whose whole cost would be paid to re-typecheck a tree that already typechecked.
-  if (testedRun) return { full: false, jobs: nothing, nodeRoots: [], testedRun, selection: testedPatch ? 'tested patch' : 'tested tree' };
-  const changed = new Set();
-  // Scanner configuration and its contract tests never enter a product bundle.
-  // Keep workflow checks; mixed source or unknown inputs retain their normal selection.
-  let scannerContracts = false;
-  full ||= paths.length === 0;
-  for (const path of paths) {
-    if (path === '.github/workflows/codeql.yml' || path === 'scripts/__tests__/workflows.test.mjs') {
-      scannerContracts = true;
-      continue;
-    }
-    // Only repository prose is inert. Skill/reference markdown under services
-    // is shipped product input and must exercise its owning module.
-    if (/^(README\.md|CONTRIBUTING\.md|AGENTS\.md|CLAUDE\.md|LICENSE)$/.test(path)
-      || /^docs\/[^\n]+\.md$/.test(path)) continue;
-    const module = /^services\/([^/]+)\//.exec(path)?.[1];
-    if (!Object.hasOwn(CI_MODULES, module ?? '')
-      || module === 'contracts' || module === 'utils' || module === 'test-support'
-      || path.endsWith('/package.json')) {
-      full = true;
-    } else changed.add(module);
-  }
-  const affected = new Set(changed);
-  let expanded;
-  do {
-    expanded = false;
-    for (const [module, dependencies] of Object.entries(CI_MODULES)) {
-      if (!affected.has(module) && dependencies.some((dep) => affected.has(dep))) {
-        affected.add(module);
-        expanded = true;
-      }
-    }
-  } while (expanded);
-
-  const app = affected.has('app');
-  const jobs = Object.fromEntries(CI_JOBS.map((job) => [job, full]));
-  jobs.checks = true;
-  if (!full) {
-    jobs.node = affected.size > 0 || scannerContracts;
-    for (const job of ['ui', 'build', 'api', 'gates']) jobs[job] = app;
-  }
-  // The integration project runs wherever the node project does (it holds the scripts' Docker and Chromium proofs).
-  jobs.integration = jobs.node;
-  const nodeRoots = full ? [] : [
-    ...(affected.size || scannerContracts ? ['scripts/'] : []),
-    ...[...affected].map((module) => `services/${module}/`),
-  ].sort();
-  return { full, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
+/** Every job, or none when `testedRun` names the green run that already tested this tree. */
+export function planCi({ testedRun = null } = {}) {
+  const jobs = Object.fromEntries(CI_JOBS.map((job) => [job, !testedRun]));
+  return testedRun ? { full: false, jobs, testedRun, selection: 'tested tree' } : { full: true, jobs, testedRun: null, selection: 'full suite' };
 }
 
 /** A selected job must succeed; only an unselected job may be skipped. */
