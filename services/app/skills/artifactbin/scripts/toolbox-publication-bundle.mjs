@@ -1,5 +1,5 @@
 /** Internal: canonical project snapshot mechanics.
- * Used by: toolbox publication and publication-bundle compatibility commands. */
+ * Used by: toolbox-publish.mjs. */
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';

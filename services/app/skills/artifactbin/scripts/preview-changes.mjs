@@ -1,7 +1,7 @@
 /**
  * Internal: project change detection for the preview: a polled content revision of the served tree
  * and the in-page notice that offers a reload (and dataset export) when it changes.
- * Used by: preview.mjs, html-preview.test.mjs.
+ * Used by: preview-server.mjs, html-preview.test.mjs.
  */
 import {opendir,realpath,stat} from 'node:fs/promises';
 import {join,relative,sep} from 'node:path';

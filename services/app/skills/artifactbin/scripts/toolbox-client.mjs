@@ -125,7 +125,6 @@ const authLapse=error=>(error?.code==='auth_required'||/^auth_required\b/.test(S
   error?.message)))&&!(error instanceof ToolError&&/^No saved grant/.test(error.message));
 /** The process exit code for a failure: 3 (auth/access) for a lapsed sign-in. */
 export const toolExit=error=>error?.exit??(authLapse(error)?3:1);
-/** Preserve legacy details while exposing a stable check result on all refusals. */
 /** An unexpected error's first line, bounded, with bearer values and token-like runs removed. */
 const causeOf=error=>{const line=String(error?.message??'').split('\n')[0].replace(/Bearer\s+\S+/gi,
   'Bearer [redacted]').replace(/[A-Za-z0-9_.~+/=-]{32,}/g,'[redacted]').slice(0,300).trim();
@@ -150,8 +149,8 @@ return {...diagnostics,ok:false,code:error.code??'operation_failed',message:erro
    ToolError?error.message:transient(error)?'Network or server error before a result arrived.':
    'Operation failed; inspect the selected files and server.'+causeOf(error),recovery:
    error.recovery??(transient(error)?'Retry once; written requests resume from their journal.':
-   'Correct the input or inspect the underlying operation.'),...(error.details?{details:
-   error.details}:{})};
+   'Correct the input or inspect the underlying operation.'),...(error.details&&!diagnostics.checks?
+   {details:error.details}:{})};
 }
 /** @param {(parsed:any)=>Promise<import(
   '../../../lib/skills/author-toolbox-contract').AuthorResult|any>} execute */

@@ -64,7 +64,7 @@ describe('installable shared skill folder',()=>{
    if(file.ref&&!isShippedSkillTopic(file.file.replace(/\.md$/,'')))continue;
    expect(expected[file.path.replace(/^artifactbin\//,'')],file.path).toBe(skillFileWithFrontmatter(file,text));
   }
-  expect(expected['scripts/publication-bundle.mjs']).toContain('sendPublication');
+  for(const shim of ['scripts/publication-bundle.mjs','scripts/preview.mjs'])expect(expected[shim]).toBeUndefined();
   expect(expected['scripts/toolbox-publish-legacy.mjs']).toBeUndefined();
   expect(expected['resolvers/resolver-public-url.ts']).toContain('export const typeDefs');
   expect(expected['references/datasets.md']).toContain('dataset');
@@ -95,7 +95,7 @@ describe('installable shared skill folder',()=>{
    expect(expected['scripts/preview-export.mjs']).toBeUndefined();
    expect(await installedParser.packPreviewExport({html:'<!doctype html><html><head><title>Saved</title></head><body><p>Retained</p></body></html>',pathname:'/index.html',load:async()=>{throw Error('No external resources');}})).toContain('Retained');
    expect(installedParser.previewHtml('<!doctype html><html><head><script>check()</script></head><body>Source</body></html>','')).toContain('<html data-af-private-preview="true">');
-   const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
+   const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview-server.mjs')).href;
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
    const server=await platformOrigin();
    const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0,platformOrigin:server.base});
@@ -227,7 +227,7 @@ it('keeps the served release within the unchanged installed updater limit',async
  expect(bytes.byteLength).toBeLessThanOrEqual(limit);
  const files=decodeRelease(Buffer.from(bytes),manifest);
  expect(files['scripts/toolbox-publication-bundle.mjs']).toBeTruthy();
- expect(files['scripts/preview.mjs']).toBeTruthy();
+ expect(files['scripts/preview-server.mjs']).toBeTruthy();
  expect(files['design-systems/almanac.css']).toBeTruthy();
  expect(files['scripts/preview-runtime.mjs']).toBeUndefined();
  expect(files['scripts/preview-libraries.mjs']).toBeUndefined();

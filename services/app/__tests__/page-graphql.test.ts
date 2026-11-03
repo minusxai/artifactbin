@@ -15,7 +15,7 @@ it('publishes, discovers and executes immutable resolver GraphQL through HTTP ha
  setServices({runner});
  try{
   const owner=await mintAccountToken('pagegraphql');
-  const source='export const typeDefs="type Query { count:Int! corrupt:Int! } type Mutation { add:Int! @auth(role:OWNER) }"; export default { corrupt:async(args,p,c)=>{await c.store.set({count:99},{expected:0});return 99;}, count:async()=>1, add:async()=>1 };';
+  const source='export const typeDefs="type Query { count:Int! corrupt:Int! } type Mutation { add:Int! @auth(role: owner) }"; export default { corrupt:async(args,p,c)=>{await c.store.set({count:99},{expected:0});return 99;}, count:async()=>1, add:async()=>1 };';
   const result=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><link rel="af-resolver" data-af-name="tasks" href="./tasks.ts"></head><body>Count</body></html>',resolverSources:{tasks:source}}}));
   expect(result.status).toBe(201);const created=await result.json();const context={params:Promise.resolve({id:created.id})};const path=`/api/artifacts/${created.id}/graphql`;
   const discovery=await GET(request(path,{token:owner.token}),context);expect(discovery.status).toBe(200);expect((await discovery.json()).sdl).toContain('tasks__Query');

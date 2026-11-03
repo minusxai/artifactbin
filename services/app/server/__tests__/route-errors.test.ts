@@ -13,12 +13,11 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mountRoutes } from '../api';
 import { createAppServer } from '../app';
-import { CLI_LAST_SERVICE_VERSION, CLI_RETIREMENT_VERSION, overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 
 const boom = { GET: () => { throw new Error('the engine is on fire'); } };
 const routes = [{ path: '/api/boom', dir: '/api/boom', methods: ['GET'] as const, module: boom }];
 
-afterEach(() => { vi.restoreAllMocks(); resetConfigOverrides(); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe('a route that throws', () => {
   it('is logged with its method and path, and answers without them', async () => {
@@ -49,14 +48,9 @@ describe('the retired CLI installer', () => {
   });
 });
 
-describe('the CLI release pointer', () => {
-  it('names the version the CLI retirement switch allows', async () => {
+describe('the retired CLI release pointer', () => {
+  it('is not served: an old CLI finds no update', async () => {
     const app = createAppServer({ indexHtml: async () => '<main>app shell</main>' });
-    const pointer = await (await app.request('/chat/release.json')).json() as { version: string; protocol: number };
-    expect(pointer.protocol).toBeGreaterThan(0);
-    expect(pointer.version, 'off by default: the pointer holds the retirement release, the server names the last service release').toBe(CLI_LAST_SERVICE_VERSION);
-    overrideConfig({}, { CLI__RETIREMENT: 'on' });
-    const on = await (await app.request('/chat/release.json')).json() as { version: string };
-    expect(on.version).toBe(CLI_RETIREMENT_VERSION);
+    expect((await app.request('/chat/release.json')).status).toBe(404);
   });
 });

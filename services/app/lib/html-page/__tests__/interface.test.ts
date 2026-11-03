@@ -13,8 +13,7 @@ describe('the core script',()=>{
  it('has one flat address, and the legacy alias is still recognized',()=>{
   expect(RUNTIME_CORE_PATH).toBe('/af/core.js');
   expect(isRuntimeCoreSrc(RUNTIME_CORE_PATH)).toBe(true);
-  expect(isRuntimeCoreSrc('/af/v1/core.js')).toBe(true);
-  for(const src of [null,undefined,'','/af/core.js?v=2','https://cdn.example/af/core.js','/af/v2/core.js'])expect(isRuntimeCoreSrc(src)).toBe(false);
+  for(const src of [null,undefined,'','/af/v1/core.js','/af/core.js?v=2','https://cdn.example/af/core.js','/af/v2/core.js'])expect(isRuntimeCoreSrc(src)).toBe(false);
  });
 
  it('leaves a page whose core is already the first plain head script byte-identical',()=>{
@@ -31,7 +30,7 @@ describe('the core script',()=>{
  });
 
  it('collapses duplicated, async or misplaced cores into one, keeping the first identity escaped',()=>{
-  const html='<html><head><title>T</title><script async src="/af/v1/core.js" data-af-id="c&quot;1"></script></head><body><script src="/af/core.js"></script></body></html>';
+  const html='<html><head><title>T</title><script async src="/af/core.js" data-af-id="c&quot;1"></script></head><body><script src="/af/core.js"></script></body></html>';
   const repaired=repairCoreScript(html);
   expect(repaired.removed).toHaveLength(2);
   expect(repaired.html).toBe('<html><head><script src="/af/core.js" data-af-id="c&quot;1"></script><title>T</title></head><body></body></html>');

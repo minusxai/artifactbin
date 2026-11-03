@@ -1,19 +1,13 @@
-#!/usr/bin/env node
 /**
- * Internal: the private loopback preview server (startPreview); also a deprecated direct entry,
- * `node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]` (prefer serve.mjs).
+ * Internal: the private loopback preview server (startPreview); serve.mjs is its command.
  * Contract: lib/skills/preview-contract.d.ts. Routes live in preview-dataset-route.mjs and
  * preview-source-routes.mjs; file helpers in preview-server-files.mjs.
  * Used by: serve.mjs, html-preview/author-toolbox/font-delivery/shared-skill-delivery tests,
  *   scripts/fixtures/local-preview.mjs.
  */
-import {beforeCommand} from './toolbox-update.mjs';
-
-import {realpathSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {realpath,stat,writeFile,rename} from 'node:fs/promises';
 import {resolve,relative,sep,extname,basename} from 'node:path';
-import {pathToFileURL} from 'node:url';
 import {platformModules} from './preview-platform.mjs';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
@@ -32,16 +26,16 @@ export const PRIVATE_CSP =
   "'self'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action "+
   "'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-downloads";
 /** Start a private loopback server; contract: lib/skills/preview-contract.d.ts.
- * `platformOrigin` (default: the archive's selected server; `fontOrigin` is its older name)
+ * `platformOrigin` (default: the archive's selected server)
  * supplies the runtime, libraries, components and fonts (./preview-platform); a source
  * checkout's own build outputs come first. */
-export async function startPreview({root,port=0,runtimeDir,platformOrigin,fontOrigin,
+export async function startPreview({root,port=0,runtimeDir,platformOrigin,
   libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
 if(!Number.isInteger(port)||port<0||port>65535)throw Error(
    'Port must be an integer from 0 to 65535');
 const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error(
    'Root must be a directory');
- const origin=platformOrigin??fontOrigin??configuredServer??null;
+ const origin=platformOrigin??configuredServer??null;
  const platform=platformModules({origin,libraryAssets});
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
  const platformFont=platformFonts(origin);
@@ -152,24 +146,4 @@ await new Promise((done,reject)=>{server.once('error',reject);server.listen(port
    });
 return {server,url:`http://127.0.0.1:${server.address().port}/`,close:()=>new Promise((done,
    reject)=>server.close(error=>error?reject(error):done()))};
-}
-if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
-if(await beforeCommand(import.meta.url,process.argv.slice(2)))process.exit(process.exitCode??0);
-process.argv=process.argv.filter(arg=>arg!=='--no-update');
-console.error('Deprecated preview.mjs; prefer serve.mjs PROJECT.');const args=process.argv.slice(2);
-   if(args.length===1&&args[0]==='--help'){console.log(
-   'Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]\nServes only the selected '+
-   'project on loopback. Stop with Ctrl-C.');process.exit(0);}
- const root=args.shift();let port=0,runtimeDir;
- try {
-if(!root||root.startsWith('--'))throw Error(
-    'Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]');
-while(args.length){const flag=args.shift(),value=args.shift();if(!value)throw Error(
-    'Missing option value');if(flag==='--port')port=Number(value);else if(
-    flag==='--runtime-dir')runtimeDir=value;else throw Error('Unknown option');}
-const session=await startPreview({root,port,runtimeDir});console.log(
-    `Private local preview: ${session.url}\nStop with Ctrl-C. Only the selected directory is `+
-    `served; dataset edits stay in memory. No files are uploaded or written.`);
-  for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{void session.close();});
- }catch(error){console.error(error.message);process.exitCode=1;}
 }

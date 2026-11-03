@@ -10,7 +10,7 @@ import {RUN_TABLES} from '@artifactbin/runner/schema';
  * (Column/Index/Table) are the contract's.
  */
 import type { Table } from '@artifactbin/contracts';
-import { renderSchema } from '@artifactbin/utils';
+import { renderDroppedTables, renderSchema } from '@artifactbin/utils';
 
 const USERS: Table = {
   name: 'users',
@@ -70,8 +70,6 @@ const USERS: Table = {
   // `password_hash` (login is email + OTP; there are no passwords). Dead data, dropped on boot.
   dropped: ['is_guest', 'password_hash'],
 };
-
-// RETIRED TABLE — custom_domains. Existing rows remain untouched; default hosts derive live ownership.
 
 const TOKENS: Table = {
   name: 'tokens',
@@ -274,15 +272,6 @@ const ARTIFACT_SOURCE_IDS: Table = {
   primaryKey: ['artifact_id', 'source_id'],
 };
 
-// RETIRED TABLES — `artifact_node_aliases` (the map from retired `data-annotation-anchor`
-// keys to node ids; empty on production) and `node_identity_migration_jobs` (the
-// one-off migrations' cursors; its last job, `sqlite-data-syntax`, completed) went
-// with the code that read them, in the change that deleted the SQLite-syntax and
-// legacy-anchor compatibility shims. Both tables were dropped from production on
-// 2026-10-09 after a backup. Boot DDL is additive-only, so any other database created
-// before the change keeps them; nothing reads or writes them. A fresh database never
-// creates them.
-
 /**
  * The NAMED people on an artifact and what they may do — the sibling of
  * `visibility` (who may read via the link), applying under every visibility.
@@ -416,10 +405,6 @@ const COMMENT_REACTION_EVENTS: Table = {
   indexes: [{name:'idx_comment_reaction_events_artifact_seq',columns:['artifact_id','seq']}],
 };
 
-// RETIRED TABLES — `login_codes` and `oauth_codes` merged into `codes` below.
-// Boot DDL is additive-only, so databases created before the merge keep the
-// (empty — rows lived ≤10 min) old tables; nothing reads or writes them. A
-// fresh database never creates them.
 
 /**
  * Fire-and-forget usage events (lib/analytics.ts is the only writer/reader).
@@ -498,11 +483,6 @@ const CODES: Table = {
     { name: 'idx_codes_expires', columns: ['expires_at'] },
   ],
 };
-
-// RETIRED TABLE — `webfonts`, the family → copied-faces index of the retired
-// font-copying pipeline. A document's font metas now emit a Google Fonts
-// `@import` (lib/page-styles/document-fonts); nothing reads or writes it. Boot
-// DDL is additive-only, so an older database keeps the table; a fresh one never creates it.
 
 /**
  * THE GLOBAL URL → OBJECT CACHE for URL-kept external assets (lib/web-assets).
@@ -776,7 +756,6 @@ const MERMAID_HARVESTS: Table = {
 };
 
 /** At-most-once mutation admission, before the content transaction. */
-// Retired hosted-agent, schedule and terminal-relay tables are not created for a fresh app.
 // RUN_TABLES remain internal: the native backend controller performs boot recovery against them.
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
@@ -829,34 +808,6 @@ const ID_RESERVATION_BATCHES: Table = {
 const ARTIFACT_ID_REGISTRY: Table = {
  name:'artifact_id_registry',columns:[{name:'id',type:'TEXT',notNull:true},{name:'owner',type:'TEXT',notNull:true},{name:'batch',type:'TEXT'},{name:'ordinal',type:'INTEGER'},{name:'consumed',type:'BOOLEAN',notNull:true,default:'false'}],primaryKey:['id'],
  indexes:[{name:'idx_reservation_batch_ordinal',columns:['owner','batch','ordinal'],unique:true}],
-};
-/**
- * RETIRED. A test user is a `users` row (`kind='testuser'`, `parent_user_id`,
- * `expires_at`) with a life of its own, not a lease on a browser session: it is
- * minted by `lib/testusers`, named by `viewer: {testuser}`, and erased with
- * everything it owns. Nothing reads or writes this table any more; the rows an
- * older build left behind are kept so a database rolled back to it still works.
- *
- * It was keyed by (session_id, owner) because a session id is the CALLER's
- * choice: two owners naming the same id must not collide on this table.
- */
-const BROWSER_TEST_USERS: Table = {
- name:'browser_test_users',
- columns:[
-  {name:'session_id',type:'TEXT',notNull:true},
-  // The session service's own owner key: `user:<userId>` or `token:<tokenId>`.
-  {name:'owner',type:'TEXT',notNull:true},
-  {name:'user_id',type:'TEXT',notNull:true},
-  {name:'token_id',type:'TEXT',notNull:true},
-  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-  // The sweep's clock, stamped on every call the owner makes about this
-  // session — the SAME quantity the session service ages its own leases by
-  // (`touched`). Aging the record by `created_at` instead would revoke the
-  // identity out from under a session that is still being worked in.
-  {name:'touched_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- ],
- primaryKey:['session_id','owner'],
- indexes:[{name:'idx_browser_test_users_owner',columns:['owner']}],
 };
 /**
  * The app's tables, in the order boot applies them — and the shape
@@ -1072,12 +1023,11 @@ const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
  {name:'source',type:'TEXT',notNull:true},{name:'type_defs',type:'TEXT',notNull:true},
  {name:'compiled',type:'TEXT',notNull:true},{name:'owner_id',type:'TEXT',notNull:true},
  {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
- // Resolver contract: name->host bindings of the secrets map. The retired `api` column (1 = the removed
- // caps.store/secrets.get capabilities) stays on existing databases, untouched and unread.
+ // Resolver contract: name->host bindings of the secrets map.
  {name:'secret_hosts',type:'JSONB',notNull:true,default:"'{}'::jsonb"},
-],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}]};
-// RETIRED TABLE — html_backend_stores, the removed `caps.store` state of api 1 resolvers. Existing rows remain
-// untouched; nothing reads or writes them.
+],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}],
+ // `api` marked the removed resolver format (1 = caps.store/secrets.get); dead data.
+ dropped:['api']};
 
 const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
  {name:'owner_id',type:'TEXT',notNull:true},{name:'backend_id',type:'TEXT',notNull:true},
@@ -1094,7 +1044,19 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+
+/**
+ * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
+ * annotation-anchor aliases and node-identity migration cursors, the login/OAuth code tables merged into `codes`,
+ * copied web fonts, the shared rate-limit counter, browser test-user leases, hosted agents and their branches,
+ * remote agents and work, and the api 1 resolvers' `caps.store` state.
+ */
+export const DROPPED_TABLES: readonly string[] = [
+  'custom_domains', 'artifact_node_aliases', 'node_identity_migration_jobs', 'login_codes', 'oauth_codes', 'webfonts',
+  'rate_limit_hits', 'browser_test_users', 'hosted_conversations', 'hosted_branches', 'remote_agents', 'remote_work',
+  'html_backend_stores',
+];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
-export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
+export const SCHEMA_STATEMENTS: string[] = [...renderSchema(TABLES), ...renderDroppedTables(DROPPED_TABLES)];

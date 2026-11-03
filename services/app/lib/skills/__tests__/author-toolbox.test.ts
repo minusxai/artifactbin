@@ -262,7 +262,7 @@ it('autofix.mjs fixes in place, --dry-run writes nothing, and the report starts 
 });
 it('serve runs autofix on the served bytes and leaves the file alone unless asked to write',async()=>{
  const {mkdtemp,readFile,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
- const startPreview=(await import('../../../skills/artifactbin/scripts/preview.mjs')).startPreview as (options:any)=>Promise<{url:string;close():Promise<void>}>;
+ const startPreview=(await import('../../../skills/artifactbin/scripts/preview-server.mjs')).startPreview as (options:any)=>Promise<{url:string;close():Promise<void>}>;
  const root=await mkdtemp(path.join(tmpdir(),'author-serve-autofix-'));
  try{
   const file=path.join(root,'index.html'),source='<!doctype html><html><head><title>T</title></head><body><h1 id="x">Hi</h1><p id="x"></p></body></html>';await writeFile(file,source);
@@ -422,16 +422,13 @@ it('logout revokes the saved grant by default without refreshing or revoking env
    await shared.saveCredentials(saved,root);reply=()=>Response.json({error},{status:400});
    expect(await logout()).toMatchObject({serverRevoked:true,localGrantRemoved:true});expect(await shared.readCredentials(server,root)).toBeNull();
   }
-  // --revoke stays accepted as the default; --local is the explicit offline removal.
-  await shared.saveCredentials(saved,root);reply=()=>Response.json({});
-  expect(await logout({revoke:true})).toMatchObject({serverRevoked:true,localGrantRemoved:true});expect(calls).toBe(7);
-  await expect(logout({local:true,revoke:true})).rejects.toMatchObject({code:'invalid_logout',exit:2});
+  // --local is the explicit offline removal.
   await shared.saveCredentials(saved,root);
   expect(await logout({local:true})).toMatchObject({serverRevoked:false,localGrantRemoved:true,environmentGrantStillActive:true,note:expect.stringContaining('not revoke')});
   expect(await shared.readCredentials(server,root)).toBeNull();
   // Nothing saved: nothing to revoke, no request, and the result never claims a revocation.
   expect(await logout()).toMatchObject({serverRevoked:false,localGrantRemoved:true,environmentGrantStillActive:true,note:expect.stringContaining('No saved grant')});
-  expect(calls).toBe(7);
+  expect(calls).toBe(6);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('forwards the eligible anonymous public-view receipt to the publication result',async()=>{

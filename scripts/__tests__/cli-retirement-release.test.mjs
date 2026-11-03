@@ -13,12 +13,11 @@ const cli = JSON.parse(read('services/cli/package.json'));
 const afbin = (args) => spawnSync(process.execPath, [path.join(root, 'services/cli', cli.bin.afbin), ...args], { encoding: 'utf8', env: { PATH: process.env.PATH } });
 
 describe('the CLI retirement build', () => {
-  it('is @afbin/cli 0.6.0, one file with no dependencies, the version the pointer and the server switch name', () => {
+  it('is @afbin/cli 0.6.0, one file with no dependencies, the version the release pointer names', () => {
     expect(cli).toMatchObject({ name: '@afbin/cli', version: '0.6.0', bin: { afbin: 'bin/afbin.mjs' }, files: ['bin/afbin.mjs'] });
     expect(cli).not.toHaveProperty('dependencies');
     expect(cli).not.toHaveProperty('scripts');
     expect(JSON.parse(read('services/app/public/chat/release.json')).version).toBe(cli.version);
-    expect(read('services/app/lib/platform/config.ts')).toContain(`export const CLI_RETIREMENT_VERSION = '${cli.version}';`);
     // Not a workspace: the root install and lockfile stay exactly v3's.
     expect(JSON.parse(read('package.json')).workspaces).not.toContain('services/cli');
     expect(read('package-lock.json')).not.toContain('"services/cli"');

@@ -34,27 +34,17 @@ it('logs reaction events like comments, checkpoints them and deduplicates them o
   expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('resumes logs and checkpoints saved under the old human-comments stream name',async()=>{
- const {mkdtemp,readFile,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+it('refuses a log or checkpoint saved under another stream name',async()=>{
+ const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'legacy-watch-')),log=path.join(root,'old.ndjson'),checkpoint=path.join(root,'old-checkpoint.json');
+ const root=await mkdtemp(path.join(tmpdir(),'other-stream-watch-')),log=path.join(root,'old.ndjson'),checkpoint=path.join(root,'old-checkpoint.json');
  const server='https://example.test',old={server,artifact:'PAGE12',stream:'human-comments'};
- const seenEvent={type:'artifactbin.comment',event_id:'ann_seen',comment_id:'ann_seen'};
  try{
-  await writeFile(log,[{kind:'watch',schema:1,...old},{kind:'event',...old,event:seenEvent},{kind:'checkpoint',schema:1,...old,cursor:'legacy1'}].map(r=>JSON.stringify(r)).join('\n')+'\n');
-  await writeFile(checkpoint,JSON.stringify({kind:'comment-checkpoint',schema:1,...old,cursor:'legacy2',eventIds:[]})+'\n');
-  const cursors:string[]=[];
-  const client={server,request:async(route:string)=>{cursors.push(new URL(route,server).searchParams.get('after')!);return {events:[seenEvent,{type:'artifactbin.comment',event_id:'ann_new',comment_id:'ann_new'}],next_cursor:'next',has_more:false};}};
-  // --append to the old log: resumes its checkpoint, skips the event it already holds, appends under the new name.
-  await watchComments(client,'PAGE12',{once:true,append:true,output:log});
-  const records=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
-  expect(records.filter(r=>r.kind==='event').map(r=>r.event.event_id)).toEqual(['ann_seen','ann_new']);
-  expect(records.at(-1)).toMatchObject({kind:'checkpoint',stream:'comments',cursor:'next'});
-  // --cursor naming an old log or an old checkpoint file.
-  const delivered:any[]=[];
-  await watchComments(client,'PAGE12',{once:true,cursor:checkpoint},{deliver:async(v:any)=>{delivered.push(v);}});
-  expect(cursors).toEqual(['legacy1','legacy2']);
-  expect(delivered.filter(v=>v.kind==='event').map(v=>v.event.event_id)).toEqual(['ann_seen','ann_new']);
+  await writeFile(log,[{kind:'watch',schema:1,...old},{kind:'checkpoint',schema:1,...old,cursor:'old1'}].map(r=>JSON.stringify(r)).join('\n')+'\n');
+  await writeFile(checkpoint,JSON.stringify({kind:'comment-checkpoint',schema:1,...old,cursor:'old2',eventIds:[]})+'\n');
+  const client={server,request:async()=>{throw Error('must not request');}};
+  await expect(watchComments(client,'PAGE12',{once:true,append:true,output:log})).rejects.toMatchObject({code:'log_mismatch'});
+  await expect(watchComments(client,'PAGE12',{once:true,cursor:checkpoint},{deliver:async()=>{}})).rejects.toMatchObject({code:'checkpoint_mismatch'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('watch --next baselines once, resumes from its default checkpoint, skips own events and never overlaps requests',async()=>{

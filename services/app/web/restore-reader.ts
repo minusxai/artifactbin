@@ -1,11 +1,11 @@
 /**
  * Restore a compiled /a reader's place after a reload, before the optional app boots. The modules that do it
  * (envelope parsing, the anchor hold) load only when `window.name` actually carries a parked place
- * (lib/story-runtime/reader-mode: `mx:doc:` / legacy `mx:anchor:`), so an ordinary page load carries none of that
+ * (lib/html-reader/reader-mode: `mx:doc:`), so an ordinary page load carries none of that
  * code on the way to ready.
  */
 export function restoreReloadedReader(win: Window = window): Promise<void> {
-  if (!/^mx:(?:doc|anchor):/.test(win.name)) return Promise.resolve();
+  if (!win.name.startsWith('mx:doc:')) return Promise.resolve();
   return Promise.all([
     import('@/lib/html-reader/anchor'),
     import('@/lib/html-reader/anchor-restore'),

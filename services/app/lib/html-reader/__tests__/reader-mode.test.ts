@@ -52,10 +52,9 @@ describe('the mx:doc window.name envelope', () => {
     expect(readerMode(win())).toBeNull();
   });
 
-  it('still consumes the legacy bare-anchor prefix a pre-envelope document wrote', () => {
+  it('ignores the bare-anchor prefix pre-envelope documents wrote', () => {
     window.name = 'mx:anchor:' + JSON.stringify({ path: '0.3', fraction: 0.75 });
-    expect(takeReloadAnchor(win())).toEqual({ path: '0.3', fraction: 0.75 });
-    expect(window.name).toBe('');
+    expect(takeReloadAnchor(win())).toBeNull();
   });
 });
 

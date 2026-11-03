@@ -10,7 +10,7 @@ import {ROSTER} from '../../design-systems/lib/pages.mjs';
 import {GET as skillArchive} from '../../services/app/app/skills/artifactbin.zip/route.ts';
 import {pathToFileURL} from 'node:url';
 const ROOT=path.resolve(import.meta.dirname,'../../services/app/skills/artifactbin'),BASE='https://example.test';
-let installedDir,prepareBundle,sendPublication;
+let installedDir,prepareBundle;
 /** A documented HTML sample as a saved publication request, its dataset links pointing at `datasetId`. */
 const prepareSample=async(name,datasetId='abc123')=>{
  const root=path.join(installedDir,'artifactbin'),entry=`examples/${name}.html`;
@@ -20,7 +20,7 @@ const prepareSample=async(name,datasetId='abc123')=>{
 beforeAll(async()=>{
  installedDir=await mkdtemp(path.join(tmpdir(),'native-author-installed-'));
  const zip=path.join(installedDir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',installedDir]);
- ({prepareBundle,sendPublication}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/publication-bundle.mjs')).href));
+ ({prepareBundle}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/toolbox-publication-bundle.mjs')).href));
 });
 afterAll(async()=>{if(installedDir)await rm(installedDir,{recursive:true,force:true});});
 describe('native author resources',()=>{
@@ -37,26 +37,6 @@ describe('native author resources',()=>{
    if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
    if(name==='shared-app'){const budget=saved.body.publicationBundle.files.find(file=>file.path==='examples/budget.ts');expect(Buffer.from(budget.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
   }
- });
- it('replays the exact saved request and blocks cross-origin credentials or redirects',async()=>{
-  const saved=await prepareSample('report'),requests=[];
-  const fetcher=async(url,input)=>{requests.push({url,input});return Response.json({id:'abc123',url:BASE+'/a/abc123'});};
-  const env={ARTIFACTBIN_URL:BASE,ARTIFACTBIN_TOKEN:'test-only-token'};
-  await sendPublication(saved,env,fetcher);await sendPublication(saved,env,fetcher);
-  expect(requests[0]).toEqual(requests[1]);expect(requests[0].input.redirect).toBe('error');
-  expect(requests[0].input.headers['Idempotency-Key']).toBe(saved.idempotencyKey);
-  await expect(sendPublication(saved,{...env,ARTIFACTBIN_URL:'https://other.example'},fetcher)).rejects.toThrow('origin-matched');
-  expect(requests).toHaveLength(2);
- });
- it('refuses to overwrite a prepared request so retries keep their identity',async()=>{
-  const dir=await mkdtemp(path.join(tmpdir(),'native-author-'));
-  try{
-   const output=path.join(dir,'request.json'),root=path.join(installedDir,'artifactbin'),helper=path.join(root,'scripts/publication-bundle.mjs');
-   execFileSync(process.execPath,[helper,root,'examples/report.html',BASE,output],{stdio:'pipe'});
-   const original=await readFile(output,'utf8');
-   expect(()=>execFileSync(process.execPath,[helper,root,'examples/report.html',BASE,output],{stdio:'pipe'})).toThrow();
-   expect(await readFile(output,'utf8')).toBe(original);
-  }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('generates every shipped design-system stylesheet from the retained specification',async()=>{
   for(const slug of ROSTER){
@@ -78,41 +58,4 @@ it('prepares an installed design-system stylesheet whose fonts stay on the platf
   const prepared=await installed.prepare(html,'design-systems/gate-almanac.html');
   expect(prepared.body.publicationBundle.files.map(file=>file.path)).toEqual(['design-systems/almanac.css']);
  }finally{await installed.dispose();}
-});
-
-it('saved-request sends preserve updates, refusal receipts and single-attempt uncertain outcomes',async()=>{
- const env={ARTIFACTBIN_URL:BASE,ARTIFACTBIN_TOKEN:'test-only-token'};
- const saved={server:BASE,method:'PUT',artifactId:'PAGE12',idempotencyKey:'test-only-key-123456',
-  body:{html:'<p>Update</p>',expectedVersion:3,expectedState:'observed',publicationBundle:{mappings:{}}}};
- const calls=[];
- const receipt={error:'conflict',dependencyReceipts:[{path:'logo.svg',id:'ASSET1',version:1}]};
- await expect(sendPublication(saved,env,async(url,input)=>{
-  calls.push({url,input});return Response.json(receipt,{status:409});
- })).rejects.toMatchObject({receipt});
- expect(calls[0].url).toBe(BASE+'/api/artifacts/PAGE12');
- expect(calls[0].input).toMatchObject({method:'PUT',redirect:'error',body:JSON.stringify(saved.body),
-  headers:{Authorization:'Bearer test-only-token','Idempotency-Key':saved.idempotencyKey}});
- for(const result of [()=>{throw Error('connection lost');},()=>new Response('not JSON'),
-  ()=>Response.json({error:'unavailable'},{status:503})]){
-  let attempts=0;
-  await expect(sendPublication(saved,env,async()=>{attempts++;return result();})).rejects.toThrow();
-  expect(attempts).toBe(1);
- }
- for(const server of [BASE+'/path','https://user:pass@example.test','https://example.test?query=1']){
-  await expect(sendPublication({...saved,server},env,async()=>{throw Error('must not send');})).rejects.toThrow();
- }
- for(const body of [{html:'old'}, {...saved.body,expectedVersion:'3'}]){
-  await expect(sendPublication({...saved,body},env,async()=>{throw Error('must not send');})).rejects.toThrow('observed');
- }
- const dir=await mkdtemp(path.join(tmpdir(),'legacy-receipt-'));
- try{
-  const {sendBundleFile}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/publication-bundle.mjs')).href);
-  const file=path.join(dir,'request.json'),bytes=JSON.stringify(saved);await writeFile(file,bytes);
-  await expect(sendBundleFile(file,env,async()=>Response.json(receipt,{status:409}))).rejects.toMatchObject({receipt});
-  expect(JSON.parse(await readFile(file+'.receipt.json','utf8'))).toEqual({receipt,mappings:{'logo.svg':{id:'ASSET1',version:1}}});
-  expect(await readFile(file,'utf8')).toBe(bytes);
-  const success={id:'PAGE12',dependencyReceipts:receipt.dependencyReceipts};
-  expect(await sendBundleFile(file,env,async()=>Response.json(success))).toEqual(success);
-  expect(JSON.parse(await readFile(file+'.receipt.json','utf8'))).toEqual({receipt:success,mappings:{'logo.svg':{id:'ASSET1',version:1}}});
- }finally{await rm(dir,{recursive:true,force:true});}
 });

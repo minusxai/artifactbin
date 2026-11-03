@@ -11,10 +11,9 @@ export interface AuthorJournal {
  baseline?:AuthorBaseline;
 }
 export interface AuthorResult {ok:boolean;code:string;recovery?:string;[key:string]:unknown}
-/** `stream` is 'comments'; checkpoints written before the rename say 'human-comments' and are still read. */
-export interface CommentCheckpoint {kind:'comment-checkpoint';schema:1;server:string;artifact:string;stream:'comments'|'human-comments';cursor:string;eventIds:string[]}
+export interface CommentCheckpoint {kind:'comment-checkpoint';schema:1;server:string;artifact:string;stream:'comments';cursor:string;eventIds:string[]}
 
-/** Check diagnostics stay at the top level on success and refusal; details remains a compatibility alias. */
+/** Check diagnostics stay at the top level on success and refusal. */
 export interface AuthorCheckResult {
  smokePassed:boolean; checks:ReadonlyArray<Record<string,unknown>>; unverified:ReadonlyArray<string>; note:string;
 }

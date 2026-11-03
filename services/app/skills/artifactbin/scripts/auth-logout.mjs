@@ -35,8 +35,6 @@ async function revokeSaved(saved, server, fetcher) {
 }
 
 export async function logoutGrant({values, server, root, shared, env, fetcher}) {
-  if (values.local && values.revoke)
-    throw new ToolError('invalid_logout', 'Choose --local or --revoke.', 2);
   const revoke = !values.local;
   const location = shared.credentialPaths(server, root);
   let serverRevoked = false, saved = null;

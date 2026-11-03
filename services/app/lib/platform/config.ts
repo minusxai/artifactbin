@@ -1,7 +1,4 @@
-import {readFileSync} from 'node:fs';
 import {isIP} from 'node:net';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
@@ -388,70 +385,6 @@ export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
 /** Optional runner HTTP boundary; otherwise the composition root registers a local runner. */
 export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
 export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
-
-/**
- * The afbin release this server tells clients to run: `version` in public/chat/release.json, the pointer
- * `npm run release:cli` bumps and `afbin update` fetches. Read from disk (cwd is services/app, as for the
- * public/ mount in server/app) once, on first use, so a bundle that imports this module without serving the
- * app never needs the file.
- */
-let cliRelease: string | undefined;
-/** The places the released CLI pointer can live, in order: the app's working directory (a production
- * package copies `public/` beside the bundle), this source tree's own `public/` (tests and tools that run the
- * app from another working directory, such as the server repository's), and a repository root. */
-export const CLI_RELEASE_CANDIDATES = (): string[] => {
-  const candidates = [path.resolve('public/chat/release.json')];
-  // Under a browser-like test environment import.meta.url is not a file URL; the source-tree candidate is
-  // then simply unavailable, never an error.
-  try {
-    if (import.meta.url.startsWith('file:')) candidates.push(fileURLToPath(new URL('../../public/chat/release.json', import.meta.url)));
-  } catch {
-    // no source-tree candidate
-  }
-  candidates.push(path.resolve('services/app/public/chat/release.json'));
-  return candidates;
-};
-/** Read the first candidate that parses; `''` when none does, so a missing pointer degrades the version header
- * and the update-required body instead of failing the request that needed them. */
-export function readCliReleaseVersion(candidates: string[] = CLI_RELEASE_CANDIDATES()): string {
-  for (const file of candidates) {
-    try {
-      const version = (JSON.parse(readFileSync(file, 'utf8')) as { version?: unknown }).version;
-      if (typeof version === 'string' && version) return version;
-    } catch {
-      // try the next candidate
-    }
-  }
-  return '';
-}
-/**
- * CLI RETIREMENT SWITCH — `CLI__RETIREMENT=on` (read through `env('CLI','RETIREMENT')`; default off).
- *
- * CLI_RETIREMENT_VERSION is the final afbin release: every command replaces the skill folders `afbin setup`
- * installed with the author skill and uninstalls the npm package. Its release had to move public/chat/release.json
- * to that version (the release workflow requires the pointer to match the package), so while the switch is off
- * this server keeps advertising CLI_LAST_SERVICE_VERSION instead — in the `X-Artifactbin-CLI-Version` header, the
- * update-required body and the served /chat/release.json — and no client is pushed to retire.
- *
- * Turn it on only after CLI_RETIREMENT_VERSION is published to npm: from then on every 0.5.x CLI with
- * auto-update enabled installs it after its next successful server command, and `afbin update` installs it too.
- * A pointer at or below CLI_LAST_SERVICE_VERSION is advertised unchanged, whatever the switch says.
- */
-export const CLI_RETIREMENT_VERSION = '0.6.0';
-export const CLI_LAST_SERVICE_VERSION = '0.5.55';
-export const cliRetirementEnabled = (): boolean => env('CLI', 'RETIREMENT') === 'on';
-/** The version to advertise for a pointer version: anything past the last service release (the retirement
- * release or a later fix to it) only while the switch is on. */
-export const advertisedCliVersion = (version: string): string => {
-  const parts = (value: string) => value.split('.').map(Number);
-  const [a, b] = [parts(version), parts(CLI_LAST_SERVICE_VERSION)];
-  const newer = a.length === 3 && a.every(Number.isSafeInteger) && (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0;
-  return newer && !cliRetirementEnabled() ? CLI_LAST_SERVICE_VERSION : version;
-};
-export function cliReleaseVersion(): string {
-  cliRelease ??= readCliReleaseVersion();
-  return advertisedCliVersion(cliRelease);
-}
 
 /**
  * THE TEST OVERRIDE for configuration: replaces the settings below, and `env()` reads, without touching the

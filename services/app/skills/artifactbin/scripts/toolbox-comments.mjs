@@ -9,11 +9,8 @@ import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThre
   from './toolbox-watch-state.mjs';
 import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
 export {watchLogPath,noteWatchActivity} from './toolbox-watch-state.mjs';
-/** Logs and checkpoints saved before the feed carried agents' writes name the old stream; they
- * resume unchanged. */
-const STREAMS=new Set([stream,'human-comments']);
-function matches(value,server,id){return value?.server===server&&value?.artifact===id&&STREAMS.has(
-  value?.stream);}
+function matches(value,server,id){return value?.server===server&&value?.artifact===id&&
+  value?.stream===stream;}
 /** @returns {Promise<Pick<import('../../../lib/skills/author-toolbox-contract').CommentCheckpoint,
   'cursor'|'eventIds'>>} */
 async function checkpointInput(value,server,id){

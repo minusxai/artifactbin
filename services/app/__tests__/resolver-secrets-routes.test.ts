@@ -10,7 +10,7 @@ import { mintAccountToken as mintToken, useAppHarness } from '@/__tests__/harnes
 import { identityForUser } from '@/lib/accounts';
 import { updateSharingFor } from '@/lib/artifacts';
 
-vi.mock('@/lib/page-operations', async original => ({ ...await original<typeof import('@/lib/page-operations')>(), compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { value: String test: String! @auth(role: OWNER) }', compiled: source, secretBindings: ['TOKEN'], secretHosts: { TOKEN: 'api.example.com' } }) }));
+vi.mock('@/lib/page-operations', async original => ({ ...await original<typeof import('@/lib/page-operations')>(), compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { value: String test: String! @auth(role: owner) }', compiled: source, secretBindings: ['TOKEN'], secretHosts: { TOKEN: 'api.example.com' } }) }));
 useAppHarness();
 const app = new Hono();
 mountRoutes(app);

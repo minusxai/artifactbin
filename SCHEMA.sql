@@ -242,6 +242,8 @@ ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_bindings J
 
 ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;
+
 CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
 
 CREATE TABLE IF NOT EXISTS app.groups (
@@ -1822,29 +1824,31 @@ ALTER TABLE app.artifact_id_registry ADD COLUMN IF NOT EXISTS consumed BOOLEAN N
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reservation_batch_ordinal ON app.artifact_id_registry (owner, batch, ordinal);
 
-CREATE TABLE IF NOT EXISTS app.browser_test_users (
-  session_id TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  token_id TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  touched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (session_id, owner)
-);
+DROP TABLE IF EXISTS app.custom_domains;
 
-ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL;
+DROP TABLE IF EXISTS app.artifact_node_aliases;
 
-ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+DROP TABLE IF EXISTS app.node_identity_migration_jobs;
 
-ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+DROP TABLE IF EXISTS app.login_codes;
 
-ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
+DROP TABLE IF EXISTS app.oauth_codes;
 
-ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+DROP TABLE IF EXISTS app.webfonts;
 
-ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS touched_at TIMESTAMPTZ NOT NULL DEFAULT now();
+DROP TABLE IF EXISTS app.rate_limit_hits;
 
-CREATE INDEX IF NOT EXISTS idx_browser_test_users_owner ON app.browser_test_users (owner);
+DROP TABLE IF EXISTS app.browser_test_users;
+
+DROP TABLE IF EXISTS app.hosted_conversations;
+
+DROP TABLE IF EXISTS app.hosted_branches;
+
+DROP TABLE IF EXISTS app.remote_agents;
+
+DROP TABLE IF EXISTS app.remote_work;
+
+DROP TABLE IF EXISTS app.html_backend_stores;
 
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 

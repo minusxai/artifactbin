@@ -127,12 +127,14 @@ const tableNames = (statements) => {
 
 /* ── the two sides ───────────────────────────────────────────────────────── */
 
-const { renderSchema } = await tsImport('@artifactbin/utils', import.meta.url);
+const { renderSchema, renderDroppedTables } = await tsImport('@artifactbin/utils', import.meta.url);
 
 async function appSide() {
   const mod = await tsImport('../services/app/lib/platform/schema.ts', import.meta.url);
   const data = tableData(mod);
-  if (data) return { statements: renderSchema(data, { schema: APP_SCHEMA }), names: data.map((t) => t.name) };
+  // Tables the app no longer declares are dropped after the declared ones (DROPPED_TABLES).
+  const dropped = renderDroppedTables(mod.DROPPED_TABLES ?? [], { schema: APP_SCHEMA });
+  if (data) return { statements: [...renderSchema(data, { schema: APP_SCHEMA }), ...dropped], names: data.map((t) => t.name) };
   if (Array.isArray(mod.SCHEMA_STATEMENTS)) {
     // The pre-split shape: statements already rendered (unqualified) by the
     // same utils renderer — re-qualified, which is byte-identical to the path

@@ -1,7 +1,7 @@
 /**
  * Internal: file helpers for the private preview server: content types, platform font lookup,
  * root containment and the per-request autofix of served pages.
- * Used by: preview.mjs, preview-source-routes.mjs.
+ * Used by: preview-server.mjs, preview-source-routes.mjs.
  */
 import {readFile,readdir} from 'node:fs/promises';
 import {statSync} from 'node:fs';
@@ -16,13 +16,12 @@ export const types={'.html':'text/html; charset=utf-8','.htm':'text/html; charse
   '.webp':'image/webp','.avif':'image/avif','.woff2':'font/woff2','.woff':'font/woff',
   '.mp4':'video/mp4','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 /**
- * The platform stylesheet's font files: /af/fonts/<name>.woff2 (and the legacy
- * /fonts/<name>.<hash8>.woff2). A source checkout reads the app's public/fonts; otherwise each
+ * The platform stylesheet's font files: /af/fonts/<name>.woff2. A source checkout reads the
+ * app's public/fonts; otherwise each
  * file is fetched once from the selected server's /af/fonts/ (the skill archive packages no fonts)
  * and served from this origin, so the private CSP keeps font-src 'self'.
  */
-const PLATFORM_FONT=
-  /^\/(?:af\/fonts\/([a-z0-9-]+)\.woff2|fonts\/([a-z0-9-]+)\.[a-f0-9]{8}\.woff2)$/;
+const PLATFORM_FONT=/^\/af\/fonts\/([a-z0-9-]+)\.woff2$/;
 let checkoutFonts;
 async function checkoutFont(name){
  // Resolved from this file: scripts/ -> services/app/public/fonts in a source checkout.
@@ -38,7 +37,7 @@ export function platformFonts(origin){
  const fetched=new Map();
  return async pathname=>{
   const match=PLATFORM_FONT.exec(pathname);if(!match)return null;
-  const name=match[1]??match[2],local=await checkoutFont(name);if(local)return local;
+  const name=match[1],local=await checkoutFont(name);if(local)return local;
   if(!origin)return null;
   if(!fetched.has(name))fetched.set(name,(async()=>{
 const response=await fetch(new URL(`/af/fonts/${name}.woff2`,origin),{redirect:'error',signal:

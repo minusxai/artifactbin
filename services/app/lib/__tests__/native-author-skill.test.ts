@@ -101,7 +101,7 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','publication-bundle','preview','autofix','groups','policy'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','autofix','groups','policy'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
    // The installed autofix runs standalone and edits only the selected file.
    const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
    expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);
@@ -111,7 +111,7 @@ describe('one installable native HTML author skill',()=>{
    expect(readFileSync(occupied,'utf8')).toBe('retained');
    // The removed sample flags are refused as invocation errors.
    try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare','report','--server',BASE,'--output',path.join(dir,'report.json')],{cwd:installed,stdio:'pipe'});throw Error('Expected --prepare refusal');}catch(error){expect((error as {status:number}).status).toBe(2);}
-   const {prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/publication-bundle.mjs')).href);
+   const {prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
    for(const sample of ['report','csv-dashboard','shared-app']){
     const source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
     const saved=await prepareBundle({root:installed,entry:`examples/${sample}.html`,server:BASE,entryHtml:source.replaceAll('ref:DATASET_ID','ref:REALDATA123').replaceAll('ref:TARGETS_ID','ref:REALDATA123')});

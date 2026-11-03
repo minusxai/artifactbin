@@ -31,14 +31,14 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
   Results never contain credentials.`;
 
 import {runTool, positional, integer, ToolError} from './toolbox-client.mjs';
-import {startPreview} from './preview.mjs';
+import {startPreview} from './preview-server.mjs';
 // Start the preview and print one JSON receipt with the loopback URL; the process then stays up
 // until a signal.
 export async function serveCommand({values, positionals}) {
   if (values.server)
     throw new ToolError(
       'unsupported_server', 'Private serve does not connect to a remote server.', 2);
-  // Limits and details (all enforced in preview.mjs): the project is capped at 2,000 files,
+  // Limits and details (all enforced in preview-server.mjs): the project is capped at 2,000 files,
   // 32 MiB per file and 128 MiB; at most 4 dataset sessions (clean ones expire after 30 idle
   // minutes, dirty ones are never evicted silently), 512 operations each, 64 KiB request bodies;
   // declared data up to 8 MiB per file and 16 MiB per session.

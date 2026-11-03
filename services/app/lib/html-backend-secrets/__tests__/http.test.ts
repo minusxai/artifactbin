@@ -3,7 +3,7 @@ const state=vi.hoisted(()=>({owner:'owner',owned:true,names:[] as string[],write
 vi.mock('@/lib/authentication',()=>({requestOrSessionActor:async()=>({userId:state.owner,tokenId:null}),refusesCrossSite:()=>false}));
 vi.mock('@/lib/accounts',()=>({accountOf:(actor:{userId:string})=>actor.userId}));
 vi.mock('@/lib/artifacts',()=>({getOwnedArtifactFor:async()=>state.owned?{}:null}));
-vi.mock('@/lib/html-backends',async original=>({...await original<typeof import('@/lib/html-backends')>(),getHtmlBackendVersion:async()=>({ownerId:'owner',backendId:'backend',pageId:'page',typeDefs:'type Query { n: Int test: String! @auth(role: OWNER) }',secretBindings:['TOKEN'],secretHosts:{TOKEN:'api.example.com'}})}));
+vi.mock('@/lib/html-backends',async original=>({...await original<typeof import('@/lib/html-backends')>(),getHtmlBackendVersion:async()=>({ownerId:'owner',backendId:'backend',pageId:'page',typeDefs:'type Query { n: Int test: String! @auth(role: owner) }',secretBindings:['TOKEN'],secretHosts:{TOKEN:'api.example.com'}})}));
 vi.mock('@/lib/html-backend-secrets',()=>({backendSecrets:{names:async()=>state.names,put:async(...args:unknown[])=>{state.writes.push(args);state.names=['TOKEN'];},remove:async()=>{state.names=[];}}}));
 import {GET,PUT,DELETE} from '@/app/api/my/resolvers/[id]/[version]/secrets/route';
 const context={params:Promise.resolve({id:'backend',version:'v1'})};

@@ -11,7 +11,7 @@ export function checkDigest(envelope,file){
  const lines=[];
  // Problems autofix cannot fix in a local preview come first: the browser evidence below may
  // follow from them.
- const autofix=envelope.autofix??envelope.details?.autofix;
+ const autofix=envelope.autofix;
  if(autofix?.problems?.length){
   lines.push(`autofix: ${autofix.problems.length} problem${autofix.problems.length===1?'':
    's'} to fix by hand`);
