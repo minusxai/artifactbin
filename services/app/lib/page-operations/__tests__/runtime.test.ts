@@ -78,3 +78,33 @@ it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB 
   expect(JSON.stringify(receipts)).not.toMatch(/k=|Bearer|s3cr3t/);
  }finally{await runner.close();await db.close();await server.close();}
 },30000);
+it('a resolver\'s own thrown message reaches the caller; caps refusals, non-Error throws and timeouts stay platform failures',async()=>{
+ const {withHttpServer}=await import('@artifactbin/test-support/net');
+ const {useLoopbackLookup}=await import('@artifactbin/utils/node/loopback-lookup');
+ const {createResolverFetch}=await import('../public-fetch');
+ const {composePageSchema,executePageOperation}=await import('../namespaces');
+ useLoopbackLookup();
+ const server=await withHttpServer((_req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end('<html>private body</html>');});
+ const db=new PGlite();let record:PageBackendRecord;
+ const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(store,context.request,operation,args,async()=>record,undefined,async()=>'k3y-value',createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}))});
+ try{
+  const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { note: String uncaught: String rethrown: String bad: String str: String spin: String }"; export default {
+   note: async()=>{const e=Error("Write a note of 1 to 280 characters.\\nsecond line");throw e;},
+   uncaught: async(a,p,caps)=>(await caps.fetch("https://other.example.com/?k={{KEY}}")).text(),
+   rethrown: async(a,p,caps)=>{try{await caps.fetch("https://other.example.com/?k={{KEY}}");}catch(e){throw Error("Could not reach the API ("+e.message+")");}},
+   bad: async(a,p,caps)=>(await caps.fetch("http://api.localhost:${server.port}/")).json(),
+   str: async()=>{throw "plain string";},
+   spin: async()=>{for(;;){}} };`;
+  record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend3',pageId:'page1',version:'v1',ownerId:'owner1'};
+  const schema=composePageSchema([{name:'notes',fileId:'backend3',version:'v1',typeDefs:record.typeDefs}]);
+  const invoke=createBackendInvoker(runner,async()=>record);
+  const ask=async(field:string,role:'owner'|'viewer')=>(await executePageOperation({schema,request:{query:`{ notes { ${field} } }`},caller:{pageId:'page1',subject:'u1',role},invoke,signal:new AbortController().signal})).errors![0]!;
+  expect(await ask('note','viewer')).toMatchObject({message:'Write a note of 1 to 280 characters.',extensions:{code:'backend_failed'}});
+  expect((await ask('note','viewer')).extensions).toEqual({code:'backend_failed'});
+  expect(await ask('note','owner')).toMatchObject({message:'Write a note of 1 to 280 characters.',extensions:{detail:'Write a note of 1 to 280 characters.'}});
+  expect((await ask('rethrown','viewer')).message).toBe("Could not reach the API (secret_host_forbidden: KEY)");
+  for(const field of ['uncaught','bad','str','spin'])expect(await ask(field,'viewer'),field).toEqual({message:'Backend execution failed',path:['notes',field],extensions:{code:'backend_failed'}});
+  expect((await ask('uncaught','owner')).extensions).toEqual({code:'backend_failed',detail:'secret_host_forbidden: KEY'});
+ }finally{await runner.close();await db.close();await server.close();}
+},30000);
