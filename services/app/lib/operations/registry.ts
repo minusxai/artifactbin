@@ -153,7 +153,7 @@ const CONTENT_FIELDS = {
   format: z.literal('folder').optional().describe("A folder has no content field. Other artifact formats are selected by their content field."),
   parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
   shares: z.array(z.object({email:z.string(),role:z.enum(['viewer','commenter','editor'])})).max(100).optional().describe('Explicit sharing list; omission preserves it and an empty list clears it atomically with content.'),
-  access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL: 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>)."),
+  access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ceiling: 'readwrite' (a new stored dataset's default when unset — rows change through the generated GraphQL mutations wherever its permissions allow; owner and editors only until rules admit more, see /llms/permissions) or 'read' (no writes through any door)."),
   visibility: z.enum(['public', 'private', 'unlisted']).optional().describe("read ACL: 'public' = anyone with the link, and it lists on the owner's public profile; 'unlisted' = anyone with the link, but never listed anywhere; 'private' = the owner + emails they share it with (needs a logged-in account — anonymous tokens can be public or unlisted). Defaults: account-owned tokens publish private — except images and datasets, born unlisted; anonymous tokens publish public."),
 };
 

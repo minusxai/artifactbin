@@ -35,10 +35,10 @@ describe('creating a dataset returns how to USE it', () => {
     const {body}=await create({title:'sales',dataset:'month,revenue\n2026-01,120\n2026-02,150'});
     expect(body.usage).toContain('<!doctype html>');expect(body.usage).toContain(`href="ref:${body.id}"`);
     const published=await create({html:body.usage});expect(published.status,JSON.stringify(published.body)).toBe(201);
-    const queries=[...body.usage.matchAll(/gql`([^`]+)`/g)].map(match=>match[1]);expect(queries).toHaveLength(2);
+    const queries=[...body.usage.matchAll(/gql`([^`]+)`/g)].map(match=>match[1]);expect(queries).toHaveLength(1);
     const execute=async(query:string,variables={})=>await(await graphql(request(`/api/artifacts/${published.body.id}/graphql`,{method:'POST',token,json:{revision:'1',query,variables}}),{params:Promise.resolve({id:published.body.id})})).json();
-    const schema=await execute(queries[0]);expect(schema.errors).toBeUndefined();
-    const rows=await execute(queries[1],{table:schema.data.data.schema.tables[0].id});expect(rows.errors).toBeUndefined();expect(rows.data.data.rows.rows).toHaveLength(2);
+    const rows=await execute(queries[0],{offset:0});expect(rows.errors).toBeUndefined();
+    expect(rows.data.data.map(({month,revenue}:{month:string;revenue:number})=>[month,revenue])).toEqual([['2026-01',120],['2026-02',150]]);
   });
 
   it('still returns something useful when there is no numeric column', async () => {

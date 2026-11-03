@@ -29,7 +29,9 @@ describe('one installable native HTML author skill',()=>{
  });
  it('executes the documented namespace input mutation against the composed backend SDL',async()=>{
   const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
-  const guide=publicGuideText('backends',BASE)!;
+  const guide=publicGuideText('resolvers',BASE)!;
+  // The retired topic name is served as the same text, for installed skills that still link it.
+  expect(publicGuideText('backends',BASE)).toBe(guide);
   const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
   expect(query).toBeTruthy();
   const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);
@@ -90,7 +92,8 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','garden.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon'])expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(true);
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
@@ -120,7 +123,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="budget"');expect(plan.backendSources.budget).toBe(saved.body.backendSources.budget);expect(saved.body.backendSources.budget).toContain('@auth(signedIn:true)');expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="budget"');expect(plan.backendSources.budget).toBe(saved.body.backendSources.budget);expect(saved.body.backendSources.budget).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });
@@ -130,7 +133,7 @@ describe('the shipped skill folder',()=>{
  it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
-  expect(refs).toEqual(['references/backends.md','references/datasets.md','references/dataviz.md','references/diagrams.md','references/groups.md','references/maps.md','references/runtime.md']);
+  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/groups.md','references/maps.md','references/permissions.md','references/resolvers.md','references/runtime.md']);
   // The design systems ship as self-documenting stylesheets, not guides.
   expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.

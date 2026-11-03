@@ -49,8 +49,8 @@ describe('access on the bearer API', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string; access: string; usage: string };
     expect(body.access).toBe('readwrite');
-    expect(body.usage).toContain('schema');
-    expect(body.usage).toContain('rows(tableId:');
+    expect(body.usage).toContain('data(limit:1000');
+    expect(body.usage).not.toContain('rows(tableId:');
     expect(body.usage).toContain('af-dataset');
     expect(body.usage).not.toContain('<Mutation');
     expect((await getArtifactById(body.id))!.access).toBe('readwrite');

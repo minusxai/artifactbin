@@ -443,3 +443,38 @@ it('forwards the eligible anonymous public-view receipt to the publication resul
   expect(result.user_page_url).toBe('https://alice.u.example.test/PAGE12-plan');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('publish --template applies a new dataset\'s starting permissions after the create, and only then',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'publish-template-')),server='https://example.test';
+ try{
+  const project=path.join(root,'project');await (await import('node:fs/promises')).mkdir(project);const csv=path.join(project,'signups.csv'),page=path.join(project,'index.html');
+  await writeFile(csv,'name,created_by\nAda,\n');await writeFile(page,'<!doctype html><html><head><title>T</title></head><body><h1>Hi</h1></body></html>');
+  const seen:Array<{method:string;path:string;body?:any}>=[];
+  const fetcher=async(url:any,init:any)=>{
+   const {pathname,search}=new URL(String(url)),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):undefined;seen.push({method,path:pathname+search,body});
+   if(pathname==='/api/artifacts'&&method==='POST')return Response.json({id:'DATA12',url:server+'/a/DATA12',version:1,state:'a'.repeat(64),format:'dataset'},{status:201});
+   if(pathname==='/api/artifacts/DATA12/policy/templates')return Response.json({revision:1,templates:[{name:'own-rows',ok:true,policy:{version:3,tables:[]}}]});
+   if(pathname==='/api/artifacts/DATA12/policy'&&method==='PUT')return Response.json({saved:true,revision:2,readBack:'Table public.rows\n- Owner, editors: see and change everything.'});
+   return Response.json({error:'unexpected'},{status:500});
+  };
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher,log:()=>{}};
+  await expect(publishCommand({values:{server,template:'own-rows'},positionals:[page]},options)).rejects.toMatchObject({code:'template_requires_dataset'});
+  await expect(publishCommand({values:{server,template:'everyone'},positionals:[csv]},options)).rejects.toMatchObject({exit:2});
+  expect(seen).toEqual([]);
+  const done=await publishCommand({values:{server,template:'own-rows','owner-column':'created_by'},positionals:[csv]},options);
+  expect(done.permissions).toEqual({template:'own-rows',revision:2,readBack:['Table public.rows','- Owner, editors: see and change everything.']});
+  expect(seen.map(r=>r.method+' '+r.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA12/policy/templates?ownerColumn=created_by','PUT /api/artifacts/DATA12/policy']);
+  expect(seen[2]!.body).toEqual({policy:{version:3,tables:[]},expectedPolicyRevision:1});
+  // An existing dataset changes permissions through policy.mjs, never a republish.
+  await expect(publishCommand({values:{server,template:'read-only'},positionals:[csv]},options)).rejects.toMatchObject({code:'template_not_for_update'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('names the dataset links that publish puts on the legacy API, as the server decides',async()=>{
+ const {legacyDatasetLinks}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const link=(name:string,api='')=>`<link rel="af-dataset" data-af-name="${name}" href="ref:abcdef"${api}>`;
+ expect(legacyDatasetLinks(link('orders')+'<script>gql`{orders(limit:5){_id}}`</script>')).toEqual([]);
+ expect(legacyDatasetLinks(link('orders')+link('old',' data-af-api="legacy"'))).toEqual(['old']);
+ expect(legacyDatasetLinks(link('orders')+'<script>q(`{orders{rows(tableId:$t){rows{id}}}}`)</script>')).toEqual(['orders']);
+ expect(legacyDatasetLinks(link('orders',' data-af-api="hasura"')+'<script>q(`{x{schema{revision}}}`)</script>')).toEqual([]);
+});

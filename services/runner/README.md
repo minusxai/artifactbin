@@ -4,7 +4,7 @@ The app uses `RunnerService` to compile and invoke native HTML backends. Backend
 source exports GraphQL type definitions and resolvers; publication binds an
 immutable version to the page. Readers call the page GraphQL endpoint, which
 checks current page access and dataset authority before executing a resolver.
-See [the backend authoring contract](../app/skills/artifactbin/references/backends.md).
+See [the resolver authoring contract](../app/skills/artifactbin/references/resolvers.md).
 
 `npm run setup -- --yes` followed by `npm run dev` registers the local runner.
 A local child process uses a V8 isolate. Production container restrictions apply

@@ -6,7 +6,8 @@ Usage: node scripts/publish.mjs FILE [--title T] [--visibility private|unlisted|
        node scripts/publish.mjs --resume JOURNAL
 Flags: --type html|dataset|asset (inferred from unambiguous extensions); --root DIR project
   boundary (default: the source directory); --manifest FILE JSON {"manifest":[paths]} of extra
-  runtime-loaded files; --title; --visibility (new pages default to unlisted);
+  runtime-loaded files; --title; --visibility (new pages default to unlisted); --template
+  read-only|own-rows|editors-only [--owner-column C] a new dataset's permissions (prints readBack);
   --group HANDLE creates a new page in that group (you need editor access; it resolves GET
   /api/groups/HANDLE first); a destination that conflicts with the parent's owner is refused, and
   it never moves existing pages, so updates reject it; --dry-run validates and plans without
@@ -20,6 +21,7 @@ Examples:
   node scripts/publish.mjs ./project/index.html           # first publish; prints the receipt and
                                                             any autofix: changes
   node scripts/publish.mjs page.html --group design_team  # new page in a group you edit
+  node scripts/publish.mjs signups.csv --template own-rows --owner-column created_by
   node scripts/publish.mjs page.html                      # after: node scripts/read.mjs ID
                                                             --output page.html
   node scripts/publish.mjs --resume JOURNAL               # after exit 5 (unknown outcome);
@@ -30,8 +32,8 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   publish before the page and are discovered from static HTML URLs, CSS url() and @import, and
   static or literal dynamic module imports (up to 99 files, 4 MB each, 16 MB total); list other
   runtime-loaded files in --manifest. Computed imports and cyclic graphs are refused; remote URLs,
-  absolute server paths and ref: links stay as written. af-backend files go in as backend
-  sources, never as public assets. An update is conditional on the observed version: a
+  absolute server paths and ref: links stay as written. af-resolver (alias af-backend) files go in
+  as resolver sources, never as public assets. A link on the legacy dataset API prints deprecated:. An update is conditional on the observed version: a
   concurrent remote change exits 4 instead of overwriting. The journal is saved before sending
   and --resume never changes it. A 409 or a refused baseline means someone else edited (or the
   baseline is historical, missing or mismatched): read.mjs again and reapply; there is no force

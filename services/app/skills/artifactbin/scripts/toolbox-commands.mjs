@@ -34,6 +34,8 @@ const commands = {
       root: flag(),
       manifest: flag(),
       title: flag(),
+      template: flag(),
+      'owner-column': flag(),
       visibility: flag(),
       group: flag(),
       personal: flag('boolean'),

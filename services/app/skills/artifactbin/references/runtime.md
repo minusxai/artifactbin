@@ -79,21 +79,21 @@ await client.mutate({mutation:gql`mutation {increment(by:1)}`});
 
 ## Remote namespaces
 
-An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable backend version or authorized dataset. Query through that namespace with `client.query`, for example the GraphQL query `{budget{targets{category amount}}}` for the backend in the shared-app example. A backend’s source filename is an authoring file, not a URL the browser fetches.
+An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable resolver version or authorized dataset. Query with `client.query`: a dataset's generated fields are top-level (`{targets{category amount}}`), a resolver's stay under its name (`{budget{signedIn}}`). A resolver’s source file is not a URL the browser fetches.
 
 Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
 
-Use `onBackendChange` for manual invalidation and reconnect handling:
+Use `onResolverChange` for manual invalidation and reconnect handling:
 
 ```js
-import {onBackendChange} from '@afbin/apollo';
-const changes=onBackendChange(names=>{
- if(names.includes('garden'))void refresh(); // your function re-queries shared facts
+import {onResolverChange} from '@afbin/apollo';
+const changes=onResolverChange(names=>{
+ if(names.includes('budget'))void refresh(); // your function re-queries shared facts
 });
 // When removing this UI: changes.unsubscribe();
 ```
 
-Names identify changed namespaces, not results or grants. `watchQuery` observes local fields and backends; invalidation, reconnect and committed mutations refresh backend reads without persisting results. `loading` is true while pending, false on answer/error. `clearOnRefresh:true` clears remote fields before reads. Clear private UI on completed refusal; unsubscribe on removal. Mutations never retry automatically.
+Names identify changed namespaces, not results or grants. `watchQuery` observes local fields and remote reads; invalidation, reconnect and committed mutations refresh remote reads without persisting results. `loading` is true while pending, false on answer/error. `clearOnRefresh:true` clears remote fields before reads. Clear private UI on completed refusal; unsubscribe on removal. Mutations never retry automatically.
 
 Remote data is never silently copied into persisted local state. Keep temporary selections or filters local; read shared facts through their namespace. Query/mutation errors must reach the UI. An unknown write outcome requires recovery; never turn it into a success message or a second new mutation.
 

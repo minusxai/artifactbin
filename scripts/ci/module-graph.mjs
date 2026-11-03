@@ -159,7 +159,7 @@ const BUNDLED_LEAVES = {
   'lib/capture': ['contract', 'png', 'screen'],
   'lib/chart': ['chart-theme'],
   'lib/data-ingest': ['coerce', 'csv', 'types'],
-  'lib/datasets': ['dataset-usage', 'definition', 'types'],
+  'lib/datasets': ['dataset-usage', 'definition', 'graphql-names', 'types'],
   'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'selection', 'selection-contract', ],
   'lib/html-components': ['hosted.json', 'markdown-typography', 'row-identity', 'table-comparison', 'table-values'],
   'lib/html-page': ['core-script', 'design-system', 'html-source', 'pwa-settings'],
