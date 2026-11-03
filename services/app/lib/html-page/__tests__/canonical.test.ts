@@ -36,9 +36,11 @@ describe('the core script is platform-added: pages work with or without it',()=>
   expect(cores(html)).toEqual(['/af/core.js']);
   expect(html.indexOf('/af/core.js')).toBeLessThan(html.indexOf('<title'));
  });
- it('keeps one written core without duplicating it',()=>{
-  const html=canonicalizeHtmlPage(page('<script src="/af/core.js" data-af="core"></script><title>T</title>')).html;
-  expect(cores(html)).toEqual(['/af/core.js']);
+ it('keeps one written core, current or legacy, without duplicating it',()=>{
+  for(const src of ['/af/core.js','/af/v1/core.js']){
+   const html=canonicalizeHtmlPage(page(`<script src="${src}" data-af="core"></script><title>T</title>`)).html;
+   expect(cores(html)).toEqual([src]);
+  }
  });
 });
 

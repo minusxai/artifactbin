@@ -24,7 +24,7 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
  const renderedSource=(rendered.match(/^\s*(<!doctype[^>]*>)/i)?.[1]??'')+target.documentElement.outerHTML;
  const envelope={version:1 as const,source,...(portable.identity?{identity:portable.identity}:{}),...((portable.renderedDigest||adopt||options.renderedSource!==undefined)?{renderedDigest:portableRenderedDigest(renderedSource)}:{}),...(options.privateState?{privateState:options.privateState}:{})};
  const block=parser.parseFromString(portableScript(envelope),'text/html').querySelector('script')!;
- for(const old of target.querySelectorAll('script[data-af="core"],script[src="/af/core.js"]')) old.remove();
+ for(const old of target.querySelectorAll('script[data-af="core"],script[src="/af/core.js"],script[src="/af/v1/core.js"]')) old.remove();
  const fragments:Node[]=[];
  for(const name of ['runtime','apollo','reader','chrome','portable-engine','core']) {
   const source=live.querySelector(`script[data-af="${name}"]`);

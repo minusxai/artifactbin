@@ -74,5 +74,6 @@
   "services/utils/src/__tests__/artifact-name.test.ts",
   "services/utils/src/__tests__/escape.test.ts",
   "services/utils/src/__tests__/sha256.test.ts",
-  "services/app/lib/artifacts/__tests__/reservation-pool.test.ts"
+  "services/app/lib/artifacts/__tests__/reservation-pool.test.ts",
+  "services/app/lib/html-page/__tests__/interface.test.ts"
 ]
