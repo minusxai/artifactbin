@@ -294,6 +294,3 @@ describe('comment writes through a restart', () => {
       expect(seen).toEqual([true, false, true, false]);
     });
   });
-
-describe('artifactRequests', () => {
-});

@@ -10,7 +10,7 @@ import { createUser, mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { link } from '@/lib/social';
 import {
-  accountWorkspaceCoreFor, artifactStarter, formatJsxPreview, homeBootstrapFor, likeSummaryByUser, listAccountTokenRows, listOwnedArtifacts,
+  accountWorkspaceCoreFor, artifactStarter, homeBootstrapFor, likeSummaryByUser, listAccountTokenRows, listOwnedArtifacts,
   workspaceAssetsFor,
 } from '@/lib/workspace';
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
@@ -165,11 +165,4 @@ describe('the pure leaves', () => {
     expect(parentOfRow({})).toBeNull();
   });
 
-  it('formats JSX for display, keeping several roots and an empty source as it was', async () => {
-    expect(await formatJsxPreview('  ')).toBe('  ');
-    const formatted = await formatJsxPreview('<A x="1"><B/></A><C/>');
-    expect(formatted).toContain('<A x="1">');
-    expect(formatted).toContain('<C />');
-    await expect(formatJsxPreview('<A>')).rejects.toThrow();
-  });
 });

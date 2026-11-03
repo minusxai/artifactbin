@@ -322,7 +322,6 @@
    "services/app/lib/__tests__/export-verdicts.test.ts": 9342,
    "services/app/lib/__tests__/file-id.test.ts": 43,
    "services/app/lib/__tests__/font-cache-headers.test.ts": 3836,
-   "services/app/lib/__tests__/format-jsx-preview.test.ts": 27,
    "services/app/lib/__tests__/insecure-context-ids.test.ts": 64,
    "services/app/lib/__tests__/live-stream.test.ts": 29,
    "services/app/lib/__tests__/login-href.test.ts": 8,

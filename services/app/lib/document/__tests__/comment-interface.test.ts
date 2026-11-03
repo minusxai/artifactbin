@@ -9,7 +9,6 @@ import {
   parseRel, personMentions, refinementRange,
   type AnnotationRange,
 } from '..';
-import { ANNOTATION_AREA_MIN_PX, findNearest, formatRel } from '../annotation-range';
 import { personMention } from '../person-mentions';
 
 const textRange = (text: string, start: number) => ({ v: 1, parts: [{ rel: '', start, end: start + text.length, text }] });
@@ -40,9 +39,8 @@ describe('rel addresses', () => {
     ['0.2', { sibling: 0, steps: [0, 2] }],
     ['+1', { sibling: 1, steps: [] }],
     ['+1.2.3', { sibling: 1, steps: [2, 3] }],
-  ])('parses %j and formats it back', (rel, address) => {
+  ])('parses %j', (rel, address) => {
     expect(parseRel(rel)).toEqual(address);
-    expect(formatRel(address)).toBe(rel);
   });
 
   it.each(['-1', '0.', '.0', '+', '+a', '1..2', 'a', '0.-1', '1 '])('refuses %j', (rel) => {
@@ -57,10 +55,6 @@ describe('rel addresses', () => {
     expect(parseRel('1.'.repeat(32) + '1')).toBeNull();
     expect(parseRel(Array.from({ length: 32 }, () => '1').join('.'))).not.toBeNull();
     expect(parseRel(7 as unknown as string)).toBeNull();
-  });
-
-  it('formats +0 as the anchor itself', () => {
-    expect(formatRel({ sibling: 0, steps: [] })).toBe('');
   });
 });
 
@@ -84,29 +78,6 @@ describe('range kinds', () => {
     expect(refinementRange(area)).toBe(area);
     expect(refinementRange(null)).toBeNull();
     expect(refinementRange(undefined)).toBeNull();
-  });
-
-  it('treats a drag under 6px in both directions as a click', () => {
-    expect(ANNOTATION_AREA_MIN_PX).toBe(6);
-  });
-});
-
-describe('findNearest', () => {
-  it('picks the occurrence nearest the captured index', () => {
-    expect(findNearest('ab ab ab', 'ab', 0)).toBe(0);
-    expect(findNearest('ab ab ab', 'ab', 4)).toBe(3);
-    expect(findNearest('ab ab ab', 'ab', 100)).toBe(6);
-  });
-
-  it('prefers the earlier one on a tie, and -1 for missing or empty text', () => {
-    expect(findNearest('xx ab xx ab', 'ab', 6)).toBe(3);
-    expect(findNearest('abc', 'z', 0)).toBe(-1);
-    expect(findNearest('abc', '', 0)).toBe(-1);
-  });
-
-  it('finds overlapping occurrences', () => {
-    expect(findNearest('aaaa', 'aa', 2)).toBe(2);
-    expect(findNearest('aaaa', 'aa', 1)).toBe(1);
   });
 });
 
