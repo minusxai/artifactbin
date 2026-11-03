@@ -37,6 +37,7 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'scripts/ci/npm-acceptance/', repo: SERVER, holds: ['package.json', 'package-lock.json'], usedAt: ['.github/workflows/ci.yml:458-459 (cache path, hashFiles of its lock)', '.github/workflows/ci.yml:461 (`npm ci --prefix scripts/ci/npm-acceptance`)'] },
   { path: 'scripts/gate-cli-conformance.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:680 (`node toolkit/scripts/gate-cli-conformance.mjs`)'] },
   { path: 'scripts/lib/ci-elapsed.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:734 (sparse-checkout)', '.github/workflows/ci.yml:746 (run)', 'test/tested-images.test.mjs:249'] },
+  { path: 'services/app/testing/native-acceptance.mjs', repo: SERVER, usedAt: ['scripts/accept-native-html.mjs (imports the scenario from toolkit/services/app/testing/native-acceptance.mjs)', '.github/workflows/ci.yml native-html (runs it)'] },
   { path: 'scripts/build/build-islands.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:15 (run from toolkit/services/app)', 'test/source-runtime.test.mjs:39', 'test/image-inputs.test.mjs:63'] },
   { path: 'scripts/lib/dev-env.mjs', repo: EVALS, usedAt: ['lib/dev-server.ts:27 (imports declaredPort, loadDotEnv, resolvePort)'] },
   { path: 'scripts/lib/dev-runner.mjs', repo: EVALS, usedAt: ['lib/dev-server.ts:68, main.ts:824, __tests__/dev-server.test.ts:98 (not imported: evals reads login codes where it points the dev server)'] },
@@ -66,7 +67,7 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(10);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(11);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(6);
   });
 
