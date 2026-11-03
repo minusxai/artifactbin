@@ -16,7 +16,7 @@ import { resetAllowances } from '@/lib/allowances';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
-import { getDb, resetDb } from '@/lib/platform/db';
+import { getDb, resetDb, type Queryable } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export';
 import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
@@ -277,6 +277,28 @@ export async function setDatasetPolicy(actor: AccessActor, id: string, policy: u
   if (response.status === 409) return { conflict: true };
   if (response.status !== 200) throw new Error(body.detail ?? `policy refused (${response.status})`);
   return body;
+}
+
+/**
+ * EVERY STATEMENT THE DATABASE SEES while `work` runs, for query-budget tests: their text (inside transactions
+ * too), how many transactions `work` opened, and the statement count `measureQueries` reports.
+ */
+export async function recordStatements<T>(work: () => Promise<T>): Promise<{ value: T; sql: string[]; transactions: number; count: number }> {
+  const db = await getDb();
+  const query = db.query.bind(db), transaction = db.transaction.bind(db);
+  const sql: string[] = [];
+  let transactions = 0;
+  db.query = (async <R,>(text: string, params?: unknown[]) => { sql.push(text); return query<R>(text, params); }) as typeof db.query;
+  db.transaction = (async <R,>(fn: (tx: Queryable) => Promise<R>) => {
+    transactions++;
+    return transaction((tx) => fn({ query: async <U,>(text: string, params?: unknown[]) => { sql.push(text); return tx.query<U>(text, params); } }));
+  }) as typeof db.transaction;
+  try {
+    // The index, asked late: a test file's vi.mock of a platform module must still reach it.
+    const { measureQueries } = await import('@/lib/platform');
+    const { value, stats } = await measureQueries(work);
+    return { value, sql, transactions, count: stats.count };
+  } finally { db.query = query; db.transaction = transaction; }
 }
 
 /** Admit fixtures through verified-email acceptance, never role PUT. */

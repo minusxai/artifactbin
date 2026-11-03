@@ -15,9 +15,8 @@ import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { createUser, ensureUsername, mintToken } from '@/lib/accounts';
 import { link } from '@/lib/social';
-import { getDb, measureQueries } from '@/lib/platform';
-import type { Queryable } from '@/lib/platform/db';
-import { useAppHarness } from '@/__tests__/harness';
+import { getDb } from '@/lib/platform';
+import { recordStatements, useAppHarness } from '@/__tests__/harness';
 import { BOOTSTRAP_ID, createAppServer } from '@/server/app';
 
 useAppHarness();
@@ -51,18 +50,6 @@ async function view(door: Door, id: string, actor: Actor | null, search = ''): P
   return { status: response.status, page: inlined(await response.text())?.artifact ?? null };
 }
 
-/** Every statement the database sees while `work` runs. */
-async function recorded<T>(work: () => Promise<T>) {
-  const db = await getDb();
-  const query = db.query.bind(db), transaction = db.transaction.bind(db);
-  const sql: string[] = [];
-  db.query = (async <R,>(text: string, params?: unknown[]) => { sql.push(text); return query<R>(text, params); }) as typeof db.query;
-  db.transaction = (async <R,>(fn: (tx: Queryable) => Promise<R>) => transaction((tx) => fn({ query: async <U,>(text: string, params?: unknown[]) => { sql.push(text); return tx.query<U>(text, params); } }))) as typeof db.transaction;
-  try {
-    const { value, stats } = await measureQueries(work);
-    return { value, sql, count: stats.count };
-  } finally { db.query = query; db.transaction = transaction; }
-}
 const userKindReads = (sql: string[]) => sql.filter((text) => /SELECT kind FROM users/i.test(text)).length;
 
 /**
@@ -103,7 +90,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const w = await world();
     const actor = session(w.viewer);
     expect((await view(door, w.doc, actor)).status).toBe(200);
-    const { value, sql, count } = await recorded(() => view(door, w.doc, actor));
+    const { value, sql, count } = await recordStatements(() => view(door, w.doc, actor));
     console.info('[budget] %s door, signed-in non-owner page view: statements=%d user-kind reads=%d', door, count, userKindReads(sql));
     expect(value.status).toBe(200);
     const page = value.page!;
@@ -121,7 +108,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
   it('for an anonymous reader: no role facts, the social chrome in one statement', async () => {
     const w = await world();
     // A query string keeps the anonymous shell cache out of it: this is the view it would have to render.
-    const { value, count } = await recorded(() => view(door, w.anonymousDoc, null, '?budget=1'));
+    const { value, count } = await recordStatements(() => view(door, w.anonymousDoc, null, '?budget=1'));
     console.info('[budget] %s door, anonymous page view: statements=%d', door, count);
     expect(value.status).toBe(200);
     const page = value.page!;
@@ -137,7 +124,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const w = await world();
     const actor = session(w.author);
     expect((await view(door, w.doc, actor)).status).toBe(200);
-    const { value, count } = await recorded(() => view(door, w.doc, actor));
+    const { value, count } = await recordStatements(() => view(door, w.doc, actor));
     console.info('[budget] %s door, owner page view: statements=%d', door, count);
     expect(value.status).toBe(200);
     const page = value.page!;
