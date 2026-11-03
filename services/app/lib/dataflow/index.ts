@@ -2,7 +2,7 @@
 export type { Row, Scalar, TableResult } from './dataflow';
 export type { ColumnType, DatasetColumn } from './dataset-shape';
 export { inferColumns } from './dataset-shape';
-export type { CompiledDataflow, CompiledNotify } from './compiled-dataflow';
+export type { CompiledDataflow } from './compiled-dataflow';
 export { EMPTY_COMPILED_DATAFLOW } from './compiled-dataflow';
 
 export { scalarMatches } from './dataflow';

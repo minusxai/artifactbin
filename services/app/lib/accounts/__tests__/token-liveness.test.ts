@@ -1,14 +1,12 @@
 /**
  * ONE TOKEN-LIVENESS RULE, TWO CLOCKS. `now()` is the transaction's start; `clock_timestamp()` is the moment the
  * statement runs. A request's own lookup is one statement, so either reads the same; a fence that must still hold
- * when its transaction commits (the notification principal, read inside a dataset write's commit after its row
- * locks) reads the wall clock, so a token that expired while the transaction waited is refused.
+ * when its transaction commits reads the wall clock, so a token that expired while the transaction waited is refused.
  */
 import { describe, expect, it } from 'vitest';
 import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { LIVE_TOKEN_SQL } from '@/lib/accounts/tokens';
 import { liveTokenSql } from '@/lib/accounts';
-import { notificationPrincipal } from '@/lib/notifications';
 import { getDb } from '@/lib/platform';
 import type { Queryable } from '@artifactbin/contracts';
 
@@ -30,15 +28,5 @@ describe('token liveness', () => {
       return { start: await live(tx, LIVE_TOKEN_SQL, token.id), wall: await live(tx, liveTokenSql('clock_timestamp()'), token.id) };
     });
     expect(seen).toEqual({ start: true, wall: false });
-  });
-
-  it('the notification principal refuses a token that expired after its transaction began', async () => {
-    const token = await mintAccountToken('liveness_principal');
-    const db = await getDb();
-    await expect(db.transaction(tx => notificationPrincipal(tx, { kind: 'token', id: token.id }))).resolves.toMatchObject({ actor: { userId: token.userId, tokenId: token.id } });
-    await expect(db.transaction(async tx => {
-      await expireSinceStart(tx, token.id);
-      return notificationPrincipal(tx, { kind: 'token', id: token.id });
-    })).rejects.toThrow('notification_access_revoked');
   });
 });

@@ -9,7 +9,7 @@ import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
-import { link, seedOwnerJoin } from '@/lib/social';
+import { link } from '@/lib/social';
 import {changeMembership,getArtifactById,invitePeople} from '@/lib/artifacts';
 import {recordEvent} from '@/lib/platform';
 import {membershipInbox,recordNotification,updateMembershipInbox} from '@/lib/notifications';
@@ -115,13 +115,3 @@ it('auto-accepts a mention from someone the recipient follows unless they turned
  await expect(db.transaction(tx=>invitePeople(tx,row,alice,['dave'],'node:other'))).rejects.toThrow('Person is not eligible for this invitation');
 });
 const carol=()=>identityForUser('carol',null,'carol@example.test');
-
-it('lists a mutation run beside member notifications and reads it by id while the recipient stays joined',async()=>{
- await db.query("INSERT INTO notification_jobs(id,mutation_run_id,document_id,input) VALUES('job','run','doc',$1::jsonb)",[JSON.stringify({origin:{mutationName:'change'},bindings:{userId:'alice'}})]);
- await db.query("INSERT INTO mutation_notifications(id,job_id,mutation_run_id,recipient_id,artifact_id,initiator,messages,sources) VALUES('mn','job','run','bob','doc',$1::jsonb,'[\"Done\"]','[]')",[JSON.stringify({principal:{kind:'user',id:'alice'},execution:'human'})]);
- expect(await ids()).toEqual([]);
- await seedOwnerJoin(db,'doc','bob');
- const inbox=await membershipInbox(bob);
- expect(inbox.notifications).toEqual([expect.objectContaining({id:'mn',kind:'mutation',messages:['Done'],mutation_name:'change',actor:expect.objectContaining({kind:'user',userId:'alice',viaAgent:false})})]);
- expect((await updateMembershipInbox(bob,{read:'mn',revision:1})).unread).toBe(0);
-});

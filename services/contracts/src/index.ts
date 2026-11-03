@@ -40,7 +40,7 @@ export * from './document-operation';
 export * from './document-update';
 export type { StoredMermaidImage } from './mermaid-image';
 
-export * from './mutation-notifications';
+export * from './mutation-operations';
 
 export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunWait, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
 

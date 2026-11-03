@@ -1,4 +1,3 @@
-import {mutationNotificationInbox} from './mutation-inbox';
 import { JOIN_RELATIONS, dismissPendingRelations } from '@/lib/social';
 import { setAutoAcceptMentions } from '@/lib/accounts';
 import {canAnnotate} from '@artifactbin/contracts';
@@ -25,10 +24,8 @@ export async function membershipInbox(actor:AccessActor,offset=0,onlyId:string|n
  const notifications=[];
  for(const n of rows){if(!n.artifact_id){if(n.kind==='follow'||n.source?.startsWith('group:'))notifications.push(n);continue;}const artifact=artifacts.get(n.artifact_id);if(artifact&&await readThrough(db,artifact,actor,facts)&&(!n.source?.startsWith('comment:')||canAnnotate(await effectiveRole(artifact,actor,facts))))notifications.push(n);}
  await facts.settle();
- const mutationItems=await mutationNotificationInbox(db,actor.userId,onlyId);
- const combined=[...notifications,...mutationItems].sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()||a.id.localeCompare(b.id));
  const blocks=(await db.query<{user_id:string;username:string|null}>('SELECT b.blocked_user_id AS user_id,u.username FROM user_blocks b JOIN users u ON u.id=b.blocked_user_id WHERE b.user_id=$1',[actor.userId])).rows;
- return {autoAccept:user.auto_accept_mentions,notifications:combined.slice(offset,offset+50),unread:combined.filter(n=>!n.read_at).length,next:combined.length>offset+50?offset+50:null,blocks};
+ return {autoAccept:user.auto_accept_mentions,notifications:notifications.slice(offset,offset+50),unread:notifications.filter(n=>!n.read_at).length,next:notifications.length>offset+50?offset+50:null,blocks};
 }
 export async function updateMembershipInbox(actor:AccessActor,input:{autoAccept?:boolean;read?:string;readAll?:boolean;revision?:number;block?:string;unblock?:string}){
  if(!actor.userId)throw new MembershipError('Sign in to update notifications');
@@ -38,15 +35,12 @@ export async function updateMembershipInbox(actor:AccessActor,input:{autoAccept?
   if(input.autoAccept!==undefined)await setAutoAcceptMentions(tx,actor.userId!,input.autoAccept);
   if(input.readAll){
    // Acknowledge the current revisions across the whole inbox, including unloaded pages.
-   const changed:Array<{id:string;revision:number}>=[];
-   for(const table of ['member_notifications','mutation_notifications'] as const)changed.push(...(await tx.query<{id:string;revision:number}>(`UPDATE ${table} SET seen_revision=revision,read_at=now() WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL) RETURNING id,revision`,[actor.userId])).rows);
+   const changed=(await tx.query<{id:string;revision:number}>('UPDATE member_notifications SET seen_revision=revision,read_at=now() WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL) RETURNING id,revision',[actor.userId])).rows;
    await notificationsChanged(tx,actor.userId!,changed,'read');
   }
   if(input.read){
    const changed=await tx.query<{revision:number}>(`UPDATE member_notifications SET seen_revision=greatest(seen_revision,least(revision,$3)),read_at=CASE WHEN revision<=$3 THEN now() ELSE read_at END WHERE id=$1 AND recipient_id=$2 AND seen_revision<least(revision,$3) RETURNING revision`,[input.read,actor.userId,input.revision??1]);
    if(changed.rows[0])await notificationChanged(tx,input.read,actor.userId!,changed.rows[0].revision,'read');
-   const mutation=await tx.query<{revision:number}>(`UPDATE mutation_notifications SET seen_revision=greatest(seen_revision,least(revision,$3)),read_at=CASE WHEN revision<=$3 THEN now() ELSE read_at END WHERE id=$1 AND recipient_id=$2 AND seen_revision<least(revision,$3) RETURNING revision`,[input.read,actor.userId,input.revision??1]);
-   if(mutation.rows[0])await notificationChanged(tx,input.read,actor.userId!,mutation.rows[0].revision,'read');
   }
   if(input.block){await tx.query('INSERT INTO user_blocks(user_id,blocked_user_id) SELECT $1,id FROM users WHERE id=$2 AND id<>$1 ON CONFLICT DO NOTHING',[actor.userId,input.block]);await dismissPendingRelations(tx,actor.userId!,input.block);}
   if(input.unblock)await tx.query('DELETE FROM user_blocks WHERE user_id=$1 AND blocked_user_id=$2',[actor.userId,input.unblock]);

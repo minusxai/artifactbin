@@ -12,8 +12,7 @@ const actor = identityForUser(RECIPIENT.id, null, RECIPIENT.email);
 /**
  * The seed's rules, restated independently of the inbox: which notifications the recipient may see.
  * Access kinds rotate by i%6 (0 unlisted, 1 named commenter share, 2 group viewer, 3 none, 4 public
- * commenter link, 5 own); comments need a commenter role, mutations an explicit accepted join and
- * readable sources.
+ * commenter link, 5 own); comments need a commenter role.
  */
 function expectedInbox(from: number, to: number) {
   const items: Array<{ id: string; at: number; unread: boolean }> = [];
@@ -24,7 +23,6 @@ function expectedInbox(from: number, to: number) {
     if (readable && i % 7 !== 0 && [1, 4, 5].includes(kind)) items.push({ id: `vol-c${i}`, at, unread: i % 3 !== 0 });
     if (readable && i % 8 !== 0) items.push({ id: `vol-m${i}`, at: at + minute, unread: true });
     if (i % 5 === 0 && !blocked) items.push({ id: `vol-f${i}`, at, unread: true });
-    if (readable && i % 10 !== 8 && i % 10 !== 9 && i % 9 !== 0) items.push({ id: `vol-n${i}`, at: at + 2 * minute, unread: i % 4 !== 0 });
   }
   items.sort((a, b) => b.at - a.at || a.id.localeCompare(b.id));
   return { ids: items.map((item) => item.id), unread: items.filter((item) => item.unread).length };
@@ -70,7 +68,7 @@ it('marks everything read with one event per notification in a number of stateme
     const events = (await db.query<{ notification_id: string; change: string }>("SELECT envelope->'payload'->>'notification_id' AS notification_id,envelope->'payload'->>'change' AS change FROM event_outbox WHERE envelope->>'verb'='notification_changed'")).rows;
     return { value, stats, events };
   };
-  const unreadIds = async () => (await db.query<{ id: string }>('SELECT id FROM member_notifications WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL) UNION ALL SELECT id FROM mutation_notifications WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL)', [RECIPIENT.id])).rows.map((row) => row.id).sort();
+  const unreadIds = async () => (await db.query<{ id: string }>('SELECT id FROM member_notifications WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL)', [RECIPIENT.id])).rows.map((row) => row.id).sort();
   await seedInboxVolume(db, base, 1, 30);
   let expected = await unreadIds();
   const small = await readAll();

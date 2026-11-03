@@ -5,7 +5,7 @@ export { loadDatasetRows, storeDatasetRows, storedRowStats } from './dataset-sto
 export { datasetCreateFields } from './dataset-usage';
 export { parseDatasetDefinition, serializeDatasetDefinition } from './definition';
 export { executeDocumentQueries } from './document-queries';
-export type { DocumentQuerySource, DocumentQuerySourceMode } from './document-queries';
+export type { DocumentQuerySourceMode } from './document-queries';
 export { DatasetError } from './errors';
 export { executeCatalog } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';

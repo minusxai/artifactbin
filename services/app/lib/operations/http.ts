@@ -1,7 +1,7 @@
 import { hostedAuthorization, hostedRefusal, hostedOperationCompleted } from '@/lib/authentication';
 import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, MembershipError, readableArtifact, refusingUnservable } from '@/lib/artifacts';
 import { holdsCreatingToken } from '@/lib/artifact-access';
-import { adaptMutationOperationReply, canWriteDataset, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
+import { adaptMutationOperationReply, canWriteDataset, normalizeMutationOperation } from '@/lib/document-data';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {ownedArtifactState} from '@/lib/workspace';
 /**
@@ -88,7 +88,7 @@ export async function runOperation(
     // Uniform for missing and inaccessible targets; no receipt was claimed.
     if(!await authorize(actor,input))return json({error:'not_found',admission_refused:true},404);
     const payload=name==='mutate_dataset'&&typeof input.name==='string'?normalizeMutationOperation({documentId:String(input.id),mutation:input.name,args:(input.args??{}) as Record<string,string|number|boolean|null>,...(input.row!==undefined?{row:input.row as Record<string,string|number|boolean|null>}:{}),...(input.value!==undefined?{value:input.value as string|number|boolean|null}:{}),...(typeof input.tz==='string'?{tz:input.tz}:{}),...(typeof input.expectedState==='string'?{expectedState:input.expectedState}:{})}):{name,input};
-    const saved=await durableMutation(actor,ctx.base,key,payload,receipt=>operation(name).run({...ctx,mutationReceipt:receipt},input),{initiator:mutationInitiator(actor,'agent',author.kind==='agent'?author.label:null)});
+    const saved=await durableMutation(actor,ctx.base,key,payload,receipt=>operation(name).run({...ctx,mutationReceipt:receipt},input));
     const result=adaptMutationOperationReply(saved,'api');
     const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
     return complete(opResponse({...result,...(terminal?{headers:{'X-Artifactbin-Mutation-Receipt':key}}:{})}));

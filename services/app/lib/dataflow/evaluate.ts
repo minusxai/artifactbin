@@ -41,8 +41,6 @@ export interface RunDataflowOptions {
   sourceQuery?: (query: CompiledQuery, params: Record<string, Scalar>, types: Record<string, ColumnType>, page?: QueryPage, timeoutMs?: number) => Promise<TableResult>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */
   values?: Record<string, Scalar>;
-  /** Trusted saved arguments for a headless execution; ordinary overrides remain declared-only. */
-  bindings?: { values: Record<string, Scalar>; types: Record<string, ColumnType> };
   /** Run only these queries (and what they read) — a re-run after a value change. */
   only?: Iterable<string>;
   /** The rows each query ships (DISPLAY_ROWS by default); a downstream query still reads the whole result. */
@@ -128,8 +126,8 @@ type PreparedRun = { state: DataflowState } | { run: EngineRun; imports: ImportT
 async function prepareRun(engine: DataflowEngine, flow: CompiledDataflow, imports: ImportTables, opts: RunDataflowOptions): Promise<PreparedRun> {
   const values = initialValues(flow);
   for (const [k, v] of Object.entries(opts.values ?? {})) if (Object.hasOwn(values, k)) values[k] = v;
-  const logical: Record<string, Scalar> = { ...values, ...opts.bindings?.values, ...platformValues({ userId: opts.userId ?? null, now: opts.now ?? new Date().toISOString(), tz: opts.tz ?? 'UTC' }) };
-  const types: Record<string, ColumnType> = { ...valueTypes(flow), ...opts.bindings?.types };
+  const logical: Record<string, Scalar> = { ...values, ...platformValues({ userId: opts.userId ?? null, now: opts.now ?? new Date().toISOString(), tz: opts.tz ?? 'UTC' }) };
+  const types: Record<string, ColumnType> = valueTypes(flow);
 
   const tables: DataflowState['tables'] = {};
   const errors: DataflowState['errors'] = {};

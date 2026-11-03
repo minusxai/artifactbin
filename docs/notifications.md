@@ -22,9 +22,8 @@ publisher persists facts in `events.events` and uses the delivery ledger for
 retryable subscribers. No new activity store, bus or activity-feed UI is added.
 Observational telemetry can still use best-effort `emit`.
 
-A human's own comment and membership actions stay silent. Existing stored mutation
-notification jobs retain their delivery and inspection paths; native HTML does not
-author `<Notify>` declarations. Agent replies notify the human account even
+A human's own comment and membership actions stay silent. Native HTML does not
+author `<Notify>` declarations, and dataset mutations notify nobody. Agent replies notify the human account even
 when they share an identity. Replies notify the thread's participants and saved
 mention recipients, excluding blocks. Reply plus resolution is one source event
 and one conversation notification per recipient. Reopening is a new event.
@@ -46,7 +45,7 @@ The live stream refreshes read, acceptance and removal state across tabs.
 
 Both surfaces offer **Mark all as read** while the inbox has unread items.
 `PATCH /api/my/people` with `{ "readAll": true }` acknowledges the signed-in
-account's current membership and mutation notification revisions in one
+account's current notification revisions in one
 transaction, including unloaded pages. It preserves history and pending
 invitations; later updates become unread again through the usual revision path.
 

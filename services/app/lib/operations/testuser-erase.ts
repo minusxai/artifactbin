@@ -7,7 +7,6 @@
  */
 import { TESTUSER_LIMITS } from '@artifactbin/contracts';
 import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
-import { eraseMutationNotifications, lockMutationNotificationAuthority } from '@/lib/notifications';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations';
 import { objectStore } from '@/lib/object-store';
 import { getDb, TABLES } from '@/lib/platform';
@@ -58,7 +57,6 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
   const db = await getDb();
   let picture: string | null = null;
   const erased = await db.transaction(async (tx) => {
-    await lockMutationNotificationAuthority(tx,'write');
     const user = await tx.query<{ id: string; image_key: string | null }>(
       "SELECT id, image_key FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
     );
@@ -66,7 +64,6 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
     picture = user.rows[0]!.image_key;
     const owned = await tx.query<{ id: string }>('SELECT id FROM artifacts WHERE user_id = $1', [testUserId]);
     const ids = owned.rows.map((row) => row.id);
-    await eraseMutationNotifications(tx,testUserId,ids);
     await expireCommentImagesFor(tx,testUserId,ids);
     await tx.query('DELETE FROM comment_reactions WHERE user_id=$1 OR comment_id IN (SELECT id FROM annotations WHERE author_user_id=$1 OR artifact_id=ANY($2::text[]))',[testUserId,ids]);
     await tx.query('DELETE FROM comment_reaction_events WHERE user_id=$1 OR artifact_id=ANY($2::text[]) OR comment_id IN (SELECT id FROM annotations WHERE author_user_id=$1)',[testUserId,ids]);

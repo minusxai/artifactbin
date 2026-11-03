@@ -11,8 +11,7 @@ it('pins context before work and reads the winning canonical receipt for first a
  const work=()=>durableMutation(actor,'http://localhost:5001','mxmx_test_saved_context',{mutation:'add'},async receipt=>{
   calls++;
   await pinMutationContext(receipt,{bindings:{n:7},revision:'old'});
-  expect(receipt.runId).not.toContain('mxmx_test_saved_context');
-  const success={datasetId:'dataset',datasetEditId:'edit',version:2,affected:1,rowCount:2,mutationRunId:receipt.runId};
+  const success={datasetId:'dataset',datasetEditId:'edit',version:2,affected:1,rowCount:2};
   await (await getDb()).transaction(tx=>completeDocumentMutationReceipt(tx,receipt,success));
   return {status:200,body:{wrongRouteShape:true}};
  });

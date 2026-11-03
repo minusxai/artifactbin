@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
-import { isMutationNotification, type InboxItem, type MemberNotificationItem, type MutationNotificationView } from '@artifactbin/contracts';
+import type { MemberNotificationItem } from '@artifactbin/contracts';
 import { timeAgo } from '../ui/ui';
 import { Button } from '../ui/Button';
 import { StatusMessage } from '../ui/StatusMessage';
@@ -37,15 +37,15 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
   const [busy, setBusy] = createSignal(false);
   const [actionError, setActionError] = createSignal('');
   const items = () => props.compact ? inbox.state()?.notifications.slice(0, 6) ?? [] : inbox.state()?.notifications ?? [];
-  const markRead = (item: InboxItem) => { void inbox.load({ read: item.id, revision: item.revision }); props.close?.(); };
+  const markRead = (item: MemberNotificationItem) => { void inbox.load({ read: item.id, revision: item.revision }); props.close?.(); };
   const markAllRead = async () => {
     if (busy()) return;
     setBusy(true); setActionError('');
     try { await inbox.load({ readAll: true }); }
     finally { setBusy(false); }
   };
-  const respond = async (item: InboxItem, action: 'accept' | 'approve' | 'dismiss') => {
-    if (isMutationNotification(item) || !item.artifact_id) return;
+  const respond = async (item: MemberNotificationItem, action: 'accept' | 'approve' | 'dismiss') => {
+    if (!item.artifact_id) return;
     setBusy(true); setActionError('');
     try {
       const response = await apiFetch(`/api/my/artifacts/${encodeURIComponent(item.artifact_id)}/members`, 'POST', { action, ...(item.direction === 'request' ? { userId: item.user_id } : {}) });
@@ -54,7 +54,6 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Could not update invitation'); }
     finally { setBusy(false); }
   };
-  const mutationSummary = (item: MutationNotificationView) => <a href={`/a/${item.artifact_id}`} onClick={() => markRead(item)} class="block break-words text-sm"><For each={item.messages}>{message => <span class="block">{message}</span>}</For></a>;
   const memberSummary = (item: MemberNotificationItem) => <>
     <a class="block break-words text-sm leading-5 text-fg hover:text-accent" href={destination(item)} onClick={() => markRead(item)}><span class="font-semibold">{senderLabel(item)}</span> {ACTION[item.kind] ?? 'mentioned you in'} <span class="font-semibold">{item.title ?? 'Untitled artifact'}</span></a>
     <Show when={item.created_at}><time dateTime={item.created_at} class="mt-1 block text-xs text-muted">{timeAgo(item.created_at!)}</time></Show>
@@ -68,7 +67,7 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
     <Show when={!inbox.state() && !inbox.error()}><StatusMessage kind="loading" class="p-4">Loading notifications…</StatusMessage></Show>
     <Show when={inbox.state() && !items().length}><div class="px-6 py-10 text-center"><Bell size={24} class="mx-auto mb-3 text-muted" /><p class="text-sm font-medium">You’re all caught up.</p><p class="mt-1 text-xs leading-5 text-muted">Invitations, replies and activity will appear here.</p></div></Show>
     <ul class="m-0 list-none divide-y divide-edge p-0"><For each={items()}>{item => <li data-notification-id={item.id} class={`relative flex gap-3 px-3 py-3.5 ${item.read_at ? '' : 'bg-accent-soft/40'}`}>
-      <div class="min-w-0 flex-1">{isMutationNotification(item) ? mutationSummary(item) : memberSummary(item)}</div>
+      <div class="min-w-0 flex-1">{memberSummary(item)}</div>
       <Show when={!item.read_at}><span aria-label="Unread" class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" /></Show>
     </li>}</For></ul>
     <Show when={!props.compact && inbox.state()?.next != null}><div class="border-t border-edge p-3 text-center"><Button size="sm" variant="secondary" onClick={() => void inbox.loadMore()}>Load more</Button></div></Show>

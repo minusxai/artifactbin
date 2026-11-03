@@ -1,9 +1,6 @@
 {
   "$comment": "Written by node scripts/ci/module-graph.mjs --write-allowed-tests. White-box tests (an unexported helper, a namespace to spy on) and the test harness and setup, which keep deep platform paths so a test file's vi.mock of them reaches the index: test file -> other modules' internal files it imports. The list only shrinks.",
   "testImports": {
-    "scripts/__tests__/postgres-notification-fixture.test.mjs": [
-      "../../services/app/lib/datasets/sql"
-    ],
     "scripts/__tests__/reserved-ids-postgres-proof.ts": [
       "@/lib/artifacts/identities"
     ],
@@ -47,9 +44,6 @@
     ],
     "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
       "../../html-components/markdown"
-    ],
-    "services/app/lib/notifications/__tests__/notification-jobs.test.ts": [
-      "@/lib/operations/testuser-erase"
     ],
     "services/app/lib/registered-page-queries/__tests__/adapter.test.ts": [
       "@/lib/page-graphql/registered-queries"
