@@ -16,12 +16,21 @@ import { getHtmlBackendVersion } from '@/lib/html-backends';
 import { localPageBackendCapability, pageBackendOperation } from '@/lib/page-operations';
 import { resolverDatasets } from '@/lib/page-graphql';
 
+/** Dataset executions caps.sql makes (its reads select `_id`), optionally held so concurrent calls overlap. */
+const reads = vi.hoisted(() => ({ count: 0, holdMs: 0 }));
+vi.mock('@/lib/datasets', async (original) => {
+  const datasets = await original<typeof import('@/lib/datasets')>();
+  return { ...datasets, executeCatalog: (async (...args: Parameters<typeof datasets.executeCatalog>) => {
+    if (args[1].includes('AS "_id"')) { reads.count++; if (reads.holdMs) await new Promise((resolve) => setTimeout(resolve, reads.holdMs)); }
+    return datasets.executeCatalog(...args);
+  }) as typeof datasets.executeCatalog };
+});
 vi.mock('@/lib/page-operations', async (original) => ({
   ...await original<typeof import('@/lib/page-operations')>(),
   compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { totals: Int }', compiled: source, secretBindings: [], secretHosts: {} }),
 }));
 useAppHarness();
-beforeEach(() => setSession(null));
+beforeEach(() => { setSession(null); reads.count = 0; reads.holdMs = 0; });
 
 type Person = Awaited<ReturnType<typeof person>>;
 async function person(name: string) {
@@ -189,4 +198,17 @@ it('remote callback: the caller comes from the signed pin, and a refusal reaches
   expect((await call(pin({ subject: f.owner.userId, role: 'owner' }), names)).body.rows).toHaveLength(3);
   expect(await call(pin(), names)).toEqual({ status: 400, body: { error: 'caller_unavailable: the run does not attest who called' } });
   expect(await call(pin({ subject: f.owner.userId, role: 'owner' }), { sql: 'DELETE FROM staff' })).toEqual({ status: 400, body: { error: expect.stringMatching(/^validation_failed: /) } });
+});
+
+it('shares one in-flight read of a revision under one role view between concurrent calls, never across callers', async () => {
+  const f = await fixture();
+  reads.holdMs = 300;
+  const query = { sql: 'SELECT count(*) AS n FROM staff' };
+  const [a, b] = await Promise.all([sql(f, owner(f), query), sql(f, owner(f), query)]);
+  expect([a.rows, b.rows]).toEqual([[{ n: 3 }], [{ n: 3 }]]);
+  expect(reads.count).toBe(1);
+  reads.count = 0;
+  const [mine, theirs] = await Promise.all([sql(f, owner(f), query), sql(f, { subject: f.viewer.userId, role: 'viewer' }, query)]);
+  expect([mine.rows, theirs.rows]).toEqual([[{ n: 3 }], [{ n: 2 }]]);
+  expect(reads.count).toBe(2);
 });

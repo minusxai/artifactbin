@@ -36,7 +36,7 @@ An anonymous caller refused a field that needs signed_in gets `Sign in required`
 every other refusal is `Not allowed`.
 
 A resolver declares its secrets as a map such as `{API_KEY: 'api.example.com'}` and gets `caps`
-with `fetch` and `query` only (below): `caps.fetch(url, {method, headers, body})` (`public-fetch.ts`).
+with `fetch`, `query` and `sql` only (below): `caps.fetch(url, {method, headers, body})` (`public-fetch.ts`).
 The app performs the request. It fills `{{NAME}}` in the URL (percent-encoded),
 header values and body only for a declared name whose bound host (exact, or any
 subdomain under one leading `*.`) matches the request host. Anything else is
@@ -79,6 +79,27 @@ receipt when the resolver passes one. A document is at most 16 KiB and an answer
 (`RESOLVER_LIMITS`); each call counts toward the 32-request limit. A
 resolver's live revision is a hash of the page's linked live dataset revisions
 (`lib/html-backends/live.ts`), so a dataset write refreshes its reads.
+
+## `caps.sql`
+
+`await caps.sql(sql, params?)` answers `{columns, rows}`; `caps.sql({queries, params, paramTypes, tables})`
+mirrors the SQL service's `RunInput` (queries in order, a later one reading an earlier result by name, inline
+author-typed `tables`) and answers `{[name]: {columns, rows} | {error}}` (`sql.ts`). It is READ-ONLY: it runs on
+the SQL service's `run` door, the one registered page queries use, which admits reads only; data changes only
+through `caps.query` mutations. A call mounts the linked datasets its SQL names (SQLite folds ASCII identifiers,
+so a link name absent from the text cannot be read): a single-table dataset is the table `<link>`, a multi-table
+one `<link>.<table>` (an attached schema, as the service mounts imports), each with `_id`, the row's
+generated-API id. Rows come from the same load `caps.query` uses (`lib/dataset-graphql` `readLinkedDatasetTables`
+over `loadLinked`: each dataset's role view for the caller through the page, `X-Hasura-Page-Id` the page), so
+filtered rows, hidden columns and unreadable datasets are absent. SQL can aggregate, so a mounted table whose
+rule for the caller lacks `allow_aggregations` refuses the call (`permission_denied`; owner and editor always
+may). Reads of one revision under one role view are shared while in flight (`lib/datasets` `createSharedReads`).
+Limits are the registered page queries' (`SQL_READ_LIMITS` in `services/contracts`): 10,000 input rows (inline
+and dataset together), a million cells and 8 MiB of input, 5 s per `run`, 20 s per call; the answer is bounded
+by `RESOLVER_LIMITS.queryResultBytes` and each call counts toward the 32-request limit. Refusals throw with
+`code` `validation_failed` (a bad argument or SQL, a write statement), `permission_denied`, `input_too_large`,
+`result_too_large`, `timeout`, `conflict`, `unavailable` or `caller_unavailable`. The local preview (`serve.mjs`)
+runs no resolvers.
 
 Author code runs in the existing bounded isolated runner, never in the app process.
 Imports use the runner compiler's fixed bundled allowlist:

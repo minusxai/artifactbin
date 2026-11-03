@@ -55,8 +55,8 @@ if(errors?.length)throw Error(errors[0].message);
   last sort key, so `offset` paging is stable. Read pages until one is shorter than `limit`.
 - `orders_by_pk(_id:ID!)` returns null when the row is missing or hidden from you.
 - `orders_aggregate{aggregate{count(columns,distinct) sum avg min max} nodes}` takes the same
-  arguments; it exists only when your rule allows aggregations. There is no group-by: group the
-  rows you read, or run one aggregate per group with `where`.
+  arguments; it exists only when your rule allows aggregations. For GROUP BY, joins or window
+  functions, read the rows with SQL in a resolver ([`caps.sql`](resolvers.md#capssql-read-only-sql)).
 - `where`: `_and _or _not`; per column `_eq _neq _gt _gte _lt _lte _in _nin _is_null`, plus
   `_like _ilike _nlike _nilike` on strings. `order_by`: `asc desc` and their `_nulls_first`/`_last`.
 
