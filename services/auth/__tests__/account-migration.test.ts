@@ -4,6 +4,7 @@ import {afterEach, beforeEach, expect, it} from 'vitest';
 import {pgliteDialect} from '../src/auth/pglite';
 import {createHumanAuth} from '../src/auth/human';
 import {assertHumanAccountSchema, migrateHumanAccountSchema} from '../src/auth/account-migration';
+import {migrationTarget} from '../scripts/migrate-account';
 
 let pg: PGlite;
 let db: Kysely<Record<string, unknown>>;
@@ -89,4 +90,17 @@ it.each([false, true])('startup refuses duplicate identities with nullable issue
   await expect(assertHumanAccountSchema(db)).rejects.toThrow('Duplicate authentication provider/account identities');
   expect(await schema()).toEqual(before);
   expect(await pg.query('SELECT * FROM auth.account ORDER BY id')).toEqual(rows);
+});
+
+it('operator migration targets the schema startup checks', async () => {
+  const url = 'postgres://reviewed.invalid/db';
+  expect(migrationTarget({AUTH__MIGRATION_DATABASE_URL:url})).toEqual({connectionString:url,schema:'auth'});
+  expect(() => migrationTarget({AUTH__SCHEMA:'deploy_auth'})).toThrow('AUTH__MIGRATION_DATABASE_URL');
+  const {schema} = migrationTarget({AUTH__MIGRATION_DATABASE_URL:url,AUTH__SCHEMA:'deploy_auth'});
+  expect(schema).toBe('deploy_auth');
+  await pg.exec(`CREATE SCHEMA deploy_auth; CREATE TABLE deploy_auth.account (id text PRIMARY KEY, "providerId" text NOT NULL, "accountId" text NOT NULL, issuer text NOT NULL);
+    CREATE UNIQUE INDEX "account_issuer_accountId_uidx" ON deploy_auth.account (issuer, "accountId")`);
+  await expect(assertHumanAccountSchema(db, schema)).rejects.toThrow('Startup never applies this migration');
+  expect(await migrateHumanAccountSchema(db, {...options, schema})).toEqual({changed:true});
+  await expect(assertHumanAccountSchema(db, schema)).resolves.toBeUndefined();
 });
