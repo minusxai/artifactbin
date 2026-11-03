@@ -47,7 +47,11 @@ describe('isForbiddenIp — IPv6', () => {
     'ff02::1',                              // multicast
     '::ffff:127.0.0.1', '::ffff:10.0.0.1',  // v4-mapped: the classic bypass
     '::ffff:169.254.169.254',
-    '64:ff9b::a00:1',                       // NAT64 — embeds a v4 we cannot see
+    '64:ff9b::a00:1',                       // NAT64 — judged by the v4 it embeds
+    '::ffff:7f00:1', '::ffff:a9fe:a9fe',    // v4-mapped in hex, the form WHATWG URL normalizes [::ffff:127.0.0.1] to
+    '::127.0.0.1', '::7f00:1',              // v4-compatible
+    '2002:7f00:1::1', '2001:0:4136::1',     // 6to4 and Teredo embed a v4 too
+    'fec0::1', '100::1', '3fff::1',         // site-local, discard, documentation
   ];
   it.each(forbidden)('refuses %s', (ip) => expect(isForbiddenIp(ip)).toBe(true));
 
@@ -92,6 +96,13 @@ describe('parseWebUrl', () => {
   it('sees through IPv4 obfuscation, because WHATWG normalizes it before we check', () => {
     // 0x7f000001, 2130706433 and 017700000001 are all 127.0.0.1.
     for (const host of ['0x7f000001', '2130706433', '0177.0.0.1', '127.1']) {
+      expect(() => parseWebUrl(`https://${host}/x`, STRICT)).toThrow(WebIngestError);
+    }
+  });
+
+  it('refuses a v4-mapped loopback literal, which the URL parser rewrites to hex', () => {
+    expect(new URL('https://[::ffff:127.0.0.1]/x').hostname).toBe('[::ffff:7f00:1]');
+    for (const host of ['[::ffff:127.0.0.1]', '[::ffff:169.254.169.254]', '[::ffff:10.0.0.1]', '[::127.0.0.1]']) {
       expect(() => parseWebUrl(`https://${host}/x`, STRICT)).toThrow(WebIngestError);
     }
   });

@@ -5,6 +5,10 @@
  * cleared, and never read back (the server returns names only). When the resolver declares `test`, Test connection
  * runs `{ <name> { test } }` as the owner against the listed revision and shows the string, or the refusal code with
  * the owner-only detail.
+ *
+ * A name bound to `postgres` is a database connection: host, port, database, user and password, saved together
+ * (write-only, like a secret value). Its password enters the resolver's sandboxed run, so the hint says to use a
+ * read-only database user.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
@@ -61,6 +65,51 @@ function SecretRow(props: { resolver: PageResolver; name: string; host: string; 
   </ListRow>;
 }
 
+const CONNECTION_FIELDS = [['host', 'Host', 'text'], ['port', 'Port', 'number'], ['database', 'Database', 'text'], ['user', 'User', 'text'], ['password', 'Password', 'password']] as const;
+type ConnectionField = typeof CONNECTION_FIELDS[number][0];
+
+function ConnectionRow(props: { resolver: PageResolver; name: string; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
+  const [values, setValues] = createSignal<Record<ConnectionField, string>>({ host: '', port: '5432', database: '', user: '', password: '' });
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal('');
+  const complete = () => CONNECTION_FIELDS.every(([key]) => values()[key].trim() !== '');
+  const send = async (method: 'PUT' | 'DELETE') => {
+    setBusy(true); setError('');
+    try {
+      const v = values();
+      const body = method === 'PUT' ? { name: props.name, connection: { host: v.host.trim(), port: Number(v.port), database: v.database, user: v.user, password: v.password } } : { name: props.name };
+      const response = await fetch(`/api/my/resolvers/${encodeURIComponent(props.resolver.backendId)}/${encodeURIComponent(props.resolver.version)}/secrets`, { method, headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const answer = await response.json().catch(() => null) as { names?: string[]; error?: string } | null;
+      if (!response.ok || !answer?.names) throw new Error(answer?.error ?? 'backend_secret_failed');
+      if (method === 'PUT') setValues({ ...v, password: '' });
+      props.onNames(answer.names);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'backend_secret_failed'); }
+    finally { setBusy(false); }
+  };
+  return <ListRow class="items-end">
+    <div class="grid min-w-40 gap-1">
+      <span class="font-mono text-sm text-fg">{props.name}</span>
+      <span class="font-sans text-xs text-muted">Postgres connection</span>
+      <span><Badge tone={props.set ? 'accent' : 'dim'}>{props.set ? 'Set' : 'Not set'}</Badge></span>
+    </div>
+    <form class="grid flex-1 gap-2" onSubmit={(event) => { event.preventDefault(); if (complete()) void send('PUT'); }}>
+      <div class="flex flex-wrap items-end gap-2">
+        <For each={CONNECTION_FIELDS}>{([key, label, type]) =>
+          <Field label={`${label} for ${props.name}`} class="min-w-32 flex-1">
+            <Input type={type} autocomplete={type === 'password' ? 'new-password' : 'off'} spellcheck={false} value={values()[key]} disabled={busy()} onInput={(event) => setValues({ ...values(), [key]: event.currentTarget.value })} />
+          </Field>}
+        </For>
+      </div>
+      <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
+      <p class="m-0 font-sans text-xs text-muted">Use a read-only database user: the password reaches the resolver's sandboxed run, and page editors can read it. TLS with full certificate verification is required.</p>
+      <div class="flex gap-2">
+        <Button type="submit" size="md" disabled={busy() || !complete()}>Save connection</Button>
+        <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove connection</Button></Show>
+      </div>
+    </form>
+  </ListRow>;
+}
+
 function ResolverSection(props: { id: string; revision: string; resolver: PageResolver }): JSX.Element {
   const [set, setSet] = createSignal(props.resolver.set);
   const [testing, setTesting] = createSignal(false);
@@ -79,8 +128,12 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
   return <Panel label={`Resolver ${props.resolver.name}`} padding="sm" title={<span class="font-mono">{props.resolver.name}</span>}
     actions={<Show when={props.resolver.test}><Button variant="secondary" size="sm" disabled={testing()} onClick={() => void test()}>Test connection</Button></Show>}>
     <Show when={names().length} fallback={<StatusMessage kind="empty">This resolver declares no secrets.</StatusMessage>}>
-      <ul class="m-0 list-none p-0"><For each={names()}>{(name) =>
-        <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={(next) => { setSet(next); setOutcome(null); }} />}
+      <ul class="m-0 list-none p-0"><For each={names()}>{(name) => {
+        const onNames = (next: string[]) => { setSet(next); setOutcome(null); };
+        return props.resolver.secrets[name] === 'postgres'
+          ? <ConnectionRow resolver={props.resolver} name={name} set={set().includes(name)} onNames={onNames} />
+          : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
+      }}
       </For></ul>
     </Show>
     <Show when={testing()}><StatusMessage kind="loading">Testing the connection…</StatusMessage></Show>

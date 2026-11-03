@@ -11,7 +11,7 @@ if (!config.secret || config.secret.length < 32 || !config.image || !config.appU
     throw Error('Standalone runner requires CONTRACT__ACTOR_SECRET (32+ characters), RUNNER__WORKER_IMAGE and RUNNER__ARTIFACTBIN_BASE_URL');
 const db = new PGlite(config.dataDir);
 const forward = overHttp(config.appUrl, config.secret);
-const runner = await createRunner({ db, dockerImage: config.image, maxConcurrent: config.concurrent, capabilities: hostCapabilities({ artifactbin: remoteArtifactbin(config.appUrl, forward) }) });
+const runner = await createRunner({ db, dockerImage: config.image, maxConcurrent: config.concurrent, database: { allowLoopback: config.databaseLoopback }, capabilities: hostCapabilities({ artifactbin: remoteArtifactbin(config.appUrl, forward) }) });
 const server = serve({ fetch: runnerHttp(runner, config.secret).fetch, hostname: '0.0.0.0', port: config.port });
 let closing = false;
 async function close() { if (closing)

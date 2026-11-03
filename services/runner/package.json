@@ -7,6 +7,8 @@
     ".": "./src/index.ts",
     "./local": "./src/local.ts",
     "./capabilities": "./src/capabilities.ts",
+    "./database-tunnel": "./src/database-tunnel.ts",
+    "./worker-database": "./src/worker-database.mjs",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {
@@ -16,6 +18,7 @@
     "core-js": "3.45.1",
     "esbuild": "0.28.2",
     "fast-text-encoding": "1.0.6",
-    "isolated-vm": "5.0.4"
+    "isolated-vm": "5.0.4",
+    "postgres": "3.4.9"
   }
 }

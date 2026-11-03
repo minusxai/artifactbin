@@ -8,5 +8,7 @@ export function runnerConfig(source: Record<string, string | undefined>) {
     const dataDir = env.env('RUNNER', 'DATA_DIR') ?? './data/runner';
     const secret = env.env('CONTRACT', 'ACTOR_SECRET');
     const appUrl = env.env('RUNNER', 'ARTIFACTBIN_BASE_URL');
-    return { image, port, dataDir, secret, appUrl, concurrent, names: env.namesRead() };
+    /** Development only: resolver database tunnels may reach loopback and skip TLS. Never set in production. */
+    const databaseLoopback = env.env('RUNNER', 'DATABASE_LOOPBACK') === 'true';
+    return { image, port, dataDir, secret, appUrl, concurrent, databaseLoopback, names: env.namesRead() };
 }

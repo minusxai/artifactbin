@@ -1,10 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { RESOLVER_LIMITS, type RunStart, type RunWait, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
+import { RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type RunStart, type RunWait, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
 import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
 import { createWorkerPool, startWorker, type WorkerMessage } from './worker-pool';
+import { createDatabaseTunnels, type DatabaseTunnelOptions, type RunTunnels } from './database-tunnel';
 const worker = fileURLToPath(new URL('./runner-worker.mjs', import.meta.url));
 const defaults: RunnerLimits = { timeoutMs: 30000, cpuMs: 200, memoryMiB: 64, maxRequests: 100, maxOutputBytes: RESOLVER_LIMITS.outputBytes };
 const terminal = (s: string) => !['queued', 'running'].includes(s);
@@ -29,6 +30,8 @@ export interface RunnerOptions {
      */
     prestartedWorkers?: number;
     ceilings?: Partial<RunnerLimits>;
+    /** `caps.postgres` tunnels (database-tunnel.ts). `allowLoopback` is controller configuration for development only. */
+    database?: DatabaseTunnelOptions;
 }
 interface Active {
     request: RunStart;
@@ -51,6 +54,8 @@ interface Active {
     tail: Promise<unknown>;
     requests: RunReceipt['requests'];
     usage: RunReceipt['usage'];
+    /** Database tunnels this run opened, created with its first granted connection. */
+    tunnels?: RunTunnels;
 }
 function json(value: unknown, max: number): string { const s = JSON.stringify(value); if (s === undefined || Buffer.byteLength(s) > max)
     throw Error('size_limit'); return s; }
@@ -74,6 +79,16 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
     const { db } = options;
     await initializeStore(db);
     const active = new Map<string, Active>();
+    const databases = createDatabaseTunnels(options.database);
+    /** The run's tunnels: counted against its owner and its page (the admitted principal's tenant). */
+    function tunnelsOf(id: string, r: Active): RunTunnels {
+        if (!r.tunnels) {
+            const input = r.request.input, principal = input && typeof input === 'object' && !Array.isArray(input) ? input.principal : null;
+            const page = principal && typeof principal === 'object' && !Array.isArray(principal) && typeof principal.tenant === 'string' ? principal.tenant : r.request.artifactId ?? id;
+            r.tunnels = databases.forRun({ owner: r.request.userId, page }, msg => { if (!r.finishing && r.child) r.child.stdin.write(JSON.stringify(msg) + '\n'); });
+        }
+        return r.tunnels;
+    }
     let closed = false;
     let admission = Promise.resolve();
     let pumping = false;
@@ -111,6 +126,8 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         run.finishing = (async () => {
             clearTimeout(run.timer);
             run.controller.abort();
+            // Every database socket closes with the run, before its worker is reaped or its receipt saved.
+            run.tunnels?.close();
             // A Docker daemon may still be creating the named container after its CLI is killed.
             // Fence creation before reaping; a terminal receipt must never precede cleanup.
             if (run.containerCreation) {
@@ -155,6 +172,11 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         const r = active.get(id);
         if (!r || r.finishing)
             return;
+        // Tunnel bytes are handled synchronously, in arrival order, before anything here awaits.
+        if (typeof msg.type === 'string' && msg.type.startsWith('tunnel_')) {
+            tunnelsOf(id, r).message(msg);
+            return;
+        }
         if (msg.type === 'ready') {
             r.child!.stdin.write(JSON.stringify({ type: 'run', bundle: r.bundle, input: r.request.input, env: r.request.env ?? {}, memoryMiB: r.limits.memoryMiB, cpuMs: r.limits.cpuMs }) + '\n');
             return;
@@ -202,6 +224,9 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 value = await options.capabilities({ runId: id, callId, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);
                 if (msg.operation === 'artifactbin.pageBackend.fetch')
                     value = takeFetchReceipt(value, Date.now() - started, r.requests);
+                // A named connection's target becomes a grant only this run's tunnels can name.
+                if (msg.operation === RESOLVER_DATABASE_OPERATION)
+                    value = tunnelsOf(id, r).grant(value);
             }
             if (!r.finishing)
                 r.child!.stdin.write(json({ type: 'response', id: callId, value }, RESOLVER_LIMITS.messageBytes) + '\n');

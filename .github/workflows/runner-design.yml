@@ -32,6 +32,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: docker build -f services/runner/Dockerfile -t artifactbin-worker .
+      # The resolver database test starts its own TLS PostgreSQL from this image (and skips without it).
+      - run: docker pull postgres:17-alpine
       - name: Retained page boundary and retired public execution doors
         env:
           RUNNER_TEST_IMAGE: artifactbin-worker
@@ -39,7 +41,11 @@ jobs:
       - name: Retained product worker isolation and operation authority
         env:
           RUNNER_TEST_IMAGE: artifactbin-worker
-        run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-container-lifecycle.test.ts services/app/__tests__/page-graphql.test.ts services/app/lib/page-operations/__tests__/backend.test.ts services/app/lib/page-operations/__tests__/runtime.test.ts
+        run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-container-lifecycle.test.ts services/app/__tests__/page-graphql.test.ts services/app/lib/page-operations/__tests__/backend.test.ts services/app/lib/page-operations/__tests__/runtime.test.ts services/app/lib/page-operations/__tests__/database-runner.test.ts
+      - name: Resolver database connections end to end (Docker worker, TLS PostgreSQL)
+        env:
+          RUNNER_TEST_IMAGE: artifactbin-worker
+        run: node node_modules/vitest/vitest.mjs run --project=integration services/app/lib/page-operations/__tests__/database-postgres.test.ts
       - name: Product transactions on PostgreSQL
         env:
           RUNNER_TEST_DATABASE: postgres://postgres:validation@127.0.0.1:5432/runner_validation
