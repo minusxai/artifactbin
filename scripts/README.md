@@ -16,10 +16,10 @@ workflow job (`ci.yml`, `page-speed.yml`), another script, an agent, or a person
 that is not in the tree.
 
 Paths another repository runs, copies or imports are a contract: move them only with a paired change
-there. artifactbin-server runs or imports `build/build-islands.mjs`,
-`services/app/scripts/build-server-reader.mjs` and `services/app/testing/native-acceptance.mjs`; the evals repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and
-`lib/{credential,env,slug}.ts`, and mirrors `lib/dev-runner.mjs`. Where each is used, and the check that
-fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
+there. artifactbin-server runs or imports `build/build-islands.mjs`, `build/html-core.mjs`,
+`services/app/scripts/build-server-reader.mjs` and `services/app/testing/native-acceptance.mjs`; the evals
+repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and `lib/{env,slug}.ts`. Where each is used, and the
+check that fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 
 ## Dev and agent tooling
 

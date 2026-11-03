@@ -24,6 +24,8 @@ Upstream: [account schema change](https://github.com/better-auth/better-auth/blo
    Independently confirm the target and database owner credentials. Supply the
    connection through the protected `AUTH__MIGRATION_DATABASE_URL` environment
    setting; never place credentials in command arguments or logs.
+   Set `AUTH__SCHEMA` to the deployment's auth schema when it is not `auth`;
+   the operation migrates the same schema startup checks.
 3. From the candidate checkout with installed dependencies, run:
 
    ```sh
