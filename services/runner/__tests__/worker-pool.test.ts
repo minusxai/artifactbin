@@ -2,7 +2,8 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {spawn,type ChildProcessWithoutNullStreams} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {PGlite} from '@electric-sql/pglite';
-import {createWorkerPool,type WorkerPool} from '../src/worker-pool';
+import {availableParallelism} from 'node:os';
+import {cpuBudget,createWorkerPool,type WorkerPool} from '../src/worker-pool';
 
 const spawned=vi.hoisted(()=>[] as Array<{child:ChildProcessWithoutNullStreams;runs:number}>);
 vi.mock('node:child_process',async original=>{
@@ -16,7 +17,7 @@ const cleanup:Array<()=>Promise<unknown>>=[];
 afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();spawned.length=0;});
 async function until(check:()=>boolean,ms=10_000){const end=Date.now()+ms;while(!check()){if(Date.now()>end)throw Error('timed out');await new Promise(r=>setTimeout(r,10));}}
 const exited=(c:ChildProcessWithoutNullStreams)=>c.exitCode!==null||c.signalCode!==null;
-function pool(size:number,spawnChild=real):WorkerPool{const p=createWorkerPool({size,spawnChild});cleanup.push(()=>p.close());return p;}
+function pool(size:number,spawnChild=real,maxBooting?:number):WorkerPool{const p=createWorkerPool({size,spawnChild,...(maxBooting===undefined?{}:{maxBooting})});cleanup.push(()=>p.close());return p;}
 
 it('hands each started process to exactly one claimant and replaces it',async()=>{
  const p=pool(2);await until(()=>p.spares.length===2&&p.spares.every(w=>w.ready));
@@ -28,10 +29,15 @@ it('hands each started process to exactly one claimant and replaces it',async()=
  expect(()=>first.claim({message:()=>{},fault:()=>{},startFailed:()=>{},exit:()=>{}})).toThrow('worker_already_claimed');
  for(const w of [first,second])w.child.kill('SIGKILL');
 });
-it('boots no spare beside a worker that is still starting',async()=>{
- const p=pool(1);const claimed=p.take();expect(claimed.ready).toBe(false);
+it('on one CPU, boots no spare beside a worker that is still starting',async()=>{
+ const p=pool(1,real,1);const claimed=p.take();expect(claimed.ready).toBe(false);
  while(!claimed.ready){expect(p.spares).toHaveLength(0);await new Promise(r=>setTimeout(r,2));}
  await until(()=>p.spares.length===1);claimed.child.kill('SIGKILL');
+});
+it('reads the CPU budget from the cgroup quota',()=>{
+ const cpus=availableParallelism();
+ expect(cpuBudget(()=>'100000 100000')).toBe(1);expect(cpuBudget(()=>'250000 100000')).toBe(Math.min(cpus,2));
+ expect(cpuBudget(()=>'50000 100000')).toBe(1);expect(cpuBudget(()=>'max 100000')).toBe(cpus);expect(cpuBudget(()=>{throw Error('ENOENT');})).toBe(cpus);
 });
 it('replaces a killed spare and stops respawning a binary that never starts',async()=>{
  const p=pool(2);await until(()=>p.spares.length===2&&p.spares.every(w=>w.ready));

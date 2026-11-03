@@ -1,4 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { StringDecoder } from 'node:string_decoder';
 import { RESOLVER_LIMITS } from '@artifactbin/contracts';
 
@@ -80,6 +82,17 @@ export interface WorkerPool {
     readonly spares: readonly Worker[];
     close(): Promise<void>;
 }
+/** CPUs this process may use: the cgroup v2 quota (`docker --cpus`) when set, else the scheduler's. */
+export function cpuBudget(read: (path: string) => string = path => readFileSync(path, 'utf8')): number {
+    const cpus = availableParallelism();
+    try {
+        const [quota, period] = read('/sys/fs/cgroup/cpu.max').trim().split(/\s+/);
+        if (quota !== 'max' && Number(quota) > 0 && Number(period) > 0)
+            return Math.max(1, Math.min(cpus, Math.floor(Number(quota) / Number(period))));
+    }
+    catch { /* no cgroup v2 quota visible */ }
+    return cpus;
+}
 /** Consecutive idle deaths before the pool stops pre-starting until the next take: a broken binary is not respawned forever. */
 const MAX_IDLE_DEATHS = 3;
 /** An idle spare must not keep the controller's event loop alive; a claimed one must, as any running worker does. */
@@ -91,11 +104,12 @@ function holdLoop(child: ChildProcessWithoutNullStreams, hold: boolean) {
  * Keeps `size` worker processes started ahead of demand so a run does not wait for Node to boot.
  * Each process still serves exactly one run: `take` removes it from the pool for good.
  *
- * Refill is one background boot at a time, and only while no worker is booting. On one CPU a spare
- * that boots beside a run's still-starting worker halves that worker's speed: the run then waits
- * longer than with no pool at all. Runs never wait for refill; with no spare, `take` spawns at once.
+ * Refill starts a background boot only while fewer than `maxBooting` workers (default: the CPUs this
+ * process may use) are booting. On one CPU a spare that boots beside a run's still-starting worker
+ * halves that worker's speed, so the run would wait longer than with no pool at all. Runs never wait
+ * for refill; with no spare, `take` spawns at once.
  */
-export function createWorkerPool({ size, spawnChild }: { size: number; spawnChild: () => ChildProcessWithoutNullStreams }): WorkerPool {
+export function createWorkerPool({ size, spawnChild, maxBooting = cpuBudget() }: { size: number; spawnChild: () => ChildProcessWithoutNullStreams; maxBooting?: number }): WorkerPool {
     if (!Number.isInteger(size) || size < 0) throw Error('invalid_pool_size');
     const spares: Worker[] = [], booting = new Set<Worker>();
     let closed = false, idleDeaths = 0;
@@ -112,7 +126,7 @@ export function createWorkerPool({ size, spawnChild }: { size: number; spawnChil
         fill();
     }
     function fill() {
-        while (!closed && idleDeaths < MAX_IDLE_DEATHS && spares.length < size && booting.size === 0) {
+        while (!closed && idleDeaths < MAX_IDLE_DEATHS && spares.length < size && booting.size < maxBooting) {
             let worker: Worker;
             try { worker = startWorker(spawnChild, hooks); }
             catch { idleDeaths++; continue; }
