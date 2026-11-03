@@ -1,6 +1,6 @@
 ---
 name: resolvers
-description: Resolver files for pages, caps.fetch with host-filled secrets, caps.query over linked datasets as the caller, @auth roles and Test connection.
+description: Resolver files for pages, caps.fetch with host-filled secrets, caps.query over linked datasets as the caller, read-only caps.sql, @auth roles and Test connection.
 ---
 ## Read first: dataset or resolver?
 
@@ -21,7 +21,7 @@ it from the new page version only.
 
 ## Contents
 
-[File](#the-file) · [caps.fetch](#capsfetch-and-secrets) · [caps.query](#capsquery-datasets-as-the-caller) · [@auth](#auth-roles) · [Page](#calling-from-the-page) · [Library](#library)
+[File](#the-file) · [caps.fetch](#capsfetch-and-secrets) · [caps.query](#capsquery-datasets-as-the-caller) · [caps.sql](#capssql-read-only-sql) · [@auth](#auth-roles) · [Page](#calling-from-the-page) · [Library](#library)
 
 ## The file
 
@@ -29,8 +29,8 @@ Start from a library file below (`resolvers/resolver-*.ts`; each top comment say
 or `examples/budget.ts`. Export `typeDefs`, a default object of root field resolvers, optionally
 `secrets` and a `test` field. Each resolver gets `(args, principal, caps)`: `principal` is
 `{tenant, subject, role}` (the page ID, the caller's account ID or null, their role), set by the
-platform; never authorize from a name typed into the page. `caps` holds exactly `fetch` and `query`.
-No npm packages or Node built-ins.
+platform; never authorize from a name typed into the page. `caps` holds exactly `fetch`, `query`
+and `sql`. No npm packages or Node built-ins.
 
 ```ts
 export const secrets = {API_KEY: 'api.example.com'};
@@ -94,6 +94,25 @@ It returns `data`; refusals throw an Error with `code` (`permission_denied`, `va
 `signed_in` (see [permissions](permissions.md)). There is no upsert: read the row, then
 `update_X_by_pk(pk_columns:{_id})` or `insert_X_one`.
 
+## caps.sql: read-only SQL
+
+`await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs, window functions,
+`GROUP BY`, `date_trunc`, `to_date`, `date_format`...) over the linked datasets as the caller and
+returns `{columns, rows}`. Data changes only through `caps.query` mutations. A single-table dataset
+is the table `<link>`, a multi-table one `<link>.<table>`; each has `_id`. You read the rows and
+columns `caps.query` gives you; a dataset whose rule for you lacks `allow_aggregations` refuses the
+call. Bind values as `$name`:
+
+```ts
+const {rows} = await caps.sql('SELECT region, count(*) AS n, sum(amount) AS total FROM orders ' +
+  'WHERE day >= $since GROUP BY region', {since: '2026-01-01'});
+```
+
+`caps.sql({queries:[{name, sql}], params, paramTypes, tables})` runs several in order (a later one
+reads an earlier by name) with inline `tables` (`{columns:[{name, type}], rows}`) and returns
+`{[name]: {columns, rows} | {error}}`. Per call: 10,000 input rows, 8 MiB input, 5 s per query,
+20 s in all, a 1 MiB answer; each call is one of the 32 requests.
+
 ## @auth roles
 
 `@auth(role: owner|editor|viewer|signed_in|anonymous)` means "at least" (anonymous < signed_in <
@@ -120,6 +139,7 @@ Errors and refusals come back in `errors`: show them; never report them as saved
 | File | Source | Secret |
 |---|---|---|
 | `resolver-public-url.ts` | Public CSV/JSON URL | none |
+| `resolver-dataset-sql.ts` | Linked dataset, totals with `caps.sql` | none |
 | `resolver-http-json.ts` | JSON API with a bearer key | `API_KEY` |
 | `resolver-google-sheets.ts` | Private Google Sheet | `GOOGLE_SA` (service account) |
 | `resolver-bigquery.ts` | BigQuery SQL | `GOOGLE_SA` |

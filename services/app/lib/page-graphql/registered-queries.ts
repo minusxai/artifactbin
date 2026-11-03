@@ -1,6 +1,6 @@
 import {getDb, SQL_SERVICE_URL, services} from '@/lib/platform';
 import {readRegisteredQueryMembers, registeredSourceCatalog, QUERY_LIMITS as limits, createRegisteredPageQueries, pageSourceDigest, registeredPlan, type QueryContext} from '@/lib/registered-page-queries';
-import {resolveDatasetConnection, storedRowStats, executeCatalog} from '@/lib/datasets';
+import {createSharedReads, resolveDatasetConnection, storedRowStats, executeCatalog} from '@/lib/datasets';
 import { createHash } from "node:crypto";
 import type { AccessActor } from "@/lib/accounts";
 import { getArtifactById, readableArtifactIdentity, type ArtifactIdentity, type ArtifactRow } from "@/lib/artifacts";
@@ -64,37 +64,7 @@ const identityKey = (row: ArtifactIdentity) =>
  * Nothing outlives the read; each joiner still runs its own fences, and the read is cancelled only when every
  * joiner has gone.
  */
-const sharedWindows = new Map<string, { result: Promise<Awaited<ReturnType<typeof executeCatalog>>>; joined: number; controller: AbortController }>();
-async function sharedWindow(key: string, signal: AbortSignal, load: (signal: AbortSignal) => ReturnType<typeof executeCatalog>) {
-  signal.throwIfAborted();
-  let entry = sharedWindows.get(key);
-  if (!entry) {
-    const controller = new AbortController();
-    const created = { joined: 0, controller, result: Promise.resolve().then(() => load(controller.signal)) };
-    entry = created;
-    sharedWindows.set(key, created);
-    created.result.then(() => {}, () => {}).finally(() => { if (sharedWindows.get(key) === created) sharedWindows.delete(key); });
-  }
-  const joined = entry;
-  joined.joined++;
-  let leave!: () => void;
-  const left = new Promise<never>((_, reject) => {
-    leave = () => reject(signal.reason ?? Error("cancelled"));
-  });
-  left.catch(() => {});
-  const onAbort = () => leave();
-  signal.addEventListener("abort", onAbort, { once: true });
-  try {
-    return await Promise.race([joined.result, left]);
-  } finally {
-    signal.removeEventListener("abort", onAbort);
-    if (--joined.joined === 0 && sharedWindows.get(key) === joined) {
-      // Settled reads are already gone from the map; an unsettled one nobody waits on is cancelled.
-      sharedWindows.delete(key);
-      joined.controller.abort(Error("cancelled"));
-    }
-  }
-}
+const sharedWindow = createSharedReads<Awaited<ReturnType<typeof executeCatalog>>>();
 /** Host adapter only: the page's exact saved backend link selects its immutable program. */
 export function createRetainedRegisteredQueries(
   actor: AccessActor,

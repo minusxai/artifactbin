@@ -29,7 +29,7 @@ export const RESOLVER_LIMITS = Object.freeze({
   maxRequests: 32,
   /** One `caps.query` GraphQL document. */
   queryDocumentBytes: 16 * 1024,
-  /** One `caps.query` answer's `data`. */
+  /** One `caps.query` answer's `data`, and one `caps.sql` answer. */
   queryResultBytes: 1024 * 1024,
   /** The longest one `getRun` holds a completion wait open; below the runner client's 30 s request timeout. */
   runWaitMs: 20_000,

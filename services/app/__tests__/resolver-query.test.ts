@@ -15,7 +15,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { readHtmlPage } from '@/lib/html-publication';
 import { getHtmlBackendVersion, htmlLiveLinks, htmlSharedRevisions } from '@/lib/html-backends';
 import { localPageBackendCapability, pageBackendOperation } from '@/lib/page-operations';
-import { resolverDatasetQuery } from '@/lib/page-graphql';
+import { resolverDatasets } from '@/lib/page-graphql';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 
@@ -71,7 +71,7 @@ const admitted = (f: Fixture, caller: { subject: string | null; role: string } |
   program: { source: f.backend.compiled, language: 'javascript' }, input: { kind: 'invoke', principal: { tenant: f.pageId, subject: caller?.subject ?? null, ...(caller ? { role: caller.role } : {}) } },
 });
 const inProcess = (f: Fixture, caller: { subject: string | null; role: string } | null, query: string, op: 'query' | 'mutation' = 'query') =>
-  localPageBackendCapability(admitted(f, caller, op), 'artifactbin.pageBackend.query', { query }, undefined, resolverDatasetQuery);
+  localPageBackendCapability(admitted(f, caller, op), 'artifactbin.pageBackend.query', { query }, undefined, resolverDatasets);
 
 it('runs as the caller: owner, a viewer share and a signed-in reader see different rows under the v3 select rule; anonymous none', async () => {
   const f = await fixture();
@@ -126,7 +126,7 @@ it('remote callback: the caller comes from the signed pin, never from arguments;
   const pin = (caller?: { subject: string | null; role: 'owner' | 'viewer' | 'anonymous' }): Actor => ({ credential: 'session', userId: f.backend.ownerId,
     runner: { pageBackendOperation: 'query', runId: 'run1', callId: 1, artifactId: f.backend.backendId, version: f.backend.version, editId: f.backend.version, sourceHash: createHash('sha256').update(f.backend.compiled).digest('hex'), ...(caller ? { caller } : {}) } });
   const call = async (actor: Actor, input: Record<string, unknown>) => {
-    const response = await pageBackendOperation(attachActor(request('/api/runner/operations', { method: 'POST' }), actor), 'pageBackend.query', input as never, f.backend.compiled, resolverDatasetQuery);
+    const response = await pageBackendOperation(attachActor(request('/api/runner/operations', { method: 'POST' }), actor), 'pageBackend.query', input as never, f.backend.compiled, resolverDatasets);
     return { status: response.status, body: await response.json() };
   };
   expect(names((await call(pin({ subject: f.viewer.userId, role: 'viewer' }), { query: READ })).body)).toEqual(['ada', 'cy']);

@@ -11,6 +11,7 @@ export { executeCatalog } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';
 export { datasetResponse } from './http';
 export { connectionShape, secretTargetShape } from './input';
+export { createSharedReads } from './shared-reads';
 export { storedMediaReferences } from './media-references';
 export { compileNotebookSql } from './notebook';
 export { throttlePublicMutation } from './policy/usage';

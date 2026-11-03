@@ -24,7 +24,8 @@ Gotchas:
   - Local datasets: <link rel="af-dataset" data-af-name="sales" href="./sales.csv"> (CSV or a
     JSON array of rows; data-af-table and data-af-schema optional). Edits stay in memory; export a
     session at the runtime config's localPreview.endpoint + "/export/NAME". Remote backend and
-    dataset namespaces are unavailable offline.
+    dataset namespaces are unavailable offline: resolvers (caps.fetch, caps.query, caps.sql) never
+    run here; publish to call them.
   - The toolbar's Save HTML downloads a packed portable copy; it never overwrites the file or
     publishes.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.

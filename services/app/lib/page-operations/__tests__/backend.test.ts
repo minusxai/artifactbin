@@ -6,10 +6,10 @@ import {composePageSchema,executePageOperation} from '../namespaces';
 const record={backendId:'backend1',pageId:'page1',version:'v1',source:'source',compiled:'immutable bundle',typeDefs:'type Query { x:Int }',ownerId:'owner1'};
 const request:RunStart={requestId:'r1',pageBackendOperation:'mutation',userId:'owner1',artifactId:'backend1',artifactVersion:'v1',program:{source:'immutable bundle',language:'javascript'},input:{kind:'invoke',principal:{tenant:'page1',subject:null}}};
 const v2={...record,secretBindings:['KEY'],secretHosts:{KEY:'api.example.com'}};
-it('offers resolver code fetch and query only: secret values, the removed store and unknown operations are refused',async()=>{
+it('offers resolver code fetch, query and sql only: secret values, the removed store and unknown operations are refused',async()=>{
  const read=vi.fn(async()=>'private-value'),fetcher=vi.fn(),query=vi.fn();
  for(const [operation,args] of [['artifactbin.pageBackend.secrets.get',{name:'KEY'}],['artifactbin.pageBackend.store.get',{}],['artifactbin.pageBackend.store.set',{value:1,expected:0}],['artifactbin.other',{}]] as const)
-  await expect(pageBackendCapability(request,operation,args,async()=>v2,read,fetcher,query)).rejects.toThrow('backend_capability_forbidden');
+  await expect(pageBackendCapability(request,operation,args,async()=>v2,read,fetcher,{query,sql:query})).rejects.toThrow('backend_capability_forbidden');
  expect(read).not.toHaveBeenCalled();expect(fetcher).not.toHaveBeenCalled();expect(query).not.toHaveBeenCalled();
 });
 it('refuses forged admitted code before fetching',async()=>{
@@ -79,22 +79,30 @@ describe('caps.query on the host',()=>{
  it('hands the query port the admitted caller and operation, never one the arguments name',async()=>{
   const query=vi.fn(async()=>({ok:true}));
   const args={query:'{ staff { name } }',principal:{subject:'owner1',role:'owner'},subject:'owner1',role:'owner',pageBackendOperation:'mutation'};
-  expect(await pageBackendCapability(admitted({subject:'viewer1',role:'viewer'}),'artifactbin.pageBackend.query',args,async()=>v2,undefined,undefined,query)).toEqual({ok:true});
+  expect(await pageBackendCapability(admitted({subject:'viewer1',role:'viewer'}),'artifactbin.pageBackend.query',args,async()=>v2,undefined,undefined,{query})).toEqual({ok:true});
   expect(query).toHaveBeenCalledWith({pageId:'page1',caller:{subject:'viewer1',role:'viewer'},operation:'query',args});
-  await pageBackendCapability(admitted({subject:null,role:'anonymous'},'mutation'),'artifactbin.pageBackend.query',{query:'{x}'},async()=>v2,undefined,undefined,query);
+  await pageBackendCapability(admitted({subject:null,role:'anonymous'},'mutation'),'artifactbin.pageBackend.query',{query:'{x}'},async()=>v2,undefined,undefined,{query});
   expect(query).toHaveBeenLastCalledWith(expect.objectContaining({caller:{subject:null,role:'anonymous'},operation:'mutation'}));
   // An admitted principal with no (or no known) role attests no caller.
   for(const principal of [{subject:'viewer1'},{subject:'viewer1',role:'admin'}] as Record<string,import('@artifactbin/contracts').RunnerJson>[]){
-   await pageBackendCapability(admitted(principal),'artifactbin.pageBackend.query',{query:'{x}'},async()=>v2,undefined,undefined,query);
+   await pageBackendCapability(admitted(principal),'artifactbin.pageBackend.query',{query:'{x}'},async()=>v2,undefined,undefined,{query});
    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({caller:null}));
   }
  });
  it('needs the composition\'s port, and still checks the admitted code first',async()=>{
   const query=vi.fn(async()=>null);
-  const run=(backend:typeof v2,start=admitted({subject:'viewer1',role:'viewer'}),port:typeof query|null=query)=>pageBackendCapability(start,'artifactbin.pageBackend.query',{query:'{x}'},async()=>backend,undefined,undefined,port??undefined);
+  const run=(backend:typeof v2,start=admitted({subject:'viewer1',role:'viewer'}),port:typeof query|null=query)=>pageBackendCapability(start,'artifactbin.pageBackend.query',{query:'{x}'},async()=>backend,undefined,undefined,port?{query:port}:undefined);
   await expect(run(v2,undefined,null)).rejects.toThrow('backend_capability_forbidden');
   await expect(run(v2,{...admitted({subject:'viewer1',role:'viewer'}),program:{source:'forged',language:'javascript'}})).rejects.toThrow('backend_capability_forbidden');
   await expect(run(v2,{...admitted({subject:'viewer1',role:'viewer'}),input:{kind:'invoke',principal:{tenant:'other-page',subject:'viewer1',role:'viewer'}}})).rejects.toThrow('backend_capability_forbidden');
+  expect(query).not.toHaveBeenCalled();
+ });
+ it('routes caps.sql to its own port with the admitted caller; without that port it is refused',async()=>{
+  const query=vi.fn(async()=>null),sql=vi.fn(async()=>({columns:[],rows:[]}));
+  const args={sql:'SELECT 1',principal:{subject:'owner1',role:'owner'}};
+  expect(await pageBackendCapability(admitted({subject:'viewer1',role:'viewer'}),'artifactbin.pageBackend.sql',args,async()=>v2,undefined,undefined,{query,sql})).toEqual({columns:[],rows:[]});
+  expect(sql).toHaveBeenCalledWith({pageId:'page1',caller:{subject:'viewer1',role:'viewer'},operation:'query',args});
+  await expect(pageBackendCapability(admitted({subject:'viewer1',role:'viewer'}),'artifactbin.pageBackend.sql',args,async()=>v2,undefined,undefined,{query})).rejects.toThrow('backend_capability_forbidden');
   expect(query).not.toHaveBeenCalled();
  });
 });

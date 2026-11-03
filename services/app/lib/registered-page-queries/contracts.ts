@@ -1,3 +1,4 @@
+import { SQL_READ_LIMITS } from "@artifactbin/contracts";
 import type {
   ColumnType,
   DatasetColumn,
@@ -95,20 +96,8 @@ export interface QueryPorts {
 export interface QueryOptions {
   scheduleDeadline?: (ms: number, expire: () => void) => () => void;
 }
-export const QUERY_LIMITS = Object.freeze({
-  rows: 10000,
-  cells: 1000000,
-  tables: 64,
-  queries: 64,
-  params: 240,
-  sqlBytes: 64000,
-  /** Serialized materialized SQL input and internal dependency-answer work budget. */
-  inputBytes: 8 * 1024 * 1024,
-  /** Serialized returned table-name/outcome record, after the requested projection.
-   * Four MiB admits bounded stored-data responses; the independent input/work ceiling remains eight MiB. */
-  outputBytes: 4 * 1024 * 1024,
-  wallMs: 20000,
-});
+/** The shared page-read SQL budget (contracts `SQL_READ_LIMITS`), the same one a resolver's caps.sql gets. */
+export const QUERY_LIMITS = SQL_READ_LIMITS;
 
 /** Read-only presentation identity, derived from this request's authenticated target subject.
  * Source identity translation belongs to migration mappings, never caller arguments. */
