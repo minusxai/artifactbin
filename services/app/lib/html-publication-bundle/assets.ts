@@ -5,6 +5,7 @@ import { archivedVersionFor, canReadArtifact, getArtifactById } from '@/lib/arti
 import { writerFor } from '@/lib/artifact-access';
 import { getDb } from '@/lib/platform';
 import {serveStoredFile} from '@/lib/datasets';
+import {REVALIDATE,etagOf,matchingTag,notModified} from '@/lib/http';
 import type {BundleReceipt} from './execute';
 interface Admission {delegator:AccessActor;version:number;receipts:BundleReceipt[]}
 async function admission(request:Request,actor:AccessActor,pageId:string):Promise<Admission|null>{
@@ -27,12 +28,23 @@ export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:
  const askedRevision=new URL(request.url).searchParams.get('revision');
  const receipt=admitted.receipts.find(item=>item.kind==='asset'&&item.id===dependencyId&&(!askedRevision||item.revision===askedRevision));if(!receipt)return null;
  const asset=await assetVersion(admitted.delegator,receipt);if(!asset)return null;
+ // Cached privately and revalidated on every use: access is checked above before any 304, so a reader who lost
+ // access gets nothing. The tag names every input of the bytes: the stored object, and for pinned text the page
+ // version and sibling receipts it is rewritten against, plus the rewrite itself.
+ const pinned=new URL(request.url).searchParams.has('version');
+ const etag=etagOf({page:pageId,dependency:dependencyId,revision:receipt.revision,object:asset.meta.objectKey??null,sha256:asset.meta.sha256??null,
+  pin:pinned?{version:admitted.version,receipts:admitted.receipts.filter(item=>item.kind==='asset'),rewrite:PIN_REWRITE}:null});
+ const held=matchingTag(request.headers.get('if-none-match'),etag);
+ if(held){const answer=notModified(held);answer.headers.set('Access-Control-Allow-Origin','*');return answer;}
  // Opaque /raw runners need CORS for admitted modules and fonts; admission
  // above remains the authority, and no credentialed wildcard is granted.
  const response=await serveStoredFile(request,asset,true),contentType=response.headers.get('content-type')??'';
- if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&new URL(request.url).searchParams.has('version'))return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset')),{status:response.status,headers:response.headers});
- return response;
+ const headers=new Headers(response.headers);if(response.ok){headers.set('Cache-Control',REVALIDATE);headers.set('ETag',etag);}
+ if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&pinned)return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset')),{status:response.status,headers});
+ return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
+/** The pinning rewrite's own identity: a change to how pinned text is rewritten is a change to its bytes. */
+const PIN_REWRITE=etagOf(pinPublicationAssetUrls.toString());
 async function parallel<T,R>(items:readonly T[],work:(item:T)=>Promise<R>):Promise<R[]>{
  const results:R[]=[];let position=0;await Promise.all(Array.from({length:Math.min(4,items.length)},async()=>{while(position<items.length){const index=position++;results[index]=await work(items[index]!);}}));return results;
 }
