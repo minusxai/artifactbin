@@ -28,6 +28,7 @@ import { artifactState } from './state';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
+import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json, thrownMessage } from '../http';
@@ -285,7 +286,7 @@ async function insertArtifact(
     input.description ?? null,
     input.format,
     input.source,
-    JSON.stringify(input.meta),
+    JSON.stringify(withWebAssets(input.format, input.source, input.meta)),
     // Accounts create private documents, except assets, born
     // unlisted: a public document reaches them at read time, and a
     // born-private ref bakes a 404 into every shared document that uses
@@ -433,7 +434,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
              ancestor_ids=COALESCE($10::text[],ancestor_ids), access=COALESCE($11,access), link_role=COALESCE($14,link_role),
              ${headBumpSql('$8', '$12', '$13')}
          WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
-        [id, scope.val, content.format, content.source, JSON.stringify(content.meta),
+        [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, content.source, content.meta)),
           content.title !== undefined ? content.title : current.title,
           content.description !== undefined ? content.description : current.description,
           newEditId(), content.visibility ?? null, content.ancestor_ids ?? null, content.access ?? null,

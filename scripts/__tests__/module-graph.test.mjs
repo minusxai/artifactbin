@@ -158,13 +158,14 @@ describe('module graph', () => {
     });
 
     it('holds lib/artifacts to its index and table entries: any other deep import, alias or relative, is refused', () => {
-      const files = { 'services/app/lib/artifacts/index.ts': "export * from './store';\n", 'services/app/lib/artifacts/store.ts': '', 'services/app/lib/artifacts/table.ts': '' };
+      const files = { 'services/app/lib/artifacts/index.ts': "export * from './store';\n", 'services/app/lib/artifacts/store.ts': '', 'services/app/lib/artifacts/table.ts': '', 'services/app/lib/artifacts/web-assets.ts': '' };
       // The real DEEP_MODULES table (the default): only lib/artifacts is in this tree, so only its row applies.
       const run = extra => checkModuleGraph(scanModuleGraph(tree({ ...files, ...extra })), allowList([])).violations.join('\n');
       expect(run({
         'services/app/lib/publish/a.ts': "import { getArtifactById } from '@/lib/artifacts';\n",
         'services/app/lib/runner/b.ts': "import type { ArtifactRow } from '../artifacts';\n",
         'services/app/lib/listings/t.ts': "import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';\n",
+        'scripts/backfill-web-assets.ts': "import { backfillWebAssets } from '@/lib/artifacts/web-assets';\n",
       })).toBe('');
       const violations = run({
         'services/app/lib/serving/c.ts': "import { getArtifactById } from '@/lib/artifacts/store';\n",
@@ -177,7 +178,8 @@ describe('module graph', () => {
 
     it('lets only tests and the harness import lib/artifacts/testing: product code is refused, alias or relative', () => {
       const files = { 'services/app/lib/artifacts/index.ts': '', 'services/app/lib/artifacts/table.ts': '', 'services/app/lib/artifacts/testing.ts': '' };
-      const graph = extra => scanModuleGraph(tree({ ...files, 'services/app/lib/listings/t.ts': "import '@/lib/artifacts/table';\n", ...extra }));
+      const graph = extra => scanModuleGraph(tree({ ...files, 'services/app/lib/listings/t.ts': "import '@/lib/artifacts/table';\n",
+        'services/app/lib/artifacts/web-assets.ts': '', 'scripts/backfill-web-assets.ts': "import '@/lib/artifacts/web-assets';\n", ...extra }));
       const tests = {
         'services/app/__tests__/quota.test.ts': "import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';\n",
         'services/app/lib/publish/__tests__/assets.test.ts': "import { assetBytesForToken } from '../../artifacts/testing';\n",

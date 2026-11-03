@@ -1,10 +1,8 @@
-import {type ArtifactRow,canReadArtifact} from '@/lib/artifacts';
+import {type ArtifactRow,canReadArtifact,webAssetHashes} from '@/lib/artifacts';
 import {artifactQuery} from '@/lib/artifacts/table';
 import {LIVE_ARTIFACT_SQL} from '@/lib/artifact-access';
 import {ANONYMOUS_ACTOR,ownerUsername} from '@/lib/accounts';
 import {getDb,PUBLIC_BASE_URL,USER_PAGES_HOST} from '@/lib/platform';
-import {htmlAssetLinks} from '@/lib/html-page';
-import {urlHash} from '@/lib/document';
 import {canonicalArtifactPath,domainPostPath} from '@/lib/http';
 import {documentOwner,userPagesOrigin,type UserPagesOwner} from './hosts';
 type ServedRow={user_id:string|null;group_id?:string|null;visibility:string;format:string;deleted_at?:unknown};
@@ -21,9 +19,18 @@ export async function servesEmbeddedArtifact(owner:UserPagesOwner,row:ArtifactRo
  if(!embeddedFormats.has(row.format)||!await canReadArtifact(row,ANONYMOUS_ACTOR))return false;
  return (await (await getDb()).query(`SELECT 1 FROM artifacts WHERE ${ownerSql(owner)} AND visibility IN ('public','unlisted') AND format='html' AND ${LIVE_ARTIFACT_SQL} AND meta->'refs' @> $2::jsonb LIMIT 1`,[owner.id,JSON.stringify([{id:row.id}])])).rows.length>0;
 }
+/**
+ * Whether the owner's host serves `/assets/<hash>`: one of its eligible pages names that image (meta.webAssets,
+ * lib/artifacts web-assets). A hash no web_assets row has is refused by its primary key alone, before any page is
+ * read. A known hash is the indexed `meta->'webAssets' ? hash`; only on a miss are pages written before the key
+ * existed (none once scripts/backfill-web-assets.ts has run) matched by their source, exactly as they were.
+ */
 export async function servesWebAsset(owner:UserPagesOwner,hash:string):Promise<boolean>{
- const posts=await artifactQuery<{source:string|null}>(await getDb(),`SELECT source,document FROM artifacts WHERE ${ownerSql(owner)} AND visibility IN ('public','unlisted') AND format='html' AND ${LIVE_ARTIFACT_SQL} AND (source IS NOT NULL OR document IS NOT NULL)`,[owner.id]);
- return posts.rows.some(post=>htmlAssetLinks(post.source??'').imageUrls.some(url=>urlHash(url)===hash));
+ const db=await getDb(),pages=`FROM artifacts WHERE ${ownerSql(owner)} AND visibility IN ('public','unlisted') AND format='html' AND ${LIVE_ARTIFACT_SQL}`;
+ if(!(await db.query('SELECT 1 FROM web_assets WHERE url_hash=$1',[hash])).rows.length)return false;
+ if((await db.query(`SELECT 1 ${pages} AND meta->'webAssets' ? $2 LIMIT 1`,[owner.id,hash])).rows.length)return true;
+ const legacy=await artifactQuery<{source:string}>(db,`SELECT source ${pages} AND NOT (meta ? 'webAssets') AND source IS NOT NULL`,[owner.id]);
+ return legacy.rows.some(post=>webAssetHashes(post.source).includes(hash));
 }
 /** Bare hosts are copies: the app remains canonical, with no domain database lookup. */
 export async function canonicalDocumentUrl(row:Pick<ArtifactRow,'id'|'title'|'user_id'> & {group_id?:string|null}):Promise<string>{

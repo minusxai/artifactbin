@@ -24,6 +24,8 @@ export { artifactState } from './state';
 export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
+/** The web images a page serves on its owner's host (meta.webAssets), derived at every content write. */
+export { webAssetHashes } from './web-assets';
 export { CreationReplay, creationOperation, lookupCreation, recoverCreationIds } from './creation-ledger';
 export { reserveArtifactIds, reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
