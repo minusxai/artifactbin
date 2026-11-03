@@ -59,6 +59,7 @@
   "services/app/lib/web-ingest/__tests__/sniff.test.ts",
   "services/browser/__tests__/session-redirects.test.ts",
   "services/browser/__tests__/session-request-queue.test.ts",
+  "services/browser/__tests__/browser-holder.test.ts",
   "services/contracts/__tests__/html-contracts.test.ts",
   "services/contracts/__tests__/loopback-names.test.ts",
   "services/runner/__tests__/model-stream.test.ts",
