@@ -31,8 +31,6 @@ export type PoolAnswer = { id: number; ok: true; result: unknown } | { id: numbe
 export interface SqlPoolOptions {
   /** Engine threads; a few, never more than the machine has cores for. */
   workers?: number;
-  /** Admission cap for owned reads; legacy methods retain their existing API. */
-  maxReadQueue?:number;
   /** A module whose default export is the composition root's `SqlExtensions`, imported by every thread. */
   extensions?: string;
   /** How long past a call's own deadline a silent thread is given before it is replaced. */
@@ -126,32 +124,17 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     }
   };
 
-  const call = <T>(request: DistributiveOmit<PoolRequest, 'id'>, deadlineMs: number, onError: (error: string) => T, signal?:AbortSignal): Promise<T> => {
+  const call = <T>(request: DistributiveOmit<PoolRequest, 'id'>, deadlineMs: number, onError: (error: string) => T): Promise<T> => {
     if(closed)return Promise.resolve(onError('the SQL engine is closed'));
-    if(signal?.aborted)return Promise.resolve(onError('sql_read_cancelled'));
-    if(signal&&queue.length>=Math.max(0,pool.maxReadQueue??64)&&!threads.some(t=>!t.task&&!t.retiring)&&threads.length>=size)return Promise.resolve(onError('sql_read_busy'));
     return new Promise<T>(resolve=>{
       let done=false;
-      const settle=(answer:PoolAnswer)=>{if(done)return;done=true;signal?.removeEventListener('abort',cancel);resolve(answer.ok?answer.result as T:onError(answer.error));};
-      const task:Task={request:{...request,id:++ids} as PoolRequest,deadlineMs,settle};
-      const cancel=()=>{
-        const index=queue.indexOf(task);if(index>=0){queue.splice(index,1);settle({id:task.request.id,ok:false,error:'sql_read_cancelled'});pump();return;}
-        const thread=threads.find(t=>t.task===task);if(thread)void retire(thread).then(()=>{settle({id:task.request.id,ok:false,error:'sql_read_cancelled'});pump();});
-      };
-      signal?.addEventListener('abort',cancel,{once:true});queue.push(task);pump();
+      const settle=(answer:PoolAnswer)=>{if(done)return;done=true;resolve(answer.ok?answer.result as T:onError(answer.error));};
+      queue.push({request:{...request,id:++ids} as PoolRequest,deadlineMs,settle});pump();
     });
   };
 
   const timedOut = (error: string) => error === 'timed_out';
   return {
-    startRead:(callerInput)=>{
-      const input=structuredClone(callerInput);
-      const abort=new AbortController();
-      const {limit,timeoutMs}=queryBounds(input,caps);
-      const bounds:ReadBounds={limit,timeoutMs,pageLimit:queryBounds(input,caps,input.page).limit};
-      const result=call<Record<string,QueryOutcome>>({method:'run',input,bounds},timeoutMs*Math.max(1,input.queries.length),error=>Object.fromEntries(input.queries.map(q=>[q.name,{error}])),abort.signal);
-      return {result,cancelAndDrain:async()=>{abort.abort();await result;}};
-    },
     run: (input) => {
       const { limit, timeoutMs } = queryBounds(input, caps);
       const bounds: ReadBounds = { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit };
