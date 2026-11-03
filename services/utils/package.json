@@ -17,6 +17,7 @@
     "./body": "./src/body.ts",
     "./escape": "./src/escape.ts",
     "./sha256": "./src/sha256.ts",
+    "./public-address": "./src/public-address.ts",
     "./runtime-id": "./src/runtime-id.ts",
     "./node/credentials": "./src/credentials.ts",
     "./node/loopback-lookup": "./src/loopback-lookup.ts",

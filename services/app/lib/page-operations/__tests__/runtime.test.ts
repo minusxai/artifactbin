@@ -2,7 +2,7 @@ import {it,expect} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '@artifactbin/runner/local';
 import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type PageBackendRecord} from '../backend';
-it('executes a compiled immutable resolver through the retained isolated runner, with caps fetch, query and sql only',async()=>{
+it('executes a compiled immutable resolver through the retained isolated runner, with caps fetch, postgres, query and sql only',async()=>{
  const db=new PGlite();let record:PageBackendRecord;
  const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(context.request,operation,args,async()=>record)});
  try{
@@ -14,7 +14,7 @@ it('executes a compiled immutable resolver through the retained isolated runner,
   const call={namespace:'tasks',fileId:'backend1',version:'v1',operation:'query' as const,field:'double',args:{n:2},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
   expect(await invoke(call)).toBe(4);
   expect(await invoke({...call,operation:'mutation',field:'add',args:{n:1}})).toBe(2);
-  expect(await invoke({...call,field:'caps',args:{}})).toBe('fetch,query,sql');
+  expect(await invoke({...call,field:'caps',args:{}})).toBe('fetch,postgres,query,sql');
   expect(await invoke({...call,field:'store',args:{}})).toBe('undefined undefined');
  }finally{await runner.close();await db.close();}
 },20000);
@@ -72,7 +72,7 @@ it('the host fills secrets, the resolver never sees a value, and a 2 MiB respons
   for(const form of [KEY,encodeURIComponent(KEY)])expect(output).not.toContain(form);
   expect(received[0]).toBe(`Bearer ${KEY} /echo?k=${encodeURIComponent(KEY)} ${KEY}`);
   // caps is exactly {fetch, query, sql}; the role is the admitted principal's.
-  expect(JSON.parse(output)).toEqual({keys:['fetch','query','sql'],named:'undefined',role:'viewer',
+  expect(JSON.parse(output)).toEqual({keys:['fetch','query','sql','postgres'],named:'undefined',role:'viewer',
    query:{caller:{subject:'viewer1',role:'viewer'},operation:'query',variables:{team:'red'}},
    sql:{caller:{subject:'viewer1',role:'viewer'},args:{sql:'SELECT team, count(*) AS n FROM staff GROUP BY team',params:{min:1}}},
    sqlBatch:{caller:{subject:'viewer1',role:'viewer'},args:{queries:[{name:'a',sql:'SELECT 1'}],tables:{t:{columns:[{name:'v',type:'number'}],rows:[{v:1}]}}}},

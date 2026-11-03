@@ -62,6 +62,9 @@ describe('caps.fetch',()=>{
   expect(await code(lax({url:`${base}/echo`,method:'POST',body:'{{ELSEWHERE}}'},s))).toBe('secret_host_forbidden');
   expect(await code(lax({url:`http://{{KEY}}.localhost:${server.port}/echo`},s))).toBe('secret_host_forbidden');
   expect(await code(lax({url:`http://u:{{KEY}}@api.localhost:${server.port}/echo`},s))).toBe('secret_host_forbidden');
+  // A database connection is never a fetch secret, even to a host literally named "postgres".
+  expect(await code(lax({url:`${base}/echo`,headers:{authorization:'{{WAREHOUSE}}'}},{...s,hosts:{...hosts,WAREHOUSE:'postgres'}}))).toBe('secret_host_forbidden');
+  expect(await code(lax({url:`http://postgres/echo?p={{WAREHOUSE}}`},{...s,hosts:{...hosts,WAREHOUSE:'postgres'}}))).toBe('secret_host_forbidden');
   expect(seen).toEqual([]);expect(s.read).not.toHaveBeenCalled();
   expect(await code(lax({url:`${base}/echo`,headers:{authorization:'{{ELSEWHERE}}'}},{...s,hosts:{...hosts,ELSEWHERE:'api.localhost'}}))).toBe('secret_unavailable');
   expect(seen).toEqual([]);

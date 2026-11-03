@@ -1,4 +1,4 @@
-import {RESOLVER_LIMITS,type ResolverFetchReceipt,type ResolverSecretHosts,type RunnerJson} from '@artifactbin/contracts';
+import {RESOLVER_DATABASE_BINDING,RESOLVER_LIMITS,type ResolverFetchReceipt,type ResolverSecretHosts,type RunnerJson} from '@artifactbin/contracts';
 import {parseWebUrl,requestWebHop,WebIngestError,type WebIngestPolicy} from '@/lib/web-ingest';
 import {redact,secretForms} from './redaction';
 import {createGoogleTokenSource,GoogleAuthFailure,googleAuthOption,isGoogleApiHost,type GoogleAuth,type GoogleTokenSourceOptions} from './google-auth';
@@ -95,6 +95,8 @@ export function createResolverFetch(options:{policy?:WebIngestPolicy;timeoutMs?:
   for(const name of used){
    const binding=Object.hasOwn(secrets.hosts,name)?secrets.hosts[name]:undefined;
    if(binding===undefined)fail('unknown_secret',name);
+   // A database connection is never a fetch secret, whatever the request host.
+   if(binding===RESOLVER_DATABASE_BINDING)fail('secret_host_forbidden',name);
    if(!secretHostAllows(binding!,host))fail('secret_host_forbidden',name);
   }
   // The bearer goes only to a Google API host, whatever the binding says.

@@ -59,6 +59,9 @@ describe('main validation', () => {
       'services/app/__tests__/page-graphql.test.ts',
       'services/app/lib/page-operations/__tests__/backend.test.ts',
       'services/app/lib/page-operations/__tests__/runtime.test.ts',
+      // caps.postgres with the Docker worker: tunnel cleanup and redaction, and a real TLS PostgreSQL end to end.
+      'services/app/lib/page-operations/__tests__/database-runner.test.ts',
+      'services/app/lib/page-operations/__tests__/database-postgres.test.ts',
     ].sort());
     // A pull request into main (refs/pull/N/merge) and main itself run the same retained set.
     expect([...selected('refs/pull/904/merge')].sort()).toEqual([...main].sort());

@@ -19,6 +19,36 @@ it('refuses forged admitted code before fetching',async()=>{
  expect(fetcher).not.toHaveBeenCalled();
 });
 
+describe('caps.postgres on the host',()=>{
+ const connection={host:'db.example.com',port:5432,database:'shop',user:'reader',password:'pg-secret',tls:'verify-full'};
+ const v3={...record,secretBindings:['API_KEY','WAREHOUSE'],secretHosts:{API_KEY:'api.example.com',WAREHOUSE:'postgres'}};
+ const op='artifactbin.pageBackend.postgres';
+ it('answers the owner\'s stored connection for a declared postgres name, and nothing for any other name',async()=>{
+  const read=vi.fn(async(_b:unknown,name:string)=>name==='WAREHOUSE'?JSON.stringify(connection):'api-key');
+  expect(await pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>v3,read)).toEqual(connection);
+  for(const [args,code] of [[{name:'API_KEY'},'unknown_connection: API_KEY'],[{name:'MISSING'},'unknown_connection: MISSING'],[{name:'lower'},'invalid_request: connection name'],[null,'invalid_request: connection name'],[{name:'constructor'},'invalid_request: connection name']] as const)
+   await expect(pageBackendCapability(request,op,args as never,async()=>v3,read)).rejects.toThrow(code);
+  expect(read).toHaveBeenCalledTimes(1);
+ });
+ it('fails closed on an unset or malformed stored value, and without a secret reader',async()=>{
+  for(const read of [async()=>{throw Error('backend_secret_unavailable');},async()=>'not json',async()=>JSON.stringify({...connection,port:22}),async()=>JSON.stringify({...connection,host:'127.1'})])
+   await expect(pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>v3,read)).rejects.toThrow('connection_unavailable: WAREHOUSE');
+  await expect(pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>v3)).rejects.toThrow('backend_capability_forbidden');
+ });
+ it('checks the admitted code, owner and page first',async()=>{
+  const read=vi.fn(async()=>JSON.stringify(connection));
+  for(const forged of [{...request,program:{source:'forged',language:'javascript' as const}},{...request,userId:'other'},{...request,input:{kind:'invoke',principal:{tenant:'page2',subject:null}}}])
+   await expect(pageBackendCapability(forged,op,{name:'WAREHOUSE'},async()=>v3,read)).rejects.toThrow('backend_capability_forbidden');
+  expect(read).not.toHaveBeenCalled();
+ });
+ it('redacts each connection password from a failed run\'s detail and shown message',async()=>{
+  const runner={start:async()=>({runId:'run1'}),getRun:async()=>({status:'failed',output:null,receipt:{reason:RESOLVER_THREW+'login with pg-secret failed',requests:[]}}),cancel:async()=>{}} as unknown as RunnerService;
+  const call={namespace:'db',fileId:'backend1',version:'v1',operation:'query' as const,field:'x',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
+  const error=await createBackendInvoker(runner,async()=>({...v3,compiled:'bundle'}),{readSecret:async(_b,name)=>name==='WAREHOUSE'?JSON.stringify(connection):'api-key'})(call).catch(e=>e);
+  expect(error).toBeInstanceOf(FieldFailed);expect(error.shown).toBe('login with [redacted] failed');expect(error.detail).toBe('login with [redacted] failed');
+ });
+});
+
 describe('backend run admission retries',()=>{
  const backend={...record,compiled:'bundle'};
  const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};

@@ -36,7 +36,7 @@ An anonymous caller refused a field that needs signed_in gets `Sign in required`
 every other refusal is `Not allowed`.
 
 A resolver declares its secrets as a map such as `{API_KEY: 'api.example.com'}` and gets `caps`
-with `fetch`, `query` and `sql` only (below): `caps.fetch(url, {method, headers, body})` (`public-fetch.ts`).
+with `fetch`, `query`, `sql` and `postgres` only (below): `caps.fetch(url, {method, headers, body})` (`public-fetch.ts`).
 The app performs the request. It fills `{{NAME}}` in the URL (percent-encoded),
 header values and body only for a declared name whose bound host (exact, or any
 subdomain under one leading `*.`) matches the request host. Anything else is
@@ -58,6 +58,17 @@ values; failures are `auth_key_invalid` or `auth_failed`. Size and time limits a
 `services/contracts`: 2 MiB response, 256 KiB request body and 10 s per fetch,
 4 MiB per runner message and remote callback reply, 15 s wall time and a 16 s app
 wait.
+
+## `caps.postgres`
+
+`const db = await caps.postgres(name)` opens a session on a connection the pinned version declares as
+`secrets = {NAME: 'postgres'}` and the owner configured (`database.ts`: `unknown_connection` for any other name,
+`connection_unavailable` when unset; `caps.fetch` refuses such a name as `secret_host_forbidden`). `db.query(sql,
+params?)` answers `{rows, columns, command, count}`; `db.end()` closes it. The settings, password included, go to
+the runner worker's driver, never to resolver code; the runner tunnels the bytes (services/runner README, *Database
+connections*). The password enters the sandboxed run: editors are trusted to see it, so owners use a read-only
+database user. A failed run's reason is redacted of each connection's password as of a secret value. Owners set a
+connection with `PUT {name, connection: {host, port, database, user, password, tls?, ca?}}` on the secrets address.
 
 ## `caps.query`
 

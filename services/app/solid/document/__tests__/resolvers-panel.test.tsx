@@ -94,3 +94,28 @@ it('puts the Resolvers tab in the settings for the page owner only', async () =>
   fireEvent.click(await screen.findByRole('tab', { name: 'Resolvers' }));
   expect(await screen.findByRole('region', { name: 'Resolver sheets' })).toBeTruthy();
 });
+
+it('saves a Postgres connection as one write-only form and says to use a read-only user', async () => {
+  const calls: Call[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ url, method, body });
+    const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'shop', backendId: 'b1', version: 'v1', test: false, secrets: { WAREHOUSE: 'postgres' }, set: [] }] });
+    return reply({ names: method === 'PUT' ? ['WAREHOUSE'] : [] });
+  }));
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = within(await screen.findByRole('region', { name: 'Resolver shop' }));
+  expect(panel.getByText('Postgres connection')).toBeTruthy();
+  expect(panel.getByText(/Use a read-only database user/)).toBeTruthy();
+  const save = panel.getByRole('button', { name: 'Save connection' }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+  const fill = { Host: 'db.example.com', Port: '6543', Database: 'shop', User: 'reader', Password: VALUE };
+  for (const [label, value] of Object.entries(fill)) fireEvent.input(panel.getByLabelText(`${label} for WAREHOUSE`), { target: { value } });
+  expect((panel.getByLabelText('Password for WAREHOUSE') as HTMLInputElement).type).toBe('password');
+  fireEvent.click(save);
+  await waitFor(() => expect(panel.getByText('Set')).toBeTruthy());
+  expect(calls.find(call => call.method === 'PUT')).toEqual({ url: '/api/my/resolvers/b1/v1/secrets', method: 'PUT', body: { name: 'WAREHOUSE', connection: { host: 'db.example.com', port: 6543, database: 'shop', user: 'reader', password: VALUE } } });
+  expect((panel.getByLabelText('Password for WAREHOUSE') as HTMLInputElement).value).toBe('');
+  expect(document.body.innerHTML).not.toContain(VALUE);
+});

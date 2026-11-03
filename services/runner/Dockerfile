@@ -8,5 +8,6 @@ FROM node:22.23.4-bookworm-slim
 WORKDIR /worker
 COPY --from=build /worker/node_modules ./node_modules
 COPY services/runner/src/runner-worker.mjs ./runner-worker.mjs
+COPY services/runner/src/worker-database.mjs ./worker-database.mjs
 USER 1000:1000
 ENTRYPOINT ["node", "--no-node-snapshot", "runner-worker.mjs"]

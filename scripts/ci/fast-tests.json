@@ -68,6 +68,7 @@
   "services/utils/__tests__/dataset-policy.test.ts",
   "services/app/lib/dataset-permissions/__tests__/stored-policy.test.ts",
   "services/utils/__tests__/runner-native-client.test.ts",
+  "services/utils/__tests__/public-address.test.ts",
   "services/utils/__tests__/timestamp.test.ts",
   "services/utils/src/__tests__/artifact-name.test.ts",
   "services/utils/src/__tests__/escape.test.ts",

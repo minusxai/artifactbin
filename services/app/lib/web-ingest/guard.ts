@@ -12,6 +12,8 @@
  * machine on a cloud box must still never be a metadata oracle.
  */
 
+import { isAllowedAddress } from '@artifactbin/utils/public-address';
+
 type WebIngestErrorCode =
   | 'invalid_url'        // not a parseable http(s) URL, or carries credentials / a custom port
   | 'forbidden_scheme'   // not https (or http where the policy allows it)
@@ -41,76 +43,13 @@ export interface WebIngestPolicy {
 
 // ── address rules ────────────────────────────────────────────────────────────
 
-/** Forbidden even when `allowPrivate` is on: nothing ever softens these. */
-const ALWAYS_FORBIDDEN_V4 = [
-  [169, 254], // link-local — includes the cloud metadata IP
-] as const;
-
-const isAlwaysForbiddenV4 = (o: number[]): boolean =>
-  ALWAYS_FORBIDDEN_V4.some((prefix) => prefix.every((p, i) => o[i] === p));
-
-const isPrivateV4 = (o: number[]): boolean =>
-  o[0] === 0 ||                                     // "this network"
-  o[0] === 10 ||                                    // RFC1918
-  (o[0] === 100 && o[1] >= 64 && o[1] <= 127) ||    // CGNAT
-  o[0] === 127 ||                                   // loopback
-  (o[0] === 172 && o[1] >= 16 && o[1] <= 31) ||     // RFC1918
-  (o[0] === 192 && o[1] === 0 && o[2] === 0) ||     // IETF assignments
-  (o[0] === 192 && o[1] === 0 && o[2] === 2) ||     // TEST-NET-1
-  (o[0] === 192 && o[1] === 168) ||                 // RFC1918
-  (o[0] === 198 && (o[1] === 18 || o[1] === 19)) || // benchmarking
-  (o[0] === 198 && o[1] === 51 && o[2] === 100) ||  // TEST-NET-2
-  (o[0] === 203 && o[1] === 0 && o[2] === 113) ||   // TEST-NET-3
-  o[0] >= 224;                                      // multicast + reserved + broadcast
-
-const parseV4 = (ip: string): number[] | null => {
-  const parts = ip.split('.');
-  if (parts.length !== 4) return null;
-  const octets = parts.map((p) => (/^\d{1,3}$/.test(p) ? Number(p) : NaN));
-  return octets.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? octets : null;
-};
-
-/** First hextet of a normalized v6 address ('' pieces from `::` count as 0). */
-const v6Head = (ip: string): number | null => {
-  const head = ip.split(':', 1)[0];
-  if (head === '') return 0; // starts with '::'
-  return /^[0-9a-f]{1,4}$/.test(head) ? parseInt(head, 16) : null;
-};
-
-const forbiddenV6 = (ip: string): boolean => {
-  if (ip === '::' || ip === '::1') return true;
-  // v4-mapped (::ffff:a.b.c.d) — the classic bypass: judge the embedded v4.
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
-  if (mapped) return isForbiddenIp(mapped[1]);
-  // NAT64 embeds a v4 we cannot see through — forbid the whole prefix.
-  if (ip.startsWith('64:ff9b:')) return true;
-  if (ip.startsWith('2001:db8:')) return true; // documentation
-  const head = v6Head(ip);
-  if (head === null) return true; // unparseable — fail closed
-  if ((head & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
-  if ((head & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-  if ((head & 0xff00) === 0xff00) return true; // multicast
-  return false;
-};
-
 /**
- * Whether an ADDRESS may never be fetched. `allowPrivate` admits the private
- * ranges (dev), but never link-local — see the module doc.
+ * Whether an ADDRESS may never be fetched. The ranges live in `@artifactbin/utils` (`isAllowedAddress`),
+ * shared with the resolver database tunnel. `allowPrivate` admits loopback and the private ranges (dev),
+ * but never link-local or reserved space — see the module doc.
  */
 export function isForbiddenIp(ip: string, policy?: WebIngestPolicy): boolean {
-  const trimmed = ip.trim().toLowerCase();
-  if (!trimmed) return true;
-  if (trimmed.includes(':')) {
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(trimmed);
-    if (mapped) return isForbiddenIp(mapped[1], policy);
-    if (policy?.allowPrivate && (trimmed === '::1')) return false;
-    return forbiddenV6(trimmed);
-  }
-  const octets = parseV4(trimmed);
-  if (!octets) return true; // fail closed
-  if (isAlwaysForbiddenV4(octets)) return true;
-  if (policy?.allowPrivate) return false;
-  return isPrivateV4(octets);
+  return !isAllowedAddress(ip, { allowPrivate: !!policy?.allowPrivate });
 }
 
 // ── URL rules ────────────────────────────────────────────────────────────────

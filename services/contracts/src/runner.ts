@@ -34,6 +34,36 @@ export const RESOLVER_LIMITS = Object.freeze({
   /** The longest one `getRun` holds a completion wait open; below the runner client's 30 s request timeout. */
   runWaitMs: 20_000,
 });
+/**
+ * `caps.postgres`: the database tunnel's limits, enforced by the runner controller that opens the TCP
+ * connection (services/runner `database-tunnel.ts`). Counts per owner and per page are per controller.
+ */
+export const RESOLVER_DATABASE_LIMITS = Object.freeze({
+  /** Tunnels one run may open in total (a driver reconnect counts again). */
+  connectionsPerRun: 4,
+  /** Tunnels open at once for one page owner, and for one page, across that controller's runs. */
+  connectionsPerOwner: 16,
+  connectionsPerPage: 8,
+  /** DNS lookup plus TCP connect, every vetted address tried included. */
+  connectTimeoutMs: 5_000,
+  /** A tunnel with no bytes either way for this long is closed. */
+  idleTimeoutMs: 10_000,
+  /** Bytes from the database to the run, and from the run to the database, over all its tunnels. */
+  bytesInPerRun: 16 * 1024 * 1024,
+  bytesOutPerRun: 4 * 1024 * 1024,
+  /** Bytes in flight per tunnel and direction before the sender waits for an acknowledgement. */
+  windowBytes: 256 * 1024,
+  /** Largest payload of one tunnel message. */
+  chunkBytes: 64 * 1024,
+  /** Tunnel messages one run may send the controller. */
+  messagesPerRun: 50_000,
+  /** Lowest port a connection may name: database servers listen on unprivileged ports. */
+  minPort: 1024,
+});
+/** The host operation that answers a named connection; the worker calls it, resolver code cannot. */
+export const RESOLVER_DATABASE_OPERATION = 'artifactbin.pageBackend.postgres';
+/** The `secrets` export binding value that declares a Postgres connection instead of a fetch secret. */
+export const RESOLVER_DATABASE_BINDING = 'postgres';
 /** What a run receipt records for one `caps.fetch`: never a query string, header value or body. */
 export interface ResolverFetchReceipt {
   method: string;

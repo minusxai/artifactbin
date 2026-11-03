@@ -42,7 +42,7 @@ export * from './mutation-operations';
 export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunWait, RunEvent, RunReceipt, RunSnapshot, RunnerService } from './runner';
 
 export type {ResolverFetchReceipt} from './runner';
-export {RESOLVER_LIMITS} from './runner';
+export {RESOLVER_LIMITS,RESOLVER_DATABASE_LIMITS,RESOLVER_DATABASE_OPERATION,RESOLVER_DATABASE_BINDING} from './runner';
 
 // Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
 // makes esbuild's split reader graph load that chunk through unrelated contract imports.
