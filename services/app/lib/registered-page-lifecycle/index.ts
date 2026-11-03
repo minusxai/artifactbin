@@ -39,6 +39,13 @@ export const pageSourceDigest = (html: string) => createHash('sha256').update(ht
  * keeps serving, saving and re-binding it until a migration removes them.
  */
 export const isRegisteredPageProgram = (compiled: string): boolean => compiled.startsWith('!registered-page-');
+/** KEPT UNTIL THE REGISTERED-PAGE MIGRATION: the names among `links` (a locked head's) that are registered programs of
+ * that page, so a save whose HTML still declares them with the removed af-backend rel keeps and re-binds them. */
+export async function registeredProgramNames(tx: Queryable, links: readonly HtmlBackendLink[]): Promise<Set<string>> {
+  const names = new Set<string>();
+  for (const link of links) if ((await backendRecord(tx, link))?.compiled.startsWith('!registered-page-')) names.add(link.name);
+  return names;
+}
 export class NewRegistrationRefused extends Error {
   readonly body: { error: 'registered_programs_retired'; namespace: string; details: string[] };
   constructor(readonly namespace: string) {

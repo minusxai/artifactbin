@@ -26,8 +26,8 @@ useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const link =
   '<link rel="af-resolver" data-af-name="queries" href="./queries.ts">';
-const html = (body: string, declared = true) =>
-  `<!doctype html><html><head><title>Rebind</title>${declared ? link : ""}</head><body>${body}</body></html>`;
+const html = (body: string, declared = true, form = link) =>
+  `<!doctype html><html><head><title>Rebind</title>${declared ? form : ""}</head><body>${body}</body></html>`;
 const program = {
   scalars: {},
   imports: [],
@@ -48,7 +48,7 @@ const provenance = {
   sqlEngineSha256: "c".repeat(64),
 };
 /** A migrated page: its head carries a registered `queries` program bound to that head. */
-async function migratedPage() {
+async function migratedPage(form = link) {
   const owner = await mintAccountToken("rebind_owner"),
     editor = await mintAccountToken("rebind_editor"),
     stranger = await mintAccountToken("rebind_stranger");
@@ -67,7 +67,7 @@ async function migratedPage() {
     [pageId, editor.userId, editor.email],
   );
   // Import shape: the registered head is also present in artifact_versions.
-  const source = html("<p>Migrated</p>");
+  const source = html("<p>Migrated</p>", true, form);
   const row = (
     await db.query<{ version: number }>("SELECT version FROM artifacts WHERE id=$1", [pageId])
   ).rows[0]!;
@@ -320,4 +320,30 @@ it("a revert past an ordinary replacement resolver does not resurrect the regist
   expect(reverted.status).toBe(409);
   expect(await reverted.json()).toMatchObject(RETIRED);
   expect((await f.stored()).version).toBe(head);
+});
+
+/** The saved HTML of the live registered pages still names their programs with the removed af-backend rel. */
+const afBackend = (pageId = "PAGE") =>
+  `<link rel="af-backend" href="https://artifactbin.dev/api/artifacts/${pageId}/graphql" data-af-name="queries">`;
+
+it("re-saving a page whose registered program is declared with af-backend keeps the link and its data", async () => {
+  const f = await migratedPage(afBackend());
+  await expectTotal(f);
+  for (const [token, body] of [[f.owner.token, "<p>Owner edit</p>"], [f.editor.token, "<p>Editor edit</p>"]] as const) {
+    expect((await f.save(token, { html: html(body, true, afBackend(f.pageId)) })).status).toBe(200);
+    const after = await plan(f);
+    expect(after.link.backendId).toBe(f.prepared.link.backendId);
+    expect(after.plan?.registration.pageVersion).toBe(after.now.version);
+    await expectTotal(f);
+  }
+});
+
+it("af-backend declares nothing that is not already a registered program of the page", async () => {
+  const f = await migratedPage();
+  const stray = `<link rel="af-backend" data-af-name="other" href="https://artifactbin.dev/api/artifacts/${f.pageId}/graphql">`;
+  expect((await f.save(f.owner.token, { html: html(`<p>Edit</p>`, true, link + stray) })).status).toBe(200);
+  expect((await f.stored()).meta.htmlLinks!.map((l) => l.name)).toEqual(["queries"]);
+  // A page that declares its registration only with af-resolver and then drops it is not kept alive by af-backend elsewhere.
+  expect((await f.save(f.owner.token, { html: html(`<p>Gone</p>`, true, stray) })).status).toBe(200);
+  expect((await f.stored()).meta.htmlLinks ?? []).toEqual([]);
 });

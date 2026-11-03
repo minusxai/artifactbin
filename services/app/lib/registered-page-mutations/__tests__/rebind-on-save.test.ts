@@ -31,11 +31,11 @@ vi.mock("@/lib/page-operations", async (original) => ({
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const link = '<link rel="af-resolver" data-af-name="actions" href="./actions.ts">';
-const html = (body: string, declared = true) =>
-  `<!doctype html><html><head><title>Rebind</title>${declared ? link : ""}</head><body>${body}</body></html>`;
+const html = (body: string, declared = true, form = link) =>
+  `<!doctype html><html><head><title>Rebind</title>${declared ? form : ""}</head><body>${body}</body></html>`;
 const provenance = { compilerSha256: "a".repeat(64), sourceSha256: "b".repeat(64) };
 /** A migrated page: its head carries a registered `actions` mutation program bound to that head. */
-async function migratedPage() {
+async function migratedPage(form = link) {
   const owner = await mintAccountToken("mutation_rebind_owner"),
     editor = await mintAccountToken("mutation_rebind_editor"),
     stranger = await mintAccountToken("mutation_rebind_stranger");
@@ -66,7 +66,7 @@ async function migratedPage() {
     reset: ["body"],
   };
   // Import shape: the registered head is also present in artifact_versions.
-  const source = html("<p>Migrated</p>");
+  const source = html("<p>Migrated</p>", true, form);
   const row = (await db.query<{ version: number }>("SELECT version FROM artifacts WHERE id=$1", [pageId])).rows[0]!;
   const page = { pageId, version: row.version + 1, html: source };
   const prepared = prepareRegisteredMutationBackend("actions", `native_${pageId}`, page, structuredClone(program), provenance);
@@ -287,4 +287,15 @@ it("no page gains a registered mutation: a fork and a revert to a head without o
   expect(reverted.status).toBe(409);
   expect(await reverted.json()).toMatchObject(retired);
   expect((await f.stored()).version).toBe(head);
+});
+
+it("re-saving a page whose registered mutation is declared with af-backend keeps the link and its writes", async () => {
+  const declared = (pageId: string) =>
+    `<link rel="af-backend" href="https://artifactbin.dev/api/artifacts/${pageId}/graphql" data-af-name="actions">`;
+  const f = await migratedPage(declared("PAGE"));
+  expect((await f.save(f.owner.token, { html: html("<p>Owner edit</p>", true, declared(f.pageId)) })).status).toBe(200);
+  const after = await plan(f);
+  expect(after.link.backendId).toBe(f.prepared.link.backendId);
+  expect(after.plan?.registration.pageVersion).toBe((await f.stored()).version);
+  await expectCommitted(f, "after af-backend save");
 });

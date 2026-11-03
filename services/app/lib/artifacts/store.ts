@@ -3,10 +3,10 @@ import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
 import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries';
 import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations';
-import { isRegisteredPageProgram, NewRegistrationRefused } from '../registered-page-lifecycle';
+import { isRegisteredPageProgram, NewRegistrationRefused, registeredProgramNames } from '../registered-page-lifecycle';
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
-import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
+import { canonicalizeHtmlPage, htmlBackendNames, htmlRetiredBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
@@ -672,7 +672,11 @@ async function replaceScoped(
     }
     if(input.format==='html'){
       const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
-      const names=htmlBackendNames(input.source??'');
+      const declared=htmlBackendNames(input.source??'');
+      // KEPT UNTIL THE REGISTERED-PAGE MIGRATION: a head's registered program still declared with the removed af-backend rel stays declared.
+      const retired=htmlRetiredBackendNames(input.source??'').filter(name=>!declared.includes(name));
+      const registered=retired.length?await registeredProgramNames(tx,previous):new Set<string>();
+      const names=[...declared,...retired.filter(name=>registered.has(name))];
       if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
       if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
       const backendOwner=current.user_id??current.token_id;
