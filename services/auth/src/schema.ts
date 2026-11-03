@@ -35,6 +35,9 @@ export const AUTH_TABLES: Table[] = [
     indexes: [
       { name: 'idx_auth_credentials_group', columns: ['group_id'], where: 'group_id IS NOT NULL' },
       { name: 'idx_auth_credentials_expiry', columns: ['expires_at'] },
+      // Bearer admission's family fence: a refresh token's membership by its access token id.
+      // Production builds it CONCURRENTLY by hand before deploy; this keeps the same name and definition.
+      { name: 'idx_auth_credentials_access', columns: ["(payload->>'access_token_id')"], where: "kind='refresh_token'" },
     ],
   },
 ];

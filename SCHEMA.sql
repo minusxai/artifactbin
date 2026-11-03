@@ -1931,6 +1931,8 @@ CREATE INDEX IF NOT EXISTS idx_auth_credentials_group ON auth.credentials (group
 
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_expiry ON auth.credentials (expires_at);
 
+CREATE INDEX IF NOT EXISTS idx_auth_credentials_access ON auth.credentials ((payload->>'access_token_id')) WHERE kind='refresh_token';
+
 -- schema "events" — owned by the events role; tables declared by services/events/src/schema.ts
 
 CREATE TABLE IF NOT EXISTS events.events (
