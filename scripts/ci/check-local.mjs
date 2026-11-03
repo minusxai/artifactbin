@@ -12,7 +12,6 @@ const args = raw.filter(arg => arg !== '--reuse' && !arg.startsWith('--part='));
 const node = process.execPath;
 const rootTypes = command => command[command.indexOf('-p') + 1] === 'tsconfig.json';
 const validateCommands = [
-  [node, 'scripts/ci/check-residual-names.mjs'],
   [node, 'scripts/ci/check-ui-primitives.mjs'],
   [node, 'scripts/ci/module-graph.mjs'],
   [node, 'scripts/ci/table-ownership.mjs'],

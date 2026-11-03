@@ -100,10 +100,11 @@ describe('handlers through Hono', () => {
   });
 });
 
-// Exercise the full server: a missing explicit non-API route can reach the SPA shell.
-it('retired authoring routes preserve their HTTP refusal independently of credentials', async () => {
+// Exercise the full server: the retired JSX authoring paths have no route of their own.
+it('retired authoring paths are unrouted: API paths answer the JSON not-found, reader paths the 404 page', async () => {
   const app = createAppServer({indexHtml: async () => '<main>SPA shell</main>'});
   const actor = await mintToken('retired-route');
+  expect(ROUTES.map(route => route.path).filter(path => /\/(draft-preview|viewer|edits|prepare)$/.test(path))).toEqual([]);
   const paths = [
     ['/a/abc123/draft-preview', ['GET', 'POST']],
     ['/a/abc123/viewer', ['GET']],
@@ -116,9 +117,13 @@ it('retired authoring routes preserve their HTTP refusal independently of creden
         accept: 'text/html', ...(authorization ? {authorization} : {}),
       }});
       expect(response.status, method + ' ' + path).toBe(404);
-      expect(response.headers.get('content-type')).toBe('application/json');
-      expect(response.headers.get('cache-control')).toBeNull();
-      expect(await response.text()).toBe('{"error":"not_found"}');
+      if (path.startsWith('/api/')) {
+        expect(response.headers.get('content-type')).toBe('application/json');
+        expect((await response.json()).error).toBe('not_found');
+      } else if (method === 'GET') {
+        // The app's own not-found page: the shell, answered 404.
+        expect(await response.text(), path).toContain('SPA shell');
+      }
     }
   }
 });

@@ -8,8 +8,6 @@ import { createUser, identityForUser } from '@/lib/accounts';
 import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
 import {mintAccountToken as mintToken} from '@/__tests__/harness';
 import {GET,PUT,PATCH} from '@/app/api/artifacts/[id]/route';
-import {POST as prepare} from '@/app/api/artifacts/[id]/prepare/route';
-import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {GET as content} from '@/app/api/artifacts/[id]/content/route';
 import {GET as annotations,POST as annotate} from '@/app/api/artifacts/[id]/annotations/route';
 import {GET as capabilities} from '@/app/api/capabilities/route';
@@ -35,7 +33,7 @@ import {bearerIdentity,request,useAppHarness} from './harness';
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
  * the auth proxy attaches verified claims, the app resolves the bearer, and every route reaches the
  * same decision. Two rules: an admin edits any document that is not private, through every door the
- * owner uses (the CLI's /prepare included); an admin reaches NO private artifact, by any door.
+ * owner uses; an admin reaches NO private artifact, by any door.
  */
 const harness=useAppHarness();
 const SOURCE='<html><head></head><body><p data-af-id="intro">Before</p></body></html>';
@@ -61,8 +59,6 @@ beforeEach(async()=>{
  app.get('/api/artifacts/:id',routed(GET));
  app.put('/api/artifacts/:id',routed(PUT));
  app.patch('/api/artifacts/:id',routed(PATCH));
- app.post('/api/artifacts/:id/prepare',routed(prepare));
- app.post('/api/artifacts/:id/edits',routed(edit));
  app.get('/api/artifacts/:id/content',routed(content));
  app.get('/api/artifacts/:id/annotations',routed(annotations));
  app.post('/api/artifacts/:id/annotations',routed(annotate));
@@ -99,9 +95,6 @@ it('refuses an admin every door to a private document with the uniform not-found
   ['read',bearer(`/api/artifacts/${PRIVATE.id}`)],
   ['content',bearer(`/api/artifacts/${PRIVATE.id}/content`)],
   ['versions',bearer(`/api/artifacts/${PRIVATE.id}/versions`)],
-  ['prepare',bearer(`/api/artifacts/${PRIVATE.id}/prepare`,{method:'POST',json:{source:SOURCE}})],
-  // A well-formed edit (prepared-document's protocol body), so the refusal is the access decision and not the body check.
-  ['edits',bearer(`/api/artifacts/${PRIVATE.id}/edits`,{method:'POST',json:{html:SOURCE,expectedVersion:1,expectedState:'0'.repeat(64)}})],
   ['annotations',bearer(`/api/artifacts/${PRIVATE.id}/annotations`)],
   ['annotate',bearer(`/api/artifacts/${PRIVATE.id}/annotations`,{method:'POST',json:{node_id:'intro',body:'hello'}})],
  ];

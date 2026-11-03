@@ -114,11 +114,6 @@ describe('cli-preconditions', () => {
    const response=await PATCH(request(`/api/my/artifacts/${row.id}`,{method:'PATCH',actor:{credential:'session',userId:token.userId!,email:token.email!,emailVerified:true},json:{title:'Changed'}}),{params:Promise.resolve({id:row.id})});
    expect(response.status).toBe(400);expect((await response.json()).error).toBe('state_required');
   });
-  it('refuses metadata on the body-edit endpoint instead of bypassing state conditions',async()=>{
-   const {POST:edit}=await import('@/app/api/artifacts/[id]/edits/route');const token=await mintToken('edit-metadata');
-   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();
-   const response=await edit(request(`/api/artifacts/${row.id}/edits`,{method:'POST',token:token.token,json:{edit_id:row.edit_id,title:'Changed'}}),{params:Promise.resolve({id:row.id})});expect(response.status).toBe(404);
-  });
   it('requires observed conditions when reverting a retained version',async()=>{
    const {POST:revert}=await import('@/app/api/artifacts/[id]/revert/route');const token=await mintToken('revert-conditions');
    const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();const ctx={params:Promise.resolve({id:row.id})};

@@ -20,7 +20,7 @@ export default {
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests and the preview gate's build.
-        'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
+        'scripts/gates/gate-*.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/resolver-latency.ts', 'scripts/backfill-web-assets.ts', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',

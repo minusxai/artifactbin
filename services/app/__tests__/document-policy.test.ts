@@ -5,7 +5,6 @@ import {afterEach,beforeEach,expect,it} from 'vitest';
 import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
 import type {Actor} from '@artifactbin/contracts';
 import {GET,PUT,DELETE} from '@/app/api/my/artifacts/[id]/route';
-import {POST as edit} from '@/app/api/my/artifacts/[id]/edits/route';
 import {GET as page} from '@/app/api/page/artifact/[id]/route';
 import {request,useAppHarness} from './harness';
 import {observedRequest} from './conditional-request';
@@ -43,7 +42,6 @@ it('refuses an admin every browser door to a private document, leaking nothing a
  const doors:Array<[string,Response]>=[
   ['read',await GET(request(privatePath,options),privateContext)],
   ['page',await page(request('/api/page/artifact/prv123',options),privateContext)],
-  ['edit',await edit(request(privatePath+'/edits',{...options,method:'POST',json:{source:'retired editor request'}}),privateContext)],
   ['replace',await PUT(await observedRequest(privatePath,{...options,method:'PUT',json:{html:nativeHtml('<p data-af-id="intro">Admin</p>')}}),privateContext)],
   ['delete',await DELETE(request(privatePath,{...options,method:'DELETE'}),privateContext)],
  ];

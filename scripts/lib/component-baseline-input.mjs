@@ -1,7 +1,13 @@
 import path from 'node:path';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {hostedComponentFiles,verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
-import {baselineLocalOrigin} from './component-baseline-session.mjs';
+
+/** The isolated local origin a gate publishes to and reads from; never a production host or a URL carrying credentials. */
+export function baselineLocalOrigin(base) {
+ const url=new URL(base);
+ if(url.username||url.password||!['http:','https:'].includes(url.protocol)||(!['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)&&!url.hostname.endsWith('.lvh.me')))throw Error('Baseline publication requires an isolated local origin');
+ return url.origin;
+}
 
 /** Add source-verified hosted component evidence to an imported reader manifest without republishing its entries. */
 export async function attachVerifiedComponentAssets(input,{source,base,fetcher=fetch}){

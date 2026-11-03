@@ -5,7 +5,7 @@
  * tree — so it lives in one file rather than being spread over a dozen `not.toContain` lines in tests
  * that are about something else entirely:
  *
- *   - the pre-rename product identity (the `check-residual-names.mjs` binary and its allowlist);
+ *   - the pre-rename product identity;
  *   - the retired token surfaces, which used to be asserted absent inside proxy, CLI and eval tests
  *     that were really about rate limits, config and instrumentation;
  *   - identifiers spelled like a credential, which trip CodeQL's heuristic and redden every PR;
@@ -15,40 +15,32 @@
  * synthetic violation and once against the real tree. A guard that only ever sees a clean repository
  * is indistinguishable from a guard that does nothing.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import yaml from 'yaml';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const GUARD = path.join(ROOT, 'scripts', 'ci', 'check-residual-names.mjs');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
-const temporary = [];
+/**
+ * The pre-rename product identity, in every spelling: hyphen, space or underscore, any case, British, and the
+ * plural typo. Only `artifact_bin`, exactly, is the retained database/schema name. Assembled from parts so this
+ * file does not spell what it forbids.
+ */
+const RESIDUAL_NAME = new RegExp(['(?:artifact|artefact)(?:-|[ _])bin', ['artifacts', 'bin'].join('')].join('|'), 'gi');
 
-afterEach(() => {
-  for (const directory of temporary.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
-});
-
-function repository(files, allowlist = []) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifactbin-residual-'));
-  temporary.push(root);
-  fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
-  for (const [file, content] of Object.entries(files)) {
-    const target = path.join(root, file);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
+/** Pure so a synthetic violation can prove the scan bites. `files` is a list of `[path, text]`. */
+function residualNames(files) {
+  const found = [];
+  for (const [file, text] of files) {
+    for (const match of text.matchAll(RESIDUAL_NAME)) {
+      if (match[0] === ['artifact', 'bin'].join('_')) continue;
+      found.push(`${file}:${text.slice(0, match.index).split('\n').length}: ${match[0]}`);
+    }
   }
-  const allowlistPath = path.join(root, 'scripts', 'allowlist.json');
-  fs.writeFileSync(allowlistPath, JSON.stringify(allowlist));
-  execFileSync('git', ['-C', root, 'init', '-q']);
-  execFileSync('git', ['-C', root, 'add', ...Object.keys(files)]);
-  return { root, allowlistPath };
+  return found;
 }
-
-const run = ({ root, allowlistPath }) => spawnSync(process.execPath, [GUARD, '--root', root, '--allowlist', allowlistPath], { encoding: 'utf8' });
 
 describe('residual-name guard', () => {
   it('rejects historical, British, underscore/case, and plural-typo spellings', () => {
@@ -62,29 +54,15 @@ describe('residual-name guard', () => {
       ['artifacts', 'bin'].join(''),
       ['Artifacts', 'bin'].join(''),
     ];
-    const fixture = repository({ 'identity.txt': variants.join('\n') });
-    const result = run(fixture);
-    expect(result.status).toBe(1);
-    for (const variant of variants) expect(`${result.stdout}${result.stderr}`).toContain(variant);
+    expect(residualNames([['identity.txt', variants.join('\n')]])).toEqual(variants.map((variant, index) => `identity.txt:${index + 1}: ${variant}`));
   });
 
-  it('requires the exact allowed occurrence count', () => {
-    const oldName = ['artifact', 'bin'].join('-');
-    const fixture = repository({ 'history.txt': `${oldName}\n${oldName}\n` }, [
-      { path: 'history.txt', value: oldName, count: 1, reason: 'fixture' },
-    ]);
-    expect(run(fixture).status).toBe(1);
-    fs.writeFileSync(fixture.allowlistPath, JSON.stringify([
-      { path: 'history.txt', value: oldName, count: 2, reason: 'fixture' },
-    ]));
-    expect(run(fixture).status).toBe(0);
+  it('keeps the exact retained database name and the current name', () => {
+    expect(residualNames([['schema.sql', `CREATE SCHEMA ${['artifact', 'bin'].join('_')};\nartifactbin`]])).toEqual([]);
   });
 
-  it('does not inspect ignored or otherwise untracked files', () => {
-    const oldName = ['artifact', 'bin'].join('-');
-    const fixture = repository({ '.gitignore': '.env\n', 'tracked.txt': 'artifactbin\n' });
-    fs.writeFileSync(path.join(fixture.root, '.env'), `${oldName}\n`);
-    expect(run(fixture).status).toBe(0);
+  it('no tracked file spells the pre-rename identity', () => {
+    expect(residualNames(trackedText())).toEqual([]);
   });
 });
 

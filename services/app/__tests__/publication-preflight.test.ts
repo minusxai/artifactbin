@@ -41,3 +41,7 @@ it('dry-runs a create and a replace through the publish requests without writing
  const stored=(await db.query<{version:number;title:string|null}>('SELECT version,title FROM artifacts WHERE id=$1',[row.id])).rows[0];
  expect(stored.version).toBe(row.version);expect(stored.title).not.toBe('Renamed');
 });
+it('does not offer an obsolete client-compiled edit mode',async()=>{
+ const token=await mintToken('native-preflight');const created=await (await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p>Page</p>')}}))).json();
+ const response=await preflight(request('/api/artifacts/preflight',{method:'POST',token:token.token,json:{id:created.id,mode:'edit',input:{document_update:{}}}}));expect(response.status).toBe(400);expect((await response.json()).error).toBe('invalid_preflight_mode');
+});
