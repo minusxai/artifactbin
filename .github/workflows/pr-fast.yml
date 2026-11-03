@@ -57,7 +57,34 @@ jobs:
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      # A PULL REQUEST THAT CHANGES THE LOCK MISSES THAT KEY ON EVERY PUSH: only main saves it, after the merge.
+      # A cold `npm ci` was 14-24s of #1018's 47s and 55s runs. So on a miss, restore the newest whole install
+      # (this branch's, else main's; restore only, so no stale tree is ever saved) and let `npm install`
+      # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
+      # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
+      # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
       - if: steps.install.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: near-install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
+      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != ''
+        name: Reconcile the nearest install to this lock
+        run: |
+          npm install --no-audit --no-fund
+          if git diff --quiet -- package-lock.json package.json 'services/*/package.json'; then
+            node services/app/scripts/copy-assets.mjs
+          else
+            git checkout -- package-lock.json package.json 'services/*/package.json'
+            npm ci --no-audit --no-fund
+          fi
+      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''
         run: npm ci --no-audit --no-fund
       # The root type check is incremental: start from the newest native build info any run of this repository
       # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
