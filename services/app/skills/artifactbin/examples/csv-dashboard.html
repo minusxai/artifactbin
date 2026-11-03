@@ -8,9 +8,10 @@ Next: in this copy replace only the [bracketed] text and the data (no drafts els
 Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset), then
 replace the placeholder after ref: in the dataset link below with the returned dataset ID and
 publish this page (node scripts/publish.mjs examples/csv-dashboard.html).
-Gotchas: never publish the placeholder. Field names are the CSV's column names (graphql.mjs schema ID
-lists them). Verify chart values against the source cells, including empty values. Copy it as index.html and replace only the [bracketed] text and the
-data; keep its CSS, JS and layout, and add no new controls.
+Gotchas: never publish the placeholder. Field names are the CSV's column names (graphql.mjs
+schema ID lists them). Verify chart values against the source cells, including empty values.
+Copy it as index.html and replace only the [bracketed] text and the data; keep its CSS, JS and
+layout, and add no new controls.
 -->
 <html lang="en">
 <head>
@@ -51,7 +52,8 @@ week</h2><svg id="chart" viewBox="0 0 640 300" role="img"
 aria-labelledby="chart-title chart-description">
 <desc id="chart-description">The chart loads from the linked CSV dataset.</desc></svg></section>
 <aside><h2 class="t-title">How to read this</h2>
-<p>Figures below are calculated only after every page of rows has loaded.</p><p id="summary" class="number"></p>
+<p>Figures below are calculated only after every page of rows has loaded.</p>
+<p id="summary" class="number"></p>
 <p class="muted">Illustrative data. Weekly snapshots of waiting work are not summed as a backlog
 total.</p></aside></div><table><caption>Source rows used in this chart</caption><thead><tr>
 <th scope="col">Week</th><th scope="col">Completed</th><th scope="col">Waiting</th></tr></thead>

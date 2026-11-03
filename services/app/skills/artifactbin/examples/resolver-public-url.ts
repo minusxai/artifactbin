@@ -1,7 +1,8 @@
 /**
- * Resolver: rows from a public CSV or JSON URL (no secrets), typed for the page.
+ * Example resolver: rows from a public CSV or JSON URL (no secrets), typed for the page.
  * Usage: cp examples/resolver-public-url.ts sales.ts; link it with
- *   <link rel="af-resolver" data-af-name="sales" href="./sales.ts"> and query {sales{rows{name value}}}.
+ *   <link rel="af-resolver" data-af-name="sales" href="./sales.ts"> and query
+ *   {sales{rows{name value}}}.
  * Next: set URL; rename Row's fields and the mapping in row() to your columns.
  * Gotchas: HTTPS on port 443 only, 2 MiB and 10 s per request; private addresses are refused. A
  *   Google Sheet published to the web works: use its CSV export URL. Quoted fields may hold commas.
@@ -14,7 +15,8 @@ export const typeDefs = `
     test: String! @auth(role: owner)
   }
 `;
-type Caps = { fetch(url: string): Promise<{ ok: boolean; status: number; text(): Promise<string> }> };
+type Res = { ok: boolean; status: number; text(): Promise<string> };
+type Caps = { fetch(url: string): Promise<Res> };
 type Fields = Record<string, string>;
 
 /** One CSV line into fields; doubled quotes inside a quoted field are one quote. */
@@ -42,7 +44,8 @@ async function records(caps: Caps): Promise<Fields[]> {
   const [header = [], ...lines] = text.split(/\r?\n/).filter(Boolean).map(fields);
   return lines.map(line => Object.fromEntries(header.map((key, i) => [key.trim(), line[i] ?? ''])));
 }
-const row = (r: Fields) => ({ name: String(r.name ?? ''), value: r.value === '' ? null : Number(r.value) });
+const row = (r: Fields) =>
+  ({ name: String(r.name ?? ''), value: r.value === '' ? null : Number(r.value) });
 
 export default {
   async rows({ limit }: { limit?: number }, _principal: unknown, caps: Caps) {

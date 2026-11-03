@@ -1,5 +1,5 @@
 /**
- * Resolver: rows from a Supabase table over its REST API (PostgREST), read-only.
+ * Example resolver: rows from a Supabase table over its REST API (PostgREST), read-only.
  * Secrets: SUPABASE_KEY = the project's anon key (with row level security) or a dedicated key,
  *   set by the page owner in the page's Resolvers panel. Prefer the anon key: never the service
  *   role key unless the page is private.
@@ -28,16 +28,19 @@ async function select(caps: Caps, query: string): Promise<Array<Record<string, u
   const res = await caps.fetch('https://' + HOST + '/rest/v1/' + TABLE + '?' + query, {
     headers: { apikey: '{{SUPABASE_KEY}}', Authorization: 'Bearer {{SUPABASE_KEY}}' },
   });
-  if (!res.ok) throw Error('Supabase answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
+  if (!res.ok)
+    throw Error('Supabase answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
   return (await res.json()) as Array<Record<string, unknown>>;
 }
 
 export default {
-  async tasks({ status, limit }: { status?: string; limit?: number }, _principal: unknown, caps: Caps) {
+  async tasks(args: { status?: string; limit?: number }, _principal: unknown, caps: Caps) {
+    const { status, limit } = args;
     const filter = status ? '&status=eq.' + encodeURIComponent(status) : '';
     const rows = await select(caps, 'select=id,title,status,due&order=due.asc&limit=' +
       Math.min(limit ?? 500, 1000) + filter);
-    return rows.map(r => ({ id: String(r.id), title: String(r.title ?? ''), status: r.status ?? null, due: r.due ?? null }));
+    return rows.map(r => ({ id: String(r.id), title: String(r.title ?? ''),
+      status: r.status ?? null, due: r.due ?? null }));
   },
   async test(_args: unknown, _principal: unknown, caps: Caps) {
     return 'Read ' + (await select(caps, 'select=id&limit=5')).length + ' rows from ' + TABLE;

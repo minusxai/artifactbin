@@ -12,8 +12,13 @@ function fieldsOf(columns:unknown):string[] {
  const names=Array.isArray(columns)?columns.flatMap(column=>column&&typeof column==='object'&&typeof (column as {name?:unknown}).name==='string'?[(column as {name:string}).name]:[]):[];
  return ['_id',...Object.values(hasuraColumnNames(names))];
 }
+/** A stable order for offset paging: the first column, then `_id` to break ties (rows are otherwise in `_id` hash order). */
+function orderOf(fields:readonly string[]):string {
+ return `[${[...fields.slice(1,2),'_id'].map(field=>`{${field}:asc}`).join(',')}]`;
+}
 function usage(id:string,columns:unknown,catalog?:DatasetCatalog):string {
  if(catalog?.kind==='postgres')return datasetQuerySnippet(id,catalog);
+ const fields=fieldsOf(columns);
  return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dataset rows</title><script src="/af/core.js" data-af="core"></script>
@@ -25,7 +30,7 @@ import {client,gql} from '@afbin/apollo';
 try {
  const rows=[];
  for(let offset=0;;offset+=1000){
-  const {data,errors}=await client.query({query:gql\`query($offset:Int!){data(limit:1000,offset:$offset){${fieldsOf(columns).join(' ')}}}\`,variables:{offset}});
+  const {data,errors}=await client.query({query:gql\`query($offset:Int!){data(order_by:${orderOf(fields)},limit:1000,offset:$offset){${fields.join(' ')}}}\`,variables:{offset}});
   if(errors?.length)throw Error(errors[0].message);
   rows.push(...data.data);
   if(data.data.length<1000)break;

@@ -23,7 +23,8 @@ export const typeDefs=`
 const FIND=`query Find($c:String!){targets(where:{category:{_eq:$c}}){_id}}`;
 const UPDATE=`mutation Update($id:ID!,$a:Float!){update_targets_by_pk(pk_columns:{_id:$id},
  _set:{amount:$a}){category amount}}`;
-const INSERT=`mutation Insert($o:targets_insert_input!){insert_targets_one(object:$o){category amount}}`;
+const INSERT=`mutation Insert($o:targets_insert_input!){insert_targets_one(object:$o){
+ category amount}}`;
 const CLEAR=`mutation Clear($c:String!){delete_targets(where:{category:{_eq:$c}}){affected_rows}}`;
 export default {
  // Lets the page show guests why they can't edit; @auth still enforces it on every write.

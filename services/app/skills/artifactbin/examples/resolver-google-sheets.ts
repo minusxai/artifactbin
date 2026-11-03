@@ -1,5 +1,5 @@
 /**
- * Resolver: open deals from a private Google Sheet shared with a service account.
+ * Example resolver: open deals from a private Google Sheet shared with a service account.
  * Secrets: GOOGLE_SA = that service account's JSON key, set by the page owner in the page's
  *   Resolvers panel. The host signs in with it and sends the token only to sheets.googleapis.com.
  * Usage: cp examples/resolver-google-sheets.ts pipeline.ts; link it with
@@ -21,7 +21,8 @@ export const typeDefs = `
   }
 `;
 type Auth = { type: 'google'; secret: string; scopes: string[] };
-type Caps = { fetch(url: string, init?: { auth?: Auth }): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> };
+type Res = { ok: boolean; status: number; json(): Promise<unknown> };
+type Caps = { fetch(url: string, init?: { auth?: Auth }): Promise<Res> };
 const auth: Auth = { type: 'google', secret: 'GOOGLE_SA',
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] };
 

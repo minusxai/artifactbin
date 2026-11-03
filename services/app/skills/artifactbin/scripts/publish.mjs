@@ -33,8 +33,9 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   static or literal dynamic module imports (up to 99 files, 4 MB each, 16 MB total); list other
   runtime-loaded files in --manifest. Computed imports and cyclic graphs are refused; remote URLs,
   absolute server paths and ref: links stay as written. af-resolver (alias af-backend) files go in
-  as resolver sources, never as public assets. A link on the legacy dataset API prints deprecated:. An update is conditional on the observed version: a
-  concurrent remote change exits 4 instead of overwriting. The journal is saved before sending
+  as resolver sources, never as public assets. A link on the legacy dataset API prints
+  deprecated:. An update is conditional on the observed version: a concurrent remote change exits
+  4 instead of overwriting. The journal is saved before sending
   and --resume never changes it. A 409 or a refused baseline means someone else edited (or the
   baseline is historical, missing or mismatched): read.mjs again and reapply; there is no force
   overwrite and never attach a fresh head to stale bytes. --create publishes exported or

@@ -7,7 +7,7 @@ describe('native dataset authoring hints',()=>{
  it('returns a complete native HTML page that reads every row through the generated API with the columns\' field names',()=>{
   const result=datasetCreateFields('abc123',[{name:'amount',type:'number'},{name:'Created By',type:'string'}],2);
   expect(result.usage).toContain('<!doctype html>');expect(result.usage).toContain(datasetQuerySnippet('abc123'));
-  expect(result.usage).toContain('data(limit:1000,offset:$offset){_id amount created_by}');
+  expect(result.usage).toContain('data(order_by:[{amount:asc},{_id:asc}],limit:1000,offset:$offset){_id amount created_by}');
   expect(result.usage).toContain('graphql.mjs schema abc123');
   expect(result.usage).not.toMatch(LEGACY);
   expect(result.usage).not.toMatch(/<Helmet|<Import|<Query|<Chart|afbin push/);

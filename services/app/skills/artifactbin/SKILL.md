@@ -17,8 +17,9 @@ Manual ZIP installs must reinstall with the installer to update. Credentials sta
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
-  -steps, -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs; repairs.csv;
-  resolver-*.ts (copyable resolvers: public-url, http-json, google-sheets, bigquery, supabase, neon)
+  -steps, -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs;
+  repairs.csv; resolver-*.ts (copyable resolvers: public-url, http-json, google-sheets, bigquery,
+  supabase, neon)
 - `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
 (`--help` each)
 - `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups
@@ -116,7 +117,8 @@ sharing and deliberate ownership moves.
   'end to end' or 'fully verified'. Republish only to fix a failed requirement, never for polish,
   refactors or extra verification. Open screenshots only if your model accepts image input;
   otherwise the reply says appearance is unverified. For a shared app, the reply also says how
-  others get access: open the link and sign in to edit, and copies the dataset permissions read-back.
+  others get access: open the link and sign in to edit, and copies the dataset permissions
+  read-back.
 - **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then `node
   scripts/publish.mjs page.html`, then reply and watch (below); keep editing and publishing the same
   file and never regenerate the page from scratch. Publish rewrites the file with `data-af-id`s:
