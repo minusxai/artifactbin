@@ -5,7 +5,6 @@ import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
 import { writeShares } from './store';
 import { artifactQuery } from './document';
-import { catalogOf } from '@/lib/datasets';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 
@@ -22,7 +21,6 @@ export interface SharingState {
   groupShares?:import('@artifactbin/contracts').GroupShare[];
   /** Datasets: the write ACL, and the documents that would stop working if it were closed. */
   access?: DatasetAccess;
-  datasetKind?: 'stored' | 'postgres';
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
   /** False for an anonymous owner: `private` has no ACL to anchor without an account. */
   canPrivate?: boolean;
@@ -52,7 +50,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     groupShares:(await db.query<import('@artifactbin/contracts').GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
     canPrivate: !!(row.user_id||row.group_id),
     ...(row.format === 'dataset'
-      ? { access: row.access, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: [] }
+      ? { access: row.access, writtenBy: [] }
       : {}),
   };
 }
@@ -78,7 +76,7 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
     if (patch.access) {
       // Datasets only — the SQL says so rather than the caller, so a document
       // can never acquire a write ACL by way of this surface.
-      await tx.query(`UPDATE artifacts SET access = $2 WHERE id = $1  AND format = 'dataset' AND ($2 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres')`, [id, patch.access]);
+      await tx.query(`UPDATE artifacts SET access = $2 WHERE id = $1 AND format = 'dataset'`, [id, patch.access]);
     }
     if(patch.shares!==undefined)await writeShares(tx,id,patch.shares);
     // Dataset subscribers must re-read capabilities even when rows/version
@@ -92,7 +90,7 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
       linkRole: patch.linkRole ?? row.link_role ?? 'viewer',
       shares: shares.rows,
       canPrivate: !!(row.user_id||row.group_id),
-      ...(row.format === 'dataset' ? {access:patch.access ?? row.access,datasetKind:catalogOf(row)?.kind ?? 'stored'} : {}),
+      ...(row.format === 'dataset' ? {access:patch.access ?? row.access} : {}),
     } satisfies SharingState;
   });
   if (!done) return null;

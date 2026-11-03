@@ -120,7 +120,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
         <h2 class={SECTION_HEADING}>owner</h2>
         <Show when={format === 'dataset'}>
           <Button variant="ghost" size="sm" type="button" aria-label="Copy dataset reference" class="w-full justify-start"
-            onClick={() => { void copyText(catalog() ? datasetQuerySnippet(id, catalog()) : `ref:${id}`); setCopiedRef(true); }}>
+            onClick={() => { void copyText(catalog() ? datasetQuerySnippet(id) : `ref:${id}`); setCopiedRef(true); }}>
             {copiedRef() ? 'copied dataset reference' : catalog() ? `copy query · source="${id}"` : `copy ref:${id}`}
           </Button>
         </Show>
@@ -184,10 +184,10 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
         <AssetWorkspace workspace={format === 'dataset' ? 'Dataset' : 'Asset'} tabs={format === 'dataset' ? ['data', 'actions', 'sharing'] : ['asset', 'sharing']} active={section()} onSelect={setSection}
           actions={<Show when={format === 'dataset' && canEdit()}><Button variant="secondary" href={`/a/${id}/edit`} aria-label="Edit dataset">Edit dataset</Button></Show>}>
           <div hidden={section() !== 'data' && section() !== 'asset'}>{preview}</div>
-          <Show when={format === 'dataset' && section() === 'actions'}><DatasetActionsView id={id} canInspect={canEdit()} kind={catalog()?.kind} /></Show>
+          <Show when={format === 'dataset' && section() === 'actions'}><DatasetActionsView id={id} canInspect={canEdit()} /></Show>
           <Show when={section() === 'sharing'}>
             <Panel class="mx-auto max-w-2xl space-y-4">
-              <DocumentSharing id={id} title={title()} owner={owner()} editable={canEdit()} variant="embedded" format={format} datasetKind={catalog()?.kind} onDataActions={() => setSection('actions')} />
+              <DocumentSharing id={id} title={title()} owner={owner()} editable={canEdit()} variant="embedded" format={format} onDataActions={() => setSection('actions')} />
               <Show when={canEdit()}><p class="text-xs text-muted">Sharing changes save immediately.</p></Show>
             </Panel>
           </Show>

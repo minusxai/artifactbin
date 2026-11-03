@@ -50,9 +50,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 31, timeoutMs: 70_000 },
   // Native HTML writes and shared data reaching open pages without a reload.
   { name: 'live', needsMail: false, seconds: 19, timeoutMs: 60_000 },
-  // One walk over dataflow, local-sql-state, dataset-policies and data-ux (proposal row 10). Its PostgreSQL leg is
-  // services/app/lib/datasets/__tests__/postgres-routes.test.ts now, so no gate starts Docker (was 21s with it).
-  // Was 21s with it; 22s in one gate container of this change (four CPUs, two servers, eight gates at once).
+  // One walk over dataflow, local-sql-state, dataset-policies and data-ux (proposal row 10). No gate starts Docker.
   { name: 'data-journey', needsMail: false, seconds: 20, timeoutMs: 60_000 },
   // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container;
   // 27s in the eight-gate container run that dropped its forged write and second permission flip (was 33s).

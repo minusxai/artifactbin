@@ -1,5 +1,5 @@
 /** The datasets module's interface: what code outside lib/datasets imports (rule 4, scripts/ci/module-graph.mjs). */
-export { catalogOf, importedRows, importedTables, prepareCatalog, publicCatalogOf } from './catalog';
+export { catalogOf, importedRows, importedTables, prepareCatalog, publicCatalogOf, resolveDatasetConnection } from './catalog';
 export { publishDataset, publishImage, publishPdf, publishVizRecipe, storeImageContent, storePdfContent } from './data-tiers';
 export { loadDatasetRows, storeDatasetRows, storedRowStats } from './dataset-store';
 export { datasetCreateFields } from './dataset-usage';
@@ -10,18 +10,13 @@ export { DatasetError } from './errors';
 export { executeCatalog } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';
 export { datasetResponse } from './http';
-export { connectionShape, secretTargetShape } from './input';
 export { createSharedReads } from './shared-reads';
 export { storedMediaReferences } from './media-references';
-export { compileNotebookSql } from './notebook';
 export { throttlePublicMutation } from './policy/usage';
 export { keepDatasetConfiguration, LEGACY_POLICY_REFUSED, readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from './policy/validation';
-export { discoverPostgres, queryPostgres } from './postgres';
 export type { ServerRefLoader } from './asset-reference';
-export { openDatasetSecret, sealDatasetSecret } from './secret-crypto';
-export { claimPendingDatasetSecret, createDatasetSecret, resolveDatasetConnection } from './secrets';
 export type {
-  CatalogInput, CatalogRowView, DatasetCatalog, DatasetConnection, DatasetNotebook, DatasetTable, DiscoveredTable, NotebookCell,
+  CatalogInput, CatalogRowView, DatasetCatalog, DatasetTable,
 } from './types';
 export { people, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
 export { graphqlRootNameProblem } from './graphql-names';

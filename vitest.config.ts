@@ -115,15 +115,10 @@ export default defineConfig({
           // boot Docker (a disposable Postgres) or real Chromium; they run in
           // the `integration` project instead, kept out of the default `npm
           // test`. Excluded here so they are collected exactly once — there,
-          // not both here and there. Their PURE siblings (postgres-capacity,
-          // postgres-tls, custom-dns, network, migrate — all vi.mock their
-          // transport) stay in `node`.
+          // not both here and there.
           exclude: [
             '**/node_modules/**',
             '**/*.ui.test.{ts,tsx}',
-            'services/app/lib/datasets/__tests__/postgres.test.ts',
-            'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
-            'services/app/lib/datasets/__tests__/postgres-routes.test.ts',
             ...CHROMIUM_TESTS,
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
@@ -133,8 +128,7 @@ export default defineConfig({
       },
       {
         // Heavy, environment-dependent tests: a disposable Dockerised Postgres
-        // (postgres/notebook-postgres, guarded by `describe.skipIf` on
-        // `docker image inspect postgres:17-alpine`) and a real headless
+        // (guarded by `describe.skipIf` on `docker image inspect postgres:17-alpine`) and a real headless
         // Chromium (browser contract and internal asset rendering). Kept
         // out of the default `npm test` for a fast inner loop; CI runs this
         // project in the `node` job, which already provisions both (see
@@ -146,13 +140,9 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           include: [
-            'services/app/lib/datasets/__tests__/postgres.test.ts',
-            'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
-            // The data-journey gate's PostgreSQL leg through the real routes: same `skipIf` on the image.
-            'services/app/lib/datasets/__tests__/postgres-routes.test.ts',
             ...CHROMIUM_TESTS,
             // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
-            // a disposable Postgres (same `skipIf` on the image as postgres.test.ts).
+            // a disposable Postgres (a `skipIf` on the image).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...SERVER_BOOT_TESTS,
           ],

@@ -15,8 +15,9 @@ with a durable `Idempotency-Key` and an origin-bound bearer, never from page HTM
 
 These are sample figures. A dataset needs at least one data row. New datasets are readable by
 anyone who can open them; only the owner and editors change rows. To let readers add or edit rows,
-set rules: [permissions](permissions.md). Only stored CSV/JSON rows can be linked: connected
-PostgreSQL catalogs are refused with HTTP 400 `dataset_stable_identity_unavailable`.
+set rules: [permissions](permissions.md). A dataset is stored CSV/JSON rows; there are no connected
+databases. Reach your own Postgres from a resolver with `caps.fetch` ([resolvers](resolvers.md):
+`resolver-neon.ts`, `resolver-supabase.ts`).
 
 ```html
 <link rel="af-dataset" data-af-name="orders" href="ref:DATASET_ID">

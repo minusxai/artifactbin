@@ -125,7 +125,7 @@ describe('dockerRunArgs', () => {
 
   it('runs the inside half with CI’s gate environment and the chosen gates', () => {
     expect(args.slice(args.indexOf('afbin-gate:pw1-abc') + 1)).toEqual(['node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', '2', '--build-key', 'b'.repeat(32), 'hydration', 'fonts']);
-    expect(args.filter((_, i) => args[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true']);
+    expect(args.filter((_, i) => args[i - 1] === '-e')).toEqual([]);
   });
 
 });

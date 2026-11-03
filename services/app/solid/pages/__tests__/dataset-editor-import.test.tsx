@@ -23,7 +23,8 @@ const result = { rows, rowCount: 1, totalRows: 1, truncated: false, headers: ['n
 
 it('offers explicit source choices and keeps added tables when switching inputs', () => {
   editor();
-  for (const name of ['CSV', 'Google Sheets', 'JSON', 'PostgreSQL']) expect(screen.getByRole('tab', { name })).toBeInTheDocument();
+  for (const name of ['CSV', 'Google Sheets', 'JSON']) expect(screen.getByRole('tab', { name })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: 'PostgreSQL' })).toBeNull();
   expect(screen.getByLabelText('CSV file')).toBeVisible();
   expect(screen.queryByLabelText('Google Sheet URL')).not.toBeInTheDocument();
   click('Google Sheets');

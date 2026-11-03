@@ -7,9 +7,9 @@ import {objectStore} from '@/lib/object-store';
 import {datasetReadAccess,datasetRowsFor,viewCatalog} from '@/lib/dataset-permissions';
 import {json} from '@/lib/http';
 
-/** A reader's definition names the public relations only: no connection, no notebook. */
+/** A reader's definition names the public relations only. */
 const readableDefinition=(catalog:DatasetCatalog)=>serializeDatasetDefinition({
- kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,
+ kind:'stored',defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,
  tables:catalog.tables.map(table=>({schema:table.schema,name:table.name,columns:table.columns.map(column=>column.name)})),
 });
 

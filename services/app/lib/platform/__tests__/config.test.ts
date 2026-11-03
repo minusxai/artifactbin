@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   APP_HMR_PORT_SETTING, deploymentConfig, env, envNamesRead, parseUserPagesHost, requirePagesHost, resolveHmrPort, unknownEnvNames,
 } from '@/lib/platform';
-import { overrideConfig, parseAliasOrigins, parseDatasetDnsServers, parseDatasetPrivateTargetHashes, parsePagesHost, resetConfigOverrides } from '@/lib/platform/config';
+import { overrideConfig, parseAliasOrigins, parsePagesHost, resetConfigOverrides } from '@/lib/platform/config';
 
 /** A fresh copy of the configuration module, read from exactly these environment variables. */
 async function configFrom(environment: Record<string, string | undefined>) {
@@ -21,7 +21,6 @@ afterEach(() => { vi.unstubAllEnvs(); resetConfigOverrides(); });
 const expectSettings = (config: Record<string, unknown>, settings: Array<[string, unknown]>) =>
   expect(Object.fromEntries(settings.map(([name]) => [name, config[name]]))).toEqual(Object.fromEntries(settings));
 
-const HASH = 'a'.repeat(64);
 
 describe('settings', () => {
   it('derives every setting from its one MODULE__NAME', async () => {
@@ -30,7 +29,6 @@ describe('settings', () => {
       APP__PORT: '4100', APP__HMR_PORT: '4200', APP__PUBLIC_BASE_URL: 'https://app.example.com', APP__ASSETS_ORIGIN: 'https://assets.example.com',
       APP__ALIAS_ORIGINS: 'https://alias.example.com', APP__PAGES_HOST: 'Pages.Example.com.',
       ADMIN__SECRET: 'admin', AUTH__SECRET: 'auth', ANALYTICS__SECRET: 'analytics', ARTIFACTS__ALLOW_PUBLIC: '0',
-      DATASET__ALLOW_PRIVATE_NETWORKS: 'true', DATASET__DNS_SERVERS: '1.1.1.1, 9.9.9.9', DATASET__PRIVATE_TARGET_HASHES: HASH,
       QUOTA__ARTIFACTS_PER_TOKEN: '7', ASSETS__MAX_BYTES_PER_TOKEN: '8', HTTP__TRUSTED_PROXY_HOPS: '3',
       SQL__MAX_ROWS: '50', SQL__MAX_QUERY_ROWS: undefined, SQL__QUERY_TIMEOUT_MS: '900', SQL__SERVICE_URL: 'http://sql',
       OBJECT_STORE__LOCAL_DIR: '/objects', WEB_INGEST__ALLOW_PRIVATE: '1', WEB_INGEST__TIMEOUT_MS: '11', WEB_INGEST__MAX_PER_HOUR: '12',
@@ -53,9 +51,6 @@ describe('settings', () => {
       ['AUTH_SECRET', 'auth'],
       ['ANALYTICS_SECRET', 'analytics'],
       ['ALLOW_PUBLIC_VISIBILITY', false],
-      ['DATASET_ALLOW_PRIVATE_NETWORKS', true],
-      ['DATASET_DNS_SERVERS', ['1.1.1.1', '9.9.9.9']],
-      ['DATASET_PRIVATE_TARGET_HASHES', [HASH]],
       ['ARTIFACT_QUOTA_PER_TOKEN', 7],
       ['ASSETS_MAX_BYTES_PER_TOKEN', 8],
       ['TRUSTED_PROXY_HOPS', 3],
@@ -85,7 +80,7 @@ describe('settings', () => {
   it('falls back to its defaults when nothing is set', async () => {
     const unset = Object.fromEntries([
       'APP__PORT', 'APP__HMR_PORT', 'APP__PUBLIC_BASE_URL', 'APP__ASSETS_ORIGIN', 'APP__ALIAS_ORIGINS', 'AUTH__SECRET', 'ANALYTICS__SECRET',
-      'ARTIFACTS__ALLOW_PUBLIC', 'DATASET__ALLOW_PRIVATE_NETWORKS', 'DATASET__DNS_SERVERS', 'DATASET__PRIVATE_TARGET_HASHES',
+      'ARTIFACTS__ALLOW_PUBLIC',
       'QUOTA__ARTIFACTS_PER_TOKEN', 'ASSETS__MAX_BYTES_PER_TOKEN', 'HTTP__TRUSTED_PROXY_HOPS', 'SQL__MAX_ROWS', 'SQL__MAX_QUERY_ROWS',
       'SQL__QUERY_TIMEOUT_MS', 'OBJECT_STORE__LOCAL_DIR', 'WEB_INGEST__ALLOW_PRIVATE', 'WEB_INGEST__TIMEOUT_MS', 'WEB_INGEST__MAX_PER_HOUR',
       'IMAGES__MAX_BYTES', 'PDF__MAX_BYTES', 'FILES__MAX_BYTES', 'EXPORT__INTERNAL_ORIGIN', 'APP__USER_PAGES_HOST', 'EVENTS__SCHEMA',
@@ -100,9 +95,6 @@ describe('settings', () => {
       ['AUTH_SECRET', 'dev-only-secret-change-me'],
       ['ANALYTICS_SECRET', 'dev-only-secret-change-me'],
       ['ALLOW_PUBLIC_VISIBILITY', false],
-      ['DATASET_ALLOW_PRIVATE_NETWORKS', false],
-      ['DATASET_DNS_SERVERS', []],
-      ['DATASET_PRIVATE_TARGET_HASHES', []],
       ['ARTIFACT_QUOTA_PER_TOKEN', 1000],
       ['ASSETS_MAX_BYTES_PER_TOKEN', 10_000_000_000],
       ['TRUSTED_PROXY_HOPS', 1],
@@ -139,31 +131,9 @@ describe('settings', () => {
     expect(requirePagesHost()).toBe('lvh.me');
   });
 
-  it('refuses malformed dataset network settings at boot', async () => {
-    await expect(configFrom({ DATASET__DNS_SERVERS: 'dns.example.com' })).rejects.toThrow('DATASET__DNS_SERVERS');
-    await expect(configFrom({ DATASET__PRIVATE_TARGET_HASHES: 'abc' })).rejects.toThrow('DATASET__PRIVATE_TARGET_HASHES');
-  });
 });
 
 describe('parsers', () => {
-  it('reads literal DNS server addresses only', () => {
-    expect(parseDatasetDnsServers(undefined)).toEqual([]);
-    expect(parseDatasetDnsServers('  ')).toEqual([]);
-    expect(parseDatasetDnsServers('1.1.1.1,2606:4700::1111')).toEqual(['1.1.1.1', '2606:4700::1111']);
-    expect(Object.isFrozen(parseDatasetDnsServers('1.1.1.1'))).toBe(true);
-    for (const bad of ['1.1.1.1,', 'one.one', '1.1.1.1,dns']) expect(() => parseDatasetDnsServers(bad), bad).toThrow();
-  });
-
-  it('reads at most 32 unique SHA-256 fingerprints', () => {
-    expect(parseDatasetPrivateTargetHashes('')).toEqual([]);
-    expect(parseDatasetPrivateTargetHashes(` ${HASH} `)).toEqual([HASH]);
-    const many = Array.from({ length: 32 }, (_, i) => i.toString(16).padStart(64, '0'));
-    expect(parseDatasetPrivateTargetHashes(many.join(','))).toHaveLength(32);
-    expect(() => parseDatasetPrivateTargetHashes([...many, 'f'.repeat(64)].join(','))).toThrow();
-    expect(() => parseDatasetPrivateTargetHashes(`${HASH},${HASH}`)).toThrow();
-    expect(() => parseDatasetPrivateTargetHashes('A'.repeat(64))).toThrow();
-  });
-
   it('reads a bare pages hostname, lowercased and without a trailing dot', () => {
     expect(parsePagesHost(undefined)).toBeNull();
     expect(parsePagesHost(' ')).toBeNull();

@@ -108,7 +108,7 @@ it('explores a catalogued dataset, and the owner may edit it and copy its refere
   expect(screen.getByLabelText('Edit dataset')).toBeInTheDocument();
   const panel = await controls();
   fireEvent.click(panel.getByRole('button', { name: 'Copy dataset reference' }));
-  expect(writeText).toHaveBeenCalledWith(datasetQuerySnippet('art001', catalog()));
+  expect(writeText).toHaveBeenCalledWith(datasetQuerySnippet('art001'));
   expect(panel.getByRole('button', { name: 'Copy dataset reference' })).toHaveTextContent('copied dataset reference');
   expect(within(panel.getByLabelText('Owner actions')).queryByRole('button', { name: 'Share' })).toBeNull();
 });

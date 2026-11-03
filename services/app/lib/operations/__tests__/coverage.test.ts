@@ -58,8 +58,6 @@ describe('the registry covers the surface', () => {
     const routes = new Set([
       ...routePaths(path.join(ROOT, 'app/api/groups'), '/api/groups'),
       ...routePaths(path.join(ROOT, 'app/api/artifacts'), '/api/artifacts'),
-      ...routePaths(path.join(ROOT, 'app/api/datasets'), '/api/datasets'),
-      ...routePaths(path.join(ROOT, 'app/api/secrets'), '/api/secrets'),
       ...routePaths(path.join(ROOT, 'app/api/browser-sessions'), '/api/browser-sessions'),
       ...routePaths(path.join(ROOT, 'app/api/testusers'), '/api/testusers'),
       // export_artifact's HTTP twin lives under the document's own sub-path.

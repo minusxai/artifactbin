@@ -1,7 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * THE DATASET PAGE'S CATALOG (DatasetCatalogView) — what the data-journey gate's PostgreSQL leg read in a browser,
- * moved here (its server half is lib/datasets/__tests__/postgres-routes.test.ts): a reader's schema browser lists
+ * THE DATASET PAGE'S CATALOG (DatasetCatalogView): a reader's schema browser lists
  * exactly the exposed relations and columns, the schema selector moves the preview between them, and a manual refresh
  * asks the server to refresh and says when it last did.
  */
@@ -14,10 +13,10 @@ import { DatasetCatalogView } from '../DatasetCatalogView';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const catalog = {
-  kind: 'postgres', defaultSchema: 'sales', refreshSeconds: 0,
+  kind: 'stored', defaultSchema: 'sales', refreshSeconds: 0,
   tables: [
-    { schema: 'sales', name: 'orders', source: { schema: 'sales', table: 'orders' }, columns: [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }] },
-    { schema: 'support', name: 'tickets', source: { schema: 'support', table: 'tickets' }, columns: [{ name: 'id', type: 'number' }, { name: 'subject', type: 'string' }] },
+    { schema: 'sales', name: 'orders', columns: [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }] },
+    { schema: 'support', name: 'tickets', columns: [{ name: 'id', type: 'number' }, { name: 'subject', type: 'string' }] },
   ],
 } as unknown as DatasetCatalog;
 
