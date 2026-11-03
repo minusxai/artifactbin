@@ -212,11 +212,12 @@ it('Vite implicitly loads the app PostCSS config from the web root', async () =>
 
 it('keeps test-support owned by its test consumers and product worker proofs in CI', () => {
   const readPkg = file => JSON.parse(readFileSync(path.join(REPO_ROOT, file), 'utf8'));
-  for (const service of ['events', 'runner']) {
-    const manifest = readPkg(`services/${service}/package.json`);
-    expect(manifest.devDependencies['@artifactbin/test-support']).toBe('0.1.0');
-    expect(manifest.dependencies).not.toHaveProperty('@artifactbin/test-support');
-  }
+  const events = readPkg('services/events/package.json');
+  expect(events.devDependencies['@artifactbin/test-support']).toBe('0.1.0');
+  expect(events.dependencies).not.toHaveProperty('@artifactbin/test-support');
+  // The runner's tests no longer use it: neither list names it.
+  const runner = readPkg('services/runner/package.json');
+  expect({ ...runner.dependencies, ...runner.devDependencies }).not.toHaveProperty('@artifactbin/test-support');
   const workflow = readFileSync(path.join(REPO_ROOT, '.github/workflows/runner-design.yml'), 'utf8');
   for (const command of ['prove-postgres.ts', 'scripts/runner-os-boundary.mjs artifactbin-worker']) expect(workflow).toContain(command);
 });
