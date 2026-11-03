@@ -19,9 +19,6 @@
 
 import { isLoopbackName } from './loopback-names';
 
-/** The public identity document's path. Spelled once. */
-export const SERVER_IDENTITY_PATH = '/api/server';
-
 export interface ServerIdentityDocument {
   /** The one origin this deployment calls itself. */
   origin: string;
@@ -68,27 +65,3 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
   return Object.freeze(origins);
 }
 
-/**
- * STRICT READING of a served identity document. A server that answers
- * something else — an HTML error page parsed as JSON, `{}` from a catch-all
- * proxy, an origin with a path — is a server that said NOTHING, and a client
- * that reads `null` here behaves exactly as it did before this endpoint
- * existed. Anything less strict would let an unrelated 200 grant an alias.
- */
-export function parseServerIdentityDocument(value: unknown): ServerIdentityDocument | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as {origin?: unknown; aliases?: unknown};
-  if (typeof record.origin !== 'string') return null;
-  const origin = normalizeOrigin(record.origin);
-  if (!origin) return null;
-  if (record.aliases !== undefined && !Array.isArray(record.aliases)) return null;
-  const aliases: string[] = [];
-  for (const entry of (record.aliases ?? []) as unknown[]) {
-    if (typeof entry !== 'string') return null;
-    const alias = normalizeOrigin(entry);
-    if (!alias) return null;
-    // A document naming its own origin among its aliases is redundant, not wrong.
-    if (alias !== origin && !aliases.includes(alias)) aliases.push(alias);
-  }
-  return {origin, aliases};
-}

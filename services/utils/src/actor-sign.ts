@@ -14,9 +14,6 @@ const SKEW_SECONDS = 30;
 
 interface Claims extends Actor { iat: number; exp: number }
 
-/** Present so a test can assert the comparison is the constant-time one. */
-export const timingSafeEqualUsed = true;
-
 function canonical(obj: Record<string, unknown>): string {
   const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
   return JSON.stringify(Object.fromEntries(keys.map((k) => [k, obj[k]])));

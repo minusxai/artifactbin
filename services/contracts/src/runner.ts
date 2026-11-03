@@ -79,10 +79,10 @@ export interface RunStart {
 }
 
 /** Every read/cancel is owner-scoped, including the in-process implementation. */
-export interface RunLookup { userId: string; runId: string }
+interface RunLookup { userId: string; runId: string }
 export interface RunWait extends RunLookup { waitMs?: number }
 export interface RunEvent { sequence: number; event: RunnerJson }
-export interface RunEventPage {
+interface RunEventPage {
   events: RunEvent[];
   /** Last sequence returned, or the requested cursor if the page was empty. */
   nextSequence: number;
@@ -134,4 +134,3 @@ export interface RunnerService {
   /** Idempotent; resolves once cancellation is accepted. getRun observes terminal cleanup. */
   cancel(input: RunLookup): Promise<void>;
 }
-

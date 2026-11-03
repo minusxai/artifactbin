@@ -9,7 +9,7 @@
  * Types only. The compiler (lib/dataflow/compile-dataflow) produces it; it is
  * stored in `meta.parsedArtifact` and shipped to the runtime in the island.
  */
-import type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, UserConstraints } from '@artifactbin/contracts';
 import type { Scalar, Row } from './dataflow';
 
 /**
@@ -43,7 +43,7 @@ interface CompiledValue {
   /** A user picker's options: the dataset (`source="ref:<id>"`) and user column it draws from, and that column's constraints. */
   source?: string;
   column?: string;
-  constraints?: import('@artifactbin/contracts').UserConstraints;
+  constraints?: UserConstraints;
 }
 
 /** What a query or mutation depends on, by kind. Every name is declared or built in. */

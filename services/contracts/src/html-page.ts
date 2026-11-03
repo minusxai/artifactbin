@@ -11,16 +11,5 @@ export interface HtmlPageVersion {
   pageId: string; version: number; revision: string; html: string;
   nextNodeId: number; links: readonly HtmlPageLink[];
 }
-export interface SaveHtmlPageRequest {
-  pageId?: string; expectedRevision?: string; requestId: string; html: string;
-  /** Named resolver TypeScript files, one per `<link rel="af-resolver">`. */
-  resolverSources?: Readonly<Record<string, string>>;
-}
 /** Secret name to the one host that may receive it: exact, or one leading `*.` label. Never values. */
 export type ResolverSecretHosts = Readonly<Record<string, string>>;
-export interface HtmlPublicationReceipt { pageId: string; version: number; revision: string; created: boolean }
-/** Instantiate A with original AccessActor. Do not reconstruct it from page-supplied principal fields. */
-export interface HtmlPublication<A> {
-  save(actor: A, input: SaveHtmlPageRequest, signal?: AbortSignal): Promise<HtmlPublicationReceipt>;
-  read(actor: A, pageId: string, revision?: string): Promise<HtmlPageVersion>;
-}

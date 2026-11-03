@@ -25,7 +25,6 @@ export interface UserOption { value: string; label: string }
 export interface PersonCard { name: string; handle: string | null; image: string | null }
 export interface DatasetColumn { name: string; type: ColumnType; /** Suggested scalar choices for typed authoring controls; not an access restriction. */ choices?: Scalar[]; constraints?: UserConstraints }
 
-
 export interface TableResult {
   rows: Row[];
   columns: DatasetColumn[];

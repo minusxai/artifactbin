@@ -44,9 +44,6 @@
     "services/app/lib/skills/__tests__/production-image.test.ts": [
       "../../libraries/components.server"
     ],
-    "services/app/server/__tests__/public-assets-host.test.ts": [
-      "@/lib/export/assets"
-    ],
     "services/app/solid/document/__tests__/annotation-composer.test.tsx": [
       "@/lib/artifact-backend/retrying"
     ],

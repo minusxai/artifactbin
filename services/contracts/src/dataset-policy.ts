@@ -26,7 +26,7 @@ interface PermissionEntry<P> {
   comment?: string | null;
 }
 export type DatasetOperation = 'insert' | 'update' | 'delete';
-export interface DatasetTablePolicy {
+interface DatasetTablePolicy {
   table: { schema: string; name: string };
   insert_permissions?: PermissionEntry<InsertPermission>[];
   update_permissions?: PermissionEntry<UpdatePermission>[];
@@ -34,7 +34,7 @@ export interface DatasetTablePolicy {
 }
 /**
  * The retired version 1 policy shape. Nothing in this tree reads it; it stays exported (with `parseDatasetPolicy`)
- * only because the deployment repository still imports both (app/__tests__/downstream-exports.test.ts).
+ * only because the deployment repository still imports both (services/{contracts,utils}/__tests__/downstream-exports.test.ts).
  */
 export interface DatasetPolicy {
   version: 1;
@@ -59,7 +59,7 @@ export interface DatasetMutationPolicy {
    */
   trusted?: boolean;
 }
-export interface DatasetPrincipal {
+interface DatasetPrincipal {
   groupId?: string | null;
   userId: string | null;
   tokenId: string | null;

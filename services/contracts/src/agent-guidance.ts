@@ -3,15 +3,6 @@
 export const MARKUP_STYLE_RULE =
   'EVERY element needs Tailwind utilities in className — bare HTML renders completely unstyled.';
 
-/** Shared authoring guidance rendered in both the CLI skill and HTTP references. */
-export const URL_REPLY_RULE = 'URL-only requests get the URL alone.';
-export const PROGRESSIVE_AUTHORING_RULE =
-  'Save a complete small edit, or a useful first version of larger work with real content. Share its URL immediately, before visual checks. Say checks are continuing. Never publish an empty scaffold just to get a link.';
-export const NATIVE_TABLE_AUTHORING_RULE =
-  'DataTable and native HTML tables already own their scroll boxes. Avoid a pixel width or min-width on the table. At 390px, check .mx-doc fits and the last column is reachable. Recheck after the final edit.';
-export const PHONE_AUTHORING_RULE =
-  'At 390px, fix overflow, clipping and unreachable controls. Use numeric roles for figures, text roles for prose; stack crowded stats.';
-
 /**
  * The rule whose absence produced a report that contradicted its own data.
  *

@@ -2,10 +2,6 @@
  * Render unavailable mutations as disabled controls, preserving authored content. */
 export const SIGN_IN_REQUIRED = 'sign_in_required';
 
-/** Translate capability codes for accessible descriptions and refusal messages. */
-export const refusalText = (reason: string | null | undefined): string | null =>
-  reason === undefined || reason === null ? null : reason === SIGN_IN_REQUIRED ? 'Unavailable while signed out.' : reason;
-
 /**
  * DID THE DOOR SAY "SIGN IN"? — the client half, for a control that has a
  * Response in hand rather than a reason string.

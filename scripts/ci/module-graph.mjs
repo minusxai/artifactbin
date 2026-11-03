@@ -228,6 +228,7 @@ export const DEEP_MODULES = {
   'lib/allowances': { entries: [''], serverOnly: [''] },
   'lib/datasets': { ...bundled('lib/datasets'), downstream: ['execute'] },
   'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
+  'lib/export': { entries: [''], downstream: ['assets'] },
   // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.
   'lib/html-systems': { ...bundled('lib/html-systems'), entries: ['', 'server'], serverOnly: ['server'] },
   // A story's design vocabulary and its CSS compile (node, tailwind), and the edits to its JSX source: browser-bundled

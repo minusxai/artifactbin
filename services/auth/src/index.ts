@@ -1,13 +1,10 @@
-export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,publicBuildAssets,type AuthOptions,type AuthApp,type AuthEnv,type SessionStore,type SessionInfo} from './parts';
-export {AUTH_TABLES,ensureAuthSchema} from './schema';
-export {createBearerReader,type BearerReaderOptions} from './identity/bearer';
-export { createHumanAuth, ensureHumanAuthSchema, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
-export {
-  smtpMailer, type SmtpSettings, type MailSettings, resendMailer, devOutboxMailer, mailerForRuntime, usesDevOutbox,
-  DEV_OUTBOX_RELATIVE_PATH, DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed,
-} from './mail';
+export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,type SessionStore,type SessionInfo} from './parts';
+export {ensureAuthSchema} from './schema';
+export {createBearerReader} from './identity/bearer';
+export { createHumanAuth, ensureHumanAuthSchema, type HumanAuth, type OutgoingMail } from './auth/human';
+export { resendMailer, mailerForRuntime } from './mail';
 export {authEnvNamesRead,readEnv} from './env';
-export {mailSettingsOf,admissionPolicyOf,type AdmissionPolicy,loginProvidersOf,completeLoginMethods,testDomainSignInOf,type LoginProviders,type CompleteLoginMethods} from './config';
+export {mailSettingsOf,admissionPolicyOf,loginProvidersOf,testDomainSignInOf,type LoginProviders} from './config';
 import type { HumanAuth } from './auth/human';
 import type { SessionStore } from './parts';
 
@@ -18,5 +15,3 @@ export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
   ...(h.sessions.identity ? {identity: h.sessions.identity.bind(h.sessions)} : {}),
   handler: (request) => h.handler(request),
 });
-
-export {migrateHumanAccountSchema} from './auth/account-migration';

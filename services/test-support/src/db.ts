@@ -30,7 +30,7 @@ export const testDb = (): TestDb => {
 };
 
 /** The app-owned tokens table, as the reader SELECTs it (the app declares it; readers only read). */
-export const TOKENS_DDL: readonly string[] = [
+const TOKENS_DDL: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS tokens (
      id TEXT PRIMARY KEY,
      name TEXT,

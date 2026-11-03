@@ -12,7 +12,7 @@ export interface PageOperations<A> {
   execute(actor:A,request:PageOperationRequest,signal:AbortSignal):Promise<PageOperationResponse>;
 }
 /** `role` is the caller's page role, decided by the app before the resolver ran (never by resolver input). */
-export interface PageResolverPrincipal { readonly tenant:string; readonly subject:string|null; readonly role:DatasetRole }
+interface PageResolverPrincipal { readonly tenant:string; readonly subject:string|null; readonly role:DatasetRole }
 export interface PageResolverFieldCall {
   namespace:string; fileId:string; version:string; operation:'query'|'mutation';
   field:string; args:HtmlJsonObject; principal:PageResolverPrincipal; signal:AbortSignal;
@@ -40,11 +40,6 @@ export interface PageNamespaceSource {
  */
 export const PAGE_VIEWER_ROOT = 'viewer';
 export const PAGE_VIEWER_TYPE = 'Viewer';
-export interface PageViewer { signedIn: boolean; id: string | null; name: string | null }
 /** `role` is the caller's page role (`datasetRoleFrom` over the page's sharing); null cannot read the page. */
 export interface PageCaller { pageId:string; subject:string|null; role:DatasetRole|null }
 export interface PageSchema { sdl:string; namespaces:readonly string[] }
-export interface PageNamespaceExecutor {
-  compose(sources:readonly PageNamespaceSource[]):PageSchema;
-  execute(input:{schema:PageSchema;request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>;caller:PageCaller;invoke:PageResolverInvoker['invoke'];signal:AbortSignal}):Promise<PageOperationResponse>;
-}

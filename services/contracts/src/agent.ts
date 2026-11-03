@@ -13,7 +13,7 @@
  */
 
 /** Known values recognized from `Artifactbin-Agent`. Unknown declarations remain valid display names. */
-export const DECLARED_AGENT_SLUGS = [
+const DECLARED_AGENT_SLUGS = [
   'chatgpt',
   'codex',
   'pi',

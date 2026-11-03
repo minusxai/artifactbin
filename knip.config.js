@@ -81,17 +81,25 @@ export default {
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },
     },
+    // THE PACKAGES: an export of a package entry (its package.json `exports`, or a server) that nothing imports is
+    // reported too (`includeEntryExports`). What the private deployment imports is pinned, by name, in each
+    // package's __tests__/downstream-exports.test.ts, so those imports count as uses here. knip does not count an
+    // inline `import('@artifactbin/…').Name` type query as a use: import the type instead.
+    'services/contracts': { includeEntryExports: true },
+    'services/utils': { includeEntryExports: true },
+    'services/test-support': { includeEntryExports: true },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
-    'services/auth': { ignoreBinaries: ['openssl'] },
+    'services/auth': { ignoreBinaries: ['openssl'], includeEntryExports: true },
     'services/runner': {
       entry: ['src/server.ts', 'prove-postgres.ts'],
       // Bundled into each user program by specifier (src/compiler.ts).
       ignoreDependencies: ['abort-controller', 'fast-text-encoding', 'core-js'],
+      includeEntryExports: true,
     },
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
-    'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'] },
-    'services/events': { entry: ['src/server.ts'] },
-    'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'] },
+    'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'], includeEntryExports: true },
+    'services/events': { entry: ['src/server.ts'], includeEntryExports: true },
+    'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'], includeEntryExports: true },
   },
   ignoreIssues: {
     // A route answers HEAD (or another method) with the same handler: `export { GET as HEAD }`.
