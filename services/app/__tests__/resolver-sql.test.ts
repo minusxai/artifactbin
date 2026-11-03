@@ -180,9 +180,9 @@ it('trips the input and result limits', async () => {
   // Inline rows and dataset rows share the 10k input rows.
   expect(await refusal(sql(f, owner(f), { ...inline(9998), queries: [{ name: 'q', sql: 'SELECT count(*) FROM t, staff' }] }))).toMatch(/^input_too_large: /);
   expect((await sql(f, owner(f), { ...inline(9997), queries: [{ name: 'q', sql: 'SELECT count(*) AS n FROM t, staff' }] })).q.rows).toEqual([{ n: 9997 * 3 }]);
-  // A result past the row cap, or past the resolver's 1 MiB answer.
+  // A result past the row cap, or past the resolver's 4 MiB answer.
   expect(await refusal(sql(f, owner(f), { sql: 'WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 10001) SELECT i FROM n' }))).toMatch(/^result_too_large: /);
-  expect(await refusal(sql(f, owner(f), { sql: "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000) SELECT i, printf('%.1000c', 'x') AS pad FROM n" }))).toMatch(/^result_too_large: /);
+  expect(await refusal(sql(f, owner(f), { sql: "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5000) SELECT i, printf('%.1000c', 'x') AS pad FROM n" }))).toMatch(/^result_too_large: /);
 });
 
 it('remote callback: the caller comes from the signed pin, and a refusal reaches the runner as its code', async () => {

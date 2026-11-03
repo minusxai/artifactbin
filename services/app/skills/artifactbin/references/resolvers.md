@@ -59,7 +59,7 @@ export default {
 };
 ```
 
-Limits per call: 15 s wall time, 32 capability requests, 1 MiB result, 64 MiB memory.
+Limits per call: 15 s wall time, 32 capability requests, 4 MiB result, 64 MiB memory.
 
 A resolver's own `throw Error('...')` reaches every caller as `errors[0].message` (first line, 200
 characters, secrets redacted); a caps error you don't catch, a timeout or a crash reads `Backend
@@ -111,7 +111,7 @@ const {rows} = await caps.sql('SELECT region, count(*) AS n, sum(amount) AS tota
 `caps.sql({queries:[{name, sql}], params, paramTypes, tables, only})` runs several in order (a later one
 reads an earlier by name) with inline `tables` (`{columns:[{name, type}], rows}`) and returns
 `{[name]: {columns, rows} | {error}}`, only the `only` names if given. Per call: 10,000 input rows, 8 MiB input, 5 s per query,
-20 s in all, a 1 MiB answer; each call is one of the 32 requests.
+20 s in all, a 4 MiB answer; each call is one of the 32 requests.
 
 ## @auth roles
 

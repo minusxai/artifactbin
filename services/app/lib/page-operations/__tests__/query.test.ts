@@ -13,10 +13,10 @@ describe('createResolverQuery', () => {
   it('runs as the caller\'s bare account over the page\'s links, with the resolver result cap', async () => {
     const { execute, query } = port({ data: { staff: [] } });
     expect(await query(call({ subject: 'u1', role: 'viewer' }, { query: '{ staff { name } }', variables: { a: 1 }, operationName: 'Q' }))).toEqual({ staff: [] });
-    expect(execute).toHaveBeenCalledWith({ userId: 'u1', tokenId: null, email: null, documentEditor: false }, links, { query: '{ staff { name } }', variables: { a: 1 }, operationName: 'Q' }, { operation: 'query', resultBytes: 1024 * 1024, pageId: 'page1' }, expect.any(AbortSignal));
+    expect(execute).toHaveBeenCalledWith({ userId: 'u1', tokenId: null, email: null, documentEditor: false }, links, { query: '{ staff { name } }', variables: { a: 1 }, operationName: 'Q' }, { operation: 'query', resultBytes: 4 * 1024 * 1024, pageId: 'page1' }, expect.any(AbortSignal));
     // The page names itself to the dataset rules (X-Hasura-Page-Id); a mutation's Idempotency-Key reaches the receipt.
     await query(call({ subject: null, role: 'anonymous' }, { query: '{ x }', idempotencyKey: 'resolver_key_0001' }, 'mutation'));
-    expect(execute).toHaveBeenLastCalledWith({ userId: null, tokenId: null, email: null, documentEditor: false }, links, { query: '{ x }', idempotencyKey: 'resolver_key_0001' }, { operation: 'mutation', resultBytes: 1024 * 1024, pageId: 'page1' }, expect.any(AbortSignal));
+    expect(execute).toHaveBeenLastCalledWith({ userId: null, tokenId: null, email: null, documentEditor: false }, links, { query: '{ x }', idempotencyKey: 'resolver_key_0001' }, { operation: 'mutation', resultBytes: 4 * 1024 * 1024, pageId: 'page1' }, expect.any(AbortSignal));
   });
   it('refuses a run without an attested caller and malformed arguments before reaching a dataset', async () => {
     const { execute, query } = port({ data: {} });
