@@ -22,10 +22,16 @@ it('hands each started process to exactly one claimant and replaces it',async()=
  const p=pool(2);await until(()=>p.spares.length===2&&p.spares.every(w=>w.ready));
  const first=p.take(),second=p.take();
  expect(first.ready).toBe(true);expect(new Set([first.child.pid,second.child.pid]).size).toBe(2);
- expect(p.spares.map(w=>w.child.pid)).not.toContain(first.child.pid);expect(p.spares).toHaveLength(2);
+ expect(p.spares.map(w=>w.child.pid)).not.toContain(first.child.pid);
+ await until(()=>p.spares.length===2&&p.spares.every(w=>w.ready));expect(p.spares.map(w=>w.child.pid)).not.toContain(second.child.pid);
  const heard:string[]=[];first.claim({message:m=>heard.push(m.type),fault:()=>{},startFailed:()=>{},exit:()=>{}});expect(heard).toEqual(['ready']);
  expect(()=>first.claim({message:()=>{},fault:()=>{},startFailed:()=>{},exit:()=>{}})).toThrow('worker_already_claimed');
  for(const w of [first,second])w.child.kill('SIGKILL');
+});
+it('boots no spare beside a worker that is still starting',async()=>{
+ const p=pool(1);const claimed=p.take();expect(claimed.ready).toBe(false);
+ while(!claimed.ready){expect(p.spares).toHaveLength(0);await new Promise(r=>setTimeout(r,2));}
+ await until(()=>p.spares.length===1);claimed.child.kill('SIGKILL');
 });
 it('replaces a killed spare and stops respawning a binary that never starts',async()=>{
  const p=pool(2);await until(()=>p.spares.length===2&&p.spares.every(w=>w.ready));

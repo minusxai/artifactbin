@@ -289,6 +289,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             }
             limits.memoryMiB = Math.max(8, limits.memoryMiB);
             // Outside the admission lock: bundling is pure and cached, so concurrent admissions do not queue behind it.
+            // It also precedes the queue_full check; sources are app-signed, pinned backends, so the extra builds are bounded.
             const bundle = await bundleSource(request.program.source);
             let release!: () => void;
             const prior = admission;

@@ -20,14 +20,23 @@ export interface Worker {
     claim(handlers: WorkerHandlers): void;
 }
 
+/** Lifecycle observations for the pool, whoever has claimed the worker. */
+interface WorkerHooks {
+    /** Unclaimed and dead: killed for a protocol fault, or it exited. */
+    idleDeath?(worker: Worker): void;
+    /** The process reported `ready`. */
+    ready?(worker: Worker): void;
+    /** The process is gone (exit or start failure), claimed or not. */
+    gone?(worker: Worker): void;
+}
 /**
  * One worker process and its line protocol. Before a claim the only acceptable message is `ready`;
  * anything else, or exit, kills it and reports `idleDeath` so the pool can replace it.
  */
-export function startWorker(spawnChild: () => ChildProcessWithoutNullStreams, idleDeath: (worker: Worker) => void = () => {}): Worker {
+export function startWorker(spawnChild: () => ChildProcessWithoutNullStreams, hooks: WorkerHooks = {}): Worker {
     const child = spawnChild();
     let handlers: WorkerHandlers | undefined, ready = false, dead = false, claimed = false;
-    const idleFault = () => { if (!dead) { dead = true; child.kill('SIGKILL'); idleDeath(worker); } };
+    const idleFault = () => { if (!dead) { dead = true; child.kill('SIGKILL'); hooks.idleDeath?.(worker); } };
     const fault = (reason: string) => handlers ? handlers.fault(reason) : idleFault();
     child.stdin.on('error', () => { if (handlers) handlers.fault('worker_stdin_closed'); });
     const decoder = new StringDecoder('utf8');
@@ -42,14 +51,15 @@ export function startWorker(spawnChild: () => ChildProcessWithoutNullStreams, id
             let msg: WorkerMessage;
             try { msg = JSON.parse(line); }
             catch { fault('invalid_worker_message'); continue; }
+            const first = msg?.type === 'ready' && !ready;
+            if (first) { ready = true; hooks.ready?.(worker); }
             if (handlers) handlers.message(msg);
-            else if (msg?.type === 'ready' && !ready) ready = true;
-            else idleFault();
+            else if (!first) idleFault();
         }
     });
     child.stderr.on('data', (b: Buffer) => { stderrBytes += b.length; if (stderrBytes > 65536) fault('stderr_limit'); });
-    child.once('error', () => { if (handlers) handlers.startFailed(); else idleFault(); });
-    child.once('exit', () => { if (handlers) handlers.exit(); else idleFault(); });
+    child.once('error', () => { hooks.gone?.(worker); if (handlers) handlers.startFailed(); else idleFault(); });
+    child.once('exit', () => { hooks.gone?.(worker); if (handlers) handlers.exit(); else idleFault(); });
     const worker: Worker = {
         child,
         get ready() { return ready; },
@@ -80,11 +90,20 @@ function holdLoop(child: ChildProcessWithoutNullStreams, hold: boolean) {
 /**
  * Keeps `size` worker processes started ahead of demand so a run does not wait for Node to boot.
  * Each process still serves exactly one run: `take` removes it from the pool for good.
+ *
+ * Refill is one background boot at a time, and only while no worker is booting. On one CPU a spare
+ * that boots beside a run's still-starting worker halves that worker's speed: the run then waits
+ * longer than with no pool at all. Runs never wait for refill; with no spare, `take` spawns at once.
  */
 export function createWorkerPool({ size, spawnChild }: { size: number; spawnChild: () => ChildProcessWithoutNullStreams }): WorkerPool {
     if (!Number.isInteger(size) || size < 0) throw Error('invalid_pool_size');
-    const spares: Worker[] = [];
+    const spares: Worker[] = [], booting = new Set<Worker>();
     let closed = false, idleDeaths = 0;
+    const hooks: WorkerHooks = {
+        idleDeath: onIdleDeath,
+        ready: worker => { booting.delete(worker); fill(); },
+        gone: worker => { if (booting.delete(worker)) fill(); },
+    };
     function onIdleDeath(worker: Worker) {
         const i = spares.indexOf(worker);
         if (i < 0) return;
@@ -93,11 +112,12 @@ export function createWorkerPool({ size, spawnChild }: { size: number; spawnChil
         fill();
     }
     function fill() {
-        while (!closed && idleDeaths < MAX_IDLE_DEATHS && spares.length < size) {
+        while (!closed && idleDeaths < MAX_IDLE_DEATHS && spares.length < size && booting.size === 0) {
             let worker: Worker;
-            try { worker = startWorker(spawnChild, onIdleDeath); }
+            try { worker = startWorker(spawnChild, hooks); }
             catch { idleDeaths++; continue; }
             holdLoop(worker.child, false);
+            booting.add(worker);
             spares.push(worker);
         }
     }
@@ -108,7 +128,8 @@ export function createWorkerPool({ size, spawnChild }: { size: number; spawnChil
             if (closed) throw Error('runner_closed');
             let i = spares.findIndex(w => w.ready && !w.dead);
             if (i < 0) i = spares.findIndex(w => !w.dead);
-            const worker = i >= 0 ? spares.splice(i, 1)[0]! : startWorker(spawnChild);
+            const worker = i >= 0 ? spares.splice(i, 1)[0]! : startWorker(spawnChild, hooks);
+            if (!worker.ready) booting.add(worker);
             holdLoop(worker.child, true);
             idleDeaths = 0;
             fill();
