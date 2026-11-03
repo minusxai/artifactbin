@@ -21,8 +21,7 @@ import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-pe
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
 import { archivedVersionFor, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
-import { holdsCreatingToken, effectiveRole } from '@/lib/artifact-access';
-import { countOpenAnnotations } from '@/lib/annotations';
+import { holdsCreatingToken, effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
 import { verifyExportKey } from '@/lib/export';
@@ -31,8 +30,8 @@ import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
 import { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from '@/lib/authentication';
-import { count, has } from '@/lib/social';
-import { getUserById, issuePagesTicket, ownerUsername } from '@/lib/accounts';
+import { pageSocial } from '@/lib/social';
+import { issuePagesTicket, ownerUsername } from '@/lib/accounts';
 import {ARTIFACT_FORMATS, type ArtifactFormat, CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
 import type { StoryDesignName } from '@/lib/validation';
@@ -150,18 +149,21 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const key = search.get('key');
   const exporting = verifyExportKey(header.id, key ?? undefined);
   const actor = await sessionActor(request);
-  if (!admitted && !exporting && !holdsCreatingToken(header, actor) && !(await canReadArtifact(header, actor))) return notFound();
+  // Every role decision this view makes reads one memo of the actor's access facts, shared with the app page's own
+  // admission of this very request (server/app documentPreparation): the role is resolved once per view.
+  const facts = requestAccessFacts(request, actor);
+  if (!admitted && !exporting && !holdsCreatingToken(header, actor) && !(await canReadArtifact(header, actor, facts))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
-  if (!admitted && accessMoved(header, artifact) && !exporting && !holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return notFound();
+  if (!admitted && accessMoved(header, artifact) && !exporting && !holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor, facts))) return notFound();
 
   // One role per request, beside the reads that need none of it.
   const groupId = (artifact as typeof artifact & { group_id?: string | null }).group_id ?? null;
   const [role, ownerGroup, kind] = await Promise.all([
-    effectiveRole(artifact, actor),
+    effectiveRole(artifact, actor, facts),
     groupId ? getGroupById(groupId) : Promise.resolve(null),
     browserSessionKind(request, actor),
   ]);
@@ -237,17 +239,14 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
   const social = Promise.all([
-    // The author's row, once: the handle (byline, canonical) and their face.
-    artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null), forkedFromCredit(artifact.forked_from),
-    // The heart renders from THIS answer: asking a second door for it would
-    // leave the control blank (or wrong) for a frame on every page load. An
-    // anonymous reader still gets the count — it is the number, not the button,
-    // that everyone can see.
-    viewerId ? has(viewerId, 'like', artifact.id) : Promise.resolve(false),
-    count('like', artifact.id),
-    artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
-    artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
-    isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
+    /*
+     * The author's row (the handle for the byline and canonical, and their face), the heart, the follow control and
+     * the open comment threads, in one statement (lib/social pageSocial). The heart renders from THIS answer: asking
+     * a second door for it would leave the control blank (or wrong) for a frame on every page load. An anonymous
+     * reader still gets the counts — it is the number, not the button, that everyone can see.
+     */
+    pageSocial({ artifactId: artifact.id, authorId: artifact.user_id, viewerId, annotations: isDoc }),
+    forkedFromCredit(artifact.forked_from),
     artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
@@ -280,12 +279,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // The reader was admitted above (or by the caller) unless an export key stood in for the check: only then is it asked.
   const readerAdmitted = !!admitted || !exporting || holdsCreatingToken(artifact, actor);
   // Beside the served runtime and the social reads, not after them: none depends on another.
-  const [[author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview], hasInvitedUsers, framedSrc] = await Promise.all([
+  const [[{ author, liked, likeCount, following, followCount, openAnnotations }, forkedFrom, dataPreview], hasInvitedUsers, framedSrc] = await Promise.all([
     // A framed document runs its own first results on its own origin: the app's answer, through either door, carries none.
     social,
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
     // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
-    framing && isDoc && (readerAdmitted || await canReadArtifact(artifact, actor))
+    framing && isDoc && (readerAdmitted || await canReadArtifact(artifact, actor, facts))
       ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
   ] as const);
   const authorUsername = author?.username ?? null;

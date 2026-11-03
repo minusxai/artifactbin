@@ -5,3 +5,4 @@
 export { count, has, link, linked, replaceLinked, unlink } from './relations';
 export { JOIN_RELATIONS, dismissPendingRelations, seedOwnerJoin, setRelationState } from './relation-state';
 export { profileSocial, type ProfileSocial } from './profile-social';
+export { pageSocial } from './page-social';
