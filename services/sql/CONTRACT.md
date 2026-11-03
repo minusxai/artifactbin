@@ -67,6 +67,18 @@ rejecting dependency cycles. Typed parameters remain bound values; query literal
 The ordinary read admission, external-access lock, deadline and pagination caps still apply.
 PostgreSQL catalogs continue to use the app's PostgreSQL compiler before the PostgreSQL transport.
 
+**Prepared catalog databases.** A catalog table's `key` is the content address of the rows its `source`
+carries: the same key always travels with the same rows, and the caller changes it whenever they could differ
+(another object, row-ID set or role view). When every source has a key, each engine thread (and each
+`createSqliteSql`) keeps the database it built for that catalog in a byte-capped LRU (`SqlPoolOptions.preparedBytes`,
+32 MiB per thread by default), so the rows may be left out of `tables`: a hit answers from the kept database,
+a miss answers every query `{ rowsRequired: true }` and the caller resends the same read with the rows.
+The engine derives an entry's identity from the default schema, every table's schema, name and columns, every
+model's SQL and every key — a view with fewer columns, other rows or an emptied model never reads another's
+entry. Keys are content addresses, so nothing is invalidated: a write makes a new key and the old entry ages out.
+Each read runs in a transaction that is rolled back, so a kept database stays exactly as built.
+`__tests__/prepared-cache.test.ts` covers hits, resends, the byte cap and isolation, over every shape.
+
 
 ## The SQLite engine
 

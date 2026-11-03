@@ -202,6 +202,14 @@ export class SqliteDatabase {
 
   close(): void { this.#db.close(); }
 
+  /** What the database holds, in bytes: the pages of `main`, `temp` and every attached schema. */
+  bytes(): number {
+    return this.exec('PRAGMA database_list').reduce((sum, d) => {
+      const schema = quote(String(d.name));
+      return sum + Number(this.exec(`PRAGMA ${schema}.page_count`)[0]?.page_count ?? 0) * Number(this.exec(`PRAGMA ${schema}.page_size`)[0]?.page_size ?? 0);
+    }, 0);
+  }
+
   /** Run engine-owned SQL with the guard off. Never pass author text through here. */
   trusted<T>(fn: () => T): T {
     this.#trusted++;

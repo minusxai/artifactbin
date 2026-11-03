@@ -6,17 +6,19 @@
  * exists only for a thread that stops answering altogether.
  */
 import { parentPort, workerData } from 'node:worker_threads';
-import { loadSqlite } from './sqlite/index';
+import { loadSqlite, PreparedCache } from './sqlite/index';
 import type { SqlExtensions } from './extensions';
 import type { PoolRequest, PoolAnswer } from './pool';
 
 const engine = await loadSqlite();
+/** This thread's prepared catalog databases (./sqlite/prepared): one call at a time, so one cache. */
+const prepared = new PreparedCache(typeof workerData?.preparedBytes === 'number' ? workerData.preparedBytes : undefined);
 const extensions: SqlExtensions = typeof workerData?.extensions === 'string' ? (await import(workerData.extensions)).default ?? {} : {};
 
 parentPort!.on('message', (request: PoolRequest) => {
   let answer: PoolAnswer;
   try {
-    const result = request.method === 'run' ? engine.run(request.input, request.bounds)
+    const result = request.method === 'run' ? engine.run(request.input, request.bounds, prepared)
       : request.method === 'runMany' ? engine.runMany(request.input, (_run, i) => request.bounds.at(i)!)
       : request.method === 'mutate' ? engine.mutate(request.input, request.bounds, extensions)
         : request.method === 'dryRun' ? engine.dryRun(request.input)

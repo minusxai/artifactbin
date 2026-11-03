@@ -9,12 +9,14 @@
  */
 import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput, StatementAnalysis } from '@artifactbin/contracts';
 import { SqliteDatabase, type Relation } from './database';
+import type { PreparedCache } from './prepared';
 import { dryRunQueries, heldDatabase, runManyQueries, runQueries, type HeldDatabase, type ReadBounds } from './reads';
 import { dryRunMutations, runMutation, type WriteBounds } from './writes';
 import { loadSqliteModule, type Sqlite3 } from './wasm';
 import type { SqlExtensions } from '../extensions';
 
 export { SqliteDatabase, type Relation } from './database';
+export { PreparedCache } from './prepared';
 export type { ReadBounds } from './reads';
 export type { WriteBounds } from './writes';
 export type { SqlExtensions } from '../extensions';
@@ -29,7 +31,8 @@ export interface SqliteEngine {
    * changes — whether the statement is a read or a write is the caller's to judge.
    */
   analyze(sql: string, schema: Relation[], options?: { mode: 'write'; extensions?: SqlExtensions }): StatementAnalysis;
-  run(input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome>;
+  /** A catalog read keyed on every source is answered from (and kept in) `prepared` (./prepared). */
+  run(input: RunInput, bounds: ReadBounds, prepared?: PreparedCache): Record<string, QueryOutcome>;
   /** `run` once per entry of `input.runs`, the imports loaded once for all of them; `bounds` per run. */
   runMany(input: RunManyInput, bounds: (run: RunManyInput['runs'][number], index: number) => ReadBounds): Array<Record<string, QueryOutcome>>;
   /**
@@ -61,7 +64,7 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
       prepared.finalize();
       return prepared.analysis;
     }),
-    run: (input, bounds) => runQueries(sqlite3, input, bounds),
+    run: (input, bounds, prepared) => runQueries(sqlite3, input, bounds, prepared),
     runMany: (input, bounds) => runManyQueries(sqlite3, input, bounds),
     held: (schemas) => heldDatabase(sqlite3, schemas),
     mutate: (input, bounds, extensions) => runMutation(sqlite3, input, bounds, extensions),

@@ -11,14 +11,16 @@ import type { SqlService } from '@artifactbin/contracts';
 import { queryBounds } from './bounds';
 import { DEFAULT_CAPS, type SqlCaps } from './caps';
 import type { SqlExtensions } from './extensions';
-import { loadSqlite } from './sqlite/index';
+import { loadSqlite, PreparedCache } from './sqlite/index';
 
 export function createSqliteSql(opts: Partial<SqlCaps> = {}, extensions: SqlExtensions = {}): SqlService {
   const caps: SqlCaps = { ...DEFAULT_CAPS, ...opts };
+  // The service's prepared catalog databases: calls run one at a time on this thread, so one cache.
+  const prepared = new PreparedCache();
   return {
     run: async (input) => {
       const { limit, timeoutMs } = queryBounds(input, caps);
-      return (await loadSqlite()).run(input, { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit });
+      return (await loadSqlite()).run(input, { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit }, prepared);
     },
     runMany: async (input) => (await loadSqlite()).runMany(input, (run) => {
       const { limit, timeoutMs } = queryBounds(run, caps);

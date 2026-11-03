@@ -11,6 +11,7 @@ import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, 
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
 import { Refused, SqliteDatabase, TimedOut, type Prepared, type TableData } from './database';
+import { preparedKey, type PreparedCache } from './prepared';
 import type { Sqlite3 } from './wasm';
 
 /** The bounds of one call, already clamped by the caller to its caps. */
@@ -18,7 +19,9 @@ export interface ReadBounds { limit: number; pageLimit: number; timeoutMs: numbe
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e)).split('\n').slice(0, 3).join(' ').trim();
 
-export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome> {
+export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds, prepared?: PreparedCache): Record<string, QueryOutcome> {
+  const key = preparedKey(input);
+  if (key !== null) return preparedRead(sqlite3, input, bounds, key, prepared);
   const db = new SqliteDatabase(sqlite3);
   try {
     return readAll(db, input, bounds, () => {
@@ -26,6 +29,28 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
     });
   } finally {
     db.close();
+  }
+}
+
+/**
+ * A keyed catalog read (./prepared): over the database `prepared` keeps for `key`, else over one built
+ * from the rows the input carries — kept when it fits — else `rowsRequired`, for the caller to resend
+ * with the rows. Every read runs in a scratch transaction, so the kept database is exactly as built.
+ */
+function preparedRead(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds, key: string, prepared: PreparedCache | undefined): Record<string, QueryOutcome> {
+  const cached = prepared?.get(key);
+  if (cached) return cached.scratch(() => readAll(cached, input, bounds, () => {}, false, true));
+  if (input.catalog!.tables.some((t) => t.source !== undefined && !Object.hasOwn(input.tables, t.source))) {
+    return Object.fromEntries(input.queries.map((q) => [q.name, { error: 'the catalog rows are not prepared here: resend them with the keys', rowsRequired: true }]));
+  }
+  const db = new SqliteDatabase(sqlite3);
+  let kept = false;
+  try {
+    try { mountCatalog(db, input); } catch (error) { return failedAll(input, error); }
+    kept = prepared?.keep(key, db) ?? false;
+    return db.scratch(() => readAll(db, input, bounds, () => {}, false, true));
+  } finally {
+    if (!kept) db.close();
   }
 }
 
@@ -96,12 +121,15 @@ export function heldDatabase(sqlite3: Sqlite3, schemas: readonly string[]): Held
 const failedAll = (input: RunInput, error: unknown): Record<string, QueryOutcome> =>
   Object.fromEntries(input.queries.map((q) => [q.name, { error: message(error) }]));
 
-/** Every query of `input`, in order, over `db`; `loadImports` puts the imports in place. `keepAll` loads even the last result whole. */
-function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void, keepAll = false): Record<string, QueryOutcome> {
+/**
+ * Every query of `input`, in order, over `db`; `loadImports` puts the imports in place. `keepAll` loads even
+ * the last result whole. `mounted`: the catalog is already in place (a prepared database).
+ */
+function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void, keepAll = false, mounted = false): Record<string, QueryOutcome> {
   const out: Record<string, QueryOutcome> = {};
   const types = input.paramTypes ?? input.catalog?.paramTypes ?? {};
   try {
-    if (input.catalog) mountCatalog(db, input);
+    if (input.catalog) { if (!mounted) mountCatalog(db, input); }
     else {
       for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, ...t });
       loadImports();
