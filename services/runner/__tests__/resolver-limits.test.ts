@@ -8,8 +8,8 @@ afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close()
 const MiB=1024*1024;
 describe('the resolver limits table',()=>{
  it('moves together: each link after the fetch response is at least as large, and the app outwaits the wall time',()=>{
-  // caps.query's document and answer caps join the table (resolvers plan PR 5: 16 KiB document, 1 MiB result).
-  expect(RESOLVER_LIMITS).toEqual({fetchResponseBytes:2*MiB,fetchRequestBodyBytes:256*1024,fetchTimeoutMs:10_000,messageBytes:4*MiB,outputBytes:MiB,wallMs:15_000,appWaitMs:16_000,maxRequests:32,queryDocumentBytes:16*1024,queryResultBytes:MiB,runWaitMs:20_000});
+  // caps.query's document and answer caps join the table (16 KiB document; results are 4 MiB, the generated dataset API's answer size).
+  expect(RESOLVER_LIMITS).toEqual({fetchResponseBytes:2*MiB,fetchRequestBodyBytes:256*1024,fetchTimeoutMs:10_000,messageBytes:8*MiB,outputBytes:4*MiB,wallMs:15_000,appWaitMs:16_000,maxRequests:32,queryDocumentBytes:16*1024,queryResultBytes:4*MiB,runWaitMs:20_000});
   // One completion wait covers the app's whole wait, and returns before the runner client's 30 s request timeout.
   expect(RESOLVER_LIMITS.runWaitMs).toBeGreaterThanOrEqual(RESOLVER_LIMITS.appWaitMs);expect(RESOLVER_LIMITS.runWaitMs).toBeLessThan(30_000);
   expect(RESOLVER_LIMITS.messageBytes).toBeGreaterThanOrEqual(RESOLVER_LIMITS.queryResultBytes);
@@ -34,7 +34,7 @@ describe('controller links',()=>{
   expect(s.output).toEqual({length:3*MiB,receipt:false,error:null});
   expect(s.receipt?.requests).toContainEqual(expect.objectContaining({service:'fetch',operation:'artifactbin.pageBackend.fetch',status:200,fetch:{method:'GET',host:'api.example.com',path:'/v1',bytesIn:3*MiB,bytesOut:0,secrets:['KEY']}}));
  },20000);
- it('refuses a reply past the 4 MiB message cap',async()=>{
+ it('refuses a reply past the message cap',async()=>{
   expect((await run(RESOLVER_LIMITS.messageBytes)).output).toEqual({length:null,receipt:false,error:'size_limit'});
  },20000);
 });

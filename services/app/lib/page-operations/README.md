@@ -75,7 +75,7 @@ Mutations are refused in query resolvers (`permission_denied`); in mutation reso
 they run through the generated mutation path as the caller, under each dataset's rules
 for the caller's role through the page (`X-Hasura-Page-Id` is the page), one dataset
 per mutation (`one_dataset_per_mutation`), with `idempotencyKey` naming the durable
-receipt when the resolver passes one. A document is at most 16 KiB and an answer 1 MiB
+receipt when the resolver passes one. A document is at most 16 KiB and an answer 4 MiB
 (`RESOLVER_LIMITS`); each call counts toward the 32-request limit. A
 resolver's live revision is a hash of the page's linked live dataset revisions
 (`lib/html-backends/live.ts`), so a dataset write refreshes its reads.

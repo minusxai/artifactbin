@@ -7,7 +7,7 @@
  *   {totals{byRegion(since:"2026-01-01"){region orders revenue}}}.
  * Next: rename orders, region, amount and day to your link and columns; pass values as $params.
  * Gotchas: reads only (write through caps.query mutations); the caller's rule for every dataset
- *   the SQL names must allow aggregations; 10,000 input rows, 5 s per query, 1 MiB answer.
+ *   the SQL names must allow aggregations; 10,000 input rows, 5 s per query, 4 MiB answer.
  */
 export const typeDefs = `
   type Total { region: String! orders: Int! revenue: Float! }

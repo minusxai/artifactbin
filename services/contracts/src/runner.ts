@@ -18,10 +18,10 @@ export const RESOLVER_LIMITS = Object.freeze({
   fetchRequestBodyBytes: 256 * 1024,
   /** One `caps.fetch`, every redirect hop included. */
   fetchTimeoutMs: 10_000,
-  /** One controller/worker line, and the app's reply to a remote capability callback. */
-  messageBytes: 4 * 1024 * 1024,
-  /** A resolver's own result. */
-  outputBytes: 1024 * 1024,
+  /** One controller/worker line, and the app's reply to a remote capability callback: room for a full answer plus its envelope. */
+  messageBytes: 8 * 1024 * 1024,
+  /** A resolver's own result: the same 4 MiB a page's generated dataset API answers. */
+  outputBytes: 4 * 1024 * 1024,
   /** Resolver wall time in the runner. */
   wallMs: 15_000,
   /** How long the app waits for a run: wall time plus one second. */
@@ -30,7 +30,7 @@ export const RESOLVER_LIMITS = Object.freeze({
   /** One `caps.query` GraphQL document. */
   queryDocumentBytes: 16 * 1024,
   /** One `caps.query` answer's `data`, and one `caps.sql` answer. */
-  queryResultBytes: 1024 * 1024,
+  queryResultBytes: 4 * 1024 * 1024,
   /** The longest one `getRun` holds a completion wait open; below the runner client's 30 s request timeout. */
   runWaitMs: 20_000,
 });
