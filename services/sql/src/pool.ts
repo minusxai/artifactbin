@@ -33,6 +33,8 @@ export interface SqlPoolOptions {
   workers?: number;
   /** A module whose default export is the composition root's `SqlExtensions`, imported by every thread. */
   extensions?: string;
+  /** Bytes of prepared catalog databases each thread keeps (./sqlite/prepared); 32 MiB by default. */
+  preparedBytes?: number;
   /** How long past a call's own deadline a silent thread is given before it is replaced. */
   graceMs?: number;
   /** The thread entry; the bundled `pool-worker.mjs` beside this module, else its source under tsx. */
@@ -63,7 +65,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
   let closed = false;
 
   const spawn = (): Thread => {
-    const worker = new Worker(entry.url, { ...(entry.execArgv ? { execArgv: entry.execArgv } : {}), workerData: { extensions: pool.extensions } });
+    const worker = new Worker(entry.url, { ...(entry.execArgv ? { execArgv: entry.execArgv } : {}), workerData: { extensions: pool.extensions, preparedBytes: pool.preparedBytes } });
     const thread: Thread = { worker, task: null, timer: null, ready: new Promise((resolve, reject) => {
       const onReady = (m: unknown) => { if ((m as { ready?: boolean })?.ready) { worker.off('message', onReady); resolve(); } };
       worker.on('message', onReady);

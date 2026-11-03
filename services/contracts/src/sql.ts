@@ -45,6 +45,8 @@ export interface QueryFailure {
   timedOut?: boolean;
   /** Set when a WRITE would have taken the table past the row cap (nothing was stored). */
   full?: boolean;
+  /** Set when a keyed catalog read left its rows out and the engine has no database prepared for its keys: resend with the rows. */
+  rowsRequired?: boolean;
 }
 export type QueryOutcome = TableResult | QueryFailure;
 export const isQueryFailure = (o: QueryOutcome): o is QueryFailure => 'error' in o;
@@ -63,7 +65,12 @@ export interface QueryPage {
  * Models are native read SQL, bound lazily so unused drafts cannot break a read. */
 interface SqlReadCatalog {
   defaultSchema: string;
-  tables: Array<{ schema: string; name: string; columns: DatasetColumn[]; source?: string; sql?: string }>;
+  /**
+   * `key`: the content address of the rows `source` carries — the same key always travels with the same
+   * rows. When every source has one, the engine may answer from a database it prepared for this catalog
+   * and these keys, and the rows may be left out; a miss is a `rowsRequired` failure, resent with them.
+   */
+  tables: Array<{ schema: string; name: string; columns: DatasetColumn[]; source?: string; key?: string; sql?: string }>;
   paramTypes?: Record<string, ColumnType>;
 }
 
