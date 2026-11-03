@@ -3,6 +3,7 @@ import {useAppHarness,mintAccountToken} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {getArtifactById} from '@/lib/artifacts';
 import {urlHash} from '@/lib/document';
+const LAST=urlHash('https://images.example.test/last.png');
 import {publicHomeFiles,servesEmbeddedArtifact,servesWebAsset,type UserPagesOwner} from '..';
 useAppHarness();
 it('keeps embedded bytes and copied web images owner-scoped with 200 eligible posts',async()=>{
@@ -17,7 +18,7 @@ it('keeps embedded bytes and copied web images owner-scoped with 200 eligible po
  await db.query(`INSERT INTO artifacts(id,token_id,user_id,format,visibility,source,meta)
  SELECT 'post'||lpad(n::text,4,'0'),$1,$2,'html',CASE WHEN n=200 THEN 'unlisted' ELSE 'public' END,
  CASE WHEN n=200 THEN '<img src="https://images.example.test/last.png">' ELSE '<h1>Post</h1>' END,
- CASE WHEN n=200 THEN '{"refs":[{"id":"asset01"}]}'::jsonb ELSE '{}'::jsonb END FROM generate_series(1,200) n`,[actor.id,user.id]);
+ CASE WHEN n=200 THEN jsonb_build_object('refs',jsonb_build_array(jsonb_build_object('id','asset01')),'webAssets',jsonb_build_array($3::text)) ELSE '{"webAssets":[]}'::jsonb END FROM generate_series(1,200) n`,[actor.id,user.id,LAST]);
  const started=performance.now();
  expect(await servesEmbeddedArtifact(user,row)).toBe(true);
  expect(await servesWebAsset(user,urlHash('https://images.example.test/last.png'))).toBe(true);

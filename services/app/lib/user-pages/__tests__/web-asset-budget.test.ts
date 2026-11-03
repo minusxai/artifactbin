@@ -3,7 +3,7 @@
  * an owner with 200 eligible pages of about 44 KB, each naming its own web image. Observed before the stored set:
  * every answer, hit or miss and for any 64-hex hash an anonymous caller makes up, was one statement reading all 200
  * sources and parsing them (262–269 ms in production). Now a made-up hash costs one primary-key lookup on
- * web_assets, and a served one two statements that read no page source.
+ * web_assets, and a known one two statements that read no page source, served or not.
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
@@ -83,8 +83,11 @@ describe('owner-host /assets/<hash>', () => {
     const lookup = hit.sql.find((text) => /\bFROM artifacts\b/.test(text))!;
     const plan = (await (await getDb()).query<{ 'QUERY PLAN': string }>(`EXPLAIN ${lookup}`, [host.id, urlHash(image('last'))])).rows.map((row) => row['QUERY PLAN']).join('\n');
     expect(plan).toContain('idx_artifacts_web_assets');
-    // Another owner's image is known to web_assets but not served here.
-    expect(await servesWebAsset(host, urlHash(image('theirs')))).toBe(false);
+    // Another owner's image is known to web_assets but not served here, at the same two statements.
+    const miss = await recorded(() => servesWebAsset(host, urlHash(image('theirs'))));
+    expect(miss.value).toBe(false);
+    for (const text of miss.sql) expect(text).not.toMatch(/\b(source|document)\b/i);
+    expect(miss.count).toBe(2);
     expect(await fastest(() => servesWebAsset(host, urlHash(image('last'))))).toBeLessThan(25);
     expect(await fastest(() => servesWebAsset(host, urlHash(image('theirs'))))).toBeLessThan(25);
   });
