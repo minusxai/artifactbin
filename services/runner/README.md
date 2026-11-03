@@ -7,7 +7,12 @@ checks current page access and dataset authority before executing a resolver.
 See [the resolver authoring contract](../app/skills/artifactbin/references/resolvers.md).
 
 `npm run setup -- --yes` followed by `npm run dev` registers the local runner.
-A local child process uses a V8 isolate. Production container restrictions apply
+A local child process uses a V8 isolate. Each run gets its own `node --no-node-snapshot`
+worker process, killed when the run ends and never reused. The controller keeps a few
+(`prestartedWorkers`, default 2) started ahead of demand, booting no more at once than its
+CPU quota, so a run usually skips Node's start. Bundles are cached by source hash and
+compiler version. `getRun({waitMs})` (`?wait=` over HTTP) holds the read until the run is
+terminal, at most `RESOLVER_LIMITS.runWaitMs`. Production container restrictions apply
 when a worker image is configured. A remote app selects the signed-Actor HTTP
 client through `RUNNER__SERVICE_URL`; app and controller share
 `CONTRACT__ACTOR_SECRET`. Keep this trusted service connection private.
