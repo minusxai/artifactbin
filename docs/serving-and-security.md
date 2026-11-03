@@ -100,7 +100,7 @@ connected portable file remains read-only for remote operations.
   Signed-out visitors must sign in before creation.
 - **Folders:** create `{format:"folder",title:"Reports"}` and use its ID as
   `parent_id`. Listings, moves, trash and restoration keep ownership checks;
-  a folder holds pages and has no content of its own.
+  a folder has no page content of its own.
 - **Custom domains:** when enabled, account settings attach and verify DNS through
   `/api/my/domain` and `/api/my/domain/verify`. Choose an owned public HTML page
   as homepage or set exact custom paths, or keep the public profile listing.
