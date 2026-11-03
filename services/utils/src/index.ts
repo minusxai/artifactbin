@@ -7,7 +7,7 @@ export { httpClient, jsonServer, postServer, type HttpClient, type JsonRoutes, t
 export { log } from './log';
 export { BodyTooLargeError, readBody, collectNodeBody } from './body';
 export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, fakeActor, type FakeSql, type FakeEvents } from './fakes';
-export { TOKEN_RE, hashToken, createTokenReader } from './tokens';
+export { TOKEN_RE, hashToken } from './tokens';
 export { createCodeStore } from './codes';
 export { AGENT_COOKIE, cookieName, clearCookieHeader, readCookie } from './agent-session';
 export { renderSchema, renderDroppedTables, ensureTable } from './schema';

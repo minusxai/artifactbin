@@ -58,7 +58,7 @@ import * as m30 from '@artifactbin/utils';
 
 describe('values the deployment composes from', () => {
   it('@/__tests__/harness', () => {
-    for (const name of ["mintAccountToken","request","useAppHarness"]) expect(name in m0, name).toBe(true);
+    for (const name of ["bearerIdentity","mintAccountToken","request","useAppHarness"]) expect(name in m0, name).toBe(true);
   });
   it('@/app/api/artifacts/[id]/edits/route', () => {
     for (const name of ["POST"]) expect(name in m1, name).toBe(true);
@@ -130,7 +130,7 @@ describe('values the deployment composes from', () => {
     for (const name of ["ACTOR_HEADER","ANONYMOUS","FORWARDED_FOR","FORWARDED_HOST","FORWARDED_PROTO","SERVICE_AUTH_HEADER","denyResponse","eventName","isInternalApiPath"]) expect(name in m29, name).toBe(true);
   });
   it('@artifactbin/utils', () => {
-    for (const name of ["actorOf","actorReceiver","assemble","attachActor","buildAssetRequest","buildAssetResponse","createEnv","createTokenReader","envelope","eventsClient","fakeEvents","httpClient","inProcess","isPublicAssetRequest","log","noopEvents","overHttp","parseAssetsOrigin","parseDatasetPolicy","publicAssetResponse","runnerClient","serve","serviceSecretForServer","signActor","verifyActor"]) expect(name in m30, name).toBe(true);
+    for (const name of ["actorOf","actorReceiver","assemble","attachActor","buildAssetRequest","buildAssetResponse","createEnv","envelope","eventsClient","fakeEvents","httpClient","inProcess","isPublicAssetRequest","log","noopEvents","overHttp","parseAssetsOrigin","parseDatasetPolicy","publicAssetResponse","runnerClient","serve","serviceSecretForServer","SERVING_POOL","signActor","verifyActor","withPoolErrors"]) expect(name in m30, name).toBe(true);
   });
 });
 

@@ -80,6 +80,8 @@ describe('createBearerReader',()=>{
  it('qualifies tables by the configured schemas and admits only plain identifiers',async()=>{
   const statements:string[]=[];
   await createBearerReader({db:{query:async(sql)=>{statements.push(sql);return {rows:[]};}},authSchema:'identity',appSchema:'app'}).byToken('mx_'+'q'.repeat(40));
+  // Only ever a SELECT: the proxy's role holds SELECT on the app's tokens and nothing else.
+  expect(statements).toHaveLength(1);expect(statements[0]).toMatch(/^\s*SELECT /);
   expect(statements[0]).toMatch(/FROM app\.tokens t/);
   expect(statements[0]).toMatch(/identity\.credentials member/);
   expect(statements[0]).toMatch(/identity\."user" u/);

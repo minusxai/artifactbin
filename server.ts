@@ -228,7 +228,7 @@ async function main(): Promise<void> {
    */
   const anonymousHosts = {name:'anonymousUserHosts',mount:<E extends import('hono').Env>(host:import('hono').Hono<E>)=>{host.use('*',userHostIngress(app));}};
   const listener = appOnly
-    ? getRequestListener(assemble([anonymousHosts,bearerAdmission({env,tokens:reader,identityDb:queryable,appSchema:readEnv(env,'APP__SCHEMA'),admitIdentity:admitDeploymentIdentity}),
+    ? getRequestListener(assemble([anonymousHosts,bearerAdmission({env,tokens:reader,admitIdentity:admitDeploymentIdentity}),
       {name:'application',mount:host=>host.all('*',c=>app.fetch(c.req.raw))}]).fetch)
     : getRequestListener(assemble([anonymousHosts,...authParts({
       upstream: inProcess(app),

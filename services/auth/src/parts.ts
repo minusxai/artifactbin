@@ -20,9 +20,8 @@ export interface AuthOptions {
  upstream:Upstream;
  admitIdentity?:(identity:SessionInfo)=>Promise<boolean>;
  env:Record<string,string|undefined>;
- /** The bearer read (`createBearerReader`). A reader that still has `invalidate` is utils' retired cached
-  * reader, which a composition pinned to it keeps until it switches; it is read the old three-step way. */
- tokens:Pick<TokenReader,'byToken'>&Partial<Pick<TokenReader,'invalidate'>>;
+ /** The bearer read (`createBearerReader`): token, OAuth family fence and identity in one statement. */
+ tokens:TokenReader;
  sessions:SessionStore;
  cookieSecret:string;
  secure?:boolean;
@@ -43,7 +42,7 @@ const aliasOriginsOf = (o:Pick<AuthOptions,'env'>):readonly string[] => {
 };
 /** App-only composition: the auth owner admits bearers without mounting login or OAuth routes.
  * Trusted internal actors already on the request remain authoritative, including refusals. */
-type BearerAdmissionOptions=Pick<AuthOptions,'env'|'tokens'|'identityDb'|'appSchema'|'trustedHops'|'admitIdentity'>;
+type BearerAdmissionOptions=Pick<AuthOptions,'env'|'tokens'|'trustedHops'|'admitIdentity'>;
 export function bearerAdmission(o: BearerAdmissionOptions): Part {
   return {name:'bearerAdmission',mount:app=>app.use('*',async(c,next)=>{
     if(actorOf(c.req.raw)||!c.req.raw.headers.has('authorization'))return next();
@@ -201,36 +200,18 @@ export function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
 }
 
 
-async function resolveBearer(request:Request,o:BearerAdmissionOptions,sessions?:Pick<SessionStore,'identity'>):Promise<Actor|null>{
+async function resolveBearer(request:Request,o:BearerAdmissionOptions):Promise<Actor|null>{
   const auth = request.headers.get('authorization') ?? '';
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!presented) return null;
-  // utils' retired cached reader: clear its cache, then the separate family fence and identity reads.
-  // Kept only while a pinned composition still passes it; the fused reader needs none of this.
-  if (o.tokens.invalidate) return legacyBearer(presented,request,o,sessions);
   // One statement: the token, its OAuth family fence and the account's identity. A failed read throws (503).
   const token = await o.tokens.byToken(presented);
   if (!token?.userId || !tokenFitsRequest(token, request, o)) return ANONYMOUS;
   return {credential:'bearer',tokenId:token.id,userId:token.userId,...(token.email!==undefined?{email:token.email,emailVerified:token.emailVerified}:{})};
 }
 
-async function legacyBearer(presented:string,request:Request,o:BearerAdmissionOptions,sessions?:Pick<SessionStore,'identity'>):Promise<Actor>{
-  // Family revocation committed in another process must take effect on this request.
-  o.tokens.invalidate?.();
-  const token = await o.tokens.byToken(presented);
-  const oauthLive = !token?.audience || (o.identityDb && await createOAuthStore(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth',o.appSchema??readEnv(o.env,'APP__SCHEMA')).accessLive(token.id));
-  if (token?.userId && oauthLive && tokenFitsRequest(token, request, o)) {
-    const actor: Actor = { credential: 'bearer', tokenId: token.id, userId: token.userId };
-    const identity = await sessions?.identity?.(token.userId).catch(() => null);
-    return identity?.userId === token.userId && identity
-      ? {...actor, email: identity.email, emailVerified: identity.emailVerified}
-      : actor;
-  }
-  return ANONYMOUS;
-}
-
 async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]): Promise<Actor> {
-  const bearer=await resolveBearer(request,o,o.sessions);
+  const bearer=await resolveBearer(request,o);
   if(bearer)return bearer;
   const session = await o.sessions.resolve(request);
   if (session?.userId && session.email && session.emailVerified === true) {
