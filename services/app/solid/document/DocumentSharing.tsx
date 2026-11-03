@@ -2,7 +2,6 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
-import type { DatasetCatalog } from '@/lib/datasets';
 import { artifactEditPath } from '@/lib/http/urls';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SharingVerdict } from '@/lib/workspace';
@@ -43,7 +42,7 @@ function VisibilityIcon(props: { icon: SharingIcon; size: number; class?: string
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean; canPublic?: boolean;
   /** A dataset's writes: who may change it through a document. */
-  access?: DatasetAccess; datasetKind?: DatasetCatalog['kind'];
+  access?: DatasetAccess;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
 // Module-level, so the groups' option objects keep their identity across the refetches a change causes (ToggleGroup keys by it, and a rebuilt row would drop focus).
@@ -67,7 +66,6 @@ export function DocumentSharing(props: {
   onOpen?: () => void;
   /** The artifact's format: a dataset's sharing also answers who may WRITE it (the writes row). */
   format?: string;
-  datasetKind?: DatasetCatalog['kind'];
   /** Validated document dependencies; access remains independent of document sharing. */
   refs?: ReadonlyArray<{ id: string; kind: string }>;
 }): JSX.Element {
@@ -108,10 +106,9 @@ export function DocumentSharing(props: {
       return true;
     } catch { setError('could not update sharing'); return false; }
   };
-  // A dataset: a PostgreSQL one is read-only by construction; a stored one says who may write it.
-  const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
-  const showWrites = () => props.format === 'dataset' && !!state() && !postgres();
-  const writable = () => !postgres() && state()?.access === 'readwrite';
+  // A dataset says who may write it.
+  const showWrites = () => props.format === 'dataset' && !!state();
+  const writable = () => state()?.access === 'readwrite';
   const [confirmReadOnly, setConfirmReadOnly] = createSignal(false);
   const [readOnlyBusy, setReadOnlyBusy] = createSignal(false);
   const [readOnlyError, setReadOnlyError] = createSignal<string | null>(null);
@@ -175,7 +172,6 @@ export function DocumentSharing(props: {
           <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
         </label>
       </Show>
-      <Show when={postgres()}><p aria-label="PostgreSQL read-only access" class="mt-5 border-t border-edge pt-4 leading-relaxed text-muted">Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.</p></Show>
       <Show when={showWrites()}>
         <div class="mt-5 border-t border-edge pt-4">
           <p class="mb-1 flex items-center justify-between text-faint"><span class="uppercase tracking-wider">writes</span><PenLine size={11} /></p>
@@ -210,7 +206,7 @@ export function DocumentSharing(props: {
           <Button type="submit" variant="secondary" size="sm" aria-label="Add email">Add</Button>
         </form>
       </div>
-      <Show when={props.format === 'dataset' && !postgres()}><Button variant="secondary" size="sm" aria-label="Manage access policies" onClick={(event: MouseEvent) => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 w-full justify-start">manage data actions ↗</Button></Show>
+      <Show when={props.format === 'dataset'}><Button variant="secondary" size="sm" aria-label="Manage access policies" onClick={(event: MouseEvent) => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 w-full justify-start">manage data actions ↗</Button></Show>
     </>}</Show>
   </>;
   const heading = () => `Share “${props.title || (props.format === 'folder' ? 'Untitled folder' : 'Untitled')}”`;

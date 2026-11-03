@@ -9,7 +9,6 @@ import type { SharingPatch } from '@artifactbin/contracts';
 import { browserActor } from '@/lib/authentication';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';
 import { json, readJson } from '@/lib/http';
-import { catalogOf } from '@/lib/datasets';
 
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -57,11 +56,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const access = parseAccessValue(body.access, current.format);
   if (access instanceof Response) return access;
-  // Refuse before updateSharingFor opens its transaction: a combined patch
-  // must never apply visibility/shares and silently drop an impossible access.
-  if (access === 'readwrite' && catalogOf(current)?.kind === 'postgres') {
-    return json({ error: 'dataset_read_only', details: ['Postgres datasets are read-only'] }, 400);
-  }
   if (access) patch.access = access;
   const shares = parseShareEntries(body.shares);
   if (shares instanceof Response) return shares;

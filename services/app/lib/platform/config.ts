@@ -102,24 +102,6 @@ export const IS_DEV = process.env.NODE_ENV === 'development';
 
 /** Shared authentication signing secret. The fallback is for local dev only. */
 export const AUTH_SECRET = env('AUTH', 'SECRET') ?? 'dev-only-secret-change-me';
-/** Operator opt-in for databases on a private/self-hosted network. */
-export const DATASET_ALLOW_PRIVATE_NETWORKS = env('DATASET','ALLOW_PRIVATE_NETWORKS') === 'true';
-export function parseDatasetDnsServers(value:string|undefined):readonly string[]{
-  if(value===undefined||value.trim()==='')return [];
-  const servers=value.split(',').map(server=>server.trim());
-  if(servers.some(server=>!server||isIP(server)===0))throw new Error('DATASET__DNS_SERVERS must contain only literal DNS server IP addresses.');
-  return Object.freeze(servers);
-}
-/** Optional resolver list used only for remote dataset PostgreSQL hosts. */
-export const DATASET_DNS_SERVERS=parseDatasetDnsServers(env('DATASET','DNS_SERVERS'));
-/** Exact reviewed connection fingerprints; permits only RFC1918/ULA, never loopback or metadata. */
-export function parseDatasetPrivateTargetHashes(value:string|undefined):readonly string[]{
- if(!value?.trim())return [];
- const hashes=value.split(',').map(hash=>hash.trim());
- if(hashes.length>32||hashes.some(hash=>!/^[a-f0-9]{64}$/.test(hash))||new Set(hashes).size!==hashes.length)throw Error('DATASET__PRIVATE_TARGET_HASHES must contain at most 32 unique SHA256 fingerprints.');
- return Object.freeze(hashes);
-}
-export const DATASET_PRIVATE_TARGET_HASHES=parseDatasetPrivateTargetHashes(env('DATASET','PRIVATE_TARGET_HASHES'));
 
 
 /**

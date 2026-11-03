@@ -17,7 +17,6 @@
     ],
     "services/app/__tests__/harness.ts": [
       "@/lib/accounts/agent-session",
-      "@/lib/datasets/postgres",
       "@/lib/document-serving/render-cache",
       "@/lib/platform/ids",
       "@/lib/platform/schema",
@@ -35,9 +34,6 @@
     "services/app/__tests__/pages-origin-host.test.ts": [
       "@/lib/accounts/pages-sessions",
       "@/lib/document-serving/native-html.server"
-    ],
-    "services/app/lib/datasets/__tests__/dataset-secret-boundary.test.ts": [
-      "@/lib/operations/datasets"
     ],
     "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": [
       "../../html-components/file-upload"

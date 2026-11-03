@@ -1,10 +1,8 @@
 import {expect,it,vi} from 'vitest';
-import { identityForUser } from '@/lib/accounts';
 import {useAppHarness} from '@/__tests__/harness';
 import {prepareContentInput,applyPreparedContent} from '../prepared/prepare-content';
 import {objectStore} from '@/lib/object-store';
 import {prepareCatalog} from '@/lib/datasets';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
 useAppHarness();
 const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" /></svg>');
 for(const [kind,body] of Object.entries({
@@ -26,9 +24,9 @@ for(const [kind,body] of Object.entries({
  put.mockRestore();
 });
 it('prepares stored catalog models against staged data without persisting their source tables',async()=>{
- const token=await mintToken('preparation');const put=vi.spyOn(objectStore(),'put');
+ const put=vi.spyOn(objectStore(),'put');
  try {
-  const result=await prepareContentInput({dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:3}]},{schema:'public',name:'summary',sql:'select sum(n) as total from rows'}]}},{prepareDataset:(input,objects)=>prepareCatalog(input,identityForUser(token.userId, token.id),undefined,objects)});
+  const result=await prepareContentInput({dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:3}]},{schema:'public',name:'summary',sql:'select sum(n) as total from rows'}]}},{prepareDataset:(input,objects)=>prepareCatalog(input,undefined,objects)});
   expect(result instanceof Response ? await result.clone().text() : 'prepared').toBe('prepared');
   if(result instanceof Response)return;
   expect(put).not.toHaveBeenCalled();

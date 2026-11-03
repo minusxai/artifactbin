@@ -17,7 +17,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as createSecretRoute } from '@/app/api/my/secrets/route';
+import { POST as tablesRoute } from '@/app/a/[id]/tables/route';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
@@ -184,9 +184,7 @@ describe('profile sync at the bearer door', () => {
  * both doors are one resolver (lib/authentication request-identity).
  */
 describe('a bearer-only invitee whose first call is not a withTokenAuth route', () => {
-  const TARGET = { host: 'db.example.com', port: 5432, database: 'commerce', username: 'reader', ssl: true };
-
-  it('reaches a dataset shared with them as editor through /api/my/secrets, having never called another route', async () => {
+  it('reaches a dataset shared with them as editor through its tables door, having never called another route', async () => {
     const owner = await createUser({ email: 'dataset-owner@example.com' });
     const ownerToken = await mintToken('owner', owner.id);
     const published = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: ownerToken.token, json: {
@@ -203,11 +201,11 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const invitee = await mintToken('invitee', 'usr_cli0000000005');
     expect((await db.query('SELECT email FROM users WHERE id = $1', ['usr_cli0000000005'])).rows).toEqual([{email:invitee.email}]);
 
-    const response = await createSecretRoute(attachActor(
-      request('/api/my/secrets', { method: 'POST', token: invitee.token, json: { value: 'a-password', connection: TARGET, datasetId: id } }),
+    const response = await tablesRoute(attachActor(
+      request(`/a/${id}/tables`, { method: 'POST', token: invitee.token, json: { sql: 'SELECT id FROM rows' } }),
       { credential: 'bearer', tokenId: invitee.id, userId: 'usr_cli0000000005', email: 'firstcall@invited.example', emailVerified: true },
-    ));
-    expect(response.status, await response.clone().text()).toBe(201);
+    ), { params: Promise.resolve({ id }) });
+    expect(response.status, await response.clone().text()).toBe(200);
     expect((await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', ['usr_cli0000000005'])).rows[0]?.email).toBe('firstcall@invited.example');
   });
 
@@ -222,10 +220,10 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const { id } = (await published.json()) as { id: string };
 
     const stranger = await mintToken('stranger', 'usr_cli0000000006');
-    const response = await createSecretRoute(attachActor(
-      request('/api/my/secrets', { method: 'POST', token: stranger.token, json: { value: 'a-password', connection: TARGET, datasetId: id } }),
+    const response = await tablesRoute(attachActor(
+      request(`/a/${id}/tables`, { method: 'POST', token: stranger.token, json: { sql: 'SELECT id FROM rows' } }),
       { credential: 'bearer', tokenId: stranger.id, userId: 'usr_cli0000000006', email: 'stranger@invited.example', emailVerified: true },
-    ));
+    ), { params: Promise.resolve({ id }) });
     expect(response.status).toBe(404);
   });
 });

@@ -21,7 +21,7 @@ import {
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/social';
 import { claimArtifactId } from './identities';
-import { parseDatasetDefinition, serializeDatasetDefinition, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, claimPendingDatasetSecret, resolveDatasetConnection, DatasetError, loadDatasetRows } from '@/lib/datasets';
+import { parseDatasetDefinition, serializeDatasetDefinition, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
@@ -226,8 +226,6 @@ async function insertArtifact(
   // rule is not re-judged under the forker's id: that would make every app
   // whose rows name its members unforkable by anyone but the one person named.
   if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({meta:{objectKey:key}}));
-  const catalog=catalogOf(input);
-  if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,creator,id,tx);
   const ownerKind = await userKindOf(userId, tx);
   /*
    * THE SANDBOX CEILING. A test user's work never lists anywhere and is never
@@ -246,7 +244,7 @@ async function insertArtifact(
   // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
   // A GraphQL name (validated by the create door) is stored in that template's configuration, whatever the access.
   const named = atCreation.graphqlName !== undefined;
-  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset' && catalog?.kind!=='postgres';
+  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset';
   if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
   const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
   if(input.format==='html'&&input.htmlBackends){
@@ -421,9 +419,6 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
     current,
     async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
       await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
-      const catalog = catalogOf(content);
-      if (catalog?.kind === 'postgres' && catalog.connection)
-        await resolveDatasetConnection(catalog.connection, undefined, current.id, tx);
     },
     async publish(content: ArtifactInput, rebinds: CarriedRebinds): Promise<ArtifactRow> {
       await archiveVersion(tx, current);
@@ -899,7 +894,7 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
     if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
     const policy=patch.policy===undefined?undefined:validateDatasetPolicyForRow(current,patch.policy);
-    if (patch.access && (current.format !== 'dataset' || (patch.access === 'readwrite' && catalogOf(current)?.kind === 'postgres'))) return null;
+    if (patch.access && current.format !== 'dataset') return null;
     const meta = {...current.meta};
     for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
     if(opts.dryRun)return {...current,...patch,meta};

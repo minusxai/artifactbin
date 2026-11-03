@@ -4,14 +4,11 @@ import type { StoredContent } from '@/lib/document';
 import {json} from '@/lib/http';
 import {publishDataset} from '@/lib/datasets/data-tiers';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import type {DatasetCatalog,DatasetHost,DatasetTable} from './types';
+import type {DatasetCatalog,DatasetConnection,DatasetHost,DatasetTable,PostgresConfig} from './types';
 import {DatasetError} from './errors';
-import {discoverPostgres, queryPostgres} from './postgres';
 import {executeCatalog} from './execute';
 import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
-import {resolveDatasetConnection} from './secrets';
-import {compileNotebookSql} from './notebook';
-import {connectionShape, catalogInputShape} from './input';
+import {catalogInputShape} from './input';
 import type { DatasetColumn } from '@/lib/dataflow';
 import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;
@@ -20,10 +17,17 @@ const shape=catalogInputShape;
 export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
  return catalogFromMetadata(row.meta);
 }
-/** Reader-safe catalog: public relations only, never connection or notebook internals. */
+/** Reader-safe catalog: public relations only. */
 export function publicCatalogOf(row:{meta:unknown}):DatasetCatalog|null {
  const catalog=catalogOf(row);if(!catalog)return null;
  return {kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,tables:catalog.tables.map(({schema,name,columns})=>({schema,name,columns}))};
+}
+/**
+ * RETIRED: connected Postgres datasets have no credentials to resolve. Only lib/page-graphql's registered queries
+ * still call this, for a `postgres` catalog nothing can create; it goes with them.
+ */
+export async function resolveDatasetConnection(_connection:DatasetConnection,_actor?:AccessActor,_datasetId?:string):Promise<PostgresConfig>{
+ throw new DatasetError('Dataset credentials are unavailable',403);
 }
 const key=(table:{schema:string;name:string})=>JSON.stringify([table.schema,table.name]);
 /**
@@ -42,41 +46,18 @@ function reshapeWithoutRows(table:{schema:string;name:string;columns?:Array<stri
  if(retyped.length)throw new DatasetError(`${where}: retyping stored column ${retyped.join(', ')} needs the table's rows restated; add rows={[...]} to reshape it`);
  return declared.filter(c=>!prior.columns.some(p=>p.name===c.name)).map(c=>'type' in c?c as DatasetColumn:{name:c.name,type:'string' as const});
 }
-export async function prepareCatalog(input:unknown,actor:AccessActor,previous?:Pick<DatasetHost,'id'|'meta'>,objects?:ContentObjects):Promise<StoredContent|Response> {
+export async function prepareCatalog(input:unknown,previous?:Pick<DatasetHost,'id'|'meta'>,objects?:ContentObjects):Promise<StoredContent|Response> {
  try{
   const authored=typeof input==='string'?parseDatasetDefinition(input):input;
-  if(authored&&typeof authored==='object'&&(authored as {connection?:unknown}).connection){
-   const checked=catalogInputShape.safeParse(authored);if(!checked.success)throw new DatasetError(checked.error.issues.map(issue=>`${issue.path.join('.')}: ${issue.message}`).join('; '));
-   const definition=checked.data;const connection=connectionShape.parse(definition.connection);
-   if(definition.kind!=='postgres')throw new DatasetError('Connection settings require a Postgres dataset');
-   const old=previous?catalogOf(previous):null,defaultSchema=definition.defaultSchema??'public';
-   if(old&&old.kind!==definition.kind)throw new DatasetError('Create a new dataset to change its source kind');
-   if(old&&old.defaultSchema!==defaultSchema)throw new DatasetError('The default schema is fixed to preserve existing query bindings');
-   const tableNames=new Set<string>();for(const table of definition.tables){const tableKey=key(table);if(tableNames.has(tableKey))throw new DatasetError('Table names must be unique within a schema');tableNames.add(tableKey);if(!table.columns?.length||table.columns.some(c=>typeof c!=='string')||new Set(table.columns).size!==table.columns.length)throw new DatasetError('Every exposed table needs unique columns');const sources=Number(!!table.source)+Number(!!table.modelCellId)+Number(!!table.sql)+Number(!!table.rows);if(sources!==1)throw new DatasetError('Each table requires exactly one source');}
-   if(!definition.tables.some(table=>table.schema===defaultSchema))throw new DatasetError('The default schema must exist in the catalog');
-   const notebook=definition.notebook??{cells:[]};
-   const config=await resolveDatasetConnection(connection,previous?undefined:actor,previous?.id);const discovered=await discoverPostgres(config);
-   const raw:DatasetCatalog={kind:'postgres',connection,notebook,notebookSources:discovered,defaultSchema:'public',refreshSeconds:definition.refreshSeconds??60,tables:discovered.map(table=>({...table,source:{schema:table.schema,table:table.name}}))};
-   const ids=new Set<string>(),names=new Set<string>(),outputs=new Map<string,DatasetColumn[]>();
-   for(const cell of notebook.cells){if(ids.has(cell.id)||names.has(cell.name))throw new DatasetError('Notebook cell ids and names must be unique');ids.add(cell.id);names.add(cell.name);const compiled=compileNotebookSql(raw,notebook,cell.id);const result=await queryPostgres(config,compiled.sql,compiled.values,{limit:1,offset:0});outputs.set(cell.id,result.columns);}
-   const tables:DatasetTable[]=definition.tables.map(table=>{if(table.modelCellId){const columns=outputs.get(table.modelCellId);if(!columns)throw new DatasetError(`Unknown model cell: ${table.modelCellId}`);const selected=(table.columns??[]).map(name=>{const column=columns.find(item=>item.name===name);if(!column)throw new DatasetError(`Model column is unavailable: ${table.schema}.${table.name}.${name}`);return column;});return {schema:table.schema,name:table.name,modelCellId:table.modelCellId,columns:selected};}if(!table.source||!table.columns)throw new DatasetError('A whitelisted table requires a source and columns');const source=discovered.find(item=>item.schema===table.source!.schema&&item.name===table.source!.table);const columns=table.columns.map(name=>{const column=source?.columns.find(item=>item.name===name);if(!column)throw new DatasetError(`Source column is unavailable: ${table.schema}.${table.name}.${name}`);return column;});return {schema:table.schema,name:table.name,source:table.source,columns};});
-   const catalog:DatasetCatalog={kind:'postgres',connection,notebook,notebookSources:discovered,defaultSchema,refreshSeconds:definition.refreshSeconds??60,tables};
-   const canonical=serializeDatasetDefinition({...definition,connection,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds});
-   return {format:'dataset',source:canonical,derivedTitle:null,meta:{catalog,columns:[]}};
-  }
   const parsed=shape.safeParse(authored);if(!parsed.success)throw new DatasetError(parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; '));
   const data={...parsed.data,defaultSchema:parsed.data.defaultSchema??'public',refreshSeconds:parsed.data.refreshSeconds??60};const seen=new Set<string>();for(const t of data.tables){if(seen.has(key(t)))throw new DatasetError('Table names must be unique within a schema');seen.add(key(t));}
   if(!data.tables.some(t=>t.schema===data.defaultSchema))throw new DatasetError('The default schema must exist in the catalog');
   const old=previous?catalogOf(previous):null;
   if(old&&old.defaultSchema!==data.defaultSchema)throw new DatasetError('The default schema is fixed to preserve existing query bindings');
   if(old&&old.kind!==data.kind)throw new DatasetError('Create a new dataset to change its source kind');
-  if(data.kind==='postgres'){
-   throw new DatasetError('Postgres datasets require an inline dataset connection');
-  }
   const tables:DatasetTable[]=[];
   for(const t of data.tables){
-   if(t.sql){if(t.source||t.rows)throw new DatasetError('A model has SQL, not a second source');tables.push({schema:t.schema,name:t.name,sql:t.sql,columns:[]});continue;}
-   if(t.source)throw new DatasetError('Stored tables do not have a remote source');
+   if(t.sql){if(t.rows)throw new DatasetError('A model has SQL, not a second source');tables.push({schema:t.schema,name:t.name,sql:t.sql,columns:[]});continue;}
    const prior=old?.tables.find(p=>key(p)===key(t));
    if(!t.rows&&prior?.objectKey){
     const added=reshapeWithoutRows(t,prior);
@@ -97,7 +78,7 @@ export async function prepareCatalog(input:unknown,actor:AccessActor,previous?:P
    const stored=await publishDataset(declared?.length?{columns:declared}:named?.length?{columns:named}:{},t.rows,objects);if(stored instanceof Response)return stored;
    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});
   }
-  const catalog:DatasetCatalog={kind:data.kind,defaultSchema:data.defaultSchema,refreshSeconds:data.kind==='stored'?0:data.refreshSeconds,tables};
+  const catalog:DatasetCatalog={kind:data.kind,defaultSchema:data.defaultSchema,refreshSeconds:0,tables};
   // Dependencies are probed in topological order by retrying only unknown model shapes.
   const pending=tables.filter(t=>t.sql);let lastError:unknown;
   while(pending.length){let progress=false;

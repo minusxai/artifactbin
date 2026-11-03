@@ -61,7 +61,7 @@ values and secrets. App and adjacent HMR ports must both be available.
 | --- | --- | --- |
 | Native HTML pages, design systems, comments, sharing, history and restore | Default setup and a signed-in account. Share roles and artifact visibility still control access. | [HTTP API](http-api.md), [document format](document-format.md) |
 | CSV/JSON datasets, GraphQL queries, charts and mutations | Register data through the author skill or HTTP API and reference it from the page. Mutations need the dataset's write policy. | `<origin>/llms/datasets`, `<origin>/llms/dataviz` |
-| Connected PostgreSQL datasets | A reachable PostgreSQL database and credentials in its dataset definition. Private network destinations require the self-host operator's `DATASET__ALLOW_PRIVATE_NETWORKS` setting. | `<origin>/llms/datasets` |
+| Your own PostgreSQL | Datasets are stored rows only. A page reaches your database through a resolver that calls its HTTP API with `caps.fetch` (the Neon and Supabase examples), with the password as a resolver secret. | `<origin>/llms/resolvers` |
 | Images, PDFs, other files and URL imports | Uploaded files or permitted remote URLs. Remote imports need network access and respect size limits and blocked private destinations. | [file uploads](file-uploads.md) |
 | PNG/JPG exports | Chromium, prepared/downloaded when needed; exports run on the server. | [serving and security](serving-and-security.md) |
 | Offline HTML | A published head; download the HTML export. Viewer-local state works offline; linked public reads are optional, and remote writes never queue. | [serving and security](serving-and-security.md) |

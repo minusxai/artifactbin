@@ -362,7 +362,7 @@ describe('CI job shape', () => {
     for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'browser-chromium'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
       expect(warmKeys).toContain(restore.with.key);
     }
-    // No gate starts its own PostgreSQL (its leg is services/app/lib/datasets/__tests__/postgres-routes.test.ts),
+    // No gate starts its own PostgreSQL,
     // so no gate shard pulls the image.
     expect(jobs.gates.steps.filter((step) => /docker pull postgres/.test(step.run ?? ''))).toEqual([]);
 

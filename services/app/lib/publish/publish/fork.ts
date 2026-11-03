@@ -5,7 +5,7 @@ import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/data
 import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';
-import { catalogOf, DatasetError } from '@/lib/datasets';
+import { DatasetError } from '@/lib/datasets';
 import { datasetReadAccess } from '@/lib/dataset-permissions';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { trackEvent } from '@/lib/analytics';
@@ -32,8 +32,7 @@ export interface ForkOverrides {
  * Which parts of a document travel and which belong to the original's life is stated once, in
  * [serving and security](../../../../docs/serving-and-security.md). Two things the doc cannot say:
  * object-store bytes are REFERENCED rather than re-uploaded (every key is content-addressed, so a
- * fork of a 27 MB sheet costs no bytes), and a Postgres catalog copies only when the forker owns
- * its live connection.
+ * fork of a 27 MB sheet costs no bytes).
  *
  * A markup document is RE-PUBLISHED as the forker rather than row-copied, and that is the whole
  * point of the function: refs resolve through `refLoaderForActor(actor)`, so a document whose
@@ -122,14 +121,13 @@ export async function forkArtifact(
  *
  * A FOLDER's source names its OWN children table by id, so a copy would
  * faithfully list the original's children and re-pointing it would silently
- * rewrite a document the forker never wrote. A live POSTGRES catalog keeps its
- * credentials bound to the original, so the copy could not answer one query.
+ * rewrite a document the forker never wrote.
  */
 export function forkRefusal(source: ArtifactRow): Response | null {
   if (source.format === 'folder') {
     return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
   }
-  return postgresForkRefusal(source);
+  return null;
 }
 
 /** What one fork made: the copy, and a copied dataset per `ref:` it had to repoint. */
@@ -171,15 +169,5 @@ async function forkInput(
       throw error;
     }
   }
-  const refusal=postgresForkRefusal(source);
-  if(refusal)return refusal;
   return {...carried,format:source.format,source:source.source,meta:source.meta};
-}
-
-/** A live remote catalog cannot copy its dataset-bound secret to a new id. */
-function postgresForkRefusal(source:ArtifactRow):Response|null {
-  if(source.format!=='dataset')return null;
-  const catalog=catalogOf(source);
-  if(catalog?.kind!=='postgres')return null;
-  return json({error:'not_forkable',hint:'Postgres credentials remain bound to the original dataset'},403);
 }

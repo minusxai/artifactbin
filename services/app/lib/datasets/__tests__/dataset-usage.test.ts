@@ -1,7 +1,5 @@
 import {describe,it,expect} from 'vitest';
 import {datasetCreateFields,datasetQuerySnippet} from '../dataset-usage';
-import type {DatasetCatalog} from '../types';
-const postgres:DatasetCatalog={kind:'postgres',refreshSeconds:60,defaultSchema:'public',tables:[{schema:'public',name:'orders',columns:[{name:'amount',type:'number'}]}]};
 const LEGACY=/schema\{|rows\(tableId|writeRows|data-af-api|expectedRevision|columnId/;
 describe('native dataset authoring hints',()=>{
  it('returns a complete native HTML page that reads every row through the generated API with the columns\' field names',()=>{
@@ -19,8 +17,5 @@ describe('native dataset authoring hints',()=>{
  });
  it('names the retained metadata API when writes are disabled',()=>{
   const result=datasetCreateFields('abc123',[],0);expect(result.writes).toContain('PATCH /api/my/artifacts/abc123');expect(result.writes).not.toContain('afbin');
- });
- it('does not advertise unsupported PostgreSQL native dataset bindings or writes',()=>{
-  const result=datasetCreateFields('abc123',[],2,{catalog:postgres},'readwrite');expect(result.access).toBe('read');expect(result.usage).not.toContain('<link');expect(result.writes).toMatch(/PostgreSQL.*read-only/);
  });
 });

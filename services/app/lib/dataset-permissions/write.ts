@@ -103,7 +103,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   const db = options.tx ?? await getDb();
   const revision = row.policy_revision ?? 0;
   const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.document || !!options.pageId });
-  if (row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
+  if (row.format !== 'dataset' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
   if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role) return { allowed: false, role, revision, reason: 'no_rule' };

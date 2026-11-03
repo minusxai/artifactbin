@@ -43,7 +43,7 @@ export function keepDatasetConfiguration(policy:DatasetPermissions,stored:unknow
 }
 
 function requireStoredDataset(row:PolicyRow) {
- if(row.format!=='dataset'||catalogOf(row)?.kind==='postgres')throw new Error('Policies require a stored dataset');
+ if(row.format!=='dataset')throw new Error('Policies require a stored dataset');
 }
 
 /** A version 3 policy checked against the dataset's tables and columns; throws naming every problem by path. */

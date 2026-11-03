@@ -9,7 +9,6 @@ import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
 import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit,respondToCommentReaction} from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
-import {DATASET_OPERATIONS} from '@/lib/operations/datasets';
 import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
@@ -166,7 +165,7 @@ const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fi
  */
 const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "folder placement requires ownership; editors may change sharing and dataset data policies" };
 
-const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id. A Postgres dataset must have a usable connection" };
+const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
 
 /** The shared write refusals, stated once and spread into each writer's table. */
 const CONTENT_ERRORS: OperationError[] = [
@@ -397,7 +396,7 @@ const updateMetadataOp: Operation = {
 
 const transferArtifactOp: Operation = {
  name:'transfer_artifact',title:'Transfer artifact ownership',http:{method:'POST',path:'/api/artifacts/{id}/transfer'},
- description:'Deliberately transfer an artifact or complete folder subtree (including trashed descendants) to Personal or a group where you are an editor. Requires current ownership. IDs/history remain; external dependencies or connected datasets can refuse transfer. A busy transfer returns 409 without changes; retry after the competing operation finishes. Defaults and ordinary edits never transfer ownership.',
+ description:'Deliberately transfer an artifact or complete folder subtree (including trashed descendants) to Personal or a group where you are an editor. Requires current ownership. IDs/history remain; external dependencies can refuse transfer. A busy transfer returns 409 without changes; retry after the competing operation finishes. Defaults and ordinary edits never transfer ownership.',
  input:{id:z.string(),destination:z.discriminatedUnion('type',[z.object({type:z.literal('personal')}).strict(),z.object({type:z.literal('group'),id:z.string().min(1)}).strict()])},
  annotations:{},example:{input:{id:'aB3xK9',destination:{type:'group',id:'grp_team'}}},
  errors:[NOT_FOUND,{status:403,code:'transfer_refused',fix:'Control the current owner and require editor membership in the destination group.'},{status:409,code:'transfer_conflict',fix:'Read the refusal: retry contention after other work finishes; include dependencies or retain their current owner.'}],
@@ -609,7 +608,7 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact to adapt an existing document, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document that reads a private one is refused by name instead of copied broken. Forking an APP copies the datasets its <Mutation> declarations WRITE — rows, columns, access and write policy — under your account and repoints the page at the copies; datasets it only READS keep their ref. Pass dry_run: true to be told which datasets that would copy, creating nothing. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders are not forkable, nor live Postgres datasets: a Postgres secret remains bound to the original dataset. Answers the create reply plus forked_from and datasets — the copies it made, each with its own forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact to adapt an existing document, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document that reads a private one is refused by name instead of copied broken. Forking an APP copies the datasets its <Mutation> declarations WRITE — rows, columns, access and write policy — under your account and repoints the page at the copies; datasets it only READS keep their ref. Pass dry_run: true to be told which datasets that would copy, creating nothing. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders are not forkable. Answers the create reply plus forked_from and datasets — the copies it made, each with its own forked_from.',
   input: {
     id: z.string(),
     dry_run: z.boolean().optional().describe('answer { datasets } — the datasets a fork would copy under your account, in the order the page names them — and create nothing'),
@@ -774,7 +773,7 @@ const queryDatasetGraphqlOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
+  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

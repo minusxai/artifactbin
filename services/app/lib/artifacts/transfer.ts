@@ -3,7 +3,7 @@ import { actorSubject, emit, generateInternalId, getDb, type Queryable } from '.
 import {notifyParent,parentOf} from './placement';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import {DatasetError, catalogOf} from '../datasets';
+import {DatasetError} from '../datasets';
 import { notifyArtifactSql } from './table';
 import { ownerPredicate, type ArtifactRow } from '@/lib/artifact-access';
 import {recordGroupMutation,getGroupRole} from '../groups';
@@ -30,9 +30,6 @@ export async function transferArtifact(actor:AccessActor,id:string,destination:A
   const groupId=destination.type==='group'?destination.id:null;
   const userId=destination.type==='personal'?actor.userId:null;
   if(target.group_id===groupId&&target.user_id===userId)return target;
-  // Connections bind saved credentials to their original principal. Until a
-  // credential migration contract exists, transferring them fails closed.
-  if(closure.some(r=>catalogOf(r)?.kind==='postgres'))throw new DatasetError('Connected datasets cannot change owner',409);
   const ids=new Set(closure.map(r=>r.id));
   await assertTransferDependencies(tx,closure);
   const updated=await tx.query<ArtifactRow>(`UPDATE artifacts SET group_id=$2,user_id=$3,

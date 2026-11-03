@@ -182,7 +182,6 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
     '-v', `${worktree}:${INSIDE.src}:ro`,
     '-v', `${volume}:${INSIDE.deps}`,
     '-v', `${BUILD_VOLUME}:${INSIDE.builds}`,
-    '-e', 'DATASET__ALLOW_PRIVATE_NETWORKS=true',
     ...pilotArgs, ...batchArgs,
     ...componentArgs,
     '-w', INSIDE.src,

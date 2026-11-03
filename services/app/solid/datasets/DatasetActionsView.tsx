@@ -14,13 +14,11 @@ type Actions = {
 };
 
 /** Read-only inspection: the v3 read-back of who can see and change the data, from the editor-scoped policy API; never widens access. */
-export function DatasetActionsView(props: { id: string; canInspect: boolean; kind?: string }): JSX.Element {
+export function DatasetActionsView(props: { id: string; canInspect: boolean }): JSX.Element {
   return <section aria-label="Read-only data actions" class="space-y-5 text-sm">
     <header><SectionHeading>Data actions</SectionHeading><p class="mt-1 text-muted">Who can see and change this data. Use Edit dataset to change the rules.</p></header>
-    <Show when={props.kind !== 'postgres'} fallback={<p class="text-muted">PostgreSQL datasets are read-only.</p>}>
-      <Show when={props.canInspect} fallback={<p class="text-muted">Data action rules are visible to dataset editors.</p>}>
-        <SavedActions id={props.id} />
-      </Show>
+    <Show when={props.canInspect} fallback={<p class="text-muted">Data action rules are visible to dataset editors.</p>}>
+      <SavedActions id={props.id} />
     </Show>
   </section>;
 }

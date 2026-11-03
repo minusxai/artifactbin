@@ -96,7 +96,7 @@ function parseGraphqlName(body:Record<string,unknown>,parsed:{format:string;meta
  const refuse=(detail:string)=>json({error:'invalid_graphql_name',details:[detail]},400);
  const problem=graphqlRootNameProblem(body.name);if(problem)return refuse(problem);
  const catalog=catalogOf(parsed);
- if(parsed.format!=='dataset'||catalog?.kind==='postgres')return refuse('name sets the GraphQL root of a new stored dataset (CSV or JSON rows)');
+ if(parsed.format!=='dataset')return refuse('name sets the GraphQL root of a new stored dataset (CSV or JSON rows)');
  if((catalog?.tables.length??1)>1)return refuse('a multi-table dataset\'s GraphQL roots are its table names');
  if(forkedFrom)return refuse('a copy takes its GraphQL root from its title: drop name or forked_from');
  return body.name as string;
@@ -198,7 +198,7 @@ export async function replaceArtifactWithBody(
   const prepared: PreparedContent | Response = current.format === 'folder'
     ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
     : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
-      prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
+      prepareDataset: (input,objects) => prepareCatalog(input,current,objects),
       loadRef: refLoaderForActor(owner),
       // Account-owned imports may have no historical creator credential.
       overByteQuota: byteQuotaFor(owner.tokenId, owner.userId),
@@ -212,7 +212,6 @@ export async function replaceArtifactWithBody(
   if (parent instanceof Response) return parent;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
-  if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
   const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
@@ -374,7 +373,7 @@ async function createArtifactFromBodyPrepared(
   const sentMarkup=body.markup;
   const prepared = await prepareContentInput(body, {
     creating: true,
-    prepareDataset: (input,objects) => prepareCatalog(input,actor,undefined,objects),
+    prepareDataset: (input,objects) => prepareCatalog(input,undefined,objects),
     loadRef: refLoaderForActor(publicationActor),
     overByteQuota: byteQuotaFor(actor.tokenId),
   }, {allowRemoteInputs:!options.dryRun});
@@ -384,7 +383,6 @@ async function createArtifactFromBodyPrepared(
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
-  if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
   const graphqlName=parseGraphqlName(body,parsed,forkedFrom);if(graphqlName instanceof Response)return graphqlName;
 
   const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;

@@ -1,67 +1,26 @@
 /**
- * lib/datasets' interface beyond execution: connection shapes and sealed credentials (only their owner or their
- * dataset may open them), stored catalogs and rows, user-typed columns (self, membership and unknown users refused),
+ * lib/datasets' interface beyond execution: stored catalogs and rows, user-typed columns (self, membership and unknown users refused),
  * the stored file, image, PDF and viz tiers with their size and type refusals, the viewer mutation policy, the
  * public mutation throttle and the JSON door's error mapping.
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { DatasetColumn } from '@artifactbin/contracts';
-import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { useAppHarness } from '@/__tests__/harness';
+import { createUser } from '@/lib/accounts';
 import { objectStore, prepareObjects } from '@/lib/object-store';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, getDb } from '@/lib/platform';
 import { seedOwnerJoin } from '@/lib/social';
 import {
-  DatasetError, catalogOf, executeDocumentQueries, claimPendingDatasetSecret, connectionShape, createDatasetSecret, datasetResponse, importedRows, importedTables, loadDatasetRows,
-  openDatasetSecret, publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
-  readFileUpload, resolveDatasetConnection, resolveUserColumnScope, retainUserScope, sealDatasetSecret, secretTargetShape, serveStoredFile,
+  DatasetError, catalogOf, executeDocumentQueries, datasetResponse, importedRows, importedTables, loadDatasetRows,
+  publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
+  readFileUpload, resolveUserColumnScope, retainUserScope, serveStoredFile,
   storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, storedRowStats, throttlePublicMutation, uploadedSha256,
   userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
 
 useAppHarness();
 
-const TARGET = { host: 'db.example.test', port: 5432, database: 'app', username: 'reader', ssl: true };
 const failure = async (result: unknown) => (result instanceof Response ? { status: result.status, ...(await result.json()) } : result);
-
-describe('connections and sealed credentials', () => {
-  it('accepts exactly the connection fields, and a target without the secret id', () => {
-    const secret = `sec_${'a'.repeat(24)}`;
-    expect(connectionShape.parse({ ...TARGET, passwordSecretId: secret })).toEqual({ ...TARGET, passwordSecretId: secret });
-    for (const bad of [{ ...TARGET, passwordSecretId: 'sec_x' }, { ...TARGET, passwordSecretId: secret, password: 'p' }, { ...TARGET, port: 0, passwordSecretId: secret }, { ...TARGET, host: ' ', passwordSecretId: secret }]) {
-      expect(connectionShape.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
-    }
-    expect(secretTargetShape.parse(TARGET)).toEqual(TARGET);
-  });
-
-  it('opens a sealed secret only with the same id, target and signing secret', () => {
-    const sealed = sealDatasetSecret('hunter2', 'sec_1', 'hash_1', 'auth');
-    expect(sealed).not.toContain('hunter2');
-    expect(openDatasetSecret({ id: 'sec_1', target_hash: 'hash_1', ciphertext: sealed }, 'auth')).toBe('hunter2');
-    expect(() => openDatasetSecret({ id: 'sec_2', target_hash: 'hash_1', ciphertext: sealed }, 'auth')).toThrow();
-    expect(() => openDatasetSecret({ id: 'sec_1', target_hash: 'hash_2', ciphertext: sealed }, 'auth')).toThrow();
-    expect(() => openDatasetSecret({ id: 'sec_1', target_hash: 'hash_1', ciphertext: sealed }, 'other')).toThrow();
-  });
-
-  it('lets only its creator use a pending secret, and only its dataset once claimed', async () => {
-    const owner = await mintAccountToken('owner'), stranger = await mintAccountToken('stranger');
-    const ownerActor = identityForUser(owner.userId, owner.id), strangerActor = identityForUser(stranger.userId, stranger.id);
-    await expect(createDatasetSecret(ownerActor, '', TARGET)).rejects.toThrow('Secret value is required');
-    await expect(createDatasetSecret(ownerActor, 'x'.repeat(4097), TARGET)).rejects.toBeInstanceOf(DatasetError);
-    const { id } = await createDatasetSecret(ownerActor, 'pw', TARGET);
-    const connection = { ...TARGET, passwordSecretId: id };
-    expect(await resolveDatasetConnection(connection, ownerActor)).toEqual({ ...TARGET, password: 'pw' });
-    await expect(resolveDatasetConnection(connection, strangerActor)).rejects.toMatchObject({ status: 403 });
-    await expect(resolveDatasetConnection({ ...connection, host: 'elsewhere.example' }, ownerActor)).rejects.toMatchObject({ status: 403 });
-    const db = await getDb();
-    await expect(claimPendingDatasetSecret(connection, strangerActor, 'ds_1', db)).rejects.toMatchObject({ status: 403 });
-    await claimPendingDatasetSecret(connection, ownerActor, 'ds_1', db);
-    expect(await resolveDatasetConnection(connection, undefined, 'ds_1')).toEqual({ ...TARGET, password: 'pw' });
-    await expect(resolveDatasetConnection(connection, ownerActor)).rejects.toMatchObject({ status: 403 });
-    await expect(resolveDatasetConnection(connection, undefined, 'ds_2')).rejects.toMatchObject({ status: 403 });
-    await expect(claimPendingDatasetSecret(connection, ownerActor, 'ds_2', db)).rejects.toMatchObject({ status: 403 });
-  });
-});
 
 describe('stored catalogs and rows', () => {
   it('stores rows by content, reads them back, counts them once, and refuses to parse an object past the cap', async () => {
@@ -78,7 +37,6 @@ describe('stored catalogs and rows', () => {
     const { objectKey } = await storeDatasetRows([{ n: 1 }]);
     const catalog: DatasetCatalog = {
       kind: 'stored', defaultSchema: 'public', refreshSeconds: 0,
-      connection: { ...TARGET, passwordSecretId: 'sec_x' },
       tables: [
         { schema: 'public', name: 'rows', columns: [{ name: 'n', type: 'number' }], objectKey },
         { schema: 'public', name: 'empty', columns: [] },
@@ -87,7 +45,6 @@ describe('stored catalogs and rows', () => {
       ],
     };
     expect(importedTables(catalog).map(t => t.name)).toEqual(['rows', 'empty']);
-    expect(importedTables({ ...catalog, kind: 'postgres' })).toEqual([]);
     expect(await importedRows(catalog)).toEqual({ rows: { rows: [{ n: 1 }], columns: [{ name: 'n', type: 'number' }] }, empty: { rows: [], columns: [] } });
     expect(catalogOf({ meta: { catalog } })).toBe(catalog);
     expect(catalogOf({ meta: [] })).toBeNull();
@@ -97,13 +54,12 @@ describe('stored catalogs and rows', () => {
     expect(publicCatalogOf({ meta: {} })).toBeNull();
   });
 
-  it('finds every image a stored dataset\'s cells reference, and none for a connected one', async () => {
+  it('finds every image a stored dataset\'s cells reference', async () => {
     const id = 'IMGabc123';
     const { objectKey } = await storeDatasetRows([{ photo: `ref:${id}` }, { photo: `/a/${id}` }, { photo: null }]);
     const catalog = { kind: 'stored', defaultSchema: 'public', refreshSeconds: 0, tables: [{ schema: 'public', name: 'rows', columns: [], objectKey }] };
     const refs = await storedMediaReferences({ meta: { catalog } });
     expect(refs).toEqual(new Set([id]));
-    expect(await storedMediaReferences({ meta: { catalog: { ...catalog, kind: 'postgres' } } })).toEqual(new Set());
   });
 
 
@@ -222,7 +178,6 @@ describe('dataset policy', () => {
     expect(validateDatasetPolicyForRow(row, v3)).toEqual(v3);
     expect(validateDatasetPolicyForRow(row, null)).toBeNull();
     expect(() => validateDatasetPolicyForRow({ format: 'html', meta: {}, dataset_policy: null } as never, null)).toThrow('Policies require a stored dataset');
-    expect(() => validateDatasetPolicyForRow({ format: 'dataset', meta: { catalog: { kind: 'postgres', tables: [] } }, dataset_policy: null } as never, null)).toThrow('stored dataset');
     expect(() => validateDatasetPolicyForRow(row, { ...v3, tables: [{ ...v3.tables[0], select_permissions: [{ role: 'viewer', permission: { columns: ['missing'], filter: {} } }] }] })).toThrow(/tables\[0\]\.select_permissions\[0\].*missing/);
     for (const legacy of [{ version: 2, allow: [] }, { version: 1, enforcement: 'enabled', tables: [] }, { tables: [] }])
       expect(() => validateDatasetPolicyForRow(row, legacy)).toThrow(/Version 1 and 2 dataset policies can no longer be set: send a version 3 policy/);
