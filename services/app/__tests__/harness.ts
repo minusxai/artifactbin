@@ -7,6 +7,7 @@ import {inviteGroupMember,acceptGroupInvitations} from '@/lib/groups';
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
+import { createBearerReader, ensureAuthSchema, ensureHumanAuthSchema } from '@artifactbin/auth';
 import type { Actor, Credential } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
@@ -34,6 +35,25 @@ const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
 
 /** Authenticated route fixtures always belong to an email account. Explicit null
  * remains available for legacy-credential rejection and historical alias tests. */
+/**
+ * The auth host's bearer reader over this harness's database, as server.ts composes it: the auth tables its one
+ * statement reads (credentials, Better Auth's user) created, and `account` writing the identity it returns.
+ */
+export async function bearerIdentity() {
+  const db = await getDb();
+  const raw = db.raw();
+  if (raw.kind !== 'pglite') throw new Error('The harness database is PGLite.');
+  await ensureAuthSchema(db, 'auth');
+  await ensureHumanAuthSchema({ pglite: raw.instance, schema: 'auth' });
+  return {
+    reader: createBearerReader({ db }),
+    async account(a: { userId: string; email: string; emailVerified: boolean }): Promise<void> {
+      await db.query('DELETE FROM auth."user" WHERE email=$2 AND id<>$1', [a.userId, a.email]);
+      await db.query('INSERT INTO auth."user"(id,name,email,"emailVerified") VALUES ($1,$2,$2,$3) ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email,"emailVerified"=EXCLUDED."emailVerified"', [a.userId, a.email, a.emailVerified]);
+    },
+  };
+}
+
 export async function mintAccountToken(...args: Parameters<typeof mintRawToken>) {
   const [name, suppliedUserId, query, options] = args;
   if (suppliedUserId === null) return { ...await mintRawToken(name, null, query, options), userId: null, email: null };

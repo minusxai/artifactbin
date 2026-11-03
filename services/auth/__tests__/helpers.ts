@@ -1,6 +1,7 @@
 import { ensureTokensTable, resetTables, testDb } from '@artifactbin/test-support/db';
-import { createTokenReader } from '@artifactbin/utils';
 import { ensureAuthSchema } from '../src/schema';
+import { ensureHumanAuthSchema } from '../src/auth/human';
+import { createBearerReader } from '../src/identity/bearer';
 import type { AuthOptions } from '../src/parts';
 
 export { mintTestToken, testDb } from '@artifactbin/test-support/db';
@@ -11,6 +12,8 @@ async function ensureTestSchema(): Promise<void> {
   await pg().exec('CREATE SCHEMA IF NOT EXISTS auth');
   await ensureTokensTable();
   await ensureAuthSchema({ query }, 'auth');
+  // Better Auth's tables: the bearer reader reads the account's identity from auth."user".
+  await ensureHumanAuthSchema({ pglite: pg(), schema: 'auth' });
 }
 
 /** Wipe both sides' tables so each test starts empty. */
@@ -25,7 +28,7 @@ export async function testAuthOptions(overrides: Partial<AuthOptions> = {}): Pro
   return {
     upstream: async () => new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }),
     env: {},
-    tokens: createTokenReader({ db: { query } }),
+    tokens: createBearerReader({ db: { query } }),
     sessions: {
       resolve: async () => null,
       handler: async () => new Response('{"ok":true,"fake":"better-auth"}', { headers: { 'content-type': 'application/json' } }),

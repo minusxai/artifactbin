@@ -272,7 +272,56 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
   };
 }
 
+/** The driver a human-auth boot is handed: one PGLite or one pg pool, and the schema identity lives in. */
+type HumanDriver = Pick<HumanAuthOptions, 'pglite' | 'pool' | 'schema'>;
+
+/**
+ * Better Auth's tables without a login surface. Bearer admission reads the account's identity from
+ * `<schema>."user"` in its one statement, so the app-only composition creates the same tables a full boot
+ * does. The options are the schema renderer's (scripts/render-schema.mjs): the tables depend on neither the
+ * secret, the origin nor the mailer.
+ */
+export async function ensureHumanAuthSchema(opts: HumanDriver): Promise<void> {
+  const store = await openHumanStore(opts);
+  await store.ensureTables(humanAuthOptions({ secret: 'schema-only-secret-schema-only-secret', baseURL: 'http://schema.invalid', mail: { send: async () => {} } }, store.db));
+}
+
 export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth> {
+  const { schema, db, queryable, ensureTables } = await openHumanStore(opts);
+
+  /*
+   * THE OPTIONS, from the ONE pure builder — the same object the schema
+   * renderer builds, over the same schema-qualified handle (that handle is
+   * where `compileMigrations` gets its `auth.` prefixes).
+   */
+  const auth = betterAuth(humanAuthOptions(opts, db));
+  await ensureTables(auth.options);
+
+  return {
+    handler: (request) => auth.handler(request),
+    api: auth.api,
+    sessions: {
+      async live(sessionId,userId){
+        return (await queryable.query(`SELECT 1 FROM ${schema}.session WHERE id=$1 AND "userId"=$2 AND "expiresAt">now()`,[sessionId,userId])).rows.length===1;
+      },
+      async identity(userId) {
+        const row = await (db as unknown as Kysely<IdentityTables>).selectFrom('user')
+          .select(['id', 'email', 'emailVerified']).where('id', '=', userId).executeTakeFirst();
+        return row ? {userId: row.id, email: row.email, emailVerified: row.emailVerified === true} : null;
+      },
+      async resolve(request) {
+        // Errors propagate: only "no session" is anonymous. returnHeaders carries the rolled-forward cookie.
+        const {headers, response: s} = await auth.api.getSession({ headers: request.headers, returnHeaders: true });
+        if (!s?.user?.id) return null;
+        const setCookies = headers.getSetCookie();
+        return { sessionId:s.session.id, userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified, ...(setCookies.length ? { setCookies } : {}) };
+      },
+    },
+  };
+}
+
+/** The schema (created when absent) and the handles a boot needs over the one driver it was handed. */
+async function openHumanStore(opts: HumanDriver) {
   if (!opts.pglite && !opts.pool) throw new Error('createHumanAuth: a PGLite instance or a pg pool is required');
   const dialect = opts.pglite
     ? pgliteDialect(opts.pglite as Parameters<typeof pgliteDialect>[0])
@@ -310,52 +359,24 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
   if (already.rows.length === 0) await run(create);
   const db = raw.withSchema(schema);
 
-  /*
-   * THE OPTIONS, from the ONE pure builder — the same object the schema
-   * renderer builds, over the same schema-qualified handle (that handle is
-   * where `compileMigrations` gets its `auth.` prefixes).
-   */
-  const auth = betterAuth(humanAuthOptions(opts, db));
-
-  // Better Auth's migration introspects WITHOUT the schema qualifier, so on a
-  // second boot against an existing `auth.*` it would try to create the tables
-  // again and fail. Every boot after the first therefore skips it by asking
-  // information_schema — the same additive, idempotent stance as lib/schema.
-  /** The handle the step below needs: a parameterised query, whichever driver we were handed. */
+  /** The handle our own reads need: a parameterised query, whichever driver we were handed. */
   const queryable: Queryable = {
     query: async <T = Record<string, unknown>>(sql: string, params?: unknown[]) => {
       if (opts.pglite) return (await (opts.pglite as { query(sql: string, params?: unknown[]): Promise<{ rows: T[] }> }).query(sql, params)) as { rows: T[] };
       return (await opts.pool!.query(sql, params)) as unknown as { rows: T[] };
     },
   };
-  const exists = async (): Promise<boolean> =>
-    (await queryable.query('SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = \'user\'', [schema])).rows.length > 0;
-  if (await exists()) {
-    await assertHumanAccountSchema(raw, schema);
-  } else {
-    const { runMigrations } = await getMigrations(auth.options);
-    await runMigrations();
-  }
-
   return {
-    handler: (request) => auth.handler(request),
-    api: auth.api,
-    sessions: {
-      async live(sessionId,userId){
-        return (await queryable.query(`SELECT 1 FROM ${schema}.session WHERE id=$1 AND "userId"=$2 AND "expiresAt">now()`,[sessionId,userId])).rows.length===1;
-      },
-      async identity(userId) {
-        const row = await (db as unknown as Kysely<IdentityTables>).selectFrom('user')
-          .select(['id', 'email', 'emailVerified']).where('id', '=', userId).executeTakeFirst();
-        return row ? {userId: row.id, email: row.email, emailVerified: row.emailVerified === true} : null;
-      },
-      async resolve(request) {
-        // Errors propagate: only "no session" is anonymous. returnHeaders carries the rolled-forward cookie.
-        const {headers, response: s} = await auth.api.getSession({ headers: request.headers, returnHeaders: true });
-        if (!s?.user?.id) return null;
-        const setCookies = headers.getSetCookie();
-        return { sessionId:s.session.id, userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified, ...(setCookies.length ? { setCookies } : {}) };
-      },
+    schema, db, queryable,
+    // Better Auth's migration introspects WITHOUT the schema qualifier, so on a
+    // second boot against an existing `auth.*` it would try to create the tables
+    // again and fail. Every boot after the first therefore skips it by asking
+    // information_schema — the same additive, idempotent stance as lib/schema.
+    async ensureTables(options: BetterAuthOptions): Promise<void> {
+      const exists = (await queryable.query('SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = \'user\'', [schema])).rows.length > 0;
+      if (exists) await assertHumanAccountSchema(raw, schema);
+      else await (await getMigrations(options)).runMigrations();
     },
   };
 }
+

@@ -74,7 +74,6 @@ interface OAuthRoutesOptions {
   trustedHops: number;
   publicBaseUrl?: string;
   aliasOrigins?: readonly string[];
-  invalidateTokens?:()=>void;
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
@@ -220,7 +219,6 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const {client_id,token}=body as Record<string,unknown>;
     if(typeof client_id!=='string'||!client_id||typeof token!=='string'||!token)return answer({error:'invalid_request'},400);
     await o.oauth.revokeRefresh(token,client_id);
-    o.invalidateTokens?.();
     return answer({});
   });
 

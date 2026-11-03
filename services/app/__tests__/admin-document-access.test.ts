@@ -1,7 +1,7 @@
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';
-import {createTokenReader,inProcess} from '@artifactbin/utils';
+import {inProcess} from '@artifactbin/utils';
 import { getArtifactById, artifactState, selectChildren } from '@/lib/artifacts';
 import { readThrough } from '@/lib/artifact-access';
 import { createUser, identityForUser } from '@/lib/accounts';
@@ -29,7 +29,7 @@ import {GET as pageArtifact} from '@/app/api/page/artifact/[id]/route';
 import {stageCommentImage} from '@/lib/annotations';
 import sharp from 'sharp';
 import type {Actor} from '@artifactbin/contracts';
-import {request,useAppHarness} from './harness';
+import {bearerIdentity,request,useAppHarness} from './harness';
 
 /**
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
@@ -54,6 +54,7 @@ beforeEach(async()=>{
  await db.query("INSERT INTO users(id,email,kind) VALUES ('usr_owner','owner@example.com','account') ON CONFLICT DO NOTHING");
  for(const doc of [UNLISTED,PRIVATE])await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3,'{}','html',$4,'base-edit')`,[doc.id,`${doc.visibility} document`,SOURCE,doc.visibility]);
  identity={userId:user.id,email:user.email!,emailVerified:true};
+ const bearers=await bearerIdentity();await bearers.account(identity);
  const app=new Hono();
  app.get('/api/capabilities',c=>capabilities(c.req.raw));
  app.post('/api/artifacts/preflight',c=>preflight(c.req.raw));
@@ -73,7 +74,7 @@ beforeEach(async()=>{
  app.get('/api/artifacts/:id/comment-images/:imageId',routed(commentImage));
  app.get('/a/:id/raw',routed(raw));
  app.post('/a/:id/mutate',routed(mutate));
- proxy=createAuthHost({upstream:inProcess(app),tokens:createTokenReader({db}),sessions:{resolve:async()=>null,identity:async()=>identity},cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
+ proxy=createAuthHost({upstream:inProcess(app),tokens:bearers.reader,sessions:{resolve:async()=>null},cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
 });
 afterEach(()=>setDocumentEditorPolicy());
 

@@ -47,6 +47,11 @@ it.concurrent.each(['AUTH__SECRET', 'CONTRACT__ACTOR_SECRET'])('app-only startup
     };
     expect(await session(secret)).toMatchObject({ kind: 'account', user: { id: actor.userId } });
     expect(await session('wrong-secret')).toMatchObject({ user: null });
+    // A fresh database: boot created the auth tables the one-statement bearer read joins, so an unknown
+    // token is nobody (the app's answer), never the 503 a missing table would be.
+    const bearer = await fetch(`http://127.0.0.1:${port}/api/page/session`, { headers: { authorization: `Bearer mx_${'u'.repeat(40)}` } });
+    expect(bearer.status).toBe(200);
+    expect(await bearer.json()).toMatchObject({ user: null });
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       const exited = new Promise(resolve => child.once('exit', resolve));

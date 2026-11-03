@@ -1,6 +1,7 @@
 export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,publicBuildAssets,type AuthOptions,type AuthApp,type AuthEnv,type SessionStore,type SessionInfo} from './parts';
 export {AUTH_TABLES,ensureAuthSchema} from './schema';
-export { createHumanAuth, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
+export {createBearerReader,type BearerReaderOptions} from './identity/bearer';
+export { createHumanAuth, ensureHumanAuthSchema, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
 export {
   smtpMailer, type SmtpSettings, type MailSettings, resendMailer, devOutboxMailer, mailerForRuntime, usesDevOutbox,
   DEV_OUTBOX_RELATIVE_PATH, DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed,

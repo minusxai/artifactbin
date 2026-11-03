@@ -233,8 +233,6 @@ const VERSIONED = 'public, max-age=86400, stale-while-revalidate=604800';
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
   actorSecret?: string;
-  /** Composition hook keeping the proxy's token cache coherent after revoke. */
-  onTokenRevoked?: (id?: string) => void;
   /** Where the built SPA lives (dist/web). In dev, `index` is answered by Vite instead. */
   webDir?: string;
   /** Dev: how the app shell (web/solid-app.html) is produced (Vite transforms it); prod: read from webDir. */
@@ -379,14 +377,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const safe = publicAssetResponse(response);
     return c.req.method === 'HEAD' ? new Response(null, { status: safe.status, headers: safe.headers }) : safe;
   });
-  if (opts.onTokenRevoked) {
-    app.use('/api/*', async (c, next) => {
-      await next();
-      if (c.req.method !== 'DELETE' || c.res.status !== 204) return;
-      const match = /^\/api\/(?:my\/)?tokens\/([^/]+)$/.exec(new URL(c.req.url).pathname);
-      if (match) opts.onTokenRevoked?.(decodeURIComponent(match[1]));
-    });
-  }
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
