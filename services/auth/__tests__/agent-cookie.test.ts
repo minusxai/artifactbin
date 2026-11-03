@@ -11,7 +11,7 @@ const token={id:'tok_live',userId:null};
 const options=():AuthOptions=>({
   env:{},cookieSecret:secret,identityDb:testDb(),
   sessions:{resolve:async()=>null},
-  tokens:{byToken:async()=>null,byId:async(id:string)=>id===token.id?token:null,invalidate:()=>{}},
+  tokens:{byToken:async()=>null},
   upstream:async(_request:Request,actor:unknown)=>Response.json(actor),
 });
 const cookie=async()=>setCookieHeader(encodeAgentSession({tokenIds:[token.id],sessionId},secret),false).split(';')[0]!;

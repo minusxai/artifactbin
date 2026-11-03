@@ -2,9 +2,8 @@ import type { Queryable } from './db';
 
 /**
  * THE PROXY'S ONE READ OF AN APP-OWNED TABLE. The app owns `tokens` and every write to it; the proxy
- * resolves a presented credential through this reader and nothing else — an indexed SELECT with a short
- * cache, never an HTTP call. utils names no credential policy: the caller says which credential it is
- * building an Actor for.
+ * resolves a presented credential through this reader and nothing else — one indexed SELECT per request
+ * (auth `createBearerReader`: token, OAuth family fence and account identity), never a cache or an HTTP call.
  */
 export interface TokenRecord {
   id: string;
@@ -13,6 +12,9 @@ export interface TokenRecord {
   audience?: string;
   /** Space-delimited OAuth scope; absent on ordinary/manual tokens. */
   scope?: string;
+  /** The account's identity, read in the same statement as the token; absent when it has no account row. */
+  email?: string;
+  emailVerified?: boolean;
 }
 export interface TokenReader {
   /** The bearer path. Refuses a value that is not token-shaped BEFORE hashing or touching the database. */

@@ -4,9 +4,11 @@ import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {Pool,type PoolClient} from 'pg';
 import {randomBytes} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
-import {createTokenReader,hashToken} from '@artifactbin/utils';
+import {hashToken} from '@artifactbin/utils';
 import {createOAuthStore} from '../src/identity/oauth';
 import {ensureAuthSchema} from '../src/schema';
+import {ensureHumanAuthSchema} from '../src/auth/human';
+import {createBearerReader} from '../src/identity/bearer';
 import {createAuthHost} from '../src/parts';
 
 const database=process.env.AUTH_TEST_DATABASE_URL;
@@ -18,6 +20,7 @@ describe.skipIf(!database)('READ COMMITTED auth with separate connections and SE
  beforeAll(async()=>{
   owner=new Pool({connectionString:database});
   await ensureAuthSchema(queryable(owner),authSchema);
+  await ensureHumanAuthSchema({pool:owner,schema:authSchema});
   await owner.query(`CREATE SCHEMA ${appSchema}; CREATE TABLE ${appSchema}.tokens(id text primary key, name text, token_hash text, user_id text,audience text,scope text,expires_at timestamptz,deleted_at timestamptz); CREATE ROLE ${role}; GRANT USAGE ON SCHEMA ${appSchema},${authSchema} TO ${role}; GRANT SELECT ON ${appSchema}.tokens TO ${role}; GRANT ALL ON ALL TABLES IN SCHEMA ${authSchema} TO ${role}`);
   auth=new Pool({connectionString:database,options:`-c role=${role}`});
  });
@@ -28,7 +31,7 @@ describe.skipIf(!database)('READ COMMITTED auth with separate connections and SE
  };
  const store=()=>createOAuthStore(queryable(auth),authSchema,appSchema);
  const issue=async()=>{const access=await mint(),refresh=await store().issueRefresh({clientId:'client',userId:'user',resource:'http://test/api',scope:'artifacts',accessTokenId:access.id});return {access,refresh};};
- const host=()=>createAuthHost({identityDb:queryable(auth),appSchema,env:{AUTH__SCHEMA:authSchema,APP__PUBLIC_BASE_URL:'http://test'},sessions:{resolve:async()=>null},cookieSecret:'test',tokens:createTokenReader({db:queryable(auth),schema:appSchema}),upstream:async(_r,actor)=>Response.json({credential:actor.credential})});
+ const host=()=>createAuthHost({identityDb:queryable(auth),appSchema,env:{AUTH__SCHEMA:authSchema,APP__PUBLIC_BASE_URL:'http://test'},sessions:{resolve:async()=>null},cookieSecret:'test',tokens:createBearerReader({db:queryable(auth),authSchema,appSchema}),upstream:async(_r,actor)=>Response.json(actor)});
  const admitted=async(token:string)=>(await(await host().request('http://test/api',{headers:{authorization:`Bearer ${token}`}})).json()).credential;
  it('revoke waits on rotation but its old statement snapshot cannot leave either bearer usable',async()=>{
   const first=await issue(),client=await owner.connect(),ready=gate(),resume=gate();
@@ -80,5 +83,18 @@ describe.skipIf(!database)('READ COMMITTED auth with separate connections and SE
   await store().revokeRefresh(first.refresh,'client');
   expect(await admitted(first.access.token)).toBe('none');expect(await admitted(candidate.token)).toBe('none');
   await expect(auth.query(`UPDATE ${appSchema}.tokens SET deleted_at=now()`)).rejects.toMatchObject({code:'42501'});
+ });
+ it('a family revoked or a token deleted on another connection refuses the next request through a warm host',async()=>{
+  await owner.query(`INSERT INTO ${authSchema}."user"(id,name,email,"emailVerified") VALUES('user','User','mxmx_test_bearer@example.com',true) ON CONFLICT (id) DO NOTHING`);
+  const warm=host(),actor=async(token:string)=>(await(await warm.request('http://test/api',{headers:{authorization:`Bearer ${token}`}})).json()) as Record<string,unknown>;
+  const first=await issue();
+  expect(await actor(first.access.token)).toEqual({credential:'bearer',tokenId:first.access.id,userId:'user',email:'mxmx_test_bearer@example.com',emailVerified:true});
+  // Another process's writer: the owner's own connection, not the reader's pool.
+  await owner.query(`UPDATE ${authSchema}.credentials SET deleted_at=now() WHERE kind='refresh_family' AND credential_hash=(SELECT group_id FROM ${authSchema}.credentials WHERE kind='refresh_token' AND payload->>'access_token_id'=$1)`,[first.access.id]);
+  expect(await actor(first.access.token)).toEqual({credential:'none'});
+  const second=await issue();
+  expect(await actor(second.access.token)).toMatchObject({credential:'bearer'});
+  await owner.query(`UPDATE ${appSchema}.tokens SET deleted_at=now() WHERE id=$1`,[second.access.id]);
+  expect(await actor(second.access.token)).toEqual({credential:'none'});
  });
 });

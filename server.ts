@@ -14,8 +14,8 @@ import path from 'node:path';
 import { developmentPagesHosts, developmentViteOptions } from './services/app/lib/runtime/dev-vite';
 import { withRequestLog } from './services/app/lib/runtime/request-log';
 import { getRequestListener } from '@hono/node-server';
-import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { bearerAdmission, ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
+import { assemble, inProcess } from '@artifactbin/utils';
+import { bearerAdmission, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
 // The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
@@ -171,14 +171,16 @@ async function main(): Promise<void> {
    */
   let authSecret: string | undefined;
   let human: Awaited<ReturnType<typeof createHumanAuth>> | undefined;
-  // Both compositions use auth-owned family admission; app-only omits login and mint routes.
-  const reader = createTokenReader({ db: queryable, ttlMs: 5000, admitBearer: token => canAuthenticateUser(token.userId), schema: readEnv(env, 'APP__SCHEMA') });
+  // Both compositions admit bearers with auth's one-statement read (token, family fence, identity), so both
+  // create the auth tables it reads at boot; app-only omits login and mint routes.
+  const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
+  await ensureAuthSchema(queryable, authSchema);
+  if (appOnly) await ensureHumanAuthSchema({ schema: authSchema, ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }) });
+  const reader = createBearerReader({ db: queryable, authSchema, appSchema: readEnv(env, 'APP__SCHEMA'), admitBearer: token => canAuthenticateUser(token.userId) });
   if (!appOnly) {
     validateDeploymentConfiguration();
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
     authSecret = readEnv(env, 'AUTH__SECRET')!;
-    const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
-    await ensureAuthSchema(queryable, authSchema);
     const mailer = mailerForRuntime({
       ...mailSettingsOf(env),
       publicBaseUrl: baseURL,
@@ -216,7 +218,6 @@ async function main(): Promise<void> {
     ...(appOnly
       ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') }
       : dev && sessionActorSecret ? { actorSecret: sessionActorSecret } : {}),
-    ...(reader ? { onTokenRevoked: (id) => reader.invalidate(id) } : {}),
     ...(vite ? { indexHtml: async (url: string) =>
       vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve('web/solid-app.html'), 'utf8')) } : {}),
   });
@@ -232,7 +233,7 @@ async function main(): Promise<void> {
     : getRequestListener(assemble([anonymousHosts,...authParts({
       upstream: inProcess(app),
       env,
-      tokens: reader!,
+      tokens: reader,
       sessions: sessionStoreOf(human!),
       admitIdentity:admitDeploymentIdentity,
       cookieSecret: authSecret!,
@@ -252,7 +253,7 @@ async function main(): Promise<void> {
   const known = new Set([...envNamesRead(), ...(!appOnly ? authEnvNamesRead() : [])]);
   known.add('CONTRACT__ACTOR_SECRET');
   for (const name of sessionEnvNames) known.add(name);
-  if (appOnly) known.add('AUTH__SECRET');
+  if (appOnly) { known.add('AUTH__SECRET'); known.add('AUTH__SCHEMA'); }
   for (const name of unknownEnvNames(env, known)) {
     console.warn(`[env] ${name} is set but nothing reads it`);
   }

@@ -1,9 +1,12 @@
 import {beforeEach,describe,expect,it,afterAll,beforeAll} from 'vitest';
 import {createHash} from 'node:crypto';
 import {ACTOR_HEADER,ANONYMOUS} from '@artifactbin/contracts';
-import {signActor,assemble,cookieName,createTokenReader,inProcess} from '@artifactbin/utils';
+import {signActor,assemble,cookieName,inProcess} from '@artifactbin/utils';
 import {encodeAgentSession} from './legacy-cookie-fixture';
 import {authParts,type AuthOptions} from '../src/parts';
+import {createBearerReader} from '../src/identity/bearer';
+import {ensureHumanAuthSchema} from '../src/auth/human';
+import {ensureAuthSchema} from '../src/schema';
 import {mintTestToken,resetTestDb,testDb,testAuthOptions} from './helpers';
 import { createUser } from '@/lib/accounts';
 import {attachActor} from '@artifactbin/utils';
@@ -83,7 +86,7 @@ describe('the session part', () => {
 });
 
 describe('revocation reaches the reader at once', () => {
-  /** A revoke in the app reaches the identity host's reader at once in the full image: the composition root hands the app `reader.invalidate`. */
+  /** A revoke in the app reaches the identity host at once: the bearer reader reads the database on every request, with no cache to keep coherent. */
 
   const ADMIN = 'admin-secret-for-tests';
   process.env.ADMIN__SECRET = ADMIN;
@@ -93,8 +96,12 @@ describe('revocation reaches the reader at once', () => {
     let mint: () => Promise<{ id: string; token: string }>;
     beforeAll(async () => {
       const db = { query: async <T = Record<string, unknown>>(sql: string, params?: unknown[]) => (await getDb()).query<T>(sql, params as never) };
-      const reader = createTokenReader({ db, ttlMs: 60_000 });
-      const app = createAppServer({ indexHtml: async () => '<div id="root">SPA</div>', onTokenRevoked: (id?: string) => reader.invalidate(id) } as never);
+      const raw = (await getDb()).raw();
+      if (raw.kind !== 'pglite') throw new Error('the app test database is PGLite');
+      await ensureAuthSchema(db, 'auth');
+      await ensureHumanAuthSchema({ pglite: raw.instance, schema: 'auth' });
+      const reader = createBearerReader({ db });
+      const app = createAppServer({ indexHtml: async () => '<div id="root">SPA</div>' });
       const base = await testAuthOptions();
       proxy = assemble(authParts({ ...base, tokens: reader, upstream: inProcess(app) }));
       // The mint is INTERNAL: the proxy refuses the prefix at the edge, so a

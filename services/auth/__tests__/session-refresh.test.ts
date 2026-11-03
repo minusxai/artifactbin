@@ -6,7 +6,7 @@ import {createAuthHost,type AuthApp} from '../src/parts';
 
 /** A browser session rolls forward: Better Auth refreshes once expiresAt is 5 of the 7 days away (updateAge 1 day). */
 const baseURL = 'http://localhost:9402';
-const noTokens = {byToken: async () => null, byId: async () => null, invalidate: () => {}};
+const noTokens = {byToken: async () => null};
 let db: PGlite; let auth: HumanAuth; let app: AuthApp; let cookie = ''; let otp = '';
 let upstreamSetCookie: string | null = null;
 

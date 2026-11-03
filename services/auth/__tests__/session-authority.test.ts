@@ -5,7 +5,7 @@ import {createAuthHost} from '../src/parts';
 
 describe('split human session authority',()=>{
  const secret='test-service-secret';
- const host=(live=async(s:string,u:string)=>s==='session'&&u==='user')=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret},cookieSecret:'test',tokens:{byToken:async()=>null,byId:async()=>null,invalidate:()=>{}},sessions:{resolve:async()=>null,live},upstream:async()=>new Response('app')});
+ const host=(live=async(s:string,u:string)=>s==='session'&&u==='user')=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null,live},upstream:async()=>new Response('app')});
  it('admits only authenticated bounded POSTs and follows owner liveness',async()=>{
   let active=true;const app=host(async(s,u)=>active&&s==='session'&&u==='user');
   const call=(body:unknown,key=secret)=>app.request(HUMAN_SESSION_LIVE_PATH,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:key,'content-type':'application/json'},body:JSON.stringify(body)});

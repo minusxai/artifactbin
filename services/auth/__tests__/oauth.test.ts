@@ -1,10 +1,11 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
+import { assemble, hashToken } from '@artifactbin/utils';
 import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { authParts, type AuthOptions } from '../src/parts';
+import { createBearerReader } from '../src/identity/bearer';
 import { ensureAuthSchema } from '../src/schema';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -155,7 +156,7 @@ describe('the oauth provider routes', () => {
     expect(new Date(minted.expires_at).getTime()-Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(first.scope).toBe('artifacts');
     const { query } = testDb();
-    expect(await createTokenReader({ db: { query } }).byToken(first.access_token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
+    expect(await createBearerReader({ db: { query } }).byToken(first.access_token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
     expect(await (await app.request(`${RESOURCE}`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
     expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
     expect((await query("SELECT credential_hash FROM auth.credentials WHERE kind = 'refresh_token'")).rows[0]).not.toMatchObject({ credential_hash: first.refresh_token });
@@ -346,7 +347,7 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
   const response=await refresh(after,before,`${CANONICAL}/api`);
   expect(response.status,await response.clone().text()).toBe(200);
   const next=await response.json() as {access_token:string;refresh_token:string};
-  expect(await createTokenReader({db:{query:testDb().query}}).byToken(next.access_token)).toMatchObject({audience:`${CANONICAL}/api`});
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken(next.access_token)).toMatchObject({audience:`${CANONICAL}/api`});
   const again=await refresh(after,{client_id:before.client_id,refresh_token:next.refresh_token},`${CANONICAL}/api`);
   expect(again.status,await again.clone().text()).toBe(200);
  });

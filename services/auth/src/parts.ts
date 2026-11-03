@@ -20,7 +20,9 @@ export interface AuthOptions {
  upstream:Upstream;
  admitIdentity?:(identity:SessionInfo)=>Promise<boolean>;
  env:Record<string,string|undefined>;
- tokens:TokenReader;
+ /** The bearer read (`createBearerReader`). A reader that still has `invalidate` is utils' retired cached
+  * reader, which a composition pinned to it keeps until it switches; it is read the old three-step way. */
+ tokens:Pick<TokenReader,'byToken'>&Partial<Pick<TokenReader,'invalidate'>>;
  sessions:SessionStore;
  cookieSecret:string;
  secure?:boolean;
@@ -84,7 +86,7 @@ export function session(o: AuthOptions): Part<AuthEnv> {
           // identically for in-process and HTTP upstreams. Never query auth
           // tables from the app or pretend its attached snapshot is live.
           let current:Actor=ANONYMOUS;
-          try {if(admitted.tokenId)o.tokens.invalidate(admitted.tokenId);current=await resolveActor(c.req.raw,o);} catch { /* fail closed */ }
+          try {current=await resolveActor(c.req.raw,o);} catch { /* fail closed */ }
           const identity=(actor:Actor)=>[actor.credential,actor.userId,actor.tokenId,actor.email,actor.emailVerified];
           if(JSON.stringify(identity(current))!==JSON.stringify(identity(admitted))) {
             await c.res.body?.cancel().catch(()=>{});
@@ -166,7 +168,6 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         sessions: o.sessions,
-        invalidateTokens:()=>o.tokens.invalidate(),
         admitIdentity:o.admitIdentity,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
         upstream: o.upstream,
@@ -203,21 +204,29 @@ export function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
 async function resolveBearer(request:Request,o:BearerAdmissionOptions,sessions?:Pick<SessionStore,'identity'>):Promise<Actor|null>{
   const auth = request.headers.get('authorization') ?? '';
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  if (presented) {
-    // Family revocation committed in another process must take effect on this request.
-    o.tokens.invalidate();
-    const token = await o.tokens.byToken(presented);
-    const oauthLive = !token?.audience || (o.identityDb && await createOAuthStore(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth',o.appSchema??readEnv(o.env,'APP__SCHEMA')).accessLive(token.id));
-    if (token?.userId && oauthLive && tokenFitsRequest(token, request, o)) {
-      const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
-      const identity = token.userId ? await sessions?.identity?.(token.userId).catch(() => null) : null;
-      return identity?.userId === token.userId && identity
-        ? {...actor, email: identity.email, emailVerified: identity.emailVerified}
-        : actor;
-    }
-    return ANONYMOUS;
+  if (!presented) return null;
+  // utils' retired cached reader: clear its cache, then the separate family fence and identity reads.
+  // Kept only while a pinned composition still passes it; the fused reader needs none of this.
+  if (o.tokens.invalidate) return legacyBearer(presented,request,o,sessions);
+  // One statement: the token, its OAuth family fence and the account's identity. A failed read throws (503).
+  const token = await o.tokens.byToken(presented);
+  if (!token?.userId || !tokenFitsRequest(token, request, o)) return ANONYMOUS;
+  return {credential:'bearer',tokenId:token.id,userId:token.userId,...(token.email!==undefined?{email:token.email,emailVerified:token.emailVerified}:{})};
+}
+
+async function legacyBearer(presented:string,request:Request,o:BearerAdmissionOptions,sessions?:Pick<SessionStore,'identity'>):Promise<Actor>{
+  // Family revocation committed in another process must take effect on this request.
+  o.tokens.invalidate?.();
+  const token = await o.tokens.byToken(presented);
+  const oauthLive = !token?.audience || (o.identityDb && await createOAuthStore(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth',o.appSchema??readEnv(o.env,'APP__SCHEMA')).accessLive(token.id));
+  if (token?.userId && oauthLive && tokenFitsRequest(token, request, o)) {
+    const actor: Actor = { credential: 'bearer', tokenId: token.id, userId: token.userId };
+    const identity = await sessions?.identity?.(token.userId).catch(() => null);
+    return identity?.userId === token.userId && identity
+      ? {...actor, email: identity.email, emailVerified: identity.emailVerified}
+      : actor;
   }
-  return null;
+  return ANONYMOUS;
 }
 
 async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]): Promise<Actor> {
