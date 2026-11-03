@@ -4,6 +4,7 @@ import { defineConfig } from 'vitest/config';
 import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
+import { suiteEnv } from './scripts/lib/suite-env.mjs';
 
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
 // islands project because scripts/ci/test-changed.mjs discovers only api/node/ui/islands.
@@ -75,24 +76,7 @@ export default defineConfig({
     hookTimeout: 45_000,
     // Native HTML tests use the hosted components and libraries built by this setup.
     globalSetup: ['./services/app/test/setup/build-runtime.global.ts'],
-    env: {
-      APP_PACKAGE_ROOT: path.resolve(import.meta.dirname, 'services/app'),
-      ADMIN__SECRET: 'test-secret',
-      ARTIFACTS__ALLOW_PUBLIC: '1',
-      // lib/email refuses to send without a key (a login code in a log is an
-      // auth bypass), so the suite supplies one. No test reaches the network:
-      // they stub global fetch and assert the Resend request shape.
-      EMAIL__RESEND_API_KEY: 'test-resend-key',
-      // A small image cap so the size-limit test trips on a few KB, not a real
-      // 5 MB payload. The mechanism is identical; only the threshold differs.
-      IMAGES__MAX_BYTES: '5000',
-      // Same trick for the PDF tier: 20 KB rather than the real 25 MB, so the
-      // cap test trips on a payload a test can build rather than on a real one.
-      PDF__MAX_BYTES: '20000',
-      FILES__MAX_BYTES: '10000',
-      // Required (every document on its own origin, lib/platform/config PAGES_HOST): the development host.
-      APP__PAGES_HOST: 'lvh.me',
-    },
+    env: suiteEnv(import.meta.dirname),
     projects: [
       {
         extends: true,

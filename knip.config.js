@@ -68,6 +68,8 @@ export default {
         // Test fixtures run as their own tsx processes by the tests beside them.
         // The setup file of pr fast's guard tier (vitest.guard.config.ts at the root).
         'test/setup/guard.setup.ts',
+        // The native acceptance scenario minusxai/artifactbin-server's scripts/accept-native-html.mjs imports by path.
+        'testing/native-acceptance.mjs',
       ],
       project: ['**/*.{ts,tsx,mjs,js,jsx,css}', '!public/**', '!skills/artifactbin/components/*.ts'],
       ignoreDependencies: [

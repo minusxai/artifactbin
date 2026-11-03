@@ -6,10 +6,12 @@ name: pr fast
 #
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
-# (scripts/ci/fast-tests.json) and the guard tests (scripts/ci/guard-tests.json) on four runners at once, each
-# restoring main's install cache. The guard tests read the repository's own files by path (workflows, package
-# scripts, the skill tree), so no import graph selects them and the fast list's capability audit refuses them; each
-# guards a contract whose break once reached main. WHEN MAIN GOES RED, find why this lane missed it and add a
+# (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json) and the contract tests
+# (scripts/ci/contract-tests.json) on four runners at once, each restoring main's install cache. The guard tests read
+# the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
+# the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
+# server's native acceptance) through the real handlers, which the audit refuses too. Each guards a contract whose
+# break once reached main. WHEN MAIN GOES RED, find why this lane missed it and add a
 # deterministic guard here (either list, or a contract test) within the budget. The root type
 # check uses TypeScript 7's native compiler (scripts/lib/type-check.mjs): about 7s cold on a runner where tsc 5
 # took 30s, and longer still from stale build info, so no diff size can push it past the limit. It starts from
