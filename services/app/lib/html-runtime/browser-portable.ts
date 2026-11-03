@@ -41,7 +41,7 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
    config.offline=true;
    if(portable.identity){config.pageId=portable.identity.artifactId;config.revision=portable.identity.baseRevision;}
    config.savedNodeIds=[...target.querySelectorAll('[data-af-id]')].map(node=>node.getAttribute('data-af-id'));
-   config.backends=[...target.querySelectorAll('link[data-af-name]')].filter(node=>(node.getAttribute('rel')??'').split(/\s+/).some(rel=>rel==='af-resolver'||rel==='af-backend'||rel==='af-dataset')).map(node=>node.getAttribute('data-af-name'));
+   config.backends=[...target.querySelectorAll('link[data-af-name]')].filter(node=>(node.getAttribute('rel')??'').split(/\s+/).some(rel=>rel==='af-resolver'||rel==='af-dataset')).map(node=>node.getAttribute('data-af-name'));
    config.bindings=Object.fromEntries([...target.querySelectorAll('link[data-af-name][href^="ref:"]')].map(node=>[node.getAttribute('data-af-name'),node.getAttribute('href')!.slice(4)]));
    if(options.privateState)config.initialState=options.privateState;
    copy.textContent=JSON.stringify(config).replace(/</g,'\\u003c');

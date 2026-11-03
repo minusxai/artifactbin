@@ -5,9 +5,48 @@ import {beforeCommand} from './toolbox-update.mjs';
 import {readFile,writeFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {prepareBundle} from './toolbox-publication-bundle.mjs';
-import {sendPublication} from './toolbox-publish-legacy.mjs';
+import {serverOrigin,originRequest} from './toolbox-client.mjs';
 import {fileURLToPath} from 'node:url';
 export {prepareBundle,prepareBundleUpdate} from './toolbox-publication-bundle.mjs';
+/** Sends a saved publication request once, with origin-matched environment credentials only. */
+export async function sendPublication(saved, env = process.env, fetcher = fetch) {
+  const origin = serverOrigin(saved.server);
+  if (env.ARTIFACTBIN_URL !== origin || !env.ARTIFACTBIN_TOKEN)
+    throw Error(
+      'Supply origin-matched ARTIFACTBIN_URL and ARTIFACTBIN_TOKEN outside the saved request.'
+    );
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(saved.idempotencyKey ?? ''))
+    throw Error('A durable idempotency key is required.');
+  if (!['POST', 'PUT'].includes(saved.method) || !saved.body || typeof saved.body !== 'object')
+    throw Error('Invalid saved publication request.');
+  const id = saved.artifactId;
+  if (saved.method === 'PUT' && !/^[A-Za-z0-9]{6,}$/.test(id ?? ''))
+    throw Error('An update requires the existing artifact ID.');
+  if (
+    saved.method === 'PUT' &&
+    (!Number.isInteger(saved.body.expectedVersion) || typeof saved.body.expectedState !== 'string')
+  )
+    throw Error('An update requires observed expectedVersion and expectedState.');
+  // One attempt: no retries, stored grants, refreshes or other receipt contract.
+  const route = '/api/artifacts' + (saved.method === 'PUT' ? '/' + id : '');
+  const response = await originRequest(origin, route, {
+    method: saved.method, body: saved.body,
+    headers: {Authorization: 'Bearer ' + env.ARTIFACTBIN_TOKEN,
+      'Idempotency-Key': saved.idempotencyKey}
+  }, fetcher);
+  const receipt = await response.json();
+  if (!response.ok) {
+    const error = Error(
+      `Publication refused (HTTP ${response.status}): ` +
+        (typeof receipt.error === 'string'
+          ? receipt.error
+          : 'read the server recovery instructions')
+    );
+    error.receipt = receipt;
+    throw error;
+  }
+  return receipt;
+}
 export async function sendBundleFile(requestFile,env=process.env,fetcher=fetch){
  const saved=JSON.parse(await readFile(requestFile,'utf8'));
  const saveReceipt=receipt=>writeFile(requestFile+'.receipt.json',JSON.stringify({receipt,

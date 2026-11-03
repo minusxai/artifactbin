@@ -3,7 +3,7 @@
  * Secrets: SUPABASE_KEY = the project's anon key (with row level security) or a dedicated key,
  *   set by the page owner in the page's Resolvers panel. Prefer the anon key: never the service
  *   role key unless the page is private.
- * Usage: cp examples/resolver-supabase.ts tasks.ts; link it with
+ * Usage: cp resolvers/resolver-supabase.ts tasks.ts; link it with
  *   <link rel="af-resolver" data-af-name="tasks" href="./tasks.ts">; publish, then send the owner
  *   to the Resolvers panel to set SUPABASE_KEY and press Test connection.
  * Next: set PROJECT (the subdomain of your project URL) and TABLE; rename Task's fields.

@@ -126,7 +126,6 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
 const CONTENT_FIELDS = {
   publicationBundle:z.object({entryPath:z.string(),files:z.array(z.object({path:z.string(),contentType:z.string(),base64:z.string()})).max(99),mappings:z.record(z.string(),z.object({kind:z.enum(['asset','dataset']),id:z.string(),revision:z.string(),state:z.string().regex(/^[a-f0-9]{64}$/).optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional()})).optional()}).optional(),
   resolverSources:z.record(z.string(),z.string()).optional().describe('Named resolver TypeScript files, one per <link rel="af-resolver" data-af-name>, validated and published atomically with html.'),
-  backendSources:z.record(z.string(),z.string()).optional().describe('Legacy alias of resolverSources; send one of them, never both.'),
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),

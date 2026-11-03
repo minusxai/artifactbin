@@ -52,12 +52,12 @@ describe('head metadata',()=>{
 
 describe('backend declarations',()=>{
  it('lists backend link names in source order and ignores datasets and other links',()=>{
-  expect(htmlBackendNames('<link rel="stylesheet" href="a.css"><link rel="af-backend" data-af-name="orders"><link rel="af-dataset" data-af-name="sales" href="ref:abc123"><link rel="preload af-backend" data-af-name="_two">')).toEqual(['orders','_two']);
+  expect(htmlBackendNames('<link rel="stylesheet" href="a.css"><link rel="af-resolver" data-af-name="orders"><link rel="af-dataset" data-af-name="sales" href="ref:abc123"><link rel="preload af-resolver" data-af-name="_two">')).toEqual(['orders','_two']);
   expect(htmlBackendNames('')).toEqual([]);
  });
  it('refuses invalid, reserved and duplicate names',()=>{
-  for(const name of ['','1x','__private','na-me','名前'])expect(()=>htmlBackendNames(`<link rel="af-backend" data-af-name="${name}">`)).toThrow('Invalid namespace');
-  expect(()=>htmlBackendNames('<link rel="af-backend" data-af-name="db"><link rel="af-backend" data-af-name="db">')).toThrow('Duplicate');
+  for(const name of ['','1x','__private','na-me','名前'])expect(()=>htmlBackendNames(`<link rel="af-resolver" data-af-name="${name}">`)).toThrow('Invalid namespace');
+  expect(()=>htmlBackendNames('<link rel="af-resolver" data-af-name="db"><link rel="af-resolver" data-af-name="db">')).toThrow('Duplicate');
  });
 });
 

@@ -2,7 +2,7 @@
  * Example resolver: open deals from a private Google Sheet shared with a service account.
  * Secrets: GOOGLE_SA = that service account's JSON key, set by the page owner in the page's
  *   Resolvers panel. The host signs in with it and sends the token only to sheets.googleapis.com.
- * Usage: cp examples/resolver-google-sheets.ts pipeline.ts; link it with
+ * Usage: cp resolvers/resolver-google-sheets.ts pipeline.ts; link it with
  *   <link rel="af-resolver" data-af-name="pipeline" href="./pipeline.ts">; publish, then send the
  *   owner to the Resolvers panel to set GOOGLE_SA and press Test connection.
  * Next: set SHEET (the ID in the sheet's URL) and RANGE; rename the fields to your header row.

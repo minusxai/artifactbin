@@ -62,7 +62,7 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
  }});
 }
 /**
- * A resolver's caps.query (api 2), composed here so page operations stay below datasets and artifacts: the datasets
+ * A resolver's caps.query, composed here so page operations stay below datasets and artifacts: the datasets
  * the page head links, as one Hasura-style API run as the caller the run was admitted for.
  */
 export const resolverDatasetQuery=createResolverQuery({

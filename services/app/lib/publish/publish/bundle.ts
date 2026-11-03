@@ -13,18 +13,13 @@ class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_no
 export interface BundlePage {id:string;resolvedBackendNames:readonly string[];dependencies:readonly unknown[];creator:TokenHoldingActor;newFilesRefused?:boolean}
 const MAPPING_ID=/^[A-Za-z0-9]{6,128}$/;
 export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[]}|Response>{
- // resolverSources is the resolver field; backendSources stays its permanent alias, never both.
- if(body.resolverSources!==undefined){
-  if(body.backendSources!==undefined)return json({error:'conflicting_resolver_sources',details:['Send resolverSources only; backendSources is its legacy alias']},400);
-  const {resolverSources,...rest}=body;body={...rest,backendSources:resolverSources};
- }
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
- try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{resolvedBackendNames:[...page?.resolvedBackendNames??[],...Object.entries(body.backendSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
- if(Object.keys(plan.backendSources).length){
-  const explicit=body.backendSources as Record<string,unknown>|undefined;
-  if(explicit&&Object.entries(plan.backendSources).some(([name,source])=>explicit[name]!==undefined&&explicit[name]!==source))return json({error:'conflicting_backend_sources'},400);
-  body={...body,backendSources:{...explicit,...plan.backendSources}};
+ try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{resolvedBackendNames:[...page?.resolvedBackendNames??[],...Object.entries(body.resolverSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
+ if(Object.keys(plan.resolverSources).length){
+  const explicit=body.resolverSources as Record<string,unknown>|undefined;
+  if(explicit&&Object.entries(plan.resolverSources).some(([name,source])=>explicit[name]!==undefined&&explicit[name]!==source))return json({error:'conflicting_backend_sources'},400);
+  body={...body,resolverSources:{...explicit,...plan.resolverSources}};
  }
  if(!bundle)return {body,receipts:[]};
  const key=request?.headers.get('Idempotency-Key');if(!key||!/^[-_A-Za-z0-9]{16,128}$/.test(key))return json({error:'bundle_idempotency_required'},400);

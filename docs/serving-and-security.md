@@ -42,7 +42,7 @@ state. Retained content-addressed module aliases serve exact digest-checked byte
 
 ## Data and backend execution
 
-Native `<link rel="af-dataset">` and `<link rel="af-backend">` declarations bind
+Native `<link rel="af-dataset">` and `<link rel="af-resolver">` declarations bind
 unique GraphQL namespaces. The page version pins backend versions and any pinned
 dataset revisions; live datasets use current data. Page GraphQL at
 `/api/artifacts/ID/graphql` checks page access, revision and current authority.

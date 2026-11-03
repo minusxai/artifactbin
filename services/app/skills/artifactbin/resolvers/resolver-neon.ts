@@ -2,7 +2,7 @@
  * Example resolver: a Postgres query on Neon over its HTTP SQL endpoint (no raw TCP needed).
  * Secrets: NEON_PASSWORD = the database role's password, set by the page owner in the page's
  *   Resolvers panel. Use a read-only role.
- * Usage: cp examples/resolver-neon.ts orders.ts; link it with
+ * Usage: cp resolvers/resolver-neon.ts orders.ts; link it with
  *   <link rel="af-resolver" data-af-name="orders" href="./orders.ts">; publish, then send the owner
  *   to the Resolvers panel to set NEON_PASSWORD and press Test connection.
  * Next: set HOST, ROLE and DATABASE from the connection string (postgresql://ROLE:…@HOST/DATABASE)

@@ -95,21 +95,19 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   const bytes=Buffer.from(file.base64,'base64');if(bytes.toString('base64')!==file.base64||bytes.length>MAX_FILE||(total+=bytes.length)>MAX_BYTES)throw Error('Bundle byte limit exceeded');
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }
- const backendSources:Record<string,string>={},backends:Array<{name:string;path:string;bytes:number}>=[],backendPaths=new Set<string>(),backendEdits:Array<{start:number;end:number}>=[];
+ const resolverSources:Record<string,string>={},backends:Array<{name:string;path:string;bytes:number}>=[],backendPaths=new Set<string>(),backendEdits:Array<{start:number;end:number}>=[];
  const backendNames=new Set<string>();
  const backendDocument=parse(html,{sourceCodeLocationInfo:true});
  const findBackends=(node:DefaultTreeAdapterMap['node']):void=>{
-  // af-backend is the permanent alias of af-resolver; a link names a resolver once.
   const rel='tagName'in node&&node.tagName==='link'?node.attrs.find(attr=>attr.name==='rel')?.value.split(/\s+/)??[]:[];
-  if(rel.includes('af-resolver')&&rel.includes('af-backend'))throw Error('A link declares one namespace kind');
-  if('tagName'in node&&(rel.includes('af-resolver')||rel.includes('af-backend'))){
+  if('tagName'in node&&rel.includes('af-resolver')){
    const href=node.attrs.find(attr=>attr.name==='href')?.value,name=node.attrs.find(attr=>attr.name==='data-af-name')?.value;
    const local=href&&resolve(href,entryPath);
    if(local){
     if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||backendNames.has(name))throw Error('Invalid or duplicate backend namespace');
     backendNames.add(name);
     const file=files.get(local);if(!file&&!context.resolvedBackendNames?.includes(name))throw Error('Unresolved local dependencies: '+local);
-    if(file){backendSources[name]=file.bytes.toString('utf8');backends.push({name,path:local,bytes:file.bytes.byteLength});}backendPaths.add(local);
+    if(file){resolverSources[name]=file.bytes.toString('utf8');backends.push({name,path:local,bytes:file.bytes.byteLength});}backendPaths.add(local);
     const location=node.sourceCodeLocation?.attrs?.href;if(location)backendEdits.push({start:location.startOffset,end:location.endOffset});
    }
   }
@@ -131,7 +129,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  // Explicit manifest entries also admit dependencies used dynamically by scripts.
  for(const name of files.keys())if(name!==entryPath&&!backendPaths.has(name)&&!visited.has(name))visit(name,'asset');
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
- return {backendSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
+ return {resolverSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
   for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};

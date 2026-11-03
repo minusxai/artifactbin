@@ -9,7 +9,7 @@ const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
 
 describe('inspectPublicationBundle',()=>{
  it('reports the entry, backends, dependency sizes, reused paths and the limits without writing anything',()=>{
-  const html='<link rel="af-backend" data-af-name="api" href="./api.graphql"><link rel="stylesheet" href="./main.css"><img src="./logo.svg"><img src="./kept.png">';
+  const html='<link rel="af-resolver" data-af-name="api" href="./api.graphql"><link rel="stylesheet" href="./main.css"><img src="./logo.svg"><img src="./kept.png">';
   const inspected=inspectPublicationBundle(html,{entryPath:'index.html',files:[file('api.graphql','type Query{ok:Boolean}'),file('main.css','body{background:url(./logo.svg)}','text/css'),file('logo.svg','<svg>☕</svg>','image/svg+xml')],mappings:{'kept.png':{kind:'asset',id:'KEPT12',revision:'1'}}});
   expect(inspected).toEqual({
    entryPath:'index.html',

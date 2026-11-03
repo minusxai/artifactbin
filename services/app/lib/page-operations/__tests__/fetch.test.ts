@@ -1,21 +1,7 @@
 import {it,expect,vi} from 'vitest';
-import {pageBackendCapability} from '../backend';
-import {fetchPageBackendResource} from '../public-fetch';
-import type {RunStart} from '@artifactbin/contracts';
-const record={backendId:'backend1',pageId:'page1',version:'v1',source:'',compiled:'immutable',typeDefs:'type Query{x:Int}',ownerId:'owner1'};
-const request:RunStart={requestId:'r',userId:'owner1',artifactId:'backend1',artifactVersion:'v1',program:{source:'immutable',language:'javascript'},input:{kind:'invoke',principal:{tenant:'page1',subject:null}}};
-it('rejects metadata, private, credentialed and plain HTTP destinations even under dev settings',async()=>{
- for(const url of ['https://169.254.169.254/latest','https://127.0.0.1/','https://10.0.0.1/','https://[::1]/','https://user:secret@example.com/','http://example.com/'])await expect(fetchPageBackendResource(url,new AbortController().signal)).rejects.toThrow();
-});
-it('requires an immutable admitted backend before fetching and forwards only URL',async()=>{
- const fetcher=vi.fn(async()=>({status:200,url:'https://example.com/',contentType:'application/json',body:'{}'}));
- const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
- await expect(pageBackendCapability(store,{...request,userId:'forged'},'artifactbin.pageBackend.fetch',{url:'https://example.com/'},async()=>record,fetcher)).rejects.toThrow();expect(fetcher).not.toHaveBeenCalled();
- expect(await pageBackendCapability(store,request,'artifactbin.pageBackend.fetch',{url:'https://example.com/',headers:{Authorization:'never-forward'}},async()=>record,fetcher)).toMatchObject({status:200});expect(fetcher).toHaveBeenCalledWith('https://example.com/');
-});
 
 /*
- * api 2 `caps.fetch` against a REAL local server. The strict export refuses loopback by design, so the wire
+ * `caps.fetch` against a REAL local server. The strict export refuses loopback by design, so the wire
  * tests use an instance under the development policy (private and http admitted, link-local never), and
  * `*.localhost` answers loopback through the app's own lookup. The production export is asserted separately.
  */
@@ -57,7 +43,7 @@ const lax=createResolverFetch({policy:{allowPrivate:true,allowHttp:true}});
 const secrets=(read=vi.fn(async(name:string)=>{if(name==='KEY')return KEY;throw Error('backend_secret_unavailable');}))=>({owner:'owner1',resolver:'backend1',hosts,read});
 const code=(p:Promise<unknown>)=>p.then(()=>'resolved',(e:Error&{code?:string})=>e.code??e.message);
 const leaks=(value:unknown)=>forms.filter(form=>JSON.stringify(value).includes(form)||JSON.stringify(value).includes(JSON.stringify(form).slice(1,-1)));
-describe('api 2 caps.fetch',()=>{
+describe('caps.fetch',()=>{
  it('sends method, headers and body, and fills declared placeholders on the bound host only',async()=>{
   seen.length=0;
   const got=await lax({url:`${base}/echo?key={{KEY}}`,method:'POST',headers:{Authorization:'Bearer {{KEY}}','content-type':'application/json'},body:'{"token":"{{KEY}}","template":"{{lower}}"}'},secrets());

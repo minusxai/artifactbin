@@ -10,32 +10,36 @@ import {ROSTER} from '../../design-systems/lib/pages.mjs';
 import {GET as skillArchive} from '../../services/app/app/skills/artifactbin.zip/route.ts';
 import {pathToFileURL} from 'node:url';
 const ROOT=path.resolve(import.meta.dirname,'../../services/app/skills/artifactbin'),BASE='https://example.test';
-let installedDir,prepareSample,sendPublication;
+let installedDir,prepareBundle,sendPublication;
+/** A documented HTML sample as a saved publication request, its dataset links pointing at `datasetId`. */
+const prepareSample=async(name,datasetId='abc123')=>{
+ const root=path.join(installedDir,'artifactbin'),entry=`examples/${name}.html`;
+ const html=(await readFile(path.join(root,entry),'utf8')).replaceAll('ref:DATASET_ID',`ref:${datasetId}`).replaceAll('ref:TARGETS_ID',`ref:${datasetId}`);
+ return prepareBundle({root,entry,server:BASE,entryHtml:html});
+};
 beforeAll(async()=>{
  installedDir=await mkdtemp(path.join(tmpdir(),'native-author-installed-'));
  const zip=path.join(installedDir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',installedDir]);
- ({prepareSample,sendPublication}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/publish.mjs')).href));
+ ({prepareBundle,sendPublication}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/publication-bundle.mjs')).href));
 });
 afterAll(async()=>{if(installedDir)await rm(installedDir,{recursive:true,force:true});});
 describe('native author resources',()=>{
- it('prepares real HTML, CSV and paired backend requests without leaking a credential',async()=>{
-  for(const name of ['report','repairs-data','csv-dashboard','shared-app']){
-   const saved=await prepareSample(name,BASE,'abc123');
+ it('prepares real HTML and paired resolver requests without leaking a credential',async()=>{
+  for(const name of ['report','csv-dashboard','shared-app']){
+   const saved=await prepareSample(name);
    expect(saved).toMatchObject({server:BASE,method:'POST',idempotencyKey:expect.stringMatching(/^[a-z0-9-]{36}$/)});
    expect(JSON.stringify(saved)).not.toContain('ARTIFACTBIN_TOKEN');
-   if(name==='repairs-data'){expect(saved.body.dataset).toContain('week,completed,waiting');continue;}
    expect(saved.body.html).toMatch(/^<!doctype html>/);
    expect(saved.body.html).not.toMatch(/\sclassName="|<Helmet>|DATASET_ID/);
    expect(saved.body.html).not.toContain('core.js');expect(saved.body.html).toContain('artifactbin:design-system');
    expect(saved.body.html).toContain("from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
-   if(name==='shared-app'){expect(saved.body.backendSources.budget).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
+   if(name==='shared-app'){const budget=saved.body.publicationBundle.files.find(file=>file.path==='examples/budget.ts');expect(Buffer.from(budget.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
   }
-  await expect(prepareSample('csv-dashboard',BASE)).rejects.toThrow('real returned dataset ID');
  });
  it('replays the exact saved request and blocks cross-origin credentials or redirects',async()=>{
-  const saved=await prepareSample('report',BASE),requests=[];
+  const saved=await prepareSample('report'),requests=[];
   const fetcher=async(url,input)=>{requests.push({url,input});return Response.json({id:'abc123',url:BASE+'/a/abc123'});};
   const env={ARTIFACTBIN_URL:BASE,ARTIFACTBIN_TOKEN:'test-only-token'};
   await sendPublication(saved,env,fetcher);await sendPublication(saved,env,fetcher);
@@ -47,10 +51,10 @@ describe('native author resources',()=>{
  it('refuses to overwrite a prepared request so retries keep their identity',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-author-'));
   try{
-   const output=path.join(dir,'request.json'),helper=path.join(installedDir,'artifactbin/scripts/publish.mjs');
-   execFileSync(process.execPath,[helper,'--prepare','report','--server',BASE,'--output',output]);
+   const output=path.join(dir,'request.json'),root=path.join(installedDir,'artifactbin'),helper=path.join(root,'scripts/publication-bundle.mjs');
+   execFileSync(process.execPath,[helper,root,'examples/report.html',BASE,output],{stdio:'pipe'});
    const original=await readFile(output,'utf8');
-   expect(()=>execFileSync(process.execPath,[helper,'--prepare','report','--server',BASE,'--output',output],{stdio:'pipe'})).toThrow();
+   expect(()=>execFileSync(process.execPath,[helper,root,'examples/report.html',BASE,output],{stdio:'pipe'})).toThrow();
    expect(await readFile(output,'utf8')).toBe(original);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
@@ -76,7 +80,7 @@ it('prepares an installed design-system stylesheet whose fonts stay on the platf
  }finally{await installed.dispose();}
 });
 
-it('legacy sends preserve updates, refusal receipts and single-attempt uncertain outcomes',async()=>{
+it('saved-request sends preserve updates, refusal receipts and single-attempt uncertain outcomes',async()=>{
  const env={ARTIFACTBIN_URL:BASE,ARTIFACTBIN_TOKEN:'test-only-token'};
  const saved={server:BASE,method:'PUT',artifactId:'PAGE12',idempotencyKey:'test-only-key-123456',
   body:{html:'<p>Update</p>',expectedVersion:3,expectedState:'observed',publicationBundle:{mappings:{}}}};

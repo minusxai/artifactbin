@@ -191,7 +191,7 @@ async function runnerMode(mode: 'runner' | 'http' | 'docker', compiled: string, 
     close = () => new Promise<void>(resolve => server.close(() => resolve()));
   }
   const pending: CallSample[] = [];
-  const record = { backendId: 'bench', version: '1', source: SOURCE, ownerId: 'bench-owner', pageId: 'bench-page', typeDefs, compiled: program, api: 2 as const };
+  const record = { backendId: 'bench', version: '1', source: SOURCE, ownerId: 'bench-owner', pageId: 'bench-page', typeDefs, compiled: program };
   const invoke = createBackendInvoker(instrument(service, pending), async () => record);
   const call = async (): Promise<[CallSample, number]> => {
     const sample: CallSample = { calledAt: Date.now(), polls: 0 }; pending.push(sample);

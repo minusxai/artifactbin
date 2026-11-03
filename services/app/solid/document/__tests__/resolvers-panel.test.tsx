@@ -14,7 +14,7 @@ function serve(answers: { set?: string[]; test?: boolean; graphql?: () => { stat
     const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ url, method, body });
     const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
-    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'sheets', backendId: 'b1', version: 'v1', api: 2, test: answers.test ?? true, secrets: { GOOGLE_SA: 'sheets.googleapis.com' }, set }] });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'sheets', backendId: 'b1', version: 'v1', test: answers.test ?? true, secrets: { GOOGLE_SA: 'sheets.googleapis.com' }, set }] });
     if (url === '/api/my/resolvers/b1/v1/secrets') {
       set = method === 'PUT' ? ['GOOGLE_SA'] : [];
       return reply({ names: set });

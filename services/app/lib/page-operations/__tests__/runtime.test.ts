@@ -2,27 +2,23 @@ import {it,expect} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '@artifactbin/runner/local';
 import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type PageBackendRecord} from '../backend';
-it('executes a compiled immutable backend through the retained isolated runner',async()=>{
- const db=new PGlite();let record:PageBackendRecord;let value:import('@artifactbin/contracts').HtmlJson=null,version=0;
- const store={get:async()=>({value,version}),set:async(_id:string,next:typeof value,expected:number)=>{if(expected!==version)return {ok:false,version};value=next;return {ok:true,version:++version};}};
- const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(store,context.request,operation,args,async()=>record,async url=>({status:200,url,contentType:'application/json',body:'{"value":"public"}'}),async(backend,name)=>backend.ownerId==='owner1'&&name==='TOKEN'?'server-only-token':Promise.reject(Error('forbidden')))});
+it('executes a compiled immutable resolver through the retained isolated runner, with caps fetch and query only',async()=>{
+ const db=new PGlite();let record:PageBackendRecord;
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(context.request,operation,args,async()=>record)});
  try{
-  const source='export const secretBindings=["TOKEN"]; export const typeDefs="type Query { count:Int! remote:String! secretReady:Boolean! } type Mutation { add:Int! @auth(role:EDITOR) }"; export default { secretReady:async(args,p,c)=>(await c.secrets.get("TOKEN")).length>0, remote:async(args,principal,caps)=>{const response=await caps.fetch("https://example.com/data");return (await response.json()).value;}, count: async(args,principal,caps)=>(await caps.store.get()).value?.count??0, add:async(args,principal,caps)=>{const s=await caps.store.get();await caps.store.set({count:(s.value?.count??0)+1},{expected:s.version});return principal.tenant==="page1"?1:0;} };';
+  const source='export const typeDefs="type Query { double(n:Int!):Int! caps:String! store:String! } type Mutation { add(n:Int!):Int! @auth(role:editor) }"; export default { double:async({n})=>n*2, caps:async(args,principal,caps)=>Object.keys(caps).sort().join(","), store:async(args,principal,caps)=>typeof caps.store+" "+typeof caps.secrets, add:async({n})=>n+1 };';
   record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend1',pageId:'page1',version:'v1',ownerId:'owner1'};
-  expect(record.secretBindings).toEqual(['TOKEN']);expect(record.compiled).not.toContain('server-only-token');
-  expect(record.api).toBe(1);expect(record.secretHosts).toEqual({});
-  expect(await createBackendCompiler(runner)('export const secrets={API_KEY:"api.example.com"}; export const typeDefs="type Query { test: String! @auth(role: OWNER) }"; export default { test:()=>"ok" };')).toMatchObject({secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},api:2,test:true});
+  expect(record).toMatchObject({secretBindings:[],secretHosts:{},test:false});
+  expect(await createBackendCompiler(runner)('export const secrets={API_KEY:"api.example.com"}; export const typeDefs="type Query { test: String! @auth(role: OWNER) }"; export default { test:()=>"ok" };')).toMatchObject({secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},test:true});
   const invoke=createBackendInvoker(runner,async()=>record);
-  const call={namespace:'tasks',fileId:'backend1',version:'v1',operation:'mutation' as const,field:'add',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
-  expect(await invoke(call)).toBe(1);expect(value).toEqual({count:1});expect(version).toBe(1);
-  await expect(invoke({...call,operation:'query',field:'add',args:{pageBackendOperation:'mutation'}})).rejects.toThrow();
-  expect(version).toBe(1);expect(value).toEqual({count:1});
-  expect(await invoke({...call,operation:'query',field:'count'})).toBe(1);
-  expect(await invoke({...call,operation:'query',field:'remote'})).toBe('public');
-  expect(await invoke({...call,operation:'query',field:'secretReady'})).toBe(true);
+  const call={namespace:'tasks',fileId:'backend1',version:'v1',operation:'query' as const,field:'double',args:{n:2},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
+  expect(await invoke(call)).toBe(4);
+  expect(await invoke({...call,operation:'mutation',field:'add',args:{n:1}})).toBe(2);
+  expect(await invoke({...call,field:'caps',args:{}})).toBe('fetch,query');
+  expect(await invoke({...call,field:'store',args:{}})).toBe('undefined undefined');
  }finally{await runner.close();await db.close();}
 },20000);
-it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB response crosses every link',async()=>{
+it('the host fills secrets, the resolver never sees a value, and a 2 MiB response crosses every link',async()=>{
  const {withHttpServer}=await import('@artifactbin/test-support/net');
  const {useLoopbackLookup}=await import('@artifactbin/utils/node/loopback-lookup');
  const {createResolverFetch}=await import('../public-fetch');
@@ -35,7 +31,6 @@ it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB 
   res.writeHead(200,{'content-type':'application/json','x-echo':String(req.headers.authorization)});res.end(JSON.stringify({url:req.url,authorization:req.headers.authorization}));
  });});
  const db=new PGlite();let record:PageBackendRecord;
- const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
  // caps.query's host port: echoes the caller it was handed, refuses a mutation as the real one does in a query resolver.
  const {ResolverQueryError}=await import('../query');
  const query=async({caller,operation,args}:{caller:unknown;operation:unknown;args:import('@artifactbin/contracts').RunnerJson})=>{
@@ -43,7 +38,7 @@ it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB 
   if(a.query.startsWith('mutation'))throw new ResolverQueryError('permission_denied','a dataset mutation runs only inside a mutation resolver');
   return {caller,operation,variables:a.variables} as import('@artifactbin/contracts').RunnerJson;
  };
- const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(store,context.request,operation,args,async()=>record,undefined,async(_backend,name)=>name==='KEY'?KEY:Promise.reject(Error('backend_secret_unavailable')),createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}),query)});
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(context.request,operation,args,async()=>record,async(_backend,name)=>name==='KEY'?KEY:Promise.reject(Error('backend_secret_unavailable')),createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}),query)});
  try{
   const base=`http://api.localhost:${server.port}`;
   const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { probe: String! size: Int! }"; export default {
@@ -61,13 +56,13 @@ it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB 
    },
    size: async(args,principal,caps)=>(await (await caps.fetch("${base}/fits")).text()).length };`;
   record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend2',pageId:'page1',version:'v1',ownerId:'owner1'};
-  expect(record).toMatchObject({api:2,secretHosts:{KEY:'api.localhost'}});
+  expect(record).toMatchObject({secretHosts:{KEY:'api.localhost'}});
   const invoke=createBackendInvoker(runner,async()=>record);
   const call={namespace:'conn',fileId:'backend2',version:'v1',operation:'query' as const,field:'probe',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
   const output=String(await invoke(call));
   for(const form of [KEY,encodeURIComponent(KEY)])expect(output).not.toContain(form);
   expect(received[0]).toBe(`Bearer ${KEY} /echo?k=${encodeURIComponent(KEY)} ${KEY}`);
-  // api 2 caps gain query (resolvers plan PR 5): exactly {fetch, query}; the role is the admitted principal's.
+  // caps is exactly {fetch, query}; the role is the admitted principal's.
   expect(JSON.parse(output)).toEqual({keys:['fetch','query'],named:'undefined',role:'viewer',
    query:{caller:{subject:'viewer1',role:'viewer'},operation:'query',variables:{team:'red'}},
    queryError:['permission_denied','a dataset mutation runs only inside a mutation resolver'],direct:'backend_capability_forbidden',store:'backend_capability_forbidden',
@@ -86,8 +81,7 @@ it('a resolver\'s own thrown message reaches the caller; caps refusals, non-Erro
  useLoopbackLookup();
  const server=await withHttpServer((_req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end('<html>private body</html>');});
  const db=new PGlite();let record:PageBackendRecord;
- const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
- const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(store,context.request,operation,args,async()=>record,undefined,async()=>'k3y-value',createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}))});
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(context.request,operation,args,async()=>record,async()=>'k3y-value',createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}))});
  try{
   const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { note: String uncaught: String rethrown: String bad: String str: String spin: String }"; export default {
    note: async()=>{const e=Error("Write a note of 1 to 280 characters.\\nsecond line");throw e;},

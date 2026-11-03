@@ -57,7 +57,7 @@ export async function respondToMutate(
   if (refusal) {
     return json({
       error: 'dataset_read_only',
-      details: [grantsOf(dataset)?'No grant allows this direct write. Use an allowed saved artifact action, or ask a dataset editor to add a user grant for this operation. See /llms/backends.':`${id} is read-only — make it writable: PUT here, or PATCH /api/my/artifacts/${id} { "access": "readwrite" }`],
+      details: [grantsOf(dataset)?'No grant allows this direct write. Use an allowed saved artifact action, or ask a dataset editor to add a user grant for this operation. See /llms/resolvers.':`${id} is read-only — make it writable: PUT here, or PATCH /api/my/artifacts/${id} { "access": "readwrite" }`],
     }, 403);
   }
 

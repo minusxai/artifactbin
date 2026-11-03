@@ -17,7 +17,7 @@ on the server in a sandbox, as one immutable version per change:
 `node scripts/publish.mjs index.html` sends the file (direct HTTP: `resolverSources:{"budget":"<source>"}`);
 browsers never fetch it. A page from `read.mjs` has no `href`: add `href="./NAME.ts"` beside the
 file to change it, or leave the link as is to keep the published version. Removing the link unlinks
-it from the new page version only. `af-backend` is a permanent alias of `af-resolver`.
+it from the new page version only.
 
 ## Contents
 
@@ -25,7 +25,7 @@ it from the new page version only. `af-backend` is a permanent alias of `af-reso
 
 ## The file
 
-Start from a library file below (`examples/resolver-*.ts`; each top comment says how to use it)
+Start from a library file below (`resolvers/resolver-*.ts`; each top comment says how to use it)
 or `examples/budget.ts`. Export `typeDefs`, a default object of root field resolvers, optionally
 `secrets` and a `test` field. Each resolver gets `(args, principal, caps)`: `principal` is
 `{tenant, subject, role}` (the page ID, the caller's account ID or null, their role), set by the
@@ -127,6 +127,3 @@ Errors and refusals come back in `errors`: show them; never report them as saved
 | `resolver-neon.ts` | Neon Postgres over HTTP SQL | `NEON_PASSWORD` |
 
 Provider details live in each file's header.
-
-Legacy: published versions using `caps.store`, `secretBindings` or `caps.secrets.get` keep working
-unchanged; new resolvers use datasets and `{{NAME}}` placeholders instead.
