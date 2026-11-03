@@ -15,6 +15,8 @@
  *          duplicate-data-af-id two elements with one identity (the server refuses these too)
  *          duplicate-id         two elements with one HTML id
  *          missing-asset        a relative local reference with no file behind it (checked only when `exists` is given)
+ *          comment-view         a state block's data-af-comment-fields/-exclude/-version the runtime would refuse (no view saved)
+ *          pwa-metadata         an install setting publish would silently ignore
  *
  * IDs are never assigned or renumbered here: the server's identity ledger owns them (lib/html-page canonicalizeHtmlPage).
  */
@@ -25,10 +27,11 @@ import {sha256Hex} from '@artifactbin/utils/sha256';
 import {applyEdits,atHeadStart,attribute,parseSource,type Element} from '../html-page/html-source.ts';
 import {repairCoreScript} from '../html-page/index.ts';
 import {normalizeDesignSelection} from '../html-page/design-system.ts';
+import {parseCommentViewFieldList} from '../../../contracts/src/comment-view-state.ts';
 initSync();
 
 type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link';
-type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata';
+type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata' | 'comment-view';
 interface AutofixLine { line: number; text: string }
 interface AutofixFix { rule: AutofixRule; reason: string; before: AutofixLine[]; after: AutofixLine[] }
 interface AutofixProblem { rule: AutofixProblemRule; line: number; column: number; snippet: string; message: string }
@@ -147,6 +150,21 @@ function findProblems(html: string, options: AutofixOptions = {}): AutofixProble
     if (!name.startsWith('artifactbin:pwa-') || value === null) continue;
     const bad = pwaMetaProblem(name.slice('artifactbin:pwa-'.length), value);
     if (bad) problems.push({ rule: 'pwa-metadata', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `${name}: ${bad}; the setting is ignored` });
+  }
+
+  // Saved comment views (lib/html-runtime/comment-view): an invalid list makes every comment target-only, silently.
+  for (const element of document.elements) {
+    if (element.tagName !== 'script' || attribute(element, 'data-af') !== 'state') continue;
+    const report = (message: string) => problems.push({ rule: 'comment-view', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `${message}; comments on this page would save no view` });
+    for (const name of ['data-af-comment-fields', 'data-af-comment-exclude']) {
+      const value = attribute(element, name);
+      if (value === null) continue;
+      const names = parseCommentViewFieldList(value);
+      if (typeof names === 'string') report(`${name} ${names}: write a JSON array of unique top-level state field names, like '["draft"]'`);
+      else if (name === 'data-af-comment-fields' && !names.length) report(`${name} is empty: list the fields to save, or remove it to save every field`);
+    }
+    const version = attribute(element, 'data-af-comment-version');
+    if (version !== null && (!version || version.length > 128)) report('data-af-comment-version must be 1-128 characters, or removed');
   }
 
   if (options.exists) {

@@ -29,3 +29,17 @@ it('captures opt-in UI state, restores before target layout, and returns the pri
  expect(document.querySelector<HTMLElement>('[data-mx-selection-actions]')?.hidden).toBe(true);
  bridge.dispose();
 });
+it('saves and restores a page without any declaration, leaving excluded typed text private',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'comment-view-default',revision:'1',backends:[]});
+ document.body.innerHTML=`<script type="application/json" data-af="state" data-af-comment-exclude='["draft"]'>{"screen":"home","draft":""}</script><p data-af-id="target">Target</p>`;
+ const runtime=await import('../browser-client');
+ const query=runtime.gql`{screen draft}`;
+ await runtime.client.updateQuery({query},()=>({screen:'detail',draft:'typed'}));
+ const saved=htmlSelection(window,document.querySelector('p'),'1');
+ expect((saved?.viewState?.state.$html as {fields:unknown}).fields).toEqual({screen:'detail'});
+ await runtime.client.updateQuery({query},()=>({screen:'home',draft:'mine'}));
+ const bridge=runtime.startFrameBridge({win:window,post:()=>{},attach:{kind:'attach',id:'comment-view-default',editId:'1',source:null}});
+ bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'thread',path:'target',viewState:saved?.viewState}],openId:'thread',hoverId:null}});
+ await vi.waitFor(async()=>expect((await runtime.client.query({query})).data).toEqual({screen:'detail',draft:'mine'}));
+ bridge.dispose();
+});

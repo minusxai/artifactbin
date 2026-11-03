@@ -55,16 +55,15 @@ Keep dynamic nodes under a saved source ancestor with stable IDs. Comments targe
 
 ## Saved comment views
 
-Local state stays private unless the author explicitly declares fields suitable for sharing with a comment. Add both attributes to the existing state block:
+A comment saves the reader's view: every top-level field of the state block's JSON (backend namespaces excepted). Keep typed text (drafts, notes, search boxes), tokens and personal information out of the state block, or exclude it:
 
 ```html
-<script type="application/json" data-af="state"
-  data-af-comment-version="navigation-v1" data-af-comment-fields='["screen","tab"]'>
+<script type="application/json" data-af="state" data-af-comment-exclude='["draft"]'>
 {"screen":"home","tab":"overview","draft":""}
 </script>
 ```
 
-Only the named top-level fields are attached to comments; never declare drafts, tokens, personal information or backend namespaces. Lists must contain unique simple field names. Every field must exist. The version must match exactly when restored: change it when view-field meanings change. Saved views use bounded JSON (32 KiB total); incompatible or invalid snapshots show a restoration message without changing state. Pages without a declaration keep target-only comments.
+`data-af-comment-fields='["screen","tab"]'` saves only the named fields instead. Lists hold unique simple field names; an invalid one saves no view and `autofix` refuses it. A saved view restores only while the field set (or an explicit `data-af-comment-version`) is unchanged. Views are bounded JSON (32 KiB): fields that do not fit are left out; incompatible snapshots show a message without changing state.
 
 Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. Backend data and mutations are never captured or replayed. This is saved comment context, not live sharing or following another reader's local state. Target identity rules still apply if the restored screen no longer contains that element.
 

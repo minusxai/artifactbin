@@ -1,4 +1,4 @@
-import {createHtmlCommentView} from './comment-view';
+import {commentViewDeclaration,createHtmlCommentView} from './comment-view';
 import {installHtmlCommentView} from '../html-bridge/comment-view-session';
 import {createClient,gql,readStateFragment} from './apollo/client';
 import {createViewerState} from './viewer-state';
@@ -20,16 +20,12 @@ const state = createViewerState({
 });
 export const client=createClient({backends:()=>config.backends??[],datasets:()=>config.datasets??[],state,remote});
 
-// Authors explicitly choose UI fields suitable for sharing beside a comment.
-const viewBlock=document.querySelector('[data-af="state"][data-af-comment-fields][data-af-comment-version]');
-if(viewBlock) {
- try {
-  const fields:unknown=JSON.parse(viewBlock.getAttribute('data-af-comment-fields')!);
-  if(!Array.isArray(fields)||fields.some(key=>typeof key!=='string'))throw new Error('Invalid fields');
-  installHtmlCommentView(document,createHtmlCommentView({state,backends:config.backends??[],declaration:{version:viewBlock.getAttribute('data-af-comment-version')!,fields}}));
- }catch { installHtmlCommentView(document,{capture(){throw new Error('Invalid comment view declaration');},async restore(){throw new Error('Invalid comment view declaration');}}); }
-}
-else installHtmlCommentView(document,undefined);
+// Saved comment views: the authored state block's fields (lib/html-runtime/comment-view). An invalid list saves nothing.
+const viewBlock=document.querySelector('[data-af="state"]');
+try {
+ const declaration=viewBlock ? commentViewDeclaration({initial:initial??{},attribute:name=>viewBlock.getAttribute(name)},config.backends??[]) : undefined;
+ installHtmlCommentView(document,declaration&&createHtmlCommentView({state,backends:config.backends??[],declaration}));
+}catch { installHtmlCommentView(document,{capture(){throw new Error('Invalid comment view declaration');},async restore(){throw new Error('Invalid comment view declaration');}}); }
 
 /** Read only for an explicit local Save action; this private document is never uploaded automatically. */
 export const readViewerDocument=()=>state.read();
