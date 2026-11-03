@@ -22,8 +22,8 @@ import net from 'node:net';
 import { RESOLVER_DATABASE_LIMITS, type RunnerJson } from '@artifactbin/contracts';
 import { hostNameSyntax, isAllowedAddress, parseIPv4, parseIPv6 } from '@artifactbin/utils/public-address';
 
-export type DatabaseTunnelLimits = { -readonly [K in keyof typeof RESOLVER_DATABASE_LIMITS]: number };
-export interface LookupAddress { address: string; family: number }
+type DatabaseTunnelLimits = { -readonly [K in keyof typeof RESOLVER_DATABASE_LIMITS]: number };
+interface LookupAddress { address: string; family: number }
 export interface DatabaseTunnelOptions {
   /** Development and tests only: admit loopback targets and plaintext (`tls: 'disable'`). Off by default. */
   allowLoopback?: boolean;
@@ -35,7 +35,7 @@ export interface DatabaseTunnelOptions {
 }
 /** Who a run's tunnels count against. */
 export interface TunnelScope { owner: string; page: string }
-export type TunnelSend = (message: { type: string; [key: string]: RunnerJson }) => void;
+type TunnelSend = (message: { type: string; [key: string]: RunnerJson }) => void;
 export interface RunTunnels {
   /** Registers a target for this run and returns the value the worker gets, with `grant` added. Throws a refusal code. */
   grant(value: RunnerJson): RunnerJson;
