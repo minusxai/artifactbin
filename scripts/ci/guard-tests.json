@@ -1,4 +1,5 @@
 [
+  "scripts/__tests__/chromium-tests.test.mjs",
   "scripts/__tests__/ci-budget.test.mjs",
   "scripts/__tests__/ci-cache-contracts.test.mjs",
   "scripts/__tests__/page-speed-lab.test.mjs",

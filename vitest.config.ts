@@ -5,6 +5,7 @@ import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 import { suiteEnv } from './scripts/lib/suite-env.mjs';
+import { chromiumTests } from './scripts/lib/chromium-tests.mjs';
 
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
 // islands project because scripts/ci/test-changed.mjs discovers only api/node/ui/islands.
@@ -41,6 +42,10 @@ const leaking = (include: string[], exclude: string[]) => globSync(include, { cw
   .filter((file) => LEAKS_PAST_ITS_FILE.test(readFileSync(path.join(import.meta.dirname, file), 'utf8')))
   .map((file) => file.split(path.sep).join('/'));
 const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
+
+const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
+/** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
+const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
 const UI_INCLUDE = ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'];
 /**
@@ -107,7 +112,7 @@ export default defineConfig({
         test: {
           name: 'node',
           environment: 'node',
-          include: ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'],
+          include: NODE_INCLUDE,
           // The heavy tests below match this project's include globs but
           // boot Docker (a disposable Postgres) or real Chromium; they run in
           // the `integration` project instead, kept out of the default `npm
@@ -121,9 +126,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/app/lib/datasets/__tests__/postgres-routes.test.ts',
-            'services/browser/__tests__/contract.test.ts',
-            'services/browser/__tests__/internal-assets.test.ts',
-            'services/browser/__tests__/session-pages.test.ts',
+            ...CHROMIUM_TESTS,
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
           ],
@@ -149,10 +152,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             // The data-journey gate's PostgreSQL leg through the real routes: same `skipIf` on the image.
             'services/app/lib/datasets/__tests__/postgres-routes.test.ts',
-            'services/browser/__tests__/contract.test.ts',
-            'services/browser/__tests__/internal-assets.test.ts',
-            // Launches real Chromium: integration only, like contract.test.ts.
-            'services/browser/__tests__/session-pages.test.ts',
+            ...CHROMIUM_TESTS,
             // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
             // a disposable Postgres (same `skipIf` on the image as postgres.test.ts).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
