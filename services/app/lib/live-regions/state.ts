@@ -123,7 +123,7 @@ function keepUnchanged(kind: RegionKind, base: PMNode, revision: PMNode): PMNode
   return schema.nodes.doc!.create(null, blocks);
 }
 
-export interface RegionRevisionInput {
+interface RegionRevisionInput {
   kind: RegionKind;
   /** The live state now. */
   live: Uint8Array;
@@ -133,7 +133,7 @@ export interface RegionRevisionInput {
   html?: string;
   markdown?: string;
 }
-export interface RegionRevision {
+interface RegionRevision {
   /** Apply to the live state and broadcast: only the revision's own changes. */
   update: Uint8Array;
   /** The snapshot of the version the revision becomes, for the next revision. */

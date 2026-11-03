@@ -50,7 +50,7 @@ function keepSavedIds(kind: RegionKind, doc: PMNode, saved: ReadonlySet<string>)
   return regionSchema(kind).nodes.doc!.create(null, blocks);
 }
 
-export interface RegionCompactionInput {
+interface RegionCompactionInput {
   /** The last saved page source and its identity ledger. */
   savedHtml: string;
   ledger: HtmlIdentityLedger;
@@ -59,7 +59,7 @@ export interface RegionCompactionInput {
   /** The live state. */
   state: Uint8Array;
 }
-export interface RegionCompaction {
+interface RegionCompaction {
   /** The new page source and ledger, to save as a version. */
   html: string;
   ledger: HtmlIdentityLedger;

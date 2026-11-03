@@ -17,7 +17,7 @@ import { ID_ATTRS } from '../schema';
 import { liveDocument, readDocument } from '../state';
 
 const REMOTE = 'remote';
-export const PAGE = (region: string, kind: RegionKind) => {
+const PAGE = (region: string, kind: RegionKind) => {
   const tag = kind === 'rich' ? 'article' : 'h1';
   return `<!doctype html><html><head><title>Plan</title><style>p{color:red}</style></head><body>
 <header><h1>Fixed title</h1></header>

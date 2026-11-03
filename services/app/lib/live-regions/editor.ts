@@ -92,7 +92,7 @@ const withAttrs = (state: EditorState, attrs: (node: PMNode) => Record<string, u
 };
 const bind = (make: (state: EditorState) => Command): Command => (state, dispatch, view) => make(state)(state, dispatch, view);
 
-export interface RegionCommands {
+interface RegionCommands {
   splitBlock: Command; backspace: Command; indent: Command; outdent: Command;
   heading(level: number): Command; list(type: ListType | null): Command; quote(on: boolean): Command; codeBlock(on: boolean): Command;
   strong: Command; em: Command; code: Command; link(href: string | null): Command;
@@ -255,7 +255,7 @@ function markShortcuts(kind: RegionKind): Plugin {
  * The editor plugins of a region bound to its fragment: y-prosemirror sync and undo (each person undoes only their
  * own edits), the id dedupe, Markdown input rules, the keymap and the region clipboard.
  */
-export function editorPlugins(kind: RegionKind, fragment: Y.XmlFragment, mapping?: ReturnType<typeof initProseMirrorDoc>['mapping']): Plugin[] {
+function editorPlugins(kind: RegionKind, fragment: Y.XmlFragment, mapping?: ReturnType<typeof initProseMirrorDoc>['mapping']): Plugin[] {
   const schema = regionSchema(kind);
   const commands = regionCommands(kind);
   return [

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { attribute, parseSource } from '../../html-page/html-source';
-import { applyRegionRevision, compactRegion, createRegionState, LiveRegionRefusal, normalizeRegionHtml, regionFragment, regionHtml, safeHref, type RegionKind } from '..';
+import { applyRegionRevision, compactRegion, createRegionState, LiveRegionRefusal, normalizeRegionHtml, regionFragment, regionHtml, regionSchema, safeHref, type RegionKind } from '..';
 
 const refusal = (run: () => unknown): LiveRegionRefusal => {
   try { run(); } catch (error) { if (error instanceof LiveRegionRefusal) return error; throw error; }
@@ -38,6 +38,22 @@ function outsideRegion(html: string, regionId: string): [string, string] {
   return [html.slice(0, location.startTag!.endOffset), html.slice(location.endTag!.startOffset)];
 }
 const apply = (state: Uint8Array, ...updates: Uint8Array[]) => Y.mergeUpdates([state, ...updates]);
+
+describe('schema (I2 checks attributes too)', () => {
+  it('validates every structural attribute and the link href', () => {
+    const schema = regionSchema('rich');
+    const { nodes, marks } = schema;
+    const ok = nodes.doc!.create(null, nodes.textblock!.create({ level: 2, list: 'ordered', depth: 3, quote: true, afId: 'af-1', itemId: 'af-2' }, schema.text('x')));
+    expect(() => ok.check()).not.toThrow();
+    for (const attrs of [{ level: 7 }, { list: 'dotted' }, { depth: 7 }, { quote: 'yes' }, { afId: '"><b>' }, { listId: 1 }]) {
+      expect(() => nodes.doc!.create(null, nodes.textblock!.create(attrs)).check(), JSON.stringify(attrs)).toThrow(RangeError);
+    }
+    expect(() => nodes.doc!.create(null, nodes.textblock!.create(null, schema.text('x', [marks.link!.create({ href: 'javascript:alert(1)' })]))).check()).toThrow(RangeError);
+    expect(() => nodes.doc!.create(null, nodes.code_block!.create(null, schema.text('x', [marks.strong!.create()]))).check()).toThrow(RangeError);
+    expect(Object.keys(regionSchema('text').nodes)).toEqual(['doc', 'textblock', 'text']);
+    expect(Object.keys(regionSchema('text').marks)).toEqual([]);
+  });
+});
 
 describe('normal form (I6: normalize once, then byte-identical through ProseMirror and Yjs)', () => {
   const rich: [string, string, string][] = [

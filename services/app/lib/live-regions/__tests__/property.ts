@@ -16,7 +16,7 @@ import { expect } from 'vitest';
 import * as Y from 'yjs';
 import { Room, type Client } from './harness';
 
-export type Op =
+type Op =
   | { op: 'type'; client: number; at: number; length: number }
   | { op: 'shortcut'; client: number; at: number; which: (typeof SHORTCUTS)[number] }
   | { op: 'bold'; client: number; at: number; length: number }
@@ -31,13 +31,13 @@ export type Op =
   | { op: 'agent'; at: number };
 const SHORTCUTS = ['# ', '## ', '- ', '* ', '1. ', '> ', '```', '---'] as const;
 
-export const REGIONS = [
+const REGIONS = [
   '<h2>Plan</h2><p>First paragraph.</p><ul><li>one</li><li>two<ul><li>deep</li></ul></li></ul><blockquote><p>quoted</p></blockquote><pre><code>code</code></pre><hr><p>last</p>',
   '<p>alpha</p><p>beta</p>',
   '',
 ];
 
-export const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain((clients) => {
+const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain((clients) => {
   const client = fc.nat({ max: clients - 1 });
   const at = fc.nat({ max: 10_000 });
   const op: fc.Arbitrary<Op> = fc.oneof(
@@ -57,7 +57,7 @@ export const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain
   );
   return fc.record({ clients: fc.constant(clients), region: fc.constantFrom(...REGIONS.keys()), ops: fc.array(op, { minLength: 1, maxLength: maxOps }) });
 });
-export type Scenario = { clients: number; region: number; ops: Op[] };
+type Scenario = { clients: number; region: number; ops: Op[] };
 
 /** Cursor positions inside text blocks, in document order. */
 const positions = (client: Client) => {
@@ -70,7 +70,7 @@ const TRACKED = /[一-鿿]/gu;
 const tracked = (text: string) => text.match(TRACKED) ?? [];
 
 /** One run; returns the number of characters lost to the known limitation. */
-export function runScenario({ clients: count, region, ops }: Scenario): { lostToLimitation: number; typed: number } {
+function runScenario({ clients: count, region, ops }: Scenario): { lostToLimitation: number; typed: number } {
   const room = new Room('rich', REGIONS[region]!);
   const clients = Array.from({ length: count }, (_unused, index) => room.join(String.fromCharCode(65 + index)));
   let next = 0x4e00;

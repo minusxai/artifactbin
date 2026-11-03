@@ -10,7 +10,7 @@
  * - `snapshot_mismatch`: the snapshot is not one of this live state's (it names updates the state never saw).
  * - `region_not_found`: the saved page has no editable region with that `data-af-id`.
  */
-export type LiveRegionRefusalCode = 'unsupported_content' | 'missing_snapshot' | 'snapshot_mismatch' | 'region_not_found';
+type LiveRegionRefusalCode = 'unsupported_content' | 'missing_snapshot' | 'snapshot_mismatch' | 'region_not_found';
 
 export class LiveRegionRefusal extends Error {
   readonly code: LiveRegionRefusalCode;

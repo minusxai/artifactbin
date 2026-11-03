@@ -351,6 +351,8 @@ describe('republish and agent edits (three-way)', () => {
     expect(() => room.republish((region) => region.replace('Goals', 'Aims'))).toThrow(expect.objectContaining({ code: 'missing_snapshot' }));
     expect(() => room.republish((region) => region)).toThrow(LiveRegionRefusal);
     expect(room.html()).toBe(before);
+    room.snapshot = room.compact().snapshot;
+    expect(bare(room.invariants())).toBe('<h2>Goals</h2><p>First paragraph about the plan [typed].</p><p>Second paragraph that the author will revise.</p>');
   });
 
   it('two republishes in a row, each against the snapshot the previous one kept, with typing between', () => {
@@ -433,6 +435,17 @@ describe('ids', () => {
     const page = room.compact();
     const next = /<strong data-af-id="([^"]+)">rewritten/.exec(page.html)![1];
     expect(next).not.toBe(strongId);
+    expect(bare(room.invariants())).toBe('<p>Hello <strong>rewritten</strong> text</p>');
+  });
+
+  it('Backspace-join keeps the first paragraph\'s id; the second paragraph\'s id retires at compaction', () => {
+    const [room, A] = open('<p>First</p><p>Second</p>');
+    const [first, second] = idsOf(room.html());
+    A.select(A.blockStart(1)).key('Backspace');
+    expect(room.invariants()).toBe(`<p data-af-id="${first}">FirstSecond</p>`);
+    const page = room.compact();
+    expect(page.ledger.allocatedIds).toContain(second);
+    expect(page.html).not.toContain(`"${second}"`);
   });
 });
 
