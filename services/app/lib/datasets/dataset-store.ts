@@ -39,3 +39,20 @@ export async function loadDatasetRows(row: { meta: unknown }): Promise<Record<st
   // deliberately not here, so there is one cache and not one per caller.
   return JSON.parse((await objectStore().get(key)).toString('utf8'));
 }
+
+/**
+ * How many rows a stored object holds. Remembered by key: objects are content-addressed, so a key's count never
+ * changes, and a reader asking it again (each dataset GraphQL request numbers the rows of every table it reads)
+ * pays one parse per object per process, not one per request. Bounded, oldest out first.
+ */
+const rowCounts = new Map<string, number>();
+const COUNTS_KEPT = 2_000;
+
+export async function storedRowCount(key: string): Promise<number> {
+  const known = rowCounts.get(key);
+  if (known !== undefined) return known;
+  const count = (await loadDatasetRows({ meta: { objectKey: key } })).length;
+  if (rowCounts.size >= COUNTS_KEPT) rowCounts.delete(rowCounts.keys().next().value!);
+  rowCounts.set(key, count);
+  return count;
+}

@@ -10,6 +10,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { objectStore } from '@/lib/object-store';
+import { executeCatalog } from '@/lib/datasets';
+import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { POST } from '@/app/api/artifacts/[id]/graphql/route';
@@ -94,6 +96,18 @@ describe('the statement budget', () => {
       console.info('[budget] dataset graphql %s door, %s: 1 root=%d statements, 2 roots=%d', door, who, one.count, two.count);
       expect(two.count, two.sql.join('\n')).toBe(one.count);
     });
+
+    // Object keys are content hashes, so a key's row count never changes: a warm request never loads rows to count
+    // them, and the engine answers from the database it prepared for the object's key (lib/datasets executeCatalog).
+    it.each(['owner', 'viewer'] as const)('loads no stored object on the %s\'s warm request', async (who) => {
+      const { token } = world()[who];
+      await gql(world(), door, token, TWO);
+      const spy = vi.spyOn(objectStore(), 'get');
+      try {
+        expect((await gql(world(), door, token, TWO)).errors).toBeUndefined();
+        expect(spy).not.toHaveBeenCalled();
+      } finally { spy.mockRestore(); }
+    });
   });
 });
 
@@ -101,13 +115,14 @@ describe.each(['direct', 'page'] as const)('one authorization per request, throu
   it('fences afresh: a share revoked while the read runs withholds its rows', async () => {
     const world = await seed((viewer) => viewer);
     expect((await gql(world, door, world.viewer.token, ONE)).data?.staff).toHaveLength(3);
-    const store = objectStore(), get = store.get.bind(store);
     let revoked = false;
-    // The read's first object load: the owner revokes the viewer's share after the request was authorized.
-    const spy = vi.spyOn(store, 'get').mockImplementation(async (key: string) => {
+    // The read's first engine statement: the owner revokes the viewer's share after the request was authorized.
+    const revoking: typeof executeCatalog = async (...args) => {
       if (!revoked) { revoked = true; await (await getDb()).query('DELETE FROM artifact_shares WHERE artifact_id=$1', [world.dataset]); }
-      return get(key);
-    });
+      overrideCatalogExecutor(undefined);
+      try { return await executeCatalog(...args); } finally { overrideCatalogExecutor(revoking); }
+    };
+    overrideCatalogExecutor(revoking);
     try {
       // Directly the fence refuses the request (the uniform answer); a page re-runs a raced read on the new head,
       // where the viewer no longer reads the dataset. Either way no row leaves.
@@ -116,7 +131,7 @@ describe.each(['direct', 'page'] as const)('one authorization per request, throu
       const body = await response.text();
       expect(body).not.toMatch(/"n\d+"/);
       expect((JSON.parse(body) as Reply).data?.staff ?? null).toBeNull();
-    } finally { spy.mockRestore(); }
+    } finally { overrideCatalogExecutor(undefined); }
     expect(revoked).toBe(true);
   });
 

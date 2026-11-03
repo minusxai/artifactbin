@@ -273,3 +273,21 @@ production Postgres round trips weigh more per statement. With the engine's prep
 remains is the snapshot: it parses each stored object to count its rows and derives every row's ID. Through a
 page the same reads cost 14 / 32 statements (owner / viewer), down from 20 / 64; the rest of a page request
 reads the page itself.
+
+### Row counts remembered by object key, 2026-11-04
+
+Before is `58bf498d5` (main, one authorization per request), after is this change; same session, same
+machine. Each request numbered every table's rows by parsing its stored object for the count; the count is now
+remembered by object key (lib/datasets `storedRowCount`), which is safe because keys are content hashes. A warm
+request loads no stored object at all. Statements are unchanged (8 owner, 14 viewer). Times in ms.
+
+| caller | query | p50 before → after | p95 before → after |
+|---|---|---|---|
+| owner | list (100 rows) | 37 → 30 | 40 → 35 |
+| owner | 2 roots (list + count) | 36 → 30 | 39 → 30 |
+| owner | count + sum + nodes | 32 → 26 | 35 → 31 |
+| viewer | list (100 rows) | 32 → 24 | 33 → 25 |
+| viewer | 2 roots (list + count) | 31 → 24 | 32 → 28 |
+| viewer | count + sum + nodes | 29 → 24 | 32 → 26 |
+
+What remains per request is mostly deriving every row's ID (one digest per row when no IDs are stored).
