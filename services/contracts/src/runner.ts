@@ -122,10 +122,6 @@ export interface RunSnapshot {
 }
 
 export interface RunnerService {
-  capabilities?(): Promise<RunnerCapabilities>;
-  terminal?(input: RunLookup): Promise<RunnerTerminal>;
-  write?(input: RunLookup & { text: string }): Promise<void>;
-  checkpoint?(input: RunLookup & {reference: string}): Promise<RunnerJson>;
   /** Returns after durable admission, not program completion. Runner generates runId. */
   start(input: RunStart): Promise<{ runId: string }>;
   /**
@@ -139,11 +135,3 @@ export interface RunnerService {
   cancel(input: RunLookup): Promise<void>;
 }
 
-export interface RunnerCapabilities {
-  version: 1; managedProcesses: boolean; persistence: boolean; ssh: boolean;
-  defaults: { vcpu: number; memoryMiB: number; ttlSeconds?: number };
-}
-export interface RunnerTerminal {
-  snapshot: string; seq?: number; status?: string;
-  ssh?: { hostname?: string; host?: string; port?: number; username?: string; hostKey?: string; command?: string } | null;
-}

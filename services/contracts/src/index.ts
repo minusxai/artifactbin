@@ -44,7 +44,7 @@ export * from './mutation-operations';
 
 export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunWait, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
 
-export type {RunnerCapabilities,RunnerTerminal,ResolverFetchReceipt} from './runner';
+export type {ResolverFetchReceipt} from './runner';
 export {RESOLVER_LIMITS} from './runner';
 export * from './preview-connect';
 
