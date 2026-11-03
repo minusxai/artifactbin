@@ -56,10 +56,10 @@ try {
     check(text.includes("—"), "catalog renders missing cell distinctly");
     check((await page.getByLabel("Dataset summary").textContent()).includes("3 rows"), "catalog summary reports real row count");
     check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "catalog fits phone width");
-    await put(owner, datasetPageHtml(ds.id, { writable: false }));
+    await put(owner, datasetPageHtml(ds.id, { writable: false, columns: ["month", "revenue", "zip", "note"] }));
     await page.goto(`${BASE}/a/${owner.id}`, { waitUntil: "domcontentloaded" });
     let frame = await framed(page);
-    check(await frame.locator("#total").textContent() === "rows: 3", "Apollo namespace reads CSV rows");
+    check(await frame.locator("#total").textContent() === "rows: 3", "generated dataset roots read CSV rows");
     const cells = await frame.locator("tbody tr").filter({ hasText: "2026-02" }).locator("td").allTextContents();
     check(cells.includes("09876") && cells.includes("NULL"), "GraphQL preserves typed null and lexical identifier");
     check((await frame.locator("tbody tr").filter({ hasText: "2026-03" }).locator("td").allTextContents()).includes(""), "quoted empty string remains different from typed null");
@@ -67,17 +67,16 @@ try {
     check(bars.length === 3 && bars.find((b) => b.value === 190)?.height === 180 && bars.find((b) => b.value === 120)?.height > 0, "uploaded numeric values render proportional SVG marks rather than table fallback");
     check((await frame.locator("#chart text").textContent()).includes("190"), "chart labels its quantitative maximum");
     const large = await create(owner, { dataset: Array.from({ length: 205 }, (_, i) => ({ item: `Task ${i + 1}`, amount: i + 1 })) });
-    await put(owner, datasetPageHtml(large.id, { writable: false }));
+    await put(owner, datasetPageHtml(large.id, { writable: false, columns: ["item", "amount"] }));
     await page.frameLocator("iframe[data-mx-document-frame]").locator("#total").filter({ hasText: "rows: 205" }).waitFor();
     frame = await framed(page);
-    check(await frame.locator("tbody tr").count() === 205, "native page follows every GraphQL cursor beyond 100 rows");
-    check(await frame.locator("#source").textContent() === "Complete: 205", "complete count is distinguished from a stored sample");
+    check(await frame.locator("tbody tr").count() === 205, "native page reads every page of 100 rows beyond the first");
     check(await frame.locator("tbody tr").filter({ hasText: "Task 205" }).count() === 1, "last remote page reaches the UI");
   });
   await lane(check, "private page and dataset authority").run(async () => {
     const owner = await startDocument(BASE);
     const ds = await create(owner, { dataset: [{ secret: "Owner-only row" }], visibility: "private" });
-    await put(owner, datasetPageHtml(ds.id, { writable: false }));
+    await put(owner, datasetPageHtml(ds.id, { writable: false, columns: ["secret"] }));
     await sharing(owner, owner.id, { visibility: "private" });
     const stranger = await connectAgent(BASE);
     const anonymous = await fetch(`${BASE}/api/artifacts/${owner.id}`, { headers: { Authorization: `Bearer ${stranger.token}` } });

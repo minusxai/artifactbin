@@ -302,7 +302,7 @@ export function createClient(options: ClientOptions): AfClient {
   const datasetNames=options.datasets;
   /**
    * A generated-API dataset link's roots are top-level remote fields: its name, `<name>_…` and
-   * `insert_|update_|delete_<name>…` (a multi-table dataset's are `<name>_<table>…`). Legacy links stay namespaces.
+   * `insert_|update_|delete_<name>…` (a multi-table dataset's are `<name>_<table>…`).
    */
   const isDatasetRoot = (field: FieldNode) => {
     const names = typeof datasetNames === "function" ? datasetNames() : datasetNames ?? [];

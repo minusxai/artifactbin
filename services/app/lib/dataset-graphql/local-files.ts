@@ -5,8 +5,7 @@ import type {DatasetColumn} from '@artifactbin/contracts';
 import {inferColumns} from '@artifactbin/utils/shape';
 import {parseCsv} from '../data-ingest/csv';
 import {coerceRows} from '../data-ingest/coerce';
-import {createLocalDataset} from './local';
-import type {LocalDataset,LocalDatasetTable} from './local-types';
+import type {LocalDatasetTable} from './local-types';
 export interface LocalDatasetFileOptions {
  /** Trusted reader relative to root; owns descriptor confinement and byte bounds. */
  readText?:(relativePath:string)=>Promise<string>;
@@ -25,11 +24,7 @@ async function boundedText(target:string):Promise<string>{
  }finally{await handle.close();}
 }
 export interface LocalDatasetFile {path:string;table:string;schema?:string;columns?:DatasetColumn[]}
-/** Only explicitly declared files under root are admitted; symlinks cannot escape root. */
-export async function loadLocalDataset(root:string,namespace:string,files:readonly LocalDatasetFile[],options:LocalDatasetFileOptions={}):Promise<LocalDataset>{
- return createLocalDataset(namespace,await loadLocalTables(root,files,options));
-}
-/** The declared files' tables (rows coerced to their columns), for either local engine. */
+/** The declared files' tables (rows coerced to their columns). Only explicitly declared files under root are admitted; symlinks cannot escape root. */
 export async function loadLocalTables(root:string,files:readonly LocalDatasetFile[],options:LocalDatasetFileOptions={}):Promise<LocalDatasetTable[]>{
  if(files.length>64)throw new Error('local_dataset_too_many_files');
  const base=await realpath(root),tables:LocalDatasetTable[]=[];let totalBytes=0;

@@ -1,4 +1,3 @@
-// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
@@ -34,30 +33,31 @@ describe('retired draft compiler boundary', () => {
 describe('native saved-page dataset queries',()=>{
  async function fixture(visibility='public'){
   const owner=await mintToken('native-query');const ds=await create(owner.token,{dataset:ROWS,visibility});
-  const page=await create(owner.token,{html:`<html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${ds.id}"></head><body>Sales</body></html>`,visibility});
+  const page=await create(owner.token,{html:`<html><head><link rel="af-dataset" data-af-name="sales" href="ref:${ds.id}"></head><body>Sales</body></html>`,visibility});
   const call=async(query:string,variables={},token?:string)=>await(await graphql(request(`/api/artifacts/${page.id}/graphql`,{method:'POST',token,json:{revision:'1',query,variables}}),params({id:page.id}))).json();
-  const result=await call('{sales{schema{revision tables{id columns{id label}}}}}',{},owner.token);
-  return {owner,call,page,table:result.data.sales.schema.tables[0]};
+  return {owner,call,page};
  }
- it('discovers stable IDs, projects typed cells, and follows bounded revision-bound pages',async()=>{
-  const f=await fixture();const revenue=f.table.columns.find((c:{label:string})=>c.label==='revenue').id;
-  const query='query($table:ID!,$columns:[ID!],$after:String){sales{rows(tableId:$table,columnIds:$columns,first:2,after:$after){revision rows{id cells{columnId value{type number}}} pageInfo{hasNextPage endCursor}}}}';
-  const first=await f.call(query,{table:f.table.id,columns:[revenue]});expect(first.errors).toBeUndefined();expect(first.data.sales.rows.rows).toHaveLength(2);expect(first.data.sales.rows.pageInfo.hasNextPage).toBe(true);
-  const next=await f.call(query,{table:f.table.id,columns:[revenue],after:first.data.sales.rows.pageInfo.endCursor});expect(next.data.sales.rows.rows).toHaveLength(1);expect(next.data.sales.rows.pageInfo.hasNextPage).toBe(false);
-  expect(first.data.sales.rows.rows[0].cells).toEqual([{columnId:revenue,value:{type:'NUMBER',number:expect.any(Number)}}]);
-  expect([...first.data.sales.rows.rows,...next.data.sales.rows.rows].map(row=>row.cells[0].value.number).sort((a,b)=>a-b)).toEqual([3,837,1200]);
+ it('projects typed columns and pages with limit and offset under a stable order',async()=>{
+  const f=await fixture();
+  const query='query($offset:Int){sales(order_by:{revenue:asc},limit:2,offset:$offset){_id revenue}}';
+  const first=await f.call(query,{offset:0});expect(first.errors).toBeUndefined();expect(first.data.sales).toHaveLength(2);
+  const next=await f.call(query,{offset:2});expect(next.data.sales).toHaveLength(1);
+  expect(Object.keys(first.data.sales[0]).sort()).toEqual(['_id','revenue']);
+  expect([...first.data.sales,...next.data.sales].map((row:{revenue:number})=>row.revenue)).toEqual([3,837,1200]);
  });
- it('runs parameterized filters and whole-source aggregates through the constant schema',async()=>{
-  const f=await fixture();const revenue=f.table.columns.find((c:{label:string})=>c.label==='revenue').id;
-  const result=await f.call('query($table:ID!,$revenue:ID!){sales{query(tableId:$table,first:1,filters:[{columnId:$revenue,operator:GTE,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:10}}],aggregates:[{id:"total",operation:SUM,columnId:$revenue}]){rows{cells{value{number}}}}}}',{table:f.table.id,revenue});
-  expect(result.errors).toBeUndefined();expect(result.data.sales.query.rows[0].cells[0].value.number).toBe(2037);
+ it('runs variable filters and whole-source aggregates through the generated schema',async()=>{
+  const f=await fixture();
+  const result=await f.call('query($minimum:Float){sales_aggregate(where:{revenue:{_gte:$minimum}}){aggregate{sum{revenue}}}}',{minimum:10});
+  expect(result.errors).toBeUndefined();expect(result.data.sales_aggregate.aggregate.sum.revenue).toBe(2037);
  });
  it('keeps private page and dataset reads behind the original reader identity',async()=>{
-  const f=await fixture('private');expect(await f.call('{sales{schema{revision}}}')).toEqual({error:'page_operation_unavailable'});
-  expect((await f.call('{sales{schema{revision}}}',{},f.owner.token)).data.sales.schema.revision).toBe('1');
+  const f=await fixture('private');expect(await f.call('{sales{region}}')).toEqual({error:'page_operation_unavailable'});
+  expect((await f.call('{sales{region}}',{},f.owner.token)).data.sales).toHaveLength(3);
  });
- it('rejects undeclared namespaces and invalid page bounds before returning rows',async()=>{
-  const f=await fixture();expect((await f.call('{guessed{schema{revision}}}')).errors).toBeDefined();
-  expect((await f.call('query($t:ID!){sales{rows(tableId:$t,first:101){rows{id}}}}',{t:f.table.id})).errors).toBeDefined();
+ it('rejects undeclared roots and invalid page bounds before returning rows',async()=>{
+  const f=await fixture();expect((await f.call('{guessed{region}}')).errors).toBeDefined();
+  const negative=await f.call('{sales(limit:-1){_id}}');expect(negative.errors).toBeDefined();expect(negative.data?.sales??null).toBeNull();
+  // A limit above the 1000-row cap is cut to it, never an unbounded read.
+  expect((await f.call('{sales(limit:5000){_id}}')).data.sales).toHaveLength(3);
  });
 });

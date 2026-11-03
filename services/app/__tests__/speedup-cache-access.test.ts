@@ -1,4 +1,3 @@
-// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 import { expect, it, vi } from 'vitest';
 import {objectStore} from '@/lib/object-store';
 import {afterEach} from 'vitest';
@@ -24,10 +23,9 @@ async function fixture(twoQueries=false){
   const user=await createUser({email:'mxmx_test_speedup_access@example.com'}),token=await mintToken('source-owner',user.id);
   const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',dataset:[{n:314159265}]}}));
   expect(ds.status,await ds.clone().text()).toBe(201);const dataset=(await ds.json()).id;
-  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="data" href="ref:${dataset}"></head><body><p>Numbers</p></body></html>`}}));
+  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset}"></head><body><p>Numbers</p></body></html>`}}));
   expect(made.status,await made.clone().text()).toBe(201);const id=(await made.json()).id;
-  const schema=await queryPrivateDocument(request(`/api/artifacts/${id}/graphql`,{method:'POST',token:token.token,json:{revision:"1",query:'{data{schema{tables{id}}}}'}}),{params:Promise.resolve({id})});const schemaBody=await schema.json();expect(schemaBody.errors,JSON.stringify(schemaBody)).toBeUndefined();const table=schemaBody.data.data.schema.tables[0].id;
-  queries.set(id,`{data{a:rows(tableId:"${table}",first:1){rows{cells{value{number}}}}${twoQueries?` b:rows(tableId:"${table}",first:2){rows{cells{value{number}}}}`:''}}}`);
+  queries.set(id,`{a:data(limit:1){n}${twoQueries?' b:data(limit:2){n}':''}}`);
 
   const store=objectStore(),get=store.get.bind(store);const spy=vi.spyOn(store,'get').mockImplementation(async key=>sourceRead.hold?Buffer.from(JSON.stringify((await sourceRead.hold()).rows)):get(key));restore=()=>spy.mockRestore();
   return {id,dataset,user,token};

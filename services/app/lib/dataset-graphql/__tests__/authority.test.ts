@@ -3,41 +3,42 @@ import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as readPage,PUT as replacePage} from '@/app/api/artifacts/[id]/route';
 import { requestOrSessionActor } from '@/lib/authentication';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import {getVersionFor,updateSharingFor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
-import {createRetainedDatasetGraphql} from '../retained';
+import {linkedGql,errorCode} from '@/__tests__/linked-datasets';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '../index';
 useAppHarness();
-const signal=new AbortController().signal,anonymous=identityForUser(null);
+const anonymous=identityForUser(null);
+const READ='{ data(limit: 1) { _id amount } }';
 async function fixture(visibility:'public'|'private'){
  const owner=await mintAccountToken('pinned_dataset_fixture'),req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{amount:1}],access:'readwrite',visibility}}),actor=await requestOrSessionActor(req),response=await create(req);
- expect(response.status).toBe(201);const {id}=await response.json(),live={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const},pinned={...live,mode:'pinned' as const,revision:'1'},api=createRetainedDatasetGraphql(),schema=await api.schema(actor,live,signal),table=schema.tables[0]!;
+ expect(response.status).toBe(201);const {id}=await response.json(),live={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const},pinned={...live,mode:'pinned' as const,revision:'1'};
+ const read=async(reader:AccessActor,link:typeof live|typeof pinned)=>{const reply=await linkedGql(reader,link,READ);if(reply.errors)throw Error(errorCode(reply)??'');return reply.data!.data as Array<{_id:string;amount:number}>;};
  const advance=async()=>{
-  const read=await api.read(actor,live,{tableId:table.id,first:1},signal);
-  expect((await api.write(actor,live,{tableId:table.id,expectedRevision:read.revision,requestId:'advance-pinned-dataset',changes:[{kind:'UPDATE',rowId:read.rows[0]!.id,cells:[{columnId:table.columns[0]!.id,value:{type:'NUMBER',value:2}}]}]},signal)).outcome).toBe('committed');
+  expect((await linkedGql(actor,live,'mutation { update_data(where: {}, _set: {amount: 2}) { affected_rows } }')).data).toEqual({update_data:{affected_rows:1}});
  };
- return {id,actor,owner,live,pinned,api,table,advance};
+ return {id,actor,owner,live,pinned,read,advance};
 }
 it('keeps an explicitly pinned public dataset readable after its head advances and revokes it with current access',async()=>{
- const f=await fixture('public'),before=await f.api.read(anonymous,f.pinned,{tableId:f.table.id,first:1},signal);
+ const f=await fixture('public'),before=await f.read(anonymous,f.pinned);
  await f.advance();
  await expect(authorizeDatasetBinding(anonymous,f.pinned)).resolves.toBeUndefined();
- expect((await f.api.read(anonymous,f.pinned,{tableId:f.table.id,first:1},signal)).rows).toEqual(before.rows);
- expect((await f.api.read(anonymous,f.live,{tableId:f.table.id,first:1},signal)).rows[0]!.cells[0]!.value.value).toBe(2);
+ expect(await f.read(anonymous,f.pinned)).toEqual(before);
+ expect((await f.read(anonymous,f.live))[0]!.amount).toBe(2);
  expect(await getVersionFor(anonymous,f.id,1)).toBeNull();
  await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
- await expect(f.api.read(anonymous,f.pinned,{tableId:f.table.id,first:1},signal)).rejects.toThrow('dataset_not_found');
+ await expect(f.read(anonymous,f.pinned)).rejects.toThrow('dataset_not_found');
 });
 it('keeps a private viewer pin readable after a head update without granting editor history access',async()=>{
  const f=await fixture('private'),user=await createUser({email:'dataset-viewer@example.test'}),viewer=identityForUser(user.id);
  await updateSharingFor(f.actor,f.id,{shares:[{email:user.email,role:'viewer'}]});
- const before=await f.api.read(viewer,f.pinned,{tableId:f.table.id,first:1},signal);await f.advance();
- expect((await f.api.read(viewer,f.pinned,{tableId:f.table.id,first:1},signal)).rows).toEqual(before.rows);
+ const before=await f.read(viewer,f.pinned);await f.advance();
+ expect(await f.read(viewer,f.pinned)).toEqual(before);
  expect(await getVersionFor(viewer,f.id,1)).toBeNull();
  await updateSharingFor(f.actor,f.id,{shares:[]});
  await expect(authorizeDatasetBinding(viewer,f.pinned)).rejects.toThrow('dataset_not_found');
- await expect(f.api.read(viewer,f.pinned,{tableId:f.table.id,first:1},signal)).rejects.toThrow('dataset_not_found');
+ await expect(f.read(viewer,f.pinned)).rejects.toThrow('dataset_not_found');
 });
 
 it('rechecks current readership when access changes while an archive is loading',async()=>{
@@ -62,7 +63,8 @@ it.each(['postgres','sql'])('rejects an authorized unsupported %s binding at pub
   expect(await response.json()).toMatchObject({error:'dataset_stable_identity_unavailable',hint:expect.stringContaining('stored CSV/JSON')});
  }
  expect(Number((await db.query<{count:string}>("SELECT count(*) FROM artifacts WHERE format='html'")).rows[0]!.count)).toBe(0);
- await expect(f.api.schema(f.actor,f.live,signal)).rejects.toThrow('dataset_stable_identity_unavailable');
+ // An unsupported dataset mounts nothing, as if unlinked.
+ await expect(f.read(f.actor,f.live)).rejects.toThrow('dataset_not_found');
  // A caller without dataset readership gets no connector-type information.
  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
  const outsider=await mintAccountToken('unsupported-dataset-reader');

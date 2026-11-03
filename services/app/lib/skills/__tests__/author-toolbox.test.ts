@@ -494,11 +494,3 @@ it('publish --name sends a new dataset\'s GraphQL root in the create body, and o
   expect(seen).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('names the dataset links that publish puts on the legacy API, as the server decides',async()=>{
- const {legacyDatasetLinks}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
- const link=(name:string,api='')=>`<link rel="af-dataset" data-af-name="${name}" href="ref:abcdef"${api}>`;
- expect(legacyDatasetLinks(link('orders')+'<script>gql`{orders(limit:5){_id}}`</script>')).toEqual([]);
- expect(legacyDatasetLinks(link('orders')+link('old',' data-af-api="legacy"'))).toEqual(['old']);
- expect(legacyDatasetLinks(link('orders')+'<script>q(`{orders{rows(tableId:$t){rows{id}}}}`)</script>')).toEqual(['orders']);
- expect(legacyDatasetLinks(link('orders',' data-af-api="hasura"')+'<script>q(`{x{schema{revision}}}`)</script>')).toEqual([]);
-});

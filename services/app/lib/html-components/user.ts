@@ -7,13 +7,7 @@
  * Events: af-user-state (bubbles) with event.detail.status when the status changes.
  * Examples:
  *   element.person={id:"u1",name:"Ada",handle:"ada",image:null,profileHref:"/u/ada"};
- *   Resolve a User ID from a linked dataset's typed user column by querying that namespace:
- *   const {data}=await client.query({query:gql`query($ids:[ID!]!){bookings{
- *     people(ids:$ids){id name handle image}}}`,variables:{ids:[userId]}});
- *   element.person=data.bookings.people.find(p=>p.id===userId)??null;
- * Gotchas: only IDs present in that dataset's typed user columns resolve (at most 100 per
- *   request; dataset read permission is checked before and after). Offline preview cannot
- *   resolve account cards. Keep an absent card null; never invent a name from the ID.
+ * Gotchas: keep an absent card null; never invent a name from a User ID.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
 import { personFaceBackground, personInitial } from '../ui-runtime/person-face';

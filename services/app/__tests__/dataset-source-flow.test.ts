@@ -1,4 +1,3 @@
-// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Native dataset namespaces replace JSX Import/Query chains; direct catalog SQL remains separate. */
 import { expect, it } from "vitest";
 import { request, useAppHarness, mintAccountToken } from "./harness";
@@ -25,7 +24,7 @@ async function fixture(dataset: unknown) {
   });
   const page = await publish({
     html: nativeHtml(
-      `<link rel="af-dataset" data-af-api="legacy" data-af-name="data" href="ref:${id}"><h1>Dataset</h1>`,
+      `<link rel="af-dataset" data-af-name="data" href="ref:${id}"><h1>Dataset</h1>`,
     ),
     visibility: "public",
   });
@@ -44,49 +43,24 @@ async function fixture(dataset: unknown) {
     expect(response.status, await response.clone().text()).toBe(200);
     const body = await response.json();
     expect(body.errors).toBeUndefined();
-    return body.data.data;
+    return body.data;
   };
-  const schema = await run(
-    "{data{schema{tables{id label columns{id label}}}}}",
-  );
-  return {
-    id,
-    page,
-    owner,
-    publish,
-    run,
-    tables: schema.schema.tables as {
-      id: string;
-      label: string;
-      columns: { id: string; label: string }[];
-    }[],
-  };
+  return { id, page, owner, publish, run };
 }
 it("aggregates complete stored inputs beyond display windows and bounds paginated output", async () => {
   const f = await fixture(
-      Array.from({ length: 10005 }, (_, i) => ({ n: i + 1 })),
-    ),
-    table = f.tables[0]!,
-    column = table.columns[0]!;
+    Array.from({ length: 10005 }, (_, i) => ({ n: i + 1 })),
+  );
   const result = await f.run(
-    'query($table:ID!,$column:ID!){data{query(tableId:$table,first:1,aggregates:[{id:"count",operation:COUNT},{id:"total",operation:SUM,columnId:$column}]){source{truncated totalRows storedRows} rows{cells{value{number}}}} rows(tableId:$table,first:2){rows{id} pageInfo{hasNextPage endCursor}}}}',
-    { table: table.id, column: column.id },
+    "{data_aggregate{aggregate{count sum{n}}} data(limit:2){_id}}",
   );
-  expect(
-    result.query.rows[0].cells.map(
-      (c: { value: { number: number } }) => c.value.number,
-    ),
-  ).toEqual([10005, 50055015]);
-  expect(result.query).toMatchObject({
-    source: { truncated: false, totalRows: 10005 },
-  });
-  expect(result.rows.rows).toHaveLength(2);
-  expect(result.rows.pageInfo.hasNextPage).toBe(true);
+  expect(result.data_aggregate.aggregate).toEqual({ count: 10005, sum: { n: 50055015 } });
+  expect(result.data).toHaveLength(2);
   const filtered = await f.run(
-    'query($table:ID!,$column:ID!){data{query(tableId:$table,first:1,filters:[{columnId:$column,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:10000}}],aggregates:[{id:"tail",operation:SUM,columnId:$column}]){rows{cells{value{number}}}}}}',
-    { table: table.id, column: column.id },
+    "query($minimum:Float){data_aggregate(where:{n:{_gt:$minimum}}){aggregate{sum{n}}}}",
+    { minimum: 10000 },
   );
-  expect(filtered.query.rows[0].cells[0].value.number).toBe(50015);
+  expect(filtered.data_aggregate.aggregate.sum.n).toBe(50015);
 });
 it("discovers multi-schema tables and changes only the explicitly selected stable table", async () => {
   const f = await fixture({
@@ -97,23 +71,14 @@ it("discovers multi-schema tables and changes only the explicitly selected stabl
       { schema: "support", name: "tickets", rows: [{ total: 10 }] },
     ],
   });
-  expect(f.tables.map((t) => t.label).sort()).toEqual(["orders", "tickets"]);
-  const table = f.tables.find((t) => t.label === "tickets")!,
-    column = table.columns[0]!;
-  const read = await f.run(
-    "query($table:ID!){data{rows(tableId:$table,first:2){revision rows{id}}}}",
-    { table: table.id },
-  );
+  // A multi-table link's roots are <link>_<table>.
+  const read = await f.run("{data_orders{total} data_tickets{_id}}");
+  expect(read.data_orders).toHaveLength(2);
   const write = await f.run(
-    'mutation($table:ID!,$column:ID!,$row:ID!,$revision:String!){data{writeRows(tableId:$table,expectedRevision:$revision,requestId:"table-isolation",changes:[{kind:UPDATE,rowId:$row,cells:[{columnId:$column,value:{type:NUMBER,number:11}}]}]){outcome}}}',
-    {
-      table: table.id,
-      column: column.id,
-      row: read.rows.rows[0].id,
-      revision: read.rows.revision,
-    },
+    "mutation($row:ID!){update_data_tickets_by_pk(pk_columns:{_id:$row},_set:{total:11}){total}}",
+    { row: read.data_tickets[0]._id },
   );
-  expect(write.writeRows.outcome).toBe("committed");
+  expect(write.update_data_tickets_by_pk).toEqual({ total: 11 });
   const response = await tableQuery(
     request(`/a/${f.id}/tables`, {
       method: "POST",
@@ -145,7 +110,7 @@ it("does not admit folder projections as dataset namespaces", async () => {
       token: f.owner.token,
       json: {
         html: nativeHtml(
-          `<link rel="af-dataset" data-af-api="legacy" data-af-name="children" href="ref:${folder}"><p>Folder</p>`,
+          `<link rel="af-dataset" data-af-name="children" href="ref:${folder}"><p>Folder</p>`,
         ),
       },
     }),

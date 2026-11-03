@@ -41,8 +41,8 @@ const outcome = async (frame) => {
   await frame.locator("#receipt").filter({ hasText: /./ }).waitFor();
   return frame.locator("#receipt").textContent();
 };
-const imageHtml = (datasetId, initial, tall = false) => pageHtml("Row images", `<link rel="af-dataset" data-af-name="data" data-af-api="legacy" href="ref:${datasetId}"><h1>Row images</h1><label>Rows <input id="take" type="number" value="2"></label><label>Reverse <input id="reverse" type="checkbox"></label><label>Selected book <input id="selected" value="0"></label><section aria-label="Selected"></section><section aria-label="Gallery">${initial.map((row) => `<article style="min-height:${tall ? 384 : 90}px"><img src="${row.image}" alt="${row.title}" loading="lazy" width="48" height="64"><h2>${row.title}</h2></article>`).join("")}</section><output id="error"></output>`, `const readDataset=${readDataset.toString()};const query=async(text,variables)=>{const result=await client.query({query:gql(Object.assign([text],{raw:[text]})),variables});if(result.errors?.length)throw Error(result.errors.map(error=>error.message).join('; '));return result.data};
-const loaded=await readDataset(query);const cell=value=>value?.[{STRING:'string',NUMBER:'number',BOOLEAN:'boolean',JSON:'json'}[value?.type]];const rows=loaded.rows.map(row=>Object.fromEntries(loaded.table.columns.map(column=>[column.label,cell(row.cells.find(c=>c.columnId===column.id)?.value)]))).sort((a,b)=>Number(a.id)-Number(b.id));
+const imageHtml = (datasetId, initial, tall = false) => pageHtml("Row images", `<link rel="af-dataset" data-af-name="data" href="ref:${datasetId}"><h1>Row images</h1><label>Rows <input id="take" type="number" value="2"></label><label>Reverse <input id="reverse" type="checkbox"></label><label>Selected book <input id="selected" value="0"></label><section aria-label="Selected"></section><section aria-label="Gallery">${initial.map((row) => `<article style="min-height:${tall ? 384 : 90}px"><img src="${row.image}" alt="${row.title}" loading="lazy" width="48" height="64"><h2>${row.title}</h2></article>`).join("")}</section><output id="error"></output>`, `const readDataset=${readDataset.toString()};const query=async(text,variables)=>{const result=await client.query({query:gql(Object.assign([text],{raw:[text]})),variables});if(result.errors?.length)throw Error(result.errors.map(error=>error.message).join('; '));return result.data};
+const loaded=await readDataset(query,['id','title','image']);const rows=loaded.rows.map(({_id,...row})=>row).sort((a,b)=>Number(a.id)-Number(b.id));
 const state=gql\`{take reverse selected}\`;function article(row){const node=document.createElement('article');node.style.minHeight='${tall ? 384 : 90}px';node.dataset.afId='book-'+row.id;const image=document.createElement('img');image.src=row.image;image.alt=row.title;image.loading='lazy';image.width=48;image.height=64;const title=document.createElement('h2');title.textContent=row.title;node.append(image,title);return node}
 client.watchQuery({query:state}).subscribe(({data})=>{document.querySelector('#take').value=data.take;document.querySelector('#reverse').checked=data.reverse;document.querySelector('#selected').value=data.selected;const ordered=data.reverse?[...rows].reverse():rows;document.querySelector('[aria-label="Gallery"]').replaceChildren(...ordered.slice(0,data.take).map(article));const selected=rows.find(row=>String(row.id)===data.selected);document.querySelector('[aria-label="Selected"]').replaceChildren(...(selected?[article(selected)]:[]))});
 for(const id of ['take','reverse','selected'])document.querySelector('#'+id).oninput=event=>client.updateQuery({query:state},data=>({...data,[id]:id==='take'?Number(event.target.value):id==='reverse'?event.target.checked:event.target.value}));document.documentElement.dataset.afReady='yes';`, { take: tall ? 32 : 2, reverse: false, selected: "0" });
@@ -53,7 +53,7 @@ try {
     await api(owner.token, `/api/artifacts/${owner.id}`, { html: editableDatasetPageHtml(dataset.id) }, "PUT");
     const a = await open(owner.id, owner);
     const b = await open(owner.id, owner);
-    check(await a.frame.locator("tbody tr").count() === 500, "500 rows load through complete GraphQL pagination");
+    check(await a.frame.locator("tbody tr").count() === 500, "500 rows load through limit/offset pages of the generated API");
     const bMutations = [];
     b.page.on("request", (request) => {
       if (request.method() === "POST" && request.url().endsWith("/graphql")) {
@@ -68,7 +68,7 @@ try {
     await a.frame.getByRole("button", { name: "Save 1", exact: true }).click();
     check(await outcome(a.frame) === "committed", "owner cell edit commits real dataset row");
     await b.frame.getByRole("button", { name: "Save 1", exact: true }).click();
-    check(await outcome(b.frame) === "rejected", "stale reader update reports revision conflict");
+    check(await outcome(b.frame) === "rejected", "stale reader update (conditional on the values it edited) reports a conflict");
     check(await b.frame.getByLabel("item 1", { exact: true }).inputValue() === "My pending draft", "conflict preserves viewer intent");
     check(bMutations.length === 1, "conflicting mutation is sent once without automatic retry");
     await b.page.reload({ waitUntil: "domcontentloaded" });

@@ -248,7 +248,7 @@ export function composePageSchema(
 /**
  * Mount the generated dataset sources flat: each root on Query/Mutation, nullable (one failure stays local), with
  * `@dataset`; each type once under its own name (the shared prelude repeats identically across links). A root
- * equal to a backend or legacy link's name, or another link's root, refuses the page: `graphql_root_collision`.
+ * equal to a resolver link's name, or another link's root, refuses the page: `graphql_root_collision`.
  */
 function mountDatasets(
   sources: readonly NamespaceSource[],

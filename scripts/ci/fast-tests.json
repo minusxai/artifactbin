@@ -20,7 +20,6 @@
   "services/app/lib/dataflow/__tests__/cell-value.test.ts",
   "services/app/lib/dataflow/__tests__/number-aggregation.test.ts",
   "services/app/lib/dataflow/__tests__/number-format.test.ts",
-  "services/app/lib/dataset-graphql/__tests__/local.test.ts",
   "services/app/lib/dataset-graphql/__tests__/model.test.ts",
   "services/app/lib/datasets/__tests__/catalog-metadata.test.ts",
   "services/app/lib/datasets/__tests__/dataset-usage.test.ts",

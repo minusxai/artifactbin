@@ -5,7 +5,7 @@ import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQue
 import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations';
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
-import { canonicalizeHtmlPage, htmlBackendNames, resolveDatasetApis, type HtmlIdentityLedger } from '../html-page';
+import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
@@ -252,9 +252,9 @@ async function insertArtifact(
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
     const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
-    input={...input,meta:{...input.meta,htmlLinks:[...links,...resolveDatasetApis(input.htmlDatasets??[])]}};
+    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
   }
-  if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:resolveDatasetApis(input.htmlDatasets)}};
+  if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
   const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -677,7 +677,7 @@ async function replaceScoped(
       const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id);
       if(carried instanceof Response)return carried;
       rebinds=carried.rebinds;
-      input={...input,meta:{...input.meta,htmlLinks:[...links.map(link=>carried.links.find(next=>next.name===link.name)??link),...resolveDatasetApis(input.htmlDatasets??[],(current.meta.htmlLinks??[]) as HtmlPageLink[])]}};
+      input={...input,meta:{...input.meta,htmlLinks:[...links.map(link=>carried.links.find(next=>next.name===link.name)??link),...(input.htmlDatasets??[])]}};
     }
     input=retainUserScope(input,current);
     /*

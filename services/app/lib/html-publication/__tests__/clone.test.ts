@@ -9,9 +9,10 @@ it('copies an explicit immutable code allowlist without credentials, owner autho
 it('retains dataset bindings only after checking the receiving principal and preserves pinning',async()=>{
  const binding={kind:'dataset' as const,name:'data',datasetId:'dataset',mode:'pinned' as const,revision:'2'};
  const authorizeDataset=vi.fn(async()=>{});
- // A fork keeps the source link's API: a stored link without one is legacy, and the copy records it.
- expect((await planHtmlClone(ANONYMOUS_ACTOR,'p',[binding],{backend:vi.fn(),authorizeDataset})).htmlDatasets).toEqual([{...binding,api:'legacy'}]);
- expect((await planHtmlClone(ANONYMOUS_ACTOR,'p',[{...binding,api:'hasura'}],{backend:vi.fn(),authorizeDataset})).htmlDatasets).toEqual([{...binding,api:'hasura'}]);expect(authorizeDataset).toHaveBeenCalledWith(ANONYMOUS_ACTOR,binding);
+ expect((await planHtmlClone(ANONYMOUS_ACTOR,'p',[binding],{backend:vi.fn(),authorizeDataset})).htmlDatasets).toEqual([binding]);
+ // A stored link's retired keys (the old per-link api) are not copied into the fork.
+ const stored={...binding,api:'legacy'} as typeof binding;
+ expect((await planHtmlClone(ANONYMOUS_ACTOR,'p',[stored],{backend:vi.fn(),authorizeDataset})).htmlDatasets).toEqual([binding]);expect(authorizeDataset).toHaveBeenCalledWith(ANONYMOUS_ACTOR,binding);
  await expect(planHtmlClone(ANONYMOUS_ACTOR,'p',[binding],{backend:vi.fn(),authorizeDataset:async()=>{throw Error('forbidden');}})).rejects.toThrow('forbidden');
 });
 it('rejects missing and foreign backend snapshots instead of copying their authority',async()=>{

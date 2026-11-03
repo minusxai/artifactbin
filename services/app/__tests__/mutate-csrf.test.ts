@@ -1,4 +1,3 @@
-// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /**
  * Account session writes require a same-site Origin. Legacy token cookies no
  * longer authorize browser access. Bearer writes remain independent of Origin,
@@ -33,13 +32,10 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 const ROWS = [{ choice: 'ramen' }];
-const DOC=(ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="records" href="ref:${ds}" data-af-mode="live"></head><body><h1>Vote</h1></body></html>`;
-const documents=new Map<string,{datasetId:string;tableId:string;columnId:string}>();
+const DOC=(ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${ds}" data-af-mode="live"></head><body><h1>Vote</h1></body></html>`;
 async function bind(token:string,ds:string,visibility:string){
  const doc=(await create(token,{html:DOC(ds),visibility})).id;
- const schema=await nativeDatasetClient(doc).schema({token});expect(schema.response.status).toBe(200);
- const table=schema.body.data!.records!.schema.tables[0]!;
- documents.set(doc,{datasetId:ds,tableId:table.id,columnId:table.columns.find(column=>column.label==='choice')!.id});return doc;
+ expect((await nativeDatasetClient(doc).rows('records','choice',{token})).response.status).toBe(200);return doc;
 }
 
 beforeEach(async () => {
@@ -55,10 +51,8 @@ async function setup() {
   const doc=await bind(t.token,ds,'private');
   return { t, user, ds, doc };
 }
-const write=async(doc:string,auth:Parameters<typeof mutationRequest>[1])=>{
- const bound=documents.get(doc)!;const revision=String((await getArtifactById(bound.datasetId))!.version);
- return (await nativeDatasetClient(doc).write(bound.tableId,revision,[{kind:'INSERT',cells:[{columnId:bound.columnId,value:{type:'STRING',string:'tacos'}}]}],`csrf_${doc}_${revision}`,auth)).response;
-};
+const write=async(doc:string,auth:Parameters<typeof mutationRequest>[1])=>
+ (await nativeDatasetClient(doc).gql('mutation { insert_records(objects: [{choice: "tacos"}]) { affected_rows } }',{},auth)).response;
 
 describe('cross-site writes', () => {
   it('refuses one riding an ACCOUNT session, and writes nothing', async () => {
@@ -130,7 +124,10 @@ describe('cross-site writes', () => {
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({data:{records:{writeRows:{outcome:'rejected',revision:null}}},extensions:{outcomes:{'records.writeRows':'rejected'}}});
+    // Anonymous has no insert rule: the page schema has no insert root for it, so nothing runs.
+    const body = await res.json();
+    expect(body.data ?? null).toBeNull();
+    expect(body.errors?.[0]?.message).toBeTruthy();
     expect((await getArtifactById(ds))!.version).toBe(1);
   });
 });

@@ -22,7 +22,7 @@ export async function setDatasetPolicy(
   const committed = await commitDatasetPolicy(await getDb(), actor, row, policy, revision);
   return committed === null ? { conflict: true } : { revision: committed, policy };
 }
-/** How a write door reaches the dataset: false = the direct door, true = page writeRows, a document = its program, a page id = the page's generated API. */
+/** How a write door reaches the dataset: false = the direct door, true = through a page that names no page id, a document = its program, a page id = the page's generated API. */
 export type WriteDoor = boolean | GrantDocument | { pageId: string };
 const doorOptions = (declared: WriteDoor): DatasetWriteOptions =>
   typeof declared !== 'object' ? { throughPage: declared } : 'pageId' in declared ? { pageId: declared.pageId, throughPage: true } : { document: declared, throughPage: true };

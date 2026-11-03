@@ -5,9 +5,7 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
-import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
-import {createDatasetGraphql} from '@/lib/dataset-graphql';
-import {randomUUID} from 'node:crypto';
+import {linkedGql,liveLink} from '@/__tests__/linked-datasets';
 // The policy API serves the app's editor and the read-only view since the old app policy route was retired.
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
@@ -44,17 +42,17 @@ async function fixture() {
       },
     ],
   };
-  const api=createRetainedDatasetGraphql(),signal=new AbortController().signal;
-  const binding={kind:'dataset' as const,name:'data',datasetId:ds,mode:'live' as const};
-  const table=(await api.schema(actor,binding,signal)).tables[0]!;const column=table.columns.find(c=>c.label==='n')!;
+  // A write through the page's generated API: committed only when every root it names answered.
+  const link=liveLink(ds);
   const writeAs=async(caller:AccessActor,mutation='add',n=2)=>{
-    const revision=String((await getArtifactById(ds))!.version);
-    const row=(await api.read(actor,binding,{tableId:table.id,first:1},signal)).rows[0]!;
-    try{return await api.write(caller,binding,{tableId:table.id,expectedRevision:revision,requestId:randomUUID(),changes:mutation==='remove'?[{kind:'DELETE',rowId:row.id}]:[{kind:'INSERT',cells:[{columnId:column.id,value:{type:'NUMBER',value:n}}]}]},signal);}
-    catch(error){if(error instanceof Error&&error.message==='dataset_not_found')return {outcome:'rejected'};throw error;}
+    const row=((await linkedGql(actor,link,'{ data(limit: 1) { _id } }')).data!.data as Array<{_id:string}>)[0]!;
+    const reply=mutation==='remove'
+      ?await linkedGql(caller,link,'mutation($id: ID!) { delete_data_by_pk(_id: $id) { _id } }',{variables:{id:row._id},pageId:doc})
+      :await linkedGql(caller,link,'mutation($n: Float) { insert_data_one(object: {n: $n}) { _id } }',{variables:{n},pageId:doc});
+    return {outcome:!reply.errors?.length&&reply.data&&Object.values(reply.data).every(value=>value!==null)?'committed':'rejected'};
   };
   const write=(mutation='add',n=2)=>writeAs(ANONYMOUS_ACTOR,mutation,n);
-  return {owner,actor,ds,doc,policy,write,writeAs,binding,table,column};
+  return {owner,actor,ds,doc,policy,write,writeAs,link};
 }
 it('applies one data policy to everyone with view access', async () => {
   const f = await fixture();
@@ -158,7 +156,7 @@ it('refuses an owner re-push from a stale base, so rows written by viewers survi
   expect(fresh.status, await fresh.clone().text()).toBe(200);
 });
 // Legacy saved-JSX mutationAccess previews were removed with that transport.
-// Native write receipts are checked against the retained policy/executor below.
+// Writes below go through the page's generated API under the retained policy and executor.
 
 async function sharedFixture(
   role: 'viewer' | 'commenter' | 'editor' = 'viewer',
@@ -194,13 +192,6 @@ it('requires dataset view access even when its declared app is public', async ()
   const f = await sharedFixture();
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   expect((await f.writeAs(ANONYMOUS_ACTOR)).outcome).toBe('rejected');
-});
-it('rechecks dataset sharing after admission before committing a native write',async()=>{
- const f=await sharedFixture();await setDatasetPolicy(f.actor,f.ds,f.policy,0);
- const port=retainedDatasetGraphqlPort();let revoked=false;
- const api=createDatasetGraphql({...port,snapshot:async(...args)=>{const snapshot=await port.snapshot(...args);await updateSharingFor(f.actor,f.ds,{shares:[]});revoked=true;return snapshot;}});
- await expect(api.write(identityForUser(f.user.id,f.token.id),f.binding,{tableId:f.table.id,expectedRevision:'1',requestId:randomUUID(),changes:[{kind:'INSERT',cells:[{columnId:f.column.id,value:{type:'NUMBER',value:3}}]}]},new AbortController().signal)).rejects.toThrow('dataset_not_found');
- expect(revoked).toBe(true);expect((await getArtifactById(f.ds))?.version).toBe(1);
 });
 
 it('lets editors open the visual policy editor', async () => {

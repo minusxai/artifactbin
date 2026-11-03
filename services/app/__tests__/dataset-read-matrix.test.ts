@@ -16,7 +16,7 @@ import {viewersWritePolicy} from '@artifactbin/utils';
 import {getDb} from '@/lib/platform';
 import {canReadArtifact,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
-import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql';
+import {linkedGql,errorCode} from './linked-datasets';
 import {registeredQueryImportForRow} from '@/lib/document-data';
 
 useAppHarness();
@@ -101,7 +101,6 @@ it('decides every policy shape × caller × read door as its v3 reading does',as
  const db=await getDb(),owner=await person('read_owner'),editor=await person('read_editor'),viewer=await person('read_viewer'),named=await person('read_named'),signedIn=await person('read_signed_in');
  const actors:Record<Caller,AccessActor>={owner:owner.actor,editor:editor.actor,viewer:viewer.actor,named:named.actor,signedIn:signedIn.actor,anonymous:ANONYMOUS_ACTOR};
  const tokens:Record<Caller,string|null>={owner:owner.token,editor:editor.token,viewer:viewer.token,named:named.token,signedIn:signedIn.token,anonymous:null};
- const signal=new AbortController().signal,api=createRetainedDatasetGraphql();
  const actual:Record<string,boolean>={},want:Record<string,boolean>={};
  let n=0;
  for(const shape of SHAPES){
@@ -116,7 +115,7 @@ it('decides every policy shape × caller × read door as its v3 reading does',as
    const actor=actors[caller],key=`${shape.name}|${caller}|${door}`;
    const row=(await getArtifactById(id))!,page=(await getArtifactById(doc))!;
    const sql=()=>tables(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select 1 as one'},...(tokens[caller]?{token:tokens[caller]}:{})}),{params:Promise.resolve({id})}).then(r=>r.status===200);
-   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?()=>api.schema(actor,binding,signal):door==='tables'?sql:()=>registeredQueryImportForRow(page,id,actor));
+   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedGql(actor,binding,'{ data(limit: 1) { _id } }');if(reply.errors?.length)throw Error(errorCode(reply)??'refused');}:door==='tables'?sql:()=>registeredQueryImportForRow(page,id,actor));
    want[key]=BASELINE&&CHANGED.has(key)?!expected(shape,caller,door):expected(shape,caller,door);
   }
  }
