@@ -14,6 +14,14 @@ describe('autofix rules',()=>{
   expect(bad[0]!.message).toContain('six-digit hex');expect(bad[2]!.message).toContain('unknown setting');
   expect(findProblems(page(OK+'\n<meta name="artifactbin:pwa-enabled" content="true">\n<meta name="artifactbin:pwa-theme-color" content="#234b35">'))).toEqual([]);
  });
+ it('accepts saved comment view attributes and names an invalid field list',()=>{
+  const state=(attributes:string)=>page(OK+`\n<script type="application/json" data-af="state" ${attributes}>{"tab":"a","draft":""}</script>`);
+  for(const ok of ['',`data-af-comment-exclude='["draft"]'`,`data-af-comment-fields='["tab"]'`,`data-af-comment-version="v1" data-af-comment-fields='["tab"]'`])expect(findProblems(state(ok))).toEqual([]);
+  const bad=findProblems(state(`data-af-comment-exclude='draft'`));
+  expect(bad.map(problem=>problem.rule)).toEqual(['comment-view']);
+  expect(bad[0]!.message).toContain('data-af-comment-exclude');expect(bad[0]!.message).toContain('["draft"]');
+  for(const attributes of [`data-af-comment-exclude='["draft","draft"]'`,`data-af-comment-fields='[]'`,`data-af-comment-fields='["a-b"]'`,'data-af-comment-version=""'])expect(findProblems(state(attributes)).map(problem=>problem.rule),attributes).toEqual(['comment-view']);
+ });
  it('leaves a correct page byte-identical and reports clean',()=>{
   const html=page(OK),result=autofixHtml(html,{exists:()=>true});
   expect(result.html).toBe(html);expect(result.changed).toBe(false);

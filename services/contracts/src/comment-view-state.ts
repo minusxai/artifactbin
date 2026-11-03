@@ -27,3 +27,23 @@ export function parseCommentViewState(input: unknown): CommentViewState | null {
     return JSON.parse(encoded) as CommentViewState;
   } catch { return null; }
 }
+
+/** A `data-af-comment-fields` / `data-af-comment-exclude` value: a JSON array of unique simple top-level names, or why not.
+ * Shared by the runtime (which then refuses to save any view) and autofix (which refuses to publish). */
+export function parseCommentViewFieldList(text: string): readonly string[] | string {
+  let list: unknown;
+  try { list = JSON.parse(text); } catch { return 'is not JSON'; }
+  if (!Array.isArray(list) || list.some(key => typeof key !== 'string')) return 'is not an array of field names';
+  if (list.length > COMMENT_VIEW_STATE_MAX_KEYS) return `lists more than ${COMMENT_VIEW_STATE_MAX_KEYS} fields`;
+  const names = list as string[];
+  if (new Set(names).size !== names.length) return 'repeats a field';
+  const bad = names.find(key => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || key.length > 128 || ['__proto__', 'constructor', 'prototype'].includes(key));
+  return bad === undefined ? names : `has an invalid field name "${bad.slice(0, 40)}"`;
+}
+
+/** The version of an undeclared view: a field set that changes (added, removed, renamed) refuses older views. */
+export function derivedCommentViewVersion(fields: readonly string[]): string {
+  let hash = 0x811c9dc5;
+  for (const char of [...fields].sort().join(',')) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 0x01000193); }
+  return 'auto-' + (hash >>> 0).toString(16).padStart(8, '0');
+}

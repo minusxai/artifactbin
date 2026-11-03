@@ -227,8 +227,9 @@ default host; the canonical app link stays unchanged. Private shares do not gain
 Every saved page version remains available; never reuse a removed ID. A 409 or a refused baseline
 means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser
 anchors and selectors. Initial viewer state goes in `<script type="application/json"
-data-af="state">`. Page scripts execute on the page's runner origin, separately from account
-credentials.
+data-af="state">`; comments save its fields as the reader's view, so keep typed text out of it or
+list it in `data-af-comment-exclude` ([saved views](references/runtime.md#saved-comment-views)).
+Page scripts execute on the page's runner origin, separately from account credentials.
 
 ## Installed resources
 
