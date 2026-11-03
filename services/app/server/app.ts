@@ -227,6 +227,8 @@ const APP_SECURITY_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 const IMMUTABLE = 'public, max-age=31536000, immutable';
+/** A VERSION-addressed file (`/libraries/<name>-<version>/`): a rebuild of the same version may change its bytes, so a day, revalidated in the background for a week, never immutable. */
+const VERSIONED = 'public, max-age=86400, stale-while-revalidate=604800';
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -522,8 +524,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return { status: 200, admitted: { row, canonicalPath }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
-  // Static: content-addressed trees are immutable; everything else is served plainly.
-  app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
+  // Static: content-addressed trees are immutable, version-addressed libraries a day; everything else is served plainly.
+  app.use('/libraries/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', VERSIONED); c.header('access-control-allow-origin', '*'); });
   // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
   // Every file is content-addressed; both requests need CORS and immutable caching.
   app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
