@@ -9,7 +9,8 @@ import {parse,serialize} from 'parse5';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import parseCss from 'css-tree/parser';
 import walkCss from 'css-tree/walker';
-// Bundled into preview-html.mjs (lib/skills/assets BUNDLED_ONLY_SOURCES), so it reads the app's one statement of the core addresses.
+// Bundled into preview-html.mjs (lib/skills/assets BUNDLED_ONLY_SOURCES), so it reads the app's
+// one statement of the core addresses.
 import {isRuntimeCoreSrc} from '../../../lib/html-page/core-script.ts';
 initSync();
 const PLATFORM=new Set(['@afbin/apollo','@afbin/reader','@afbin/chrome','@afbin/portable']);

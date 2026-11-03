@@ -129,7 +129,9 @@ test('local operations bound concurrency and pass a real abort signal',async()=>
 
 
 test('platform modules come only from closed /af/, /libraries/ and /af/components/ paths, fetched once from the selected server',async()=>{
- const {platformModules}=await import('../../services/app/skills/artifactbin/scripts/preview-platform.mjs');
+ const {platformModules,LEGACY_CORE_PATH}=await import('../../services/app/skills/artifactbin/scripts/preview-platform.mjs');
+ // The raw-shipped preview platform keeps the one copy of the app's legacy core address: pinned equal here.
+ assert.equal(LEGACY_CORE_PATH,(await import('../../services/app/lib/html-page/core-script.ts')).LEGACY_CORE_PATH);
  const {withHttpServer}=await import('../../services/test-support/src/net.ts');
  const requests=[];
  const files={'/af/core.js':'core()','/af/apollo.js':'export const apollo=1;','/af/reader.js':'export const reader=1;','/af/components/tabs.js':'import "./chunk-abc.js";','/af/components/chunk-abc.js':'export {};','/libraries/fixture-1.0.0/index.js':'export const value=1;','/af/import-map.json':JSON.stringify({imports:{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js','@afbin/evil':'https://evil.test/x.js','not-reserved':'/af/components/tabs.js'}})};

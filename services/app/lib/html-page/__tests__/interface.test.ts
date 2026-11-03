@@ -5,7 +5,6 @@
 import {describe,expect,it} from 'vitest';
 import {htmlBackendNames,htmlPageMetadata,isRuntimeCoreSrc,repairCoreScript} from '../index';
 import {LEGACY_CORE_PATH,RUNTIME_CORE_PATH} from '../core-script';
-import {LEGACY_CORE_PATH as SKILL_LEGACY_CORE_PATH} from '../../../skills/artifactbin/scripts/preview-platform.mjs';
 import {applyEdits,atHeadStart,insertAttribute,parseSource,removeElement} from '../html-source';
 
 const element=(source:string,tag:string,at=0)=>parseSource(source).elements.filter(node=>node.tagName===tag)[at]!;
@@ -13,9 +12,8 @@ const element=(source:string,tag:string,at=0)=>parseSource(source).elements.filt
 describe('the core script',()=>{
  it('has one flat address, and the legacy alias is still recognized',()=>{
   expect(RUNTIME_CORE_PATH).toBe('/af/core.js');
-  // The legacy address is stated once in the app; the raw-shipped preview platform keeps the one pinned copy.
+  // The legacy address is stated once in the app (the raw-shipped preview platform's copy is pinned in html-preview.test.mjs).
   expect(LEGACY_CORE_PATH).toBe('/af/v1/core.js');
-  expect(SKILL_LEGACY_CORE_PATH).toBe(LEGACY_CORE_PATH);
   expect(isRuntimeCoreSrc(RUNTIME_CORE_PATH)).toBe(true);
   expect(isRuntimeCoreSrc('/af/v1/core.js')).toBe(true);
   for(const src of [null,undefined,'','/af/core.js?v=2','https://cdn.example/af/core.js','/af/v2/core.js'])expect(isRuntimeCoreSrc(src)).toBe(false);

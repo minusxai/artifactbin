@@ -19,9 +19,10 @@ const MAX_BYTES=8_000_000;
 const RUNTIME_MODULES={core:'/af/core.js',apollo:'/af/apollo.js',reader:'/af/reader.js',chrome:
   '/af/chrome.js',portableEngine:'/af/portable.js',morph:'/af/morph.js'};
 
-/** KEPT FOR EXISTING PAGES ONLY: the legacy core address saved pages still load. This file ships raw, so
- * it keeps this one copy of services/app/lib/html-page/core-script.ts LEGACY_CORE_PATH (a test pins them
- * equal); delete both when no live page source contains /af/v1/core.js. */
+/** KEPT FOR EXISTING PAGES ONLY: the legacy core address saved pages still load. This file
+ * ships raw, so it keeps this one copy of LEGACY_CORE_PATH in
+ * services/app/lib/html-page/core-script.ts (html-preview.test.mjs pins them equal); delete
+ * both when no live page source contains /af/v1/core.js. */
 export const LEGACY_CORE_PATH='/af/v1/core.js';
 
 /** True for a path this module may answer. */
