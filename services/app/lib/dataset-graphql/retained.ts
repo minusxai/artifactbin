@@ -1,5 +1,5 @@
 import type {ArtifactRow} from '@/lib/artifacts';
-import {catalogOf, executeCatalog, loadDatasetRows} from '@/lib/datasets';
+import {catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
 import type {DatasetGraphqlPort} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
@@ -50,9 +50,10 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
    const rowIds:Record<string,readonly string[]>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
    for(const table of catalog.tables){
-    const tableId=tableIdentity(table),rows=await loadDatasetRows({meta:{objectKey:table.objectKey}}),prior=saved?.[tableId];
-    // Row IDs are positions in the stored object (execution decorates before the view filters).
-    rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey!,rows.length,prior);
+    // Row IDs are positions in the stored object (execution decorates before the view filters). Its key is its
+    // content hash, so the count remembered for the key is this object's.
+    const tableId=tableIdentity(table),count=await storedRowCount(table.objectKey!),prior=saved?.[tableId];
+    rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey!,count,prior);
    }
    // Schema metadata a caller does not fence has no later check: recheck readership after object loads.
    if(!options.fenced)await verify();
