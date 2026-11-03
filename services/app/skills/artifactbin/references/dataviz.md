@@ -10,7 +10,7 @@ Name question, unit, grain, source, period, timezone and missing/partial data. R
 
 ## Bootstrap
 
-Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The core import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. `serve.mjs` and downloads resolve the same names; external data still needs admission or an honest offline state.
+Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The core import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. `serve.mjs` and downloads resolve the same names.
 
 ```html
 <div id="chart" role="img" aria-label="Completed tasks by category"></div>
@@ -21,7 +21,9 @@ import {compile} from "@afbin/vega-lite";
 const spec = compile({width:280, height:160,
   data:{values:[{category:"A", count:18},{category:"B", count:12}]},
   mark:"bar", encoding:{x:{field:"category",type:"nominal"},
-    y:{field:"count",type:"quantitative"}}}).spec;
+    y:{field:"count",type:"quantitative"},
+    tooltip:[{field:"category",title:"Category"},
+      {field:"count",type:"quantitative",title:"Completed tasks",format:","}]}}).spec;
 const view = new vega.View(vega.parse(spec, undefined, {ast:true}), {
   container:document.querySelector("#chart"), renderer:"svg",
   expr:vega.expressionInterpreter
@@ -31,7 +33,7 @@ window.addEventListener("pagehide", () => view.finalize(), {once:true});
 </script>
 ```
 
-For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Keep the original source canonical; downloaded copies embed the admitted bytes. Add table, resizing, theme and teardown below. Steps: bars are `.mark-rect path`, not `<rect>`.
+For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. The hosted `View` shows a themed tooltip by default (design tokens, light/dark; closes on leave, Escape, outside press, `finalize()`): give each chart a `tooltip` encoding. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Add table, resizing, theme and teardown below. Steps: bars are `.mark-rect path`, not `<rect>`.
 
 ## Contents
 
@@ -53,7 +55,7 @@ Choose explicit timestamp offsets and reporting timezone before grouping. Vega-L
 
 Original Chart defaults: transparent surface, `.3~s` numbers, 11px axis labels, 12px normal-weight axis titles, dashed `[3,3]` grids, top legend, line width 2 with filled size-25 points and bar end-radius 2. Apply these explicitly through Vega-Lite `config`; native Vega uses parser config/mark encodings. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
 
-Old renderer token resolution, legend wrapping/selection and styled tooltips are **not automatic** in standalone libraries. Resolve font/colors from the chart's design-system scope; pass concrete sRGB colors, since CSS-variable/OKLCH strings can fail in expressions. Observe the host’s theme scope (`data-af-dark`, `data-af-design-system`, class/style changes on ancestors); rebuild configuration when resolved tokens change, and disconnect the observer on teardown. Keep category identity stable and check text, grids, ramps and explicit colors in both modes.
+Chart token resolution and legend wrapping are **not automatic**. Resolve font/colors from the chart's design-system scope; pass concrete sRGB colors, since CSS-variable/OKLCH strings can fail in expressions. Observe the host’s theme scope (`data-af-dark`, `data-af-design-system`, class/style changes on ancestors); rebuild configuration when resolved tokens change, and disconnect the observer on teardown. Check text, grids, ramps and explicit colors in both modes.
 
 ## Layout and interaction
 
@@ -61,13 +63,13 @@ Size the host. Single/layered Vega-Lite supports `width: "container"`. For Vega 
 
 Provide title, units, `description` and an accessible table. Supplement color with labels/shapes. Necessary actions/information must work with keyboard/touch and without hover.
 
-Tooltip fields need human titles/formats, not internal columns; a tooltip `format` errors on a nominal field (quantitative or temporal only). Styled tooltips require a handler/plugin: escape text, keep overlays in the chart document/viewport, dismiss on outside action, Escape and teardown. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
+Tooltips list fields by `title`: name each for readers, never raw columns (`{"field":"pts","type":"quantitative","title":"Points","format":","}`); a `title` field is the heading. `format` errors on nominal fields. Add no other tooltip handler. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
 
 ## Data and lifetime
 
 Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read shared facts with `client.query` under linked `data-af-name`. Discover dataset IDs; collect all pages at one revision or use supported server aggregates. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `watchQuery` can render linked backend data directly and refreshes it on invalidation; `onBackendChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
 
-Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, unsubscribe client listeners and remove tooltip/listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
+Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, unsubscribe client listeners and remove listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
 
 Offline needs local libraries/assets and permitted data. Download does not automatically snapshot GraphQL or pack arbitrary dependencies. Show unavailable states honestly; test downloads offline.
 

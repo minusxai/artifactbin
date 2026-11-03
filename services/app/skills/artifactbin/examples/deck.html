@@ -115,8 +115,7 @@ function matrix(s){
     svg.append(svgEl('text',{x:cx+14,y:cy+5,'font-size':16,fill:'currentColor'},p.label));
   });
   svg.append(svgEl('text',{x:890,y:296,'text-anchor':'end','font-size':13,fill:'currentColor'},
-    'Positions are illustrative'));return svg;
-}
+    'Positions are illustrative'));return svg;}
 const surface={cover:'red cover',ask:'ink'},charts=[],badge='Illustrative figures';
 SLIDES.forEach((s,n)=>{
   const id='slide-'+s.id,section=el('section',id,{'data-af-slide':'',class:surface[s.type]??'',
@@ -187,7 +186,8 @@ async function drawCharts(){views.forEach(view=>view.finalize());
         color:ink,fontSize:14},encoding:{text:{field:'label'}}}],
       encoding:{x:{field:'x',type:'ordinal',sort:null,title:null,axis:{labelAngle:0}},
         y:{field:'y',type:'quantitative',title:s.yTitle??null,axis:{format:s.format}},
-        tooltip:[{field:'x',type:'nominal'},{field:'y',type:'quantitative',format:s.format}]},
+        tooltip:[{field:'x',type:'nominal',title:s.label},{field:'y',type:'quantitative',
+          title:s.yTitle,format:s.format}]},
       config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,
         gridColor:token('--ds-line'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',

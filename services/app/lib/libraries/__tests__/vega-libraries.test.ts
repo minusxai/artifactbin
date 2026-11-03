@@ -73,3 +73,18 @@ it('keeps the full native Vega API within its browser download budget',async()=>
  for(const name of ['View','parse','changeset','sceneVisit'])expect(typeof vega[name]).toBe('function');
  expect(result.outputFiles[0]!.contents.byteLength).toBeLessThan(650_000);
 });
+
+it('installs the themed tooltip on every hosted View unless the page passes its own',async()=>{
+ const {module:vega}=await bundled('vega');
+ expect(typeof vega.tooltipHandler).toBe('function');
+ const spec=vega.parse({width:20,height:20,marks:[]},undefined,{ast:true});
+ const view=new vega.View(spec,{renderer:'none',expr:vega.expressionInterpreter});
+ const own=()=>{};const custom=new vega.View(spec,{renderer:'none',expr:vega.expressionInterpreter,tooltip:own});
+ try{
+  expect(view).toBeInstanceOf(vega.View);expect(typeof view.tooltip()).toBe('function');
+  // Vega's own default writes the native title attribute on every call; the hosted default never does.
+  const element={setAttribute:vi.fn()};view.tooltip().call(view,{element:()=>element},null,null,'Value');
+  expect(element.setAttribute).not.toHaveBeenCalled();expect(custom.tooltip()).toBe(own);
+  await view.runAsync();
+ }finally{view.finalize();custom.finalize();}
+});
