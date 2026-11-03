@@ -108,9 +108,9 @@ const {rows} = await caps.sql('SELECT region, count(*) AS n, sum(amount) AS tota
   'WHERE day >= $since GROUP BY region', {since: '2026-01-01'});
 ```
 
-`caps.sql({queries:[{name, sql}], params, paramTypes, tables})` runs several in order (a later one
+`caps.sql({queries:[{name, sql}], params, paramTypes, tables, only})` runs several in order (a later one
 reads an earlier by name) with inline `tables` (`{columns:[{name, type}], rows}`) and returns
-`{[name]: {columns, rows} | {error}}`. Per call: 10,000 input rows, 8 MiB input, 5 s per query,
+`{[name]: {columns, rows} | {error}}`, only the `only` names if given. Per call: 10,000 input rows, 8 MiB input, 5 s per query,
 20 s in all, a 1 MiB answer; each call is one of the 32 requests.
 
 ## @auth roles

@@ -48,6 +48,20 @@ describe('createResolverSql', () => {
     });
   });
 
+  it('`only` answers just the named queries: the rest run as dependencies and never count against the answer cap', async () => {
+    const huge = ok([{ n: 'x'.repeat(RESOLVER_LIMITS.queryResultBytes) }]);
+    const { run, sql } = port({ run: () => ({ base: huge, total: ok() }) });
+    const queries = [{ name: 'base', sql: 'SELECT * FROM staff' }, { name: 'total', sql: 'SELECT count(*) AS n FROM base' }];
+    expect(await sql(call({ queries, only: ['total'] }))).toEqual({ total: { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] } });
+    expect(run.mock.calls[0]![0].queries).toEqual(queries);
+    // Without `only` every answer comes back, so the dependency's rows trip the cap.
+    expect(await code(sql(call({ queries })))).toEqual(['result_too_large', expect.any(String)]);
+    for (const only of [[], ['nope'], ['total', 'total'], 'total', [1]])
+      expect(await code(sql(call({ queries, only }))), JSON.stringify(only)).toEqual(['validation_failed', expect.stringContaining('only')]);
+    expect(await code(sql(call({ sql: 'SELECT 1', only: ['result'] })))).toEqual(['validation_failed', expect.stringContaining('only')]);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
   it('works with no linked dataset at all: pure expressions and inline tables read nothing', async () => {
     const { read, run, sql } = port();
     await sql(call({ sql: 'SELECT 1 + 1 AS n' }, { subject: null, role: 'anonymous' }));

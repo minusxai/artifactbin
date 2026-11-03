@@ -82,9 +82,10 @@ resolver's live revision is a hash of the page's linked live dataset revisions
 
 ## `caps.sql`
 
-`await caps.sql(sql, params?)` answers `{columns, rows}`; `caps.sql({queries, params, paramTypes, tables})`
+`await caps.sql(sql, params?)` answers `{columns, rows}`; `caps.sql({queries, params, paramTypes, tables, only})`
 mirrors the SQL service's `RunInput` (queries in order, a later one reading an earlier result by name, inline
-author-typed `tables`) and answers `{[name]: {columns, rows} | {error}}` (`sql.ts`). It is READ-ONLY: it runs on
+author-typed `tables`) and answers `{[name]: {columns, rows} | {error}}` (`sql.ts`), for the `only` names when
+given: the other queries run as dependencies and their rows neither come back nor count against the answer cap. It is READ-ONLY: it runs on
 the SQL service's `run` door, the one registered page queries use, which admits reads only; data changes only
 through `caps.query` mutations. A call mounts the linked datasets its SQL names (SQLite folds ASCII identifiers,
 so a link name absent from the text cannot be read): a single-table dataset is the table `<link>`, a multi-table
