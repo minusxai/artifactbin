@@ -2,7 +2,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 vi.mock('../mermaid-images/reader-draw',()=>({drawForReader:vi.fn()}));
 import {drawForReader} from '../mermaid-images/reader-draw';
-import {AfMermaid,type MermaidContract} from './mermaid';
+import {AfMermaid} from './mermaid';
 import './mermaid';
 afterEach(()=>{document.body.replaceChildren();vi.resetAllMocks();});
 const tick=async()=>{for(let i=0;i<12;i++) await Promise.resolve();};
@@ -14,7 +14,7 @@ it('ignores stale results and disconnected drawings; retries errors',async()=>{
 });
 it('uses stored images, falls back on image failure and inherits dark mode',async()=>{
  vi.mocked(drawForReader).mockResolvedValue({image:{src:'data:image/svg+xml,new',type:'flowchart'}});
- const el=document.createElement('af-mermaid') as AfMermaid; el.code='graph TD; A-->B'; const contract:MermaidContract=el; expect(contract.colorMode).toBe('auto'); el.storedImage={src:'data:image/svg+xml,stored',type:'flowchart'}; el.setAttribute('data-af-dark',''); document.body.append(el); expect(drawForReader).not.toHaveBeenCalled();
+ const el=document.createElement('af-mermaid') as AfMermaid; el.code='graph TD; A-->B'; expect(el.colorMode).toBe('auto'); el.storedImage={src:'data:image/svg+xml,stored',type:'flowchart'}; el.setAttribute('data-af-dark',''); document.body.append(el); expect(drawForReader).not.toHaveBeenCalled();
  el.querySelector('img')?.dispatchEvent(new Event('error')); await vi.waitFor(()=>expect(drawForReader).toHaveBeenCalledWith(el,el.code,true,expect.any(Function))); 
 });
 it('redraws for ancestor theme changes and rejects completions after disposal',async()=>{

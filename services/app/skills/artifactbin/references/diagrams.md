@@ -88,11 +88,11 @@ Pele supports the built-in Mermaid 12.1 diagram syntax, with different positions
 
 URL `click` links work; JavaScript callbacks are ignored. Default schemes are HTTP, HTTPS, mailto and tel; unsafe schemes are filtered. For untrusted diagrams restrict `linkSchemes`, set `links: false` or `images: false` as appropriate. Do not pass untrusted markup through icon/math/sanitize callbacks. Errors and source/output/edge limits are part of the API, not reasons to retry indefinitely.
 
-## Offline and retained elements
+## Offline
 
 Only referenced registered modules enter a downloaded page. The example renders offline without a CDN. Remote images, fonts or application data still require their own admitted resources; keep design-system fonts inside the project and prefer portable text labels. Library cost is paid only by pages that import it.
 
-Pages published earlier with the old `<af-mermaid>` element keep working; new pages use the direct API above. Previously downloaded self-contained files keep their embedded code.
+Previously downloaded self-contained files keep their embedded code.
 
 Mermaid.js `initialize`, `run`, `render(id, source)` and `bindFunctions` are not Pele APIs. Update owned direct-library scripts to `mount(container, source)` or `render(source, options)`; do not simply change an import URL. Unsupported HTML labels, callbacks, plugins and special math/icon rendering need an explicit alternative, not a silent conversion.
 

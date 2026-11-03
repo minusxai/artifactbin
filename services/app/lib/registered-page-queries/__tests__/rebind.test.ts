@@ -46,7 +46,7 @@ describe('pageSourceDigest', () => {
 describe('planRegisteredQueryRebinds and commitRegisteredQueryRebinds', () => {
   it('re-binds a carried program to the new version, passes other links through, and commits it beside the old one', async () => {
     const f = await fixture();
-    const planned = await planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link, plain], f.owner.userId);
+    const planned = await planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link, plain], f.owner.userId, [f.prepared.link, plain]);
     expect(planned.links[1]).toEqual(plain);
     expect(planned.links[0]).toMatchObject({ kind: 'backend', name: 'queries', backendId: 'be_queries' });
     expect(planned.links[0]!.version).not.toBe(f.prepared.link.version);
@@ -59,7 +59,7 @@ describe('planRegisteredQueryRebinds and commitRegisteredQueryRebinds', () => {
 
   it('answers no work for no carried links, and commits nothing for no rebinds', async () => {
     const f = await fixture();
-    expect(await planRegisteredQueryRebinds(f.db, f.next, [], f.owner.userId)).toEqual({ links: [], rebinds: [] });
+    expect(await planRegisteredQueryRebinds(f.db, f.next, [], f.owner.userId, [])).toEqual({ links: [], rebinds: [] });
     await commitRegisteredQueryRebinds(f.db, f.next, []);
     expect(await backendVersions(f.db)).toEqual([f.prepared.link.version]);
   });
@@ -67,20 +67,20 @@ describe('planRegisteredQueryRebinds and commitRegisteredQueryRebinds', () => {
   it('refuses before writing when the owner changed, the version did not advance, or the stored bytes were altered', async () => {
     const f = await fixture();
     const refusal = (promise: Promise<unknown>) => promise.then(() => null, (error: unknown) => error as RegisteredQueryRebindError);
-    const stranger = await refusal(planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], 'usr_other'));
+    const stranger = await refusal(planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], 'usr_other', [f.prepared.link]));
     expect(stranger).toBeInstanceOf(RegisteredQueryRebindError);
     expect(stranger).toMatchObject({ namespace: 'queries', reason: 'query_registration_owner_changed' });
     expect(stranger!.message).toBe("registered queries 'queries' cannot be re-bound: query_registration_owner_changed");
-    expect(await refusal(planRegisteredQueryRebinds(f.db, { ...f.next, version: 1 }, [f.prepared.link], f.owner.userId))).toMatchObject({ reason: 'query_registration_changed' });
-    expect(await refusal(planRegisteredQueryRebinds(f.db, { ...f.next, pageId: 'other_page' }, [f.prepared.link], f.owner.userId))).toMatchObject({ reason: 'query_registration_changed' });
+    expect(await refusal(planRegisteredQueryRebinds(f.db, { ...f.next, version: 1 }, [f.prepared.link], f.owner.userId, [f.prepared.link]))).toMatchObject({ reason: 'query_registration_changed' });
+    expect(await refusal(planRegisteredQueryRebinds(f.db, { ...f.next, pageId: 'other_page' }, [f.prepared.link], f.owner.userId, [f.prepared.link]))).toMatchObject({ reason: 'query_registration_changed' });
     await f.db.query("UPDATE html_backend_versions SET source = source || ' ' WHERE backend_id = 'be_queries'");
-    expect(await refusal(planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId))).toMatchObject({ reason: 'query_registration_changed' });
+    expect(await refusal(planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId, [f.prepared.link]))).toMatchObject({ reason: 'query_registration_changed' });
     expect(await backendVersions(f.db)).toEqual([f.prepared.link.version]);
   });
 
   it('refuses to commit a rebind the saved head does not link', async () => {
     const f = await fixture();
-    const planned = await planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId);
+    const planned = await planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId, [f.prepared.link]);
     await f.save([f.prepared.link]);
     await expect(commitRegisteredQueryRebinds(f.db, f.next, planned.rebinds)).rejects.toThrow('query_registration_changed');
   });
@@ -114,13 +114,13 @@ describe('registered queries transaction boundaries', () => {
   it('refuses secret-bearing immutable registrations without creating a rebound version', async () => {
     const f = await fixture();
     await f.db.query("UPDATE html_backend_versions SET secret_bindings='[\"credential\"]'::jsonb WHERE backend_id=$1", [f.prepared.link.backendId]);
-    await expect(planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId)).rejects.toMatchObject({ reason: 'query_registration_changed' });
+    await expect(planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId, [f.prepared.link])).rejects.toMatchObject({ reason: 'query_registration_changed' });
     expect(await backendVersions(f.db)).toEqual([f.prepared.link.version]);
   });
 
   it('checks saved owner, version and source again at commit', async () => {
     const f = await fixture();
-    const planned = await planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId);
+    const planned = await planRegisteredQueryRebinds(f.db, f.next, [f.prepared.link], f.owner.userId, [f.prepared.link]);
     await f.save(planned.links);
     await expect(commitRegisteredQueryRebinds(f.db, {...f.next, html: 'different'}, planned.rebinds)).rejects.toThrow('query_registration_changed');
     await expect(commitRegisteredQueryRebinds(f.db, {...f.next, version: 3}, planned.rebinds)).rejects.toThrow('query_registration_changed');
@@ -132,7 +132,7 @@ describe('registered queries transaction boundaries', () => {
     const f = await fixture();
     const before = (await f.db.query('SELECT version,source,meta FROM artifacts WHERE id=$1', [f.pageId])).rows;
     await expect(f.db.transaction(async tx => {
-      const planned = await planRegisteredQueryRebinds(tx, f.next, [f.prepared.link], f.owner.userId);
+      const planned = await planRegisteredQueryRebinds(tx, f.next, [f.prepared.link], f.owner.userId, [f.prepared.link]);
       await tx.query("UPDATE artifacts SET version=2,source=$2,meta=jsonb_set(meta,'{htmlLinks}',$3::jsonb) WHERE id=$1", [f.pageId, f.next.html, JSON.stringify(planned.links)]);
       await commitRegisteredQueryRebinds(tx, f.next, planned.rebinds);
       expect((await tx.query('SELECT version FROM html_backend_versions WHERE backend_id=$1', ['be_queries'])).rows).toHaveLength(2);

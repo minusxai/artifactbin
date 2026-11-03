@@ -1,5 +1,11 @@
-// Intentional lazy browser engine boundary shared by both retained reader APIs.
-// Mermaid is the diagram syntax; Pele is the only drawing runtime.
+/**
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with ../html-components/mermaid.ts, reader-draw.ts,
+ * mermaid-fonts.ts, svg-text.ts, ../html-component-specs/mermaid-source.ts, their tests, the `mermaid` entry of hosted.json `legacy` and the reader-draw path in
+ * scripts/lib/html-components-build.mjs once no live page uses af-mermaid.
+ *
+ * af-mermaid's lazy browser engine boundary: Mermaid is the diagram syntax; Pele is the only drawing runtime.
+ */
 import {render} from 'pele';
 import {mermaidSourceError} from '@/lib/html-component-specs/mermaid-source';
 

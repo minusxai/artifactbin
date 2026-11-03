@@ -3,6 +3,7 @@ import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { GET, PUT } from "@/app/api/artifacts/[id]/route";
 import { POST as REVERT } from "@/app/api/artifacts/[id]/revert/route";
+import { POST as FORK } from "@/app/api/artifacts/[id]/fork/route";
 import { getDb } from "@/lib/platform";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import type { HtmlBackendLink } from "@artifactbin/contracts";
@@ -260,4 +261,63 @@ it("repairs a head saved before re-binding existed, in place, and leaves valid h
   expect((await plan(f)).plan?.registration.pageVersion).toBe(stale.version + 1);
   await expectTotal(f);
   expect(await f.db.transaction((tx) => repairRegisteredQueryHead(tx, f.pageId))).toEqual([]);
+});
+
+/** No page gains a registered program any more: the only doors that could add one are a fork and a revert. */
+const RETIRED = {
+  error: "registered_programs_retired",
+  namespace: "queries",
+  details: [expect.stringMatching(/dataset.*generated GraphQL API.*af-resolver/)],
+};
+const revertTo = async (f: Awaited<ReturnType<typeof migratedPage>>, version: number) =>
+  REVERT(
+    request(`/api/artifacts/${f.pageId}/revert`, {
+      method: "POST",
+      token: f.owner.token,
+      json: { version, ...(await f.expected()) },
+    }),
+    params(f.pageId),
+  );
+const pageCount = async (f: Awaited<ReturnType<typeof migratedPage>>) =>
+  (await f.db.query<{ n: number }>("SELECT count(*)::int AS n FROM artifacts")).rows[0]!.n;
+
+it("a fork that would copy a registered program onto a new page is refused; the original keeps serving", async () => {
+  const f = await migratedPage();
+  const before = await pageCount(f);
+  for (const token of [f.owner.token, f.stranger.token]) {
+    const forked = await FORK(
+      request(`/api/artifacts/${f.pageId}/fork`, { method: "POST", token, json: {} }),
+      params(f.pageId),
+    );
+    expect(forked.status).toBe(409);
+    expect(await forked.json()).toMatchObject(RETIRED);
+  }
+  expect(await pageCount(f)).toBe(before);
+  await expectTotal(f);
+});
+
+it("a revert never brings a registered program back to a head that has none", async () => {
+  const f = await migratedPage();
+  const original = (await f.stored()).version;
+  expect((await f.save(f.owner.token, { html: html("<p>No data</p>", false) })).status).toBe(200);
+  const head = (await f.stored()).version;
+  const reverted = await revertTo(f, original);
+  expect(reverted.status).toBe(409);
+  expect(await reverted.json()).toMatchObject(RETIRED);
+  expect((await f.stored()).version).toBe(head);
+});
+
+it("a revert past an ordinary replacement resolver does not resurrect the registration", async () => {
+  const f = await migratedPage();
+  const original = (await f.stored()).version;
+  const saved = await f.save(f.owner.token, {
+    html: html("<p>Ordinary backend</p>"),
+    resolverSources: { queries: "export const Query = { total: () => 1 };" },
+  });
+  expect(saved.status).toBe(200);
+  const head = (await f.stored()).version;
+  const reverted = await revertTo(f, original);
+  expect(reverted.status).toBe(409);
+  expect(await reverted.json()).toMatchObject(RETIRED);
+  expect((await f.stored()).version).toBe(head);
 });

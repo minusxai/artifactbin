@@ -16,7 +16,7 @@ export {recoverPortableSource} from '../../../lib/html-runtime/portable-source.t
 const PARSER_SHARED=/\/lib\/(?:html-publication-bundle\/plan|html-runtime\/portable-source)\.ts$/;
 export async function buildPreviewParser(source:string):Promise<string>{
  const scripts=path.resolve('skills/artifactbin/scripts');
- const graph=await Promise.all(['lib/html-publication-bundle/runtime-module-imports.ts','lib/html-publication-bundle/plan.ts','lib/libraries/index.ts','lib/html-components/hosted.json','lib/html-autofix/index.ts','lib/html-page/index.ts','lib/html-page/html-source.ts','skills/artifactbin/scripts/preview-export.mjs','lib/html-runtime/portable-source.ts','lib/html-runtime/portable.ts','lib/html-runtime/apollo/storable.ts','../utils/src/sha256.ts'].map(file=>readFile(path.resolve(file),'utf8')));
+ const graph=await Promise.all(['lib/html-publication-bundle/runtime-module-imports.ts','lib/html-publication-bundle/plan.ts','lib/libraries/index.ts','lib/html-components/hosted.json','lib/html-autofix/index.ts','lib/html-page/index.ts','lib/html-page/core-script.ts','lib/html-page/html-source.ts','skills/artifactbin/scripts/preview-export.mjs','lib/html-runtime/portable-source.ts','lib/html-runtime/portable.ts','lib/html-runtime/apollo/storable.ts','../utils/src/sha256.ts'].map(file=>readFile(path.resolve(file),'utf8')));
  const cacheKey=JSON.stringify([source,...graph]);
  if(cached?.source===cacheKey)return cached.output;
  const output=build({stdin:{contents:source+PARSER_SHARED_EXPORTS,resolveDir:scripts,loader:'js'},bundle:true,write:false,minify:true,legalComments:'none',format:'esm',platform:'node',target:'node22'}).then(result=>{

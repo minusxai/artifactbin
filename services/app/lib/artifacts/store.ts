@@ -3,6 +3,7 @@ import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
 import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries';
 import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations';
+import { isRegisteredPageProgram, NewRegistrationRefused } from '../registered-page-lifecycle';
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
@@ -248,6 +249,9 @@ async function insertArtifact(
   if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
   const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
   if(input.format==='html'&&input.htmlBackends){
+    // A new page never starts with a registered program (forks refuse earlier, in planHtmlClone).
+    const registered=input.htmlBackends.find(backend=>isRegisteredPageProgram(backend.compiled));
+    if(registered)throw new NewRegistrationRefused(registered.name);
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
     const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
@@ -336,15 +340,17 @@ interface VersionSummary {
 /** Registered programs carried to a new page version: what to commit once that version is written. */
 interface CarriedRebinds {queries:readonly RegisteredQueryRebind[];mutations:readonly RegisteredMutationRebind[]}
 const NO_REBINDS:CarriedRebinds={queries:[],mutations:[]};
-/** Plans the re-binding of carried registered query and mutation programs, or the explicit refusal when one cannot be re-bound. Nothing is written. */
-async function rebindCarriedPrograms(tx:Queryable,next:{pageId:string;version:number;html:string},carried:readonly HtmlBackendLink[],pageOwnerId:string|null):Promise<{links:HtmlBackendLink[];rebinds:CarriedRebinds}|Response>{
+/** Plans the re-binding of carried registered query and mutation programs, or the explicit refusal when one cannot be re-bound
+ * or the locked head (`held`, its backend links) carries no registered program under that backend ID today. Nothing is written. */
+async function rebindCarriedPrograms(tx:Queryable,next:{pageId:string;version:number;html:string},carried:readonly HtmlBackendLink[],pageOwnerId:string|null,held:readonly HtmlBackendLink[]):Promise<{links:HtmlBackendLink[];rebinds:CarriedRebinds}|Response>{
   try{
-    const queries=await planRegisteredQueryRebinds(tx,next,carried,pageOwnerId);
+    const queries=await planRegisteredQueryRebinds(tx,next,carried,pageOwnerId,held);
     // A query link re-bound above names a version not yet stored, so the mutation plan passes it through unchanged.
-    const mutations=await planRegisteredMutationRebinds(tx,next,queries.links,pageOwnerId);
+    const mutations=await planRegisteredMutationRebinds(tx,next,queries.links,pageOwnerId,held);
     return {links:mutations.links,rebinds:{queries:queries.rebinds,mutations:mutations.rebinds}};
   }
   catch(error){
+    if(error instanceof NewRegistrationRefused)return json(error.body,409);
     if(error instanceof RegisteredQueryRebindError)return json({error:'registered_queries_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement resolver for '${error.namespace}' in resolverSources, or remove its <link rel="af-resolver">.`]},409);
     if(error instanceof RegisteredMutationRebindError)return json({error:'registered_mutations_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement resolver for '${error.namespace}' in resolverSources, or remove its <link rel="af-resolver">.`]},409);
     throw error;
@@ -557,11 +563,12 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     try { await write.validateContent(target); }
     catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
-    // A reverted page names the registered programs of the version it restores; they are re-bound to the new version like any save.
+    // A reverted page names the registered programs of the version it restores; those the head still carries are re-bound like any save; one it no longer carries is refused (no new registrations).
     let rebinds: CarriedRebinds = NO_REBINDS;
     if(target.format==='html'){
       const restored=(target.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[];
-      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:target.source??''},restored.filter((link):link is HtmlBackendLink=>link.kind==='backend'),current.user_id);
+      const backends=(links:readonly (HtmlBackendLink|HtmlDatasetLink)[])=>links.filter((link):link is HtmlBackendLink=>link.kind==='backend');
+      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:target.source??''},backends(restored),current.user_id,backends((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]));
       if(carried instanceof Response)return {notArchived:true,refusal:carried};
       rebinds=carried.rebinds;
       target={...target,meta:{...target.meta,htmlLinks:restored.map(link=>link.kind==='backend'?carried.links.find(next=>next.name===link.name)??link:link)}};
@@ -673,7 +680,7 @@ async function replaceScoped(
       const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
       const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
       // A registered query or mutation program carried forward (declared again, no replacement source in this save) is re-bound to the new version (registered-page-queries/registry, registered-page-mutations/registry).
-      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id);
+      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id,previous);
       if(carried instanceof Response)return carried;
       rebinds=carried.rebinds;
       input={...input,meta:{...input.meta,htmlLinks:[...links.map(link=>carried.links.find(next=>next.name===link.name)??link),...(input.htmlDatasets??[])]}};

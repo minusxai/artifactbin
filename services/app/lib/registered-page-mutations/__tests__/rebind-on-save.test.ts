@@ -3,6 +3,7 @@ import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { GET, PUT } from "@/app/api/artifacts/[id]/route";
 import { POST as REVERT } from "@/app/api/artifacts/[id]/revert/route";
+import { POST as FORK } from "@/app/api/artifacts/[id]/fork/route";
 import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb } from "@/lib/platform";
 import { getArtifactById, changeMembership } from "@/lib/artifacts";
@@ -261,4 +262,29 @@ it("repairs a head saved before mutation re-binding existed, in place, and leave
   expect((await plan(f)).plan?.registration.pageVersion).toBe(stale.version + 1);
   await expectCommitted(f, "repaired");
   expect(await f.db.transaction((tx) => repairRegisteredMutationHead(tx, f.pageId))).toEqual([]);
+});
+
+it("no page gains a registered mutation: a fork and a revert to a head without one are both refused", async () => {
+  const f = await migratedPage();
+  const retired = { error: "registered_programs_retired", namespace: "actions" };
+  const forked = await FORK(
+    request(`/api/artifacts/${f.pageId}/fork`, { method: "POST", token: f.owner.token, json: {} }),
+    params(f.pageId),
+  );
+  expect(forked.status).toBe(409);
+  expect(await forked.json()).toMatchObject(retired);
+  const original = (await f.stored()).version;
+  expect((await f.save(f.owner.token, { html: html("<p>No actions</p>", false) })).status).toBe(200);
+  const head = (await f.stored()).version;
+  const reverted = await REVERT(
+    request(`/api/artifacts/${f.pageId}/revert`, {
+      method: "POST",
+      token: f.owner.token,
+      json: { version: original, ...(await f.expected()) },
+    }),
+    params(f.pageId),
+  );
+  expect(reverted.status).toBe(409);
+  expect(await reverted.json()).toMatchObject(retired);
+  expect((await f.stored()).version).toBe(head);
 });

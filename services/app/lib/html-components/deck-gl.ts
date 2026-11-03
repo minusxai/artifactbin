@@ -1,25 +1,16 @@
 /**
- * <af-deck-gl>: legacy wrapper for a deck.gl map (new maps: references/maps.md); needs WebGL.
- * Usage: import '/af/components/deck-gl.js';  (legacy, served by URL only:
- *   `@afbin/deck-gl` is the deck.gl library)
- * Props: options={data,layers,basemap,colorMode,initialViewState,tooltip,legend,title,height,
- *   boundaries} (property only; validated on set, throws TypeError on an invalid map).
- *   basemap auto|light|dark|none (default auto, follows the nearest data-af-dark ancestor);
- *   tooltip true|false|column list; legend default true; height default 420.
- * Examples:
- *   document.querySelector('af-deck-gl').options={data:rows,layers:[...]};
- * Gotchas: the WebGL engine (deck-gl-engine.js) loads lazily on connect; a failed load shows a
- *   role=status message. Street basemaps fetch external OpenFreeMap tiles; basemap:'none' and
- *   supplied boundaries need no map service. No WebGL2 falls back to a plain deck.gl canvas.
+ * KEPT FOR EXISTING PAGES ONLY (33 live pages on 3 Nov 2026). New pages use the direct libraries
+ * (references/maps.md, diagrams.md). Delete together with deck-gl-engine.ts, deck-gl-model.ts,
+ * ../viz/deck-engine-core.ts, their tests, the `deck-gl` entry of hosted.json `legacy`, the deck-gl-engine path in
+ * scripts/lib/html-components-build.mjs and the deck-engine-core type re-export in lib/viz/index.ts once no live page
+ * uses af-deck-gl.
+ *
+ * <af-deck-gl>: the element existing pages set `options` on (validated on set; an invalid map throws TypeError). It
+ * loads deck-gl-engine.js lazily on connect and follows the nearest data-af-dark ancestor unless colorMode is set.
  */
 import { registerComponent } from './register-component';
 import { validateDeckMap } from "../html-component-specs/deck-spec";
-import { DeckGeneration, type DeckGLOptions } from "./deck-gl-model";
-export type { DeckGLOptions } from "./deck-gl-model";
-export interface DeckGLAdapter {
-  update(options: DeckGLOptions): void;
-  dispose(): void;
-}
+import { DeckGeneration, type DeckGLAdapter, type DeckGLOptions } from "./deck-gl-model";
 /** Lazy engine import keeps WebGL dependencies out of ordinary HTML controls.
  * Bundlers retain this local chunk. */
 export class AfDeckGL extends HTMLElement {

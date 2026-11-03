@@ -602,7 +602,6 @@
    "services/app/lib/markdown/__tests__/code-block.test.ts": 155,
    "services/app/lib/markdown/__tests__/content.test.ts": 88,
    "services/app/lib/markdown/__tests__/interface.test.ts": 37,
-   "services/app/lib/mermaid-images/__tests__/drawn.test.ts": 11,
    "services/app/lib/notifications/__tests__/authority.test.ts": 5251,
    "services/app/lib/notifications/__tests__/context.test.ts": 28,
    "services/app/lib/notifications/__tests__/events.test.ts": 5935,
