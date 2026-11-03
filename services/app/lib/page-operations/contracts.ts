@@ -34,11 +34,14 @@ export class FieldFailed extends Error {
   readonly code: string;
   /** What the backend said, e.g. the thrown error's message: extensions.detail for the page owner only. */
   readonly detail?: string;
-  constructor(code: string, detail?: string) {
+  /** A message the resolver code itself threw, already redacted: the GraphQL error message for every caller. */
+  readonly shown?: string;
+  constructor(code: string, detail?: string, shown?: string) {
     super(code);
     this.name = "FieldFailed";
     this.code = code;
     if (detail !== undefined) this.detail = detail;
+    if (shown !== undefined) this.shown = shown;
   }
 }
 

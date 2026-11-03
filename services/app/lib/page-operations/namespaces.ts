@@ -510,7 +510,9 @@ export async function executePageOperation(
               );
             }
             settle("unknown");
-            throw new GraphQLError("Backend execution failed", { extensions });
+            // A message the resolver threw (redacted by the invoker) is shown to every caller; any other failure is not.
+            const shown = extensions ? boundedDetail((error as { shown?: unknown }).shown) : undefined;
+            throw new GraphQLError(shown ?? "Backend execution failed", { extensions });
           }
           settle(reported ?? "committed");
           // Results are data only: no getters, functions or prototypes reach graphql-js.

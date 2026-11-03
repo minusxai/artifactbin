@@ -4,7 +4,7 @@ import { DATASET_ROLES, RESOLVER_LIMITS, type DatasetRole, type HtmlJson, type P
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
 import {readPinnedBackendSecret,secretBindingNames,secretHostMap} from '@/lib/html-backend-secrets';
-import {resolverFailureDetail} from './redaction';
+import {redactedLine,resolverFailureDetail} from './redaction';
 import { FieldFailed, FieldNotExecuted } from './contracts';
 import type { ResolverFetcher } from './public-fetch';
 import type { ResolverQuery } from './query';
@@ -15,20 +15,30 @@ export interface PageBackendFetchResult {status:number;url:string;contentType:st
 export type PageBackendFetcher=(url:string)=>Promise<PageBackendFetchResult>;
 export interface PageBackendStore {get(backendId:string):Promise<{value:HtmlJson;version:number}>;set(backendId:string,value:HtmlJson,expected:number,scope?:{pageId:string;version:string;ownerId:string}):Promise<{ok:boolean;version:number}>}
 const limits={timeoutMs:RESOLVER_LIMITS.wallMs,cpuMs:200,memoryMiB:64,maxRequests:RESOLVER_LIMITS.maxRequests,maxOutputBytes:RESOLVER_LIMITS.outputBytes};
+/**
+ * How a run's reason marks a message the resolver code itself threw (an Error it made, not one a capability
+ * raised or the runner reported): the invoker shows its redacted first line to every caller.
+ */
+export const RESOLVER_THREW='resolver_error: ';
 /** api 1 keeps its legacy capabilities; api 2 gets `fetch` (with host-filled `{{NAME}}` placeholders) and `query` (the page's datasets as the caller), nothing else. */
-const API1_CAPS=`Object.freeze({secrets:Object.freeze({get:(name)=>host.artifactbin.call('pageBackend.secrets.get',{name})}),fetch:async(url)=>{const r=await host.artifactbin.call('pageBackend.fetch',{url});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({'content-type':r.contentType}),text:async()=>r.body,json:async()=>JSON.parse(r.body)});},store:Object.freeze({get:()=>host.artifactbin.call('pageBackend.store.get',{}),set:async(value,options)=>{const result=await host.artifactbin.call('pageBackend.store.set',{value,expected:options.expected});if(!result.ok){const e=Error('conflict');e.code='conflict';throw e;}return result.version;}})})`;
-const API2_CAPS=`Object.freeze({fetch:async(url,init)=>{const o=init??{};const r=await host.artifactbin.call('pageBackend.fetch',{url,method:o.method,headers:o.headers,body:o.body,auth:o.auth});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({...r.headers}),text:async()=>r.body,json:async()=>JSON.parse(r.body)});},query:async(query,variables)=>{try{return await host.artifactbin.call('pageBackend.query',{query,variables:variables??null});}catch(e){const m=String(e&&e.message||e),i=m.indexOf(': ');const error=Error(i>0?m.slice(i+2):m);error.code=i>0?m.slice(0,i):m;throw error;}}})`;
+const API1_CAPS=`Object.freeze({secrets:Object.freeze({get:G((name)=>host.artifactbin.call('pageBackend.secrets.get',{name}))}),fetch:G(async(url)=>{const r=await host.artifactbin.call('pageBackend.fetch',{url});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({'content-type':r.contentType}),text:G(async()=>r.body),json:G(async()=>JSON.parse(r.body))});}),store:Object.freeze({get:G(()=>host.artifactbin.call('pageBackend.store.get',{})),set:G(async(value,options)=>{const result=await host.artifactbin.call('pageBackend.store.set',{value,expected:options.expected});if(!result.ok){const e=Error('conflict');e.code='conflict';throw e;}return result.version;})})})`;
+const API2_CAPS=`Object.freeze({fetch:G(async(url,init)=>{const o=init??{};const r=await host.artifactbin.call('pageBackend.fetch',{url,method:o.method,headers:o.headers,body:o.body,auth:o.auth});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({...r.headers}),text:G(async()=>r.body),json:G(async()=>JSON.parse(r.body))});}),query:G(async(query,variables)=>{try{return await host.artifactbin.call('pageBackend.query',{query,variables:variables??null});}catch(e){const m=String(e&&e.message||e),i=m.indexOf(': ');const error=Error(i>0?m.slice(i+2):m);error.code=i>0?m.slice(0,i):m;throw error;}})})`;
 /** The runner compiler's fixed import allowlist is authoritative. No host evaluation. */
 async function backendProgram(source:string,api:ResolverApi):Promise<string>{
  if(Buffer.byteLength(source)>262144)throw new FieldNotExecuted('Source exceeds budget','source_limit');
  const transformed=await transform(source,{loader:'ts',format:'cjs',target:'es2022'});
- return `const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
+ // G marks every error a capability raises, so only the resolver's own throws carry RESOLVER_THREW.
+ return `const __afPlatform=new WeakSet();const G=(f)=>async(...a)=>{try{return await f(...a);}catch(e){if(e!==null&&typeof e==='object')__afPlatform.add(e);throw e;}};
+const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
  if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs,secretBindings:Backend.secretBindings,secrets:Backend.secrets};}
  const fn=Backend.default[input.field];if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
  const caps=${api===1?API1_CAPS:API2_CAPS};
- return await fn(input.args,principal,caps);
+ try{return await fn(input.args,principal,caps);}catch(e){
+  if(e!==null&&typeof e==='object'&&!__afPlatform.has(e)&&typeof e.message==='string'&&e.message)throw Error(${JSON.stringify(RESOLVER_THREW)}+e.message);
+  throw e;
+ }
  }`;
 }
 /** Runner replies that prove the run was not admitted and may be on a later try (queue full, restarting, start threw before admission). */
@@ -110,7 +120,8 @@ async function pinnedValues(backend:PageBackendRecord,read:(backend:PageBackendR
 }
 /**
  * A failed run surfaces as `backend_failed`; its `detail` (shown to the page owner only, by the executor) is the
- * runner's reason made safe by `resolverFailureDetail`, redacted of the pinned secret values.
+ * runner's reason made safe by `resolverFailureDetail`, redacted of the pinned secret values. A message the
+ * resolver itself threw (RESOLVER_THREW) is also `shown`, after the same redaction, to every caller.
  */
 export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[];readSecret?:(backend:PageBackendRecord,name:string)=>Promise<string>}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
  const backend=await load(call.fileId,call.version);
@@ -118,7 +129,10 @@ export function createBackendInvoker(runner:RunnerService,load:(fileId:string,ve
  try{return await runBackend(backend);}catch(error){
   if(!(error instanceof RunFailed))throw error;
   const reason=error.receipt?.reason;
-  throw new FieldFailed('backend_failed',reason?resolverFailureDetail(error.receipt,await pinnedValues(backend,options.readSecret??readPinnedBackendSecret)):undefined);
+  if(!reason)throw new FieldFailed('backend_failed');
+  const secrets=await pinnedValues(backend,options.readSecret??readPinnedBackendSecret),thrown=reason.startsWith(RESOLVER_THREW);
+  const receipt=thrown?{...error.receipt!,reason:reason.slice(RESOLVER_THREW.length)}:error.receipt;
+  throw new FieldFailed('backend_failed',resolverFailureDetail(receipt,secrets),thrown?redactedLine(receipt!.reason!,secrets):undefined);
  }
  function runBackend(backend:PageBackendRecord){return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs);}
 };}

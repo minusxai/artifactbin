@@ -61,6 +61,10 @@ export default {
 
 Limits per call: 15 s wall time, 32 capability requests, 1 MiB result, 64 MiB memory.
 
+A resolver's own `throw Error('...')` reaches every caller as `errors[0].message` (first line, 200
+characters, secrets redacted); a caps error you don't catch, a timeout or a crash reads `Backend
+execution failed`, with the reason in `extensions.detail` for the owner only.
+
 ## caps.fetch and secrets
 
 `caps.fetch(url, {method, headers, body, auth})` returns `{ok, status, url, headers, text(), json()}`

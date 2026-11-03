@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {RESOLVER_LIMITS,type RunStart,type RunnerService} from '@artifactbin/contracts';
-import {pageBackendCapability,createBackendInvoker} from '../backend';
+import {pageBackendCapability,createBackendInvoker,RESOLVER_THREW} from '../backend';
 import {FieldFailed,FieldNotExecuted} from '../contracts';
 import {composePageSchema,executePageOperation} from '../namespaces';
 const record={backendId:'backend1',pageId:'page1',version:'v1',source:'source',compiled:'immutable bundle',typeDefs:'type Query { x:Int }',ownerId:'owner1'};
@@ -200,5 +200,36 @@ describe('owner-only resolver failure detail',()=>{
   for(const role of ['editor','viewer','anonymous'] as const)expect((await errorFor(role))?.extensions).toEqual({code:'backend_failed'});
   // No page role is refused before the resolver runs: no detail either.
   expect((await errorFor(null))?.extensions?.detail).toBeUndefined();
+ });
+});
+describe('a message the resolver code itself throws',()=>{
+ const SECRET='s3cr3t+/value=';
+ const failing=(reason:string,requests:{status:number|null}[]=[])=>({start:async()=>({runId:'run1'}),getRun:async()=>({runId:'run1',status:'failed',output:null,receipt:{reason,requests:requests.map(r=>({service:'fetch',operation:'artifactbin.pageBackend.fetch',durationMs:1,requestId:null,...r}))}}),cancel:async()=>{}}) as unknown as RunnerService;
+ const schema=composePageSchema([{name:'shop',fileId:'backend1',version:'v1',typeDefs:'type Query { note: String }'}]);
+ const errorFor=async(reason:string,role:'owner'|'editor'|'viewer'|'anonymous',requests?:{status:number|null}[])=>{
+  const invoke=createBackendInvoker(failing(reason,requests),async()=>({...record,secretBindings:['KEY']}),{readSecret:async()=>SECRET});
+  return (await executePageOperation({schema,request:{query:'{ shop { note } }'},caller:{pageId:'page1',subject:role==='anonymous'?null:'u1',role},invoke,signal:new AbortController().signal})).errors![0]!;
+ };
+ it('becomes the error message for every caller; the owner still gets the detail',async()=>{
+  for(const role of ['editor','viewer','anonymous'] as const)expect(await errorFor(`${RESOLVER_THREW}Write a note of 1 to 280 characters.`,role)).toMatchObject({message:'Write a note of 1 to 280 characters.',extensions:{code:'backend_failed'}});
+  expect((await errorFor(`${RESOLVER_THREW}Upstream refused`,'viewer',[{status:401}])).extensions).toEqual({code:'backend_failed'});
+  expect(await errorFor(`${RESOLVER_THREW}Upstream refused`,'owner',[{status:401}])).toMatchObject({message:'Upstream refused',extensions:{code:'backend_failed',detail:'HTTP 401: Upstream refused'}});
+ });
+ it('is redacted like the detail for everyone: secret values in every encoding, URL queries, credentials, first line, 200 characters',async()=>{
+  const b64=Buffer.from(SECRET).toString('base64');
+  for(const role of ['viewer','owner'] as const){
+   const {message}=await errorFor(`${RESOLVER_THREW}leaked ${SECRET} ${encodeURIComponent(SECRET)} ${b64} at https://user:pw@api.example.com/v1?key=abc Authorization: Bearer tok123\n    at note (resolver.js:1:2)`,role);
+   expect(message).toContain('[redacted]');expect(message).toContain('https://api.example.com/v1');
+   for(const leak of [SECRET,encodeURIComponent(SECRET),b64,'key=abc','user:pw','tok123','resolver.js','\n'])expect(message).not.toContain(leak);
+   const long=(await errorFor(`${RESOLVER_THREW}${'x'.repeat(190)}${SECRET}`,role)).message;
+   expect(long.length).toBeLessThanOrEqual(200);expect(long).not.toContain(SECRET.slice(0,6));
+  }
+ });
+ it('never shows a platform failure to a non-owner',async()=>{
+  for(const reason of ['timeout','secret_host_forbidden: KEY','Script execution timed out.','worker_exit',`x ${RESOLVER_THREW}not at the start`]){
+   for(const role of ['editor','viewer','anonymous'] as const)expect(await errorFor(reason,role)).toEqual({message:'Backend execution failed',path:['shop','note'],extensions:{code:'backend_failed'}});
+   expect((await errorFor(reason,'owner')).message).toBe('Backend execution failed');
+  }
+  expect((await errorFor(`${RESOLVER_THREW}`,'viewer')).message).toBe('Backend execution failed');
  });
 });
