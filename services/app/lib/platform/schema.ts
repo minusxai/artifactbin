@@ -860,7 +860,7 @@ const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
 ],primaryKey:['id'],
  // The drain reads the oldest batch every second (lib/platform/event-outbox).
  indexes:[{name:'idx_event_outbox_created',columns:['created_at','id']}]};
-/** Durable query triggers and their one winning output stay in app-owned storage. */
+/** Retired mutation-notification jobs and their inbox rows: nothing reads or writes them; they move to DROPPED_TABLES once that is live. */
 const NOTIFICATION_JOBS: Table = {name:'notification_jobs',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'mutation_run_id',type:'TEXT',notNull:true},
  {name:'document_id',type:'TEXT',notNull:true},

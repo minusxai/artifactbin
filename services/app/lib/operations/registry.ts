@@ -1,10 +1,8 @@
 import {documentOwner} from '@/lib/user-pages';
-import {notificationJobOperations} from './notification-jobs';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
 import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
-import { notificationJobStore } from '@/lib/notifications';
 import {GROUP_OPERATIONS} from './groups';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
@@ -776,7 +774,7 @@ const queryDatasetGraphqlOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,queryDatasetGraphqlOp,
+  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

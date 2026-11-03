@@ -1,5 +1,5 @@
 /** The retired named-mutation _row/_value controls now send explicit dataset SQL parameters.
- * Canonical API/browser receipt adaptation remains covered by notification-run-replay.test.ts. */
+ * Canonical API/browser receipt adaptation is covered by lib/document-data/__tests__/mutation-operation.test.ts. */
 import { expect, it } from 'vitest';
 import { request, useAppHarness, mintAccountToken } from './harness';
 import { POST as create } from '@/app/api/artifacts/route';

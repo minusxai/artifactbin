@@ -64,13 +64,13 @@ describe('durable mutation receipts', () => {
     let runs = 0;
     const work = async (receipt: MutationReceipt) => {
       runs++;
-      expect(receipt).toMatchObject({ key: KEY, runId: expect.stringMatching(/^[a-f0-9]{64}$/), initiator: 'agent' });
+      expect(receipt).toMatchObject({ key: KEY, fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) });
       // A response committed with the content write is the answer, whatever the work returns afterwards.
       await completeMutationReceipt(await harness.db(), receipt, { status: 200, body: { committed: true } });
       return { status: 500, body: { late: true } };
     };
     expect(await durableMutation(owner, ORIGIN, 'bad', {}, work)).toEqual({ status: 400, body: { error: 'invalid_idempotency_key' } });
-    expect(await durableMutation(owner, ORIGIN, KEY, { n: 1 }, work, { initiator: 'agent' } as never)).toEqual({ status: 200, body: { committed: true } });
+    expect(await durableMutation(owner, ORIGIN, KEY, { n: 1 }, work)).toEqual({ status: 200, body: { committed: true } });
     expect(await durableMutation(owner, ORIGIN, KEY, { n: 1 }, work)).toEqual({ status: 200, body: { committed: true } });
     expect(runs).toBe(1);
     expect(await durableMutation(owner, ORIGIN, KEY, { n: 2 }, work)).toEqual({ status: 409, body: { error: 'idempotency_mismatch' } });

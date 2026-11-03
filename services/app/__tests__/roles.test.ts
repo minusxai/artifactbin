@@ -7,7 +7,7 @@ import { effectiveRole, effectiveRole as roleFor } from '@/lib/artifact-access';
 import { parseShareEntries } from '@/lib/artifact-wire';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { linkRoleOf } from '@/lib/artifact-access';
-import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
+import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility, type Queryable } from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, createUser, ensureUsername } from '@/lib/accounts';
 import { setRelationState, has, count, linked, link } from '@/lib/social';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
@@ -29,7 +29,7 @@ import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prom
 import { getDb } from '@/lib/platform';
 /** A user's sign-in email changing underneath their grants (the identity store's own write). */
 const setUserEmail = async (userId: string, email: string) => { await (await getDb()).query('UPDATE users SET email = $2 WHERE id = $1', [userId, email]); };
-import { hasExplicitNotificationMembership, membershipInbox, updateMembershipInbox } from '@/lib/notifications';
+import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 
 /**
@@ -82,6 +82,9 @@ const shareWith = (owner: Account, row: ArtifactRow, email: string, role: ShareR
   updateSharingFor(identityForUser(owner.user.id, ''), row.id, { shares: [{ email, role }] });
 
 /** Nobody at all — the anonymous visitor holding only the address. */
+/** The recipient holds a live, explicit (self-consented) join of this artifact. */
+const explicitlyJoined = async (db: Queryable, documentId: string, userId: string) =>
+  (await db.query("SELECT 1 FROM relations WHERE subject_kind='user' AND subject_id=$2 AND verb='join' AND object_kind='artifact' AND object_id=$1 AND status='accepted' AND deleted_at IS NULL AND explicit_join=true", [documentId, userId])).rows.length > 0;
 const STRANGER = identityForUser(null, null);
 const SHARE_ROLE_LIST: ShareRole[] = ['viewer', 'commenter', 'editor'];
 
@@ -1277,7 +1280,7 @@ describe('artifact membership', () => {
 
   it('requires artifact-specific consent even after an autoaccepted invitation',async()=>{
    const w=await world();
-   const eligible=()=>hasExplicitNotificationMembership(w.db,'a1B2c3',w.bob.id);
+   const eligible=()=>explicitlyJoined(w.db,'a1B2c3',w.bob.id);
    expect(await eligible()).toBe(false);
    await link(w.bob.id,'follow',w.owner.id);
    await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
@@ -1293,7 +1296,7 @@ describe('artifact membership', () => {
   });
   it('records self requests and explicit invitation acceptance without granting pending eligibility',async()=>{
    const w=await world();
-   const eligible=(id:string)=>hasExplicitNotificationMembership(w.db,'a1B2c3',id);
+   const eligible=(id:string)=>explicitlyJoined(w.db,'a1B2c3',id);
    await changeMembership(w.actor(w.owner),'a1B2c3',{action:'join'});
    expect(await eligible(w.owner.id)).toBe(true);
    await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});

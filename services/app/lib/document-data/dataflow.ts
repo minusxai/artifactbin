@@ -1,4 +1,3 @@
-import {JOIN_RELATIONS} from '@/lib/social';
 import { type ArtifactHeader, type ArtifactRow, getArtifactFor, getLinkReadableArtifact, childrenTableFor } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
 import { datasetReadAccess, datasetView } from '@/lib/dataset-permissions';
@@ -13,7 +12,7 @@ type RefData = {tables:ImportTables[string];catalog?:import('@/lib/datasets').Da
 type DatasetResolver = (id:string,mode?:DocumentQuerySourceMode)=>Promise<RefData|null>;
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
-export async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
+async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
     if (!loadRows) return {tables:{}};
@@ -64,8 +63,4 @@ export async function referencedArtifactForRow(row: ArtifactRow, id: string): Pr
   if (!refs.some((ref) => ref.id === id)) return null;
   return (await getArtifactFor(writerFor(row), id))
     ?? (await getLinkReadableArtifact(id));
-}
-
-export async function acceptedMembers(artifactId:string):Promise<import('@/lib/dataflow').Row[]>{
- return (await (await getDb()).query<import('@/lib/dataflow').Row>(`SELECT user_id,joined_at::text FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id`,[artifactId])).rows;
 }

@@ -182,7 +182,4 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
     const finalMetadata = await body(await readMine(request(`/api/my/artifacts/${model.id}`, { actor: w.owner }), params(model.id)));
     expect(finalMetadata.meta.catalog.tables.some((t: { name: string }) => t.name === 'region_totals')).toBe(true);
   });
-
-  // JSX Mutation/Notification admission was retired. Delivery deduplication and
-  // atomic notification jobs remain covered by __tests__/notification-jobs.test.ts.
 });
