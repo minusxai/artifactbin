@@ -2,5 +2,6 @@
   "services/app/lib/document-serving/__tests__/native-html-publication-bundle.test.ts",
   "services/app/lib/html-backends/__tests__/native-acceptance.test.ts",
   "services/app/lib/page-graphql/__tests__/raced-read.test.ts",
-  "services/app/lib/page-operations/__tests__/backend.test.ts"
+  "services/app/lib/page-operations/__tests__/backend.test.ts",
+  "services/app/lib/page-operations/__tests__/runner-output-ceiling.test.ts"
 ]
