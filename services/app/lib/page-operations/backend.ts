@@ -40,6 +40,12 @@ const START_TIMEOUTS=new Set(['AbortError','TimeoutError','UpstreamTimeoutError'
 /** Backoff after fast start failures only (at most about 2.1 s in total); jittered so concurrent page reads do not retry in lockstep. */
 const START_RETRY_DELAYS_MS=[200,500,1000];
 const pause=(ms:number,signal?:AbortSignal)=>new Promise<void>(resolve=>{const timer=setTimeout(done,ms);function done(){clearTimeout(timer);signal?.removeEventListener('abort',done);resolve();}signal?.addEventListener('abort',done,{once:true});});
+/** The promise's value, or undefined as soon as the signal aborts (its later outcome is dropped). */
+const untilAborted=<T,>(promise:Promise<T>,signal?:AbortSignal):Promise<T|undefined>=>{
+ if(!signal)return promise;
+ if(signal.aborted){promise.catch(()=>{});return Promise.resolve(undefined);}
+ return new Promise<T|undefined>((resolve,reject)=>{const stop=()=>resolve(undefined);signal.addEventListener('abort',stop,{once:true});promise.then(resolve,reject).finally(()=>signal.removeEventListener('abort',stop));});
+};
 /**
  * Starts a run, retrying transient admission failures. Every attempt reuses the same requestId, and
  * the runner admits a requestId at most once, so a retry after a lost reply resumes the admitted run.
@@ -72,12 +78,16 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
  const lookup={runId,userId:request.userId};
  const deadline=Date.now()+RESOLVER_LIMITS.appWaitMs;
  while(true){
-  if(signal?.aborted||Date.now()>deadline){await runner.cancel(lookup).catch(()=>{});throw new FieldFailed('deadline');}
-  let snapshot;try{snapshot=await runner.getRun(lookup);}catch{throw new FieldFailed('backend_unavailable');}
+  if(signal?.aborted||Date.now()>=deadline){await runner.cancel(lookup).catch(()=>{});throw new FieldFailed('deadline');}
+  // One completion wait per round trip instead of polling; it never outlasts the call's deadline.
+  const waitMs=Math.min(deadline-Date.now(),RESOLVER_LIMITS.runWaitMs),asked=Date.now();
+  let snapshot;try{snapshot=await untilAborted(runner.getRun({...lookup,waitMs}),signal);}catch{throw new FieldFailed('backend_unavailable');}
+  if(!snapshot)continue;
   if(snapshot.status==='completed')return snapshot.output;
   // The reason stays raw here: the invoker redacts it against the pinned secrets before it becomes a detail.
   if(!['queued','running'].includes(snapshot.status))throw new RunFailed(snapshot.receipt);
-  await new Promise(resolve=>setTimeout(resolve,10));
+  // Back early and still running: a runner that does not hold the wait. Poll it gently.
+  if(Date.now()-asked<waitMs)await pause(10,signal);
  }
 }
 /** Source that reaches for a legacy capability or declaration is api 1; everything else is the resolver contract, api 2. */

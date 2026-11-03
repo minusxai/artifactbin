@@ -44,7 +44,7 @@ export type { StoredMermaidImage } from './mermaid-image';
 
 export * from './mutation-notifications';
 
-export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
+export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunWait, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
 
 export type {RunnerCapabilities,RunnerTerminal,ResolverFetchReceipt} from './runner';
 export {RESOLVER_LIMITS} from './runner';

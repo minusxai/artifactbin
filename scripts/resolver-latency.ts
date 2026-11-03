@@ -2,7 +2,7 @@
  * RESOLVER CALL LATENCY — a benchmark, never a test: no CI job runs it and nothing asserts a budget.
  *
  *   node --import tsx scripts/resolver-latency.ts [--modes micro,runner,http,docker,app] [--runs 50]
- *     [--warmup 5] [--concurrent 8] [--batches 3] [--image afbin-worker] [--base <dev app origin>] [--json <file>]
+ *     [--warmup 5] [--concurrent 8] [--batches 3] [--prestart <n>] [--image afbin-worker] [--base <dev app origin>] [--json <file>]
  *
  * One trivial resolver field (`ping: () => 'pong'`) is timed through the real code paths, unchanged:
  *
@@ -10,12 +10,13 @@
  *              spawn → `ready` (with and without `--no-node-snapshot`), and `run` → `result` inside the
  *              worker (isolate + evaluate bundle + call), then SIGKILL → exit.
  * - `runner` — `createBackendInvoker` against an in-process `createRunner` (node child per run), the
- *              local composition's runner. Each call is split from its receipt and the poll loop:
+ *              local composition's runner. Each call is split from its receipt and the completion wait:
  *              admit (start(): lookups + bundleSource + insert), queue (admittedAt → startedAt),
- *              execute (startedAt → finishedAt: spawn, isolate, call, kill, exit), observe (finishedAt →
- *              first completed getRun: persist + 10 ms polling).
+ *              execute (startedAt → finishedAt: claim a pre-started worker or spawn one, isolate, call,
+ *              kill, exit), observe (finishedAt → completed getRun: persist + the completion wait's reply).
+ *              `--prestart <n>` sets the runner's pre-started workers (default: the runner's own; 0 = none).
  * - `http`   — the same runner behind `runnerHttp` and the signed `runnerClient` on loopback: the
- *              production shape (the app reaches its runner over HTTP, and every poll is a request).
+ *              production shape (the app reaches its runner over HTTP; each getRun is a request).
  * - `docker` — the runner with `dockerImage` (a container per run). Reference only: the production
  *              resolver runner does not set it. Needs `--image` (build: services/runner/Dockerfile).
  * - `app`    — end to end through the running dev app's page GraphQL (`npm run dev`, `.env` origin):
@@ -26,7 +27,7 @@
  * service, no JIT). The resolver is compiled once in this process, as publishing does, and handed over.
  * Results: docs/resolver-latency.md.
  */
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
@@ -37,13 +38,14 @@ import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import type { HtmlJson, RunnerService, RunReceipt, RunStart } from '@artifactbin/contracts';
 
+const gitOut = (cmd: string, args: string[]) => execFileSync(cmd, args, { cwd: ROOT, encoding: 'utf8' }).trim();
 const ROOT = path.resolve(import.meta.dirname, '..');
 const WORKER = path.join(ROOT, 'services/runner/src/runner-worker.mjs');
 const SOURCE = 'export const typeDefs = "type Query { ping: String! }";\nexport default { ping: () => "pong" };\n';
 const QUERY = '{ bench { ping } }';
 const BASELINE = '{ __typename }';
 
-type Options = { modes: string[]; runs: number; warmup: number; concurrent: number; batches: number; image?: string; base?: string; json?: string };
+type Options = { modes: string[]; runs: number; warmup: number; concurrent: number; batches: number; prestart?: number; image?: string; base?: string; json?: string };
 type Series = Record<string, number[]>;
 interface ModeResult { mode: string; note: string; cold: Record<string, number>; warm: Series; concurrent: Series }
 
@@ -53,6 +55,7 @@ function parse(argv: string[]): Options & { child?: string; compiled?: string } 
   return {
     modes: (value('modes') ?? 'micro,runner,http,app').split(',').filter(Boolean),
     runs: int('runs', 50), warmup: int('warmup', 5), concurrent: int('concurrent', 8), batches: int('batches', 3),
+    prestart: value('prestart') === undefined ? undefined : (() => { const n = Number(value('prestart')); if (!Number.isSafeInteger(n) || n < 0) throw Error('--prestart must be a non-negative integer'); return n; })(),
     image: value('image'), base: value('base'), json: value('json'), child: value('child'), compiled: value('compiled'),
   };
 }
@@ -158,8 +161,8 @@ function split(sample: CallSample, total: number): Record<string, number> {
     'total (invoke → value)': total,
     'admit: start() (lookup + bundleSource + insert)': sample.startResolvedAt - sample.calledAt,
     'queue: admittedAt → startedAt': started - admitted,
-    'execute: startedAt → finishedAt (spawn, isolate, call, kill)': finished - started,
-    'observe: finishedAt → completed getRun (persist + polling)': sample.observedAt - finished,
+    'execute: startedAt → finishedAt (worker, isolate, call, kill)': finished - started,
+    'observe: finishedAt → completed getRun (persist + wait reply)': sample.observedAt - finished,
     'getRun calls': sample.polls,
   };
   return stages;
@@ -177,7 +180,7 @@ async function runnerMode(mode: 'runner' | 'http' | 'docker', compiled: string, 
   const program = (JSON.parse(compiled) as { compiled: string }).compiled;
   const db = new PGlite();
   // Production's controller allows 8 concurrent runs (artifactbin-server compose, RUNNER__MAX_CONCURRENT).
-  const local = await createRunner({ db, maxConcurrent: 8, ...(mode === 'docker' ? { dockerImage: o.image } : {}), capabilities: async () => { throw Error('no_capabilities'); } });
+  const local = await createRunner({ db, maxConcurrent: 8, ...(o.prestart === undefined ? {} : { prestartedWorkers: o.prestart }), ...(mode === 'docker' ? { dockerImage: o.image } : {}), capabilities: async () => { throw Error('no_capabilities'); } });
   let service: RunnerService = local, close = async () => {};
   if (mode === 'http') {
     const secret = randomBytes(32).toString('hex');
@@ -258,7 +261,7 @@ async function compile(): Promise<string> {
 }
 
 async function inChild(mode: string, compiledFile: string, o: Options): Promise<ModeResult> {
-  const argv = ['--runs', o.runs, '--warmup', o.warmup, '--concurrent', o.concurrent, '--batches', o.batches].map(String).concat(o.image ? ['--image', o.image] : []);
+  const argv = ['--runs', o.runs, '--warmup', o.warmup, '--concurrent', o.concurrent, '--batches', o.batches].map(String).concat(o.image ? ['--image', o.image] : [], o.prestart === undefined ? [] : ['--prestart', String(o.prestart)]);
   const child = spawn(process.execPath, ['--import', 'tsx', fileURLToPath(import.meta.url), ...argv, '--child', mode, '--compiled', compiledFile], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] });
   let out = ''; child.stdout.on('data', (b: Buffer) => { out += b.toString(); });
   const [code] = await once(child, 'close') as [number];
@@ -286,7 +289,7 @@ async function main() {
     results.push(mode === 'app' ? await appMode(o) : await inChild(mode, compiledFile, o));
   }
   fs.rmSync(dir, { recursive: true, force: true });
-  const meta = { node: process.version, platform: `${os.platform()} ${os.arch()}`, cpus: `${os.cpus().length} × ${os.cpus()[0]?.model ?? '?'}`, runs: o.runs, warmup: o.warmup, concurrent: `${o.batches} × ${o.concurrent}`, at: new Date().toISOString() };
+  const meta = { revision: (() => { try { return gitOut('git', ['rev-parse', '--short', 'HEAD']); } catch { return '?'; } })(), prestart: o.prestart ?? 'runner default', node: process.version, platform: `${os.platform()} ${os.arch()}`, cpus: `${os.cpus().length} × ${os.cpus()[0]?.model ?? '?'}`, runs: o.runs, warmup: o.warmup, concurrent: `${o.batches} × ${o.concurrent}`, at: new Date().toISOString() };
   let report = `# Resolver latency\n\n${Object.entries(meta).map(([k, v]) => `- ${k}: ${v}`).join('\n')}\n`;
   for (const r of results) {
     report += `\n## ${r.mode} — ${r.note}\n\n`;

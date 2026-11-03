@@ -97,3 +97,16 @@ it('never persists credentials read by a backend in nested results, emitted even
   const rows=await db.query('SELECT output,receipt FROM runner_runs WHERE id=$1',[runId]);expect(JSON.stringify(rows.rows)).not.toContain(secret);
  }
 });
+
+it('holds getRun open until the run is terminal, for its owner only, within the requested wait',async()=>{
+ const {runner}=await setup();const quick=await runner.start({...request('export default()=>7'),requestId:'quick'});
+ const snapshot=await runner.getRun({userId:'alice',runId:quick.runId,waitMs:10_000});expect(snapshot).toMatchObject({status:'completed',output:7});
+ const hung=await runner.start({...request('export default()=>new Promise(()=>{})'),requestId:'hung'});
+ let began=Date.now();expect((await runner.getRun({userId:'alice',runId:hung.runId,waitMs:150})).status).toMatch(/queued|running/);expect(Date.now()-began).toBeGreaterThanOrEqual(140);
+ began=Date.now();await expect(runner.getRun({userId:'bob',runId:hung.runId,waitMs:5_000})).rejects.toThrow('not_found');expect(Date.now()-began).toBeLessThan(1_000);
+ await expect(runner.getRun({userId:'alice',runId:hung.runId,waitMs:-1})).rejects.toThrow('invalid_wait');
+ const waiting=runner.getRun({userId:'alice',runId:hung.runId,waitMs:10_000});await runner.cancel({userId:'alice',runId:hung.runId});expect((await waiting).status).toBe('cancelled');
+ const app=runnerHttp(runner);const client=runnerClient('http://runner',inProcess(app));
+ const viaHttp=await client.start({...request('export default()=>8'),requestId:'http'});expect(await client.getRun({userId:'alice',runId:viaHttp.runId,waitMs:10_000})).toMatchObject({status:'completed',output:8});
+ const invalid=await inProcess(app)(new Request(`http://runner/v1/runs/${viaHttp.runId}?wait=soon`),{userId:'alice',credential:'session'});expect(invalid.status).toBe(400);
+});

@@ -1,11 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
-import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
-import { RESOLVER_LIMITS, type RunStart, type RunLookup, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
+import { RESOLVER_LIMITS, type RunStart, type RunWait, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
 import {redactRunSecrets} from './secret-redaction';
 import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
+import { createWorkerPool, startWorker, type WorkerMessage } from './worker-pool';
 const worker = fileURLToPath(new URL('./runner-worker.mjs', import.meta.url));
 const defaults: RunnerLimits = { timeoutMs: 30000, cpuMs: 200, memoryMiB: 64, maxRequests: 100, maxOutputBytes: 1024 * 1024 };
 const terminal = (s: string) => !['queued', 'running'].includes(s);
@@ -24,6 +24,11 @@ export interface RunnerOptions {
     dockerImage?: string;
     maxConcurrent?: number;
     maxQueued?: number;
+    /**
+     * Worker processes kept started ahead of demand (default 2, at most `maxConcurrent`). Each still
+     * runs exactly one program and is then killed. Ignored with `dockerImage`.
+     */
+    prestartedWorkers?: number;
     ceilings?: Partial<RunnerLimits>;
 }
 interface Active {
@@ -83,6 +88,9 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
     const maxConcurrent = options.maxConcurrent ?? 4, maxQueued = options.maxQueued ?? 100;
     if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || !Number.isInteger(maxQueued) || maxQueued < 1)
         throw Error('invalid_capacity');
+    const prestarted = options.prestartedWorkers ?? 2;
+    if (!Number.isInteger(prestarted) || prestarted < 0)
+        throw Error('invalid_capacity');
     async function persist(id: string, row: Pick<RunRow, 'admitted_at' | 'started_at'>, status: RunReceipt['status'], reason: string | null, output: RunnerJson, requests: RunReceipt['requests'] = [], usage: RunReceipt['usage'] = [], cpuMs: number | null = null) {
         const finishedAt = new Date().toISOString();
         const receipt: RunReceipt = { runId: id, status, reason, admittedAt: row.admitted_at, startedAt: row.started_at, finishedAt, durationMs: Date.parse(finishedAt) - Date.parse(row.admitted_at), cpuMs, peakMemoryBytes: null, requests, usage, estimatedDollars: null, pricingVersion: null };
@@ -94,6 +102,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             await removeContainer(row.id);
         await persist(row.id, row, 'interrupted', 'host_restart', null);
     }
+    const pool = options.dockerImage ? undefined : createWorkerPool({ size: Math.min(prestarted, maxConcurrent), spawnChild: () => spawn(process.execPath, ['--no-node-snapshot', worker], { stdio: ['pipe', 'pipe', 'pipe'], env: {} }) });
     async function removeContainer(id: string) { await new Promise<void>((resolve, reject) => { const p = spawn('docker', ['rm', '-f', `afbin-run-${id}`], { stdio: 'ignore' }); p.once('error', reject); p.once('close', () => resolve()); }); }
     async function finish(id: string, status: RunReceipt['status'], reason: string | null = null, output: RunnerJson = null, cpuMs: number | null = null): Promise<void> {
         const run = active.get(id);
@@ -137,8 +146,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         return run.finishing;
     }
     const fail = (id: string, e: unknown) => { void finish(id, 'failed', e instanceof Error ? e.message : 'run_failed').catch(() => { closed = true; }); };
-    async function message(id: string, msg: {
-        type: string;
+    async function message(id: string, msg: WorkerMessage & {
         id?: number;
         operation?: string;
         args?: RunnerJson;
@@ -229,31 +237,14 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             await r.containerCreation;
             if (r.finishing) return;
         }
-        const child = options.dockerImage ? spawn('docker', ['start', '-a', '-i', `afbin-run-${id}`], { stdio: ['pipe', 'pipe', 'pipe'] }) : spawn(process.execPath, ['--no-node-snapshot', worker], { stdio: ['pipe', 'pipe', 'pipe'], env: {} });
-        r.child = child;
-        child.stdin.on('error', () => { if (!r.finishing)
-            fail(id, Error('worker_stdin_closed')); });
-        const decoder = new StringDecoder('utf8');
-        let buffered = '';
-        let stderrBytes = 0;
-        child.stdout.on('data', (b: Buffer) => { buffered += decoder.write(b); if (Buffer.byteLength(buffered) > RESOLVER_LIMITS.messageBytes) {
-            fail(id, Error('ipc_limit'));
-            return;
-        } let end; while ((end = buffered.indexOf('\n')) >= 0) {
-            const line = buffered.slice(0, end);
-            buffered = buffered.slice(end + 1);
-            try {
-                void message(id, JSON.parse(line)).catch(e => fail(id, e));
-            }
-            catch {
-                fail(id, Error('invalid_worker_message'));
-            }
-        } });
-        child.stderr.on('data', (b: Buffer) => { stderrBytes += b.length; if (stderrBytes > 65536)
-            fail(id, Error('stderr_limit')); });
-        child.once('error', () => { void finish(id, 'interrupted', 'worker_start_failed'); });
-        child.once('exit', () => { if (!r.finishing)
-            void finish(id, 'interrupted', 'worker_exit'); });
+        const spawned = options.dockerImage ? startWorker(() => spawn('docker', ['start', '-a', '-i', `afbin-run-${id}`], { stdio: ['pipe', 'pipe', 'pipe'] })) : pool!.take();
+        r.child = spawned.child;
+        spawned.claim({
+            message: msg => { void message(id, msg).catch(e => fail(id, e)); },
+            fault: reason => { if (!r.finishing) fail(id, Error(reason)); },
+            startFailed: () => { void finish(id, 'interrupted', 'worker_start_failed'); },
+            exit: () => { if (!r.finishing) void finish(id, 'interrupted', 'worker_exit'); },
+        });
     }
     async function pump() { if (pumping || closed)
         return; pumping = true; try {
@@ -297,6 +288,9 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 }
             }
             limits.memoryMiB = Math.max(8, limits.memoryMiB);
+            // Outside the admission lock: bundling is pure and cached, so concurrent admissions do not queue behind it.
+            // It also precedes the queue_full check; sources are app-signed, pinned backends, so the extra builds are bounded.
+            const bundle = await bundleSource(request.program.source);
             let release!: () => void;
             const prior = admission;
             admission = new Promise<void>(r => release = r);
@@ -312,7 +306,6 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 }
                 if (active.size >= maxQueued)
                     throw Error('queue_full');
-                const bundle = await bundleSource(request.program.source);
                 const id = randomUUID(), admittedAt = new Date().toISOString();
                 const inserted = await db.query('INSERT INTO runner_runs(id,owner,request_key,fingerprint,status,request,admitted_at) VALUES($1,$2,$3,$4,\'queued\',$5,$6) ON CONFLICT(owner,request_key) DO NOTHING RETURNING id', [id, request.userId, request.requestId, fingerprint, JSON.stringify(request), admittedAt]);
                 if (!inserted.rows.length) {
@@ -331,12 +324,28 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 release();
             }
         },
-        async getRun({ userId, runId }: RunLookup): Promise<RunSnapshot> { const row = await ownedRun(db, userId, runId); return { runId, status: row.status, output: row.output ?? null, receipt: row.receipt }; },
+        async getRun({ userId, runId, waitMs }: RunWait): Promise<RunSnapshot> {
+            if (waitMs !== undefined && (!Number.isSafeInteger(waitMs) || waitMs < 0))
+                throw Error('invalid_wait');
+            // Ownership first: a wait never reveals that someone else's run exists.
+            let row = await ownedRun(db, userId, runId);
+            if (waitMs && !terminal(row.status)) {
+                const run = active.get(runId);
+                if (run) {
+                    let timer: ReturnType<typeof setTimeout> | undefined;
+                    await Promise.race([run.done, new Promise<void>(resolve => { timer = setTimeout(resolve, Math.min(waitMs, RESOLVER_LIMITS.runWaitMs)); })]);
+                    clearTimeout(timer);
+                }
+                // `done` resolves after the terminal receipt persists; a run that finished between the reads is terminal now.
+                row = await ownedRun(db, userId, runId);
+            }
+            return { runId, status: row.status, output: row.output ?? null, receipt: row.receipt };
+        },
         async events({ userId, runId, afterSequence, limit = 100 }) { await ownedRun(db, userId, runId); if (!Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1)
             throw Error('invalid_cursor'); const take = Math.min(limit, 100); const rows = (await db.query<RunEvent>('SELECT sequence,event FROM runner_events WHERE run_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3', [runId, afterSequence, take + 1])).rows; const events = rows.slice(0, take); return { events, nextSequence: events.at(-1)?.sequence ?? afterSequence, hasMore: rows.length > take }; },
         async cancel({ userId, runId }) { const row = await ownedRun(db, userId, runId); if (!terminal(row.status))
             await finish(runId, 'cancelled'); },
-        async close() { closed = true; await admission; await Promise.all([...active.keys()].map(id => finish(id, 'interrupted', 'shutdown'))); }
+        async close() { closed = true; await admission; await Promise.all([pool?.close(), ...[...active.keys()].map(id => finish(id, 'interrupted', 'shutdown'))]); }
     };
     return service;
 }
