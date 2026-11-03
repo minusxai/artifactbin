@@ -1,9 +1,8 @@
 /**
- * PAGE COMPOSITION (Hasura PR 6): a page's dataset link on the generated API mounts that dataset's roots flat at
- * the top of the page schema, for the page reader's role through the page (no sharing of their own: signed_in or
- * anonymous), reads and mutations, with the page as X-Hasura-Page-Id. Each saved link records its API: a new link
- * gets the generated one, a republished link keeps its own, an old page's links (no field) stay on the frozen
- * generic API, byte for byte.
+ * PAGE COMPOSITION: every dataset link mounts that dataset's generated roots flat at the top of the page schema,
+ * for the page reader's role through the page (no sharing of their own: signed_in or anonymous), reads and
+ * mutations, with the page as X-Hasura-Page-Id. There is no other dataset API: a stored link's retired `api` field
+ * is ignored and dropped on the next save.
  */
 import { beforeEach, expect, it } from 'vitest';
 import { mintAccountToken, request, setSession, useAppHarness } from './harness';
@@ -13,8 +12,6 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { readHtmlPage } from '@/lib/html-publication';
-import { composePageSchema } from '@/lib/page-operations';
-import { datasetNamespaceSources } from '@/lib/dataset-graphql';
 import { GET as artifactGet, PUT as artifactPut } from '@/app/api/artifacts/[id]/route';
 import { GET, POST } from '@/app/api/artifacts/[id]/graphql/route';
 
@@ -69,9 +66,9 @@ async function fixture(html = (id: string) => `<html><head><link rel="af-dataset
 }
 const names = (reply: { body: Reply }) => (reply.body.data?.staff as Array<{ name: string }>).map((r) => r.name).sort();
 
-it('records the generated API on a new link and mounts its roots flat, per role through the page', async () => {
+it('stores a new link as name, dataset and mode and mounts its roots flat, per role through the page', async () => {
   const f = await fixture();
-  expect((await readHtmlPage(f.owner.actor, f.page)).links).toEqual([{ kind: 'dataset', name: 'staff', datasetId: f.staff, api: 'hasura', mode: 'live' }]);
+  expect((await readHtmlPage(f.owner.actor, f.page)).links).toEqual([{ kind: 'dataset', name: 'staff', datasetId: f.staff, mode: 'live' }]);
   const owner = await sdl(f.page, f.owner), viewer = await sdl(f.page, f.viewer), other = await sdl(f.page, f.other), anonymous = await sdl(f.page, null);
   expect(owner).toMatch(/staff\(where: staff_bool_exp.*\): \[staff!\] @dataset\(link: "staff", file: "[^"]+", version: "live", table: "staff", field: "select"\)/);
   expect(owner).toContain('insert_staff_one(object: staff_insert_input!): staff @dataset');
@@ -123,23 +120,19 @@ it('writes through the page as the caller: presets name the page and the caller,
   expect((await gql(f.page, f.other, add, { variables: { o: { name: 'dee' } }, key: 'bad key' })).status).toBe(400);
 });
 
-it('keeps an old published page (links without an api) on the generic API byte for byte, and republishing keeps it', async () => {
+it('mounts a stored link that still carries the retired api field on the generated API, and the next save drops it', async () => {
   const f = await fixture();
-  // An old page: its saved link carries no api field, as every page saved before the generated API.
+  // A page saved while links named their API: its stored link says legacy.
   const db = await getDb();
   for (const table of ['artifacts', 'artifact_versions']) {
-    await db.query(`UPDATE ${table} SET meta=jsonb_set(meta,'{htmlLinks}',(SELECT jsonb_agg(link - 'api') FROM jsonb_array_elements(meta->'htmlLinks') link)) WHERE ${table === 'artifacts' ? 'id' : 'artifact_id'}=$1`, [f.page]);
+    await db.query(`UPDATE ${table} SET meta=jsonb_set(meta,'{htmlLinks}',(SELECT jsonb_agg(link || '{"api":"legacy"}'::jsonb) FROM jsonb_array_elements(meta->'htmlLinks') link)) WHERE ${table === 'artifacts' ? 'id' : 'artifact_id'}=$1`, [f.page]);
   }
-  const page = await readHtmlPage(f.owner.actor, f.page);
-  expect(page.links).toEqual([{ kind: 'dataset', name: 'staff', datasetId: f.staff, mode: 'live' }]);
-  // The same SDL the generic composition always produced, nested under Query.staff.
-  expect(await sdl(f.page, f.other)).toBe(composePageSchema(datasetNamespaceSources(page.links as never)).sdl);
-  const schema = await gql(f.page, f.other, '{ staff { schema { tables { id columns { id label } } } } }');
-  const table = schema.body.data!.staff.schema.tables[0];
-  const rows = await gql(f.page, f.other, `{ staff { rows(tableId: "${table.id}", first: 5) { rows { cells { columnId } } } } }`);
-  expect(rows.body.data!.staff.rows.rows).toHaveLength(2);
-  expect((await gql(f.page, f.other, '{ staff_aggregate { aggregate { count } } }')).body.errors?.[0]?.message).toMatch(/Cannot query field "staff_aggregate"/);
-  // Republishing the same link (read → edit → publish) keeps it legacy; a new link gets the generated API.
+  const schema = await sdl(f.page, f.other);
+  expect(schema).toContain('staff(where: staff_bool_exp');
+  expect(schema).not.toContain('staff__Query');
+  expect(names(await gql(f.page, f.other, '{ staff(order_by: {name: asc}) { name } }'))).toEqual(['ada', 'bo']);
+  expect((await gql(f.page, f.other, '{ staff { schema { tables { id } } } }')).body.errors?.[0]?.message).toMatch(/Cannot query field "schema"/);
+  // Republishing (read → edit → publish) stores every link without the field.
   const context = params(f.page);
   const head = await (await artifactGet(request(`/api/artifacts/${f.page}`, { token: f.owner.token }), context)).json();
   const other = await publish(f.owner, { dataset: [{ note: 'x' }], title: 'Notes' });
@@ -147,21 +140,19 @@ it('keeps an old published page (links without an api) on the generic API byte f
   const updated = await artifactPut(request(`/api/artifacts/${f.page}`, { method: 'PUT', token: f.owner.token, json: { html, expectedVersion: head.version, expectedState: head.state } }), context);
   expect(updated.status, await updated.clone().text()).toBe(200);
   expect((await readHtmlPage(f.owner.actor, f.page)).links).toEqual([
-    { kind: 'dataset', name: 'staff', datasetId: f.staff, api: 'legacy', mode: 'live' },
-    { kind: 'dataset', name: 'notes', datasetId: other.body.id, api: 'hasura', mode: 'live' },
+    { kind: 'dataset', name: 'staff', datasetId: f.staff, mode: 'live' },
+    { kind: 'dataset', name: 'notes', datasetId: other.body.id, mode: 'live' },
   ]);
   const both = await sdl(f.page, f.owner);
-  expect(both).toContain('staff: staff__Query!');
+  expect(both).toContain('staff(where: staff_bool_exp');
   expect(both).toContain('notes(where: notes_bool_exp');
 });
 
-it('honours an explicit data-af-api and refuses a page whose generated roots collide (graphql_root_collision)', async () => {
-  const f = await fixture((id) => `<html><head><link rel="af-dataset" data-af-name="staff" data-af-api="legacy" href="ref:${id}"></head><body>Staff</body></html>`);
-  expect((await readHtmlPage(f.owner.actor, f.page)).links).toEqual([{ kind: 'dataset', name: 'staff', datasetId: f.staff, api: 'legacy', mode: 'live' }]);
-  const collide = await publish(f.owner, { html: `<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${f.staff}"><link rel="af-dataset" data-af-name="staff_meta" href="ref:${f.staff}"></head><body>x</body></html>` });
-  expect(collide.status).toBe(400);
-  expect(collide.body).toEqual({ error: 'graphql_root_collision', details: ['link "staff" generates staff_meta, which link "staff_meta" also names; rename one link'] });
-  // The same names are fine when the colliding link stays on the generic API.
-  expect((await publish(f.owner, { html: `<html><head><link rel="af-dataset" data-af-name="staff" data-af-api="legacy" href="ref:${f.staff}"><link rel="af-dataset" data-af-name="staff_meta" href="ref:${f.staff}"></head><body>x</body></html>` })).status).toBe(201);
-  expect((await publish(f.owner, { html: `<html><head><link rel="af-dataset" data-af-name="x" data-af-api="graphql" href="ref:${f.staff}"></head><body>x</body></html>` })).status).toBe(400);
+it('refuses a page whose generated roots collide (graphql_root_collision), whatever data-af-api a link carries', async () => {
+  const f = await fixture();
+  for (const api of ['', ' data-af-api="legacy"']) {
+    const collide = await publish(f.owner, { html: `<html><head><link rel="af-dataset" data-af-name="staff"${api} href="ref:${f.staff}"><link rel="af-dataset" data-af-name="staff_meta" href="ref:${f.staff}"></head><body>x</body></html>` });
+    expect(collide.status).toBe(400);
+    expect(collide.body).toEqual({ error: 'graphql_root_collision', details: ['link "staff" generates staff_meta, which link "staff_meta" also names; rename one link'] });
+  }
 });

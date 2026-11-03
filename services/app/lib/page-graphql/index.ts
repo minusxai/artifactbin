@@ -1,7 +1,7 @@
 import {registeredMutationPlan,registeredMutationInvoker} from '@/lib/registered-page-mutations';
 import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import {type HtmlBackendVersionRecord, getHtmlBackendVersion} from '@/lib/html-backends';
-import {datasetLinkApi,type HtmlDatasetLink,type HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {HtmlBackendLink} from '@artifactbin/contracts';
 import {registeredPlan, registeredQueryInvoker} from '@/lib/registered-page-queries';
 import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-queries';
@@ -12,7 +12,7 @@ import { getArtifactById, getArtifactHeaderById, accessMoved, readableArtifactHe
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind} from '@/lib/page-operations';
-import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql, executeLinkedDatasetGraphql, loadPageDatasets, type PageDatasets} from '@/lib/dataset-graphql';
+import {executeLinkedDatasetGraphql, loadPageDatasets, type PageDatasets} from '@/lib/dataset-graphql';
 import {services} from '@/lib/platform';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
@@ -22,8 +22,8 @@ function registeredPrograms(page:HtmlPageVersion,link:HtmlBackendLink,backend:Ht
  if(!query&&!mutation&&backend.compiled.startsWith('!registered-page-'))throw Error('registered_program_unsupported');
  return {query,mutation};
 }
-/** The page's dataset links by API: generated roots (flat) or the frozen generic namespace. */
-const datasetLinks=(page:HtmlPageVersion,api:'hasura'|'legacy')=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&datasetLinkApi(link)===api);
+/** The page's dataset links: each mounts its dataset's generated roots flat at the top of the page schema. */
+const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
 async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[]>{
  return Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
   const backend=await getHtmlBackendVersion(link.backendId,link.version);
@@ -36,29 +36,26 @@ interface OperationScope{revalidateActor:()=>Promise<AccessActor>;retainReadFenc
 function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope){
  const {revalidateActor,retainReadFence}=scope;
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
- const legacy=datasetLinks(page,'legacy'),hasura=datasetLinks(page,'hasura');
- const dataset=createDatasetNamespaceInvoker(actor,legacy,createRetainedDatasetGraphql({retainReadFence}));
- // The generated-API links load once per request, for this reader's role through this page: the composed SDL and the execution share it.
+ const linked=datasetLinks(page);
+ // The dataset links load once per request, for this reader's role through this page: the composed SDL and the execution share it.
  let loaded:Promise<PageDatasets>|undefined;
- const datasets=()=>loaded??=loadPageDatasets(actor,hasura,{pageId:page.pageId,...(retainReadFence?{retainReadFence}:{}),...(scope.idempotencyKey?{idempotencyKey:scope.idempotencyKey}:{})},scope.signal??new AbortController().signal);
+ const datasets=()=>loaded??=loadPageDatasets(actor,linked,{pageId:page.pageId,...(retainReadFence?{retainReadFence}:{}),...(scope.idempotencyKey?{idempotencyKey:scope.idempotencyKey}:{})},scope.signal??new AbortController().signal);
  const sources=async(_actor:AccessActor,current:HtmlPageVersion):Promise<readonly PageNamespaceSource[]>=>[
-  ...await backendSources(current),...datasetNamespaceSources(legacy),
-  ...(hasura.length?(await datasets()).sources.map(source=>({...source,kind:'dataset-hasura' as const})):[]),
+  ...await backendSources(current),
+  ...(linked.length?(await datasets()).sources.map(source=>({...source,kind:'dataset-hasura' as const})):[]),
  ];
  // The page this request already read for this reader and revision is not read again (its source is the costly part).
  const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
- return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>hasura.length?datasets():undefined,invoke:async call=>{
+ return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>linked.length?datasets():undefined,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
-  if(!link)throw Error('namespace_not_linked');
-  if(link.kind==='backend'){
-   const record=await getHtmlBackendVersion(link.backendId,link.version);
-   if(!record)throw Error('backend_link_mismatch');
-   const {query:plan,mutation}=registeredPrograms(page,link,record);
-   if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{readPage,retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
-   if(mutation){const adapter=createRetainedRegisteredMutation(actor,page,link,record,revalidateActor);return registeredMutationInvoker(adapter.context,adapter.plan,(_context,_plan,args,signal)=>adapter.execute(args,signal))(call);}
-   return backend(call);
-  }
-  return dataset(call);
+  // Dataset roots never reach invoke: page operations run them through `datasets`.
+  if(link?.kind!=='backend')throw Error('namespace_not_linked');
+  const record=await getHtmlBackendVersion(link.backendId,link.version);
+  if(!record)throw Error('backend_link_mismatch');
+  const {query:plan,mutation}=registeredPrograms(page,link,record);
+  if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{readPage,retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
+  if(mutation){const adapter=createRetainedRegisteredMutation(actor,page,link,record,revalidateActor);return registeredMutationInvoker(adapter.context,adapter.plan,(_context,_plan,args,signal)=>adapter.execute(args,signal))(call);}
+  return backend(call);
  }});
 }
 /**

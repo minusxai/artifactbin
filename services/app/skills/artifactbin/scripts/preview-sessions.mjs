@@ -29,7 +29,7 @@ const origin='http://preview.invalid',documentUrl=new URL(pathname,origin),{link
     previewDatasetLinks(source);
 let base;try{base=new URL(baseHref??documentUrl.href,documentUrl);}catch{throw failure(400,
     'Invalid local preview base URL');}
-  const grouped=new Map(),legacyNames=new Set();
+  const grouped=new Map();
   for(const link of links){
    if(!link.href||/^[a-z][a-z0-9+.-]*:/i.test(link.href)||link.href.startsWith('//'))continue;
    const url=new URL(link.href,base);if(url.origin!==origin)continue;
@@ -40,16 +40,12 @@ if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(link.name))throw failure(400,
    const table=link.table??filename.replace(/\.(csv|json)$/i,'');
 const files=grouped.get(link.name)??[];files.push({path,table,...(link.schema?{schema:link.schema}:{
      })});grouped.set(link.name,files);
-   // data-af-api="legacy" keeps the generic namespace; otherwise the generated API, as when
-   // publishing a new link.
-   if(link.api==='legacy')legacyNames.add(link.name);
   }
   if(!grouped.size)return undefined;
 if(grouped.size>16)throw failure(413,
     'Preview supports at most 16 local dataset namespaces per page.');
-  const declarations=[...grouped].map(([name,files])=>({name,files,api:legacyNames.has(name)?
-    'legacy':'hasura'}));
-  const datasets=declarations.filter(d=>d.api==='hasura').map(d=>d.name);
+  const declarations=[...grouped].map(([name,files])=>({name,files}));
+  const datasets=declarations.map(d=>d.name);
 const key=createHash('sha256').update(pathname).update('\0').update(revision).update('\0').update(
     JSON.stringify(declarations)).digest('hex');
   prune();for(const [id,session] of sessions){

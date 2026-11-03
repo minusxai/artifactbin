@@ -118,8 +118,8 @@ describe('installable shared skill folder',()=>{
    } finally {await preview.close();await server.close();}
    const project=path.join(dir,'project');mkdirSync(project);
    writeFileSync(path.join(project,'sales.csv'),'amount\n2\n');
-   // index.html keeps the generic namespace (data-af-api="legacy"); generated.html previews the generated API, a new link's default.
-   writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" data-af-api="legacy" href="./sales.csv"><h1>Local data</h1>');
+   // Each page previews its own session of the generated API over the same file.
+   writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Local data</h1>');
    writeFileSync(path.join(project,'generated.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Generated API</h1>');
    const local=await startPreview({root:project,revisionIntervalMs:0});
    try {
@@ -129,10 +129,8 @@ describe('installable shared skill folder',()=>{
     const endpoint=new URL(config.localPreview.endpoint,local.url);
     expect((await fetch(endpoint,{method:'POST',headers:{origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
     const execute=async(query:string)=>await (await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query})})).json();
-    const discovered=await execute('{sales{schema{revision tables{id label columns{id label}}}}}');
-    expect(discovered.errors).toBeUndefined();const schema=discovered.data.sales.schema,table=schema.tables[0];
-    const mutation=await execute(`mutation {sales{writeRows(tableId:${JSON.stringify(table.id)},expectedRevision:${JSON.stringify(schema.revision)},requestId:"preview-insert",changes:[{kind:INSERT,cells:[{columnId:${JSON.stringify(table.columns[0].id)},value:{type:NUMBER,number:9}}]}]){outcome}}}`);
-    expect(mutation.errors).toBeUndefined();expect(mutation.data.sales.writeRows.outcome).toBe('committed');
+    const mutation=await execute('mutation { insert_sales_one(object: {amount: 9}) { amount } }');
+    expect(mutation.errors).toBeUndefined();expect(mutation.data.insert_sales_one.amount).toBe(9);
     const exported=await (await fetch(endpoint+'/export/sales')).json();expect(exported.tables[0].rows).toHaveLength(2);
     expect(readFileSync(path.join(project,'sales.csv'),'utf8')).toBe('amount\n2\n');
     expect((await fetch(endpoint+'/export/other')).status).toBe(404);
@@ -151,7 +149,7 @@ describe('installable shared skill folder',()=>{
     const changed=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
     expect(changed.localPreview.endpoint).toBe(config.localPreview.endpoint);
     expect(await (await fetch(endpoint+'/status')).json()).toMatchObject({dirty:true,conflict:true});
-    expect((await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query:'{sales{schema{revision}}}'})})).status).toBe(200);
+    expect((await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query:'{sales{amount}}'})})).status).toBe(200);
     expect((await (await fetch(endpoint+'/export/sales')).json()).tables[0].rows).toHaveLength(2);
     expect((await fetch(endpoint+'/discard',{method:'POST',headers:{origin:new URL(local.url).origin}})).status).toBe(200);
     const reset=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);

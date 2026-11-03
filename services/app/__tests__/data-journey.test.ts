@@ -28,13 +28,12 @@ async function owner() {
 }
 
 describe('native dataset column validation',()=>{
- it('discovers stable columns and rejects unknown IDs before executing a query',async()=>{
-  const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql');
+ it('reads generated columns and rejects unknown ones before executing a query',async()=>{
+  const {linkedGql,liveLink,errorCode}=await import('./linked-datasets');
   const o=await owner(),id=await o.created({dataset:[{region:'EU',revenue:837}]});
-  const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'sales',datasetId:id,mode:'live' as const},actor=identityForUser(o.t.userId,o.t.id),signal=new AbortController().signal;
-  const table=(await api.schema(actor,binding,signal)).tables[0]!;
-  expect((await api.read(actor,binding,{tableId:table.id,columnIds:[table.columns[0]!.id],first:1},signal)).rows).toHaveLength(1);
-  await expect(api.read(actor,binding,{tableId:table.id,columnIds:['missing-column'],first:1},signal)).rejects.toThrow();
+  const link=liveLink(id,'sales'),actor=identityForUser(o.t.userId,o.t.id);
+  expect((await linkedGql(actor,link,'{ sales(limit: 1) { region } }')).data).toEqual({sales:[{region:'EU'}]});
+  expect(errorCode(await linkedGql(actor,link,'{ sales(limit: 1) { missing_column } }'))).toBe('validation_failed');
  });
 });
 

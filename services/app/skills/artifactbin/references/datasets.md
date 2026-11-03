@@ -24,8 +24,6 @@ PostgreSQL catalogs are refused with HTTP 400 `dataset_stable_identity_unavailab
 
 Replace `DATASET_ID` before publishing. `data-af-name` is unique across a page's links. Live is the
 default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version and is read-only.
-Legacy pages: pages written against the old `schema`/`rows(tableId…)`/`writeRows` namespace keep
-working unchanged; to move one to this API, rewrite its queries and add `data-af-api="hasura"`.
 
 ## Contents
 

@@ -1,5 +1,5 @@
 /**
- * WHO MAY WRITE A DATASET, AND UNDER WHICH RULES: one decision every write door (generic page writeRows,
+ * WHO MAY WRITE A DATASET, AND UNDER WHICH RULES: one decision every write door (a page's generated dataset API,
  * markup <Mutation>, registered page mutations, the direct SQL door, file and image uploads) asks, and the
  * commit transaction asks again under the row lock so a revoked share or a new policy cannot race a write.
  *
@@ -27,7 +27,7 @@ import { toV3, type ToV3Result } from './to-v3';
 const MUTATIONS: readonly DatasetOperation[] = ['insert', 'update', 'delete'];
 
 export interface DatasetWriteOptions {
-  /** The caller arrives through a page linking the dataset (page writeRows, a page program, an upload). */
+  /** The caller arrives through a page linking the dataset (its generated API, a page program, an upload). */
   throughPage?: boolean;
   /** A saved-document program carrying the write: provenance always, program trust for backend_only. */
   document?: GrantDocument;

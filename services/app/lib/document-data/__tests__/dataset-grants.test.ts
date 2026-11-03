@@ -62,19 +62,18 @@ it('keeps a private dataset and its grants unchanged when its native owner page 
  expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();
 });
 it('does not treat page membership as dataset authority, and a named-user write grant admits no one until it becomes a share',async()=>{
- const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql');
+ const {linkedGql,liveLink}=await import('@/__tests__/linked-datasets');
  const owner=await mintToken('grant-owner'),bob=await mintToken('grant-reader');const actor=identityForUser(owner.userId,owner.id),reader=identityForUser(bob.userId,bob.id);
  const ds=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],access:'readwrite',visibility:'public'}}))).json();
  const page=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds.id}"></head><body>Rows</body></html>`,visibility:'public'}}))).json();
- const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'data',datasetId:ds.id,mode:'live' as const},signal=new AbortController().signal;
- const table=(await api.schema(actor,binding,signal)).tables[0]!,column=table.columns[0]!;
- const write=(requestId:string,expectedRevision='1')=>api.write(reader,binding,{tableId:table.id,expectedRevision,requestId,changes:[{kind:'INSERT',cells:[{columnId:column.id,value:{type:'NUMBER',value:2}}]}]},signal);
- expect((await write('before-membership')).outcome).toBe('rejected');
+ // The reader inserts through the page's generated API: committed only when the root answered.
+ const write=async(key:string)=>{const reply=await linkedGql(reader,liveLink(ds.id),'mutation { insert_data(objects: [{n: 2}]) { affected_rows } }',{pageId:page.id,idempotencyKey:`grant_${key}`});return {outcome:!reply.errors?.length&&reply.data?.insert_data?'committed':'rejected'};};
+ expect((await write('before_membership')).outcome).toBe('rejected');
  await changeMembership(reader,page.id,{action:'join'});await changeMembership(actor,page.id,{action:'approve',userId:bob.userId!});
- expect((await write('after-membership')).outcome).toBe('rejected');
+ expect((await write('after_membership')).outcome).toBe('rejected');
  await setDatasetPolicy(actor,ds.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:bob.userId}}]},0);
  // The named-user compatibility is gone: a stored v2 user:<id> write grant has no v3 entry; the migration made that person an editor instead.
- expect((await write('explicit-user-grant')).outcome).toBe('rejected');expect((await getArtifactById(ds.id))?.version).toBe(1);
+ expect((await write('explicit_user_grant')).outcome).toBe('rejected');expect((await getArtifactById(ds.id))?.version).toBe(1);
  await updateSharingFor(actor,ds.id,{shares:[{email:bob.email!,role:'editor'}]});
- expect((await write('shared-editor')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
+ expect((await write('shared_editor')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
 });

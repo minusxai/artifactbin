@@ -13,9 +13,7 @@ import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,js
   hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
 import {noteWatchActivity} from './toolbox-watch-state.mjs';
-import {TEMPLATES,applyTemplate,legacyDatasetLinks,routineChanges}
-  from './toolbox-publish-dataset.mjs';
-export {legacyDatasetLinks};
+import {TEMPLATES,applyTemplate,routineChanges} from './toolbox-publish-dataset.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};
@@ -188,11 +186,7 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'utf8'))-ids(bytes.toString('utf8'));
  const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} `+
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
- const legacy=legacyDatasetLinks(body.html);for(const name of legacy)log(
-  `deprecated: link "${name}" uses the legacy dataset API; move its queries to the generated API `+
-  '(references/datasets.md) and set data-af-api="hasura".\n');
- return {...done,...(rewritten?{rewritten}:{}),...(legacy.length?{deprecated:legacy.map(name=>
-  `link "${name}" uses the legacy dataset API`)}:{}),autofix:autofixDetail({...fixed,routine},
+ return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},
   report)};
 }
 /** A publish resets the quiet time of the page's comment watch; it never fails the publish. */

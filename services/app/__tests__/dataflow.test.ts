@@ -1,4 +1,3 @@
-// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Native pages bind dataset namespaces; typed requests validate at execution, never at JSX compile time. */
 import { expect, it } from "vitest";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
@@ -61,7 +60,7 @@ async function fixture() {
     visibility: "public",
   });
   const html = nativeHtml(
-    `<link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/core.js" data-af="core"></script>`,
+    `<link rel="af-dataset" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/core.js" data-af="core"></script>`,
   );
   const id = await publish({ html, visibility: "public" });
   const run = async (
@@ -80,12 +79,7 @@ async function fixture() {
     expect(response.status, await response.clone().text()).toBe(200);
     return response.json();
   };
-  const schema = await run("{sales{schema{tables{id columns{id label}}}}}");
-  const table = schema.data.sales.schema.tables[0] as {
-    id: string;
-    columns: { id: string; label: string }[];
-  };
-  return { id, dataset, html, owner, publish, run, table };
+  return { id, dataset, html, owner, publish, run };
 }
 it("publishes namespace bindings and exposes typed schema without inlining source rows", async () => {
   const f = await fixture();
@@ -94,7 +88,7 @@ it("publishes namespace bindings and exposes typed schema without inlining sourc
     ctx(f.id),
   );
   expect(response.status).toBe(200);
-  expect((await response.json()).sdl).toContain("sales__Query");
+  expect((await response.json()).sdl).toContain("sales(where: sales_bool_exp");
   const saved = await (
     await get(
       request(`/api/artifacts/${f.id}`, { token: f.owner.token }),
@@ -114,45 +108,27 @@ it("publishes namespace bindings and exposes typed schema without inlining sourc
   // Runtime code and hashes may contain any digits; this value exists only in source rows.
   expect(content).not.toContain(SOURCE_ONLY_SENTINEL);
   const read = await f.run(
-    "query($table:ID!){sales{rows(tableId:$table,first:2){rows{cells{value{string number}}}}}}",
-    { table: f.table.id },
+    "{sales(limit:2,order_by:{revenue:asc}){region revenue sourceOnly}}",
+    {},
     undefined,
   );
   expect(read.errors).toBeUndefined();
-  expect(read.data.sales.rows.rows).toHaveLength(2);
-  const cells = read.data.sales.rows.rows.flatMap(
-    (row: {
-      cells: { value: { string: string | null; number: number | null } }[];
-    }) => row.cells,
-  );
-  expect(
-    cells.map(
-      (cell: { value: { string: string | null } }) => cell.value.string,
-    ),
-  ).toContain(SOURCE_ONLY_SENTINEL);
-  expect(
-    cells
-      .map((cell: { value: { number: number | null } }) => cell.value.number)
-      .filter((value: unknown) => typeof value === "number")
-      .sort((a: number, b: number) => a - b),
-  ).toEqual([837, 1200]);
+  expect(read.data.sales).toEqual([
+    { region: "EU", revenue: 837, sourceOnly: SOURCE_ONLY_SENTINEL },
+    { region: "NA", revenue: 1200, sourceOnly: null },
+  ]);
 });
-it("validates typed queries and named parameters against discovered columns", async () => {
-  const f = await fixture(),
-    amount = f.table.columns.find((column) => column.label === "revenue")!;
-  const query =
-    'query($table:ID!,$column:ID!){sales{query(tableId:$table,first:2,filters:[{columnId:$column,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:1000}}]){rows{cells{value{number}}}}}}';
-  const result = await f.run(query, { table: f.table.id, column: amount.id });
+it("validates typed queries and variables against the generated columns", async () => {
+  const f = await fixture();
+  const query = "query($minimum:Float){sales(where:{revenue:{_gt:$minimum}}){revenue}}";
+  const result = await f.run(query, { minimum: 1000 });
   expect(result.errors).toBeUndefined();
-  expect(result.data.sales.query.rows).toHaveLength(1);
-  const invalid = await f.run(query, { table: f.table.id, column: "missing" });
-  expect(invalid.errors).toHaveLength(1);
-  const missing = await f.run(
-    'query($table:ID!,$column:ID!){sales{query(tableId:$table,filters:[{columnId:$column,operator:GT,parameter:"missing"}]){rows{id}}}}',
-    { table: f.table.id, column: amount.id },
-  );
-  expect(missing.errors).toHaveLength(1);
-  const cycle = await f.run('{sales{query(sql:"delete from rows"){rows{id}}}}');
+  expect(result.data.sales).toEqual([{ revenue: 1200 }]);
+  const invalid = await f.run("{sales(where:{missing:{_gt:1}}){revenue}}");
+  expect(invalid.errors.length).toBeGreaterThan(0);
+  const mistyped = await f.run(query, { minimum: "lots" });
+  expect(mistyped.errors.length).toBeGreaterThan(0);
+  const cycle = await f.run('{sales(sql:"delete from rows"){_id}}');
   expect(cycle.errors.length).toBeGreaterThan(0);
   expect(cycle.data ?? null).toBeNull();
 });
@@ -163,20 +139,13 @@ it("enforces revoked dataset ACL independently of the public page", async () => 
     f.dataset,
   ]);
   const outsider = await mintAccountToken("reader");
-  const response = await f.run(
-    "query($table:ID!){sales{rows(tableId:$table){rows{id}}}}",
-    { table: f.table.id },
-    outsider.token,
-  );
+  const response = await f.run("{sales{_id}}", {}, outsider.token);
   expect(response.errors).toHaveLength(1);
-  expect(response.data?.sales?.rows ?? null).toBeNull();
+  expect(response.data?.sales ?? null).toBeNull();
   await db.query("UPDATE artifacts SET deleted_at=now() WHERE id=$1", [
     f.dataset,
   ]);
-  const deleted = await f.run(
-    "query($table:ID!){sales{rows(tableId:$table){rows{id}}}}",
-    { table: f.table.id },
-  );
+  const deleted = await f.run("{sales{_id}}");
   expect(deleted.errors).toHaveLength(1);
 });
 it("refuses inaccessible and non-dataset bindings before publication", async () => {
@@ -192,7 +161,7 @@ it("refuses inaccessible and non-dataset bindings before publication", async () 
         token: stranger.token,
         json: {
           html: nativeHtml(
-            `<link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${ref}"><p>Data</p>`,
+            `<link rel="af-dataset" data-af-name="sales" href="ref:${ref}"><p>Data</p>`,
           ),
         },
       }),
@@ -216,7 +185,7 @@ it("applies the same binding validation to full HTML replacements", async () => 
         expectedVersion: head.version,
         expectedState: head.state,
         html: nativeHtml(
-          '<link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:missing"><p>Invalid</p>',
+          '<link rel="af-dataset" data-af-name="sales" href="ref:missing"><p>Invalid</p>',
         ),
       },
     }),

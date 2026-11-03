@@ -10,7 +10,7 @@ export interface HtmlClonePorts {
 export async function planHtmlClone(actor:AccessActor,pageId:string,links:readonly HtmlPageLink[],ports:HtmlClonePorts):Promise<HtmlClonePlan>{
  const htmlBackends:PreparedHtmlBackend[]=[];const htmlDatasets:HtmlDatasetLink[]=[];
  for(const link of links){
-  if(link.kind==='dataset'){await ports.authorizeDataset(actor,link);htmlDatasets.push({...link,api:link.api==='hasura'?'hasura':'legacy'});continue;} // A fork keeps the source link's API (absent: legacy).
+  if(link.kind==='dataset'){await ports.authorizeDataset(actor,link);htmlDatasets.push(link.mode==='pinned'?{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'pinned',revision:link.revision}:{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'live'});continue;} // Only the link's own fields: a stored link may carry retired keys.
   const backend=await ports.backend(link.backendId,link.version);
   if(!backend||backend.pageId!==pageId||backend.name!==link.name)throw Error('backend_link_mismatch');
   // Declaration names are immutable code metadata; secret rows are scoped to the fresh backend ID.

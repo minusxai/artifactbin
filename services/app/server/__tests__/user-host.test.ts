@@ -88,7 +88,7 @@ it('never turns an account bearer into dataset guest authority',async()=>{
  const user=await owner();
  const created=await publish(request('/api/artifacts',{method:'POST',token:user.token,json:{dataset:[{secret:'hidden'}],visibility:'private'}}));expect(created.status).toBe(201);const dataset=await created.json();
  const linked=await page(user.token,'unlisted',{html:`<link rel="af-dataset" data-af-name="secret_data" href="ref:${dataset.id}"><h1>Dataset guest</h1>`});
- const response=await app().request(`${base}/api/artifacts/${linked.id}/graphql`,{method:'POST',headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret','content-type':'text/plain'},body:JSON.stringify({revision:'1',query:'{ secret_data { schema { tables { id } } } }'})});
+ const response=await app().request(`${base}/api/artifacts/${linked.id}/graphql`,{method:'POST',headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret','content-type':'text/plain'},body:JSON.stringify({revision:'1',query:'{ secret_data { secret } }'})});
  expect(response.headers.has('set-cookie')).toBe(false);expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(await response.text()).not.toContain('hidden');
 });
 

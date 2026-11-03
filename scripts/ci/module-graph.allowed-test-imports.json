@@ -42,9 +42,6 @@
     "services/app/lib/datasets/__tests__/dataset-secret-boundary.test.ts": [
       "@/lib/operations/datasets"
     ],
-    "services/app/lib/document-data/__tests__/dataset-policies.test.ts": [
-      "@/lib/dataset-graphql/retained"
-    ],
     "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": [
       "../../html-components/file-upload"
     ],

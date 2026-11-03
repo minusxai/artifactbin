@@ -1,4 +1,3 @@
-// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 import {describe,expect,it} from 'vitest';
 import sharp from 'sharp';
 import {POST as publish} from '@/app/api/artifacts/route';
@@ -19,10 +18,10 @@ const create=async(token:string,body:Record<string,unknown>)=>{
  const response=await publish(request('/api/artifacts',{method:'POST',token,json:{visibility:'public',...body}}));
  const result=await response.json();expect(response.status,JSON.stringify(result)).toBe(201);return result as {id:string};
 };
-const html=(dataset:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="books_data" href="ref:${dataset}"></head><body><article data-af-id="book-list"></article></body></html>`;
+const html=(dataset:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="books_data" href="ref:${dataset}"></head><body><article data-af-id="book-list"></article></body></html>`;
 async function readRows(id:string,token:string){
  const ask=async(query:string,variables?:Record<string,unknown>)=>{const response=await graphql(request(`/api/artifacts/${id}/graphql`,{method:'POST',token,json:{query,variables,revision:"1"}}),params(id));expect(response.status,await response.clone().text()).toBe(200);const result=await response.json();expect(result.errors).toBeUndefined();return result.data.books_data;};
- const schema=await ask('{books_data{schema{tables{id columns{id label}}}}}');const table=schema.schema.tables[0];const result=await ask('query($table:ID!){books_data{rows(tableId:$table,first:10){rows{cells{columnId value{string}}}}}}',{table:table.id});return result.rows.rows.map((row:{cells:Array<{columnId:string;value:{string:string|null}}>})=>Object.fromEntries(row.cells.map(cell=>[table.columns.find((column:{id:string})=>column.id===cell.columnId).label,cell.value.string])));
+ return await ask('{books_data{id title cover_ref}}') as Array<{id:string;title:string;cover_ref:string}>;
 }
 async function fixture(){
  const token=await mintToken('row-images');

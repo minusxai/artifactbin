@@ -10,7 +10,7 @@ import { ANONYMOUS_ACTOR, identityForUser, type AccessActor } from '@/lib/accoun
 import { getDb } from '@/lib/platform';
 import { getArtifactById, canReadArtifact } from '@/lib/artifacts';
 import { createArtifactFromBody } from '@/lib/publish';
-import { createRetainedDatasetGraphql } from '@/lib/dataset-graphql';
+import { linkedGql, liveLink, errorCode } from './linked-datasets';
 import { datasetResolverForActor, registeredQueryImportForRow } from '@/lib/document-data';
 import { executeCatalog } from '@/lib/datasets';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
@@ -108,26 +108,21 @@ it('export and fork refuse a reader whose view hides rows; the owner forks the w
   expect((await fork.run(ctx(owner.actor, `/api/artifacts/${id}/fork`), { id })).status).toBe(201);
 });
 
-it('page GraphQL: schema, counts, rows and people read the view; aggregates need allow_aggregations', async () => {
+it('page GraphQL: generated columns and rows read the view; aggregates need allow_aggregations', async () => {
   const { owner, viewer, id } = await setup();
-  const api = createRetainedDatasetGraphql(), signal = new AbortController().signal;
-  const binding = { kind: 'dataset' as const, name: 'data', datasetId: id, mode: 'live' as const };
-  const schema = async (actor: AccessActor) => api.schema(actor, binding, signal);
-  const ownerSchema = await schema(owner.actor), viewerSchema = await schema(viewer.actor);
-  expect(ownerSchema.tables[0]!.columns.map((c) => c.label)).toEqual(['name', 'team', 'salary']);
-  expect(viewerSchema.tables[0]!.columns.map((c) => c.label)).toEqual(['name', 'team']);
-  expect(viewerSchema.tables[0]!.source.totalRows).toBe(2);
-  const table = viewerSchema.tables[0]!;
-  const read = async (actor: AccessActor, columnIds: string[]) => api.read(actor, binding, { tableId: table.id, columnIds, first: 100 } as never, signal);
-  const ownerRows = await read(owner.actor, ownerSchema.tables[0]!.columns.map((c) => c.id));
-  expect(ownerRows.rows).toHaveLength(3);
-  const viewerRows = await read(viewer.actor, table.columns.map((c) => c.id));
-  sees(JSON.stringify(viewerRows.rows.map((r) => r.cells.map((c) => c.value))), false);
-  expect(viewerRows.rows).toHaveLength(2);
-  // A hidden column cannot be asked for by its ID.
-  await expect(read(viewer.actor, ownerSchema.tables[0]!.columns.map((c) => c.id))).rejects.toThrow();
-  const count = { tableId: table.id, aggregates: [{ fn: 'count', alias: 'n' }], first: 10 } as never;
-  await expect(api.query(viewer.actor, binding, count, signal)).rejects.toThrow('dataset_aggregations_denied');
+  const link = liveLink(id);
+  const ownerRows = await linkedGql(owner.actor, link, '{ data { name team salary } }');
+  expect(ownerRows.errors).toBeUndefined();
+  expect(ownerRows.data!.data).toHaveLength(3);
+  sees(JSON.stringify(ownerRows.data), true);
+  const viewerRows = await linkedGql(viewer.actor, link, '{ data { name team } }');
+  expect(viewerRows.errors).toBeUndefined();
+  expect(viewerRows.data!.data).toHaveLength(2);
+  sees(JSON.stringify(viewerRows.data), false);
+  // A hidden column is not in the viewer's schema, and neither is the aggregate root.
+  expect(errorCode(await linkedGql(viewer.actor, link, '{ data { name salary } }'))).toBe('validation_failed');
+  expect(errorCode(await linkedGql(viewer.actor, link, '{ data_aggregate { aggregate { count } } }'))).toBe('validation_failed');
+  expect((await linkedGql(owner.actor, link, '{ data_aggregate { aggregate { count } } }')).data).toEqual({ data_aggregate: { aggregate: { count: 3 } } });
 });
 
 it('markup imports and registered page queries read the reader\'s view through the page', async () => {

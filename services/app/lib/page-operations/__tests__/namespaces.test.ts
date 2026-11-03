@@ -130,10 +130,10 @@ describe('generated dataset roots (dataset-hasura sources)', () => {
     expect(() => composePageSchema([{ ...sources[0]!, name: 'orders_meta' }, generated('orders', 'orders_meta')])).toThrow(/graphql_root_collision: link orders generates orders_meta, which link orders_meta also names/);
     expect(() => composePageSchema([generated('a', 'orders'), generated('b', 'orders')])).toThrow(/graphql_root_collision/);
   });
-  it('leaves a page without generated links byte-identical (no @dataset directive)', () => {
-    const legacy = [{ name: 'staff', fileId: 'ds1', version: 'live', typeDefs: 'type Query { rows: Int } type Mutation { writeRows: Int }' }];
-    expect(composePageSchema(legacy).sdl).not.toContain('@dataset');
-    expect(composePageSchema(legacy).sdl).toBe(composePageSchema(legacy.map((s) => ({ ...s }))).sdl);
+  it('leaves a page with only resolver links byte-identical (no @dataset directive)', () => {
+    const resolvers = [{ name: 'staff', fileId: 'rs1', version: 'v1', typeDefs: 'type Query { total: Int } type Mutation { setTotal: Int }' }];
+    expect(composePageSchema(resolvers).sdl).not.toContain('@dataset');
+    expect(composePageSchema(resolvers).sdl).toBe(composePageSchema(resolvers.map((s) => ({ ...s }))).sdl);
   });
   it('reads flat roots through the dataset port and sends a dataset mutation whole, keyed by root', async () => {
     const schema = composePageSchema([...sources, generated('orders')]);

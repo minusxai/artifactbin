@@ -40,7 +40,7 @@ export interface LocalHasuraDataset {
 
 async function openDatabase(): Promise<Database> {
   let sqlite: { DatabaseSync: new (path: string) => Database };
-  try { sqlite = await import('node:sqlite') as unknown as typeof sqlite; } catch { throw new Error('Local preview of the generated dataset API needs Node 22.13 or newer (node:sqlite); upgrade Node, or add data-af-api="legacy" to preview the generic API'); }
+  try { sqlite = await import('node:sqlite') as unknown as typeof sqlite; } catch { throw new Error('Local preview of the generated dataset API needs Node 22.13 or newer (node:sqlite); upgrade Node'); }
   return new sqlite.DatabaseSync(':memory:');
 }
 

@@ -31,8 +31,8 @@ function sourceNamespaces(document:Document):{names:string[];bindings:Record<str
   const rel=(link.getAttribute('rel')??'').split(/\s+/),name=link.getAttribute('data-af-name')??'';
   if(!rel.some(value=>value==='af-resolver'||value==='af-dataset')||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__')||names.includes(name))continue;
   names.push(name);const id=/^ref:([A-Za-z0-9_-]+)$/.exec(link.getAttribute('href')??'')?.[1];if(id)bindings[name]=id;
-  // A source link names its API; without data-af-api it publishes on the generated API (lib/html-page resolveDatasetApis).
-  if(rel.includes('af-dataset')&&link.getAttribute('data-af-api')!=='legacy')datasets.push(name);
+  // Every dataset link mounts its generated roots flat (apollo `datasets`).
+  if(rel.includes('af-dataset'))datasets.push(name);
  }
  return {names,bindings,datasets};
 }

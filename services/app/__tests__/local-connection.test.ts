@@ -36,7 +36,7 @@ it('never lets an ambient bearer elevate guest reads of a linked private dataset
  const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);
  const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};
  const open=async(authorizePrivate:boolean)=>{const response=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,authorizePrivate}}));expect(response.status).toBe(200);return (await response.json()).capability;};
- const run=async(cap:string)=>{const req=request(`/api/local-connection/${id}/graphql`,{method:'POST',token:owner.token,json:{revision:page.revision,query:'{ data { schema { tables { id } } } }'}});req.headers.set('X-Af-Local-Capability',cap);const response=await execute(req,{params:Promise.resolve({id})});return response.json();};
+ const run=async(cap:string)=>{const req=request(`/api/local-connection/${id}/graphql`,{method:'POST',token:owner.token,json:{revision:page.revision,query:'{ data { secret } }'}});req.headers.set('X-Af-Local-Capability',cap);const response=await execute(req,{params:Promise.resolve({id})});return response.json();};
  const guest=await run(await open(false));expect(guest.errors).toHaveLength(1);expect(JSON.stringify(guest)).not.toContain(dataset.id);
  const denied=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,authorizePrivate:true}}));expect(denied.status).toBe(403);
 });
