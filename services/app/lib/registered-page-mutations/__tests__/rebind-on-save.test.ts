@@ -29,7 +29,7 @@ vi.mock("@/lib/page-operations", async (original) => ({
 }));
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const link = '<link rel="af-backend" data-af-name="actions" href="./actions.ts">';
+const link = '<link rel="af-resolver" data-af-name="actions" href="./actions.ts">';
 const html = (body: string, declared = true) =>
   `<!doctype html><html><head><title>Rebind</title>${declared ? link : ""}</head><body>${body}</body></html>`;
 const provenance = { compilerSha256: "a".repeat(64), sourceSha256: "b".repeat(64) };
@@ -198,11 +198,11 @@ it("a revert re-binds the restored registration to the new version", async () =>
   await expectCommitted(f, "after revert");
 });
 
-it("a replacement supplied in backendSources wins over the carried registered mutation", async () => {
+it("a replacement supplied in resolverSources wins over the carried registered mutation", async () => {
   const f = await migratedPage();
   const saved = await f.save(f.owner.token, {
     html: html("<p>Ordinary backend</p>"),
-    backendSources: { actions: "export const Query = { total: () => 1 };" },
+    resolverSources: { actions: "export const Query = { total: () => 1 };" },
   });
   expect(saved.status).toBe(200);
   const after = await plan(f);

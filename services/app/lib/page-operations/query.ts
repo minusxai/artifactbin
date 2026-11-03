@@ -1,5 +1,5 @@
 /**
- * `caps.query(graphql, variables)` for api 2 resolvers, on the host: the Hasura-style API over the datasets the
+ * `caps.query(graphql, variables)` for resolvers, on the host: the Hasura-style API over the datasets the
  * page links, run AS THE CALLER. The caller (subject and page role) is the one the app admitted the run for, read
  * from the admitted request in process or from the signed runner pin remotely; resolver arguments never name it.
  * The dataset role is each dataset's own sharing under the page audience rule (lib/dataset-permissions), never the

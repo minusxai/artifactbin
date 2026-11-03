@@ -1,18 +1,9 @@
 import {RESOLVER_LIMITS,type ResolverFetchReceipt,type ResolverSecretHosts,type RunnerJson} from '@artifactbin/contracts';
-import {fetchWebResource,parseWebUrl,requestWebHop,WebIngestError,type WebIngestPolicy} from '@/lib/web-ingest';
-import type {PageBackendFetchResult} from './backend';
+import {parseWebUrl,requestWebHop,WebIngestError,type WebIngestPolicy} from '@/lib/web-ingest';
 import {redact,secretForms} from './redaction';
 import {createGoogleTokenSource,GoogleAuthFailure,googleAuthOption,isGoogleApiHost,type GoogleAuth,type GoogleTokenSourceOptions} from './google-auth';
-/** api 1 connector: public HTTPS GET, no caller headers or ambient credentials. */
-export async function fetchPageBackendResource(url:string,signal?:AbortSignal):Promise<PageBackendFetchResult>{
- const resource=await fetchWebResource(url,{maxBytes:262144,timeoutMs:3000,policy:{allowHttp:false,allowPrivate:false},signal,accept:'application/json,text/plain;q=0.9,*/*;q=0.1',userAgent:'page-backend/1'});
- return {status:200,url:resource.finalUrl,contentType:resource.contentType,body:new TextDecoder('utf-8',{fatal:true}).decode(resource.bytes)};
-}
-
-/** What api 2 `caps.fetch` answers. `receipt` is for the run receipt; the runner strips it before resolver code sees the rest. */
-interface ResolverFetchResult {status:number;url:string;headers:Record<string,string>;body:string;receipt:ResolverFetchReceipt;
- /** For api 2 versions compiled before this contract, whose wrapper read only `contentType`. */
- contentType:string}
+/** What `caps.fetch` answers. `receipt` is for the run receipt; the runner strips it before resolver code sees the rest. */
+interface ResolverFetchResult {status:number;url:string;headers:Record<string,string>;body:string;receipt:ResolverFetchReceipt}
 /** The pinned version's bindings, a reader for the owner's values and whose they are (it scopes cached Google tokens). Values never leave the host. */
 interface ResolverSecrets {owner:string;resolver:string;hosts:ResolverSecretHosts;read(name:string):Promise<string>}
 export type ResolverFetcher=(input:RunnerJson,secrets:ResolverSecrets,signal?:AbortSignal)=>Promise<ResolverFetchResult>;
@@ -78,7 +69,7 @@ function validate(input:RunnerJson):Validated{
 const ingestCode=(code:string)=>code==='too_large'?'response_limit':code==='bad_status'||code==='unsupported_type'||code==='forbidden_host'?'fetch_failed':code;
 
 /**
- * api 2 `caps.fetch`, performed by the app. `{{NAME}}` in the URL, header values or body is filled with the
+ * `caps.fetch`, performed by the app. `{{NAME}}` in the URL, header values or body is filled with the
  * owner's value only for a declared name whose bound host matches the request's host; anything else is refused
  * before a value is read or a socket opens. Every hop is vetted (scheme, port, credentials, literal and resolved
  * addresses); redirects are followed only for GET/HEAD carrying no secret. The response is redacted of every
@@ -145,7 +136,7 @@ export function createResolverFetch(options:{policy?:WebIngestPolicy;timeoutMs?:
      if(value===undefined||name==='set-cookie'||name==='set-cookie2')continue;
      responseHeaders[name]=redact(Array.isArray(value)?value.join(', '):value,forms);
     }
-    const result:ResolverFetchResult={status:res.status,url:redact(url.toString(),forms),headers:responseHeaders,contentType:(responseHeaders['content-type']??'').split(';')[0]!.trim().toLowerCase(),body:redact(new TextDecoder().decode(res.bytes),forms),
+    const result:ResolverFetchResult={status:res.status,url:redact(url.toString(),forms),headers:responseHeaders,body:redact(new TextDecoder().decode(res.bytes),forms),
      receipt:{method:request.method,host,path:template.pathname.replace(/%7B%7B([A-Z][A-Z0-9_]{0,63})%7D%7D/g,'{{$1}}'),bytesIn:res.bytes.length,bytesOut:body===undefined?0:Buffer.byteLength(body),secrets:used}};
     if(Buffer.byteLength(JSON.stringify(result))>RESULT_BYTES)fail('response_limit');
     return result;

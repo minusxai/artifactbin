@@ -1,16 +1,15 @@
 import {createHash} from 'node:crypto';
 import {actorOf} from '@artifactbin/utils';
 import type {RunnerCaller,RunnerJson,RunStart} from '@artifactbin/contracts';
-import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/lib/html-backends';
+import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {json} from '@/lib/http';
-import {fetchPageBackendResource,fetchResolverResource,ResolverFetchError} from './public-fetch';
+import {fetchResolverResource,ResolverFetchError} from './public-fetch';
 import {readPinnedBackendSecret} from '@/lib/html-backend-secrets';
 import {pageBackendCapability} from './backend';
 import {ResolverQueryError,type ResolverQuery} from './query';
-const store={get:getHtmlBackendStore,set:setHtmlBackendStore};
 /** `query` is the composition's caps.query port (lib/page-graphql `resolverDatasetQuery`); without one, caps.query is refused. */
 export async function localPageBackendCapability(request:RunStart,operation:string,input:RunnerJson,signal?:AbortSignal,query?:ResolverQuery):Promise<RunnerJson>{
- return pageBackendCapability(store,request,operation,input,getHtmlBackendVersion,url=>fetchPageBackendResource(url,signal),readPinnedBackendSecret,(args,secrets)=>fetchResolverResource(args,secrets,signal),query,signal);
+ return pageBackendCapability(request,operation,input,getHtmlBackendVersion,readPinnedBackendSecret,(args,secrets)=>fetchResolverResource(args,secrets,signal),query,signal);
 }
 /**
  * The principal a remote run was admitted for, from the signed pin (resolver code cannot reach it). A pin without

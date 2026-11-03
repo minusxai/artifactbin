@@ -2,7 +2,7 @@
  * Example resolver: a BigQuery SQL query, run with a Google service account (jobs.query REST API).
  * Secrets: GOOGLE_SA = the service account's JSON key (roles BigQuery Job User and Data Viewer),
  *   set by the page owner in the page's Resolvers panel.
- * Usage: cp examples/resolver-bigquery.ts revenue.ts; link it with
+ * Usage: cp resolvers/resolver-bigquery.ts revenue.ts; link it with
  *   <link rel="af-resolver" data-af-name="revenue" href="./revenue.ts">; publish, then send the
  *   owner to the Resolvers panel to set GOOGLE_SA and press Test connection.
  * Next: set PROJECT and SQL; rename Point's fields to the query's columns.

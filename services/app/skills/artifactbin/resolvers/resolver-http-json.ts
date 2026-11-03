@@ -2,7 +2,7 @@
  * Example resolver: a JSON API behind a bearer key; the key is a secret the host fills in, never
  *   in code.
  * Secrets: API_KEY = the provider's key, set by the page owner in the page's Resolvers panel.
- * Usage: cp examples/resolver-http-json.ts deals.ts; link it with
+ * Usage: cp resolvers/resolver-http-json.ts deals.ts; link it with
  *   <link rel="af-resolver" data-af-name="deals" href="./deals.ts">; publish, then send the owner
  *   to the Resolvers panel to set API_KEY and press Test connection.
  * Next: set HOST and PATH; rename Item's fields and the mapping to the API's JSON.

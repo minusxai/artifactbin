@@ -33,7 +33,7 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   publish before the page and are discovered from static HTML URLs, CSS url() and @import, and
   static or literal dynamic module imports (up to 99 files, 4 MB each, 16 MB total); list other
   runtime-loaded files in --manifest. Computed imports and cyclic graphs are refused; remote URLs,
-  absolute server paths and ref: links stay as written. af-resolver (alias af-backend) files go in
+  absolute server paths and ref: links stay as written. af-resolver files go in
   as resolver sources, never as public assets. A link on the legacy dataset API prints
   deprecated:. An update is conditional on the observed version: a concurrent remote change exits
   4 instead of overwriting. The journal is saved before sending
@@ -41,32 +41,16 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   baseline is historical, missing or mismatched): read.mjs again and reapply; there is no force
   overwrite and never attach a fresh head to stale bytes. --create publishes exported or
   recovered source as a new page. Data and media identity lives only in the .af.json companion.
-  The old --prepare/--send flags are deprecated.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results
   include user_page_url for eligible public/unlisted HTML when anonymous publishing hosts
   are enabled.
   Results never contain credentials.`;
 
 /** Optional author-skill helper. Credentials never enter a page or saved publication request. */
-import {beforeCommand} from './toolbox-update.mjs';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-export {prepareSample,sendPublication} from './toolbox-publish-legacy.mjs';
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (['--prepare', '--send'].includes(process.argv[2])) {
-    if(await beforeCommand(import.meta.url,process.argv.slice(2)))process.exit(process.exitCode??0);
-    process.argv=process.argv.filter(arg=>arg!=='--no-update');
-    process.stderr.write(
-      'Deprecated sample/request flags; prefer publish.mjs FILE or --resume JOURNAL.\n'
-    );
-    const {main} = await import('./toolbox-publish-legacy.mjs');
-    await main(process.argv.slice(2)).catch(error => {
-      process.stderr.write(error.message + '\n');
-      process.exitCode = 1;
-    });
-  } else {
-    const {runTool} = await import('./toolbox-client.mjs');
-    const {publishCommand} = await import('./toolbox-publish.mjs');
-    await runTool('publish', import.meta.url, publishCommand);
-  }
+  const {runTool} = await import('./toolbox-client.mjs');
+  const {publishCommand} = await import('./toolbox-publish.mjs');
+  await runTool('publish', import.meta.url, publishCommand);
 }

@@ -32,7 +32,7 @@ describe('FIELD_ERROR_CODE', () => {
 describe('compilePageBackend', () => {
   it('compiles through the configured runner as a schema run and answers sorted secret bindings', async () => {
     const started: RunStart[] = [];
-    setServices({ runner: fakeRunner({ typeDefs: 'type Query { count: Int! }', secretBindings: ['ZED', 'API_TOKEN'] }, started) });
+    setServices({ runner: fakeRunner({ typeDefs: 'type Query { count: Int! }', secrets: { ZED: 'z.example.com', API_TOKEN: 'api.example.com' } }, started) });
     const compiled = await compilePageBackend('export const typeDefs = "type Query { count: Int! }"; export default { count: () => 1 };');
     expect(compiled.typeDefs).toBe('type Query { count: Int! }');
     expect(compiled.secretBindings).toEqual(['API_TOKEN', 'ZED']);
@@ -53,20 +53,24 @@ describe('compilePageBackend', () => {
     await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_backend_exports');
     setServices({ runner: fakeRunner(['not', 'an', 'object']) });
     await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_backend_exports');
-    setServices({ runner: fakeRunner({ typeDefs: 'type Query { a: Int }', secretBindings: ['lower'] }) });
-    await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secret_bindings');
+    setServices({ runner: fakeRunner({ typeDefs: 'type Query { a: Int }', secrets: { lower: 'a.example.com' } }) });
+    await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secrets');
   });
 
-  it('binds a secrets map to hosts, records the resolver api and refuses mixing it with legacy secretBindings', async () => {
+  it('binds a secrets map to hosts and gives every source the same caps: fetch and query, never a store or secret reads', async () => {
     const plain = 'export const secrets = {SHEETS_KEY: "sheets.googleapis.com"}; export default { n: (a, p, caps) => caps.fetch("https://sheets.googleapis.com") };';
     setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secrets: { SHEETS_KEY: 'sheets.googleapis.com' } }) });
-    expect(await compilePageBackend(plain)).toMatchObject({ secretBindings: ['SHEETS_KEY'], secretHosts: { SHEETS_KEY: 'sheets.googleapis.com' }, api: 2, test: false });
+    expect(await compilePageBackend(plain)).toMatchObject({ secretBindings: ['SHEETS_KEY'], secretHosts: { SHEETS_KEY: 'sheets.googleapis.com' }, test: false });
     setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }' }) });
-    expect(await compilePageBackend('export default { n: () => 1 };')).toMatchObject({ secretBindings: [], secretHosts: {}, api: 2 });
-    for (const legacy of ['export default { n: async (a, p, caps) => (await caps.store.get()).value };', 'export default { n: async (a, p, {store}) => store.set(1, {expected: 0}) };', 'export default { n: (a, p, caps) => caps.secrets.get("TOKEN") };', 'export const secretBindings = []; export default {};'])
-      expect((await compilePageBackend(legacy)).api).toBe(1);
-    setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secretBindings: ['TOKEN'], secrets: { KEY: 'api.example.com' } }) });
-    await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secrets');
+    expect(await compilePageBackend('export default { n: () => 1 };')).toMatchObject({ secretBindings: [], secretHosts: {} });
+    for (const removed of ['export default { n: async (a, p, caps) => (await caps.store.get()).value };', 'export default { n: (a, p, caps) => caps.secrets.get("TOKEN") };']) {
+      const compiled = (await compilePageBackend(removed)).compiled;
+      expect(compiled).toContain("'pageBackend.fetch'"); expect(compiled).toContain("'pageBackend.query'");
+      expect(compiled).not.toMatch(/'pageBackend\.(?:store|secrets)\./);
+    }
+    // A removed `secretBindings` export declares nothing.
+    setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secretBindings: ['TOKEN'] }) });
+    expect(await compilePageBackend('export const secretBindings = ["TOKEN"]; export default {};')).toMatchObject({ secretBindings: [], secretHosts: {} });
     for (const secrets of [['KEY'], { KEY: 'https://api.example.com' }, { KEY: 'sk_live_value' }, { key: 'api.example.com' }]) {
       setServices({ runner: fakeRunner({ typeDefs: 'type Query { n: Int }', secrets }) });
       await expect(compilePageBackend('export default {}')).rejects.toThrow('invalid_secrets');
@@ -97,18 +101,16 @@ describe('localPageBackendCapability', () => {
     const made = await create(request('/api/artifacts', { method: 'POST', token: owner.token, json: { html: '<!doctype html><html><head></head><body><p>x</p></body></html>' } }));
     const pageId = (await made.json() as { id: string }).id;
     const db = await getDb();
-    await db.query("INSERT INTO html_backend_versions (backend_id, version, page_id, name, source, type_defs, compiled, owner_id, secret_bindings) VALUES ('be_1', 'v1', $1, 'tasks', 'src', 'type Query { a: Int }', 'compiled-program', $2, '[\"API_TOKEN\"]'::jsonb)", [pageId, owner.userId]);
-    await db.query("INSERT INTO html_backend_stores (backend_id, value, version) VALUES ('be_1', '{\"count\":3}'::jsonb, 4)");
+    await db.query("INSERT INTO html_backend_versions (backend_id, version, page_id, name, source, type_defs, compiled, owner_id, secret_bindings, secret_hosts) VALUES ('be_1', 'v1', $1, 'tasks', 'src', 'type Query { a: Int }', 'compiled-program', $2, '[\"API_TOKEN\"]'::jsonb, '{\"API_TOKEN\":\"api.example.com\"}'::jsonb)", [pageId, owner.userId]);
     await backendSecrets.put({ ownerId: owner.userId!, backendId: 'be_1' }, 'API_TOKEN', 'secret-value');
     const run: RunStart = { requestId: 'req', pageBackendOperation: 'query', userId: owner.userId!, artifactId: 'be_1', artifactVersion: 'v1', program: { source: 'compiled-program', language: 'javascript' }, input: { kind: 'invoke', principal: { tenant: pageId, subject: null } } } as RunStart;
     return { owner, pageId, run };
   }
 
-  it('reads the pinned backend store and its declared secret', async () => {
+  it('never hands a declared secret value or a store to the pinned resolver', async () => {
     const { run } = await backend();
-    expect(await localPageBackendCapability(run, 'artifactbin.pageBackend.store.get', null)).toEqual({ value: { count: 3 }, version: 4 });
-    expect(await localPageBackendCapability(run, 'artifactbin.pageBackend.secrets.get', { name: 'API_TOKEN' })).toBe('secret-value');
-    await expect(localPageBackendCapability(run, 'artifactbin.pageBackend.secrets.get', { name: 'UNDECLARED' })).rejects.toThrow('backend_secret_forbidden');
+    for (const [operation, args] of [['artifactbin.pageBackend.secrets.get', { name: 'API_TOKEN' }], ['artifactbin.pageBackend.store.get', null], ['artifactbin.pageBackend.store.set', { expected: 0, value: 1 }]] as const)
+      await expect(localPageBackendCapability({ ...run, pageBackendOperation: 'mutation' } as RunStart, operation, args)).rejects.toThrow('backend_capability_forbidden');
   });
 
   it('refuses a run that does not match the stored backend: other owner, other program, other tenant or no invoke input', async () => {
@@ -120,15 +122,13 @@ describe('localPageBackendCapability', () => {
       { ...run, artifactVersion: 'v2' },
       { ...run, input: { kind: 'schema' } },
       { ...run, artifactId: undefined },
-    ]) await expect(localPageBackendCapability(bad as RunStart, 'artifactbin.pageBackend.store.get', null)).rejects.toThrow('backend_capability_forbidden');
+    ]) await expect(localPageBackendCapability(bad as RunStart, 'artifactbin.pageBackend.fetch', { url: 'https://api.example.com/' })).rejects.toThrow('backend_capability_forbidden');
   });
 
-  it('writes the store only from a mutation, within the size limit, and only at the expected version', async () => {
+  it('refuses unknown operations, and caps.query without the composition\'s port', async () => {
     const { run } = await backend();
-    await expect(localPageBackendCapability(run, 'artifactbin.pageBackend.store.set', { expected: 4, value: 1 })).rejects.toThrow('backend_capability_forbidden');
     const mutation = { ...run, pageBackendOperation: 'mutation' } as RunStart;
-    await expect(localPageBackendCapability(mutation, 'artifactbin.pageBackend.store.set', { expected: 4, value: 'x'.repeat(61 * 1024) })).rejects.toThrow('store_limit');
-    await expect(localPageBackendCapability(mutation, 'artifactbin.pageBackend.store.set', { expected: -1, value: 1 })).rejects.toThrow('backend_capability_forbidden');
     await expect(localPageBackendCapability(mutation, 'artifactbin.pageBackend.unknown', {})).rejects.toThrow('backend_capability_forbidden');
+    await expect(localPageBackendCapability(mutation, 'artifactbin.pageBackend.query', { query: '{ x }' })).rejects.toThrow('backend_capability_forbidden');
   });
 });

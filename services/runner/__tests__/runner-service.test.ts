@@ -85,19 +85,6 @@ it('deduplicates concurrent admission before applying queue capacity',async()=>{
  await expect(runner.start({...input,input:2})).rejects.toThrow('start_conflict');
 });
 
-it('never persists credentials read by a backend in nested results, emitted events or errors',async()=>{
- const db=new PGlite();cleanup.push(()=>db.close());
- const secret='test-only-credential';
- const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:async(_ctx,operation)=>{if(operation==='artifactbin.pageBackend.secrets.get')return secret;throw Error('forbidden');}});cleanup.push(()=>runner.close());
- const code=`export default async function(input,c){const value=await c.artifactbin.call('pageBackend.secrets.get',{name:'TOKEN'});await c.emit({nested:[value]});if(input.fail)throw Error('failure: '+value);return {nested:[value]};}`;
- for(const fail of [false,true]){
-  const {runId}=await runner.start({...request(code),requestId:'secret-'+fail,input:{fail}});const snapshot=await terminal(runner,runId);
-  expect(JSON.stringify(snapshot)).not.toContain(secret);expect(JSON.stringify(await runner.events({userId:'alice',runId,afterSequence:0}))).not.toContain(secret);
-  if(fail)expect(snapshot.receipt?.reason).toContain('[redacted]');else expect(snapshot.output).toEqual({nested:['[redacted]']});
-  const rows=await db.query('SELECT output,receipt FROM runner_runs WHERE id=$1',[runId]);expect(JSON.stringify(rows.rows)).not.toContain(secret);
- }
-});
-
 it('holds getRun open until the run is terminal, for its owner only, within the requested wait',async()=>{
  const {runner}=await setup();const quick=await runner.start({...request('export default()=>7'),requestId:'quick'});
  const snapshot=await runner.getRun({userId:'alice',runId:quick.runId,waitMs:10_000});expect(snapshot).toMatchObject({status:'completed',output:7});

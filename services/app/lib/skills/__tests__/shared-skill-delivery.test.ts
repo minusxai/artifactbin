@@ -64,7 +64,9 @@ describe('installable shared skill folder',()=>{
    if(file.ref&&!isShippedSkillTopic(file.file.replace(/\.md$/,'')))continue;
    expect(expected[file.path.replace(/^artifactbin\//,'')],file.path).toBe(skillFileWithFrontmatter(file,text));
   }
-  expect(expected['scripts/publish.mjs']).toContain('sendPublication');
+  expect(expected['scripts/publication-bundle.mjs']).toContain('sendPublication');
+  expect(expected['scripts/toolbox-publish-legacy.mjs']).toBeUndefined();
+  expect(expected['resolvers/resolver-public-url.ts']).toContain('export const typeDefs');
   expect(expected['references/datasets.md']).toContain('dataset');
   expect(expected['components/file-upload.ts']).toContain('uploadFile');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);

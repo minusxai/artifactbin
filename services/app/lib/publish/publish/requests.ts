@@ -67,14 +67,13 @@ async function graphqlRootCollision(actor:AccessActor,backends:readonly string[]
 }
 
 async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
- // preparePublicationBundle folds resolverSources into backendSources for every html save.
- if(body.resolverSources!==undefined&&typeof body.html!=='string')return json({error:'invalid_backend_sources'},400);
- if(body.backendSources===undefined){
+ // preparePublicationBundle adds the bundle's resolver files to resolverSources for every html save.
+ if(body.resolverSources===undefined){
   if(creating&&typeof body.html==='string'&&htmlBackendNames(body.html).length)return json({error:'unresolved_backend_link'},400);
   return undefined;
  }
- if(typeof body.html!=='string'||!body.backendSources||typeof body.backendSources!=='object'||Array.isArray(body.backendSources))return json({error:'invalid_backend_sources'},400);
- const entries=Object.entries(body.backendSources as Record<string,unknown>);
+ if(typeof body.html!=='string'||!body.resolverSources||typeof body.resolverSources!=='object'||Array.isArray(body.resolverSources))return json({error:'invalid_backend_sources'},400);
+ const entries=Object.entries(body.resolverSources as Record<string,unknown>);
  if(entries.length>20||entries.some(([name,source])=>!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||typeof source!=='string'||Buffer.byteLength(source)>4_000_000))return json({error:'invalid_backend_sources'},400);
  try{
   const names=htmlBackendNames(body.html);

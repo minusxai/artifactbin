@@ -1,6 +1,6 @@
 /**
  * Example resolver: rows from a public CSV or JSON URL (no secrets), typed for the page.
- * Usage: cp examples/resolver-public-url.ts sales.ts; link it with
+ * Usage: cp resolvers/resolver-public-url.ts sales.ts; link it with
  *   <link rel="af-resolver" data-af-name="sales" href="./sales.ts"> and query
  *   {sales{rows{name value}}}.
  * Next: set URL; rename Row's fields and the mapping in row() to your columns.

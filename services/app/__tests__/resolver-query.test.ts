@@ -1,5 +1,5 @@
 /**
- * caps.query AS THE CALLER (resolvers plan, PR 5): an api 2 resolver reads the datasets its page links through the
+ * caps.query AS THE CALLER (resolvers plan, PR 5): a resolver reads the datasets its page links through the
  * generated Hasura-style API with the caller's dataset role (the page audience rule over the dataset's own
  * sharing), never the page owner's rights. In process the caller is the admitted request's principal; remotely it is
  * the signed runner pin, which the app reads instead of rebuilding an anonymous caller.
@@ -21,7 +21,7 @@ import { loadDatasetRows } from '@/lib/datasets';
 
 vi.mock('@/lib/page-operations', async (original) => ({
   ...await original<typeof import('@/lib/page-operations')>(),
-  compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { targets: Int }', compiled: source, secretBindings: [], secretHosts: {}, api: 2 }),
+  compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { targets: Int }', compiled: source, secretBindings: [], secretHosts: {} }),
 }));
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -43,7 +43,7 @@ const POLICY = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' 
   { role: 'signed_in', permission: { columns: '*', filter: {}, limit: 2, allow_aggregations: true } },
 ] }] };
 
-/** A page linking `staff` (v3 rule: viewers see red rows, other accounts 2 rows, anonymous nothing) and an api 2 resolver. */
+/** A page linking `staff` (v3 rule: viewers see red rows, other accounts 2 rows, anonymous nothing) and a resolver. */
 async function fixture() {
   const owner = await person('owner'), viewer = await person('viewer'), other = await person('other');
   const staff = await publish(owner, { dataset: STAFF, title: 'Staff' });
@@ -59,7 +59,6 @@ async function fixture() {
   const link = page.links.find((l) => l.kind === 'backend');
   if (link?.kind !== 'backend') throw Error('missing resolver link');
   const backend = (await getHtmlBackendVersion(link.backendId, link.version))!;
-  expect(backend.api).toBe(2);
   return { owner, viewer, other, staff, unlinked, pageId, link, backend };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;

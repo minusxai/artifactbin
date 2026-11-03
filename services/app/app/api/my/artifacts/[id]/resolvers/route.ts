@@ -9,7 +9,7 @@ import {json,unauthorized} from '@/lib/http';
 type Context={params:Promise<{id:string}>};
 /**
  * GET — the page owner's Resolvers panel: each resolver on the head revision with its declared secrets (name → bound
- * host, null for a legacy name with no host), which of them have a value, and whether it offers Test connection.
+ * host), which of them have a value, and whether it offers Test connection.
  * Values are never read. `revision` is what Test connection runs the `test` field against.
  */
 export async function GET(request:Request,context:Context){
@@ -21,9 +21,9 @@ export async function GET(request:Request,context:Context){
   const resolvers=await Promise.all(page.links.flatMap(link=>link.kind==='backend'?[link]:[]).map(async link=>{
    const backend=await getHtmlBackendVersion(link.backendId,link.version);
    if(!backend||backend.pageId!==id)return null;
-   const hosts=backend.secretHosts??{},secrets=Object.fromEntries((backend.secretBindings??[]).map(name=>[name,hosts[name]??null]));
+   const secrets=backend.secretHosts??{};
    const set=backend.ownerId===account?(await backendSecrets.names({ownerId:backend.ownerId,backendId:backend.backendId})).filter(name=>name in secrets):[];
-   return {name:link.name,backendId:link.backendId,version:link.version,api:backend.api??1,test:declaresResolverTest(backend.typeDefs),secrets,set};
+   return {name:link.name,backendId:link.backendId,version:link.version,test:declaresResolverTest(backend.typeDefs),secrets,set};
   }));
   return json({revision:page.revision,resolvers:resolvers.filter(Boolean)},200,{'Cache-Control':'no-store'});
  }catch{return json({error:'not_found'},404);}

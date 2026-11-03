@@ -2,6 +2,7 @@ import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
 import {describe,it,expect} from 'vitest';
 import {skillTree, renderSkill, SKILL_FILE_MAX_BYTES, isPublicSkillTopic, skillPackageFiles} from '@/lib/skills';
 import {publicGuideText,llmsText} from '@/lib/agent-copy';
@@ -30,8 +31,8 @@ describe('one installable native HTML author skill',()=>{
  it('executes the documented namespace input mutation against the composed backend SDL',async()=>{
   const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
   const guide=publicGuideText('resolvers',BASE)!;
-  // The retired topic name is served as the same text, for installed skills that still link it.
-  expect(publicGuideText('backends',BASE)).toBe(guide);
+  // The retired topic name is no longer served.
+  expect(publicGuideText('backends',BASE)).toBeNull();
   const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
   expect(query).toBeTruthy();
   const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);
@@ -70,7 +71,7 @@ describe('one installable native HTML author skill',()=>{
   const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
   const members:string[]=[];let offset=0;
   while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
-  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
+  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|resolvers\/[a-z0-9-]+\.ts|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
   // Pages import components as @afbin/<component> and the preview fetches the runtime and libraries from the server (D20).
   expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
@@ -90,7 +91,7 @@ describe('one installable native HTML author skill',()=>{
    }
   }
   for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
-  for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon'])expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(true);
+  for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon']){expect(Object.hasOwn(files,`resolvers/resolver-${resolver}.ts`),resolver).toBe(true);expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(false);}
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
@@ -108,10 +109,12 @@ describe('one installable native HTML author skill',()=>{
    const occupied=path.join(dir,'occupied.json');writeFileSync(occupied,'retained');
    try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'missing.html','--output',occupied,'--json'],{cwd:dir});throw Error('Expected output refusal');}catch(error){const failure=error as {status:number;stdout:Buffer};expect(failure.status).toBe(2);expect(JSON.parse(String(failure.stdout))).toMatchObject({ok:false,code:'output_exists'});}
    expect(readFileSync(occupied,'utf8')).toBe('retained');
+   // The removed sample flags are refused as invocation errors.
+   try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare','report','--server',BASE,'--output',path.join(dir,'report.json')],{cwd:installed,stdio:'pipe'});throw Error('Expected --prepare refusal');}catch(error){expect((error as {status:number}).status).toBe(2);}
+   const {prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/publication-bundle.mjs')).href);
    for(const sample of ['report','csv-dashboard','shared-app']){
-    const request=path.join(dir,sample+'.json'),source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
-    execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare',sample,'--server',BASE,'--output',request,...(sample!=='report'?['--dataset-id','REALDATA123']:[])],{cwd:installed});
-    const saved=JSON.parse(readFileSync(request,'utf8'));
+    const source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
+    const saved=await prepareBundle({root:installed,entry:`examples/${sample}.html`,server:BASE,entryHtml:source.replaceAll('ref:DATASET_ID','ref:REALDATA123').replaceAll('ref:TARGETS_ID','ref:REALDATA123')});
     expect(saved).not.toHaveProperty('token');expect(saved.body.publicationBundle).toBeDefined();
     const plan=planPublicationBundle(saved.body.html,saved.body.publicationBundle);
     // Systems are named by a head meta and served by the platform with its fonts: nothing local is bundled for them.
@@ -120,7 +123,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="budget"');expect(plan.backendSources.budget).toBe(saved.body.backendSources.budget);expect(saved.body.backendSources.budget).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="budget"');expect(plan.resolverSources.budget).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });

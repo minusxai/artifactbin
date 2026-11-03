@@ -12,9 +12,9 @@ export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancell
  * fetch response cap means raising every link after it (worker message, remote callback reply).
  */
 export const RESOLVER_LIMITS = Object.freeze({
-  /** api 2 `caps.fetch` response body, before redaction. */
+  /** `caps.fetch` response body, before redaction. */
   fetchResponseBytes: 2 * 1024 * 1024,
-  /** api 2 `caps.fetch` request body, after placeholders are filled. */
+  /** `caps.fetch` request body, after placeholders are filled. */
   fetchRequestBodyBytes: 256 * 1024,
   /** One `caps.fetch`, every redirect hop included. */
   fetchTimeoutMs: 10_000,
@@ -27,9 +27,9 @@ export const RESOLVER_LIMITS = Object.freeze({
   /** How long the app waits for a run: wall time plus one second. */
   appWaitMs: 16_000,
   maxRequests: 32,
-  /** One api 2 `caps.query` GraphQL document. */
+  /** One `caps.query` GraphQL document. */
   queryDocumentBytes: 16 * 1024,
-  /** One api 2 `caps.query` answer's `data`. */
+  /** One `caps.query` answer's `data`. */
   queryResultBytes: 1024 * 1024,
   /** The longest one `getRun` holds a completion wait open; below the runner client's 30 s request timeout. */
   runWaitMs: 20_000,

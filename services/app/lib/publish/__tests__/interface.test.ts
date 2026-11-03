@@ -136,19 +136,19 @@ describe('preparePublicationBundle',()=>{
    [{html:'<img src="./logo.svg">',publicationBundle:bundle},undefined,'bundle_idempotency_required'],
    [{html:'<img src="./logo.svg">',publicationBundle:bundle},keyed('short'),'bundle_idempotency_required'],
    [{html:'<img src="./missing.svg">',publicationBundle:bundle},keyed('publish_interface_bundle_01'),'unresolved_publication_dependencies'],
-   [{html:'<link rel="af-backend" data-af-name="api" href="./api.graphql">',backendSources:{api:'type Query{b:Int}'},publicationBundle:{entryPath:'index.html',files:[file('api.graphql','type Query{a:Int}','text/plain')]}},keyed('publish_interface_bundle_01'),'conflicting_backend_sources'],
+   [{html:'<link rel="af-resolver" data-af-name="api" href="./api.graphql">',resolverSources:{api:'type Query{b:Int}'},publicationBundle:{entryPath:'index.html',files:[file('api.graphql','type Query{a:Int}','text/plain')]}},keyed('publish_interface_bundle_01'),'conflicting_backend_sources'],
   ];
   for(const [body,req,error] of refusals){
    const result=await preparePublicationBundle(body,owner,BASE,req,unused,unused);
    expect(result instanceof Response?await errorOf(result):result).toEqual([400,error]);
   }
  });
- it('reads resolverSources as the resolver field and backendSources as its alias, refusing both at once',async()=>{
+ it('reads resolverSources as the resolver field and leaves the removed backendSources field unread',async()=>{
   const owner=await actor();const html='<link rel="af-resolver" data-af-name="api" href="./api.ts">';
-  expect(await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused)).toEqual({body:{html,backendSources:{api:'source'}},receipts:[]});
-  expect(await preparePublicationBundle({html,backendSources:{api:'source'}},owner,BASE,undefined,unused,unused)).toEqual({body:{html,backendSources:{api:'source'}},receipts:[]});
-  const both=await preparePublicationBundle({html,resolverSources:{api:'source'},backendSources:{api:'source'}},owner,BASE,undefined,unused,unused);
-  expect(both instanceof Response?await errorOf(both):both).toEqual([400,'conflicting_resolver_sources']);
+  expect(await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused)).toEqual({body:{html,resolverSources:{api:'source'}},receipts:[]});
+  // The removed field resolves nothing: the af-resolver link stays unresolved.
+  const removed=await preparePublicationBundle({html,backendSources:{api:'source'}},owner,BASE,undefined,unused,unused);
+  expect(removed instanceof Response?await errorOf(removed):removed).toEqual([400,'unresolved_publication_dependencies']);
   const bundled=await preparePublicationBundle({html,resolverSources:{api:'other'},publicationBundle:{entryPath:'index.html',files:[file('api.ts','source','text/plain')]}},owner,BASE,keyed('publish_interface_bundle_03'),unused,unused);
   expect(bundled instanceof Response?await errorOf(bundled):bundled).toEqual([400,'conflicting_backend_sources']);
  });

@@ -13,7 +13,7 @@ import { ListRow, Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
-interface PageResolver { name: string; backendId: string; version: string; api: number; test: boolean; secrets: Record<string, string | null>; set: string[] }
+interface PageResolver { name: string; backendId: string; version: string; test: boolean; secrets: Record<string, string>; set: string[] }
 interface PageResolvers { revision: string; resolvers: PageResolver[] }
 type TestOutcome = { ok: true; text: string } | { ok: false; text: string };
 
@@ -29,7 +29,7 @@ const refusal = (body: unknown, status: number): string => {
   return (body as { error?: string } | null)?.error ?? `test_failed (${status})`;
 };
 
-function SecretRow(props: { resolver: PageResolver; name: string; host: string | null; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
+function SecretRow(props: { resolver: PageResolver; name: string; host: string; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
   const [value, setValue] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
@@ -48,7 +48,7 @@ function SecretRow(props: { resolver: PageResolver; name: string; host: string |
   return <ListRow class="items-end">
     <div class="grid min-w-40 gap-1">
       <span class="font-mono text-sm text-fg">{props.name}</span>
-      <span class="font-sans text-xs text-muted"><Show when={props.host} fallback="Any host (legacy)">{props.host}</Show></span>
+      <span class="font-sans text-xs text-muted">{props.host}</span>
       <span><Badge tone={props.set ? 'accent' : 'dim'}>{props.set ? 'Set' : 'Not set'}</Badge></span>
     </div>
     <form class="flex flex-1 flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (value()) void send('PUT'); }}>
@@ -80,7 +80,7 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
     actions={<Show when={props.resolver.test}><Button variant="secondary" size="sm" disabled={testing()} onClick={() => void test()}>Test connection</Button></Show>}>
     <Show when={names().length} fallback={<StatusMessage kind="empty">This resolver declares no secrets.</StatusMessage>}>
       <ul class="m-0 list-none p-0"><For each={names()}>{(name) =>
-        <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? null} set={set().includes(name)} onNames={(next) => { setSet(next); setOutcome(null); }} />}
+        <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={(next) => { setSet(next); setOutcome(null); }} />}
       </For></ul>
     </Show>
     <Show when={testing()}><StatusMessage kind="loading">Testing the connection…</StatusMessage></Show>

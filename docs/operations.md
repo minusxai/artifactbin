@@ -162,7 +162,5 @@ Enabling wildcard DNS and TLS is an operator deployment step; the product never 
 Installed skills update themselves from `/skills/artifactbin.zip`, and the updater refuses any archive member
 outside the folders it knows (`scripts/toolbox-update-archive.mjs` `member`; the server packager's list is
 `lib/skills/package.ts` `skillZip` and `lib/skills/assets.ts`). A release may only ship a new folder once installs
-run an updater that accepts it, or their auto-update stops. `resolvers/` (`*.ts`) is accepted by the updater
-since step 1 of the resolver-library move; the server still ships nothing there. **Step 2** (move
-`examples/resolver-*.ts` to `resolvers/` and add the folder to the packager and asset lists) may ship one
-release window after step 1 is deployed, once installs have taken this updater.
+run an updater that accepts it, or their auto-update stops. `resolvers/` (`*.ts`, the copyable resolver library) is
+accepted by the updater and shipped by the packager.

@@ -27,10 +27,10 @@ run/schedule endpoints are no longer supported.
 Native backend execution is composed in `services/app/lib/page-operations`.
 The host pins backend identity, source, version, owner and page; callbacks through
 `/api/runner/operations` must carry the matching trusted attestation. Resolvers
-receive validated arguments, a trusted principal and constrained capabilities:
-store reads, compare-and-swap store writes in mutations, bounded public fetches
-and explicitly declared owner secret bindings. Source files must contain no
-credentials. Browser code cannot call the internal runner as an arbitrary command
+receive validated arguments, a trusted principal and exactly two capabilities:
+`caps.fetch`, whose `{{NAME}}` secret placeholders the host fills for the one
+declared host, and `caps.query` over the page's datasets as the caller. Secret
+values never enter a run. Source files must contain no credentials. Browser code cannot call the internal runner as an arbitrary command
 service or obtain backend source as a browser module.
 
 Programs receive no filesystem, shell, Node modules, native network access or

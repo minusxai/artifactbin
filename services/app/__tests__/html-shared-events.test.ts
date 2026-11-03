@@ -4,7 +4,6 @@ import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as eventsRoute} from '@/app/a/[id]/events/route';
 import {sseStream} from '@/__tests__/sse';
-import {setHtmlBackendStore} from '@/lib/html-backends';
 const harness=useAppHarness();
 // Presence shares this stream; dataset assertions wait for their named frame.
 async function nextData(stream:ReturnType<typeof sseStream>){
@@ -15,28 +14,34 @@ async function nextData(stream:ReturnType<typeof sseStream>){
  }
  throw new Error('Expected dataset data event');
 }
-it('two connected viewers hear committed stores; reconnect refetches writes missed while disconnected',async()=>{
+it('two connected viewers hear a resolver\'s linked dataset change; reconnect refetches writes missed while disconnected',async()=>{
  const token=await mintAccountToken('shared-events');
- const made=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:'<!doctype html><html><body><p>Shared</p></body></html>',visibility:'public'}}));
- expect(made.status,await made.clone().text()).toBe(201);
- const {id}=await made.json() as {id:string};
+ const create=async(json:Record<string,unknown>)=>{const res=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',...json}}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id as string;};
+ const dataset=await create({dataset:[{item:'one'}],access:'readwrite'});
+ const id=await create({html:'<!doctype html><html><body><p>Shared</p></body></html>'});
  const db=await harness.db();
  const backendId='backendtest';
- await db.query("UPDATE artifacts SET format='html',document=NULL,source='<p>Shared</p>',meta=$2::jsonb WHERE id=$1",[id,JSON.stringify({htmlLinks:[{kind:'backend',name:'counter',backendId,version:'v1'}]})]);
+ await db.query("UPDATE artifacts SET format='html',document=NULL,source='<p>Shared</p>',meta=$2::jsonb WHERE id=$1",[id,JSON.stringify({htmlLinks:[{kind:'backend',name:'counter',backendId,version:'v1'},{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]})]);
  await db.query("INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id) VALUES($1,'v1',$2,'counter','','','','owner')",[backendId,id]);
- await db.query('INSERT INTO html_backend_stores(backend_id,value,version) VALUES($1,NULL,0)',[backendId]);
+ const {POST:mutate}=await import('@/app/api/artifacts/[id]/mutate/route');
+ const write=async(item:string)=>expect((await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:`insert into public.rows (item) values ('${item}')`}}),{params:Promise.resolve({id:dataset})})).status).toBe(200);
  const params={params:Promise.resolve({id})};
  const connect=async()=>{const response=await eventsRoute(request(`/a/${id}/events`),params);expect(response.status).toBe(200);return sseStream(response.body!);};
+ const resolver=expect.stringMatching(new RegExp(`^resolver:${backendId}:`));
  const a=await connect(),b=await connect();
  try{
-  for(const viewer of [a,b])expect((await viewer.next(2)).find(e=>e.event==='data')?.data).toMatchObject({datasets:['counter'],revisions:{counter:`backend:${backendId}:0`}});
-  expect(await setHtmlBackendStore(backendId,{count:1},0)).toEqual({ok:true,version:1});
-  for(const viewer of [a,b])expect((await nextData(viewer)).data).toMatchObject({revisions:{counter:`backend:${backendId}:1`}});
+  const counter=(data:Record<string,unknown>|undefined)=>(data?.revisions as Record<string,string>|undefined)?.counter;
+  const opened:unknown[]=[];
+  for(const viewer of [a,b]){const data=(await viewer.next(2)).find(e=>e.event==='data')?.data;expect(data).toMatchObject({datasets:['counter','rows'],revisions:{counter:resolver}});opened.push(counter(data));}
+  expect(opened[0]).toBe(opened[1]);
+  await write('two');
+  const heard:unknown[]=[];
+  for(const viewer of [a,b]){const data=(await nextData(viewer)).data;expect(data.revisions).toMatchObject({counter:resolver,rows:expect.stringContaining(`dataset:${dataset}:2:`)});heard.push(counter(data));}
+  expect(heard[0]).not.toBe(opened[0]);expect(heard[1]).toBe(heard[0]);
   a.close();b.close();
-  expect(await setHtmlBackendStore(backendId,{count:2},1)).toEqual({ok:true,version:2});
+  await write('three');
   const reconnected=await connect();
-  try{expect((await reconnected.next(2)).find(e=>e.event==='data')?.data).toMatchObject({revisions:{counter:`backend:${backendId}:2`}});}finally{reconnected.close();}
-  expect((await db.query('SELECT value,version FROM html_backend_stores WHERE backend_id=$1',[backendId])).rows[0]).toMatchObject({value:{count:2},version:2});
+  try{const data=(await reconnected.next(2)).find(e=>e.event==='data')?.data;expect(data?.revisions).toMatchObject({counter:resolver,rows:expect.stringContaining(`dataset:${dataset}:3:`)});expect(counter(data)).not.toBe(heard[0]);}finally{reconnected.close();}
  }finally{a.close();b.close();}
 });
 it('native live dataset links hear mutations and pinned aliases stay out of invalidations',async()=>{

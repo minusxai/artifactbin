@@ -1,5 +1,5 @@
 /*
- * api 2 `caps.fetch(url, {auth:{type:'google', secret, scopes}})` against a REAL local fake of Google's token
+ * `caps.fetch(url, {auth:{type:'google', secret, scopes}})` against a REAL local fake of Google's token
  * endpoint and a fake Google API (no live Google calls). The fetcher runs under the development policy with the
  * token URL and the Google host allowlist injected; `*.localhost` answers loopback through the app's own lookup.
  */

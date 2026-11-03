@@ -18,8 +18,8 @@ Skill map (run `ls <folder>` for the full list; each file's top comment says how
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs;
-  repairs.csv; resolver-*.ts (copyable resolvers: public-url, http-json, google-sheets, bigquery,
-  supabase, neon)
+  repairs.csv
+- `resolvers/`: copyable resolvers: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
 (`--help` each)
 - `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups
