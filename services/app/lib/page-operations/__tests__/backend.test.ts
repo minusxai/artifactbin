@@ -114,11 +114,12 @@ describe('resolver time limits',()=>{
 });
 describe('resolver completion wait',()=>{
  const call=(signal=new AbortController().signal)=>({namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal});
- /** A runner that holds getRun open as the contract says: until done, or waitMs. */
+ /** A runner that holds getRun open as the contract says: until done, or waitMs. Whether the run finished is
+  * decided from the window it was asked for, never by re-reading the clock after a timer that may fire early. */
  function waiting(finishAfterMs:number|null){
   const waits:number[]=[];let cancelled=0,startedAt=0;
   const runner={start:async()=>{startedAt=Date.now();return {runId:'run1'};},cancel:async()=>{cancelled++;},
-   getRun:async({waitMs}:{waitMs?:number})=>{waits.push(waitMs??-1);const doneAt=finishAfterMs===null?Infinity:startedAt+finishAfterMs;const wake=Math.min(Date.now()+(waitMs??0),doneAt);await new Promise(r=>setTimeout(r,Math.max(0,wake-Date.now())));return Date.now()>=doneAt?{runId:'run1',status:'completed',output:'pong',receipt:null}:{runId:'run1',status:'running',output:null,receipt:null};}} as unknown as RunnerService;
+   getRun:async({waitMs}:{waitMs?:number})=>{waits.push(waitMs??-1);const doneAt=finishAfterMs===null?Infinity:startedAt+finishAfterMs;const asked=Date.now(),wake=Math.min(asked+(waitMs??0),doneAt);await new Promise(r=>setTimeout(r,Math.max(0,wake-asked)));return wake>=doneAt?{runId:'run1',status:'completed',output:'pong',receipt:null}:{runId:'run1',status:'running',output:null,receipt:null};}} as unknown as RunnerService;
   return {runner,waits,cancelled:()=>cancelled};
  }
  it('asks once and returns as the run completes instead of polling',async()=>{
