@@ -12,12 +12,17 @@
  *    disclosure, custom elements, `data-af` controls, inline `on*` handlers) and no added or changed element whose
  *    id, class or data-af-id appears in the page's scripts (they may have been queried and wired at load).
  *
+ * A version it cannot draw in place is REBUILT by the frame itself (applyHtmlVersion `rebuild`): a fresh document from the
+ * new version, so no old listener, timer or chart keeps running, with the reader's place carried over (./reading-place)
+ * and viewer state already in browser storage. Only when no valid new version could be read does the parent reload.
+ *
  * What changed is decided SOURCE AGAINST SOURCE: the HTML this document loaded (captured by the core before the page's
  * deferred scripts ran) against the new served HTML, so script-made DOM never reads as an edit. Elements the source
  * does not name (platform overlays, script-made nodes) are left where they are.
  */
 import {heldNodes,morphChildren,type MorphContext} from './morph/dom';
 import {LIVE_VERSION_HEADER} from './live-morph-contract';
+import {captureReadingPlace} from './reading-place';
 /** server/pages-host's one-time ticket parameter (lib/http/pages-origin PAGES_TICKET_PARAM), never part of the document's address. */
 const PAGES_TICKET='_pt';
 
@@ -154,14 +159,20 @@ export async function pageScripts(doc:Document,fetchFn:typeof fetch):Promise<str
  return complete?parts.join('\n'):null;
 }
 
-export interface VersionApplied {revision:string;savedNodeIds:string[]}
+export interface VersionApplied {
+ revision:string;savedNodeIds:string[];
+ /** Set when the version could not be drawn in place: the frame navigates here (its own clean address) to rebuild from it. */
+ rebuild?:string;
+}
 /**
  * Fetch the newest served version the way this frame got its document (its own address, its own session) and draw it in
- * place. Resolves with the version drawn; rejects (VersionRefused or any error) when the parent must reload.
+ * place, or, when that is refused or fails, keep the reader's place and say where to rebuild from. Rejects (VersionRefused
+ * or any error) only when no valid new version was read: then the parent reloads.
  */
-export async function applyHtmlVersion(win:Window,config:{revision:string;savedNodeIds?:readonly string[]},version:number,fetchFn:typeof fetch=win.fetch.bind(win)):Promise<VersionApplied>{
+export async function applyHtmlVersion(win:Window,config:{revision:string;savedNodeIds?:readonly string[];pageId?:string},version:number,fetchFn:typeof fetch=win.fetch.bind(win)):Promise<VersionApplied>{
  const holder=win as unknown as Record<symbol,unknown>,loaded=holder[LOADED_SOURCE];
  if(typeof loaded!=='string')throw refuse('this document kept no copy of its source');
+ // Without the ticket (spent) or the fragment (an `#af-state=` link would replace the viewer's own state on a rebuild).
  const address=new URL(win.location.href);address.searchParams.delete(PAGES_TICKET);address.hash='';
  // Marked so the read is not counted as another view of the page (app/a/[id]/raw).
  const response=await fetchFn(address.href,{credentials:'same-origin',cache:'no-store',headers:{[LIVE_VERSION_HEADER]:'1'}});
@@ -169,7 +180,13 @@ export async function applyHtmlVersion(win:Window,config:{revision:string;savedN
  const next=await response.text();
  const revision=Number(runtimeOf(new DOMParser().parseFromString(next,'text/html')).revision);
  if(!Number.isInteger(revision)||revision<version)throw refuse('the served version is not the published one');
- const applied=morphHtmlVersion(win.document,loaded,next,await pageScripts(win.document,fetchFn),config.savedNodeIds);
+ let applied:VersionApplied;
+ try{applied=morphHtmlVersion(win.document,loaded,next,await pageScripts(win.document,fetchFn),config.savedNodeIds);}
+ catch{
+  // Different scripts, an edit that is not inert, or a morph the DOM refused half way: a fresh document is always right.
+  captureReadingPlace(win,config.pageId??'');
+  return {revision:String(revision),savedNodeIds:[],rebuild:address.href};
+ }
  holder[LOADED_SOURCE]=next;
  return applied;
 }

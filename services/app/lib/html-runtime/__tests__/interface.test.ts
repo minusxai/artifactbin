@@ -3,7 +3,7 @@
  * the portable file's recovery and digest, and the browser download of a portable copy.
  */
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED,LIVE_VERSION_HEADER} from '../live-morph-contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED,LIVE_VERSION_HEADER} from '../live-morph-contract';
 import {LIVE_VERSION_HEADER as INDEX_LIVE_VERSION_HEADER,assertStorable,decodeState,downloadableHtml,encodeState,readStateFragment,stateUrl} from '../index';
 import {hasPortableDocument,readPortableDocument} from '../portable';
 import {portableRenderedDigest,recoverPortableRendering} from '../portable-source';
@@ -76,8 +76,8 @@ describe('what local state may hold',()=>{
 
 describe('live version wire names',()=>{
  it('are distinct, namespaced messages and one lowercase header name the index re-exports',()=>{
-  expect(new Set([HTML_VERSION_MESSAGE,HTML_VERSION_APPLIED,HTML_VERSION_REFUSED]).size).toBe(3);
-  for(const name of [HTML_VERSION_MESSAGE,HTML_VERSION_APPLIED,HTML_VERSION_REFUSED])expect(name).toMatch(/^mx:version/);
+  expect(new Set([HTML_VERSION_MESSAGE,HTML_VERSION_APPLIED,HTML_VERSION_REFUSED,HTML_VERSION_REBUILT]).size).toBe(4);
+  for(const name of [HTML_VERSION_MESSAGE,HTML_VERSION_APPLIED,HTML_VERSION_REFUSED,HTML_VERSION_REBUILT])expect(name).toMatch(/^mx:version/);
   expect(INDEX_LIVE_VERSION_HEADER).toBe(LIVE_VERSION_HEADER);
   expect(LIVE_VERSION_HEADER).toBe(LIVE_VERSION_HEADER.toLowerCase());
   expect(new Headers({[LIVE_VERSION_HEADER]:'3'}).get(LIVE_VERSION_HEADER)).toBe('3');

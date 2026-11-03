@@ -18,7 +18,7 @@ function load(html:string){
  return {input,chart:document.querySelector('.chart')!,canvas:document.querySelector('#drawn')!,title:document.querySelector('h1')!};
 }
 const SCRIPTS='document.querySelector(".chart")';
-afterEach(()=>{vi.restoreAllMocks();delete (window as unknown as Record<symbol,unknown>)[LOADED_SOURCE];});
+afterEach(()=>{vi.restoreAllMocks();sessionStorage.clear();delete (window as unknown as Record<symbol,unknown>)[LOADED_SOURCE];});
 
 describe('native HTML live morph',()=>{
  it('keeps the platform-owned <html> attributes the core set, and follows a new design-system meta (D4)',()=>{
@@ -90,13 +90,32 @@ describe('applyHtmlVersion (inside the frame)',()=>{
   expect(document.querySelector('[data-af-id="p2"]')!.textContent).toBe('Second, edited.');
   expect((window as unknown as Record<symbol,unknown>)[LOADED_SOURCE]).toBe(next);
  });
- it('rejects (so the parent reloads) when the document kept no source, the fetch fails, the version is older, or the morph throws',async()=>{
+ it('rejects (so the parent reloads) only when no valid new version was read: no kept source, a failed fetch, an older version',async()=>{
   const ok=async()=>new Response(served(2,V1.replace('Second.','Edited.')));
   await expect(applyHtmlVersion(window,{revision:'1'},2,ok as unknown as typeof fetch)).rejects.toThrow(VersionRefused);
   load(served(1,V1));
   await expect(applyHtmlVersion(window,{revision:'1'},2,(async()=>new Response('',{status:500})) as unknown as typeof fetch)).rejects.toThrow(VersionRefused);
   await expect(applyHtmlVersion(window,{revision:'1'},3,ok as unknown as typeof fetch)).rejects.toThrow(/not the published one/);
-  vi.spyOn(Element.prototype,'replaceChildren');vi.spyOn(Node.prototype,'insertBefore').mockImplementation(()=>{throw Error('DOM refused');});
-  await expect(applyHtmlVersion(window,{revision:'1'},2,(async()=>new Response(served(2,V1.replace('</h1>','</h1><p data-af-id="n">New</p>')))) as unknown as typeof fetch)).rejects.toThrow('DOM refused');
+  expect(sessionStorage.length).toBe(0);
+ });
+ it('asks for a rebuild, keeping the reader\'s place, when the scripts changed, the edit is not inert, or the morph throws',async()=>{
+  for(const [next,broken] of [
+   [served(2,V1.replace('Plan','Plans'),{fingerprint:'fp-2'}),false],
+   [served(2,V1.replace('Name <input','Full name <input')),false],
+   [served(2,V1.replace('</h1>','</h1><p data-af-id="n">New</p>')),true],
+  ] as const){
+   const html=served(1,V1);load(html);sessionStorage.clear();
+   history.replaceState(null,'','/?_pt=ticket&%24tab=2#af-state=abc');
+   if(broken)vi.spyOn(Node.prototype,'insertBefore').mockImplementationOnce(()=>{throw Error('DOM refused');});
+   const fetchFn=vi.fn(async(url:string)=>url.endsWith('.js')?new Response(''):new Response(next));
+   const applied=await applyHtmlVersion(window,{revision:'1',pageId:'page-1'},2,fetchFn as unknown as typeof fetch);
+   // Its own address, without the spent ticket or a state fragment that would replace the viewer's own state.
+   expect(applied).toEqual({revision:'2',savedNodeIds:[],rebuild:new URL('/?%24tab=2',location.href).href});
+   expect(JSON.parse(sessionStorage.getItem('afbin:reading-place:page-1')!)).toMatchObject({focus:'i'});
+   // The running document is not the new version's baseline: the rebuilt one loads its own.
+   expect((window as unknown as Record<symbol,unknown>)[LOADED_SOURCE]).toBe(html);
+   vi.restoreAllMocks();
+  }
+  history.replaceState(null,'','/');
  });
 });
