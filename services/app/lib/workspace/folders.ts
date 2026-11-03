@@ -11,7 +11,7 @@ import { type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { selectChildren } from '@/lib/artifacts';
-import type { ShelfRow } from './shelf';
+import type { ShelfRow } from '@/lib/shelf';
 
 /**
  * WHERE A FOLDER SITS — its ancestors, as the page's trail draws them.

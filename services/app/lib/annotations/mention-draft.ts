@@ -1,5 +1,5 @@
 import {personMentions} from '../document';
-import { sessionMentions } from '../remote';
+import { sessionMentions } from './session-mentions';
 
 /** Keep session IDs in the wire value, while the textarea shows only @name. */
 export function mentionDraft(raw: string) {

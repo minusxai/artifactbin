@@ -1,6 +1,5 @@
 import {expect,it} from 'vitest';
-import {sessionMentions} from '..';
-import {isSessionMentionHref} from '../session-mentions';
+import {isSessionMentionHref,sessionMentions} from '../session-mentions';
 const uuid='0123abcd-4567-89ab-cdef-0123456789ab',sha='a'.repeat(64);
 it('captures the visible label and the session id of every legacy UUID and SHA-256 mention',()=>{
  const text=`Ask [@Alex](/chat?session=${uuid}) and [@Build bot](/chat?session=${sha}).`;

@@ -154,7 +154,7 @@ const BUNDLED_LEAVES = {
   'lib/html-component-specs': ['boundary-ids', 'comparison', 'deck-spec', 'isometric-spec', 'mermaid-source'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'frame-bridge/parent', 'frame-markup', 'reader-mode', 'reload'],
-  'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'remote-reply'],
+  'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'remote-reply', 'session-mentions'],
   'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http'],
   'lib/capture': ['contract', 'png', 'screen'],
   'lib/chart': ['chart-theme'],
@@ -176,7 +176,6 @@ const BUNDLED_LEAVES = {
   'lib/markdown': ['content', 'styles'],
   'lib/mermaid-images': ['reader-draw'],
   'lib/page-operations': ['namespaces'],
-  'lib/remote': ['session-mentions'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/story-ui': [
@@ -184,7 +183,7 @@ const BUNDLED_LEAVES = {
   'lib/validation': [ 'html-system-modes', 'story-system-names', 'story-theme-names'],
   'lib/viz': [
     'deck-engine-core', ],
-  'lib/workspace': ['artifact-starters', 'breadcrumb', 'shelf', 'visibility-icons'],
+  'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
 };
 // Declared leaves are reviewed public entries: any importer may use them (`leavesForAll`), so a light caller never has to
 // pull a module's whole index. BUNDLED_IMPORTERS still marks the browser-bundled code the serverOnly rule guards.
