@@ -45,6 +45,28 @@ describe('serveBundleAsset',()=>{
   expect(await serveBundleAsset(asset('Missing123',logo.id),owner,'Missing123',logo.id)).toBeNull();
  });
 
+ it('is cached privately and revalidated: a held tag gets 304 only after access is checked again',async()=>{
+  const {owner,id,logo,css}=await bundledPage();
+  const first=await serveBundleAsset(asset(id,logo.id),owner,id,logo.id);
+  expect(first?.headers.get('cache-control')).toBe('private, no-cache');
+  const etag=first!.headers.get('etag')!;
+  expect(etag).toMatch(/^"[\w-]+"$/);
+  const held=(page:string,dependency:string,query='&revision=1',tag=etag)=>new Request(`${BASE}/a/${page}/assets?dependency=${dependency}${query}`,{headers:{'If-None-Match':tag}});
+  const repeat=await serveBundleAsset(held(id,logo.id),owner,id,logo.id);
+  expect(repeat?.status).toBe(304);
+  expect(repeat!.headers.get('access-control-allow-origin')).toBe('*');
+  // nginx's gzip weakens the tag; it still names the same bytes.
+  expect((await serveBundleAsset(held(id,logo.id,'&revision=1',`W/${etag}`),owner,id,logo.id))?.status).toBe(304);
+  const stranger=await mintAccountToken('bundle_assets_cache_stranger');
+  expect(await serveBundleAsset(held(id,logo.id),identityForUser(stranger.userId,stranger.id),id,logo.id)).toBeNull();
+  expect(await serveBundleAsset(held(id,logo.id),ANONYMOUS_ACTOR,id,logo.id)).toBeNull();
+  // Pinned text is rewritten against the page version, so it is a different representation with its own tag.
+  const plain=await serveBundleAsset(asset(id,css.id),owner,id,css.id);
+  const pinned=await serveBundleAsset(asset(id,css.id,'&revision=1&version=1'),owner,id,css.id);
+  expect(pinned!.headers.get('etag')).not.toBe(plain!.headers.get('etag'));
+  expect((await serveBundleAsset(held(id,css.id,'&revision=1&version=1',plain!.headers.get('etag')!),owner,id,css.id))?.status).toBe(200);
+ });
+
  it('serves a public page file to anyone',async()=>{
   const {id,logo}=await bundledPage('public');
   expect((await serveBundleAsset(asset(id,logo.id),ANONYMOUS_ACTOR,id,logo.id))?.status).toBe(200);
