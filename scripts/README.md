@@ -16,10 +16,8 @@ workflow job (`ci.yml`, `page-speed.yml`), another script, an agent, or a person
 that is not in the tree.
 
 Paths another repository runs, copies or imports are a contract: move them only with a paired change
-there. artifactbin-server runs or sparse-checks-out `lib/ci-plan.mjs`, `lib/ci-artifact-wait.mjs`,
-`lib/ci-elapsed.mjs`, `ci/ci.mjs`, `ci/npm-provenance.mjs`, `ci/npm-driver.mjs`,
-`ci/link-npm-acceptance.mjs`, `ci/npm-acceptance/`, `gate-cli-conformance.mjs` and
-`services/app/scripts/build-server-reader.mjs`; the evals repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and
+there. artifactbin-server runs or imports `build/build-islands.mjs`,
+`services/app/scripts/build-server-reader.mjs` and `services/app/testing/native-acceptance.mjs`; the evals repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and
 `lib/{credential,env,slug}.ts`, and mirrors `lib/dev-runner.mjs`. Where each is used, and the check that
 fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 
@@ -56,7 +54,6 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): plan, build key, lock fingerprint, roll-up. | `ci.yml`, `page-speed.yml` |
-| `scripts/ci/npm-provenance.mjs` | Sign and verify the CLI retirement tarball's build provenance. | `ci.yml` (`cli-pack`), `release-cli.yml`, artifactbin-server CI |
 | `scripts/ci/test-timings.mjs` | Refresh `ci/test-timings.json`, the per-file times test shards are packed by. | by hand, with a CI run id |
 | `scripts/lib/ci-elapsed.mjs` | Measure the required-check chain's elapsed time for the job summary. | `ci.yml` |
 | `scripts/lib/ci-supersede.mjs` | Cancel a pull request's earlier, unfinished CI runs without making the new run wait for them. | `ci.yml` (`supersede`) |
@@ -96,11 +93,11 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-reader-shell.mjs` | Who is served what at `/a/<id>`. | `gates.mjs` |
 | `scripts/gates/gate-reading-geometry.mjs` | Where a document sits, moves and scrolls at desktop and phone widths. | `gates.mjs` |
 
-## CLI conformance
+## HTTP acceptance
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/gate-cli-conformance.mjs` | A released CLI executable's acceptance against a host, standalone. | artifactbin-server CI |
+| `scripts/gates/lib/http-conformance.mjs` | Direct HTTP API acceptance: bearer issuance, the signed-out refusal and the authenticated artifact API. | `services/app/__tests__/http-conformance.test.ts` |
 
 ## Build
 
@@ -136,12 +133,3 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/runner-os-boundary.mjs` | Verify product worker network, filesystem, privilege and resource restrictions. | `runner-design.yml` |
-
-## Downstream release tooling
-
-Kept for artifactbin-server's CI (see the contract above); nothing in this repository's CI runs them.
-
-| File | Purpose | Run by |
-|---|---|---|
-| `scripts/lib/ci-artifact-wait.mjs` | Wait for and extract a run's artifacts. | artifactbin-server CI |
-| `scripts/ci/link-npm-acceptance.mjs` | Link the native acceptance tooling's `node_modules`. | artifactbin-server CI |

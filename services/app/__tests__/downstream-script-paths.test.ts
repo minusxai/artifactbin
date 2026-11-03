@@ -28,15 +28,6 @@ interface DownstreamPath {
 }
 
 const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
-  { path: 'scripts/lib/ci-plan.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:293 (sparse-checkout)', 'scripts/ci-plan.mjs:4 (imports isBuildInput)', 'scripts/runtime-build-key.mjs:7 (imports isBuildInput)'] },
-  { path: 'scripts/lib/ci-artifact-wait.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:294 (sparse-checkout)', 'scripts/ci/await-ci-artifact.mjs:10 (import)', 'scripts/prefetch-tested-images.mjs:9 (import)', 'test/tested-images.test.mjs:76 (import)'] },
-  { path: 'scripts/ci/npm-provenance.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:295 (sparse-checkout; imported by scripts/lib/ci-artifact-wait.mjs)'] },
-  { path: 'scripts/ci/npm-driver.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:296 (sparse-checkout)'] },
-  { path: 'scripts/ci/ci.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:127 and :221 (`node scripts/ci/ci.mjs lock-fingerprint`, working-directory toolkit)', 'test/tested-images.test.mjs:286'] },
-  { path: 'scripts/ci/link-npm-acceptance.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:463 (run, working-directory toolkit)', 'test/tested-images.test.mjs:121'] },
-  { path: 'scripts/ci/npm-acceptance/', repo: SERVER, holds: ['package.json', 'package-lock.json'], usedAt: ['.github/workflows/ci.yml:458-459 (cache path, hashFiles of its lock)', '.github/workflows/ci.yml:461 (`npm ci --prefix scripts/ci/npm-acceptance`)'] },
-  { path: 'scripts/gate-cli-conformance.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:680 (`node toolkit/scripts/gate-cli-conformance.mjs`)'] },
-  { path: 'scripts/lib/ci-elapsed.mjs', repo: SERVER, usedAt: ['.github/workflows/ci.yml:734 (sparse-checkout)', '.github/workflows/ci.yml:746 (run)', 'test/tested-images.test.mjs:249'] },
   { path: 'services/app/testing/native-acceptance.mjs', repo: SERVER, usedAt: ['scripts/accept-native-html.mjs (imports the scenario from toolkit/services/app/testing/native-acceptance.mjs)', '.github/workflows/ci.yml native-html (runs it)'] },
   { path: 'scripts/build/build-islands.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:15 (run from toolkit/services/app)', 'test/source-runtime.test.mjs:39', 'test/image-inputs.test.mjs:63'] },
   { path: 'scripts/lib/dev-env.mjs', repo: EVALS, usedAt: ['lib/dev-server.ts:27 (imports declaredPort, loadDotEnv, resolvePort)'] },
@@ -67,16 +58,16 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(11);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(2);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(6);
   });
 
   it('names the repository when a path is moved', () => {
-    const moved = (path: string) => path !== 'scripts/lib/ci-plan.mjs' && path !== 'scripts/ci/npm-acceptance/package-lock.json';
+    const moved = (path: string) => path !== 'scripts/build/build-islands.mjs' && path !== 'scripts/lib/shard.mjs';
     const problems = missingDownstreamPaths(DOWNSTREAM_SCRIPT_PATHS, moved);
     expect(problems).toHaveLength(2);
-    expect(problems[0]).toMatch(/^scripts\/lib\/ci-plan\.mjs is gone, but minusxai\/artifactbin-server depends on it \(\.github\/workflows\/ci\.yml:293/);
-    expect(problems[1]).toMatch(/^scripts\/ci\/npm-acceptance\/package-lock\.json is gone, but minusxai\/artifactbin-server depends on it/);
+    expect(problems[0]).toMatch(/^scripts\/build\/build-islands\.mjs is gone, but minusxai\/artifactbin-server depends on it \(scripts\/build\.mjs/);
+    expect(problems[1]).toMatch(/^scripts\/lib\/shard\.mjs is gone, but minusxai\/artifactbin-evals depends on it/);
   });
 
   it('every one exists in this tree', () => {

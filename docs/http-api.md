@@ -51,11 +51,7 @@ Viz recipe artifacts remain an accepted data input: `viz` contains `description`
 
 ## Compatibility, errors and updates
 
-The CLI sends `X-Artifactbin-Protocol` with its request. An incompatible mutation is refused with HTTP 426, `error: "cli_update_required"`, `required_protocol`, `required_version`, and an exact-version npm instruction **before token resolution and mutation execution**. No additional compatibility preflight is required. Clients must inspect non-success JSON before comparing protocol headers so that the server's actual refusal/hint is preserved. Compatible requests continue normally.
-
 Other errors retain their HTTP status and structured `error`, `message`/`details`, `hint`/`recovery` fields when provided. A 409 is a conflict to reconcile, not an instruction to retry the same stale write. A transport failure after a mutation can leave its outcome unknown; retain recovery state and inspect the publication receipt/current head rather than blindly sending the write again.
-
-The normal selected-server API response includes `X-Artifactbin-CLI-Version` and `X-Artifactbin-Protocol` headers, derived from the build's served release pointer.
 
 Future plugin/MCP adapters can share these service contracts and OAuth infrastructure. They are outside this implementation and must define their own consent/capability requirements; they do not automatically become email OTP clients.
 
