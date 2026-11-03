@@ -6,4 +6,6 @@ export {declaresResolverTest} from './execution-policy';
 export {FieldFailed} from './contracts';
 export {pageBackendOperation,localPageBackendCapability} from './transport';
 export {createResolverQuery} from './query';
+export {createResolverSql} from './sql';
+export type {ResolverDatasets} from './backend';
 export { FIELD_ERROR_CODE } from './contracts';

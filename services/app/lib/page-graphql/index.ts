@@ -11,8 +11,8 @@ import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonOb
 import { getArtifactById, getArtifactHeaderById, accessMoved, readableArtifactHeader } from '@/lib/artifacts';
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
-import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind} from '@/lib/page-operations';
-import {executeLinkedDatasetGraphql, loadPageDatasets, type PageDatasets} from '@/lib/dataset-graphql';
+import {createPageOperations,createBackendInvoker,createResolverQuery,createResolverSql,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
+import {executeLinkedDatasetGraphql, loadPageDatasets, readLinkedDatasetTables, type PageDatasets} from '@/lib/dataset-graphql';
 import {getDb,services} from '@/lib/platform';
 import {people} from '@/lib/datasets';
 import {json,readJson} from '@/lib/http';
@@ -63,14 +63,17 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
   return backend(call);
  }});
 }
+/** The datasets the page head links now, live and pinned. */
+const headDatasetLinks=async(pageId:string)=>{const row=await getArtifactById(pageId);return !row||row.format!=='html'?[]:((row.meta as {htmlLinks?:HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');};
 /**
- * A resolver's caps.query, composed here so page operations stay below datasets and artifacts: the datasets
- * the page head links, as one Hasura-style API run as the caller the run was admitted for.
+ * A resolver's caps.query and caps.sql, composed here so page operations stay below datasets and artifacts: the
+ * datasets the page head links, run as the caller the run was admitted for, as one Hasura-style API (query) or as
+ * read-only SQL tables on the SQL service's read door (sql).
  */
-export const resolverDatasetQuery=createResolverQuery({
- links:async pageId=>{const row=await getArtifactById(pageId);return !row||row.format!=='html'?[]:((row.meta as {htmlLinks?:HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');},
- execute:executeLinkedDatasetGraphql,
-});
+export const resolverDatasets:ResolverDatasets={
+ query:createResolverQuery({links:headDatasetLinks,execute:executeLinkedDatasetGraphql}),
+ sql:createResolverSql({links:headDatasetLinks,read:readLinkedDatasetTables,run:input=>services().sql.run(input)}),
+};
 const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Original request identity and ACLs guard both SDL and executions. */
 export async function pageGraphql(request:Request,pageId:string):Promise<Response>{

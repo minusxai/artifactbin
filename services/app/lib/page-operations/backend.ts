@@ -8,6 +8,9 @@ import {redactedLine,resolverFailureDetail} from './redaction';
 import { FieldFailed, FieldNotExecuted } from './contracts';
 import type { ResolverFetcher } from './public-fetch';
 import type { ResolverQuery } from './query';
+import type { ResolverSql } from './sql';
+/** The page's datasets for resolver code, as the caller: `caps.query` (GraphQL) and `caps.sql` (read-only SQL). */
+export interface ResolverDatasets {query?:ResolverQuery;sql?:ResolverSql}
 /** `secretBindings` lists every declared secret name; `secretHosts` binds each to its one host. */
 export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[];secretHosts?:ResolverSecretHosts;test?:boolean}
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}
@@ -17,8 +20,10 @@ const limits={timeoutMs:RESOLVER_LIMITS.wallMs,cpuMs:200,memoryMiB:64,maxRequest
  * raised or the runner reported): the invoker shows its redacted first line to every caller.
  */
 export const RESOLVER_THREW='resolver_error: ';
-/** `caps` is `fetch` (with host-filled `{{NAME}}` placeholders) and `query` (the page's datasets as the caller), nothing else. */
-const CAPS=`Object.freeze({fetch:G(async(url,init)=>{const o=init??{};const r=await host.artifactbin.call('pageBackend.fetch',{url,method:o.method,headers:o.headers,body:o.body,auth:o.auth});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({...r.headers}),text:G(async()=>r.body),json:G(async()=>JSON.parse(r.body))});}),query:G(async(query,variables)=>{try{return await host.artifactbin.call('pageBackend.query',{query,variables:variables??null});}catch(e){const m=String(e&&e.message||e),i=m.indexOf(': ');const error=Error(i>0?m.slice(i+2):m);error.code=i>0?m.slice(0,i):m;throw error;}})})`;
+/** `caps` is `fetch` (with host-filled `{{NAME}}` placeholders), `query` (the page's datasets as the caller, GraphQL) and `sql` (the same, read-only SQL), nothing else. */
+const CAPS=`Object.freeze({fetch:G(async(url,init)=>{const o=init??{};const r=await host.artifactbin.call('pageBackend.fetch',{url,method:o.method,headers:o.headers,body:o.body,auth:o.auth});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({...r.headers}),text:G(async()=>r.body),json:G(async()=>JSON.parse(r.body))});}),query:G((query,variables)=>C('pageBackend.query',{query,variables:variables??null})),sql:G((sql,params)=>C('pageBackend.sql',typeof sql==='string'?{sql,params:params??null}:sql))})`;
+/** A host call whose refusal (code: detail) reaches resolver code as an Error carrying that code. */
+const CALL=`const C=async(operation,args)=>{try{return await host.artifactbin.call(operation,args);}catch(e){const m=String(e&&e.message||e),i=m.indexOf(': ');const error=Error(i>0?m.slice(i+2):m);error.code=i>0?m.slice(0,i):m;throw error;}};`;
 /** The runner compiler's fixed import allowlist is authoritative. No host evaluation. */
 async function backendProgram(source:string):Promise<string>{
  if(Buffer.byteLength(source)>262144)throw new FieldNotExecuted('Source exceeds budget','source_limit');
@@ -30,6 +35,7 @@ export default async function(input,host){
  if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs,secrets:Backend.secrets};}
  const fn=Backend.default[input.field];if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
+ ${CALL}
  const caps=${CAPS};
  try{return await fn(input.args,principal,caps);}catch(e){
   if(e!==null&&typeof e==='object'&&!__afPlatform.has(e)&&typeof e.message==='string'&&e.message)throw Error(${JSON.stringify(RESOLVER_THREW)}+e.message);
@@ -129,18 +135,19 @@ export function createBackendInvoker(runner:RunnerService,load:(fileId:string,ve
  function runBackend(backend:PageBackendRecord){return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs);}
 };}
 /** Called only by trusted runner composition using its admitted request snapshot. */
-export async function pageBackendCapability(request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>,resolverFetch?:ResolverFetcher,resolverQuery?:ResolverQuery,signal?:AbortSignal):Promise<RunnerJson>{
+export async function pageBackendCapability(request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>,resolverFetch?:ResolverFetcher,datasets?:ResolverDatasets,signal?:AbortSignal):Promise<RunnerJson>{
  if(!request.artifactId||!(request.input&&typeof request.input==='object'&&!Array.isArray(request.input)&&request.input.kind==='invoke'))throw Error('backend_capability_forbidden');
  const backend=request.artifactVersion?await load(request.artifactId,request.artifactVersion):null;
  const principal=request.input.principal;
  if(!backend||backend.backendId!==request.artifactId||backend.version!==request.artifactVersion||backend.ownerId!==request.userId||backend.compiled!==request.program.source||!principal||typeof principal!=='object'||Array.isArray(principal)||principal.tenant!==backend.pageId)throw Error('backend_capability_forbidden');
- // Resolver code may reach any host operation by name; only fetch and query are offered, and values stay on the host.
- if(operation==='artifactbin.pageBackend.query'){
-  if(!resolverQuery)throw Error('backend_capability_forbidden');
+ // Resolver code may reach any host operation by name; only fetch, query and sql are offered, and values stay on the host.
+ const port=operation==='artifactbin.pageBackend.query'?datasets?.query:operation==='artifactbin.pageBackend.sql'?datasets?.sql:null;
+ if(port!==null){
+  if(!port)throw Error('backend_capability_forbidden');
   // The caller is the admitted principal (the app's, or the signed pin's); resolver arguments never name one.
   const role=(principal as {role?:unknown}).role,subject=principal.subject;
   const caller=typeof role==='string'&&(DATASET_ROLES as readonly string[]).includes(role)&&(subject===null||typeof subject==='string')?{subject,role:role as DatasetRole}:null;
-  return resolverQuery({pageId:backend.pageId,caller,operation:request.pageBackendOperation,args,...(signal?{signal}:{})});
+  return port({pageId:backend.pageId,caller,operation:request.pageBackendOperation,args,...(signal?{signal}:{})});
  }
  if(operation!=='artifactbin.pageBackend.fetch'||!resolverFetch||!secretReader)throw Error('backend_capability_forbidden');
  return {...await resolverFetch(args,{owner:backend.ownerId,resolver:backend.backendId,hosts:backend.secretHosts??{},read:name=>secretReader(backend,name)})} as unknown as RunnerJson;

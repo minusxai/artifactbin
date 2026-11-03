@@ -279,7 +279,7 @@ interface PageScope {
  * dataset the role can neither read nor write is absent, as if unlinked. Two links generating one name refuse the
  * page (`graphql_root_collision`; publishing refuses it first).
  */
-async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope, signal: AbortSignal): Promise<Loaded[]> {
+export async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope, signal: AbortSignal): Promise<Loaded[]> {
   const loaded: Loaded[] = [];
   for (const link of links) {
     let one: Loaded;

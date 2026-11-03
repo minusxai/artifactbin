@@ -199,6 +199,27 @@ export interface SqlService {
   dryRunMutations(input: DryRunMutationsInput): Promise<DryRunMutationsResult>;
 }
 
+/**
+ * ONE PAGE READ'S SQL BUDGET: a registered page query and a resolver's `caps.sql` call alike. Inputs (inline and
+ * dataset rows together) are bounded before the engine runs; `timeoutMs` is each `run`'s engine interrupt and
+ * `wallMs` the whole call, dataset reads included.
+ */
+export const SQL_READ_LIMITS = Object.freeze({
+  rows: 10000,
+  cells: 1000000,
+  tables: 64,
+  queries: 64,
+  params: 240,
+  sqlBytes: 64000,
+  /** Serialized materialized SQL input and internal dependency-answer work budget. */
+  inputBytes: 8 * 1024 * 1024,
+  /** Serialized returned table-name/outcome record, after the requested projection.
+   * Four MiB admits bounded stored-data responses; the independent input/work ceiling remains eight MiB. */
+  outputBytes: 4 * 1024 * 1024,
+  timeoutMs: 5000,
+  wallMs: 20000,
+});
+
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */
 export const SQL_ROUTES = { run: '/run', runMany: '/run-many', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
 
