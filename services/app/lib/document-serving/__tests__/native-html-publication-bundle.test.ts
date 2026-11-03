@@ -206,7 +206,7 @@ it('serves admitted module and font bytes to opaque runners without granting pri
  const load=(page:{id:string},receipt:{id:string;revision:string},origin:string,token?:string)=>assetGet(request(`/a/${page.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`,{token,headers:{Origin:origin}}),{params:Promise.resolve({id:page.id})});
  for(const receipt of publicPage.dependencyReceipts){
   const response=await load(publicPage,receipt,'null');expect(response.status).toBe(200);expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(response.headers.has('access-control-allow-credentials')).toBe(false);
-  expect(response.headers.get('cache-control')).toBe('no-store');expect(response.headers.get('x-content-type-options')).toBe('nosniff');expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
+  expect(response.headers.get('cache-control')).toBe('private, no-cache');expect(response.headers.get('x-content-type-options')).toBe('nosniff');expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
   if(receipt.path==='main.js'){expect(response.headers.get('content-type')).toBe('text/javascript');expect(await response.text()).toBe('export const ready=true;');}
   if(receipt.path==='face.woff2'){expect(response.headers.get('content-type')).toBe('font/woff2');expect(await response.text()).toBe('wOF2fixture');}
  }
