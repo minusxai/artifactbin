@@ -3,7 +3,7 @@ export const EXTERNALS = [
   'pg', '@electric-sql/pglite',
   // Native author modules and Lambda compilation are app-host responsibilities.
   'esbuild',
-  'isolated-vm', '@earendil-works/pi-agent-core', '@earendil-works/pi-ai',
+  'isolated-vm',
   'abort-controller', 'fast-text-encoding', 'core-js',
   'playwright', 'playwright-core',
   // The SQLite engine reads its own sqlite3.wasm beside its module.

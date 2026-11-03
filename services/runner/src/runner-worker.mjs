@@ -31,7 +31,6 @@ readline
         context.evalClosureSync(`globalThis.__capabilities = (() => {
    const invoke=(op,args)=>$0.apply(undefined,[op,args],{arguments:{copy:true},result:{promise:true,copy:true}});
    return Object.freeze({ artifactbin:Object.freeze({read:args=>invoke('read',args),reply:args=>invoke('reply',args),call:(operation,args)=>invoke('artifactbin.'+operation,args)}),
-     ai:Object.freeze({open:args=>invoke('ai.open',args),next:args=>invoke('ai.next',args)}),
      emit:event=>invoke('emit',event),env:Object.freeze($1)});
  })();`, [reference, new ivm.ExternalCopy(msg.env ?? {}).copyInto()]);
         context.evalSync(msg.bundle, { timeout: msg.cpuMs ?? 1000 });

@@ -196,7 +196,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 value = { sequence };
             }
             else {
-                if (msg.operation !== 'ai.next' && ++r.requestCount > r.limits.maxRequests)
+                if (++r.requestCount > r.limits.maxRequests)
                     throw Error('request_limit');
                 const started = Date.now();
                 value = await options.capabilities({ runId: id, callId, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);

@@ -13,7 +13,7 @@ async function setup(){
  const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:async (_ctx,op,args)=>{if(op==='read')return args;throw Error('forbidden');}});
  cleanup.push(()=>runner.close());return {runner,db};
 }
-const request=(source='export default async (input,c) => {await c.emit(input); return {input, native:typeof process, network:typeof fetch};}')=>({userId:'alice',requestId:'one',program:{source,language:'typescript' as const},input:{hello:'world'}});
+const request=(source='export default async (input,c) => {await c.emit(input); return {input, native:typeof process, network:typeof fetch, ai:typeof c.ai};}')=>({userId:'alice',requestId:'one',program:{source,language:'typescript' as const},input:{hello:'world'}});
 async function terminal(r:Awaited<ReturnType<typeof createRunner>>,runId:string){for(let n=0;n<1200;n++){const s=await r.getRun({userId:'alice',runId});if(s.receipt)return s;await new Promise(r=>setTimeout(r,10));}throw Error('never terminated');}
 describe('product runner',()=>{
  it('durably deduplicates admission and persists output, ordered events and receipt',async()=>{
@@ -21,7 +21,7 @@ describe('product runner',()=>{
   expect(await runner.start(request())).toEqual({runId});
   await expect(runner.start({...request(),input:1})).rejects.toThrow('start_conflict');
   const result=await terminal(runner,runId);expect(result.status).toBe('completed');
-  expect(result.output).toEqual({input:{hello:'world'},native:'undefined',network:'undefined'});
+  expect(result.output).toEqual({input:{hello:'world'},native:'undefined',network:'undefined',ai:'undefined'});
   expect(result.receipt?.estimatedDollars).toBeNull();
   expect(await runner.events({userId:'alice',runId,afterSequence:0})).toMatchObject({events:[{sequence:1,event:{hello:'world'}}],nextSequence:1,hasMore:false});
   await expect(runner.getRun({userId:'bob',runId})).rejects.toThrow('not_found');

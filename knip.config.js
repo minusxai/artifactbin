@@ -86,7 +86,7 @@ export default {
     'services/runner': {
       entry: ['src/server.ts', 'prove-postgres.ts'],
       // Bundled into each user program by specifier (src/compiler.ts).
-      ignoreDependencies: ['@earendil-works/pi-agent-core', '@earendil-works/pi-ai', 'abort-controller', 'fast-text-encoding', 'core-js'],
+      ignoreDependencies: ['abort-controller', 'fast-text-encoding', 'core-js'],
     },
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
     'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'] },

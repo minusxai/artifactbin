@@ -83,8 +83,6 @@ resolver's live revision is a hash of the page's linked live dataset revisions
 Author code runs in the existing bounded isolated runner, never in the app process.
 Imports use the runner compiler's fixed bundled allowlist:
 
-- `@earendil-works/pi-agent-core`
-- `@earendil-works/pi-ai/utils/event-stream`
 - `abort-controller/dist/abort-controller.mjs`
 - `fast-text-encoding`
 - `core-js/web/url`
