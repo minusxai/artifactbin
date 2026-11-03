@@ -573,36 +573,6 @@ const RELATIONS: Table = {
   ],
 };
 
-const DATASET_SECRETS: Table = {
-  name: 'dataset_secrets',
-  columns: [
-    { name: 'id', type: 'TEXT', notNull: true },
-    { name: 'token_id', type: 'TEXT', notNull: true },
-    { name: 'user_id', type: 'TEXT' },
-    { name: 'dataset_id', type: 'TEXT' },
-    { name: 'target_hash', type: 'TEXT', notNull: true },
-    { name: 'ciphertext', type: 'TEXT', notNull: true },
-    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-  ],
-  primaryKey: ['id'],
-  indexes: [{ name: 'idx_dataset_secrets_dataset', columns: ['dataset_id'] }],
-};
-
-/** Disposable derived results and fenced leases; no upstream credentials. */
-const DATASET_RESULT_CACHE: Table = {
-  name: 'dataset_result_cache',
-  columns: [
-    { name: 'cache_key', type: 'TEXT', notNull: true },
-    { name: 'result', type: 'JSONB' },
-    { name: 'bytes', type: 'INTEGER', notNull: true, default: '0' },
-    { name: 'expires_at', type: 'TIMESTAMPTZ' },
-    { name: 'owner_token', type: 'TEXT' },
-    { name: 'lease_until', type: 'TIMESTAMPTZ' },
-    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-  ],
-  primaryKey: ['cache_key'],
-};
-
 /**
  * THE PREPARED PAGE — each document version compiled ONCE for the reader
  * (lib/publish/prepared/prepared-page.server): its isolated stylesheet and the
@@ -1022,19 +992,20 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
  * annotation-anchor aliases and node-identity migration cursors, the login/OAuth code tables merged into `codes`,
  * copied web fonts, the shared rate-limit counter, browser test-user leases, hosted agents and their branches,
- * remote agents and work, the api 1 resolvers' `caps.store` state, and the retired mutation-notification jobs and
- * their inbox rows (both empty when dropped).
+ * remote agents and work, the api 1 resolvers' `caps.store` state, the retired mutation-notification jobs and
+ * their inbox rows (both empty when dropped), and the deleted connected Postgres datasets' encrypted connection
+ * secrets and result cache.
  */
 export const DROPPED_TABLES: readonly string[] = [
   'custom_domains', 'artifact_node_aliases', 'node_identity_migration_jobs', 'login_codes', 'oauth_codes', 'webfonts',
   'rate_limit_hits', 'browser_test_users', 'hosted_conversations', 'hosted_branches', 'remote_agents', 'remote_work',
-  'html_backend_stores', 'notification_jobs', 'mutation_notifications',
+  'html_backend_stores', 'notification_jobs', 'mutation_notifications', 'dataset_secrets', 'dataset_result_cache',
 ];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */

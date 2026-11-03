@@ -1502,58 +1502,6 @@ CREATE INDEX IF NOT EXISTS idx_web_assets_token ON app.web_assets (fetched_by_to
 
 CREATE INDEX IF NOT EXISTS idx_web_assets_user ON app.web_assets (fetched_by_user_id);
 
-CREATE TABLE IF NOT EXISTS app.dataset_secrets (
-  id TEXT NOT NULL,
-  token_id TEXT NOT NULL,
-  user_id TEXT,
-  dataset_id TEXT,
-  target_hash TEXT NOT NULL,
-  ciphertext TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS user_id TEXT;
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS dataset_id TEXT;
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS target_hash TEXT NOT NULL;
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS ciphertext TEXT NOT NULL;
-
-ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE INDEX IF NOT EXISTS idx_dataset_secrets_dataset ON app.dataset_secrets (dataset_id);
-
-CREATE TABLE IF NOT EXISTS app.dataset_result_cache (
-  cache_key TEXT NOT NULL,
-  result JSONB,
-  bytes INTEGER NOT NULL DEFAULT 0,
-  expires_at TIMESTAMPTZ,
-  owner_token TEXT,
-  lease_until TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (cache_key)
-);
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS cache_key TEXT NOT NULL;
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS result JSONB;
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS bytes INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS owner_token TEXT;
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
-
-ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 CREATE TABLE IF NOT EXISTS app.prepared_pages (
   artifact_id TEXT NOT NULL,
   slot TEXT NOT NULL,
@@ -1761,6 +1709,10 @@ DROP TABLE IF EXISTS app.html_backend_stores;
 DROP TABLE IF EXISTS app.notification_jobs;
 
 DROP TABLE IF EXISTS app.mutation_notifications;
+
+DROP TABLE IF EXISTS app.dataset_secrets;
+
+DROP TABLE IF EXISTS app.dataset_result_cache;
 
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 
