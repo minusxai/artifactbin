@@ -7,6 +7,7 @@ export async function readDataset(query, columns) {
   const rows = [];
   for (let offset = 0; ; offset += 100) {
     const page = (await query("query($offset:Int!){data(limit:100,offset:$offset){_id " + columns.join(" ") + "}}", { offset })).data;
+    if (offset && page.length && page[0]._id === rows[offset - 100]?._id) throw Error("Dataset offset did not advance");
     rows.push(...page);
     if (page.length < 100) break;
   }
