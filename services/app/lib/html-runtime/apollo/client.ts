@@ -16,7 +16,7 @@ import type {
   OperationDefinitionNode,
   SelectionSetNode,
 } from "graphql";
-import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject, PageMutationOutcome as Outcome } from "@artifactbin/contracts";
+import { PAGE_VIEWER_ROOT, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome } from "@artifactbin/contracts";
 import { RemoteUnreachable } from "./apollo-contracts";
 import { assertStorable, check } from "./storable";
 import { decodeState, encodeState, readStateFragment, stateUrl } from "./state-url";
@@ -317,7 +317,8 @@ export function createClient(options: ClientOptions): AfClient {
     const bare = field.name.value.replace(/^(?:insert|update|delete)_/, "");
     return names.some((name) => bare === name || bare.startsWith(`${name}_`) || field.name.value === name || field.name.value.startsWith(`${name}_`));
   };
-  const isBackend = (field: FieldNode) => backends().has(field.name.value) || isDatasetRoot(field);
+  /** Every page answers the built-in `viewer` remotely, with no link: it is never a local state field. */
+  const isBackend = (field: FieldNode) => field.name.value === PAGE_VIEWER_ROOT || backends().has(field.name.value) || isDatasetRoot(field);
   const newKey = options.idempotencyKey ?? randomKey;
 
   function localOnly(document: DocumentNode, variables: Variables | undefined, what: string) {

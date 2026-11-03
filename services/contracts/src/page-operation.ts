@@ -31,6 +31,16 @@ export interface PageNamespaceSource {
   /** dataset-hasura: root field → the table root it serves and its kind. */
   roots?:Readonly<Record<string,{table:string;field:string}>>;
 }
+/**
+ * THE BUILT-IN VIEWER QUERY every page answers with no link: `{ viewer { signedIn id name } }`. Its root and type
+ * names are reserved: no link may be named, or generate, either. Signed in means the caller's page role is at
+ * least `signed_in` (`@auth(signedIn: true)` admits them); then `id` is the resolver's `principal.subject` and
+ * `name` the person card's display name. Anyone else reads `{signedIn:false,id:null,name:null}`, never an error.
+ * Nothing else about the reader (no email, no token) is in it.
+ */
+export const PAGE_VIEWER_ROOT = 'viewer';
+export const PAGE_VIEWER_TYPE = 'Viewer';
+export interface PageViewer { signedIn: boolean; id: string | null; name: string | null }
 /** `role` is the caller's page role (`datasetRoleFrom` over the page's sharing); null cannot read the page. */
 export interface PageCaller { pageId:string; subject:string|null; role:DatasetRole|null }
 export interface PageSchema { sdl:string; namespaces:readonly string[] }

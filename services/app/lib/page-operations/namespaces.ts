@@ -12,6 +12,9 @@
  * `@dataset(link, file, version, table, field)`, its types keep their names
  * (the shared prelude once), and they execute through the request's dataset
  * port (lib/dataset-graphql `loadPageDatasets`), a mutation whole.
+ *
+ * Every page also answers the built-in `viewer` (contracts `PAGE_VIEWER_ROOT`) from the caller alone; no link may
+ * be named, or generate, its root or type.
  */
 import {
   execute,
@@ -40,7 +43,7 @@ import {
   type GraphQLTypeResolver,
   type TypeNode,
 } from "graphql";
-import { DATASET_ROLES, datasetRoleAtLeast, type DatasetRole, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
+import { DATASET_ROLES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, datasetRoleAtLeast, type DatasetRole, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
 import { PAGE_OPERATION_RESULT_BYTES, FIELD_ERROR_CODE, FieldFailed, FieldNotExecuted, boundedDetail, type ExecuteOptions, type RemoteError } from './contracts';
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 import {
@@ -65,6 +68,9 @@ const BACKEND_DIRECTIVE =
 /** A generated dataset root's mount (the counterpart of @backend): its link, dataset, version, table root and kind. */
 const DATASET_DIRECTIVE =
   "directive @dataset(link: String!, file: String!, version: String!, table: String!, field: String!) on FIELD_DEFINITION\n";
+/** The built-in viewer (contracts `PAGE_VIEWER_ROOT`): mounted on every page's Query, answered from the caller alone. */
+const VIEWER_SDL = `type ${PAGE_VIEWER_TYPE} {\n  signedIn: Boolean!\n  id: ID\n  name: String\n}\n`;
+const BUILT_IN_VIEWER = "the built-in viewer query";
 const authRole = (value: unknown): DatasetRole | null =>
   typeof value === 'string' && (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
 
@@ -171,8 +177,8 @@ export function composePageSchema(
     throw Error(`A page links at most ${MAX_SOURCES} backends`);
   const names: string[] = [];
   const owners = new Map<string, string>();
-  const parts = [BACKEND_PLATFORM_SDL, BACKEND_DIRECTIVE];
-  const query: string[] = [];
+  const parts = [BACKEND_PLATFORM_SDL, BACKEND_DIRECTIVE, VIEWER_SDL];
+  const query: string[] = [`  ${PAGE_VIEWER_ROOT}: ${PAGE_VIEWER_TYPE}!`];
   const mutation: string[] = [];
   const generated = sources.filter((source) => source?.kind === "dataset-hasura");
   for (const source of sources) {
@@ -185,6 +191,8 @@ export function composePageSchema(
       name.startsWith(SEPARATOR)
     )
       throw Error(`Backend name ${label} is not a GraphQL name`);
+    if (name === PAGE_VIEWER_ROOT)
+      throw Error(`Backend name ${label} is reserved for ${BUILT_IN_VIEWER}`);
     if (names.includes(name))
       throw Error(`Backend name ${label} is used more than once`);
     if (
@@ -222,10 +230,7 @@ export function composePageSchema(
     parts.splice(2, 0, DATASET_DIRECTIVE);
     mountDatasets(generated, names, owners, parts, query, mutation);
   }
-  // A schema needs a Query type; `_` stands in when no backend has queries.
-  parts.push(
-    `type Query {\n${query.length ? query.join("\n") : "  _: Boolean"}\n}`,
-  );
+  parts.push(`type Query {\n${query.join("\n")}\n}`);
   if (mutation.length) parts.push(`type Mutation {\n${mutation.join("\n")}\n}`);
   const sdl = parts.join("\n");
   if (new TextEncoder().encode(sdl).length > MAX_COMPOSED_BYTES)
@@ -275,6 +280,8 @@ function mountDatasets(
         for (const field of definition.fields ?? []) {
           const root = field.name.value;
           if (root === "no_queries_available") continue;
+          if (root === PAGE_VIEWER_ROOT)
+            throw Error(`graphql_root_collision: link ${name} generates ${root}, ${BUILT_IN_VIEWER}`);
           const other = rootOwner.get(root);
           if (other !== undefined)
             throw Error(`graphql_root_collision: link ${name} generates ${root}, which link ${other} also names`);
@@ -290,6 +297,8 @@ function mountDatasets(
         throw Error(`Dataset ${name} has an invalid schema`);
       const type = definition.name.value;
       const printed = print(definition);
+      if (type === PAGE_VIEWER_TYPE)
+        throw Error(`graphql_root_collision: link ${name} generates the type ${type}, ${BUILT_IN_VIEWER}`);
       const prior = types.get(type);
       if (prior === printed) continue;
       const claimed = rootOwner.get(type);
@@ -525,6 +534,7 @@ export async function executePageOperation(
   const rootValue = Object.create(null) as Record<string, unknown>;
   for (const [name, mounted] of roots)
     rootValue[name] = namespaceValue(mounted);
+  if (!mutating) rootValue[PAGE_VIEWER_ROOT] = viewerValue(options);
 
   // A mutation naming a generated dataset root goes whole through the dataset door: one dataset, one atomic step.
   const touched = mutating ? topLevelFields(document, operation).filter((field) => field.name.value !== "__typename") : [];
@@ -600,6 +610,18 @@ export async function executePageOperation(
   if (errors?.length) response.errors = errors;
   if (mutating) response.extensions = { outcomes };
   return response;
+}
+
+/**
+ * The built-in viewer, from the caller alone: signed in when `@auth(signedIn: true)` admits an account. Then `id` is
+ * the subject a resolver sees and `name` its display name, read through the port only when selected; anyone else
+ * reads nulls. Nothing else about the reader is here.
+ */
+function viewerValue({ caller, viewerName }: ExecuteOptions): Record<string, unknown> {
+  const subject = caller.subject;
+  if (subject === null || resolverFieldRefusal(caller.role, { signedIn: true }) !== null)
+    return { signedIn: false, id: null, name: null };
+  return { signedIn: true, id: subject, name: async () => (await viewerName?.(subject)) ?? null };
 }
 
 /** The operation's top-level fields, through inline fragments and fragment spreads. */

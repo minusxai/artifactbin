@@ -66,7 +66,7 @@ Local state stays private unless the author explicitly declares fields suitable 
 
 Only the named top-level fields are attached to comments; never declare drafts, tokens, personal information or backend namespaces. Lists must contain unique simple field names. Every field must exist. The version must match exactly when restored: change it when view-field meanings change. Saved views use bounded JSON (32 KiB total); incompatible or invalid snapshots show a restoration message without changing state. Pages without a declaration keep target-only comments.
 
-Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. The return snapshot stays in this viewer's frame. Backend data and mutations are never captured or replayed. This is saved comment context, not live sharing or following another reader's local state. Target identity rules still apply if the restored screen no longer contains that element.
+Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. Backend data and mutations are never captured or replayed. This is saved comment context, not live sharing or following another reader's local state. Target identity rules still apply if the restored screen no longer contains that element.
 
 ## Local mutations
 
@@ -79,9 +79,11 @@ await client.mutate({mutation:gql`mutation {increment(by:1)}`});
 
 ## Remote namespaces
 
-An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable resolver version or authorized dataset. Query with `client.query`: a dataset's generated fields are top-level (`{targets{category amount}}`), a resolver's stay under its name (`{budget{signedIn}}`). A resolver’s source file is not a URL the browser fetches.
+An HTML link declares one unique `data-af-name` (never `viewer`). The page version binds it to an immutable resolver version or authorized dataset. Query with `client.query`: a dataset's generated fields are top-level (`{targets{category amount}}`), a resolver's stay under its name (`{budget{total}}`). The browser never fetches a resolver’s source.
 
-Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
+Every page answers `{viewer{signedIn id name}}`, no link needed: `id` is the account ID (`principal.subject`, `X-Hasura-User-Id`), `name` the display name; signed out, `{signedIn:false,id:null,name:null}`. Sign-in/out refreshes it (`onResolverChange` names include `viewer`). Give guests read-only controls; `@auth` and dataset rules still decide.
+
+Remote queries wait up to 3 s for the hosted parent to attach, else return offline errors without sending. Do not depend on platform-internal bridge functions.
 
 Use `onResolverChange` for manual invalidation and reconnect handling:
 
@@ -111,9 +113,9 @@ An authorized reader can download `/a/ID/download` as one offline HTML file. For
 <img src="ref:abc123" alt="Garden beds after the harvest">
 ```
 
-Replace the example ID with a real admitted image artifact. Download packs readable PNG, JPEG, GIF, WebP and AVIF references in `img/src`, `source/src` and `video/poster` into data URLs. Both the page version's original admission and the downloading reader's current image access are required. Unavailable images refuse the download; unsupported referenced image types return `unsupported_image` (415), and files over 25 MiB return `too_large` (413).
+Use a real admitted image ID. Download packs readable PNG, JPEG, GIF, WebP and AVIF references in `img/src`, `source/src` and `video/poster` into data URLs. Both the page version's original admission and the downloading reader's current image access are required. Unavailable images refuse the download; unsupported referenced image types return `unsupported_image` (415), and files over 25 MiB return `too_large` (413).
 
-Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials. Test the downloaded file without a network.
+Data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not packed; do not promise them offline. Packing adds no backend data or credentials. Test the download without a network.
 
 
 For an unpublished local project, read the top of `scripts/serve.mjs`.

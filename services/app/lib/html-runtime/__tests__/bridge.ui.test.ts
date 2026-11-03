@@ -66,6 +66,26 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   watch.unsubscribe();
   replacement.dispose();
 });
+it('re-reads the built-in viewer and every remote read when the reader signs in or out, never on startup or an edit', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: ['orders'], appOrigin: 'https://platform.example' });
+  const runtime = await import('../browser-client');
+  const changes: Array<[readonly string[], unknown]> = [];
+  const subscription = runtime.onResolverChange((names, reason) => changes.push([names, reason]));
+  const bridge = runtime.startFrameBridge({ win: window, post: () => {}, attach: { kind: 'attach', id: 'p1', editId: '3', source: null, uploadContext: { state: 'loading', scope: 'boot' } } });
+  bridges.push(bridge);
+  // The first known session is what the first reads already ran under; a new scope with the same session is an edit.
+  bridge.receive({ kind: 'upload-context', context: { state: 'signed-out', scope: 'guest' } });
+  bridge.receive({ kind: 'upload-context', context: { state: 'signed-out', scope: 'guest-after-edit' } });
+  expect(changes).toEqual([]);
+  bridge.receive({ kind: 'upload-context', context: { state: 'signed-in', scope: 'account' } });
+  expect(changes).toEqual([[['orders', 'viewer'], 'authority']]);
+  bridge.receive({ kind: 'upload-context', context: { state: 'loading', scope: 'reloading' } });
+  bridge.receive({ kind: 'upload-context', context: { state: 'signed-in', scope: 'account-again' } });
+  expect(changes).toHaveLength(1);
+  bridge.receive({ kind: 'upload-context', context: { state: 'signed-out', scope: 'signed-out' } });
+  expect(changes).toEqual([[['orders', 'viewer'], 'authority'], [['orders', 'viewer'], 'authority']]);
+  subscription.unsubscribe();
+});
 it('uses original select controls for block picks, breadcrumbs and escape', async () => {
   vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [] });
   const { startFrameBridge } = await import('../browser-client');

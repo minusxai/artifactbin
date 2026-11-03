@@ -10,6 +10,8 @@ export interface PageOperationPorts {
  invoke:PageResolverInvoker['invoke'];
  /** The page's generated-API dataset links for this caller (the same load `sources` composed), when it has any. */
  datasets?(actor:AccessActor,page:HtmlPageVersion,signal?:AbortSignal):Promise<PageDatasetPort|undefined>;
+ /** The built-in viewer's display name for a signed-in subject (contracts `PAGE_VIEWER_ROOT`), read only when selected. */
+ viewerName?(subject:string):Promise<string|null>;
 }
 export function createPageOperations(ports:PageOperationPorts):PageOperations<AccessActor>{
  return {
@@ -21,7 +23,7 @@ export function createPageOperations(ports:PageOperationPorts):PageOperations<Ac
   if(!role)throw Error('forbidden');
   const schema=composePageSchema(await ports.sources(actor,page,signal));
   const datasets=await ports.datasets?.(actor,page,signal);
-  return executePageOperation({schema,request,caller:{pageId:page.pageId,subject:actor.userId,role},signal,invoke:ports.invoke,...(datasets?{datasets}:{})});
+  return executePageOperation({schema,request,caller:{pageId:page.pageId,subject:actor.userId,role},signal,invoke:ports.invoke,...(datasets?{datasets}:{}),...(ports.viewerName?{viewerName:ports.viewerName}:{})});
  }
  };
 }
