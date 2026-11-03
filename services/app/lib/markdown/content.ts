@@ -2,7 +2,7 @@
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
-import type { RootContent, PhrasingContent, Root } from 'mdast';
+import type { RootContent, PhrasingContent } from 'mdast';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { renderCodeBlock } from './code-block';
 
@@ -13,15 +13,12 @@ interface MarkdownContent {
   errors: string[];
 }
 
-
-
-export function markdownHref(href: string): boolean {
+function markdownHref(href: string): boolean {
   const clean = href.replace(/[\x00-\x20]/g, '');
   return !/^[a-z][a-z\d+.-]*:/i.test(clean) || /^(https?|mailto|tel):/i.test(clean);
 }
 
 const parser = unified().use(remarkParse).use(remarkGfm);
-export const parseMarkdown = (source: string): Root => parser.parse(source);
 export function markdownContent(source: string): MarkdownContent {
   const result: MarkdownContent = { html: '', text: '', headings: [], errors: [] };
   type Node = RootContent | PhrasingContent;

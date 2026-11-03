@@ -22,7 +22,7 @@ execute author code on the trusted app origin. Current document serving is owned
 by `lib/document-serving/native-html.server.ts` and `lib/html-runtime`. Publication
 stores canonical HTML and immutable backend bindings. Serving assembles runtime
 configuration, approved asset URLs and presentation separately; those wrappers
-never become the saved source. There is no compiler-markup publication step.
+never become the saved source.
 
 Normal authored scripts run within the document's isolation and CSP. The core
 script provides the hosted import map before author modules. CSP extensions use
@@ -31,7 +31,7 @@ native `<head>` declarations, for example
 origins, and reader trust/consent controls admission. Do not assume that arbitrary
 external scripts, frames or connections are admitted. Native pages permit author
 inline code within their isolated runner policy; app chrome retains its separate
-policy. Do not describe native HTML as compiled islands with inline scripts denied.
+policy.
 
 Keep tokens, session cookies and secret values out of page HTML, local state,
 source files and publication requests. The trusted parent handles authenticated
@@ -100,7 +100,7 @@ connected portable file remains read-only for remote operations.
   Signed-out visitors must sign in before creation.
 - **Folders:** create `{format:"folder",title:"Reports"}` and use its ID as
   `parent_id`. Listings, moves, trash and restoration keep ownership checks;
-  a folder is not a markup document.
+  a folder has no page content of its own.
 - **Custom domains:** when enabled, account settings attach and verify DNS through
   `/api/my/domain` and `/api/my/domain/verify`. Choose an owned public HTML page
   as homepage or set exact custom paths, or keep the public profile listing.
@@ -109,8 +109,7 @@ connected portable file remains read-only for remote operations.
 - **Notifications:** the bell and `/notifications` retain membership, social and
   conversation notifications with current-access checks and read revisions.
   `/account#notifications` manages preferences where delivery is configured.
-  See [notifications](notifications.md); retired `<Notify>` markup is not a
-  native authoring API.
+  See [notifications](notifications.md).
 - **Analytics:** workspace view totals and daily series read the events log with
   the existing fallback. View fingerprints rotate daily; telemetry does not
   grant access or determine product authorization. Missing optional event tables

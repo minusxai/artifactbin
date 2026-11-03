@@ -33,9 +33,6 @@ const SQLITE = ['@artifactbin/sql', '@sqlite.org/sqlite-wasm'];
 
 /**
  * Heavy packages that must stay behind a dynamic-import boundary.
- *
- * The CodeMirror packages are the source editor (solid/editor/SourceEditor,
- * through lib/source-editor/codemirror): only an owner who presses `code` pays.
  */
 const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/lang-javascript', ...SQLITE];
 

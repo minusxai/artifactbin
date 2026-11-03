@@ -36,9 +36,8 @@ describe('workflow supply-chain pins', () => {
 });
 
 describe('dependency security', () => {
-  // The source editor is CodeMirror (lib/source-editor/codemirror). Monaco
-  // carried its own DOMPurify, which had to be pinned outside an advisory
-  // range; it must not come back in as a second editor.
+  // Monaco carried its own DOMPurify, which had to be pinned outside an
+  // advisory range; it must not come back in.
   it('ships no Monaco', () => {
     const read = (file) => JSON.parse(readFileSync(path.join(root, file), 'utf8'));
     for (const file of ['package.json', 'services/app/package.json']) {
