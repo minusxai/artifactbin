@@ -175,9 +175,9 @@ if(parsed.values.output&&!parsed.values.append){const destination=await safePare
 if(parsed.values.output&&!result.outputOwned){await exclusive(parsed.values.output,data);if(
     name==='check')process.stdout.write(checkDigest(envelope,parsed.values.output));
     }else process.stdout.write(data);
-  // A publish that added data-af-ids says so last, below the JSON, where a tail of the output
-  // still shows it.
-  for(const note of [result.rewritten])if(typeof note==='string'&&
+  // A publish that added data-af-ids says so below the JSON, and the next step (reply and watch)
+  // comes last, where a tail of the output still shows it.
+  for(const note of [result.rewritten,result.next])if(typeof note==='string'&&
    !parsed.values.json)process.stderr.write(note+'\n');
  }catch(error){
   const envelope=toolFailure(name,error);

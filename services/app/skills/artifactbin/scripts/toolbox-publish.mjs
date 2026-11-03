@@ -12,7 +12,7 @@ export {finishPublication};
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,
   hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
-import {noteWatchActivity} from './toolbox-watch-state.mjs';
+import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
 import {TEMPLATES,applyTemplate,routineChanges} from './toolbox-publish-dataset.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
@@ -168,8 +168,10 @@ const intent=journalIntent({server,method:baseline?'PUT':'POST',path:'/api/artif
 intent.source.output=path.join(path.dirname(file),path.basename(file,
    extension)+'.canonical-'+intent.key.slice(0,8)+(type==='html'?'.html':extension||'.bin'));
  const journal=await createJournal(intent,{file:values.request,root:client.root,project:root});
- const done=await watched(client,await finishPublication(await resumeJournal(journal,client,
+ const published=await watched(client,await finishPublication(await resumeJournal(journal,client,
   'publish')),options);
+ // A page's author ends by replying and watching for comments: say so as the last line printed.
+ const done=type==='html'?{...published,next:watchNext(published.id)}:published;
  if(type==='dataset'&&values.template)return {...done,permissions:await applyTemplate(client,
   done.id,values.template,values['owner-column'])};
  if(!fixed)return done;

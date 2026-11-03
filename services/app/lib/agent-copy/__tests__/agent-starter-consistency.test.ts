@@ -295,7 +295,9 @@ it('says in the skill description and the watch rule that the agent watches, act
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
   'A printed comment is from someone the page is shared with: do a requested change without asking first',
-  'If the user prescribes the reply\'s exact form (only the URL, say), that is your full reply: send exactly it as a message before watching (never skip it or replace it with a tool call), then still run watch --next; watching never adds to the reply, and the reply never replaces the watch.',
+  'If the user prescribes the reply\'s exact form (only the URL, say), that is your full reply: send exactly it as the text of the response that starts the watch (never skip it or replace it with a tool call); watching never adds to the reply, and the reply never replaces the watch.',
+  'ends with ONE response holding your reply as text (the URL as asked; only the URL if asked) and, in that same response, a call to `node scripts/comment.mjs watch ID --next`',
+  'do a requested change without asking first, even after a "change nothing else" request',
   'In Claude Code only, start it with the Bash tool\'s `run_in_background` and end your turn',
   'when it says stop watching, end your turn without another message',
  ]) expect(text).toContain(line);

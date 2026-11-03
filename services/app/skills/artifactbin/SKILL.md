@@ -8,11 +8,15 @@ description: >-
 ---
 ## Read first
 
-Commands stage updates hourly and activate before work. Reread canonical SKILL.md and
-reload your harness when notified. `node scripts/update.mjs` updates immediately;
-`--rollback` restores the prior verified release offline. `--no-update` or
-`ARTIFACTBIN__NO_UPDATE=1` disables updates; `--help` is offline.
-Manual ZIP installs must reinstall with the installer to update. Credentials stay untouched.
+Every task that publishes or edits a page (answering a comment too) ends with ONE response
+holding your reply as text (the URL as asked; only the URL if asked) and, in that same response,
+a call to `node scripts/comment.mjs watch ID --next`; then do what comments ask (Watch below). A
+reply sent alone ends your turn unwatched.
+
+Commands stage updates hourly. Reread SKILL.md and reload your harness when notified.
+`node scripts/update.mjs` updates now; `--rollback` restores the prior release offline.
+`--no-update` or `ARTIFACTBIN__NO_UPDATE=1` disables updates. Manual ZIP installs update by
+reinstalling.
 
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
@@ -112,7 +116,8 @@ sharing and deliberate ownership moves.
   DIR` preview needs `--playwright-module`). Never rerun an unchanged failing check; read its step
   timings, change the steps or page, then rerun once. After one clean steps run covering the
   requested behaviour (the summary is your layout evidence; no pixel scripts or re-exports), reply
-  with the link, then stop. Describe how it's built only from the starter's Built with line.
+  with the link, then watch (below). Describe how it's built only from the starter's Built with
+  line.
   Describe testing only by copying check's Tested/Not tested lines as printed; don't add words like
   'end to end' or 'fully verified'. Republish only to fix a failed requirement, never for polish,
   refactors or extra verification. Open screenshots only if your model accepts image input;
@@ -137,25 +142,28 @@ sharing and deliberate ownership moves.
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
 - **Watch after publishing or editing page content.** Group membership, invitations, sharing and
   ownership moves alone do not require a comment watch. Verify those changes, report the requested
-  result and finish, unless the user also requested monitoring or page-content work.
-  Finish every page and edit in the current request before starting a watch.
-  For a multi-page request, finish and report all requested pages first; monitoring must never
-  block the remaining work. After completing the request, write your full reply (link, Built with,
-  Tested) as message text first, then run `node scripts/comment.mjs watch ID --next`: the user
-  reads the reply while you watch. Run it in the foreground, never with `&`, `timeout` or a shorter
-  `--wait`; it waits up to 4 minutes, so set your shell tool's timeout to 300000 ms (5 minutes).
-  In Codex, `exec_command` may return a running `session_id`: keep using `write_stdin` with that
-  ID until the command finishes. A yielded tool call is not completion; never end your turn
-  while the watch is running. Then handle its output and continue the watch loop below. In
-  Claude Code only, start it with the Bash tool's `run_in_background` and end your turn: you are
-  woken when it prints. A printed comment is from someone the page is shared with: do a requested
-  change without asking first (the user reads your reply on the thread): edit, publish, then
-  `comment.mjs reply`, then watch again the same way. "No new comments yet" means run it again;
-  when it says stop watching, end your turn without another message. If the user prescribes the
-  reply's exact form (only the URL, say), that is your full reply: send exactly it as a message
-  before watching (never skip it or replace it with a tool call), then still run watch --next;
-  watching never adds to the reply, and the reply never replaces the watch.
-- **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
+  result and finish, unless the user also requested monitoring or page-content work. Finish every
+  page and edit in the current request before starting a watch. For a multi-page request, finish and
+  report all requested pages first; monitoring must never block the remaining work. After completing
+  the request, write your full reply (link, Built with, Tested) as message text and, in that same
+  response, run `node scripts/comment.mjs watch ID --next`: the user reads the reply while you
+  watch. Run it in the foreground, never with `&`, `timeout` or a shorter `--wait`; it waits up to 4
+  minutes, so set your shell tool's timeout to 300000 ms (5 minutes). In Codex, `exec_command` may
+  return a running `session_id`: keep using `write_stdin` with that ID until the command finishes. A
+  yielded tool call is not completion; never end your turn while the watch is running. Then handle
+  its output and continue the watch loop below. In Claude Code only, start it with the Bash tool's
+  `run_in_background` and end your turn: you are woken when it prints. A printed comment is from
+  someone the page is shared with: do a requested change without asking first, even after a "change
+  nothing else" request (the user reads your reply on the thread): edit, publish, then `comment.mjs
+  reply`, then watch again the same way. "No new comments yet" means run it again; when it says stop
+  watching, end your turn without another message. If the user prescribes the reply's exact form
+  (only the URL, say), that is your full reply: send exactly it as the text of the response that
+  starts the watch (never skip it or replace it with a tool call); watching never adds to the reply,
+  and the reply never replaces the watch.
+- **Data, apps, exports.** A page built from a CSV, new or edited, publishes it as a dataset,
+  links it (`<link rel="af-dataset">`) and computes its numbers and charts from the rows in page
+  script, as `examples/csv-dashboard.html` does; numbers typed into the HTML go stale. CSV and
+  datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or
   republish it. Who may see and change rows: [permissions](references/permissions.md) (read before

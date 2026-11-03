@@ -95,3 +95,6 @@ export async function withWatchLock(file,run,hooks){
  finally{await readFile(file,'utf8').then(held=>JSON.parse(held).token===token&&unlink(file))
   .catch(()=>{});}
 }
+/** The step after publishing or answering on a page, printed after the result (runTool). */
+export const watchNext=id=>'Next: when the request is done, send your reply (the URL as asked) '+
+ `and, in that same response, run node scripts/comment.mjs watch ${id} --next.`;
