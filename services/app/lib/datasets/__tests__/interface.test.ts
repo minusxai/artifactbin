@@ -13,10 +13,10 @@ import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, getDb } from '@/lib/platform';
 import { seedOwnerJoin } from '@/lib/social';
 import {
   DatasetError, catalogOf, executeDocumentQueries, claimPendingDatasetSecret, connectionShape, createDatasetSecret, datasetResponse, importedRows, importedTables, loadDatasetRows,
-  openDatasetSecret, placeholderSession, policySession, publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
+  openDatasetSecret, publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
   readFileUpload, resolveDatasetConnection, resolveUserColumnScope, retainUserScope, sealDatasetSecret, secretTargetShape, serveStoredFile,
   storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, storedRowStats, throttlePublicMutation, uploadedSha256,
-  userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, viewerMutationPolicy, type DatasetCatalog,
+  userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
 
 useAppHarness();
@@ -214,19 +214,10 @@ describe('content tiers', () => {
   });
 });
 
-describe('viewer policy', () => {
-  it('builds the viewer session, with placeholders for every claim a policy names', () => {
-    expect(policySession(null)).toEqual({ 'x-hasura-role': 'viewer' });
-    expect(policySession('u1')).toEqual({ 'x-hasura-role': 'viewer', 'x-hasura-user-id': 'u1' });
-    const policy = { version: 1, tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'viewer', permission: { check: { team: { _eq: 'X-Hasura-Team-Id' } } } }] }] } as never;
-    expect(placeholderSession(policy)).toEqual({ 'x-hasura-role': 'viewer', 'x-hasura-team-id': '' });
-    expect(viewerMutationPolicy(policy, { schema: 'public', name: 'rows' }, { a: 1 })).toMatchObject({ role: 'viewer', session: { a: 1 }, operations: ['insert', 'update', 'delete'] });
-    expect(viewerMutationPolicy(policy, { schema: 'public', name: 'other' }, {})).toBeUndefined();
-  });
-
-  // The stored migration: setting a policy takes version 3 only; stored version 1/2 policies are still read and still checked against a replacement.
+describe('dataset policy', () => {
+  // Setting a policy takes version 3 only; a stored policy that is not version 3 is refused against a replacement.
   it('sets only version 3 policies, for a stored dataset, checked against its tables and columns', () => {
-    const row = { format: 'dataset', meta: { columns: [{ name: 'a' }] }, dataset_policy: { version: 2, allow: [] } } as never;
+    const row = { format: 'dataset', meta: { columns: [{ name: 'a' }] }, dataset_policy: null } as never;
     const v3 = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'anonymous', permission: { columns: ['a'], filter: {} } }] }] };
     expect(validateDatasetPolicyForRow(row, v3)).toEqual(v3);
     expect(validateDatasetPolicyForRow(row, null)).toBeNull();
@@ -237,16 +228,16 @@ describe('viewer policy', () => {
       expect(() => validateDatasetPolicyForRow(row, legacy)).toThrow(/Version 1 and 2 dataset policies can no longer be set: send a version 3 policy/);
   });
 
-  it('keeps checking a stored policy of any version against a replacement\'s tables and columns', () => {
+  it('checks a stored version 3 policy against a replacement\'s tables and columns, and refuses any other stored policy by name', () => {
     const row = { format: 'dataset', meta: { columns: [{ name: 'a' }] }, dataset_policy: null } as never;
-    const v1 = { version: 1, enforcement: 'enabled', tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'viewer', permission: { columns: ['a'], check: {} } }] }] };
     const v3 = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer', permission: { columns: ['a'], filter: {} } }] }] };
-    expect(validateStoredDatasetPolicy(row, v1)).toEqual(v1);
-    expect(validateStoredDatasetPolicy(row, { version: 2, allow: [] })).toEqual({ version: 2, allow: [] });
     expect(validateStoredDatasetPolicy(row, v3)).toEqual(v3);
+    expect(validateStoredDatasetPolicy(row, null)).toBeNull();
     const dropped = { format: 'dataset', meta: { columns: [{ name: 'b' }] }, dataset_policy: null } as never;
-    expect(() => validateStoredDatasetPolicy(dropped, v1)).toThrow('Unknown permission column');
     expect(() => validateStoredDatasetPolicy(dropped, v3)).toThrow(/unknown column "a"/);
+    const v1 = { version: 1, enforcement: 'enabled', tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'viewer', permission: { columns: ['a'], check: {} } }] }] };
+    for (const retired of [v1, { version: 2, allow: [] }, { tables: [] }])
+      expect(() => validateStoredDatasetPolicy(row, retired)).toThrow(/^The stored dataset policy is not version 3: only version 3 is read/);
   });
 });
 

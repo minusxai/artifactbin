@@ -3,14 +3,11 @@
  * (./view) it hands them.
  *
  *  - The role is the dataset's own sharing (./role). Owner and editor are admin-equivalent: the whole
- *    dataset. Every other role sees only what its v3 select entry allows (./to-v3 reads stored v1/v2
- *    policies as v3); a role with no select entry on any table gets the uniform 404.
+ *    dataset. Every other role sees only what its v3 select entry allows (./stored-policy; a stored policy
+ *    that is not version 3 throws for them); a role with no select entry on any table gets the uniform 404.
  *  - A PRIVATE dataset's signed_in and anonymous rules never apply (the visibility ceiling, plan §3/§8), except
- *    to a reader arriving through a document whose owner holds owner or editor on the dataset (stored v2
- *    grants excepted: their private ceiling admits shares only): a page's <Query>/<Import> and registered
- *    queries read by the page owner's reach.
- *  - A stored v2 grant naming one person or one page has no v3 slot: it admits only what its v3 reading
- *    allows (the stored migration, scripts/migrate-dataset-policies.ts, shared the dataset with named people).
+ *    to a reader arriving through a document whose owner holds owner or editor on the dataset: a page's
+ *    <Query>/<Import> and registered queries read by the page owner's reach.
  *  - The decision's `identity` names the role, the policy revision, the session and the rules, for
  *    cursors and read fences: any change refuses a continuation.
  */
@@ -27,7 +24,7 @@ import { liveAccessFacts, type AccessFacts, type ArtifactRow, type ReadRow } fro
 import { catalogOf, DatasetError, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole, type DatasetRoleRow } from './role';
-import { toV3, type ToV3Result } from './to-v3';
+import { storedPolicy } from './stored-policy';
 import { documentOwnerAdmin } from './write';
 import { shows, unrestricted, viewRows, type DatasetSession } from './view';
 
@@ -74,10 +71,6 @@ function tablesOf(row: Pick<ArtifactRow, 'meta'>): Array<DatasetTableName & { co
   return catalogOf(row)?.tables.map(({ schema, name, columns }) => ({ schema, name, columns: columns.map((c) => c.name) })) ?? [{ schema: 'public', name: 'rows', columns: flat }];
 }
 
-function permissionsOf(row: DatasetReadRow): ToV3Result | null {
-  try { return toV3({ policy: row.dataset_policy ?? null, visibility: row.visibility, tables: tablesOf(row).map(({ schema, name }) => ({ schema, name })) }); } catch { return null; }
-}
-
 function admitted(row: DatasetReadRow, role: DatasetRole, tables: TableSelect[], session: DatasetSession, admin: boolean): DatasetReadDecision {
   const full = tables.every((t) => !!t.permission && unrestricted(t.permission));
   const identity = JSON.stringify([role, row.policy_revision ?? 0, session, admin ? null : tables.map(({ schema, name, permission }) => [schema, name, permission])]);
@@ -97,11 +90,8 @@ export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor,
     ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
   if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
-  const read = permissionsOf(row);
-  if (!read) return { allowed: false, role };
+  const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row).map(({ schema, name }) => ({ schema, name })) });
   if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) {
-    // v2 grants never let a page reach past a private dataset's shares (grantsPermitRead's ceiling).
-    if (read.source === 'v2') return { allowed: false, role };
     const doc = options.document;
     const owner = doc && { userId: doc.group_id ? null : doc.user_id, tokenId: doc.group_id ? null : doc.token_id, groupId: doc.group_id ?? null };
     if (!owner || !(await documentOwnerAdmin(row as ArtifactRow, owner, options.tx ?? await getDb()))) return { allowed: false, role };

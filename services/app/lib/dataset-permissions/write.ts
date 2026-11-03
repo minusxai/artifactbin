@@ -4,17 +4,15 @@
  * commit transaction asks again under the row lock so a revoked share or a new policy cannot race a write.
  *
  *  - The role is the dataset's own sharing (./role). Owner and editor are admin-equivalent: no rule
- *    applies to them. Every other role writes only what a v3 entry for it allows (./to-v3 reads stored
- *    v1/v2 policies as v3; a v2 grant naming one person has no v3 entry, so it admits no one: the stored
- *    migration shared the dataset with them instead).
+ *    applies to them. Every other role writes only what a v3 entry for it allows (./stored-policy; a stored
+ *    policy that is not version 3 throws for them).
  *  - `backend_only` entries apply only to a trusted program: a saved-document proof that passes the
  *    program-trust checks (signed in, accepted page membership, saved edit, registered attestation) on a
  *    page whose owner holds owner or editor on the dataset. The engine refuses them otherwise.
  *  - A write carried by a document is that document's SQL: the document must be live at the attested edit,
  *    readable by the caller, and its owner must hold owner or editor on the dataset (provenance).
  *  - A PRIVATE dataset admits signed_in and anonymous callers only through `backend_only` entries (privateCeiling).
- *  - The `access` column stays a ceiling for datasets without v2 grants, owner included (v2 grants never
- *    read it; the stored rewrite sets it to readwrite on every migrated v2 dataset, ./migrate).
+ *  - The `access` column is a ceiling on every write, owner included.
  */
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
@@ -22,7 +20,7 @@ import { grantContext, liveAccessFacts, readThrough, writerFor, type ArtifactRow
 import { catalogOf, DatasetError } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
-import { toV3, type ToV3Result } from './to-v3';
+import { storedPolicy } from './stored-policy';
 
 const MUTATIONS: readonly DatasetOperation[] = ['insert', 'update', 'delete'];
 
@@ -41,7 +39,7 @@ export interface DatasetWriteOptions {
 
 export type DatasetWriteDecision =
   | { allowed: true; admin: true; role: 'owner' | 'editor'; revision: number }
-  | { allowed: true; admin: false; role: DatasetRuleRole; revision: number; permissions: DatasetPermissions; trusted: boolean; session: Record<string, Scalar>; execution?: ToV3Result['execution'] }
+  | { allowed: true; admin: false; role: DatasetRuleRole; revision: number; permissions: DatasetPermissions; trusted: boolean; session: Record<string, Scalar> }
   | { allowed: false; role: DatasetRole | null; revision: number; reason: 'dataset_read_only' | 'no_rule' | 'document_changed' };
 
 const entryFor = (table: DatasetTablePermissions, op: DatasetOperation, role: DatasetRuleRole) =>
@@ -52,17 +50,8 @@ const usable = (table: DatasetTablePermissions, op: DatasetOperation, role: Data
 };
 
 /** The dataset's stored tables (or the flat dataset's one), the tables a policy naming none covers. */
-function tablesOf(row: ArtifactRow) {
+function tablesOf(row: Pick<ArtifactRow, 'meta'>) {
   return catalogOf(row)?.tables.map(({ schema, name }) => ({ schema, name })) ?? [];
-}
-
-/** The stored policy read as v3, or null when it does not parse (no rule then applies). */
-function permissionsOf(row: Pick<ArtifactRow, 'dataset_policy' | 'visibility' | 'meta'>): ToV3Result | null {
-  try {
-    return toV3({ policy: row.dataset_policy, visibility: row.visibility, tables: tablesOf(row as ArtifactRow) });
-  } catch {
-    return null;
-  }
 }
 
 /** The account that wrote a document's program: its owner's identity, for its dataset role. */
@@ -91,8 +80,7 @@ async function trusted(dataset: ArtifactRow, actor: AccessActor, options: Datase
 /**
  * THE PRIVATE CEILING (plan §3/§8: "dataset is private: signed_in and anonymous rules never apply"). On a private
  * dataset a signed_in or anonymous caller (a page reader without a share) keeps only its `backend_only` entries,
- * which already need a trusted program on a page whose owner administers the dataset. Stored v1 entries are
- * viewer-only there already (./to-v3); for v2 and v3 this is the ceiling v2 grants always had.
+ * which already need a trusted program on a page whose owner administers the dataset.
  */
 function privateCeiling(row: Pick<ArtifactRow, 'visibility'>, role: DatasetRuleRole, policy: DatasetPermissions): DatasetPermissions {
   if (row.visibility !== 'private' || role === 'viewer') return policy;
@@ -114,13 +102,13 @@ function privateCeiling(row: Pick<ArtifactRow, 'visibility'>, role: DatasetRuleR
 export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, options: DatasetWriteOptions = {}): Promise<DatasetWriteDecision> {
   const db = options.tx ?? await getDb();
   const revision = row.policy_revision ?? 0;
-  const read = permissionsOf(row);
-  const v2 = read?.source === 'v2' || (!read && !!row.dataset_policy && (row.dataset_policy as { version?: unknown }).version === 2);
   const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.document || !!options.pageId });
-  if (row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres' || (!v2 && row.access !== 'readwrite')) return { allowed: false, role, revision, reason: 'dataset_read_only' };
+  if (row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
   if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
-  if (!role || !read) return { allowed: false, role, revision, reason: 'no_rule' };
+  if (!role) return { allowed: false, role, revision, reason: 'no_rule' };
+  // Read only for a rule role, so an owner or editor can always replace a stored policy that does not read.
+  const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row) });
   const policy = privateCeiling(row, role, read.policy);
   const tables = policy.tables;
   const entries = tables.flatMap((table) => MUTATIONS.map((op) => entryFor(table, op, role)).filter((entry) => !!entry));
@@ -132,7 +120,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
     ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
-  return { allowed: true, admin: false, role, revision, permissions: policy, trusted: isTrusted, session, ...(read.execution ? { execution: read.execution } : {}) };
+  return { allowed: true, admin: false, role, revision, permissions: policy, trusted: isTrusted, session };
 }
 
 /** Can this decision insert anything (the file and image doors, which name no table)? */
@@ -165,7 +153,6 @@ export function tableMutationPolicy(decision: DatasetWriteDecision, table: { sch
     session: decision.session,
     operations,
     trusted: isTrusted,
-    ...(decision.execution ? { execution: decision.execution } : {}),
   };
 }
 

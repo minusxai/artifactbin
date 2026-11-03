@@ -43,7 +43,7 @@ function VisibilityIcon(props: { icon: SharingIcon; size: number; class?: string
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean; canPublic?: boolean;
   /** A dataset's writes: who may change it through a document. */
-  access?: DatasetAccess; datasetKind?: DatasetCatalog['kind']; policyVersion?: number;
+  access?: DatasetAccess; datasetKind?: DatasetCatalog['kind'];
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
 // Module-level, so the groups' option objects keep their identity across the refetches a change causes (ToggleGroup keys by it, and a rebuilt row would drop focus).
@@ -110,7 +110,7 @@ export function DocumentSharing(props: {
   };
   // A dataset: a PostgreSQL one is read-only by construction; a stored one says who may write it.
   const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
-  const showWrites = () => props.format === 'dataset' && !!state() && !postgres() && state()!.policyVersion !== 2;
+  const showWrites = () => props.format === 'dataset' && !!state() && !postgres();
   const writable = () => !postgres() && state()?.access === 'readwrite';
   const [confirmReadOnly, setConfirmReadOnly] = createSignal(false);
   const [readOnlyBusy, setReadOnlyBusy] = createSignal(false);

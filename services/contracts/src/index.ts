@@ -21,7 +21,6 @@ export * from './sharing';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore } from './identity';
 export type { Column, Index, Table } from './schema';
 export * from './dataset-policy';
-export * from './dataset-grants';
 export * from './dataset-permissions';
 export * from './dataset-hasura';
 

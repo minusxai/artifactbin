@@ -1,4 +1,4 @@
-import type {DatasetAccessPolicy as DatasetPolicy} from './dataset-grants';
+import type {DatasetPermissions} from './dataset-permissions';
 import type {DatasetAccess,ShareEntry,ShareRole,Visibility} from './sharing';
 
 /** Editable identity and settings shared by JSX fences and typed resource files. */
@@ -17,5 +17,5 @@ export type ArtifactResourceFile = ResourceMetadata & (
  | {type:'artifact';source?:string}
  | {type:'folder'}
  | {type:'file';source?:string}
- | {type:'dataset';source?:string;access?:DatasetAccess;policy?:DatasetPolicy|null;policy_revision?:number}
+ | {type:'dataset';source?:string;access?:DatasetAccess;policy?:DatasetPermissions|null;policy_revision?:number}
 );

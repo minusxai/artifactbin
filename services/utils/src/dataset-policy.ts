@@ -68,7 +68,10 @@ function predicate(value: unknown, path: string, depth = 0) {
     }
   }
 }
-/** Exact supported Hasura fields; unknown extensions never silently disappear. */
+/**
+ * The retired version 1 policy parser. Nothing in this tree calls it; it stays exported only because the
+ * deployment repository still imports it (app/__tests__/downstream-exports.test.ts). Delete it with that import.
+ */
 export function parseDatasetPolicy(value: unknown): DatasetPolicy {
   if (JSON.stringify(value)?.length > 64_000)
     bad('policy', 'maximum size is 64 KB');
@@ -230,42 +233,4 @@ export function compilePolicyPredicate(
     return parts.length ? `(${parts.join(' AND ')})` : 'TRUE';
   };
   return { sql: walk(value), params };
-}
-
-/**
- * The one shorthand a publisher needs: everyone who can VIEW the dataset may add, change and remove
- * rows in it — the grant a page whose buttons write must have. `viewer` is the only role a data
- * policy may name (lib/datasets/policy/validation), and `public.rows` is the table a flat CSV or JSON
- * dataset exposes.
- *
- * It takes the TABLES rather than one table because the shorthand has to fit the dataset it is aimed
- * at: a multi-table `<Dataset>` definition gets one grant per declared table, and a grant naming a
- * table the dataset does not have is refused by the server as `invalid_policy` — after the content
- * is already published. Finer rules than "viewers may write it" still belong in the dataset YAML.
- */
-export function viewersWritePolicy(
-  tables:
-    | { schema: string; name: string }
-    | ReadonlyArray<{ schema: string; name: string }> = {
-    schema: 'public',
-    name: 'rows',
-  },
-): DatasetPolicy {
-  const targets = Array.isArray(tables)
-    ? (tables as ReadonlyArray<{ schema: string; name: string }>)
-    : [tables as { schema: string; name: string }];
-  return {
-    version: 1,
-    enforcement: 'enabled',
-    tables: targets.map((table) => ({
-      table,
-      insert_permissions: [
-        { role: 'viewer', permission: { columns: '*', check: {} } },
-      ],
-      update_permissions: [
-        { role: 'viewer', permission: { columns: '*', filter: {}, check: {} } },
-      ],
-      delete_permissions: [{ role: 'viewer', permission: { filter: {} } }],
-    })),
-  };
 }

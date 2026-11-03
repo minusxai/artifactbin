@@ -14,7 +14,7 @@ import { copyText } from '../lib/copy-text';
 import { apiFetch } from '../lib/api';
 interface SharingState {
   user_page_url?: string | null; visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; access?: DatasetAccess;
-  datasetKind?: DatasetCatalog['kind']; policyVersion?: number; canPrivate?: boolean;
+  datasetKind?: DatasetCatalog['kind']; canPrivate?: boolean;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
 
@@ -45,7 +45,7 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
   const copyLink = () => { void copyText(new URL(props.url ?? location.pathname, location.origin).href); setCopied(true); };
   const copyPublicView = () => { const url=state()?.user_page_url; if(url)void copyText(url); };
   const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
-  const showWrites = () => props.format === 'dataset' && state() && !postgres() && state()?.policyVersion !== 2;
+  const showWrites = () => props.format === 'dataset' && state() && !postgres();
   const close = () => { setOpen(false); props.onClose?.(); };
   // One option object per visibility, built once per `canPrivate` answer: ToggleGroup keys its buttons by option identity, so rebuilding them on every sharing update would replace the button the person just pressed.
   const allowPrivate = createMemo(() => state()?.canPrivate !== false);

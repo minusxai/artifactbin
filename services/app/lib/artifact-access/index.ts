@@ -14,7 +14,7 @@ export {
 export { documentEditorReaches, effectiveRole, holdsCreatingToken, linkRoleOf, ownsArtifact, reachesAsAccount, roleWithoutLink } from './access';
 export { liveAccessFacts, preloadAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
-export { grantContext, grantsOf, grantsPermitRead, readThrough, uploadGrantContext } from './grants';
+export { grantContext, readThrough, uploadGrantContext } from './grants';
 export type { GrantDocument, ReadRow } from './grants';
 export { attestRegisteredHtmlMutation, verifyRegisteredHtmlMutation } from './registered-html-mutation';
 export { attestSavedHtmlUpload } from './saved-html-upload';

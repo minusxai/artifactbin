@@ -14,7 +14,6 @@ import { canWriteDataset } from '@/lib/document-data';
 import {accountWorkspaceCoreFor, trashArtifactFor, restoreArtifactFor} from '@/lib/workspace';
 import {subscribeChannel} from '@/lib/publish';
 import {artifactChannel} from '@artifactbin/contracts';
-import {datasetGrantAllows,defaultDatasetGrants} from '@artifactbin/utils';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
 useAppHarness();
 afterEach(()=>resetConfigOverrides());
@@ -131,12 +130,6 @@ it('resolves group publication refs as the saved group owner and refuses creator
  const broken=await make({html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${own}" data-af-mode="live"></head><body><p>Personal data</p></body></html>`});expect(broken.status).toBe(400);
 });
 
-it('compares dataset and published artifact group principals without treating a group as a user',()=>{
- const policy=defaultDatasetGrants(),caller=identityForUser('viewer_account', null),owner={ ...identityForUser(null, null), groupId: 'grp_ownership' };
- expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{...owner}}})).toBe(true);
- expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{groupId:'other_group',userId:null,tokenId:null}}})).toBe(false);
- expect(datasetGrantAllows(policy,'insert',{caller,owner})).toBe(false);
-});
 
 it('wakes existing artifact ACL subscribers only after transferred ownership is committed',async()=>{
  const f=await fixture(),id=await f.make({html:nativeHtml('<p>Private</p>'),visibility:'private'});
@@ -202,7 +195,6 @@ it('refuses inbound dependency representations without materializing unrelated a
   {source:`legacy ref:${id}`},
   {meta:{nested:`ref:${id}`}},
   {dataset_policy:{nested:`ref:${id}`}},
-  {dataset_policy:{version:2,allow:[{actions:['insert'],from:{artifact:id}}]}},
  ];
  for(const fields of cases){
   await f.db.query('UPDATE artifacts SET source=$2,document=$3::jsonb,meta=$4::jsonb,dataset_policy=$5::jsonb WHERE id=$1',[foreign,fields.source??null,null,JSON.stringify(fields.meta??{}),fields.dataset_policy?JSON.stringify(fields.dataset_policy):null]);

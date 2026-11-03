@@ -8,7 +8,7 @@ import {canWriteDataset,writeDatasetPolicy} from '@/lib/document-data';
 import {account,datasetFixture as fixture,document,refusal,write} from './dataset-fixture';
 
 useAppHarness();
-/** A version 3 insert rule for every rule role: what the old v1 viewer entry reads as (the door sets v3 only since the stored migration). */
+/** A version 3 insert rule for every rule role. */
 const insertFor=(permission:object)=>({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission}))}]});
 
 it('refuses a write read under an older policy revision, even from the owner',async()=>{

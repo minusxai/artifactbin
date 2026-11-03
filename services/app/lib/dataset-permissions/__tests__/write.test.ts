@@ -108,6 +108,24 @@ describe('datasetWriteAccess', () => {
     expect(tableMutationPolicy(trusted, ROWS)!.operations).toEqual(['update']);
   });
 
+  it('fails loudly on a stored policy that is not version 3 for every rule role, read or write, while owner and editor keep full access', async () => {
+    const f = await fixture();
+    await updateSharingFor(f.owner, f.data.id, { shares: [{ email: f.stranger.email!, role: 'editor' }, { email: f.member.email!, role: 'viewer' }] });
+    for (const retired of [{ version: 2, allow: [{ actions: ['read', 'insert'], from: { user: '*' } }] }, { version: 1, enforcement: 'enabled', tables: [] }]) {
+      await sql('UPDATE artifacts SET dataset_policy=$2 WHERE id=$1', [f.data.id, JSON.stringify(retired)]);
+      const data = await head(f.data.id);
+      const loud = new RegExp(`^The stored dataset policy is version ${retired.version}: only version 3 is read\\.`);
+      await expect(datasetReadAccess(data, f.member)).rejects.toThrow(loud);
+      await expect(datasetWriteAccess(data, f.member)).rejects.toThrow(loud);
+      await expect(datasetReadAccess(data, ANONYMOUS_ACTOR, { throughPage: true })).rejects.toThrow(loud);
+      await expect(datasetWriteAccess(data, ANONYMOUS_ACTOR, { throughPage: true })).rejects.toThrow(loud);
+      for (const admin of [f.owner, f.stranger]) {
+        expect(await datasetReadAccess(data, admin)).toMatchObject({ allowed: true, admin: true });
+        expect(await datasetWriteAccess(data, admin)).toMatchObject({ allowed: true, admin: true });
+      }
+    }
+  });
+
   it('throws for a table the role has no entry for', async () => {
     const f = await fixture();
     const decision = await datasetWriteAccess(f.data, f.member, { document: f.program });

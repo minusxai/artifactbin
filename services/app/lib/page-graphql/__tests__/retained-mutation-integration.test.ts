@@ -46,7 +46,7 @@ it('a page source change at the final transaction boundary refuses without savin
 });
 it('grant revocation at the final transaction boundary refuses without saving data',async()=>{
  const f=await fixture(),before=(await getArtifactById(f.datasetId))!.version,transaction=f.db.transaction.bind(f.db);let injected=false;
- vi.spyOn(f.db,'transaction').mockImplementation(async work=>{if(!injected){injected=true;await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[f.datasetId,JSON.stringify({version:2,allow:[]})]);}return transaction(work);});
+ vi.spyOn(f.db,'transaction').mockImplementation(async work=>{if(!injected){injected=true;await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[f.datasetId,JSON.stringify({version:3,tables:[]})]);}return transaction(work);});
  expect(await f.run('request_grants_1234567890','added')).toMatchObject({outcome:'rejected',reset:[]});expect(injected).toBe(true);expect((await getArtifactById(f.datasetId))!.version).toBe(before);expect(await f.rows()).toHaveLength(2);expect((await f.db.query<{response:{status:number}}>('SELECT response FROM mutation_receipts')).rows.map(row=>row.response.status)).toEqual([409]);
 });
 it('the real adapter refuses a saved historical registration after its page head advances',async()=>{

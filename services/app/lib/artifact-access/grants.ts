@@ -1,25 +1,19 @@
 /**
- * DATASET GRANTS (policy version 2): who may read a governed dataset, and the saved-document context (program
- * trust) a write through a document carries. Write decisions themselves are lib/dataset-permissions', which reads
- * stored grants as v3 rules. Decided inside the caller's transaction when it has one. The rows a decision consults
- * are read here by their access columns alone: no document, no content.
+ * PROGRAM TRUST: the saved-document context a write through a document carries (lib/dataset-permissions asks it
+ * for `backend_only` rules), and the plain read-through check of a row. Decided inside the caller's transaction
+ * when it has one. The rows a decision consults are read here by their access columns alone: no document, no content.
  */
 import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from './saved-html-upload';
 import {verifyRegisteredHtmlMutation} from './registered-html-mutation';
 import {liveAccessFacts,type AccessFacts} from './access-facts';
 import {ownsArtifact} from './access';
 import { JOIN_RELATIONS } from '@/lib/social';
-import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
-import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
+import type { DatasetGrantContext, Queryable } from '@artifactbin/contracts';
 import type { ArtifactRow } from './scopes';
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { DatasetError } from '@/lib/datasets';
 
-export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantPolicy | null {
-  const value=row.dataset_policy;
-  return value&&typeof value==='object'&&'version' in value&&value.version===2?parseDatasetGrants(value):null;
-}
 const principalOf=(row:Pick<ArtifactRow,'user_id'|'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>)=>({userId:row.group_id?null:row.user_id,tokenId:row.group_id?null:row.token_id,groupId:row.group_id??null});
 export interface GrantDocument {id:string;editId:string;registeredHtml?:object}
 /** The dataset columns a grant decision reads. */
@@ -62,12 +56,3 @@ async function savedGrantContext(dataset:GrantDataset,actor:AccessActor,document
  return context;
 }
 
-/** Read grants use the actual caller and saved artifact; membership only gates mutations. */
-export async function grantsPermitRead(dataset:ReadRow,actor:AccessActor,document?:ReadRow,tx?:Queryable,given?:AccessFacts):Promise<boolean>{
- const policy=grantsOf(dataset);if(!policy)return false;
- const db=tx??await getDb(),facts=given??liveAccessFacts(actor,db);
- // Making a dataset private remains an audience ceiling, even with a public read grant.
- if(dataset.visibility==='private'&&!(await readThrough(db,dataset,actor,facts)))return false;
- if(document&&!(await readThrough(db,document,actor,facts)))return false;
- return datasetGrantAllows(policy,'read',{caller:actor,owner:principalOf(dataset),callerEditorGroupIds:await facts.editorGroupIds(),...(document?{artifact:{id:document.id,owner:principalOf(document)}}:{})});
-}

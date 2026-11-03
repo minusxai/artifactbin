@@ -23,10 +23,7 @@ export async function assertTransferDependencies(tx:Queryable,closure:ArtifactRo
  const pattern=inboundRefPattern(ids),needle=ids.length===1?`ref:${ids[0]}`:'ref:';
  // Keep serialized-key and escaped JSON semantics of the legacy scanner. Only
  // potential ref-bearing fields run the tokenizer regex; no graph crosses the wire.
- const inbound=await tx.query<{id:string;grant:boolean}>(`SELECT id,
-   (dataset_policy::text ~ '"artifact"[[:space:]]*:' AND EXISTS (
-     SELECT 1 FROM unnest($1::text[]) selected(id) WHERE strpos(dataset_policy::text,'"' || selected.id || '"') > 0
-   )) AS grant
+ const inbound=await tx.query<{id:string}>(`SELECT id
   FROM artifacts WHERE NOT (id=ANY($1::text[])) AND format IN ('html','dataset','viz') AND (
    EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(meta->'refs')='array' THEN meta->'refs' ELSE '[]'::jsonb END) ref WHERE ref->>'id'=ANY($1::text[]))
    OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(meta->'htmlLinks')='array' THEN meta->'htmlLinks' ELSE '[]'::jsonb END) link WHERE link->>'kind'='dataset' AND link->>'datasetId'=ANY($1::text[]))
@@ -34,9 +31,6 @@ export async function assertTransferDependencies(tx:Queryable,closure:ArtifactRo
    OR CASE WHEN strpos(source,$3)>0 THEN source ~ $2 ELSE false END
    OR CASE WHEN strpos(meta::text,$3)>0 THEN meta::text ~ $2 ELSE false END
    OR CASE WHEN strpos(dataset_policy::text,$3)>0 THEN dataset_policy::text ~ $2 ELSE false END
-   OR (dataset_policy::text ~ '"artifact"[[:space:]]*:' AND EXISTS (
-     SELECT 1 FROM unnest($1::text[]) selected(id) WHERE strpos(dataset_policy::text,'"' || selected.id || '"') > 0
-   ))
   ) LIMIT 1`,[ids,pattern,needle]);
- if(inbound.rows.length)throw new DatasetError(inbound.rows[0]!.grant?'Transfer would change a dataset grant outside the closure':'Transfer includes dependencies outside the selected owner closure',409);
+ if(inbound.rows.length)throw new DatasetError('Transfer includes dependencies outside the selected owner closure',409);
 }

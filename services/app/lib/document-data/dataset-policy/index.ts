@@ -1,6 +1,7 @@
 import type { GrantDocument } from '@/lib/artifact-access';
 import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
-import { validateDatasetPolicyForRow, catalogOf, type StoredDatasetPolicy } from '@/lib/datasets';
+import type { DatasetPermissions } from '@artifactbin/contracts';
+import { validateDatasetPolicyForRow, catalogOf } from '@/lib/datasets';
 import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
 import { getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
@@ -11,7 +12,7 @@ export async function setDatasetPolicy(
   value: unknown,
   revision: number,
 ): Promise<
-  { revision: number; policy: StoredDatasetPolicy | null } | { conflict: true } | null
+  { revision: number; policy: DatasetPermissions | null } | { conflict: true } | null
 > {
   const row = await getArtifactFor(actor, id);
   if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres')
@@ -49,8 +50,8 @@ export async function recheckMutation(
 export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
 /**
- * May this actor write the dataset at all through this door: owner and editors (under the `access` ceiling
- * for datasets without v2 grants), or a role with a v3 rule it can use (lib/dataset-permissions).
+ * May this actor write the dataset at all through this door: owner and editors (under the `access` ceiling),
+ * or a role with a v3 rule it can use (lib/dataset-permissions).
  */
 export async function canWriteDataset(dataset: ArtifactRow, actor: AccessActor, declared: WriteDoor = false): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';

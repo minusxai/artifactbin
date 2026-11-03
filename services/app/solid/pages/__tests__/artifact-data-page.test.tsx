@@ -183,13 +183,11 @@ it('keeps captures free of workspace navigation and mutation rules', () => {
   expect(screen.getByLabelText('Dataset catalog')).toBeInTheDocument();
 });
 
-// The v2 grant list became the v3 read-back: a stored older policy shows its migration report beside it.
-it('shows a stored v1/v2 policy as its v3 read-back with the migration report, without editing it', async () => {
-  policy = {...policy, source: 'v2', report: [{code: 'artifact_owner_grant', message: 'Grants to apps owned by the dataset owner become backend-only rules.'}], warnings: [{code: 'anonymous_write', message: 'Signed-out link holders can change rows.'}]};
+it('names why a stored policy cannot be read, beside its read-back, without editing it', async () => {
+  policy = {...policy, source: 'unreadable', report: [{code: 'unreadable', message: 'The stored dataset policy is version 2: only version 3 is read.'}], warnings: [{code: 'anonymous_write', message: 'Signed-out link holders can change rows.'}]};
   open(answer('dataset', {catalog: catalog()}, 'owner'));
   fireEvent.click(screen.getByRole('tab', {name: 'Data actions'}));
-  expect(await screen.findByText(/older version 2 format/)).toBeVisible();
-  expect(screen.getByText('Grants to apps owned by the dataset owner become backend-only rules.')).toBeVisible();
+  expect(await screen.findByText(/The stored rules could not be read/)).toHaveTextContent('The stored dataset policy is version 2: only version 3 is read.');
   expect(screen.getByText('Signed-out link holders can change rows.')).toBeVisible();
   expect(screen.getByText('Table public.rows')).toBeVisible();
   expect(within(screen.getByLabelText('Read-only data actions')).queryByRole('button')).toBeNull();

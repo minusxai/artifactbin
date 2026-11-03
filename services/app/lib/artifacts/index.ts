@@ -57,7 +57,7 @@ export {transferArtifact} from './transfer';
  * dataset and policy commits and the dataset commit emitter, the mutation context pin and invocation seam, the
  * compiled-row result and its error text, and the folder table.
  */
-export { commitDatasetPolicy, commitDatasetWrite, commitMigratedDatasetPolicy, type MigratedDatasetPolicy } from './dataset-commit';
+export { commitDatasetPolicy, commitDatasetWrite } from './dataset-commit';
 export { pinMutationContext } from './mutation-receipt';
 export type { MutationReply } from './mutation-receipt';
 export { mutationInvocation } from './mutation-invocation';

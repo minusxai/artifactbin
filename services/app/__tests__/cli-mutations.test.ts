@@ -108,7 +108,7 @@ describe('cli-policy-metadata', () => {
   it('metadata and dataset policy commit together with both state and policy revision checks',async()=>{
    const token=await mintToken('mxmx_test_policy_metadata');
    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite',title:'Before'}}));const doc=await initial.json(),path=`/api/artifacts/${doc.id}`,context={params:Promise.resolve({id:doc.id})};
-   // Policies are set as version 3 (version 1 and 2 bodies are refused since the stored migration).
+   // Policies are set as version 3 (version 1 and 2 bodies are refused).
    const policy={version:3,tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:['n'],check:{}}}]}]};
    const send=(body:object)=>patch(request(path,{method:'PATCH',token:token.token,json:body}),context);
    const first=await send({title:'After',policy,expectedPolicyRevision:0,expectedState:doc.state});expect(first.status,await first.clone().text()).toBe(200);const saved=await first.json();expect(saved.title).toBe('After');expect(saved.dataset_policy).toEqual(policy);expect(saved.policy_revision).toBe(1);

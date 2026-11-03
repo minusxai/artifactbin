@@ -3,8 +3,8 @@
  * THE APP'S DATASET PERMISSIONS EDITOR (version 3, Hasura's metadata shape). It speaks the agent policy API
  * (`/api/artifacts/:id/policy`, lib/dataset-graphql `policy`) through the browser session, so the app and agents
  * read, check and save the same document: a per-table grid of rule roles × operations, the three server-built
- * templates, the server's dry-run read-back and errors by path, a save at the loaded revision, and a migration
- * banner when the stored policy is still version 1 or 2. Owner and editors always have full access and take no
+ * templates, the server's dry-run read-back and errors by path, a save at the loaded revision, and a notice when
+ * the stored policy cannot be read (saving replaces it). Owner and editors always have full access and take no
  * rules. The server stays the validation and admission boundary for every write.
  */
 import { retryingFetch } from '@/lib/http/retry-lazily';
@@ -44,7 +44,7 @@ type Entry = DatasetPermissionEntry<Rule>;
 type ReadBackTable = { title: string; lines: string[] };
 type Loaded = {
   revision: number;
-  source: 'v3' | 'v1' | 'v2' | 'none' | 'unreadable';
+  source: 'v3' | 'none' | 'unreadable';
   report: Array<{ code: string; message: string }>;
   policy: DatasetPermissions | null;
   tables: Array<{ table: { schema: string; name: string }; root: string; columns: Array<{ name: string; type?: string }> }>;
@@ -181,18 +181,6 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
     finally { setTemplateBusy(false); }
   };
 
-  const stopSignedOutWrites = () => {
-    const policy = draft(); if (!policy) return;
-    edit({ ...policy, tables: policy.tables.map(t => {
-      const next = { ...t } as Record<string, unknown>;
-      for (const op of ['insert', 'update', 'delete'] as const) {
-        const kept = (t[fieldOf(op)] ?? []).filter(e => e.role !== 'anonymous');
-        if (kept.length) next[fieldOf(op)] = kept; else delete next[fieldOf(op)];
-      }
-      return next as unknown as DatasetTablePermissions;
-    }) });
-  };
-
   const showJson = (value: string) => {
     if (value === 'json') { setSource(pretty(draft())); setSourceError(''); }
     setView(value as 'rules' | 'json');
@@ -214,15 +202,8 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
     <Show when={loadError()}><StatusMessage kind="error">{loadError()}</StatusMessage></Show>
     <Show when={!loaded() && !loadError()}><StatusMessage kind="loading">Loading data actions…</StatusMessage></Show>
     <Show when={loaded()}>{value => <>
-      <Show when={value().source === 'v1' || value().source === 'v2' || value().source === 'unreadable'}>
-        <Panel padding="sm" label="Policy migration" class="space-y-2">
-          <Show when={value().source !== 'unreadable'} fallback={<p class="font-medium">The stored rules could not be read, so nobody below editor can use the data until you save new rules.</p>}>
-            <p class="font-medium">These rules use the older version {value().source === 'v1' ? 1 : 2} format.</p>
-            <p class="text-muted">The grid shows how they apply today. Saving writes them as version 3 rules, exactly as shown, and the items below stop being special cases.</p>
-          </Show>
-          <ul class="list-disc space-y-1 pl-5"><For each={value().report}>{item => <li>{item.message}</li>}</For></ul>
-          <Show when={value().report.some(item => item.code === 'anonymous_write')}><Button variant="secondary" size="sm" onClick={stopSignedOutWrites}>Stop signed-out writes</Button></Show>
-        </Panel>
+      <Show when={value().source === 'unreadable'}>
+        <StatusMessage kind="error">The stored rules could not be read, so nobody below editor can use the data until you save new rules. <For each={value().report}>{item => <span>{item.message}</span>}</For></StatusMessage>
       </Show>
       <Show when={value().source === 'none'}><StatusMessage kind="notice">No rules are saved yet. These are the defaults: everyone who reaches the dataset reads it, and only the owner and editors change rows.</StatusMessage></Show>
 

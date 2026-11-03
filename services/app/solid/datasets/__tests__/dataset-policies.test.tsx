@@ -2,7 +2,7 @@
 /**
  * The app's v3 dataset permissions editor, driven through the agent policy API (`/api/artifacts/:id/policy`):
  * a role × operation grid, templates, the server's dry-run read-back and errors, revision-checked saves and the
- * migration banner for a stored v1/v2 policy.
+ * notice for a stored policy that cannot be read.
  */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
@@ -143,21 +143,12 @@ it('shows dry-run errors by path and blocks saving; a stale revision explains th
   expect(api.saves()).toHaveLength(1);
 });
 
-it('explains a stored v1 policy in a migration banner, offers to stop signed-out writes, and saves it as version 3', async () => {
-  const write = { columns: '*', check: {} };
-  const migrated = { version: 3, tables: [{ table: ROWS, select_permissions: READ_ONLY.tables[0]!.select_permissions, insert_permissions: ['viewer', 'signed_in', 'anonymous'].map(role => ({ role, permission: write })) }] };
-  const api = serve({ get: () => loaded({ source: 'v1', revision: 2, policy: migrated, report: [{ code: 'anonymous_write', message: 'Signed-out readers can write, as before (rate-limited to 30 writes a minute).' }] }) });
+it('explains a stored policy that cannot be read and saves a version 3 policy over it', async () => {
+  const reason = 'The stored dataset policy is version 2: only version 3 is read.';
+  const api = serve({ get: () => loaded({ source: 'unreadable', revision: 2, policy: null, report: [{ code: 'unreadable', message: reason }], readBackTables: [] }) });
   render(() => <DatasetPolicies artifactId="ds123" expanded />);
-  const banner = await screen.findByRole('region', { name: 'Policy migration' });
-  expect(banner).toHaveTextContent('version 1');
-  expect(banner).toHaveTextContent('Signed-out readers can write, as before');
-  expect(screen.getByRole('button', { name: 'Save access policies' })).toBeEnabled();
-  fireEvent.click(within(banner).getByRole('button', { name: 'Stop signed-out writes' }));
-  expect(screen.getByLabelText('Signed-out link holders: add')).toHaveTextContent('Off');
-  expect(screen.getByLabelText('Shared viewers: add')).toHaveTextContent('All rows');
+  expect(await screen.findByText(/The stored rules could not be read/)).toHaveTextContent(reason);
   fireEvent.click(screen.getByRole('button', { name: 'Save access policies' }));
   await waitFor(() => expect(api.saves()).toHaveLength(1));
-  expect(api.saves()[0]!.body).toMatchObject({ expectedPolicyRevision: 2, policy: { version: 3 } });
-  expect(api.saves()[0]!.body!.policy.tables[0].insert_permissions.map((e: { role: string }) => e.role)).toEqual(['viewer', 'signed_in']);
-  await waitFor(() => expect(screen.queryByRole('region', { name: 'Policy migration' })).toBeNull());
+  expect(api.saves()[0]!.body).toMatchObject({ expectedPolicyRevision: 2, policy: { version: 3, tables: [{ table: ROWS }] } });
 });

@@ -7,7 +7,7 @@ import { StatusMessage } from '../ui/StatusMessage';
 
 /** The parts of the policy API's GET (`/api/artifacts/:id/policy`, lib/dataset-graphql `policy`) this view reads. */
 type Actions = {
-  source: 'v3' | 'v1' | 'v2' | 'none' | 'unreadable';
+  source: 'v3' | 'none' | 'unreadable';
   report: Array<{ code: string; message: string }>;
   readBackTables: Array<{ title: string; lines: string[] }>;
   warnings: Array<{ code: string; message: string }>;
@@ -43,13 +43,7 @@ function SavedActions(props: {id: string}): JSX.Element {
     <Show when={!state() && !error()}><StatusMessage kind="loading">Loading data actions…</StatusMessage></Show>
     <Show when={state()}>{loaded => <>
       <Show when={loaded().source === 'none'}><p class="text-muted">No rules are saved yet. These are the defaults: everyone who reaches the dataset reads it, and only the owner and editors change rows.</p></Show>
-      <Show when={loaded().source === 'unreadable'}><StatusMessage kind="error">The stored rules could not be read, so nobody below editor can use the data until new rules are saved.</StatusMessage></Show>
-      <Show when={loaded().source === 'v1' || loaded().source === 'v2'}>
-        <Panel padding="sm" label="Policy migration" class="space-y-2">
-          <p class="font-medium">These rules use the older version {loaded().source === 'v1' ? 1 : 2} format. This is how they apply today; saving them in Edit dataset writes them as version 3 rules.</p>
-          <ul class="list-disc space-y-1 pl-5"><For each={loaded().report}>{item => <li>{item.message}</li>}</For></ul>
-        </Panel>
-      </Show>
+      <Show when={loaded().source === 'unreadable'}><StatusMessage kind="error">The stored rules could not be read, so nobody below editor can use the data until new rules are saved. <For each={loaded().report}>{item => <span>{item.message}</span>}</For></StatusMessage></Show>
       <For each={loaded().readBackTables}>{table => <Panel padding="sm" class="space-y-2">
         <h3 class="font-semibold">{table.title}</h3>
         <ul class="list-disc space-y-1 pl-5"><For each={table.lines}>{line => <li>{line}</li>}</For></ul>

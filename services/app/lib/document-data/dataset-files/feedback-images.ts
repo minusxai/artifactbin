@@ -1,6 +1,6 @@
 import { getDb, generateInternalId, ID_RE, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform';
 import { type ArtifactRow, getArtifactById } from '@/lib/artifacts';
-import { grantsOf, uploadGrantContext, attestSavedHtmlUpload, readThrough } from '@/lib/artifact-access';
+import { uploadGrantContext, attestSavedHtmlUpload, readThrough } from '@/lib/artifact-access';
 import { canInsert, datasetReadAccess, datasetWriteAccess } from '@/lib/dataset-permissions';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
@@ -61,11 +61,10 @@ async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:Ac
     if(currentDoc.edit_id!==authority.editId||currentDoc.version!==authority.version||catalogOf(currentDataset)?.kind!=='stored'||!await declaredDataset(currentDoc,dataset.id))throw new DatasetError('Dataset file is unavailable',404);
   });
   const decision=await datasetWriteAccess(dataset,actor,{tx:db,throughPage:true,trust:q=>uploadGrantContext(dataset,actor,{...authority,uploadProof},q)});
-  if(!canInsert(decision))throw new DatasetError(grantsOf(dataset)?'No insert grant permits this upload':'This dataset does not grant file uploads',403);
+  if(!canInsert(decision))throw new DatasetError('This dataset does not grant file uploads',403);
 }
 async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx:import('@/lib/platform').Queryable):Promise<boolean> {
-  // Files tied to rows need a select rule (lib/dataset-permissions); a v2 grant may name this page, as before.
-  if(grantsOf(dataset))return (await datasetReadAccess(dataset,actor,{tx,document})).allowed;
+  // Files tied to rows need a select rule (lib/dataset-permissions) and a readable page.
   return (await datasetReadAccess(dataset,actor,{tx})).allowed&&await readThrough(tx,document,actor);
 }
 
