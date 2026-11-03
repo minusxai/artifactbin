@@ -31,6 +31,8 @@ export const RESOLVER_LIMITS = Object.freeze({
   queryDocumentBytes: 16 * 1024,
   /** One api 2 `caps.query` answer's `data`. */
   queryResultBytes: 1024 * 1024,
+  /** The longest one `getRun` holds a completion wait open; below the runner client's 30 s request timeout. */
+  runWaitMs: 20_000,
 });
 /** What a run receipt records for one `caps.fetch`: never a query string, header value or body. */
 export interface ResolverFetchReceipt {
@@ -78,6 +80,7 @@ export interface RunStart {
 
 /** Every read/cancel is owner-scoped, including the in-process implementation. */
 export interface RunLookup { userId: string; runId: string }
+export interface RunWait extends RunLookup { waitMs?: number }
 export interface RunEvent { sequence: number; event: RunnerJson }
 export interface RunEventPage {
   events: RunEvent[];
@@ -125,7 +128,11 @@ export interface RunnerService {
   checkpoint?(input: RunLookup & {reference: string}): Promise<RunnerJson>;
   /** Returns after durable admission, not program completion. Runner generates runId. */
   start(input: RunStart): Promise<{ runId: string }>;
-  getRun(input: RunLookup): Promise<RunSnapshot>;
+  /**
+   * With `waitMs`, returns once the run is terminal or that long has passed (capped at
+   * `RESOLVER_LIMITS.runWaitMs`). An implementation that ignores it returns at once.
+   */
+  getRun(input: RunWait): Promise<RunSnapshot>;
   /** Bounded JSON replay; no SSE subscription required. */
   events(input: RunLookup & { afterSequence: number; limit?: number }): Promise<RunEventPage>;
   /** Idempotent; resolves once cancellation is accepted. getRun observes terminal cleanup. */

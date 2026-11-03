@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import type {RunStart,RunnerService} from '@artifactbin/contracts';
+import {RESOLVER_LIMITS,type RunStart,type RunnerService} from '@artifactbin/contracts';
 import {pageBackendCapability,createBackendInvoker} from '../backend';
 import {FieldFailed,FieldNotExecuted} from '../contracts';
 import {composePageSchema,executePageOperation} from '../namespaces';
@@ -133,6 +133,36 @@ describe('resolver time limits',()=>{
    await vi.advanceTimersByTimeAsync(200);expect(await outcome).toBe('deadline');expect(cancelled).toBe(1);
    expect(limits).toMatchObject({timeoutMs:15_000,maxRequests:32,maxOutputBytes:1024*1024});
   }finally{vi.useRealTimers();}
+ });
+});
+describe('resolver completion wait',()=>{
+ const call=(signal=new AbortController().signal)=>({namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal});
+ /** A runner that holds getRun open as the contract says: until done, or waitMs. */
+ function waiting(finishAfterMs:number|null){
+  const waits:number[]=[];let cancelled=0,startedAt=0;
+  const runner={start:async()=>{startedAt=Date.now();return {runId:'run1'};},cancel:async()=>{cancelled++;},
+   getRun:async({waitMs}:{waitMs?:number})=>{waits.push(waitMs??-1);const doneAt=finishAfterMs===null?Infinity:startedAt+finishAfterMs;const wake=Math.min(Date.now()+(waitMs??0),doneAt);await new Promise(r=>setTimeout(r,Math.max(0,wake-Date.now())));return Date.now()>=doneAt?{runId:'run1',status:'completed',output:'pong',receipt:null}:{runId:'run1',status:'running',output:null,receipt:null};}} as unknown as RunnerService;
+  return {runner,waits,cancelled:()=>cancelled};
+ }
+ it('asks once and returns as the run completes instead of polling',async()=>{
+  const r=waiting(40);const began=Date.now();
+  expect(await createBackendInvoker(r.runner,async()=>({...record,compiled:'bundle'}))(call())).toBe('pong');
+  expect(r.waits).toHaveLength(1);expect(r.waits[0]).toBeGreaterThan(15_000);expect(r.waits[0]).toBeLessThanOrEqual(RESOLVER_LIMITS.runWaitMs);expect(Date.now()-began).toBeLessThan(1_000);
+ });
+ it('never waits past the call deadline or the runner wait cap, then cancels',async()=>{
+  vi.useFakeTimers();
+  try{
+   const r=waiting(null);const outcome=createBackendInvoker(r.runner,async()=>({...record,compiled:'bundle'}))(call()).then(()=>'completed',(e:FieldFailed)=>e.code);
+   await vi.advanceTimersByTimeAsync(15_900);expect(r.cancelled()).toBe(0);
+   await vi.advanceTimersByTimeAsync(200);expect(await outcome).toBe('deadline');expect(r.cancelled()).toBe(1);
+   expect(r.waits.length).toBeLessThanOrEqual(2);expect(r.waits.every(w=>w>=0&&w<=RESOLVER_LIMITS.appWaitMs&&w<=RESOLVER_LIMITS.runWaitMs)).toBe(true);
+  }finally{vi.useRealTimers();}
+ });
+ it('stops waiting and cancels the run as soon as the caller aborts',async()=>{
+  const r=waiting(null);const controller=new AbortController();const began=Date.now();
+  const outcome=createBackendInvoker(r.runner,async()=>({...record,compiled:'bundle'}))(call(controller.signal)).then(()=>'completed',(e:FieldFailed)=>e.code);
+  setTimeout(()=>controller.abort(),30);
+  expect(await outcome).toBe('deadline');expect(r.cancelled()).toBe(1);expect(Date.now()-began).toBeLessThan(1_000);
  });
 });
 describe('owner-only resolver failure detail',()=>{
