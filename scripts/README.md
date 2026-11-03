@@ -41,7 +41,6 @@ check that fails when one moves: `services/app/__tests__/downstream-script-paths
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/ci/check-local.mjs` | The FAST checks: `validate` (names, types, module graph) and `test` (affected tests). | `npm run validate`, `npm test`, `ci.yml`, `pr-fast.yml` (`validate --part=types\|lint`) |
-| `scripts/ci/check-residual-names.mjs` | Refuse retired product names outside the allowlist. | `check-local.mjs validate` |
 | `scripts/ci/check-ui-primitives.mjs` | Refuse controls, overlays and one-off styles drawn outside `services/app/solid/ui` (app chrome in `solid/` and the offline file's `lib/offline/*.tsx`); ratchets migration debt in `ui-primitives-allowlist.json` and requires an exact count and a `reason` for each permanent exception in `ui-primitives-exceptions.json`. | `check-local.mjs validate` |
 | `scripts/ci/module-graph.mjs` | Refuse import cycles and layer violations between modules. | `check-local.mjs validate` |
 | `scripts/ci/table-ownership.mjs` | Refuse writes to the artifacts, users and tokens tables outside their owning modules. | `check-local.mjs validate` |
@@ -64,7 +63,6 @@ check that fails when one moves: `services/app/__tests__/downstream-script-paths
 |---|---|---|
 | `scripts/gates.mjs` | Run the journey gates as a set: servers, shards, manifest bijection (`gates.manifest.mjs`). | `npm run test:gates`, `ci.yml` |
 | `scripts/gate-container.mjs` | Run named gates in a Linux container built and served as CI does. | by hand, agents (pre-merge only) |
-| `scripts/component-baseline-decode.mjs` | Decode captured component-baseline evidence for review. | by hand, with a capture directory |
 
 ## Journey gates
 
@@ -76,7 +74,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-accounts-and-workspace.mjs` | Guest start, OAuth consent, login, claim, fork and folders. | `gates.mjs` |
 | `scripts/gates/gate-collab-roles.mjs` | Delivery follows the link's role for owner, signed-in stranger and visitor. | `gates.mjs` |
 | `scripts/gates/gate-comments.mjs` | The owner pins feedback to a node; the agent answers. | `gates.mjs` |
-| `scripts/gates/gate-component-baseline.mjs` | Verify the reader's component asset and baseline evidence. Native migration pilots use exact local app/reader trustworthy origins for production-equivalent secure-context APIs and record `browser-context.json` on both sides. | `gates.mjs` |
+| `scripts/gates/gate-component-baseline.mjs` | Publish the component catalogue as native HTML and capture every fixture from its real reader, with the hosted component assets verified against the source. | `gates.mjs` |
 | `scripts/gates/gate-data-journey.mjs` | A dataset becomes numbers on a page that re-runs its own queries. | `gates.mjs` |
 | `scripts/gates/gate-datasets-in-documents.mjs` | Editable cells that write real rows, under every sharing permission. | `gates.mjs` |
 | `scripts/gates/gate-exports.mjs` | What the exporter photographs, checked as pixels. | `gates.mjs` |

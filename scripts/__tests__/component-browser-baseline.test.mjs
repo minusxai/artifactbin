@@ -7,42 +7,14 @@ import {execFileSync} from 'node:child_process';
 import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
-import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof, settleFiniteFrameAnimations } from '../lib/component-browser-baseline.mjs';
+import { actionTarget, captureBrowserBaseline, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof, settleFiniteFrameAnimations } from '../lib/component-browser-baseline.mjs';
 import {builtComponentFiles,verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
 import {installedFiles,componentImport} from '../fixtures/component-baseline/publication.mjs';
 const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 const noAnimations=()=>({format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:false,startedAtMs:0,completedAtMs:0,elapsedMs:0,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:[],infinite:[],counts:{finished:0,canceled:0,detached:0},timedOut:[]});
-async function capture(directory,implementation,color,overrides={}){
-  const screenshot=`${implementation}.png`;
-  const bytes=await sharp({create:{width:2,height:2,channels:4,background:color}}).png().toBuffer();
-  await writeFile(path.join(directory,screenshot),bytes);
-  return {fixture:'button',theme:'light',viewport:{width:800,height:600},state:'initial',implementation,fixtureHash:'same-input',sourceRevision:'a'.repeat(40),screenshotMode:'viewport',screenshot,screenshotSha256:createHash('sha256').update(bytes).digest('hex'),semantics:{text:'Continue'},errors:[],...overrides};
-}
 async function setup(){const directory=await mkdtemp(path.join(tmpdir(),'component-baseline-'));directories.push(directory);return directory;}
-describe('paired real reader evidence comparison',()=>{
-  it('reports actual pixel and behavior differences and saves a diagnostic diff',async()=>{
-    const directory=await setup();
-    const original=await capture(directory,'jsx','white');
-    const candidate=await capture(directory,'html','black',{semantics:{text:'Changed'}});
-    const [result]=await compareBrowserBaselines({baseline:[original],candidate:[candidate],baselineDirectory:directory,candidateDirectory:directory,output:directory});
-    expect(result).toMatchObject({changedPixels:4,changedFraction:1,behaviorEqual:false,sizeEqual:true});
-    expect((await readFile(path.join(directory,'button-light-800x600-initial-diff.png'))).length).toBeGreaterThan(0);
-  });
-  it('refuses missing cases and changed fixture inputs as parity evidence',async()=>{
-    const directory=await setup();const original=await capture(directory,'jsx','white');const candidate=await capture(directory,'html','white',{fixtureHash:'different-input'});
-    const options={baseline:[original],baselineDirectory:directory,candidateDirectory:directory,output:directory};
-    expect((await compareBrowserBaselines({...options,candidate:[]}))[0].error).toContain('Missing candidate');
-    expect((await compareBrowserBaselines({...options,candidate:[candidate]}))[0].error).toContain('Unmatched');
-  });
-  it('rejects modified images rather than trusting the evidence manifest',async()=>{
-    const directory=await setup();const original=await capture(directory,'jsx','white');const candidate=await capture(directory,'html','white');
-    await writeFile(path.join(directory,candidate.screenshot),'changed');
-    await expect(compareBrowserBaselines({baseline:[original],candidate:[candidate],baselineDirectory:directory,candidateDirectory:directory,output:directory})).rejects.toThrow('hash mismatch');
-  });
-});
-
 describe('default candidate reader gate',()=>{
   it('uses the accessible select name when the theme uppercases its visible label',()=>{
     expect(candidateCaptureIssues([{fixture:'select',state:'initial',errors:[],semantics:{text:'PERSON Ada',controls:[{role:'button',name:'Person'}],rows:[],overflow:0}}])).toEqual([]);
@@ -561,11 +533,6 @@ describe('used font evidence',()=>{
       const proof=fontByteProof({...evidence,resources:[{url:evidence.used[0].sources[0],status:200,sha256:'b'.repeat(64)}]});
       expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['b'.repeat(64)]);
       expect(proof.used[0].hashes).not.toEqual(['a'.repeat(64)]);
-      const directory=await setup(),source=evidence.used[0].sources[0];
-      const oldCapture=await capture(directory,'jsx','white',{fontEvidence:{used:evidence.used,resources:[{url:source,status:200,sha256:'a'.repeat(64)}]}});
-      const newCapture=await capture(directory,'html','white',{fontEvidence:{used:evidence.used,resources:[{url:source,status:200,sha256:'b'.repeat(64)}]}});
-      const [comparison]=await compareBrowserBaselines({baseline:[oldCapture],candidate:[newCapture],baselineDirectory:directory,candidateDirectory:directory,output:directory});
-      expect(comparison.fontBytesEqual).toBe(false);
     }finally{globalThis.document=originalDocument;}
   });
   it('does not count a declared and already-loaded face as used without rendered text using it',async()=>{
@@ -591,7 +558,7 @@ describe('component gate resource acceptance',()=>{
     const archive=await candidateArchive(),originalFetch=globalThis.fetch;
     const broken={fixture:'theme',state:'initial',errors:[],assertionErrors:[],fontEvidence:{errors:[]},resourceEvidence:{errors:['Stylesheet did not load: /theme.css']},semantics:{text:'Ready',controls:[],overflow:0}};
     vi.doMock('../gates/lib/browser.mjs',()=>({launchChromium:async()=>({close:async()=>{}})}));
-    vi.doMock('../lib/component-browser-baseline.mjs',()=>({captureBrowserBaseline:async()=>[broken],compareBrowserBaselines,candidateCaptureIssues}));
+    vi.doMock('../lib/component-browser-baseline.mjs',()=>({captureBrowserBaseline:async()=>[broken],candidateCaptureIssues}));
     vi.stubGlobal('fetch',async(input,init)=>{
       const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
       const {pathname}=new URL(url);

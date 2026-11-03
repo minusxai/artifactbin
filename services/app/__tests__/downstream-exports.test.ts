@@ -31,9 +31,7 @@ const exportsType = (source: string, name: string) =>
   new RegExp('^export (?:type )?\\{[^}]*\\b' + name + '\\b', 'm').test(source);
 
 import * as m0 from '@/__tests__/harness';
-import * as m1 from '@/app/api/artifacts/[id]/edits/route';
 import * as m2 from '@/app/api/artifacts/[id]/fork/route';
-import * as m3 from '@/app/api/artifacts/[id]/prepare/route';
 import * as m4 from '@/app/api/artifacts/[id]/query/route';
 import * as m5 from '@/app/api/artifacts/[id]/route';
 import * as m7 from '@/app/api/artifacts/preflight/route';
@@ -60,15 +58,11 @@ describe('values the deployment composes from', () => {
   it('@/__tests__/harness', () => {
     for (const name of ["bearerIdentity","mintAccountToken","request","useAppHarness"]) expect(name in m0, name).toBe(true);
   });
-  it('@/app/api/artifacts/[id]/edits/route', () => {
-    for (const name of ["POST"]) expect(name in m1, name).toBe(true);
-  });
+
   it('@/app/api/artifacts/[id]/fork/route', () => {
     for (const name of ["POST"]) expect(name in m2, name).toBe(true);
   });
-  it('@/app/api/artifacts/[id]/prepare/route', () => {
-    for (const name of ["POST"]) expect(name in m3, name).toBe(true);
-  });
+
   it('@/app/api/artifacts/[id]/query/route', () => {
     for (const name of ["POST"]) expect(name in m4, name).toBe(true);
   });

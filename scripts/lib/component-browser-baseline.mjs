@@ -1,10 +1,8 @@
 /** Actual reader capture only: caller mounts a freshly published real reader URL.
  * No page.setContent, hand-rendered JSX, CSS surrogate or production writes. */
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-import sharp from 'sharp';
-import {pixelDifference} from './pixel-difference.mjs';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
 /** @param {import('../fixtures/component-baseline/contract').BrowserParityAction} action */
 export function actionTarget(frame,action){return action.authoredId===undefined?frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})}):frame.locator(`[id=${JSON.stringify(action.authoredId)}]`);}
@@ -379,30 +377,6 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   await writeFile(path.join(output,`${implementation}-captures.json`),JSON.stringify(captures,null,2));
   await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:true,planned:tasks.length,fixtureIds,completed:captures.length,failures:[]}));
   return captures;
-}
-
-/** Produce diagnostic pixel diffs, never label unequal images parity. */
-export async function compareBrowserBaselines({baseline,candidate,baselineDirectory,candidateDirectory,output}) {
-  await mkdir(output,{recursive:true});
-  const key=item=>`${item.fixture}/${item.theme}/${item.viewport.width}x${item.viewport.height}/${item.state}`;
-  const candidates=new Map(candidate.map(item=>[key(item),item]));
-  const results=[];
-  for(const old of baseline) {
-    const current=candidates.get(key(old));candidates.delete(key(old));
-    if(!current){results.push({key:key(old),error:'Missing candidate capture'});continue;}
-    if(old.implementation!=='jsx'||current.implementation!=='html'||old.fixtureHash!==current.fixtureHash||old.screenshotMode!==current.screenshotMode||!(/^[a-f0-9]{40}$/.test(old.sourceRevision)&&/^[a-f0-9]{40}$/.test(current.sourceRevision))){results.push({key:key(old),error:'Unmatched implementation or fixture inputs'});continue;}
-    const [a,b]=await Promise.all([readFile(path.join(baselineDirectory,old.screenshot)),readFile(path.join(candidateDirectory,current.screenshot))]);
-    if(hash(a)!==old.screenshotSha256||hash(b)!==current.screenshotSha256)throw Error('Capture image hash mismatch');
-    const [left,right]=await Promise.all([sharp(a).ensureAlpha().raw().toBuffer({resolveWithObject:true}),sharp(b).ensureAlpha().raw().toBuffer({resolveWithObject:true})]);
-    const sizeEqual=left.info.width===right.info.width&&left.info.height===right.info.height;
-    let changedPixels=null,diff;
-    if(sizeEqual){changedPixels=0;diff=Buffer.alloc(left.data.length);for(let i=0;i<left.data.length;i+=4){const changed=[0,1,2,3].some(channel=>left.data[i+channel]!==right.data[i+channel]);if(changed)changedPixels++;diff[i]=changed?255:Math.round(left.data[i]*.25);diff[i+1]=changed?0:Math.round(left.data[i+1]*.25);diff[i+2]=changed?128:Math.round(left.data[i+2]*.25);diff[i+3]=255;}
-      await sharp(diff,{raw:{width:left.info.width,height:left.info.height,channels:4}}).png().toFile(path.join(output,`${key(old).replaceAll('/','-')}-diff.png`));}
-    results.push({key:key(old),sizeEqual,changedPixels,pixelDifference:sizeEqual?pixelDifference(left.data,right.data,left.info.width,left.info.height):null,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[]),...(current.resourceEvidence?.errors||[])]});
-  }
-  for(const extra of candidates.keys())results.push({key:extra,error:'Missing original capture'});
-  await writeFile(path.join(output,'comparison.json'),JSON.stringify(results,null,2));
-  return results;
 }
 
 /** Default CI gate assertions are candidate evidence only, never old/new parity. */

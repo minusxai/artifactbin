@@ -5,7 +5,6 @@ import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 import {GET as versionGET} from '@/app/api/artifacts/[id]/versions/[version]/route';
-import {POST as retiredEdit} from '@/app/api/artifacts/[id]/edits/route';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 it('preserves nested native chart data and node identities across two conditional replacements and immutable history',async()=>{
@@ -17,7 +16,4 @@ it('preserves nested native chart data and node identities across two conditiona
  const save=async(source:string)=>{const response=await PUT(request(`/api/artifacts/${first.id}`,{method:'PUT',token:actor.token,json:{html:source,expectedVersion:head.version,expectedState:head.state}}),params(first.id));expect(response.status).toBe(200);head=await read();};
  await save(next);expect(head.html).toBe(next);await save(head.html.replace('"field":"revenue"','"field":"profit"'));expect(head.html).toContain('"field":"profit"');expect(head.html).toContain('data-af-id="chart"');expect(head.html).toContain('<h1 data-af-id="heading">Revenue</h1>');expect(head.version).toBe(3);
  const archived=await versionGET(request(`/api/artifacts/${first.id}/versions/1`,{token:actor.token}),{params:Promise.resolve({id:first.id,version:'1'})});expect(archived.status).toBe(200);expect((await archived.json()).html).toBe(canonical);
-});
-it('retains the retired editor boundary while permitting ordinary native chart scripts',async()=>{
- const actor=await mintAccountToken('native-chart-boundary');const res=await retiredEdit(request('/api/artifacts/missing/edits',{method:'POST',token:actor.token,json:{source:'<Question viz={{mark:"bar"}} />'}}),params('missing'));expect(res.status).toBe(404);
 });

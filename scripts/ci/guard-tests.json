@@ -4,6 +4,7 @@
   "scripts/__tests__/ci-cache-contracts.test.mjs",
   "scripts/__tests__/images.test.mjs",
   "scripts/__tests__/page-speed-lab.test.mjs",
+  "scripts/__tests__/residual-name-guard.test.mjs",
   "scripts/__tests__/script-paths.test.mjs",
   "scripts/__tests__/scripts-index.test.mjs",
   "scripts/__tests__/stored-shape-pins.test.mjs",

@@ -10,7 +10,6 @@ import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { PATCH as patchMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -203,31 +202,6 @@ describe('a folder is not a document', () => {
       expect((await rawRoute(request(`/a/${f.id}/raw`, { actor: o.actor }), params(f.id))).status, visibility).toBe(404);
       expect((await rawRoute(request(`/a/${f.id}/raw`), params(f.id))).status, visibility).toBe(404);
     }
-  });
-
-  /**
-   * A FOLDER TAKES NO EDIT, and it answers the code the DATA TIERS answer —
-   * `not_editable`, which already means "this is not a document, replace it
-   * whole instead". There is no second word to learn and no second rule: the
-   * edit protocol asks `isDocumentFormat`, and a folder is not one.
-   */
-  it('refuses the retired source edit protocol for folders and datasets', async () => {
-    const o = await owner();
-    const folder = (await create(o.token, { format: 'folder', title: 'Before' })).body;
-    const refusedFolder = await j(await editRoute(
-      request(`/api/artifacts/${folder.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: folder.edit_id, source: '<p>After</p>' } }),
-      params(folder.id),
-    ));
-    expect(refusedFolder.status).toBe(404);
-    expect(refusedFolder.body).toMatchObject({ error: 'not_found' });
-    expect((await getArtifactById(folder.id))!.title, 'the title is unchanged').toBe('Before');
-    const ds = (await create(o.token, { dataset: [{ a: 1 }] })).body;
-    const refused = await j(await editRoute(
-      request(`/api/artifacts/${ds.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: ds.edit_id, source: '<p>No</p>' } }),
-      params(ds.id),
-    ));
-    expect(refused.status).toBe(404);
-    expect(refused.body).toMatchObject({ error: 'not_found' });
   });
 
   it('the list carries parent_id and ancestor_ids and the shelf files folders in their own partition', async () => {
