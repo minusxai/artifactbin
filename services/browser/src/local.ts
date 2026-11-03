@@ -5,8 +5,9 @@ import type { BrowserSessionOptions } from './session-config';
 /**
  * CHROMIUM, IN THIS PROCESS. The only entry of this package that loads
  * Playwright; import it from a composition root only. One browser, launched
- * on first use, closed after a minute idle; renders are SERIALISED — one page
- * at a time bounds memory, and a failed launch never poisons the next try.
+ * on first use, closed after a minute idle (./browser-holder owns that
+ * lifecycle); renders are SERIALISED — one page at a time bounds memory. A
+ * render's deadline closes its own page, never the browser.
  */
 import { chromium, errors, type Browser, type Locator, type Page } from 'playwright';
 import sharp from 'sharp';
@@ -15,6 +16,7 @@ import {browserUploadOptions} from './upload-config';
 import type { BrowserService, BrowserSessions, HarvestedSvg, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
 import { SVG_HARVEST_LIMITS } from '@artifactbin/contracts';
 import { internalAssetResponse } from './internal-assets';
+import { BrowserUnavailable, createBrowserHolder } from './browser-holder';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SETTLE_MS = 1_500;
@@ -23,6 +25,8 @@ const DEFAULT_SETTLE_MS = 1_500;
 // height cap still bounds unusually tall documents.
 const PREVIEW_WIDTH = 1_600;
 const PREVIEW_MAX_HEIGHT = 4_096;
+/** A timed-out page that will not close within this is a wedged browser, which is then retired. */
+const PAGE_CLOSE_WAIT_MS = 5_000;
 
 class NavigationError extends Error {}
 class NoSlideError extends Error { constructor(readonly slides: number) { super(`document has ${slides} slides`); } }
@@ -105,27 +109,23 @@ function svgFromDataUrl(src: string): string {
   return head.toLowerCase().endsWith(';base64') ? Buffer.from(body, 'base64').toString('utf8') : decodeURIComponent(body);
 }
 
-export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
-  const idleMs = opts.idleShutdownMs ?? 60_000;
+/** `launch` replaces Playwright's own launch (and so ignores `executablePath`); tests count and hold browsers with it. */
+export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; launch?: (timeoutMs: number) => Promise<Browser>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const upload=opts.upload??browserUploadOptions(process.env);
-  let browser: Promise<Browser> | undefined;
   let executablePath: string | undefined;
   let chain: Promise<unknown> = Promise.resolve();
-  let idle: ReturnType<typeof setTimeout> | undefined;
-
-  const get = (timeoutMs=DEFAULT_TIMEOUT_MS): Promise<Browser> => {
-    if (!browser) {
-      const p = chromium.launch({ headless: true, timeout:timeoutMs, ...(executablePath?{executablePath}:{}) }).catch((e) => { if (browser === p) browser = undefined; throw e; });
-      browser = p;
-    }
-    return browser;
+  const holder = createBrowserHolder<Browser>({
+    idleMs: opts.idleShutdownMs ?? 60_000,
+    launch: timeoutMs => opts.launch ? opts.launch(timeoutMs) : chromium.launch({ headless: true, timeout: timeoutMs, ...(executablePath ? { executablePath } : {}) }),
+    timer: (run, ms) => { const timer = setTimeout(run, ms); timer.unref?.(); return () => clearTimeout(timer); },
+  });
+  /** Closes this page; one that will not close in time means its browser is wedged, so that browser is retired. */
+  const closePage = async (page: Page, browser: Browser) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const closed = await Promise.race([page.close().then(() => true, () => true), new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), PAGE_CLOSE_WAIT_MS); })]);
+    clearTimeout(timer);
+    if (!closed) await holder.retire(browser);
   };
-  const close = async () => {
-    const b = browser; browser = undefined;
-    if (idle) clearTimeout(idle); idle = undefined;
-    if (b) await b.then((x) => x.close()).catch(() => {});
-  };
-  const scheduleIdle = () => { if (idle) clearTimeout(idle); idle = setTimeout(() => void close(), idleMs); idle.unref?.(); };
 
   /**
    * ONE PAGE, LOADED AND SETTLED — what every operation that looks at a page
@@ -137,19 +137,23 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
   async function withReadyPage<T>(req: PageRequest, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>): Promise<T> {
     const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
     const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw new Error('Render deadline');return ms;};
-    let b = await get(remaining());
-    if (!b.isConnected()) { await close(); b = await get(remaining()); }
-    const timeout = remaining();
-    // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
-    let deadlineClose:Promise<void>|undefined;
-    const renderTimer=setTimeout(()=>{deadlineClose=b.close().catch(()=>{});},remaining());
-    // The deadline closing the browser, or Playwright's own timeout, rejects navigation too: that is the render's
+    const lease = await holder.acquire(remaining());
+    // The deadline closes THIS page (with its own context), never the browser another render may be using.
+    let opened: Page | undefined;
+    let expired = false;
+    let deadlineClose: Promise<void> | undefined;
+    let renderTimer: ReturnType<typeof setTimeout> | undefined;
+    // The deadline closing the page, or Playwright's own timeout, rejects navigation too: that is the render's
     // budget running out (a 'failed' render, like a late success), never a page that could not be reached.
-    const deadlineElapsed=(e:unknown)=>deadlineClose!==undefined||e instanceof errors.TimeoutError;
-    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block' }).catch(async error=>{clearTimeout(renderTimer);await deadlineClose;throw error;});
+    const deadlineElapsed=(e:unknown)=>expired||e instanceof errors.TimeoutError;
     const forwarding = new AbortController();
     const pending = new Set<Promise<void>>();
     try {
+      renderTimer = setTimeout(() => { expired = true; if (opened) deadlineClose = closePage(opened, lease.browser); }, remaining());
+      // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
+      const page = opened = await lease.browser.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block' });
+      if (expired) throw new Error('Render deadline');
+      const timeout = remaining();
       if (req.sameOriginOnly || req.assetOrigin) {
         const origin = new URL(req.url).origin;
         // Context routing also covers popup first requests. Service workers are
@@ -207,9 +211,8 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       forwarding.abort();
       await Promise.allSettled(pending);
       clearTimeout(renderTimer);
-      await page.close().catch(() => {});
-      await deadlineClose;
-      scheduleIdle();
+      if (opened) await (deadlineClose ?? closePage(opened, lease.browser));
+      lease.release();
     }
   }
 
@@ -345,7 +348,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         (e): RenderResult => {
           if (e instanceof NoSlideError) return { ok: false, reason: 'no_slide', slides: e.slides };
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
-          if (!browser) return { ok: false, reason: 'unavailable', detail: (e as Error).message };
+          if (e instanceof BrowserUnavailable) return { ok: false, reason: 'unavailable', detail: e.message };
           return { ok: false, reason: 'failed', detail: (e as Error).message };
         },
       );
@@ -372,14 +375,14 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         (answers): SvgHarvestResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Harvest deadline'} : { ok: true, loads: answers },
         (e): SvgHarvestResult => {
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
-          if (!browser) return { ok: false, reason: 'unavailable', detail: (e as Error).message };
+          if (e instanceof BrowserUnavailable) return { ok: false, reason: 'unavailable', detail: e.message };
           return { ok: false, reason: 'failed', detail: (e as Error).message };
         },
       );
       chain = run;
       return run;
     },
-    async close() { await sessions.close(); await close(); },
+    async close() { await sessions.close(); await holder.close(); },
   };
   if(upload)service.renderAndUpload=async request=>{
     try{
