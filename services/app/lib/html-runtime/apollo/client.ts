@@ -271,6 +271,13 @@ async function runRemote(
     // Sent, then lost: the backend may have run it. Never retried.
     return settled("unknown", "Outcome unknown: " + message(error));
   }
+  // A reply with neither data nor errors (a refusal body such as {error:'rate_limited'}) ran nothing:
+  // it is an error on every field, never a silent null.
+  if (!reply || (!(reply.data && typeof reply.data === "object") && !Array.isArray(reply.errors))) {
+    const refused = (reply as { error?: unknown; message?: unknown } | undefined);
+    const reason = typeof refused?.message === "string" ? refused.message : typeof refused?.error === "string" ? refused.error : "The server answered without data";
+    return settled(kind === "mutation" ? "rejected" : null, reason);
+  }
   const data: AfJsonObject = {};
   for (const key of keys) data[key] = reply?.data && Object.hasOwn(reply.data, key) ? reply.data[key]! : null;
   const outcomes: Record<string, Outcome> = { ...(reply?.extensions?.outcomes ?? {}) };
