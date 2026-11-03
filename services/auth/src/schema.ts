@@ -2,7 +2,8 @@
 import type { Queryable, Table } from '@artifactbin/contracts';
 import { ensureTable } from '@artifactbin/utils';
 
-const AUTH_TABLES: Table[] = [
+/** @public Read by scripts/render-schema.mjs, which finds Table data among this module's exports. */
+export const AUTH_TABLES: Table[] = [
   {
     name: 'clients',
     columns: [
