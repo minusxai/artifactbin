@@ -8,11 +8,15 @@ description: >-
 ---
 ## Read first
 
+Every task that publishes or edits a page (answering a comment too) ends: your reply, exactly as
+asked (even only the URL), then `node scripts/comment.mjs watch ID --next`, doing what printed
+comments ask (see Watch below). Never end on the reply alone.
+
 Commands stage updates hourly and activate before work. Reread canonical SKILL.md and
 reload your harness when notified. `node scripts/update.mjs` updates immediately;
 `--rollback` restores the prior verified release offline. `--no-update` or
-`ARTIFACTBIN__NO_UPDATE=1` disables updates; `--help` is offline.
-Manual ZIP installs must reinstall with the installer to update. Credentials stay untouched.
+`ARTIFACTBIN__NO_UPDATE=1` disables updates. Manual ZIP installs must reinstall with the
+installer to update.
 
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
@@ -155,7 +159,10 @@ sharing and deliberate ownership moves.
   reply's exact form (only the URL, say), that is your full reply: send exactly it as a message
   before watching (never skip it or replace it with a tool call), then still run watch --next;
   watching never adds to the reply, and the reply never replaces the watch.
-- **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
+- **Data, apps, exports.** A page built from a CSV, new or edited, publishes it as a dataset,
+  links it (`<link rel="af-dataset">`) and computes its numbers and charts from the rows in page
+  script, as `examples/csv-dashboard.html` does; numbers typed into the HTML go stale. CSV and
+  datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or
   republish it. Who may see and change rows: [permissions](references/permissions.md) (read before
