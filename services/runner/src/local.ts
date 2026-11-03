@@ -6,7 +6,7 @@ import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
 import { createWorkerPool, startWorker, type WorkerMessage } from './worker-pool';
 const worker = fileURLToPath(new URL('./runner-worker.mjs', import.meta.url));
-const defaults: RunnerLimits = { timeoutMs: 30000, cpuMs: 200, memoryMiB: 64, maxRequests: 100, maxOutputBytes: 1024 * 1024 };
+const defaults: RunnerLimits = { timeoutMs: 30000, cpuMs: 200, memoryMiB: 64, maxRequests: 100, maxOutputBytes: RESOLVER_LIMITS.outputBytes };
 const terminal = (s: string) => !['queued', 'running'].includes(s);
 export interface CapabilityContext {
     runId: string;
