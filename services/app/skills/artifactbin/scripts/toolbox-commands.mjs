@@ -36,6 +36,7 @@ const commands = {
       title: flag(),
       template: flag(),
       'owner-column': flag(),
+      name: flag(),
       visibility: flag(),
       group: flag(),
       personal: flag('boolean'),

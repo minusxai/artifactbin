@@ -46,6 +46,8 @@ if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='d
    !values.template))throw new ToolError('template_requires_dataset',
    '--template (with --owner-column for own-rows) sets the permissions of a new dataset.',2,
    'For an existing dataset use policy.mjs template and set.');
+if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_dataset',
+   '--name sets a new dataset\'s GraphQL root name.',2);
  let baseline=null,source=bytes.toString('utf8');
  const sidecar=await optionalFile(values.baseline??file+'.af.json');
  if(!values.create&&sidecar){
@@ -74,6 +76,9 @@ if(values.artifact){if(!baseline||!values.baseline)throw new ToolError('baseline
 if(values.template&&baseline)throw new ToolError('template_not_for_update',
    '--template applies only when a dataset is created.',2,
    'Use policy.mjs template ID and policy.mjs set ID for an existing dataset.');
+if(values.name!==undefined&&baseline)throw new ToolError('name_not_for_update',
+   '--name applies only when a dataset is created; its GraphQL name never changes.',2,
+   'Drop --name, or publish a new dataset with --create.');
 if(values.baseline&&!baseline&&!values.create)throw new ToolError('baseline_missing',
    'The explicitly selected baseline is unavailable.',2);
 if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=
@@ -128,6 +133,7 @@ if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.e
  else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
+ if(values.name!==undefined)body.name=values.name;
  if(values.personal){
   if(baseline)throw new ToolError('personal_not_for_update',
     '--personal places a new page; it never moves an existing one.',2,

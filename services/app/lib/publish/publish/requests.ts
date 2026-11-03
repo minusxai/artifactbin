@@ -20,7 +20,7 @@ import type {PreparedHtmlBackend} from '@/lib/html-backends';
  */
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
-import { prepareCatalog, catalogOf, DatasetError } from '@/lib/datasets';
+import { prepareCatalog, catalogOf, DatasetError, graphqlRootNameProblem } from '@/lib/datasets';
 import { json, thrownMessage } from '@/lib/http';
 import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
@@ -86,6 +86,21 @@ async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):P
  catch(error){return json({error:'invalid_backend',details:[thrownMessage(error,'Invalid backend')]},400);}
 }
 
+/**
+ * `name` on create: the new dataset's GraphQL root (lib/datasets graphqlRootNameProblem), stored in its policy's
+ * configuration and never changed. Only a new single-table stored dataset takes one, never a copy (forked_from).
+ */
+function parseGraphqlName(body:Record<string,unknown>,parsed:{format:string;meta:Record<string,unknown>},forkedFrom:string|null|undefined):string|undefined|Response{
+ if(body.name===undefined)return undefined;
+ const refuse=(detail:string)=>json({error:'invalid_graphql_name',details:[detail]},400);
+ const problem=graphqlRootNameProblem(body.name);if(problem)return refuse(problem);
+ const catalog=catalogOf(parsed);
+ if(parsed.format!=='dataset'||catalog?.kind==='postgres')return refuse('name sets the GraphQL root of a new stored dataset (CSV or JSON rows)');
+ if((catalog?.tables.length??1)>1)return refuse('a multi-table dataset\'s GraphQL roots are its table names');
+ if(forkedFrom)return refuse('a copy takes its GraphQL root from its title: drop name or forked_from');
+ return body.name as string;
+}
+
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
   return parseAccessValue(body.access, format);
 }
@@ -112,6 +127,7 @@ export async function replaceArtifactWithBody(
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
+  if(Object.hasOwn(body,'name'))return json({error:'graphql_name_immutable',details:['A dataset\'s GraphQL name is chosen once, when it is created, and never changes: drop name. Publish a new dataset with the name you want.']},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -368,7 +384,7 @@ async function createArtifactFromBodyPrepared(
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
-
+  const graphqlName=parseGraphqlName(body,parsed,forkedFrom);if(graphqlName instanceof Response)return graphqlName;
 
   const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
@@ -388,7 +404,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

@@ -205,7 +205,7 @@ const createArtifactOp: Operation = {
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
   description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, optional resolverSources, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
-  input: { ...CONTENT_FIELDS, destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
+  input: { ...CONTENT_FIELDS, name: z.string().optional().describe("dataset only: the new dataset's GraphQL root name (default from the title, else data), stored as its policy configuration.custom_name and never changeable. ^[A-Za-z][A-Za-z0-9_]*$, at most 64 characters, not reserved (__*, _id, _and, _or, _not, true, false, null) and generating no shared type (Query, String, order_by, dataset_meta…); single-table stored datasets only, not with forked_from"), destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
     input: { html: '<!doctype html><html><head><title>Report</title></head><body><h1>Report</h1></body></html>' },
@@ -213,6 +213,7 @@ const createArtifactOp: Operation = {
   },
   errors: [
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
+    { status: 400, code: 'invalid_graphql_name', fix: 'details names the problem: use a valid, unreserved GraphQL name on a new single-table stored dataset, or omit name to take the title' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
@@ -241,6 +242,7 @@ const updateArtifactOp: Operation = {
     // the data tiers answer; the FIX has to be different, because "replace it
     // whole instead" is the thing that just failed.
     { status: 400, code: 'not_editable', fix: 'a folder has no content — send title, visibility or parent_id instead; its page is its listing' },
+    { status: 400, code: 'graphql_name_immutable', fix: "a dataset's GraphQL name is set once at creation: drop name, or publish a new dataset with the name you want" },
     POLICY_LOCKED,
     POLICY_MISMATCH,
     ...CONTENT_ERRORS,

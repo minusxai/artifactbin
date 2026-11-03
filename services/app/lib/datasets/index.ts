@@ -14,7 +14,7 @@ export { connectionShape, secretTargetShape } from './input';
 export { storedMediaReferences } from './media-references';
 export { compileNotebookSql } from './notebook';
 export { throttlePublicMutation } from './policy/usage';
-export { LEGACY_POLICY_REFUSED, readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy, type StoredDatasetPolicy } from './policy/validation';
+export { keepDatasetConfiguration, LEGACY_POLICY_REFUSED, readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy, type StoredDatasetPolicy } from './policy/validation';
 export { placeholderSession, policySession, viewerMutationPolicy } from './policy/viewer-policy';
 export { discoverPostgres, queryPostgres } from './postgres';
 export type { ServerRefLoader } from './asset-reference';
@@ -24,3 +24,4 @@ export type {
   CatalogInput, CatalogRowView, DatasetCatalog, DatasetConnection, DatasetNotebook, DatasetTable, DiscoveredTable, NotebookCell,
 } from './types';
 export { people, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
+export { graphqlRootNameProblem } from './graphql-names';

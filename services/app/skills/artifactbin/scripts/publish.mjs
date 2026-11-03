@@ -8,6 +8,7 @@ Flags: --type html|dataset|asset (inferred from unambiguous extensions); --root 
   boundary (default: the source directory); --manifest FILE JSON {"manifest":[paths]} of extra
   runtime-loaded files; --title; --visibility (new pages default to unlisted); --template
   read-only|own-rows|editors-only [--owner-column C] a new dataset's permissions (prints readBack);
+  --name NAME a new dataset's GraphQL root (default: from the title; fixed once created);
   --group HANDLE creates a new page in that group (you need editor access; it resolves GET
   /api/groups/HANDLE first); a destination that conflicts with the parent's owner is refused, and
   it never moves existing pages, so updates reject it; --dry-run validates and plans without
