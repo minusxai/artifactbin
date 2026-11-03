@@ -13,6 +13,9 @@ import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,js
   hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
 import {noteWatchActivity} from './toolbox-watch-state.mjs';
+import {TEMPLATES,applyTemplate,legacyDatasetLinks,routineChanges}
+  from './toolbox-publish-dataset.mjs';
+export {legacyDatasetLinks};
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};
@@ -179,58 +182,13 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'utf8'))-ids(bytes.toString('utf8'));
  const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} `+
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
- const legacy=legacyDatasetLinks(body.html);for(const name of legacy)log(`deprecated: link "${name}" `+
-  'uses the legacy dataset API; move its queries to the generated API (references/datasets.md) '+
-  'and set data-af-api="hasura".\n');
+ const legacy=legacyDatasetLinks(body.html);for(const name of legacy)log(
+  `deprecated: link "${name}" uses the legacy dataset API; move its queries to the generated API `+
+  '(references/datasets.md) and set data-af-api="hasura".\n');
  return {...done,...(rewritten?{rewritten}:{}),...(legacy.length?{deprecated:legacy.map(name=>
   `link "${name}" uses the legacy dataset API`)}:{}),autofix:autofixDetail({...fixed,routine},
   report)};
 }
-const TEMPLATES=['read-only','own-rows','editors-only'];
-/** The shapes only the legacy dataset namespace has; a link without data-af-api on such a page stays
- * on it, as the server decides (lib/html-page resolveDatasetApis). */
-const LEGACY_QUERY=/\bschema\s*\{\s*(?:revision|tables)\b|\brows\s*\(\s*tableId\b|\bwriteRows\s*\(/;
-/** Names of the page's dataset links that mount the legacy API: data-af-api="legacy", or no
- * data-af-api on a page written against the legacy shapes. */
-export function legacyDatasetLinks(html){
- const legacyQueries=LEGACY_QUERY.test(html),names=[];
- for(const [tag] of String(html??'').matchAll(/<link\b[^>]*>/gi)){
-  if(!/\brel\s*=\s*["'][^"']*\baf-dataset\b/i.test(tag))continue;
-  const name=tag.match(/\sdata-af-name\s*=\s*["']([^"']+)["']/i)?.[1],api=tag.match(
-   /\sdata-af-api\s*=\s*["']([^"']+)["']/i)?.[1];
-  if(name&&(api==='legacy'||api===undefined&&legacyQueries))names.push(name);
- }
- return names;
-}
-/** --template: the named starting permissions, applied right after the dataset is created. */
-async function applyTemplate(client,id,name,owner){
- const route=`/api/artifacts/${id}/policy`,listed=await client.request(`${route}/templates${owner?
-  '?ownerColumn='+encodeURIComponent(owner):''}`),found=listed.templates.find(t=>t.name===name);
- if(!found?.ok)throw new ToolError('invalid_template',
-  `Dataset ${id} was created, but the ${name} template does not fit it; its permissions are unchanged.`,
-  2,`Fix details.errors, then policy.mjs template ${name} ${id} … and policy.mjs set.`,
-  {id,errors:found?.errors??[]});
- const saved=await client.request(route,{method:'PUT',body:{policy:found.policy,
-  expectedPolicyRevision:listed.revision},unsafe:true,safeToRepeat:false});
- return {template:name,revision:saved.revision,readBack:String(saved.readBack??'').split('\n')
-  .filter(Boolean)};
-}
 /** A publish resets the quiet time of the page's comment watch; it never fails the publish. */
 async function watched(client,done,{now}={}){await noteWatchActivity(client.root,client.server,
   done.id,now).catch(()=>{});return done;}
-/** Platform-owned changes the server made on publish, counted rather than listed: identities and
- * asset links. */
-function routineChanges(sent,saved,identity,baseline){
-const count=text=>(text.match(/\sdata-af-id\s*=/g)??[]).length,added=count(saved)-count(sent),
-   changes=[];
-if(identity&&identity.carried)changes.push(
-   `carried forward ${identity.carried} data-af-id from v${identity.fromVersion}, ${
-     identity.fresh} new`);
- else if(added>0)changes.push(`added ${added} data-af-id`);
-const links=text=>[...text.matchAll(/\s(?:src|href|poster)\s*=\s*"([^"]*)"/g)].map(match=>match[1]),
-   before=links(sent),after=links(saved);
-if(before.length===after.length){const rewritten=before.filter((value,index)=>value!==after[
-   index]).length;if(rewritten)changes.push(`rewrote ${rewritten} asset link${rewritten===1?'':
-   's'}`);}
- return changes;
-}

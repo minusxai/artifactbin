@@ -29,7 +29,8 @@ export async function prepareSample(name, server, datasetId) {
       if (!/^[A-Za-z0-9]{6,}$/.test(datasetId ?? ''))
         throw Error('This sample requires the real returned dataset ID.');
       // The deprecated sample flow names one dataset; the shared app's targets link reuses it.
-      html = html.replace('ref:DATASET_ID', `ref:${datasetId}`).replace('ref:TARGETS_ID', `ref:${datasetId}`);
+      html = html.replace('ref:DATASET_ID', `ref:${datasetId}`)
+        .replace('ref:TARGETS_ID', `ref:${datasetId}`);
     }
     const snapshot = await prepareBundle({
       root,

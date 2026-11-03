@@ -1,5 +1,5 @@
 /**
- * Resolver: a Postgres query on Neon over its HTTP SQL endpoint (no raw TCP needed).
+ * Example resolver: a Postgres query on Neon over its HTTP SQL endpoint (no raw TCP needed).
  * Secrets: NEON_PASSWORD = the database role's password, set by the page owner in the page's
  *   Resolvers panel. Use a read-only role.
  * Usage: cp examples/resolver-neon.ts orders.ts; link it with
@@ -13,7 +13,8 @@
 const HOST = 'ep-example-123456.us-east-2.aws.neon.tech';
 const ROLE = 'reader';
 const DATABASE = 'neondb';
-const SQL = 'SELECT id, customer, total, placed_at FROM orders WHERE status = $1 ORDER BY placed_at DESC LIMIT 200';
+const SQL = 'SELECT id, customer, total, placed_at FROM orders WHERE status = $1 ' +
+  'ORDER BY placed_at DESC LIMIT 200';
 export const secrets = { NEON_PASSWORD: HOST };
 export const typeDefs = `
   type Order { id: ID! customer: String total: Float placed_at: String }
@@ -23,23 +24,28 @@ export const typeDefs = `
   }
 `;
 type Res = { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> };
-type Caps = { fetch(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<Res> };
+type Init = { method?: string; headers?: Record<string, string>; body?: string };
+type Caps = { fetch(url: string, init?: Init): Promise<Res> };
+type Row = Record<string, unknown>;
 
-async function sql(caps: Caps, query: string, params: unknown[] = []): Promise<Array<Record<string, unknown>>> {
+async function sql(caps: Caps, query: string, params: unknown[] = []): Promise<Row[]> {
   const res = await caps.fetch('https://' + HOST + '/sql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json',
-      'Neon-Connection-String': 'postgresql://' + ROLE + ':{{NEON_PASSWORD}}@' + HOST + '/' + DATABASE + '?sslmode=require' },
+      'Neon-Connection-String': 'postgresql://' + ROLE + ':{{NEON_PASSWORD}}@' + HOST + '/' +
+        DATABASE + '?sslmode=require' },
     body: JSON.stringify({ query, params }),
   });
-  if (!res.ok) throw Error('Neon answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
-  return ((await res.json()) as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+  if (!res.ok)
+    throw Error('Neon answered ' + res.status + ': ' + (await res.text()).slice(0, 200));
+  return ((await res.json()) as { rows?: Row[] }).rows ?? [];
 }
 
 export default {
   async orders({ status }: { status: string }, _principal: unknown, caps: Caps) {
-    return (await sql(caps, SQL, [status])).map(r => ({ id: String(r.id), customer: r.customer ?? null,
-      total: r.total === null ? null : Number(r.total), placed_at: r.placed_at == null ? null : String(r.placed_at) }));
+    return (await sql(caps, SQL, [status])).map(r => ({ id: String(r.id),
+      customer: r.customer ?? null, total: r.total === null ? null : Number(r.total),
+      placed_at: r.placed_at == null ? null : String(r.placed_at) }));
   },
   async test(_args: unknown, _principal: unknown, caps: Caps) {
     await sql(caps, 'SELECT 1');
