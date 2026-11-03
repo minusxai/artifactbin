@@ -513,100 +513,6 @@ ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS extensions JSONB NOT NUL
 
 ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-CREATE TABLE IF NOT EXISTS app.notification_jobs (
-  id TEXT NOT NULL,
-  mutation_run_id TEXT NOT NULL,
-  document_id TEXT NOT NULL,
-  input JSONB NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  generation INTEGER NOT NULL DEFAULT 0,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  lease_until TIMESTAMPTZ,
-  next_attempt_at TIMESTAMPTZ,
-  error_code TEXT,
-  plan JSONB,
-  retry_requested_by JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  completed_at TIMESTAMPTZ,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS mutation_run_id TEXT NOT NULL;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS document_id TEXT NOT NULL;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS input JSONB NOT NULL;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS error_code TEXT;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS plan JSONB;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS retry_requested_by JSONB;
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.notification_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_jobs_run ON app.notification_jobs (mutation_run_id);
-
-CREATE INDEX IF NOT EXISTS idx_notification_jobs_due ON app.notification_jobs (status, next_attempt_at, lease_until);
-
-CREATE TABLE IF NOT EXISTS app.mutation_notifications (
-  id TEXT NOT NULL,
-  job_id TEXT NOT NULL,
-  mutation_run_id TEXT NOT NULL,
-  recipient_id TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  initiator JSONB NOT NULL,
-  messages JSONB NOT NULL,
-  sources JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  read_at TIMESTAMPTZ,
-  revision INTEGER NOT NULL DEFAULT 1,
-  seen_revision INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS job_id TEXT NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS mutation_run_id TEXT NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS recipient_id TEXT NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS initiator JSONB NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS messages JSONB NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS sources JSONB NOT NULL;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
-
-ALTER TABLE app.mutation_notifications ADD COLUMN IF NOT EXISTS seen_revision INTEGER NOT NULL DEFAULT 0;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_mutation_notifications_run_recipient ON app.mutation_notifications (mutation_run_id, recipient_id);
-
-CREATE INDEX IF NOT EXISTS idx_mutation_notifications_recipient ON app.mutation_notifications (recipient_id, created_at);
-
 CREATE TABLE IF NOT EXISTS app.event_outbox (
   id TEXT NOT NULL,
   envelope JSONB NOT NULL,
@@ -1849,6 +1755,10 @@ DROP TABLE IF EXISTS app.remote_agents;
 DROP TABLE IF EXISTS app.remote_work;
 
 DROP TABLE IF EXISTS app.html_backend_stores;
+
+DROP TABLE IF EXISTS app.notification_jobs;
+
+DROP TABLE IF EXISTS app.mutation_notifications;
 
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 

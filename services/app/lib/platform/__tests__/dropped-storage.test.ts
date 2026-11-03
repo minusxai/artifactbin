@@ -10,7 +10,9 @@ it('drops the retired resolver store, the api column and the other retired table
     await db.exec(`CREATE TABLE html_backend_stores (backend_id TEXT, key TEXT, value JSONB);
       INSERT INTO html_backend_stores VALUES ('b', 'k', '{}');
       CREATE TABLE html_backend_versions (backend_id TEXT NOT NULL, version TEXT NOT NULL, api INTEGER, PRIMARY KEY (backend_id, version));
-      CREATE TABLE browser_test_users (session_id TEXT, owner TEXT);`);
+      CREATE TABLE browser_test_users (session_id TEXT, owner TEXT);
+      CREATE TABLE notification_jobs (id TEXT PRIMARY KEY, input JSONB);
+      CREATE TABLE mutation_notifications (id TEXT PRIMARY KEY, job_id TEXT);`);
     const tables = async () => (await db.query<{ name: string }>("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()")).rows.map(row => row.name);
     const columns = async () => (await db.query<{ name: string }>("SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'html_backend_versions'")).rows.map(row => row.name);
     for (let boot = 0; boot < 2; boot++) {
