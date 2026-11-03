@@ -1,6 +1,5 @@
 import type {ArtifactRow} from '@/lib/artifacts';
 import {catalogOf, executeCatalog, loadDatasetRows} from '@/lib/datasets';
-import {objectStore} from '@/lib/object-store';
 import type {DatasetGraphqlPort} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
@@ -48,15 +47,10 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
   async execute(actor,snapshot,tableId,statement,window,signal){
    const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===tableId);if(!table?.objectKey)throw unavailable();
    if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
-   const source=objectStore();
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
    const authorize=async()=>{if(snapshot.policyIdentity!==(await readIdentity(actor,snapshot.id,options.direct,options.pageId)).identity)throw new Error('dataset_changed');};
    const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,timeoutMs:5000,actor,datasetId:snapshot.id,signal,authorize,view:snapshot.view??null,
-    objects:{get:async key=>{
-     const bytes=await source.get(key);if(key!==table.objectKey)return bytes;
-     const rows=JSON.parse(bytes.toString('utf8')) as Record<string,unknown>[];
-     return Buffer.from(JSON.stringify(rows.map((row,i)=>({...row,[ID_COLUMN]:snapshot.rowIds[tableId]![i]}))));
-    }}});
+    rowIds:{table:snapshot.catalog.tables.indexOf(table),column:ID_COLUMN,ids:snapshot.rowIds[tableId]!}});
    await authorize();signal.throwIfAborted();
    return result.rows;
   },

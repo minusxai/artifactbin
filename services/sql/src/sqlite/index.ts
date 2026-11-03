@@ -16,7 +16,7 @@ import { loadSqliteModule, type Sqlite3 } from './wasm';
 import type { SqlExtensions } from '../extensions';
 
 export { SqliteDatabase, type Relation } from './database';
-export { PreparedCache } from './prepared';
+export { PreparedCache, preparedKey } from './prepared';
 export type { ReadBounds } from './reads';
 export type { WriteBounds } from './writes';
 export type { SqlExtensions } from '../extensions';

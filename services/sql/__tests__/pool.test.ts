@@ -5,6 +5,7 @@
  * while a query runs, and what replaces a thread that stops answering.
  */
 import { describe, expect, it } from 'vitest';
+import type { RunInput } from '@artifactbin/contracts';
 import { execFileSync } from 'node:child_process';
 import { serveSql } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
@@ -68,6 +69,36 @@ describe('a thread that stops answering', () => {
     try {
       const answers = await Promise.all(Array.from({ length: 6 }, (_, i) => pool.run({ tables: {}, params: { i }, queries: [{ name: 'q', sql: 'select $i as i' }] })));
       expect(answers.map((a) => (a.q as unknown as { rows: Array<{ i: number }> }).rows[0]!.i)).toEqual([0, 1, 2, 3, 4, 5]);
+    } finally { await pool.close(); }
+  });
+});
+
+describe('affinity', () => {
+  const columns = [{ name: 'n', type: 'number' as const }];
+  /** A keyed catalog read (src/sqlite/prepared.ts); `rows: false` sends the key alone. */
+  const keyed = (key: string, rows = true): RunInput => ({
+    catalog: { defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', columns, source: 't', key }] },
+    tables: rows ? { t: { rows: [{ n: 1 }, { n: 2 }], columns } } : {},
+    queries: [{ name: 'q', sql: 'select sum(n) as total from rows' }], params: {},
+  });
+
+  it('sends a repeated keyed read to the thread that prepared its database', async () => {
+    const pool = createSqlitePool({}, { workers: 2 });
+    try {
+      // Built at once, the two land on two threads; each later read of either finds its own.
+      await Promise.all([pool.run(keyed('a')), pool.run(keyed('b'))]);
+      for (const key of ['b', 'a', 'b', 'b', 'a']) expect((await pool.run(keyed(key, false))).q, key).toMatchObject({ rows: [{ total: 3 }] });
+    } finally { await pool.close(); }
+  });
+
+  it('takes another idle thread when the preferred one is busy, which asks for the rows', async () => {
+    const pool = createSqlitePool({ timeoutMs: 1000 }, { workers: 2 });
+    try {
+      await pool.run(keyed('a'));
+      const busy = pool.run(ENDLESS);
+      expect((await pool.run(keyed('a', false))).q).toMatchObject({ rowsRequired: true });
+      expect((await pool.run(keyed('a'))).q).toMatchObject({ rows: [{ total: 3 }] });
+      await busy;
     } finally { await pool.close(); }
   });
 });
