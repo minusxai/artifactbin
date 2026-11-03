@@ -4,10 +4,11 @@
  * mutations.
  *
  *   caps.sql(sql, params?)                                   → {columns, rows}
- *   caps.sql({queries:[{name, sql}], params?, paramTypes?, tables?}) → {[name]: {columns, rows} | {error}}
+ *   caps.sql({queries:[{name, sql}], params?, paramTypes?, tables?, only?}) → {[name]: {columns, rows} | {error}}
  *
  * The batched form mirrors the SQL service's `RunInput`: queries run in order, a later one reads an earlier result
- * by name, and `tables` are inline author-typed tables. Dataset tables come from the caller's role view through the
+ * by name, and `tables` are inline author-typed tables. `only` names the queries whose answers come back (all by
+ * default): the others still run, as dependencies, and neither travel back nor count against the answer cap. Dataset tables come from the caller's role view through the
  * same load `caps.query` uses (`read` port), so a call never shows more than the caller reads through GraphQL. A call
  * mounts only the linked datasets its SQL names. SQL can aggregate, so a mounted table whose rule for the caller
  * lacks `allow_aggregations` refuses the call. Limits are the registered page queries' (contracts
@@ -61,6 +62,8 @@ interface Prepared {
   params: Record<string, Scalar>;
   paramTypes: Record<string, ColumnType>;
   tables: Record<string, { columns: DatasetColumn[]; rows: Row[] }>;
+  /** The names answered: every query unless the call named `only`. */
+  answered: string[];
 }
 
 /** Either call form, checked: names, scalars, column types and the request-side limits. */
@@ -116,7 +119,15 @@ function prepare(args: RunnerJson): Prepared {
       tables[name] = { columns, rows };
     }
   }
-  return { single, queries: checked, params, paramTypes, tables };
+  let answered = checked.map((q) => q.name);
+  if (args.only !== undefined && args.only !== null) {
+    const only = args.only;
+    if (single) refuse('only names queries of the batched form');
+    if (!Array.isArray(only) || !only.length || new Set(only).size !== only.length || only.some((n) => typeof n !== 'string' || !names.has(n.toLowerCase()) || !checked.some((q) => q.name === n)))
+      refuse('only lists distinct names of this call\'s queries');
+    answered = only as string[];
+  }
+  return { single, queries: checked, params, paramTypes, tables, answered };
 }
 
 /** Could this SQL name the link? SQLite folds ASCII identifiers, so a name absent from the text is never read. */
@@ -178,7 +189,7 @@ export function createResolverSql(ports: ResolverSqlPorts): ResolverSql {
         throw new ResolverQueryError('unavailable');
       }
       const answers: Record<string, RunnerJson> = {};
-      for (const { name } of call.queries) {
+      for (const name of call.answered) {
         const outcome = outcomes[name];
         answers[name] = !outcome ? { error: 'unavailable: the query did not run' }
           : 'error' in outcome ? { error: outcome.timedOut ? `timeout: a query runs at most ${limits.timeoutMs} ms` : outcome.error }
