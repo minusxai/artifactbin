@@ -12,6 +12,8 @@ it('keeps embedded bytes and copied web images owner-scoped with 200 eligible po
  await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES($1,$2,'Assets','',$3)",[group.id,group.handle,user.id]);
  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,source) VALUES('asset01',$1,$2,'image','unlisted',NULL)",[actor.id,user.id]);
  const row=(await getArtifactById('asset01'))!;
+ // The copied image itself: a hash with no web_assets row is refused before any page is read.
+ await db.query('INSERT INTO web_assets(url_hash,url,object_key,content_type,bytes) VALUES($1,$2,$3,$4,1)',[urlHash('https://images.example.test/last.png'),'https://images.example.test/last.png','webasset/last','image/png']);
  await db.query(`INSERT INTO artifacts(id,token_id,user_id,format,visibility,source,meta)
  SELECT 'post'||lpad(n::text,4,'0'),$1,$2,'html',CASE WHEN n=200 THEN 'unlisted' ELSE 'public' END,
  CASE WHEN n=200 THEN '<img src="https://images.example.test/last.png">' ELSE '<h1>Post</h1>' END,

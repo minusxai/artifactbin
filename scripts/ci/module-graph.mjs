@@ -204,7 +204,8 @@ const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS,
 export const DEEP_MODULES = {
   ...Object.fromEntries(Object.keys(BUNDLED_LEAVES).map(module => [module, bundled(module)])),
   'lib/html-publication-bundle': { entries: ['', 'plan', 'runtime-module-imports'], serverOnly: [''] },
-  'lib/artifacts': { entries: ['', 'table'], downstream: ['mutation-invocation'], serverOnly: ['', 'table'], testOnly: ['testing'] },
+  // `web-assets` is the pure leaf the operator backfill (scripts/backfill-web-assets.ts) bundles alone.
+  'lib/artifacts': { entries: ['', 'table', 'web-assets'], downstream: ['mutation-invocation'], serverOnly: ['', 'table', 'web-assets'], testOnly: ['testing'] },
   // The access rule below the store and the routes' wire above it: server code, like the store they stand beside.
   'lib/artifact-access': { entries: [''], serverOnly: [''] },
   'lib/artifact-wire': { entries: [''], serverOnly: [''] },

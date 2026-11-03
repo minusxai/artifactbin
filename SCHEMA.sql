@@ -1052,6 +1052,8 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_group_updated ON app.artifacts (group_i
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_user_updated ON app.artifacts (user_id, updated_at DESC) WHERE deleted_at IS NULL AND group_id IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_artifacts_web_assets ON app.artifacts USING gin ((meta->'webAssets'));
+
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
   artifact_id TEXT NOT NULL,
   version INTEGER NOT NULL,

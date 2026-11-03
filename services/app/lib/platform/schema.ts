@@ -201,6 +201,9 @@ const ARTIFACTS: Table = {
     { name: 'idx_artifacts_group_updated', columns: ['group_id', 'updated_at DESC'], where: 'deleted_at IS NULL' },
     // An account's own live documents newest first (lib/workspace/listings): the personal counterpart of the above.
     { name: 'idx_artifacts_user_updated', columns: ['user_id', 'updated_at DESC'], where: 'deleted_at IS NULL AND group_id IS NULL' },
+    // An owner host's `/assets/<hash>` (lib/user-pages servesWebAsset): the pages naming that web image,
+    // `meta->'webAssets' ? $hash`, without reading any page's source (lib/artifacts web-assets).
+    { name: 'idx_artifacts_web_assets', columns: ["(meta->'webAssets')"], using: 'gin' },
   ],
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a

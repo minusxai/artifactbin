@@ -83,7 +83,23 @@ See [runner configuration](../services/runner/README.md) and
 - Never run two processes against the same PGLite directory. External PostgreSQL
   supports separate processes; each still needs access to the same object store.
 
-## Verification
+## Web assets backfill (`meta.webAssets`)
+
+An owner host (`APP__USER_PAGES_HOST`) answers `/assets/<hash>` from `meta.webAssets`, the image hashes the
+store derives from each HTML page's source at create and publish, through the `idx_artifacts_web_assets` index.
+Pages written before that read are still matched by their source until `scripts/backfill-web-assets.ts`
+fills the key, so the run is about speed, not correctness, and may come before or after an upgrade.
+
+1. **Dry run** (the default, SELECTs only): `node --import tsx scripts/backfill-web-assets.ts --database "$URL"`.
+   `--database` defaults to `DATABASE_URL` (`postgres://…`, or `pglite://<dir>` with the server stopped). The
+   script opens its own connection: no schema DDL or boot backfill runs. It prints ids and counts only.
+2. **Apply** with `--apply`: one UPDATE per chunk of 200 pages (`--chunk <n>`), each row written only while it
+   still lacks the key at the version read. `--limit <n>` stops after n pages.
+3. **Rerun** after the upgrade has replaced every old server, until `remaining=0` (exit 1 otherwise): a page an
+   older server published meanwhile has no key yet. Reruns are idempotent.
+
+Where the image has no `tsx`, run the esbuild bundle the script's header documents (it leaves only `pg` external).
+
 
 Run `npm run validate` and `npm test` for affected checks. Full suites, browser
 and Docker gates, and production builds run in CI; see [AGENTS.md](../AGENTS.md).
