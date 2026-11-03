@@ -114,11 +114,10 @@ per query, 20 s total, 4 MiB out; one of the 32 requests.
 
 ## caps.postgres: your own database
 
-`secrets = {DB: 'postgres'}` declares a connection; the owner sets host, port, database, user and
-password in Resolvers. `db = await caps.postgres('DB')` opens a session (TLS verify-full, public
-host, port 1024+); `await db.query(sql, [params])` gives `{rows, columns, command, count}`; then
-`db.end()`. The password enters the sandboxed run and editors can read it: **use a read-only
-database user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
+`secrets = {DB: 'postgres'}` declares a connection the owner sets in Resolvers.
+`db = await caps.postgres('DB')` opens a session (TLS verify-full, public host, port 1024+);
+`db.query(sql, [params])` gives `{rows, columns, command, count}`; then `db.end()`. The password
+enters the run: **use a read-only database user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
 
 ## @auth roles
 
