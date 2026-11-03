@@ -25,7 +25,9 @@ For PRs targeting **`main`**, the required check is `pr fast` (`.github/workflow
 validate, workflow lint, JavaScript syntax and the fast module list on three runners. Aim for
 **under 40 seconds**, warn at **40 seconds**, and fail above **60 seconds**, from `run_started_at` to the last job, and each job's final
 step fails the PR past it (`scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`).
-Never raise it. Full `ci.yml`, page-speed, credential-platform and runner-design suites run on main/manual, not automatic PRs. Never add an unbounded extra PR workflow or wait for full release checks before merging. This 40/60 policy applies consistently to application, proxy, evaluator and deployment repositories.
+Never raise it. **Every post-merge failure on main gets a fast-lane guard:** find why `pr fast` missed it and add a
+deterministic check that would have caught it (`scripts/ci/fast-tests.json`, `scripts/ci/guard-tests.json` or a
+contract test) within the budget. Full `ci.yml`, page-speed, credential-platform and runner-design suites run on main/manual, not automatic PRs. Never add an unbounded extra PR workflow or wait for full release checks before merging. This 40/60 policy applies consistently to application, proxy, evaluator and deployment repositories.
 
 For the **full post-merge chain** (and `ci.yml` on a PR), measure from `run_started_at` through
 final rollup, including runner setup, dependency waits and uploads. Aim below **3 minutes**; normal

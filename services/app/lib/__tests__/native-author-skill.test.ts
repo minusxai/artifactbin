@@ -66,7 +66,7 @@ describe('one installable native HTML author skill',()=>{
   expect(files['components/register-component.ts']).toBeUndefined();
   for(const gone of ['html-components','html-examples','html-uploads','html-sharing','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
  });
- it('ships only what agents read and run: no compiled components or platform bundles, within the size budget',async()=>{
+ it('ships only what agents read and run: no compiled components or platform bundles',async()=>{
   const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
   const members:string[]=[];let offset=0;
   while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
@@ -75,10 +75,7 @@ describe('one installable native HTML author skill',()=>{
   expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
   expect(members.some(name=>/^components\/(?:deck-gl|mermaid)/.test(name))).toBe(false);
-  // 1.6 MiB: the data-driven examples, their steps files and the generator are worth more to agents than the bytes.
-  // 1.65 MiB since #1014: local preview bundles the generated Hasura dataset API (preview-datasets.mjs, ~25 KB).
-  process.stdout.write(`Stored native skill ZIP bytes: ${archive.byteLength}\n`);
-  expect(archive.byteLength).toBeLessThan(1.65*1024*1024);
+  // The size budget is lib/skills/__tests__/skill-archive-budget.test.ts, which the pr fast guard tier runs.
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);

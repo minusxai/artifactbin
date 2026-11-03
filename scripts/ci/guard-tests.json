@@ -1,0 +1,13 @@
+[
+  "scripts/__tests__/ci-budget.test.mjs",
+  "scripts/__tests__/ci-cache-contracts.test.mjs",
+  "scripts/__tests__/page-speed-lab.test.mjs",
+  "scripts/__tests__/script-paths.test.mjs",
+  "scripts/__tests__/scripts-index.test.mjs",
+  "scripts/__tests__/stored-shape-pins.test.mjs",
+  "scripts/__tests__/v3-ci.test.mjs",
+  "scripts/__tests__/workflows.test.mjs",
+  "services/app/lib/skills/__tests__/skill-archive-budget.test.ts",
+  "services/app/lib/skills/__tests__/skill-code-shape.test.ts",
+  "services/app/lib/skills/__tests__/skill-tree.test.ts"
+]

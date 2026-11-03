@@ -96,8 +96,8 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  // The lane covers all of validate and the fast module list, and records no tested-tree evidence: only
  // ci.yml's full suite may let main's push skip its tests.
  const runs=job.steps.map(step=>step.run??'').join('\n');
- for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint'])expect(runs).toContain(command);
- expect(job.strategy.matrix.part).toEqual(['types','lint','tests']);
+ for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint','vitest.mjs run --config vitest.guard.config.ts'])expect(runs).toContain(command);
+ expect(job.strategy.matrix.part).toEqual(['types','lint','tests','guards']);
  expect(runs).not.toContain('docker run');
  expect(runs).toContain('sha256sum --check --strict');
  expect(JSON.stringify(lane)).not.toMatch(/tested-(tree|patch)/);
@@ -164,4 +164,16 @@ it('says what failed and that the budget must not be raised', () => {
 it('keeps the full-suite budget separate and rejects unknown lanes', () => {
   expect(measureCiElapsed(prStart, after(75)).status).toBe('target');
   expect(() => measureCiElapsed(prStart, after(1), {lane: 'quick'})).toThrow(/Unknown CI lane/);
+});
+// The guard tier: node-project tests that read the repository by path, each a contract that once broke main.
+it('enrolls existing node-project guard tests that the full suite also runs, once each, outside the fast list',()=>{
+ const read=path=>JSON.parse(readFileSync(new URL(`../../${path}`,import.meta.url),'utf8'));
+ const guards=read('scripts/ci/guard-tests.json'),fast=read('scripts/ci/fast-tests.json');
+ expect(guards.length).toBeGreaterThan(0);
+ expect(guards).toEqual([...new Set(guards)].sort());
+ for(const file of guards){
+  expect(readFileSync(new URL(`../../${file}`,import.meta.url),'utf8').length,file).toBeGreaterThan(0);
+  expect(file).toMatch(/^(?:scripts\/(?:.+\/)?__tests__\/[^/]+\.test\.mjs|services\/app\/lib\/.+\/__tests__\/[^/]+(?<!\.ui)\.test\.ts)$/);
+  expect(fast).not.toContain(file);
+ }
 });

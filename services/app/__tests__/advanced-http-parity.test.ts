@@ -2,6 +2,7 @@ import {getArtifactById} from '@/lib/artifacts';
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {describe,expect,it} from 'vitest';
 import {useAppHarness} from './harness';
+import {firstSaveLinks} from './stored-links';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {operationHttp} from './operation-http';
 useAppHarness();
@@ -12,10 +13,8 @@ describe('advanced HTTP parity',()=>{
     expect(ds.isError).toBe(false);
     expect(ds.data.columns).toEqual([{ name: 'm', type: 'string' }, { name: 'v', type: 'number' }]);
 
-    const story = await operationHttp(t.token, 'create_artifact', {
-      title: 'story', visibility: 'public',
-      html:nativeHtml(`<link rel="af-dataset" data-af-name="rows_data" href="ref:${ds.data.id}"><h1>Dataset page</h1>`),
-    });
+    const html = nativeHtml(`<link rel="af-dataset" data-af-name="rows_data" href="ref:${ds.data.id}"><h1>Dataset page</h1>`);
+    const story = await operationHttp(t.token, 'create_artifact', { title: 'story', visibility: 'public', html });
     expect(story.isError).toBe(false);
     // One URL per artifact, addressed by the one identifier: /a/<id> is the
     // only link (editing is a mode on it), and there is no second name.
@@ -25,7 +24,7 @@ describe('advanced HTTP parity',()=>{
 
     const got = await operationHttp(t.token, 'get_artifact', { id: story.data.id as string });
     expect(got.data.html).toContain(`href="ref:${ds.data.id}"`);
-    expect((await getArtifactById(String(story.data.id)))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'rows_data',datasetId:ds.data.id,api:'hasura',mode:'live'}]); // #1014: a new link without legacy query code mounts the generated API
+    expect((await getArtifactById(String(story.data.id)))?.meta.htmlLinks).toEqual(firstSaveLinks(html));
 
     const updated = await operationHttp(t.token, 'update_artifact', {
       id: story.data.id as string,
