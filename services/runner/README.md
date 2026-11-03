@@ -35,9 +35,6 @@ service or obtain backend source as a browser module.
 
 Programs receive no filesystem, shell, Node modules, native network access or
 database connection. Supported imports are pinned by `src/compiler.ts`.
-Host-mediated AI uses configured destinations and credentials, rejects managed
-redirects and bounds responses. Provider credentials stay on the host. Missing
-cost and usage measurements are null, not fabricated zeroes.
 
 ## Production controller
 
@@ -50,9 +47,6 @@ docker build -f services/runner/Dockerfile -t afbin-worker .
 # RUNNER__WORKER_IMAGE=afbin-worker
 # RUNNER__ARTIFACTBIN_BASE_URL=https://internal-artifactbin-app
 # RUNNER__DATA_DIR=/var/lib/artifactbin-runner
-# RUNNER__OPENAI_BASE_URL=https://internal-ai/v1
-# RUNNER__OPENAI_API_KEY=<optional host-only key>
-# RUNNER__MODEL=<configured model>
 node --import tsx services/runner/src/server.ts
 ```
 
@@ -60,7 +54,7 @@ The controller requires the Docker image and signing secret. Each run gets a new
 non-root, network-disabled, read-only container with all capabilities dropped,
 no-new-privileges, memory/CPU/PID limits, and a fresh V8 isolate. Only the controller
 has Docker access. Workers communicate over bounded stdin/stdout RPC; they receive
-no Docker socket, provider credentials or host mounts. This initial implementation
+no Docker socket, credentials or host mounts. This initial implementation
 starts workers on demand; it does not claim a warm-pool latency SLA.
 
 Run **one controller per persistent database/data directory**. The standalone
@@ -77,16 +71,13 @@ isolate entry, 64MiB isolate memory, 100 upstream requests and 1MiB output.
 Native backend calls supply tighter limits in `page-operations/backend.ts`.
 `cpuMs` is not a cumulative CPU quota. Cancellation aborts host requests,
 revokes capabilities and destroys the worker before terminal state is saved.
-The scheduler remains a service capability with persisted occurrences and
-idempotent admission; there is no public artifact scheduling API.
 
 Fast checks from the repository root:
 
 ```sh
 npm run validate
-npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/lib/page-operations/__tests__/backend.test.ts
+npm test -- --files services/runner/__tests__/runner-service.test.ts services/app/lib/page-operations/__tests__/backend.test.ts
 ```
 
 Runner CI verifies the product worker image, operation authority, real PostgreSQL
-transactions, OS restrictions and cleanup. Deterministic HTTP/SSE model fixtures
-prove transport behavior, not paid-provider reliability or throughput.
+transactions, OS restrictions and cleanup.

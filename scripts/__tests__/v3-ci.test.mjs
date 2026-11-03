@@ -57,7 +57,6 @@ describe('main validation', () => {
       'services/app/server/__tests__/retired-execution.test.ts',
       'services/runner/__tests__/runner-service.test.ts',
       'services/runner/__tests__/runner-container-lifecycle.test.ts',
-      'services/runner/__tests__/runner-orchestration.test.ts',
       'services/app/__tests__/page-graphql.test.ts',
       'services/app/lib/page-operations/__tests__/backend.test.ts',
       'services/app/lib/page-operations/__tests__/runtime.test.ts',

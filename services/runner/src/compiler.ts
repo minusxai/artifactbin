@@ -2,8 +2,6 @@ import { build, version as esbuildVersion } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const imports = new Set([
-    "@earendil-works/pi-agent-core",
-    "@earendil-works/pi-ai/utils/event-stream",
     "abort-controller/dist/abort-controller.mjs",
     "fast-text-encoding",
     "core-js/web/url",

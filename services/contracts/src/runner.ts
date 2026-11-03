@@ -66,7 +66,7 @@ export interface RunStart {
   requestId: string;
   userId: string;
   artifactId?: string;
-  /** Version loaded for this execution; schedules always reference the live artifact. */
+  /** Version loaded for this execution. */
   artifactVersion?: string;
   /** Trusted app snapshot; retained with the execution attempt, never supplied by author code. */
   document?: { source: string; editId: string };
@@ -101,7 +101,7 @@ export interface RunReceipt {
   cpuMs: number | null;
   peakMemoryBytes: number | null;
   requests: Array<{
-    service: 'artifactbin' | 'ai' | 'fetch';
+    service: 'artifactbin' | 'fetch';
     operation: string;
     durationMs: number;
     status: number | null;

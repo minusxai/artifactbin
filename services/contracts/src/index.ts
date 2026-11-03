@@ -46,7 +46,6 @@ export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunWait,
 
 export type {RunnerCapabilities,RunnerTerminal,ResolverFetchReceipt} from './runner';
 export {RESOLVER_LIMITS} from './runner';
-export * from './schedules';
 export * from './preview-connect';
 
 // Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
