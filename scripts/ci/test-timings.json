@@ -633,7 +633,7 @@
    "services/app/lib/platform/__tests__/db-and-outbox.test.ts": 6719,
    "services/app/lib/platform/__tests__/human-session-service.test.ts": 39,
    "services/app/lib/platform/__tests__/platform-contract.test.ts": 120,
-   "services/app/lib/platform/__tests__/pool-errors.test.ts": 8,
+   "services/utils/__tests__/pool.test.ts": 8,
    "services/app/lib/publish/__tests__/content-preparation.test.ts": 4690,
    "services/app/lib/publish/__tests__/interface.test.ts": 7755,
    "services/app/lib/publish/__tests__/live-data-events.test.ts": 6562,

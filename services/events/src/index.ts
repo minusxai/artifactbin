@@ -10,7 +10,7 @@
 import { Pool } from 'pg';
 import type { EventsService, EventSink, EventSubscriber, Queryable } from '@artifactbin/contracts';
 import { EVENTS_ROUTES } from '@artifactbin/contracts';
-import { createEnv, jsonServer, log, serviceSecretForServer, type JsonServer } from '@artifactbin/utils';
+import { createEnv, jsonServer, log, serviceSecretForServer, SERVING_POOL, withPoolErrors, type JsonServer } from '@artifactbin/utils';
 import { createEvents, ensureEventsSchema } from './local';
 import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
@@ -125,6 +125,14 @@ interface RunningEvents {
   close(): Promise<void>;
 }
 
+/**
+ * The events service's own pool: five connections (it writes small batches and drains on a timer), the serving
+ * timeouts, and an idle-error listener so a database failover is a logged line, not a crashed process.
+ * Exported for deployments that open the pool themselves and inject it as `db`.
+ */
+export const eventsPool = (databaseUrl: string): Pool =>
+  withPoolErrors(new Pool({ connectionString: databaseUrl, ...SERVING_POOL, max: 5 }));
+
 /** A pg Pool behind the one database interface every package speaks. */
 const poolQueryable = (pool: Pool): Queryable => ({
   query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
@@ -147,7 +155,7 @@ export async function runEvents(config: EventsConfig, overrides: EventsOverrides
   let db = overrides.db;
   if (!db) {
     if (!config.databaseUrl) throw new Error('runEvents: DATABASE_URL is required when no database is injected');
-    pool = new Pool({ connectionString: config.databaseUrl });
+    pool = eventsPool(config.databaseUrl);
     db = poolQueryable(pool);
   }
   try {
