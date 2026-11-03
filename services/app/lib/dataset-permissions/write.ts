@@ -1,22 +1,20 @@
 /**
  * WHO MAY WRITE A DATASET, AND UNDER WHICH RULES: one decision every write door (a page's generated dataset API,
- * markup <Mutation>, registered page mutations, the direct SQL door, file and image uploads) asks, and the
+ * the direct SQL door, file and image uploads) asks, and the
  * commit transaction asks again under the row lock so a revoked share or a new policy cannot race a write.
  *
  *  - The role is the dataset's own sharing (./role). Owner and editor are admin-equivalent: no rule
  *    applies to them. Every other role writes only what a v3 entry for it allows (./stored-policy; a stored
  *    policy that is not version 3 throws for them).
- *  - `backend_only` entries apply only to a trusted program: a saved-document proof that passes the
- *    program-trust checks (signed in, accepted page membership, saved edit, registered attestation) on a
- *    page whose owner holds owner or editor on the dataset. The engine refuses them otherwise.
- *  - A write carried by a document is that document's SQL: the document must be live at the attested edit,
- *    readable by the caller, and its owner must hold owner or editor on the dataset (provenance).
+ *  - `backend_only` entries apply only to a trusted program: an upload's saved-page proof that passes the
+ *    program-trust checks (signed in, accepted page membership, saved edit) on a page whose owner holds owner
+ *    or editor on the dataset. The engine refuses them otherwise.
  *  - A PRIVATE dataset admits signed_in and anonymous callers only through `backend_only` entries (privateCeiling).
  *  - The `access` column is a ceiling on every write, owner included.
  */
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { grantContext, liveAccessFacts, readThrough, writerFor, type ArtifactRow, type GrantDocument } from '@/lib/artifact-access';
+import { liveAccessFacts, writerFor, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
@@ -25,13 +23,11 @@ import { storedPolicy } from './stored-policy';
 const MUTATIONS: readonly DatasetOperation[] = ['insert', 'update', 'delete'];
 
 export interface DatasetWriteOptions {
-  /** The caller arrives through a page linking the dataset (its generated API, a page program, an upload). */
+  /** The caller arrives through a page linking the dataset (its generated API, an upload). */
   throughPage?: boolean;
-  /** A saved-document program carrying the write: provenance always, program trust for backend_only. */
-  document?: GrantDocument;
   /** The page whose GraphQL carries the write (its `X-Hasura-Page-Id`); implies `throughPage`. */
   pageId?: string;
-  /** Upload trust (its own saved-link proof); a document program uses `document` instead. */
+  /** Upload trust (its own saved-link proof): program trust for backend_only. */
   trust?: (db: Queryable) => Promise<DatasetGrantContext>;
   /** Decide inside this transaction (the commit's lock), never on the shared connection. */
   tx?: Queryable;
@@ -40,7 +36,7 @@ export interface DatasetWriteOptions {
 export type DatasetWriteDecision =
   | { allowed: true; admin: true; role: 'owner' | 'editor'; revision: number }
   | { allowed: true; admin: false; role: DatasetRuleRole; revision: number; permissions: DatasetPermissions; trusted: boolean; session: Record<string, Scalar> }
-  | { allowed: false; role: DatasetRole | null; revision: number; reason: 'dataset_read_only' | 'no_rule' | 'document_changed' };
+  | { allowed: false; role: DatasetRole | null; revision: number; reason: 'dataset_read_only' | 'no_rule' };
 
 const entryFor = (table: DatasetTablePermissions, op: DatasetOperation, role: DatasetRuleRole) =>
   table[`${op}_permissions`]?.find((entry) => entry.role === role);
@@ -55,22 +51,15 @@ function tablesOf(row: Pick<ArtifactRow, 'meta'>) {
 }
 
 /** The account that wrote a document's program: its owner's identity, for its dataset role. */
-export async function documentOwnerAdmin(dataset: ArtifactRow, owner: { userId: string | null; tokenId: string | null; groupId?: string | null }, db: Queryable): Promise<boolean> {
+async function documentOwnerAdmin(dataset: ArtifactRow, owner: { userId: string | null; tokenId: string | null; groupId?: string | null }, db: Queryable): Promise<boolean> {
   const actor = writerFor({ user_id: owner.userId, token_id: owner.tokenId, group_id: owner.groupId ?? null });
   const role = await datasetRole(dataset, actor, { facts: liveAccessFacts(actor, db) });
   return role === 'owner' || role === 'editor';
 }
 
-/** The document carrying the write is live at its attested edit, the caller reads it, and its owner administers the dataset. */
-async function documentProvenance(dataset: ArtifactRow, actor: AccessActor, document: GrantDocument, db: Queryable): Promise<boolean> {
-  const doc = (await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [document.id])).rows[0];
-  if (!doc || doc.edit_id !== document.editId || !(await readThrough(db, doc, actor))) return false;
-  return documentOwnerAdmin(dataset, { userId: doc.group_id ? null : doc.user_id, tokenId: doc.group_id ? null : doc.token_id, groupId: doc.group_id ?? null }, db);
-}
-
 /** Program trust for backend_only entries: the saved-document checks pass and the page owner administers the dataset. */
-async function trusted(dataset: ArtifactRow, actor: AccessActor, options: DatasetWriteOptions, db: Queryable): Promise<boolean> {
-  const verify = options.trust ?? (options.document ? (q: Queryable) => grantContext(dataset, actor, options.document, q) : undefined);
+async function trusted(dataset: ArtifactRow, options: DatasetWriteOptions, db: Queryable): Promise<boolean> {
+  const verify = options.trust;
   if (!verify) return false;
   let context: DatasetGrantContext;
   try { context = await verify(db); } catch { return false; }
@@ -102,9 +91,8 @@ function privateCeiling(row: Pick<ArtifactRow, 'visibility'>, role: DatasetRuleR
 export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, options: DatasetWriteOptions = {}): Promise<DatasetWriteDecision> {
   const db = options.tx ?? await getDb();
   const revision = row.policy_revision ?? 0;
-  const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.document || !!options.pageId });
+  const role = await datasetRole(row, actor, { facts: liveAccessFacts(actor, db), throughPage: options.throughPage || !!options.pageId });
   if (row.format !== 'dataset' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
-  if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role) return { allowed: false, role, revision, reason: 'no_rule' };
   // Read only for a rule role, so an owner or editor can always replace a stored policy that does not read.
@@ -113,12 +101,12 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   const tables = policy.tables;
   const entries = tables.flatMap((table) => MUTATIONS.map((op) => entryFor(table, op, role)).filter((entry) => !!entry));
   if (!entries.length) return { allowed: false, role, revision, reason: 'no_rule' };
-  const isTrusted = entries.some((entry) => entry.permission.backend_only) && await trusted(row, actor, options, db);
+  const isTrusted = entries.some((entry) => entry.permission.backend_only) && await trusted(row, options, db);
   if (!entries.some((entry) => !entry.permission.backend_only || isTrusted)) return { allowed: false, role, revision, reason: 'no_rule' };
   const session: Record<string, Scalar> = {
     'x-hasura-role': role,
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
-    ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
+    ...(options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
   return { allowed: true, admin: false, role, revision, permissions: policy, trusted: isTrusted, session };
 }
@@ -159,11 +147,11 @@ export function tableMutationPolicy(decision: DatasetWriteDecision, table: { sch
 const decisionKey = (d: DatasetWriteDecision) => JSON.stringify([d.allowed, d.role, d.revision, d.allowed && !d.admin ? d.trusted : null]);
 
 /**
- * Inside the commit transaction: lock the dataset (and the carrying document), re-read the head and decide
+ * Inside the commit transaction: lock the dataset, re-read the head and decide
  * again with this transaction's facts. Anything but the same decision refuses the commit.
  */
 export async function assertWriteCommit(tx: Queryable, dataset: ArtifactRow, actor: AccessActor, before: DatasetWriteDecision, options: Omit<DatasetWriteOptions, 'tx'> = {}): Promise<void> {
-  await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE', [[...new Set([dataset.id, ...(options.document ? [options.document.id] : [])])]]);
+  await tx.query('SELECT id FROM artifacts WHERE id=$1 FOR UPDATE', [dataset.id]);
   const current = (await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [dataset.id])).rows[0];
   if (!current || (current.policy_revision ?? 0) !== before.revision) throw new DatasetError('Mutation permission changed', 403);
   const now = await datasetWriteAccess(current, actor, { ...options, tx });

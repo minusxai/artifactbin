@@ -2,8 +2,7 @@ import {expect,it} from 'vitest';
 import { identityForUser } from '@/lib/accounts';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import { durableMutation, pinMutationContext } from '@/lib/artifacts';
-import { completeDocumentMutationReceipt } from '@/lib/document-data/mutation-operation';
+import { completeMutationReceipt, durableMutation, pinMutationContext } from '@/lib/artifacts';
 useAppHarness();
 it('pins context before work and reads the winning canonical receipt for first and repeated calls',async()=>{
  const actor=identityForUser(null, 'mxmx_test_token');
@@ -12,7 +11,7 @@ it('pins context before work and reads the winning canonical receipt for first a
   calls++;
   await pinMutationContext(receipt,{bindings:{n:7},revision:'old'});
   const success={datasetId:'dataset',datasetEditId:'edit',version:2,affected:1,rowCount:2};
-  await (await getDb()).transaction(tx=>completeDocumentMutationReceipt(tx,receipt,success));
+  await (await getDb()).transaction(tx=>completeMutationReceipt(tx,receipt,{status:200,body:{mutationOperation:success}}));
   return {status:200,body:{wrongRouteShape:true}};
  });
  const first=await work(),replay=await work();

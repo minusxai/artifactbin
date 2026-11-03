@@ -5,9 +5,7 @@
  *  - The role is the dataset's own sharing (./role). Owner and editor are admin-equivalent: the whole
  *    dataset. Every other role sees only what its v3 select entry allows (./stored-policy; a stored policy
  *    that is not version 3 throws for them); a role with no select entry on any table gets the uniform 404.
- *  - A PRIVATE dataset's signed_in and anonymous rules never apply (the visibility ceiling, plan §3/§8), except
- *    to a reader arriving through a document whose owner holds owner or editor on the dataset: a page's
- *    <Query>/<Import> and registered queries read by the page owner's reach.
+ *  - A PRIVATE dataset's signed_in and anonymous rules never apply (the visibility ceiling, plan §3/§8).
  *  - The decision's `identity` names the role, the policy revision, the session and the rules, for
  *    cursors and read fences: any change refuses a continuation.
  */
@@ -20,12 +18,10 @@ import {
   type Scalar,
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { liveAccessFacts, type AccessFacts, type ArtifactRow, type ReadRow } from '@/lib/artifact-access';
+import { liveAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
-import { getDb } from '@/lib/platform';
 import { datasetRole, type DatasetRoleRow } from './role';
 import { storedPolicy } from './stored-policy';
-import { documentOwnerAdmin } from './write';
 import { shows, unrestricted, viewRows, type DatasetSession } from './view';
 
 /** The dataset columns a read decision consults: its access columns, its policy and its catalog. */
@@ -34,8 +30,6 @@ export type DatasetReadRow = DatasetRoleRow & Pick<ArtifactRow, 'format' | 'meta
 export interface DatasetReadOptions {
   /** The caller arrives through a page linking the dataset (page GraphQL): page readers get signed_in or anonymous. */
   throughPage?: boolean;
-  /** The saved document carrying the read (registered queries, notifications, images); implies `throughPage`. */
-  document?: ReadRow;
   /** The page whose GraphQL carries the read (its `X-Hasura-Page-Id`); implies `throughPage`. */
   pageId?: string;
   /** Decide inside this transaction, with its facts. */
@@ -81,21 +75,17 @@ function admitted(row: DatasetReadRow, role: DatasetRole, tables: TableSelect[],
 export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor, options: DatasetReadOptions = {}): Promise<DatasetReadDecision> {
   if (row.format !== 'dataset') return { allowed: false, role: null };
   const facts = options.facts ?? liveAccessFacts(actor, options.tx);
-  const role = await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.document || !!options.pageId });
+  const role = await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.pageId });
   if (!role) return { allowed: false, role };
   const all = tablesOf(row).map((t) => ({ ...t, permission: READ_ALL }));
   const session: Record<string, Scalar> = {
     'x-hasura-role': role,
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
-    ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
+    ...(options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
   if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
   const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row).map(({ schema, name }) => ({ schema, name })) });
-  if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) {
-    const doc = options.document;
-    const owner = doc && { userId: doc.group_id ? null : doc.user_id, tokenId: doc.group_id ? null : doc.token_id, groupId: doc.group_id ?? null };
-    if (!owner || !(await documentOwnerAdmin(row as ArtifactRow, owner, options.tx ?? await getDb()))) return { allowed: false, role };
-  }
+  if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) return { allowed: false, role };
   const tables = tablesOf(row).map((table): TableSelect => {
     const entry = read.policy.tables.find((t) => same(t.table, table))?.select_permissions?.find((e) => e.role === (role as DatasetRuleRole));
     return { ...table, permission: entry ? entry.permission : null };

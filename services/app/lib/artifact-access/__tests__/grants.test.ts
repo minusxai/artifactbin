@@ -1,11 +1,11 @@
 /**
  * DATASET ACCESS AND CAPABILITIES through the interface: the private ceiling on a read rule, the policy
- * revision a commit re-checks, a saved document's context and its host-only proofs, and the capability table.
+ * revision a commit re-checks, an upload's saved-page context and its host-only proof, and the capability table.
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser } from '@/lib/accounts';
-import { attestRegisteredHtmlMutation, attestSavedHtmlUpload, can, capabilityRefusal, grantContext, readThrough, refusalFor, uploadGrantContext, verifyRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
+import { attestSavedHtmlUpload, can, capabilityRefusal, readThrough, refusalFor, uploadGrantContext, type ArtifactRow } from '@/lib/artifact-access';
 import { canReadArtifact, capabilityGuard } from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { account, dataset, head, mine, personOfKind, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
@@ -30,36 +30,24 @@ describe('dataset grants', () => {
   });
 
   // Write decisions (and their commit-time recheck) are lib/dataset-permissions'; grants supply program trust.
-  it('a grant context: the owner, never a guest', async () => {
-    const owner = await account('owner@example.test');
-    const guest = await personOfKind('guest');
-    const data = await dataset(owner, readable);
-    await expect(grantContext(data, guest)).rejects.toThrow('Sign in to change data');
-    expect(await grantContext(data, owner)).toMatchObject({ owner: { userId: owner.userId }, callerEditorGroupIds: [] });
-  });
-
-  it('a document context needs a host proof for HTML, the head edit, and an accepted join', async () => {
+  it('an upload context needs its host proof, the head edit and an accepted join, and never a guest', async () => {
     const owner = await account('owner@example.test');
     const reader = await account('reader@example.test');
-    const data = await dataset(owner, readAllPolicy());
+    const guest = await personOfKind('guest');
+    const data = await dataset(owner, readable);
     const doc = await mine(owner, 'App');
     await updateSharingFor(owner, doc.id, { visibility: 'unlisted' });
     const verified: string[] = [];
-    const proof = attestRegisteredHtmlMutation(doc.id, doc.edit_id, async () => { verified.push(doc.id); });
-    const document = { id: doc.id, editId: doc.edit_id, registeredHtml: proof };
-    expect(await grantContext(data, owner, document)).toMatchObject({ artifact: { id: doc.id, owner: { userId: owner.userId } } });
+    const authority = { id: doc.id, editId: doc.edit_id, version: doc.version, datasetId: data.id };
+    const uploading = { ...authority, uploadProof: attestSavedHtmlUpload(authority, async () => { verified.push(doc.id); }) };
+    expect(await uploadGrantContext(data, owner, uploading)).toMatchObject({ owner: { userId: owner.userId }, callerEditorGroupIds: [], artifact: { id: doc.id, owner: { userId: owner.userId } } });
     expect(verified).toEqual([doc.id]);
-    await expect(grantContext(data, owner, { id: doc.id, editId: doc.edit_id })).rejects.toThrow('Document access or action changed');
-    await expect(grantContext(data, owner, { ...document, editId: 'stale' })).rejects.toThrow('Document access or action changed');
-    await expect(grantContext(data, reader, document)).rejects.toThrow('Join this artifact');
-    expect(await verifyRegisteredHtmlMutation({ ...document, editId: 'other' }, await harness.db())).toBe(false);
-    expect(await verifyRegisteredHtmlMutation({ id: doc.id, editId: doc.edit_id, registeredHtml: {} }, await harness.db())).toBe(false);
-    // An upload proof is its own authority, bound to the dataset it names.
-    const upload = attestSavedHtmlUpload({ id: doc.id, editId: doc.edit_id, version: doc.version, datasetId: data.id }, async () => {});
-    const uploading = { id: doc.id, editId: doc.edit_id, version: doc.version, datasetId: data.id, uploadProof: upload };
-    expect(await uploadGrantContext(data, owner, uploading)).toMatchObject({ artifact: { id: doc.id } });
+    await expect(uploadGrantContext(data, guest, uploading)).rejects.toThrow('Sign in to change data');
+    // The proof is bound to the dataset it names and the edit it was minted at; a copied object proves nothing.
     await expect(uploadGrantContext(data, owner, { ...uploading, datasetId: 'other' })).rejects.toThrow('Document access or action changed');
-    await expect(grantContext(data, owner, { id: doc.id, editId: doc.edit_id, registeredHtml: upload })).rejects.toThrow('Document access or action changed');
+    await expect(uploadGrantContext(data, owner, { ...uploading, editId: 'stale' })).rejects.toThrow('Document access or action changed');
+    await expect(uploadGrantContext(data, owner, { ...uploading, uploadProof: {} })).rejects.toThrow('Document access or action changed');
+    await expect(uploadGrantContext(data, reader, uploading)).rejects.toThrow('Join this artifact');
   });
 });
 
