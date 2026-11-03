@@ -103,6 +103,24 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  expect(JSON.stringify(lane)).not.toMatch(/tested-(tree|patch)/);
  expect(job.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact')).map(step=>step.with.name)).toEqual(['tsgo-buildinfo']);
 });
+// A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
+it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{
+ const steps=workflow('pr-fast.yml').jobs.fast.steps;
+ const exact=steps.find(step=>step.id==='install'),near=steps.find(step=>step.id==='near-install');
+ expect(near.uses).toMatch(/^actions\/cache\/restore@/);
+ expect(near.if).toBe("steps.install.outputs.cache-hit != 'true'");
+ expect(near.with.path).toBe(exact.with.path);
+ expect(near.with.key).toBe(exact.with.key);
+ expect(near.with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
+ expect(steps.indexOf(near)).toBe(steps.indexOf(exact)+1);
+ const reconcile=steps.find(step=>step.run?.startsWith('npm install '));
+ expect(reconcile.if).toContain("steps.near-install.outputs.cache-matched-key != ''");
+ expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
+ const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
+ expect(cold).toHaveLength(1);
+ expect(cold[0].if).toBe("steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''");
+ expect(steps.some(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))).toBe(false);
+});
 it('fails the pull request lane past 60 seconds with the plain budget message',()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-pr-elapsed-'));
  const attempt=join(directory,'attempt.json'),summary=join(directory,'summary.md');
