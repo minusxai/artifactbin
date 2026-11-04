@@ -1,7 +1,8 @@
 /**
- * POST /api/start — the zero-to-live-document button.
+ * POST /api/start — the agent handoff: a page for an agent to fill.
  *
- * Creates a native HTML document and hands back the ONE agent starter
+ * Creates a native HTML document holding the start placeholder (solid/pages/Starter shows the paste over it) and
+ * hands back the ONE agent starter
  * (lib/agent-copy `existingPaste`), so the home page can give the user a paste
  * for a real, watchable document: they paste it to an agent, and the page they
  * are looking at fills in over the live stream.
@@ -12,7 +13,7 @@
 import { createArtifact, parseArtifactDestination } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
-import {artifactStarter} from '@/lib/workspace';
+import {agentStarterHtml} from '@/lib/workspace';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
 import { canUseDeploymentIdentity, withAccountToken } from '@/lib/accounts';
@@ -26,15 +27,16 @@ export async function POST(request: Request) {
   const actor = session.credential === 'session' ? session : await requestOrSessionActor(request);
   const creator = actor.userId ? await withAccountToken(actor) : null;
   if (!creator || !await canUseDeploymentIdentity(creator.userId) || !await canAuthenticateUser(creator.userId)) return unauthorized(request);
-  const parsed = await parseContentInput(artifactStarter('doc'), {});
-  if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
+  // A person who chooses "New" gets a doc instead (lib/workspace artifactStarter, through the normal create door).
+  const parsed = await parseContentInput({ html: agentStarterHtml() }, {});
+  if (parsed instanceof Response) return parsed; // unreachable: the starting document is fixed and valid
 
   const body = await readJson(request, {allowEmpty:true});
   if (!body) return json({error:'invalid_json'},400);
   let row: Awaited<ReturnType<typeof createArtifact>>;
   try { row = await createArtifact(creator.tokenId, creator.userId, {
     ...parsed,
-    meta: { ...parsed.meta, ...(new URL(request.url).searchParams.get('mode') !== 'blank' ? {startPlaceholder: true} : {}) },
+    meta: { ...parsed.meta, startPlaceholder: true },
     destination: parseArtifactDestination(body.destination),
     title: parsed.derivedTitle,
     description: parsed.derivedDescription??null,

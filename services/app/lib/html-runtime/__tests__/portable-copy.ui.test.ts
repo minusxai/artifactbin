@@ -46,3 +46,13 @@ it('retains emitted platform nonce and regenerates exact initial script admissio
  expect(readPortableDocument(saved).source).toBe(source);
  expect(serializePortableCopy({document:copy,sourceBytes:saved,portable:readPortableDocument(saved)})).toBe(saved);
 });
+it('carries the live-cell library into a saved copy, and a copy of the copy, unchanged',()=>{
+ const source='<html><body><textarea id="d">Saved</textarea><script type="module">import {collab} from "@afbin/collab";</script></body></html>';
+ document.head.innerHTML='<script data-af="runtime" type="application/json">{"offline":true,"pageId":"p","backends":[]}</script><script data-af="apollo" type="application/json">"module"</script><script data-af="reader" type="application/json">"reader"</script><script data-af="collab" type="application/json">"collab module"</script><script data-af="core">boot()</script>';
+ const saved=serializePortableCopy({document,sourceBytes:source,portable:{version:1,source}});
+ const copy=new DOMParser().parseFromString(saved,'text/html');
+ expect(JSON.parse(copy.querySelector('script[data-af="collab"]')!.textContent!)).toBe('collab module');
+ // The canonical source never holds the generated block; saving again is byte-identical.
+ expect(readPortableDocument(saved).source).toBe(source);
+ expect(serializePortableCopy({document:copy,sourceBytes:saved,portable:readPortableDocument(saved)})).toBe(saved);
+});

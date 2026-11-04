@@ -4,7 +4,7 @@ import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
-import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
+import { APP_BAR_H, REGION_TOOLBAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme, storedTheme } from '@/lib/html-reader/reader-mode';
@@ -25,7 +25,7 @@ import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGove
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
-import type { FramedStory } from '../document/create-framed-story';
+import type { FramedStory, RegionUi } from '../document/create-framed-story';
 import { framedDocumentFor } from '../document/frame-src';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -34,7 +34,6 @@ import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
-import {PendingReaderAction} from '../document/PendingReaderAction';
 import {PendingReaderDialog} from '../document/PendingReaderDialog';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
@@ -42,11 +41,12 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** Dialogs and controls load on first use. Discussion tools load when there are comments or the reader requests them.
  * SelectionActions stays eager so the first native selection/right-click retains its capability bridge. */
-const CopyAgentButton = lazy(() => import('../components/CopyAgentButton').then(m => ({default:m.CopyAgentButton})));
+const AgentHandoffDialog = lazy(() => import('../document/AgentHandoffDialog').then(m => ({default:m.AgentHandoffDialog})));
 const NotFoundPage = lazy(() => import('./NotFound').then(m => ({default:m.NotFoundPage})));
 const ReaderPresenceControls = lazy(() => import('../document/ReaderPresenceControls').then(m => ({ default: m.ReaderPresenceControls })));
 const DocumentActions = lazy(() => import('../document/DocumentActions').then(m => ({ default: m.DocumentActions })));
 const AnnotationLayer = lazy(() => import('../document/AnnotationLayer').then(m => ({ default: m.AnnotationLayer })));
+const RegionEditingChrome = lazy(() => import('../document/RegionToolbar').then(m => ({ default: m.RegionEditingChrome })));
 const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ default: m.ForkConfirm })));
 const DocumentSharing = lazy(() => import('../document/DocumentSharing').then(m => ({ default: m.DocumentSharing })));
 const DocumentSettings = lazy(() => import('../document/DocumentSettings'));
@@ -129,6 +129,9 @@ export function DocumentPage(): JSX.Element {
     setDiscussionActive(needsCommentPresentation({ canRead: comments().canReadComments, active: discussionActive(), linked: !!(new URLSearchParams(location.search).get('comment') || new URLSearchParams(location.search).get('thread')), railOpen: railOpen(), composing: !!initialAnnotationSelection(), picking: pickRequested(), openCount: openAnnotationCount(), liveCount: liveAnnotations()?.length ?? 0 }));
   });
   const [sharingOpen, setSharingOpen] = createSignal(false);
+  const [handoffOpen, setHandoffOpen] = createSignal(false);
+  /** A doc ("New" made it: one rich region for its whole body) is edited from the moment it loads, and can be handed to an agent. */
+  const isDoc = () => (live()?.template ?? page?.surface?.template) === 'doc';
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = createSignal(false);
   const [previewHead, setPreviewHead] = createSignal<{ source: string; editId: string; version: number } | null>(null);
@@ -156,6 +159,8 @@ export function DocumentPage(): JSX.Element {
   const reload = () => replaceDocument(window.location.href);
   const readerPresence = createReaderPresence({id: id!, revision: () => String(page?.archived?.version ?? (htmlHead().version || 1)), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
+  /** The region editing chrome's inputs, once the frame's bridge exists (read after `ready`). */
+  const regionUi = (): RegionUi | undefined => (story as FramedStory | null)?.regionUi;
   /** The document's frame (create-framed-story), once this page has adopted the one the server drew. */
   const [documentFrame, setDocumentFrame] = createSignal<HTMLIFrameElement | null>(null);
   /**
@@ -259,7 +264,7 @@ export function DocumentPage(): JSX.Element {
     onCleanup(() => { unmounted = true; runtimeRef.current = null; served.remove(); });
     // The document is on screen: one view (a prerendered page counts when it is shown).
     reportArtifactView(window, id);
-    void import('../document/create-framed-story').then(({ createFramedStory }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ createFramedStory, opensComment }) => { if (!unmounted) runWithOwner(owner, () => {
       story = createFramedStory({
         id, framed,
         editId: () => htmlHead().editId,
@@ -269,11 +274,14 @@ export function DocumentPage(): JSX.Element {
           readOnly: !!page.archived,
           uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
         }) : undefined,
+        // Live editing of the page's editable regions: editors of the head only (a viewer or commenter never opens one).
+        regions: backend ? { enabled: editable, loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc', autoFocus: !opensComment(window.location.search) } : undefined,
       });
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
       const framedStory = story;
-      framedStory.setTopInset(0);
+      // The region toolbar takes a strip over the frame's top edge while it shows: the document reserves it.
+      createEffect(on(() => !!framedStory.regionUi.toolbar(), (shown) => framedStory.setTopInset(shown ? REGION_TOOLBAR_H : 0)));
       window.addEventListener('hashchange', forwardHash);
       framed.frame.addEventListener('load', forwardHash);
       // The served frame may have loaded before the app did: forward now as well.
@@ -337,11 +345,13 @@ export function DocumentPage(): JSX.Element {
         openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
         onShare={() => { close(); setSharingOpen(true); }}
+        onHandToAgent={isDoc() ? () => { close(); setHandoffOpen(true); } : undefined}
         onDeleted={isOwner() ? () => window.location.assign('/') : undefined} /></></Suspense>} />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
-      <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
-        <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent" />}><CopyAgentButton id={id!} template="doc" /></Suspense></div>
+      <Show when={ready() && (regionUi()?.toolbar() || regionUi()?.slash())}><Suspense fallback={null}><RegionEditingChrome ui={regionUi()!} top={APP_BAR_H} right={railInset()} /></Suspense></Show>
+      <Show when={editable() && isDoc() && handoffOpen()}>
+        <Suspense fallback={<PendingReaderDialog title="Hand to an agent" onClose={() => setHandoffOpen(false)} />}><AgentHandoffDialog id={id!} template="doc" onClose={() => setHandoffOpen(false)} /></Suspense>
       </Show>
       <Show when={page?.surface?.pwaEnabled && location.pathname === artifactAppPath(id!) && new URLSearchParams(location.search).has('install')}><ReaderNotice label="App installation" load={() => import('../document/InstallArtifact')}>{({InstallArtifact}) => <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />}</ReaderNotice></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
@@ -363,7 +373,7 @@ export function DocumentPage(): JSX.Element {
         }} />
     </Show>
     <Show when={ready() && id && discussionActive() && comments().canReadComments}>
-      <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
+      <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} beforeComment={(subject) => story ? story.beforeComment(subject) : Promise.resolve(subject)} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={comments().canReadComments} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>

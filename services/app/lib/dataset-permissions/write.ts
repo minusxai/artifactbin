@@ -12,13 +12,14 @@
  *  - A PRIVATE dataset admits signed_in and anonymous callers only through `backend_only` entries (privateCeiling).
  *  - The `access` column is a ceiling on every write, owner included.
  */
-import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
+import type { DatasetBoolExp, DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTableName, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, writerFor, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
 import { storedPolicy } from './stored-policy';
+import { keptRows } from './view';
 
 const MUTATIONS: readonly DatasetOperation[] = ['insert', 'update', 'delete'];
 
@@ -160,4 +161,36 @@ export async function assertWriteCommit(tx: Queryable, dataset: ArtifactRow, act
   if (!current || (current.policy_revision ?? 0) !== before.revision) throw new DatasetError('Mutation permission changed', 403);
   const now = await datasetWriteAccess(current, actor, { ...options, tx });
   if (!now.allowed || decisionKey(now) !== decisionKey(before)) throw new DatasetError('Mutation permission changed', 403);
+}
+
+/**
+ * The update rule's `check` on a cell's new text: would the row, with `value` in `column`, still pass? Owner and editor
+ * always. Read as the role view reads a filter (TRUE only). The engine checks again when the cell is saved.
+ */
+export function cellCheckAdmits(decision: DatasetWriteDecision, table: DatasetTableName & { columns: readonly { name: string }[] }, column: string, row: Record<string, unknown>, value: string): boolean {
+  if (!decision.allowed) return false;
+  if (decision.admin) return true;
+  let policy: DatasetMutationPolicy | undefined;
+  try { policy = tableMutationPolicy(decision, table); } catch { return false; }
+  const check = policy?.table.update_permissions?.find((entry) => entry.role === decision.role)?.permission.check as DatasetBoolExp | null | undefined;
+  if (!check || !Object.keys(check).length) return true;
+  return keptRows([{ ...row, [column]: value }], table.columns.map((c) => c.name), { columns: '*', filter: check }, decision.session).length === 1;
+}
+
+/**
+ * May this decision change one column of one row (a live text cell, lib/region-sessions)? Owner and editor always;
+ * a rule role when its update entry names the column (and does not preset it) and its filter admits the row, read
+ * with the decision's session as the role view reads a select filter (./view keptRows: TRUE only, fail closed). The
+ * engine stays the authority when the cell is saved (its filter as row security, its check on the effect); this is
+ * the gate that decides who may open and type.
+ */
+export function canUpdateCell(decision: DatasetWriteDecision, table: DatasetTableName & { columns: readonly { name: string }[] }, column: string, row: Record<string, unknown>): boolean {
+  if (!decision.allowed) return false;
+  if (decision.admin) return true;
+  let policy: DatasetMutationPolicy | undefined;
+  try { policy = tableMutationPolicy(decision, table); } catch { return false; }
+  if (!policy?.operations.includes('update')) return false;
+  const rule = policy.table.update_permissions?.find((entry) => entry.role === decision.role)?.permission;
+  if (!rule || (rule.columns !== '*' && !rule.columns.includes(column)) || Object.hasOwn(rule.set ?? {}, column)) return false;
+  return keptRows([row], table.columns.map((c) => c.name), { columns: '*', filter: (rule.filter ?? {}) as DatasetBoolExp }, decision.session).length === 1;
 }

@@ -25,6 +25,8 @@ import { artifactState, observedChange, versionConflict, type ConflictChange } f
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
+import { closeLiveRegions, planRegionMerge, planRegionSave, type RegionPlan } from './regions';
+import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
@@ -429,6 +431,52 @@ async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 're
   if (mode === 'replace') await restore();
 }
 
+type ArtifactWrite = NonNullable<Awaited<ReturnType<typeof lockArtifactWrite>>>;
+
+/** The page's identity ledger as a write extends it: every id it ever reserved, and its next id. */
+async function pageLedger(tx: Queryable, current: ArtifactRow): Promise<HtmlIdentityLedger> {
+  const reserved = (await tx.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id])).rows.map((row) => row.source_id);
+  const old = current.meta.htmlIdentity as HtmlIdentityLedger | undefined;
+  return { allocatedIds: reserved, nextNodeId: old?.nextNodeId ?? 1 };
+}
+
+/** What saving a page's live regions came to: the head that holds their text, each region's sequence in it, and whether it is new. */
+export interface RegionSave { published: boolean; version: number; regions: Record<string, number> }
+
+/**
+ * SAVING LIVE REGIONS, through the write this transaction holds (the artifacts row FOR UPDATE): every region with
+ * unsaved edits is compacted into the saved source (./regions planRegionSave) and published as ONE new version by the
+ * normal path (archive, head bump, edit log and its NOTIFY, source ids). An unchanged page publishes nothing. With
+ * `idleBefore` (the idle backstop) it saves only when some region has had no update since then.
+ */
+async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: ArtifactWrite, options: { idleBefore?: string } = {}): Promise<RegionSave> {
+  const { current } = write;
+  const unchanged = (regions: Record<string, number> = {}): RegionSave => ({ published: false, version: current.version, regions });
+  if (current.format !== 'html') return unchanged();
+  const plan = await planRegionSave(tx, current, await pageLedger(tx, current), options);
+  if (!plan) return unchanged();
+  if (plan.html === current.source) return unchanged(await plan.commit(tx, null, actor));
+  const named = docTitleAfterSave(current, plan.html), html = named?.html ?? plan.html;
+  const input: ArtifactInput = {
+    format: 'html', source: html, ...(named ? { title: named.title } : {}),
+    meta: { ...current.meta, htmlIdentity: plan.ledger, htmlScriptFingerprint: scriptFingerprint(html), htmlLibraries: libraryVersions(), htmlIdentityCarry: undefined },
+  };
+  await write.validateContent(input);
+  const updated = await write.publish(input);
+  await logWholeDocumentWrite(tx, current, updated, true);
+  await reconcileSourceIds(tx, updated, 'replace');
+  return { published: true, version: updated.version, regions: await plan.commit(tx, updated.version, actor) };
+}
+
+/**
+ * Saves a page's live regions as one new version inside the caller's transaction (lib/region-sessions: a flush, the
+ * last editor leaving, the idle backstop). Null when the actor may not edit the page (the uniform not-found).
+ */
+export async function saveLiveRegionsInTx(tx: Queryable, actor: AccessActor, id: string, options: { idleBefore?: string } = {}): Promise<RegionSave | null> {
+  const write = await lockArtifactWrite(tx, actor, id);
+  return write && saveRegionsLocked(tx, actor, write, options);
+}
+
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
   const db = await getDb();
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
@@ -517,12 +565,19 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
-    const write = await lockArtifactWrite(tx, actor, id);
+    let write = await lockArtifactWrite(tx, actor, id);
     if (!write) return null;
-    const { current } = write;
+    let { current } = write;
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     const moved = condition(current, {expectedVersion: initial.version, expectedState: artifactState(initial)}); if (moved) return {notArchived:true,refusal:moved};
+    // A revert replaces the whole page under its live regions: their unsaved typing is saved as its own version
+    // first (the revert archives it), then the regions close and their editors reopen from the reverted text.
+    const hadRegions = current.format === 'html';
+    if (hadRegions && (await saveRegionsLocked(tx, actor, write)).published) {
+      write = (await lockArtifactWrite(tx, actor, id))!;
+      current = write.current;
+    }
 
     if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
@@ -532,6 +587,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     const updated = await write.publish(target);
     await logWholeDocumentWrite(tx, current, updated);
     await reconcileSourceIds(tx, updated, 'restore');
+    if (hadRegions) await closeLiveRegions(tx, id);
     return updated;
   });
   if (result && !isVersionNotArchived(result)) { void trackEvent('revert', result.id, { userId: result.user_id }); }
@@ -577,96 +633,128 @@ async function replaceScoped(
   if(input.format==='markup')return json({error:'unsupported_format'},400);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
-  let moved: { from: string | null; to: string | null } | null = null;
-  let unchanged = false;
-  const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
-    const write = await lockArtifactWrite(tx, actor, id);
-    if (!write) return null;
-    const { current } = write;
-    /*
-     * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
-     *
-     * This guard used to be `|| current.dataset_policy` on the line above, so
-     * every re-push of a dataset carrying a write policy came back as the
-     * uniform `not_found` — including the owner's, including one that only
-     * added a column. `--policy viewers-write` is the documented way to make a
-     * writable dataset, so the shorthand made the dataset permanently
-     * unmaintainable and said nothing about why.
-     *
-     * Who: the ONE ownership rule, asked in SQL (ownerScope), never mirrored
-     * in JS here. A named editor was invited to write the document, not to
-     * replace the rows other people are writing under the owner's policy, and
-     * they are told so BY NAME (`policy_locked`) rather than by a 404.
-     */
-    if (current.dataset_policy && !(await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND '+ownerScope(actor).where('$2'), [id, ownerScope(actor).val])).rows.length) {
-      return policyLocked('this dataset carries a write policy; only its owner may replace its content');
-    }
-    if(input.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),input.ancestor_ids);
-    const changed = observedChange(current, opts);
-    if (changed) return conflictOf(current, changed);
-    if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
-    if(input.format==='html'){
-      if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
-      // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
-      const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
-      const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
-      try{
-        const page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});
-        // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
-        input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
-      }catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
-    }
-    // Republishing the head's own source (same page, same metadata, nothing else asked) adds no version: the head comes back as the answer.
-    if(isUnchangedHtmlRepublish(current,input,opts)){
-      unchanged=true;
-      if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(current));
-      return current;
-    }
-    if(input.format==='html'){
-      const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
-      const names=htmlBackendNames(input.source??'');
-      if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
-      if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
-      const backendOwner=current.user_id??current.token_id;
-      if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
-      const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
-      const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
-      input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
-    }
-    input=retainUserScope(input,current);
-    /*
-     * The policy is re-validated against the REPLACEMENT's catalog, inside this
-     * transaction, by the same function that validated it when it was set — so
-     * a replacement that drops a table or a permission column is refused
-     * (`policy_mismatch`, naming what is missing) instead of leaving a policy
-     * pointing at columns that no longer exist. The policy row and its revision
-     * are untouched by a replace: what was granted stays granted.
-     */
-    if (current.dataset_policy) {
-      try { validateStoredDatasetPolicy({format:input.format,meta:input.meta,dataset_policy:null}, current.dataset_policy); }
-      catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
-    }
-    await write.validateContent(input);
-
-    const source = input.source;
-    const updated = await write.publish({
-      ...input, source, meta: input.meta,
-    });
-    if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
-    else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
-    await bindCurrentUserScopes(tx,updated);
-    await logWholeDocumentWrite(tx, current, updated,true);
-    await reconcileSourceIds(tx, updated, 'replace');
-    if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated));
-    moved = { from: parentOf(current), to: parentOf(updated) };
-    return updated;
-  });
+  const effects: ReplaceEffects = { moved: null, unchanged: false };
+  const result = await db.transaction((tx) => replaceArtifactInTx(tx, actor, id, input, opts, effects));
+  const { moved, unchanged } = effects;
   const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
   if (written) { void trackEvent('update', written.id, { userId: written.user_id }); }
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
   if (written) sayMoved(actor, written.id, moved);
   return result;
+}
+
+/** What a replace leaves for after its commit: the placement it changed, and whether it published at all. */
+interface ReplaceEffects { moved: { from: string | null; to: string | null } | null; unchanged: boolean }
+
+/**
+ * The replace inside ONE transaction (the caller's): every read and write goes through `tx`, and the after-commit
+ * work is reported in `effects`. An HTML page's live regions are merged three-way into the replacement (lib/artifacts
+ * regions planRegionMerge), so editors' unsaved typing survives an author's or agent's write from the head; a
+ * replacement in another format first saves their typing as its own version, then closes the regions.
+ */
+async function replaceArtifactInTx(
+  tx: Queryable,
+  actor: AccessActor,
+  id: string,
+  input: ArtifactInput,
+  opts: ReplaceOpts,
+  effects: ReplaceEffects,
+): Promise<ArtifactRow | null | VersionConflict | Response> {
+  let write = await lockArtifactWrite(tx, actor, id);
+  if (!write) return null;
+  let { current } = write;
+  /*
+   * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
+   *
+   * This guard used to be `|| current.dataset_policy` on the line above, so
+   * every re-push of a dataset carrying a write policy came back as the
+   * uniform `not_found` — including the owner's, including one that only
+   * added a column. `--policy viewers-write` is the documented way to make a
+   * writable dataset, so the shorthand made the dataset permanently
+   * unmaintainable and said nothing about why.
+   *
+   * Who: the ONE ownership rule, asked in SQL (ownerScope), never mirrored
+   * in JS here. A named editor was invited to write the document, not to
+   * replace the rows other people are writing under the owner's policy, and
+   * they are told so BY NAME (`policy_locked`) rather than by a 404.
+   */
+  if (current.dataset_policy && !(await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND '+ownerScope(actor).where('$2'), [id, ownerScope(actor).val])).rows.length) {
+    return policyLocked('this dataset carries a write policy; only its owner may replace its content');
+  }
+  if(input.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),input.ancestor_ids);
+  const changed = observedChange(current, opts);
+  if (changed) return conflictOf(current, changed);
+  if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
+  // A page leaving HTML takes its live regions with it: their unsaved typing is saved as its own version first.
+  const leavingHtml = current.format === 'html' && input.format !== 'html';
+  if (leavingHtml && (await saveRegionsLocked(tx, actor, write)).published) {
+    write = (await lockArtifactWrite(tx, actor, id))!;
+    current = write.current;
+  }
+  let regions: RegionPlan | null = null;
+  if(input.format==='html'){
+    if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
+    // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
+    const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
+    const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
+    let page:ReturnType<typeof canonicalizeHtmlPage>;
+    try{page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});}
+    catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
+    // Live regions: the written page with editors' unsaved typing merged in, three-way from the head (./regions).
+    const merged=current.format==='html'?await planRegionMerge(tx,current,page):null;
+    if(merged instanceof Response)return merged;
+    regions=merged;
+    const html=merged?.html??page.html;
+    // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
+    input={...input,source:html,meta:{...input.meta,htmlIdentity:merged?.ledger??page.ledger,htmlScriptFingerprint:scriptFingerprint(html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
+  }
+  // Republishing the head's own source (same page, same metadata, nothing else asked) adds no version: the head comes back as the answer.
+  if(isUnchangedHtmlRepublish(current,input,opts)){
+    effects.unchanged=true;
+    if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(current));
+    return current;
+  }
+  if(input.format==='html'){
+    const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
+    const names=htmlBackendNames(input.source??'');
+    if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
+    if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
+    const backendOwner=current.user_id??current.token_id;
+    if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
+    const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
+    const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
+    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
+  }
+  input=retainUserScope(input,current);
+  /*
+   * The policy is re-validated against the REPLACEMENT's catalog, inside this
+   * transaction, by the same function that validated it when it was set — so
+   * a replacement that drops a table or a permission column is refused
+   * (`policy_mismatch`, naming what is missing) instead of leaving a policy
+   * pointing at columns that no longer exist. The policy row and its revision
+   * are untouched by a replace: what was granted stays granted.
+   */
+  if (current.dataset_policy) {
+    try { validateStoredDatasetPolicy({format:input.format,meta:input.meta,dataset_policy:null}, current.dataset_policy); }
+    catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
+  }
+  await write.validateContent(input);
+
+  const source = input.source;
+  const updated = await write.publish({
+    ...input, source, meta: input.meta,
+  });
+  if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
+  else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
+  await bindCurrentUserScopes(tx,updated);
+  await logWholeDocumentWrite(tx, current, updated,true);
+  await reconcileSourceIds(tx, updated, 'replace');
+  if (regions) await regions.commit(tx, updated.version, actor);
+  if (leavingHtml) await closeLiveRegions(tx, id);
+  if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated));
+  effects.moved = { from: parentOf(current), to: parentOf(updated) };
+  return updated;
 }
 
 /**

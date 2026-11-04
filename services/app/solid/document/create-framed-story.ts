@@ -3,6 +3,17 @@ import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
+import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
+import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
+import type { CellEditing, startCellEditing } from './cell-editing';
+import { CELL_READONLY, isCellKey } from '@artifactbin/contracts';
+
+/** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
+export type RegionEditingLoader = () => Promise<{ startRegionEditing: typeof startRegionEditing }>;
+const loadRegionEditing: RegionEditingLoader = () => import('./region-editing');
+/** Live dataset text cells (@afbin/collab) are an intentional lazy browser chunk too: loaded when a signed-in reader's frame first asks for one. */
+export type CellEditingLoader = () => Promise<{ startCellEditing: typeof startCellEditing }>;
+const loadCellEditing: CellEditingLoader = () => import('./cell-editing');
 
 // The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
 import { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
@@ -128,7 +139,49 @@ interface FramedStoryOptions {
   source: () => string | null;
   /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
   htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
+  /**
+   * Live editing of the page's editable regions, for a reader who may edit this page (never a viewer or commenter):
+   * once the frame's controller runs, the saved page names its regions and the frame is told them (region-editing).
+   */
+  /** How the cell relay loads (tests); default the lazy chunk. */
+  loadCells?: CellEditingLoader;
+  regions?: {
+    enabled: Accessor<boolean>;
+    /** The saved head's HTML, as an editor reads it (ArtifactBackend.load). */
+    loadHtml: () => Promise<string | null>;
+    onSaved?: (version: number) => void;
+    /** A doc: its region opens for this editor as the page loads, with the focus (region-editing `autoOpen`). */
+    autoOpen?: boolean;
+    /** With `autoOpen`: whether that first open takes the focus (not when the page opened to show a comment). */
+    autoFocus?: boolean;
+    load?: RegionEditingLoader;
+  };
+}
 
+/**
+ * The editing chrome's inputs (solid/document/RegionToolbar): this person's region editor and what it asked for. Geometry
+ * is the PAGE's viewport (the frame's box added). Always present; it stays empty for anyone without region editing.
+ */
+export interface RegionUi {
+  /** The toolbar's state while this person has a region editor, else null. */
+  toolbar: Accessor<RegionToolbarState | null>;
+  /** The slash menu: where the caret's line ends (page viewport), while it is open. */
+  slash: Accessor<{ regionId: string; left: number; top: number } | null>;
+  /** The link dialog asked for by Mod-K, with the link at the caret. */
+  link: Accessor<{ regionId: string; href: string | null } | null>;
+  /** A toolbar or menu command for the editor. */
+  command(name: string, args?: Record<string, unknown>): void;
+  closeSlash(): void;
+  closeLink(): void;
+}
+
+/**
+ * The page's address opens a comment (`?comment=`, `?thread=`, or the comment intent): the comment takes the focus, so a
+ * doc's auto-open still opens its region but leaves the focus alone.
+ */
+export function opensComment(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has('comment') || params.has('thread') || params.get('intent') === 'comment';
 }
 
 export interface FramedStory {
@@ -139,7 +192,12 @@ export interface FramedStory {
   frame: HTMLIFrameElement;
   /** How far the page's bars reach over the frame's top edge: the document reserves it without moving (bridge `inset`). */
   setTopInset(px: number): void;
-
+  /**
+   * A new comment's subject, ready to send: inside an editable region, unsaved region text is saved first and the
+   * anchor names that version (lib/annotations/region-comment); otherwise the subject as it is.
+   */
+  beforeComment<T extends RegionCommentSubject>(subject: T): Promise<T>;
+  regionUi: RegionUi;
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
@@ -165,6 +223,69 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   // A frame whose session ran out (or that a redirect took off its origin) gets a fresh ticket (keepFrameSession).
   onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id }));
   start();
+  let editing: RegionEditing | null = null;
+  const [toolbar, setToolbar] = createSignal<RegionToolbarState | null>(null, { equals: false });
+  const [slash, setSlash] = createSignal<{ regionId: string; left: number; top: number } | null>(null);
+  const [link, setLink] = createSignal<{ regionId: string; href: string | null } | null>(null);
+  const regionUi: RegionUi = {
+    toolbar, slash, link,
+    // The frame takes the focus first, so its editor can take it back from a menu or dialog on this page. Not when
+    // it has it (a toolbar press keeps it): focusing a focused frame would move its own focus off the editor.
+    command: (name, args) => { if (editing?.command(name, args) && document.activeElement !== frame) frame.focus({ preventScroll: true }); },
+    closeSlash: () => setSlash(null),
+    closeLink: () => setLink(null),
+  };
+  const regions = options.regions;
+  if (regions) {
+    let loading = false;
+    let stopped = false;
+    const stopEditing = () => { editing?.dispose(); editing = null; };
+    // A controller that runs (again) under an editor: region editing starts once, and each new document is told its regions.
+    createEffect(on([nonce, regions.enabled], ([signed, enabled]) => {
+      if (!enabled) { stopEditing(); return; }
+      if (!signed) return;
+      if (editing) { editing.attached(); return; }
+      if (loading) return;
+      loading = true;
+      void (regions.load ?? loadRegionEditing)().then(({ startRegionEditing }) => {
+        loading = false;
+        const bridge = current();
+        if (stopped || !bridge || !regions.enabled() || editing) return;
+        editing = startRegionEditing({
+          id: options.id, bridge, loadHtml: regions.loadHtml, onSaved: regions.onSaved,
+          autoOpen: regions.autoOpen, autoFocus: regions.autoFocus, focusFrame: () => frame.focus({ preventScroll: true }),
+          onToolbar: (state) => { setToolbar(state); if (!state) setLink(null); },
+          onSlash: (at) => {
+            if (!at) { setSlash(null); return; }
+            const box = current()?.getViewportRect();
+            setSlash(box ? { regionId: at.regionId, left: box.left + at.x, top: box.top + at.y } : null);
+          },
+          onLink: setLink,
+        });
+        if (nonce()) editing.attached();
+      }, () => { loading = false; });
+    }));
+    onCleanup(() => { stopped = true; stopEditing(); });
+  }
+  // Live dataset text cells, for any reader of the page: a signed-out reader's frame is told `readonly` here, with no
+  // request made and no chunk loaded; a signed-in one's cells are relayed by cell-editing, whose server decides.
+  let cells: CellEditing | null = null, cellsLoading: Promise<void> | null = null, cellsStopped = false;
+  const signedIn = () => options.htmlContext?.().uploadSession?.state === 'signed-in';
+  createEffect(on(current, (bridge) => {
+    if (!bridge) return;
+    onCleanup(bridge.subscribeRegion((message) => {
+      if (message.kind !== 'region-open' || !isCellKey(message.regionId) || cells) return;
+      if (!signedIn()) { bridge.sendRegion({ kind: 'region-closed', regionId: message.regionId, reason: CELL_READONLY }); return; }
+      const key = message.regionId;
+      cellsLoading ??= (options.loadCells ?? loadCellEditing)().then(({ startCellEditing }) => {
+        if (!cellsStopped && !cells && current()) cells = startCellEditing({ id: options.id, bridge: current()! });
+      }, () => { cellsLoading = null; });
+      void cellsLoading?.then(() => cells?.open(key));
+    }));
+  }));
+  // A document that goes (the frame reloads) ends its cells' sessions; the next one opens its own.
+  createEffect(on(nonce, (signed) => { if (!signed) cells?.attached(); }, { defer: true }));
+  onCleanup(() => { cellsStopped = true; cells?.dispose(); cells = null; });
   onCleanup(() => {
     const bridge = current();
     setCurrent(null);
@@ -174,6 +295,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   return {
     controller: current, nonce, frame,
     setTopInset: (px) => { inset = px; current()?.setTopInset(px); },
-
+    beforeComment: (subject) => editing ? commentAfterRegionSave(subject, editing) : Promise.resolve(subject),
+    regionUi,
   };
 }

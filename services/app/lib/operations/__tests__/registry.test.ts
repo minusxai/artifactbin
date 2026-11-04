@@ -34,6 +34,8 @@ describe('the registry is curated, not generated', () => {
       'annotate', 'browser_session', 'change_artifact_membership', 'create_artifact', 'delete_artifact', 'edit_comment', 'export_artifact', 'fork_artifact', 'get_artifact', 'get_artifact_members',
       'get_dataset_policy', 'get_dataset_policy_templates', 'get_version', 'list_artifacts', 'list_versions', 'mutate_dataset', 'query_dataset_graphql', 'query_resource', 'react_comment', 'refresh_asset', 'restore_artifact', 'revert_artifact',
       'set_dataset_policy', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',
+      // Agents on live regions (lib/region-sessions agents.ts): a region's text read and written while people type; their typing saved.
+      'read_region', 'save_regions', 'write_region',
     ].sort());
   });
 
@@ -55,7 +57,7 @@ describe('the registry is curated, not generated', () => {
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     // query_dataset_graphql also runs the dataset's generated mutations (Hasura PR 5), so it is no longer read-only.
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['get_group','list_group_invitations','list_group_members','list_groups', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_dataset_policy_templates', 'get_version', 'list_artifacts', 'list_versions', 'query_resource', 'testuser_list'].sort());
+    expect(readOnly).toEqual(['get_group','list_group_invitations','list_group_members','list_groups', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_dataset_policy_templates', 'get_version', 'list_artifacts', 'list_versions', 'query_resource', 'read_region', 'testuser_list'].sort());
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 

@@ -30,6 +30,10 @@ function routePaths(dir: string, prefix: string, out: string[] = []): string[] {
 /** Routes that are deliberately NOT operations, each with its reason beside it here. */
 const EXCEPTIONS = new Set([
   '/api/artifacts/{id}/presence', // ephemeral browser reader geometry; original page ACL, no durable artifact operation
+  // Live region co-editing (lib/region-sessions): the signed-in browser editor's session transport, refused to a bearer.
+  '/api/artifacts/{id}/regions/{regionId}/open', // a browser editor's Yjs session (client id and state bytes) for one region
+  '/api/artifacts/{id}/regions/{regionId}/updates', // binary Yjs updates of an open browser session, under its server-assigned client id
+  '/api/artifacts/{id}/regions/stream', // the editors' SSE relay of region updates; transport, like presence
   '/api/artifacts/{id}/edits', // retired atomic JSX editing route; answers 404
   '/api/artifacts/{id}/runs', // asynchronous execution admission; authoring adapter pins the program, no document edit
   '/api/artifacts/{id}/schedules', // runner scheduling control plane, not a document operation

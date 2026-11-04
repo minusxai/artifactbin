@@ -318,7 +318,7 @@ export function validateDatasetPermissions(
       const path = `tables[${i}]`;
       const t = c.object(value, path);
       if (!t) return;
-      c.keys(t, ['table', 'configuration', ...OPERATIONS.map((op) => `${op}_permissions`)], path);
+      c.keys(t, ['table', 'configuration', 'collaborative_columns', ...OPERATIONS.map((op) => `${op}_permissions`)], path);
       let columns: readonly string[] | undefined;
       const name = t.table;
       if (
@@ -339,6 +339,10 @@ export function validateDatasetPermissions(
         columns = known.get(key);
       }
       if (t.configuration !== undefined) configuration(c, t.configuration, `${path}.configuration`);
+      if (t.collaborative_columns !== undefined) {
+        if (t.collaborative_columns === '*') c.add(`${path}.collaborative_columns`, 'expected a list of column names');
+        else columnList(c, t.collaborative_columns, `${path}.collaborative_columns`, columns);
+      }
       for (const op of OPERATIONS) {
         const key = `${op}_permissions`;
         if (t[key] !== undefined) entries(c, op, t[key], `${path}.${key}`, columns);
@@ -569,6 +573,9 @@ export function readBackDatasetPermissions(
       ...[...groups].map(
         ([sentence, roles]) => `${capitalize(roles.map((r) => ROLE_NAMES[r]).join(', '))}: ${sentence}.`,
       ),
+      ...(t.collaborative_columns?.length
+        ? [`Typed live together (@afbin/collab) by everyone who may change them: ${and(t.collaborative_columns)}.`]
+        : []),
     ];
     const writes = [t.insert_permissions, t.update_permissions, t.delete_permissions];
     if (writes.some((l) => l?.some((e) => e.role === 'anonymous'))) found.add('anonymous_write');

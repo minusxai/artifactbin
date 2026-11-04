@@ -6,6 +6,7 @@ import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import { defaultMarkdownParser } from 'prosemirror-markdown';
 import type { Mark, Node as PMNode } from 'prosemirror-model';
 import type { SourceElement, SourceNode } from './html';
+import type { RegionKind } from './schema';
 
 type Parse5Node = DefaultTreeAdapterMap['childNode'];
 
@@ -39,10 +40,15 @@ function fromMarkdownNode(node: PMNode): SourceNode {
   return element(MARKDOWN_BLOCKS[node.type.name] ?? node.type.name, children);
 }
 
-/** An agent's Markdown (CommonMark, raw HTML read as text) as parsed content. */
-export function markdownSource(markdown: string): SourceNode[] {
+/**
+ * An agent's Markdown (CommonMark, raw HTML read as text) as parsed content. A text region is one line of plain
+ * text, so its Markdown is one paragraph, read as that paragraph's content (anything more is refused by name).
+ */
+export function markdownSource(markdown: string, kind: RegionKind = 'rich'): SourceNode[] {
   const doc = defaultMarkdownParser.parse(markdown);
   const out: SourceNode[] = [];
   doc.forEach((child) => { out.push(fromMarkdownNode(child)); });
+  const only = out[0];
+  if (kind === 'text' && out.length === 1 && only && 'tag' in only && only.tag === 'p') return only.children;
   return out;
 }

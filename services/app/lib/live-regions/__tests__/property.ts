@@ -40,8 +40,9 @@ const REGIONS = [
 const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain((clients) => {
   const client = fc.nat({ max: clients - 1 });
   const at = fc.nat({ max: 10_000 });
+  const type = fc.record({ op: fc.constant('type' as const), client, at, length: fc.integer({ min: 1, max: 4 }) });
   const op: fc.Arbitrary<Op> = fc.oneof(
-    { weight: 8, arbitrary: fc.record({ op: fc.constant('type' as const), client, at, length: fc.integer({ min: 1, max: 4 }) }) },
+    { weight: 8, arbitrary: type },
     { weight: 3, arbitrary: fc.record({ op: fc.constant('shortcut' as const), client, at, which: fc.constantFrom(...SHORTCUTS) }) },
     { weight: 1, arbitrary: fc.record({ op: fc.constant('bold' as const), client, at, length: fc.integer({ min: 1, max: 6 }) }) },
     { weight: 3, arbitrary: fc.record({ op: fc.constant('delete' as const), client, at, length: fc.integer({ min: 1, max: 12 }) }) },
@@ -55,7 +56,9 @@ const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain((clien
     { weight: 1, arbitrary: fc.record({ op: fc.constant('republish' as const), at, change: fc.constantFrom('text' as const, 'heading' as const, 'delete' as const, 'add' as const) }) },
     { weight: 1, arbitrary: fc.record({ op: fc.constant('agent' as const), at }) },
   );
-  return fc.record({ clients: fc.constant(clients), region: fc.constantFrom(...REGIONS.keys()), ops: fc.array(op, { minLength: 1, maxLength: maxOps }) });
+  // Every run starts by typing (the region always has a text block then), so each one has tracked text for I4.
+  const ops = fc.tuple(type, fc.array(op, { maxLength: maxOps - 1 })).map(([first, rest]): Op[] => [first, ...rest]);
+  return fc.record({ clients: fc.constant(clients), region: fc.constantFrom(...REGIONS.keys()), ops });
 });
 export type Scenario = { clients: number; region: number; ops: Op[] };
 
@@ -205,16 +208,18 @@ function mulberry(seed: number) {
 
 /**
  * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed, path and shrunk
- * counterexample of a failure: `replay` re-runs exactly that case (with the same `maxOps`), and the shrunk
- * counterexample becomes a fixed `runScenario` case in convergence.property.test.ts, so pr fast keeps it.
+ * counterexample of a failure: `replay` (the seed and path, at the failing run's `maxOps`) re-runs exactly that case,
+ * and the shrunk counterexample becomes a fixed `runScenario` case in convergence.property.test.ts, so pr fast keeps it.
  */
 export function checkConvergence(runs: number, maxOps: number, replay?: { seed: number; path: string }): { typed: number; lost: number } {
-  const totals = { typed: 0, lost: 0 };
+  const totals = { typed: 0, lost: 0, silent: 0 };
   fc.assert(fc.property(scenario(maxOps), (run) => {
     const result = runScenario(run);
     totals.typed += result.typed;
     totals.lost += result.lost;
-  }), { numRuns: runs, ...replay });
-  if (!replay) expect(totals.typed, 'the runs typed text').toBeGreaterThan(runs);
-  return totals;
+    if (!result.typed) totals.silent++;
+  }), replay ? { ...replay, endOnFailure: true } : { numRuns: runs });
+  // Each run's first operation types: a run that typed nothing exercised no I4 and means the generator broke.
+  expect(totals.silent, 'runs that typed nothing').toBe(0);
+  return { typed: totals.typed, lost: totals.lost };
 }

@@ -47,6 +47,7 @@ import { datasetBindingCatalog, DatasetBindingUnsupportedError, resolveDatasetBi
 import { compileAggregate, compileRows, HasuraReadError, type HasuraAggregate, type HasuraReadArgs } from './hasura-read';
 import { compileMutation, HasuraWriteError, mutationRoots, type HasuraMutationKind } from './hasura-write';
 import type { DatasetSnapshot, DatasetStatement } from './types';
+import { collaborativeColumns } from './cells';
 
 /** Is this id a dataset (the route's branch)? Existence only: every answer below decides access itself. */
 export async function isDatasetGraphqlTarget(id: string): Promise<boolean> {
@@ -86,8 +87,8 @@ function writeModel(decision: WriteDecision, table: DatasetTable, names: HasuraT
   return { ...(insert ? { insert: named(insert) } : {}), ...(update ? { update: named(update) } : {}), ...(del ? { delete: true } : {}) };
 }
 
-const columnsOf = (table: DatasetTable, names: HasuraTableNames): HasuraColumn[] =>
-  table.columns.map((c) => ({ field: names.columns[c.name] ?? (() => { throw notFound(); })(), source: c.name, type: scalarOf(c.type) }));
+const columnsOf = (table: DatasetTable, names: HasuraTableNames, collaborative: readonly string[] = []): HasuraColumn[] =>
+  table.columns.map((c) => ({ field: names.columns[c.name] ?? (() => { throw notFound(); })(), source: c.name, type: scalarOf(c.type), ...(c.type === 'string' && collaborative.includes(c.name) ? { collaborative: true } : {}) }));
 
 /** How a load reaches the dataset: directly (its own sharing decides), or through a page (the page audience rule). */
 interface LoadMode {
@@ -140,7 +141,8 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
     const model: HasuraTableModel = {
       root: names.root,
       table: { schema: table.schema, name: table.name },
-      columns: visible ? columnsOf(visible, names) : [],
+      // A live link's text columns the owner made collaborative say so (a pinned link never opens one).
+      columns: visible ? columnsOf(visible, names, collaborativeColumns(row, table)) : [],
       aggregations: !!visible && (snapshot?.aggregatable?.[tableId] ?? false),
       ...(visible ? {} : { select: false }),
       ...(write ? { write } : {}),

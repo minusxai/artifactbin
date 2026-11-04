@@ -39,6 +39,18 @@ interface Context {
 const take = (holder: Holder | null): string | null => { if (!holder) return null; const id = holder.id; holder.id = null; return id; };
 const ownId = (element: SourceElement): string | null => { const id = element.attr('data-af-id'); return isNodeId(id) ? id : null; };
 
+/**
+ * A pasted element's own `font-weight`/`font-style` (Google Docs writes bold and italic only as styles, and wraps a copy in
+ * `<b style="font-weight:normal">`), or null. Read in strip mode only: an authored region's styles are never content.
+ */
+const styleOf = (element: SourceElement, name: 'font-weight' | 'font-style'): string | null =>
+  new RegExp(`(?:^|;)\\s*${name}\\s*:\\s*([^;!]+)`, 'i').exec(element.attr('style') ?? '')?.[1]?.trim().toLowerCase() ?? null;
+const weightIs = (value: string | null, bold: boolean): boolean => {
+  if (value === null) return false;
+  if (/^\d+$/.test(value)) return (Number(value) >= 600) === bold;
+  return bold ? value === 'bold' || value === 'bolder' : value === 'normal' || value === 'lighter';
+};
+
 interface Segment { text: string; marks: readonly Mark[] }
 /** HTML's own whitespace rule: ASCII whitespace runs collapse to one space; a block's ends are trimmed. NBSP stays. */
 function collapse(segments: Segment[], preserve = false): Segment[] {
@@ -186,6 +198,18 @@ class Reader {
     this.blocks.push(this.schema.nodes.code_block!.create({ afId: ownId(element), ...this.structure(context) }, text ? this.schema.text(text) : null));
   }
 
+  /** A pasted wrapper's bold and italic, said by its style (strip mode). */
+  private pastedFormat(element: SourceElement, marks: readonly Mark[]): readonly Mark[] {
+    const { strong, em } = this.schema.marks;
+    const weight = styleOf(element, 'font-weight'), slant = styleOf(element, 'font-style');
+    let next = marks;
+    if (weightIs(weight, true)) next = strong!.create().addToSet(next);
+    else if (weightIs(weight, false)) next = strong!.removeFromSet(next);
+    if (slant === 'italic' || slant === 'oblique') next = em!.create().addToSet(next);
+    else if (slant === 'normal') next = em!.removeFromSet(next);
+    return next;
+  }
+
   private inline(nodes: SourceNode[], marks: readonly Mark[]): Segment[] {
     const out: Segment[] = [];
     const { marks: types } = this.schema;
@@ -195,7 +219,7 @@ class Reader {
       if (OPAQUE.has(tag)) { this.unsupported(`<${tag}>`); continue; }
       if (tag === 'br') { if (this.unsupported('<br>')) out.push({ text: ' ', marks }); continue; }
       let next: readonly Mark[] | null = null;
-      if (tag === 'strong' || tag === 'b') next = types.strong!.create().addToSet(marks);
+      if (tag === 'strong' || tag === 'b') next = this.mode === 'strip' && weightIs(styleOf(node, 'font-weight'), false) ? null : types.strong!.create().addToSet(marks);
       else if (tag === 'em' || tag === 'i') next = types.em!.create().addToSet(marks);
       else if (tag === 'code') next = types.code!.create().addToSet(marks);
       else if (tag === 'a') {
@@ -204,6 +228,7 @@ class Reader {
         if (href) next = types.link!.create({ href }).addToSet(marks);
         else if (!this.unsupported(raw === null ? '<a> without href' : `unsafe link ${JSON.stringify(raw.slice(0, 40))}`)) continue;
       } else if (!this.unsupported(`<${tag}>`)) continue;
+      else next = this.pastedFormat(node, marks);
       out.push(...this.inline(node.children, next ?? marks));
     }
     return out;

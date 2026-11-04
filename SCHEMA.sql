@@ -1142,6 +1142,87 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ N
 
 CREATE INDEX IF NOT EXISTS idx_artifact_edits_artifact_seq ON app.artifact_edits (artifact_id, seq);
 
+CREATE TABLE IF NOT EXISTS app.region_states (
+  artifact_id TEXT NOT NULL,
+  region_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  state BYTEA NOT NULL,
+  state_seq BIGINT NOT NULL DEFAULT 0,
+  last_seq BIGINT NOT NULL DEFAULT 0,
+  saved_version INTEGER NOT NULL,
+  dirty_since TIMESTAMPTZ,
+  last_update_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, region_id)
+);
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS region_id TEXT NOT NULL;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS state BYTEA NOT NULL;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS state_seq BIGINT NOT NULL DEFAULT 0;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS last_seq BIGINT NOT NULL DEFAULT 0;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS saved_version INTEGER NOT NULL;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS dirty_since TIMESTAMPTZ;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS last_update_at TIMESTAMPTZ;
+
+ALTER TABLE app.region_states ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.region_updates (
+  artifact_id TEXT NOT NULL,
+  region_id TEXT NOT NULL,
+  seq BIGINT NOT NULL,
+  client_id BIGINT NOT NULL,
+  update BYTEA NOT NULL,
+  actor_user_id TEXT,
+  actor_token_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, region_id, seq)
+);
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS region_id TEXT NOT NULL;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS client_id BIGINT NOT NULL;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS update BYTEA NOT NULL;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.region_snapshots (
+  artifact_id TEXT NOT NULL,
+  region_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  snapshot BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, region_id, version)
+);
+
+ALTER TABLE app.region_snapshots ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.region_snapshots ADD COLUMN IF NOT EXISTS region_id TEXT NOT NULL;
+
+ALTER TABLE app.region_snapshots ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL;
+
+ALTER TABLE app.region_snapshots ADD COLUMN IF NOT EXISTS snapshot BYTEA NOT NULL;
+
+ALTER TABLE app.region_snapshots ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.artifact_source_ids (
   artifact_id TEXT NOT NULL,
   source_id TEXT NOT NULL,

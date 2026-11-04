@@ -23,6 +23,10 @@ export { artifactState, observedChange, versionConflict } from './state';
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
 export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
+/** Live regions as page storage (lib/region-sessions): the editable head, the region rows and the save as a version. */
+export { saveLiveRegionsInTx } from './store';
+export { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, regionUpdatesAfter } from './regions';
+export type { RegionRow } from './regions';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
 /** The web images a page serves on its owner's host (meta.webAssets), derived at every content write. */
 export { CreationReplay, creationOperation, lookupCreation, recoverCreationIds } from './creation-ledger';

@@ -6,3 +6,5 @@ export const HTML_VERSION_REFUSED='mx:version-refused';
 export const HTML_VERSION_REBUILT='mx:version-rebuilt';
 /** Marks the frame's own read of its newest version, which is not another view of the page. */
 export const LIVE_VERSION_HEADER='x-artifactbin-live-version';
+/** `Symbol.for` key of the HTML a framed document loaded (core keeps it; lib/html-runtime/live-morph LOADED_SOURCE). */
+export const LOADED_SOURCE_KEY='afbin.loaded-source';

@@ -30,6 +30,7 @@ import { SelectableItem, SelectableList } from '../ui/SelectableList';
 import { Slider } from '../ui/Slider';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../ui/Table';
 import { ToggleGroup } from '../ui/ToggleGroup';
+import { Toolbar, ToolbarSeparator } from '../ui/Toolbar';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { Checkbox, Switch } from '../ui/Checkbox';
@@ -190,6 +191,12 @@ export default function UiGallery(): JSX.Element {
           <ToggleGroup label={`Writes ${size}`} size={size} value={writes()} onChange={setWrites} options={[{ value: 'read', label: 'read-only' }, { value: 'readwrite', label: 'read & write', tone: 'caution' }]} />
         </Row>}</For>
         <Row label="swatches"><SwatchPicker label="Brush colors" options={SWATCHES} value={brush()} onChange={setBrush} custom size="sm" /></Row>
+        <Row label="toolbar"><Toolbar label="Gallery formatting" keepFocus>
+          <Tooltip content="Bold (Ctrl+B)"><Button variant="ghost" size="sm" icon aria-label="Gallery bold" pressed={pressed().includes('bold')} onClick={() => toggle('bold')}><Bold size={16} /></Button></Tooltip>
+          <Tooltip content="Italic (Ctrl+I)"><Button variant="ghost" size="sm" icon aria-label="Gallery italic" pressed={pressed().includes('italic')} onClick={() => toggle('italic')}><Italic size={16} /></Button></Tooltip>
+          <ToolbarSeparator />
+          <Select ariaLabel="Gallery text style" size="sm" class="w-36" value="paragraph" onChange={() => {}} options={[{ value: 'paragraph', label: 'Normal text' }, { value: 'h1', label: 'Heading 1' }]} />
+        </Toolbar></Row>
         <Row label="slider"><Slider label="Brush thickness" min={1} max={16} value={width()} onChange={setWidth} valueText={(v) => `${v} px`} class="w-72" /><Slider label="Chrome slider" size="sm" min={0} max={100} value={width() * 6} onChange={(v) => setWidth(Math.round(v / 6))} class="w-72" /></Row>
       </Section>
 

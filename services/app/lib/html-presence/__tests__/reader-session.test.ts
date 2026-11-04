@@ -39,3 +39,20 @@ it('counts readers outside the capped roster and leaves itself out of the total'
  incoming({viewers:[peer('a'),peer('b')],total:0});expect(counts.at(-1)).toEqual([['a','b'],2]);
  session.dispose();
 });
+it('publishes the frame\'s region caret beside its geometry, as a cursor the reader chose to share, until the editor blurs',async()=>{
+ let scheduled:()=>void=()=>{},prefs={...readerDefaults};const sent:PresencePublication[]=[];
+ const session=createReaderPresenceSession({session:'tab',revision:'1',nonce:'n',readPreferences:()=>prefs,active:()=>true,publish:async input=>{sent.push(input);return 'own';},connect:()=>()=>{},paint:()=>{},changed:()=>{},clock:{now:()=>0,setInterval:()=>1,clearInterval:()=>{},setTimeout:work=>{scheduled=work;return 2;},clearTimeout:()=>{}}});
+ await Promise.resolve();
+ session.regionCaret({regionId:'af-6',anchor:'AQID',head:'BAUG'});scheduled();await Promise.resolve();
+ expect(sent.at(-1)).toMatchObject({region:{regionId:'af-6',anchor:'AQID',head:'BAUG'}});
+ // A pointer move in the frame replaces its geometry, not the region caret.
+ session.receive({type:'mx:presence',nonce:'n',geometry:{cursor:{nodeId:'a',x:0,y:0}}});scheduled();await Promise.resolve();
+ expect(sent.at(-1)).toMatchObject({cursor:{nodeId:'a'},region:{regionId:'af-6'}});
+ session.regionCaret({regionId:'bad id',anchor:'AQID',head:'BAUG'});scheduled();await Promise.resolve();
+ expect(sent.at(-1)?.region).toBeUndefined();
+ session.regionCaret({regionId:'af-6',anchor:'AQID',head:'BAUG'});prefs={...prefs,shareCursor:false};session.preferencesChanged();await Promise.resolve();
+ expect(sent.at(-1)?.region).toBeUndefined();
+ prefs={...prefs,shareCursor:true};session.regionCaret(null);scheduled();await Promise.resolve();
+ expect(sent.at(-1)?.region).toBeUndefined();
+ session.dispose();
+});

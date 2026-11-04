@@ -109,7 +109,10 @@ sharing and deliberate ownership moves.
   scripts/publish.mjs index.html --artifact ID` instead of the starter's plain publish. Any other
   change (wording, numbers, a section) is an edit: `node scripts/read.mjs ID --output page.html`,
   edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same
-  file and never regenerate the page from scratch.
+  file and never regenerate the page from scratch. Text inside a `data-af-editable` region (a doc)
+  is the exception, since people may be typing in it: `node scripts/doc.mjs read ID --output
+  doc.md`, edit doc.md, then `node scripts/doc.mjs write doc.md`, which merges your edit with their
+  typing ([live docs](references/live-docs.md)).
 - **Check.** Copy the starter's steps files (`examples/deck-steps.mjs`; `csv-dashboard-steps.mjs`;
   `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`; they need no edits) and add a step for each
   requested value they don't check, or write one short steps file of `step('label', …)` checks:
@@ -166,7 +169,8 @@ design-system tokens and carry no credentials. Decks use `examples/deck.html`.
 | Overlays | `af-dialog`, `af-popover`, `af-tooltip` |
 | Identity/status | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
 | Prose/diagrams | `af-markdown`, `af-isometric` |
-| Data/media | `af-data-table`, `af-file-upload` |
+| Data/media | `af-data-table`, `af-file-upload`; typing in a dataset cell together: `@afbin/collab`
+  ([datasets](references/datasets.md#type-together-afbincollab)) |
 
 For charts, maps and diagrams, use the direct library APIs rather than a custom element:
 

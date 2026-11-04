@@ -3,14 +3,17 @@ import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
 import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
+import { apiFetch } from '../lib/api';
+import { artifactStarter } from '@/lib/workspace/artifact-starters';
 
-/** Browser creation opens the native page. ?agent=1 retains the external-agent
- * handoff. One POST per mounted entry; never retry an uncertain creation. */
+/** `/start` makes a doc and opens it, ready to type in (lib/workspace artifactStarter, the normal create door).
+ * ?agent=1 retains the external-agent handoff (`/api/start`, the placeholder an agent fills).
+ * One POST per mounted entry; never retry an uncertain creation. */
 export function StartPage(): JSX.Element {
   const [failed, setFailed] = createSignal(false);
   onMount(() => {
     const handoff = new URLSearchParams(window.location.search).get('agent') === '1';
-    void fetch(handoff ? '/api/start' : '/api/start?mode=blank', { method: 'POST' }).then(async response => {
+    void (handoff ? fetch('/api/start', { method: 'POST' }) : apiFetch('/api/my/artifacts', 'POST', artifactStarter('doc'))).then(async response => {
       if (response.status === 401) { replaceDocument(loginHref(window.location)); return; }
       if (!response.ok) throw new Error('Creation failed');
       const body = await response.json() as { id?: string };

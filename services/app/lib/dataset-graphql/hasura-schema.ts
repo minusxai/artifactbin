@@ -19,7 +19,11 @@ export interface HasuraColumn {
   /** The stored source column it reads. */
   source: string;
   type: HasuraScalar;
+  /** A text column the policy names in `collaborative_columns`: its object field says so in the SDL. */
+  collaborative?: boolean;
 }
+/** The description a collaborative column's field carries (pages bind it with `@afbin/collab`). */
+const COLLABORATIVE_DESCRIPTION = 'Collaborative: typed live together with @afbin/collab (collaborative_columns).';
 export interface HasuraTableModel {
   root: string;
   /** The engine table the reads compile against. */
@@ -80,7 +84,7 @@ const fieldsOf = (columns: readonly HasuraColumn[]) => list(columns.map((c) => `
 function tableTypes(t: HasuraTableModel): string[] {
   const r = t.root, w = writes(t);
   const out: string[] = [];
-  if (selects(t)) out.push(`type ${r} { ${list(['_id: ID!', ...t.columns.map((c) => `${c.field}: ${c.type}`)])} }`);
+  if (selects(t)) out.push(`type ${r} { ${list(['_id: ID!', ...t.columns.map((c) => `${c.collaborative ? `${JSON.stringify(COLLABORATIVE_DESCRIPTION)} ` : ''}${c.field}: ${c.type}`)])} }`);
   if (selects(t) || w.set || w.delete) out.push(`input ${r}_bool_exp { ${list([`_and: [${r}_bool_exp!]`, `_or: [${r}_bool_exp!]`, `_not: ${r}_bool_exp`, '_id: ID_comparison_exp', ...t.columns.map((c) => `${c.field}: ${c.type}_comparison_exp`)])} }`);
   if (selects(t)) out.push(`input ${r}_order_by { ${list(['_id: order_by', ...t.columns.map((c) => `${c.field}: order_by`)])} }`);
   out.push(...writeTypes(t));

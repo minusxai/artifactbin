@@ -6,6 +6,7 @@ import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
 import { normalizeDesignSelection } from './design-system.ts';
 export { normalizeDesignSelection, htmlAppearance } from './design-system.ts';
+export { firstHeadingText, withPageTitle } from './page-title.ts';
 import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata,HtmlPwaSettings,HtmlAssetLinks } from './contracts';
 export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPwaSettings } from './contracts';
 const CORE=RUNTIME_CORE_PATH;
@@ -40,7 +41,15 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
  const previous=new Set(options.previousHtml?allElements(options.previousHtml).all.map(element=>attribute(element,'data-af-id')).filter((id):id is string=>id!==null):[]);
  const allocated=new Set(options.ledger?.allocatedIds??previous);
  const seen=new Set<string>();
+ // Inline elements inside an editable region carry no identity: an id written in the source is removed.
+ const unidentified=regionInlineElements(document);
+ const edits:import('./html-source').Edit[]=[];
+ for(const element of unidentified){
+  const at=element.sourceCodeLocation?.attrs?.['data-af-id'];
+  if(at)edits.push({start:/\s/.test(html[at.startOffset-1]??'')?at.startOffset-1:at.startOffset,end:at.endOffset,text:''});
+ }
  for(const element of document.all){
+  if(unidentified.has(element))continue;
   const id=attribute(element,'data-af-id');
   if(id===null)continue;
   if(!/^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(id))throw new Error('Invalid data-af-id');
@@ -49,8 +58,7 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
   seen.add(id);allocated.add(id);
  }
  let next=options.ledger?.nextNodeId??1;
- const edits=[];
- const missing=document.all.filter(element=>attribute(element,'data-af-id')===null);
+ const missing=document.all.filter(element=>attribute(element,'data-af-id')===null&&!unidentified.has(element));
  // A regenerated file without IDs keeps the previous version's identities for elements it still has (D11).
  const carried=options.previousHtml&&missing.length?carryForwardIds(allElements(options.previousHtml),document,seen):new Map<SourceElement,string>();
  for(const element of missing){
@@ -65,6 +73,25 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
 }
 
 type Parsed=ReturnType<typeof allElements>;
+/** Inline tags that never carry `data-af-id` inside an editable region (lib/live-regions keeps identities on blocks only). */
+const REGION_INLINE=new Set(['a','strong','b','em','i','code']);
+/** The inline elements whose nearest `data-af-editable` ancestor is a `rich` or `text` region. */
+function regionInlineElements(document:Parsed):Set<SourceElement>{
+ const owners=new Map<unknown,SourceElement>();
+ for(const element of document.all)if(element.tagName==='template'&&'content' in element)owners.set((element as unknown as {content:unknown}).content,element);
+ const parentOf=(element:SourceElement):SourceElement|null=>{const parent=element.parentNode as unknown;if(owners.has(parent))return owners.get(parent)!;return parent&&typeof parent==='object'&&'tagName' in parent?parent as SourceElement:null;};
+ const found=new Set<SourceElement>();
+ for(const element of document.all){
+  if(!REGION_INLINE.has(element.tagName))continue;
+  for(let at=parentOf(element);at;at=parentOf(at)){
+   const kind=attribute(at,'data-af-editable');
+   if(kind===null)continue;
+   if(kind==='rich'||kind==='text')found.add(element);
+   break;
+  }
+ }
+ return found;
+}
 interface Counterpart {id:string;tag:string;parent:string;index:number;path:string;text:string;attrs:string;grams?:Map<string,number>;attrGrams?:Map<string,number>}
 const SIGNATURE_ATTRIBUTES=['class','src','href','name','type','rel','content','alt','charset','property','data-af','role','aria-label','for','value'];
 const textOf=(node:import('./html-source').Element|ParentLike):string=>{let out='';const walk=(n:any)=>{if(out.length>600)return;if(n.nodeName==='#text')out+=n.value;else if(n.childNodes)for(const c of n.childNodes)walk(c);if(n.content)walk(n.content);};walk(node);return out.replace(/\s+/g,' ').trim().slice(0,400);};

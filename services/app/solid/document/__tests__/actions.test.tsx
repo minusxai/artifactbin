@@ -49,3 +49,23 @@ it('offers discussion and sharing without an in-app document editor', () => {
   expect(view.getByRole('button', { name: 'Toggle comments' })).toBeTruthy();
   expect(view.getByRole('button', { name: 'Share' })).toBeTruthy();
 });
+
+it('offers a doc\'s editors "hand to an agent", and nobody else, and never on an archived version', () => {
+  const handoff = vi.fn();
+  const editor = render(() => <DocumentActions id="abc123" title="Notes" version={1} owner={false} canEdit canAnnotate
+    like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} onHandToAgent={handoff} />);
+  fireEvent.click(editor.getByRole('button', { name: 'Hand to an agent' }));
+  expect(handoff).toHaveBeenCalledOnce();
+  editor.unmount();
+  const reader = render(() => <DocumentActions id="abc123" title="Notes" version={1} owner={false} canEdit={false} canAnnotate
+    like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} onHandToAgent={handoff} />);
+  expect(reader.queryByRole('button', { name: 'Hand to an agent' })).toBeNull();
+  reader.unmount();
+  const archived = render(() => <DocumentActions id="abc123" title="Notes" version={1} archived owner canEdit canAnnotate
+    like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} onHandToAgent={handoff} />);
+  expect(archived.queryByRole('button', { name: 'Hand to an agent' })).toBeNull();
+  archived.unmount();
+  const page = render(() => <DocumentActions id="abc123" title="Notes" version={1} owner canEdit canAnnotate
+    like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
+  expect(page.queryByRole('button', { name: 'Hand to an agent' })).toBeNull();
+});

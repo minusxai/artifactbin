@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE } from '../../html-reader/contract';
-import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '../../html-reader/frame-bridge/parent';
+import { createFrameBridgeParent, regionFrameMessage, relayedRequest, urlValuesOf } from '../../html-reader/frame-bridge/parent';
 
 const APP = 'https://app.example', FRAME = 'https://doc.pages.example';
 function setup(frameOrigin = FRAME, extra: Partial<Parameters<typeof createFrameBridgeParent>[0]> = {}) {
@@ -145,5 +145,85 @@ describe('createFrameBridgeParent', () => {
     expect(t.posted.at(-1)!.data.payload).toEqual({ kind: 'inset', top: 0 });
     const rect = t.bridge.getViewportRect();
     expect([rect.x, rect.y, rect.width, rect.height]).toEqual([12, 23, 300, 200]);
+  });
+
+  it('carries region messages: nothing but regions-enabled reaches a frame before regions are enabled, and a new document starts over', () => {
+    const t = setup();
+    t.say({ kind: 'ready', nonce: 'n' });
+    const before = t.posted.length;
+    t.bridge.sendRegion({ kind: 'region-paint', carets: [{ id: 'u', label: 'Ada', regionId: 'r1', anchor: 'AA==', head: 'AA==' }] });
+    t.bridge.sendRegion({ kind: 'region-ack', regionId: 'r1', seq: 1 });
+    expect(t.posted).toHaveLength(before);
+    expect(t.bridge.regionsEnabled()).toBe(false);
+    t.bridge.sendRegion({ kind: 'regions-enabled', regionIds: ['r1'] });
+    expect(t.bridge.regionsEnabled()).toBe(true);
+    t.bridge.sendRegion({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: 7, state: new Uint8Array([1, 2]), seq: 3 });
+    expect(t.posted.slice(before).map(p => p.data.payload)).toEqual([
+      { kind: 'regions-enabled', regionIds: ['r1'] },
+      { kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: 7, state: new Uint8Array([1, 2]), seq: 3 },
+    ]);
+    t.say({ kind: 'hello' });
+    expect(t.bridge.regionsEnabled()).toBe(false);
+  });
+
+  it('hands validated region messages from the frame to region subscribers only', () => {
+    const t = setup();
+    t.say({ kind: 'ready', nonce: 'n' });
+    const seen: unknown[] = [], events: unknown[] = [];
+    const stop = t.bridge.subscribeRegion(message => seen.push(message));
+    t.bridge.subscribe(event => events.push(event));
+    t.say({ kind: 'region-open', regionId: 'r1' });
+    t.say({ kind: 'region-update', regionId: 'r1', update: new Uint8Array([9]) });
+    t.say({ kind: 'region-update', regionId: 'r1', update: 'not bytes' });
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: ['bold'], block: 'paragraph', extra: 'dropped' });
+    t.say({ kind: 'region-blur' });
+    t.say({ kind: 'region-link', regionId: 'r1', href: 'https://a.example/' });
+    t.say({ kind: 'region-link', regionId: 'r1', href: null, extra: 'dropped' });
+    t.say({ kind: 'region-link', regionId: 'r1', href: 7 });
+    t.say({ kind: 'region-link', regionId: 'r1', href: `https://a.example/${'x'.repeat(2048)}` });
+    t.say({ kind: 'region-link', regionId: 'not an id!', href: null });
+    t.say({ kind: 'region-open', regionId: 'r1' }, 'forged-key');
+    stop();
+    t.say({ kind: 'region-blur' });
+    expect(seen).toEqual([
+      { kind: 'region-open', regionId: 'r1' },
+      { kind: 'region-update', regionId: 'r1', update: new Uint8Array([9]) },
+      { kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: ['bold'], block: 'paragraph' },
+      { kind: 'region-blur' },
+      { kind: 'region-link', regionId: 'r1', href: 'https://a.example/' },
+      { kind: 'region-link', regionId: 'r1', href: null },
+    ]);
+    expect(events).toEqual([]);
+  });
+});
+
+describe('the frame\'s region caret', () => {
+  it('is the last region-caret the current document sent, none after region-blur or once a new document loads', () => {
+    const t = setup();
+    t.say({ kind: 'ready', nonce: 'n' });
+    expect(t.bridge.regionCaret()).toBeNull();
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: [], block: 'paragraph' });
+    expect(t.bridge.regionCaret()).toEqual({ regionId: 'r1', anchor: 'AA==', head: 'AQ==' });
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AA==', marks: [], block: 'not valid!' });
+    expect(t.bridge.regionCaret()).toEqual({ regionId: 'r1', anchor: 'AA==', head: 'AQ==' });
+    t.say({ kind: 'region-blur' });
+    expect(t.bridge.regionCaret()).toBeNull();
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: [], block: 'paragraph' });
+    t.say({ kind: 'hello' });
+    expect(t.bridge.regionCaret()).toBeNull();
+  });
+});
+
+describe('regionFrameMessage', () => {
+  it('admits only well-formed region messages within the contract limits', () => {
+    expect(regionFrameMessage({ kind: 'region-slash', regionId: 'r1', x: 3, y: 4 })).toEqual({ kind: 'region-slash', regionId: 'r1', x: 3, y: 4 });
+    for (const bad of [
+      null, { kind: 'region-open' }, { kind: 'region-open', regionId: '' }, { kind: 'region-open', regionId: 'r 1' }, { kind: 'region-open', regionId: 'x'.repeat(129) },
+      { kind: 'region-update', regionId: 'r1', update: new Uint8Array(0) }, { kind: 'region-update', regionId: 'r1', update: new Uint8Array(262_145) },
+      { kind: 'region-caret', regionId: 'r1', anchor: 'not base64!', head: 'AA==', marks: [], block: 'p' },
+      { kind: 'region-caret', regionId: 'r1', anchor: 'A'.repeat(348), head: 'AA==', marks: [], block: 'p' },
+      { kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AA==', marks: 'bold', block: 'p' },
+      { kind: 'region-slash', regionId: 'r1', x: Infinity, y: 0 }, { kind: 'fetch' },
+    ]) expect(regionFrameMessage(bad)).toBeNull();
   });
 });

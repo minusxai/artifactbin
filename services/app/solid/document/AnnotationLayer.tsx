@@ -76,6 +76,12 @@ export interface AnnotationLayerProps {
   /** The document owner may delete any comment; other viewers may delete their own. */
   canDeleteAny?: boolean;
   editId?: string;
+  /**
+   * Called with the selection a new comment anchors to, before it is sent: an editor's page saves unsaved region text
+   * first and answers the selection anchored to that version (create-framed-story `beforeComment`). A rejection fails
+   * the comment and keeps the draft.
+   */
+  beforeComment?: (subject: StoryEditSelection) => Promise<StoryEditSelection>;
   runtimeRef?: DocumentRuntimeRef;
   sessionNonce?: string | null;
   /** The thread rail is open — a panel, not a mode, and true in either mode. */
@@ -642,9 +648,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   const save = async () => {
     if (!mayCreate()) return;
-    const subject = selection();
-    if (!subject || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
-    if (!subject.nodeId && !subject.anchor) {
+    const picked = selection();
+    if (!picked || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
+    if (!picked.nodeId && !picked.anchor) {
       // Never claims a save is pending: the layer cannot know one is. Say what is true either way.
       // A selection whose source element has no durable id: an element an edit just added, or one never identified.
       setFailure(COMMENT_TARGET_UNSAVED);
@@ -654,6 +660,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setFailure(null);
     try {
       const body = draft();
+      // Unsaved region text the comment quotes is saved first; the comment anchors to that version.
+      const subject = props.beforeComment ? await props.beforeComment(picked) : picked;
       const create = (attachment?: CommentImageAttachment) => {
         const signature = JSON.stringify([subject, body, attachment?.attachment_id]);
         if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };

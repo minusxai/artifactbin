@@ -20,11 +20,19 @@ import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERS
 /** The live morph is its own content-addressed module (build.server `@afbin/morph`), fetched only when a version arrives. */
 const MORPH_MODULE='@afbin/morph';
 const loadLiveMorph=()=>import(/* @vite-ignore */ MORPH_MODULE) as Promise<typeof import('./live-morph')>;
+/** The region editor (build.server `@afbin/regions`), fetched only when the parent opens a region session (./frame-regions). */
+const REGIONS_MODULE='@afbin/regions';
+const loadRegionEditor=()=>import(/* @vite-ignore */ REGIONS_MODULE) as Promise<typeof import('./region-editor')>;
+import {startFrameRegions} from './frame-regions';
+import {createCellPort} from './frame-cells';
 import {RemoteUnreachable,type RemotePort,type QueryInvalidation} from './apollo/apollo-contracts';
 declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
 /** Portable remote access stays read-only regardless of connection state; local preview datasets are separate. */
 export const remoteReadOnly=config.offline===true&&!config.localPreview;
+/** Live dataset text cells (@afbin/collab binds through this): writable only in a page the app frames. */
+const cellPort=createCellPort({writable:!config.offline&&!!config.appOrigin&&window.parent!==window});
+export const collabPort=cellPort.port;
 function sourceNamespaces(document:Document):{names:string[];bindings:Record<string,string>;datasets:string[]}{
  const names:string[]=[],bindings:Record<string,string>={},datasets:string[]=[];
  for(const link of document.querySelectorAll('link[data-af-name]')){
@@ -125,6 +133,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const painter = createHtmlAnnotationPainter(win.document,{coordinateSpace:sourceObservation?'document':'viewport',blockPresentation:sourceObservation?'source-node':'overlay'});
   const commentView = createHtmlCommentViewSession(win.document);
   const presence = startHtmlPresence(win, geometry => post({kind:'event',event:{type:'mx:presence',nonce,geometry}}));
+  const regions = startFrameRegions({ win, post, load: loadRegionEditor });
+  const cells = cellPort.attach(post);
   let pick: 'block' | 'area' | 'select' | null = null;
   const cursor = win.document.documentElement.style.cursor;
   let suppressClick = false;
@@ -133,7 +143,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const layout = (report=true) => {const positions=painter.paint(annotations);if(report&&sourceReady)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
   const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
   const readiness=sourceObservation?startSourceAnnotationReadiness(win,()=>{sourceReady=true;if(annotations.pins.length)layout();}):null;
-  const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node);
+  const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node)||regions.ownsOverlay(node);
   const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();},painter.ownsMutation);
   const annotationObservation=sourceObservation?observeSourceAnnotations(win,{root:win.document.body,ownsOverlay,repaint:()=>{if(annotations.pins.length)layout();}}):null;
   const click = (event: MouseEvent) => {
@@ -190,6 +200,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   post({ kind: 'ready', nonce });
   return {
     receive(payload) {
+      if (cells.receive(payload) || regions.receive(payload)) return;
       if(payload.kind==='upload-context'){updateUploadContext(payload.context);return;}
       if (uploadSession.receive(payload))return;
       if (payload.kind === 'fetch-result') {
@@ -205,7 +216,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
         // A new published version (solid/document/follow-html-version): drawn in place when safe, else this document is rebuilt
         // from it (told first, so the parent follows instead of reloading); the parent reloads only when no version was read.
-        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version); if (Number.isInteger(version)) void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version)).then((applied) => { if (applied.rebuild) { post({ kind: 'event', event: { type: HTML_VERSION_REBUILT, nonce, revision: applied.revision } }); win.location.replace(applied.rebuild); return; } config.revision = applied.revision; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); }
+        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version); if (Number.isInteger(version)) void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version, undefined, regions.editing)).then((applied) => { if (applied.rebuild) { post({ kind: 'event', event: { type: HTML_VERSION_REBUILT, nonce, revision: applied.revision } }); win.location.replace(applied.rebuild); return; } config.revision = applied.revision; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); }
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
         if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
@@ -225,6 +236,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       painter.dispose();
       actions.dispose();
       presence.dispose();
+      regions.dispose();
+      cells.dispose();
       win.document.documentElement.style.cursor = cursor;
       win.document.removeEventListener('keydown', key);
       win.document.removeEventListener('pointerdown', down);

@@ -9,7 +9,7 @@ export { workspaceAssetsFor } from './inventory';
 export { buildShelf, groupShelfByRecency } from '@/lib/shelf';
 export type { ShelfItem } from '@/lib/shelf';
 export { listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from './trash';
-export { artifactStarter } from './artifact-starters';
+export { agentStarterHtml, artifactStarter } from './artifact-starters';
 export type { AccountWorkspace, AccountWorkspaceCore, AccountWorkspaceInsights, WorkspaceSharedItem } from './dashboard';
 export { folderPageFor } from './folders';
 export type { FolderPage } from './folders';

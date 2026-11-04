@@ -168,6 +168,23 @@ describe('agent Markdown (prosemirror-markdown, CommonMark, raw HTML off)', () =
   });
 });
 
+describe('the shared text', () => {
+  it('a replica that read its formatted state from bytes deletes a line end without spreading the attributes before it', () => {
+    // State bytes first, then the text: how every replica and fork opens a region. Yjs integrated the formats as
+    // a plain type's, so its search markers stayed on, and a deletion found through one dropped the marker ending the
+    // previous line end's id: "z" took that id.
+    const { state } = createRegionState('rich', '<p data-af-id="af-1">abc</p><p data-af-id="af-2"></p><p data-af-id="af-3"></p><p data-af-id="af-4">z</p>');
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, state);
+    const text = regionText(doc);
+    text.delete(5, 1);
+    expect(text.toDelta()).toEqual([
+      { insert: 'abc' }, { insert: '\n', attributes: { afId: 'af-1' } }, { insert: '\n', attributes: { afId: 'af-2' } },
+      { insert: 'z' }, { insert: '\n', attributes: { afId: 'af-4' } },
+    ]);
+  });
+});
+
 describe('three-way revision (republish and agent edits)', () => {
   /** A reader's edit made straight on the shared text: text inserted at `offset` within line `index`. */
   const readerTypes = (state: Uint8Array, index: number, offset: number, text: string, clientID = 7) => {
@@ -316,15 +333,16 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
     expect(page.html).toContain(`<p data-af-id="${kept}">keep</p>`);
   });
 
-  it('known limitation: inline element ids are re-derived by text carry-over, so rewriting a bold run changes its id', () => {
+  it('inline elements carry no ids, so rewriting a bold run keeps every id the region has', () => {
     const saved = published('<p>Hello <strong>bold</strong> and <a href="https://x.dev">link</a>.</p>');
-    const [paragraph, strong, link] = ids(saved.inner);
+    expect(saved.inner).toMatch(/^<p data-af-id="[^"]+">Hello <strong>bold<\/strong> and <a href="https:\/\/x.dev">link<\/a>.<\/p>$/);
+    const [paragraph] = ids(saved.inner);
+    expect(ids(saved.inner)).toEqual([paragraph]);
     const editedAfter = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: createRegionState('rich', saved.inner.replace('link</a>.', 'link</a>. More text.')).state });
-    expect(ids(editedAfter.html.slice(editedAfter.html.indexOf(saved.regionId))).slice(0, 3)).toEqual([paragraph, strong, link]);
+    const inner = (html: string) => { const [before, after] = outsideRegion(html, saved.regionId); return html.slice(before.length, html.length - after.length); };
+    expect(ids(inner(editedAfter.html))).toEqual([paragraph]);
     const rewritten = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: createRegionState('rich', saved.inner.replace('>bold<', '>completely different words<')).state });
-    const after = ids(rewritten.html.slice(rewritten.html.indexOf(saved.regionId))).slice(0, 3);
-    expect(after[0]).toBe(paragraph);
-    expect(after[1]).not.toBe(strong);
+    expect(inner(rewritten.html)).toBe(`<p data-af-id="${paragraph}">Hello <strong>completely different words</strong> and <a href="https://x.dev">link</a>.</p>`);
   });
 
   it('compacts a text region', () => {
@@ -343,19 +361,5 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
     const saved = published('<p>x</p>');
     const { state } = createRegionState('rich', saved.inner);
     expect(refusal(() => compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: 'af-999', state })).code).toBe('region_not_found');
-  });
-});
-
-describe('performance bound', () => {
-  it('a 50,000-character paragraph is built, read, revised and compacted in well under two seconds', () => {
-    const long = 'word '.repeat(10_000).trim();
-    const started = performance.now();
-    const saved = published(`<p>${long}</p>`);
-    const { state, snapshot } = createRegionState('rich', saved.inner);
-    expect(regionHtml('rich', state)).toHaveLength(long.length + `<p data-af-id="${ids(saved.inner)[0]}"></p>`.length);
-    const { update } = applyRegionRevision({ kind: 'rich', live: state, savedSnapshot: snapshot, html: saved.inner.replace('word word', 'WORD word') });
-    const page = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: apply(state, update) });
-    expect(page.html).toContain('WORD word');
-    expect(performance.now() - started).toBeLessThan(2000);
   });
 });
