@@ -190,6 +190,16 @@ describe('aggregates', () => {
   });
 });
 
+describe('LIKE patterns (the dataset rules\' and the generated API\'s _like/_ilike)', () => {
+  it('match the whole text: % any run, _ one character, \\ escapes; ilike folds case beyond ASCII', async () => {
+    expect(await row(`select like_matches('changed', 'ch%') as a, like_matches('Changed', 'ch%') as b, like_matches('a*b', 'a_b') as c,
+      like_matches('50% off', '50\\%%') as d, like_matches('500 off', '50\\%%') as e, like_matches('one\ntwo', 'one%two') as f,
+      ilike_matches('École', 'éCOLE') as g, ilike_matches('ÉCOLE', 'é%') as h, like_matches('École', 'é%') as i`))
+      .toEqual({ a: 1, b: 0, c: 1, d: 1, e: 0, f: 1, g: 1, h: 1, i: 0 });
+    expect(await row("select like_matches(42, '4%') as n, ilike_matches(null, '%') as m")).toEqual({ n: null, m: null });
+  });
+});
+
 describe('regular expressions (JavaScript syntax)', () => {
   it('matches, replaces every match, and extracts groups', async () => {
     expect(await row(`select regexp_matches('booking-42', '\\d+(?=$)') as m, regexp_matches('abc', '^b') as no,

@@ -4,7 +4,7 @@
  * through the dataset's mutate path as one dataset version, a GraphQL write during live typing merged three-way so
  * both survive, a deleted row closing its cell, and the stream's saves when a reader leaves.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { cellKey, type Actor } from '@artifactbin/contracts';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
@@ -28,6 +28,24 @@ import { mintAccountToken, request, useAppHarness } from './harness';
 import { sseStream } from './sse';
 
 useAppHarness();
+
+/**
+ * A seam in a save: `beforeWrite` runs once, in the window between a save reading its cells and its dataset write
+ * (no transaction open there), so a test can type or write the dataset while the save is in flight.
+ */
+const seam = vi.hoisted(() => ({ beforeWrite: null as null | (() => Promise<void>) }));
+vi.mock('@/lib/dataset-graphql', async (original) => {
+  const actual = await original<typeof import('@/lib/dataset-graphql')>();
+  return {
+    ...actual,
+    writeDatasetCells: async (...args: Parameters<typeof actual.writeDatasetCells>) => {
+      const hook = seam.beforeWrite;
+      seam.beforeWrite = null;
+      await hook?.();
+      return actual.writeDatasetCells(...args);
+    },
+  };
+});
 
 type Person = { id: string; email: string };
 const ROLES = ['viewer', 'signed_in', 'anonymous'] as const;
@@ -143,6 +161,7 @@ beforeEach(async () => {
   red = ids.red!; blue = ids.blue!;
 });
 afterEach(async () => {
+  seam.beforeWrite = null;
   for (const handle of streams.splice(0)) handle.close();
   await regionSessions().settle();
   regionSessions().dispose();
@@ -291,6 +310,51 @@ describe('saving through the dataset', () => {
     expect((await stored())[0]).toMatchObject({ title: 'Login 2', description: 'A: Fix the login bug' });
   });
 
+  const dirtyCells = async () => (await (await getDb()).query<{ region_id: string }>("SELECT region_id FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND dirty_since IS NOT NULL", [datasetId])).rows;
+
+  it('a cell typed in another process while the save is retried is saved by that save, in the same version', async () => {
+    const a = await join(viewer);
+    a.text.insert(0, 'A: ');
+    expect((await a.push()).status).toBe(200);
+    const other = createRegionSessions({ db: getDb, keepaliveFrame: () => ': keepalive\n\n', subscribe: async (channel, handler, onLost) => (await getDb()).listen(channel, handler, onLost) });
+    try {
+      seam.beforeWrite = async () => {
+        // A write lands first (the save must retry) and, in the other process, someone types in a cell nobody had touched.
+        await gqlAsOwner('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {title: "Login 2"}) { title } }', { id: red });
+        const actor = identityForUser(editor.id, null, editor.email) as AccessActor;
+        const opened = await other.cells.open(actor, pageId, key(blue));
+        if (opened.status !== 200) throw new Error(`open ${opened.status}`);
+        const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { gc: true, clientId: opened.body.clientId });
+        const before = Y.encodeStateVector(doc);
+        doc.getText('region').insert(0, 'B: ');
+        expect((await other.cells.update(actor, pageId, key(blue), { clientId: opened.body.clientId, update: Y.encodeStateAsUpdate(doc, before) })).status).toBe(200);
+      };
+      const before = await datasetVersion();
+      expect(await (await flushCells(editor)).json()).toEqual({ saved: 1 });
+      expect(seam.beforeWrite).toBeNull();
+      expect(await datasetVersion()).toBe(before + 2);
+      expect((await stored()).map((row) => [row.title, row.description])).toEqual([['Login 2', 'A: Fix the login bug'], ['Docs', 'B: Write the docs']]);
+      expect(await dirtyCells()).toEqual([]);
+    } finally { await other.settle(); other.dispose(); }
+  });
+
+  it('typing that lands while the save writes is saved as soon as that write completes', async () => {
+    const a = await join(viewer);
+    a.text.insert(0, 'A: ');
+    expect((await a.push()).status).toBe(200);
+    seam.beforeWrite = async () => {
+      a.text.insert(a.text.length, ' and more');
+      expect((await a.push()).status).toBe(200);
+    };
+    const before = await datasetVersion();
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 2 });
+    expect(await datasetVersion()).toBe(before + 2);
+    expect((await stored())[0]!.description).toBe('A: Fix the login bug and more');
+    expect(await dirtyCells()).toEqual([]);
+    // Nothing left: the next save makes no version.
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 0 });
+  });
+
   it('a deleted row closes its cell (closed: removed) and deletes its rows', async () => {
     const a = await join(editor);
     const watching = await stream(editor, `${key(red)}:${a.reply.seq}`);
@@ -396,6 +460,39 @@ describe('text the dataset will not take', () => {
     expect(b.value()).toBe('Fix the login bug ok');
     expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
     expect((await stored())[0]!.description).toBe('Fix the login bug ok');
+  });
+
+  it('a check with pattern operators decides as the engine will: an admitted text saves, a refused one is check_violation', async () => {
+    const head = (await getArtifactById(datasetId))!;
+    const policy = POLICY();
+    const viewerRule = policy.tables[0]!.update_permissions.find((entry) => entry.role === 'viewer')!;
+    (viewerRule.permission as Record<string, unknown>).check = { _and: [{ description: { _nlike: '%TODO%' } }, { description: { _ilike: 'fix%' } }] };
+    expect((await patchMetadata(ownerToken, datasetId, { policy, expectedPolicyRevision: head.policy_revision ?? 0 })).status).toBe(200);
+    const a = await join(viewer);
+    a.text.insert(a.text.length, ' today');
+    expect((await a.push()).status).toBe(200);
+    a.text.insert(a.text.length, ' TODO');
+    expect(await a.push()).toEqual({ status: 422, body: { error: 'check_violation' } });
+    const before = await datasetVersion();
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
+    expect(await datasetVersion()).toBe(before + 1);
+    expect((await stored())[0]!.description).toBe('Fix the login bug today');
+    expect((await (await getDb()).query("SELECT 1 FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%'", [datasetId])).rows).toHaveLength(1);
+  });
+
+  it('an update rule filtering on the row ID (_id) admits that row\'s cell, to open and to save', async () => {
+    const head = (await getArtifactById(datasetId))!;
+    const policy = POLICY();
+    const viewerRule = policy.tables[0]!.update_permissions.find((entry) => entry.role === 'viewer')!;
+    (viewerRule.permission as Record<string, unknown>).filter = { _id: { _eq: red } };
+    (viewerRule.permission as Record<string, unknown>).check = { _id: { _neq: blue } };
+    expect((await patchMetadata(ownerToken, datasetId, { policy, expectedPolicyRevision: head.policy_revision ?? 0 })).status).toBe(200);
+    expect((await open(viewer, key(blue))).status).toBe(404);
+    const a = await join(viewer);
+    a.text.insert(0, 'By id: ');
+    expect((await a.push()).status).toBe(200);
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
+    expect((await stored())[0]!.description).toBe('By id: Fix the login bug');
   });
 
   it('a save the dataset refuses closes the cell for everyone (closed: rejected) and leaves nothing dirty', async () => {

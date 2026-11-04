@@ -38,6 +38,8 @@ const parseCellStorage = (regionId: string): { rowId: string; source: string } |
 /** The server's attribution of a merged-in dataset write: nobody's client. */
 const SYSTEM = { userId: null, tokenId: null };
 const SAVE_ATTEMPTS = 4;
+/** The most passes one save makes (each writes one table, or loses one race; see saveDataset). */
+const SAVE_PASSES = 8;
 const bytes = (value: Uint8Array): Buffer => Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 const clientOf = (update: Uint8Array): number => Y.decodeUpdate(update).structs[0]?.id.client ?? 0;
 
@@ -165,15 +167,23 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
     return refuse('out_of_order');
   }
 
+  /**
+   * Saves the dirty cells of one dataset `actor` may write. It goes in PASSES, each reading the dirty cells from the rows
+   * again: a pass writes one table's cells as one dataset version, or loses a race to another write (merged in, tried
+   * again). A cell typed while a pass ran (in this process or another: the rows say) is in the next pass, so it is saved
+   * as soon as the write in flight completes, not at the next save event. Passes run only after a write completed or a
+   * race was lost, never on a timer, and at most SAVE_PASSES of them; what the actor may not write never starts one.
+   */
   async function saveDataset(actor: AccessActor, page: ArtifactRow, datasetId: string, idleBefore?: string): Promise<number> {
     const base = await db();
-    const dirty = (await base.query<{ region_id: string; last_update_at: string | null }>(
-      "SELECT region_id, last_update_at FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND dirty_since IS NOT NULL ORDER BY region_id", [datasetId],
-    )).rows;
-    if (!dirty.length) return 0;
-    if (idleBefore !== undefined && !dirty.some((row) => row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(idleBefore))) return 0;
     let saved = 0;
-    for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
+    for (let pass = 0; pass < SAVE_PASSES; pass++) {
+      const dirty = (await base.query<{ region_id: string; last_update_at: string | null }>(
+        "SELECT region_id, last_update_at FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND dirty_since IS NOT NULL ORDER BY region_id", [datasetId],
+      )).rows;
+      if (!dirty.length) return saved;
+      // Only the save's start asks whether anything is quiet: a pass after it is that same save.
+      if (pass === 0 && idleBefore !== undefined && !dirty.some((row) => row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(idleBefore))) return 0;
       const dataset = await getArtifactById(datasetId);
       if (!dataset) return saved;
       const writable: CellAccess[] = [];
@@ -226,7 +236,8 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
         await tx.query("UPDATE region_states SET saved_version = $3 WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND saved_version = $2", [datasetId, dataset.version, written.version]);
         await notifyRegions(tx, datasetId, `saved:${written.version}`);
       });
-      if ('written' in outcome) { saved++; if (writable.length === batch.length) return saved; continue; }
+      // Written: the next pass takes another table's cells, and any typed while this one wrote.
+      if ('written' in outcome) { saved++; continue; }
       if (outcome.refused !== 'row_changed') {
         // The dataset will not take this text: the cells close for everyone (`rejected`) rather than stay dirty forever.
         console.warn('[region-sessions] a cell save was refused:', outcome.detail);

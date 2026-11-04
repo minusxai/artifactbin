@@ -1,7 +1,8 @@
-import type {
-  DatasetPolicy,
-  PolicyPredicate,
-  Scalar,
+import {
+  DATASET_ROW_ID,
+  type DatasetPolicy,
+  type PolicyPredicate,
+  type Scalar,
 } from '@artifactbin/contracts';
 
 const comparisons: Record<string, string> = {
@@ -12,6 +13,52 @@ const comparisons: Record<string, string> = {
   _lt: '<',
   _lte: '<=',
 };
+/**
+ * The pattern operators as SQL: the engine library function (`like_matches`, `ilike_matches`, both `datasetPatternMatch`)
+ * and whether the operator is its negation. Rules' filters and checks (compilePolicyPredicate) and the generated API's
+ * `where` (app lib/dataset-graphql) compile them the same way, so every door decides a pattern alike.
+ */
+const PATTERN_OPERATORS: Readonly<Record<string, { readonly fn: 'like_matches' | 'ilike_matches'; readonly negated: boolean }>> = {
+  _like: { fn: 'like_matches', negated: false },
+  _nlike: { fn: 'like_matches', negated: true },
+  _ilike: { fn: 'ilike_matches', negated: false },
+  _nilike: { fn: 'ilike_matches', negated: true },
+};
+/** `column` against a bound `pattern` by one pattern operator, as SQL (NOT of NULL stays NULL: three-valued). */
+export function patternSql(op: string, column: string, pattern: string): string | null {
+  const known = Object.hasOwn(PATTERN_OPERATORS, op) ? PATTERN_OPERATORS[op] : undefined;
+  if (!known) return null;
+  const call = `${known.fn}(${column}, ${pattern})`;
+  return known.negated ? `(NOT ${call})` : call;
+}
+const LITERAL = /[.*+?^${}()|[\]\\/]/g;
+const patternCache = new Map<string, RegExp>();
+/**
+ * THE ONE PATTERN MATCHER of a policy predicate (`_like`, `_ilike`; their negations are its NOT): a Postgres LIKE
+ * pattern (`%` any run, `_` one character, `\` escapes the next) matched against the whole text, `insensitive`
+ * folding case as Unicode does. Three-valued: null (SQL's unknown) when either side is null or not text. The role
+ * view (app lib/dataset-permissions) evaluates filters and the live cell check with it, and the write engine
+ * registers it as an SQL function for the filter and check it judges a write by, so all of them agree.
+ */
+export function datasetPatternMatch(value: unknown, pattern: unknown, insensitive: boolean): boolean | null {
+  if (typeof value !== 'string' || typeof pattern !== 'string') return null;
+  const key = `${insensitive ? 'i' : 's'}${pattern}`;
+  let re = patternCache.get(key);
+  if (!re) {
+    let out = '';
+    for (let i = 0; i < pattern.length; i++) {
+      const c = pattern[i]!;
+      if (c === '\\' && i + 1 < pattern.length) out += pattern[++i]!.replace(LITERAL, '\\$&');
+      else if (c === '%') out += '[\\s\\S]*';
+      else if (c === '_') out += '[\\s\\S]';
+      else out += c.replace(LITERAL, '\\$&');
+    }
+    re = new RegExp(`^${out}$`, insensitive ? 'iu' : 'u');
+    if (patternCache.size > 1_000) patternCache.clear();
+    patternCache.set(key, re);
+  }
+  return re.test(value);
+}
 function bad(path: string, reason: string): never {
   throw new Error(`${path}: ${reason}`);
 }
@@ -38,17 +85,17 @@ function strings(value: unknown, path: string) {
   )
     bad(path, 'expected unique nonempty strings');
 }
-function predicate(value: unknown, path: string, depth = 0) {
+function predicate(value: unknown, path: string, depth = 0, rowId = false) {
   if (depth > 12) bad(path, 'predicate nesting exceeds 12');
   const o = object(value, path);
   for (const [field, v] of Object.entries(o)) {
     const p = `${path}.${field}`;
     if (field === '_and' || field === '_or') {
       if (!Array.isArray(v)) bad(p, 'expected an array');
-      v.forEach((x, i) => predicate(x, `${p}[${i}]`, depth + 1));
-    } else if (field === '_not') predicate(v, p, depth + 1);
+      v.forEach((x, i) => predicate(x, `${p}[${i}]`, depth + 1, rowId));
+    } else if (field === '_not') predicate(v, p, depth + 1, rowId);
     else {
-      if (field.startsWith('_') || !field || field.includes('\0'))
+      if ((field.startsWith('_') && !(rowId && field === DATASET_ROW_ID)) || !field || field.includes('\0'))
         bad(p, 'unsupported predicate');
       const ops = object(v, p);
       for (const [op, x] of Object.entries(ops)) {
@@ -63,6 +110,8 @@ function predicate(value: unknown, path: string, depth = 0) {
         } else if (Object.hasOwn(comparisons, op)) {
           scalar(x, p);
           if (x === null) bad(p, 'null comparisons require _is_null');
+        } else if (Object.hasOwn(PATTERN_OPERATORS, op)) {
+          if (typeof x !== 'string') bad(`${p}.${op}`, 'expected a text pattern');
         } else bad(`${p}.${op}`, 'unsupported operator');
       }
     }
@@ -186,14 +235,20 @@ export function policyValue(
   }
   return value;
 }
-/** SQL NULL semantics are delegated to DuckDB, including NOT/AND/OR. */
+/**
+ * A policy predicate as one SQL condition for the write engine, values bound (`$<prefix>_<n>`). SQL's three-valued
+ * logic is the engine's, NOT/AND/OR included. The pattern operators call the engine library's `like_matches` and
+ * `ilike_matches` (PATTERN_OPERATORS). `_id`, the platform row ID, reads `options.rowId`, the column the table carries
+ * the IDs in; a predicate naming it without one, and any other underscore name, refuses.
+ */
 export function compilePolicyPredicate(
   value: PolicyPredicate,
   columns: string[],
   session: Record<string, Scalar>,
   prefix = 'policy',
+  options: { rowId?: string } = {},
 ): { sql: string; params: Record<string, Scalar> } {
-  predicate(value, 'predicate');
+  predicate(value, 'predicate', 0, true);
   const params: Record<string, Scalar> = {};
   let n = 0;
   const bind = (v: Scalar) => {
@@ -212,12 +267,14 @@ export function compilePolicyPredicate(
             : 'FALSE';
       }
       if (field === '_not') return `(NOT ${walk(v as PolicyPredicate)})`;
-      if (!columns.includes(field)) bad(field, 'unknown column');
-      const col = `"${field.replaceAll('"', '""')}"`;
+      const name = field === DATASET_ROW_ID ? options.rowId ?? bad(field, 'the row ID is not available to this write') : field;
+      if (!columns.includes(name)) bad(field, 'unknown column');
+      const col = `"${name.replaceAll('"', '""')}"`;
       const conditions = Object.entries(
         v as Record<string, Scalar | Scalar[]>,
       ).map(([op, x]) => {
         if (op === '_is_null') return `${col} IS ${x ? '' : 'NOT '}NULL`;
+        if (Object.hasOwn(PATTERN_OPERATORS, op)) return patternSql(op, col, bind(x as Scalar))!;
         if (op === '_in' || op === '_nin') {
           const list = x as Scalar[];
           return list.length

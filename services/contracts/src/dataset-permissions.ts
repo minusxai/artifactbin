@@ -101,6 +101,8 @@ export const DATASET_ID_OPERATORS = ['_eq', '_neq', '_in', '_nin'] as const;
 
 /** The stable platform row ID: predicates may use it; columns and presets may not. */
 export const DATASET_ROW_ID = '_id';
+/** Where a door that serves row IDs (the generated API) carries them on a row: `_id` in a rule reads this column. */
+export const DATASET_ROW_ID_COLUMN = '__af_graphql_row_id';
 
 export const DATASET_PERMISSION_LIMITS = {
   bytes: 64_000,

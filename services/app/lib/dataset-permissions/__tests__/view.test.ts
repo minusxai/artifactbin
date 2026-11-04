@@ -47,7 +47,7 @@ describe('the filter', () => {
     ['a session value the request lacks (anonymous has no user id)', { owner: { _eq: 'X-Hasura-User-Id' } }, { 'x-hasura-role': 'anonymous' }],
     ['a session value inside _not still hides everything', { _not: { owner: { _eq: 'X-Hasura-User-Id' } } }, { 'x-hasura-role': 'anonymous' }],
     ['a column the table no longer has, even under _is_null', { gone: { _is_null: true } }, SESSION],
-    ['the platform row id (served by the generated API later)', { _id: { _eq: 'r1' } }, SESSION],
+    ['the platform row id on rows of a door that carries none (SQL, downloads)', { _id: { _eq: 'r1' } }, SESSION],
     ['an unknown operator', { team: { _regex: '.*' } }, SESSION],
     ['a type mismatch (text against a boolean)', { team: { _neq: true } }, SESSION],
   ])('fails closed: %s keeps no row', (_, filter, session) => expect(names(filter, session)).toEqual([]));
@@ -62,6 +62,14 @@ describe('viewRows', () => {
   it('keeps a door decoration the dataset does not declare (the page row id)', () => {
     const decorated = ROWS.map((row, i) => ({ ...row, __af_graphql_row_id: `r${i}` }));
     expect(viewRows(decorated, COLUMNS, rule({ team: { _eq: 'blue' } }, { columns: ['name'] }), SESSION)).toEqual([{ name: 'bo', __af_graphql_row_id: 'r1' }]);
+  });
+
+  it('reads `_id` from the ID a door carries on its rows, and never caches positions that depend on it', () => {
+    const decorated = ROWS.map((row, i) => ({ ...row, __af_graphql_row_id: `r${i}` }));
+    const byId = rule({ _id: { _in: ['r0', 'r2'] } }, { columns: ['name'] });
+    expect(viewRows(decorated, COLUMNS, byId, SESSION, 'obj-1')).toEqual([{ name: 'ada', __af_graphql_row_id: 'r0' }, { name: 'cy', __af_graphql_row_id: 'r2' }]);
+    // The same object through a door without IDs keeps nothing (no stale positions from the call above).
+    expect(viewRows(ROWS, COLUMNS, byId, SESSION, 'obj-1')).toEqual([]);
   });
 
   it('returns the stored rows themselves for a rule that hides nothing', () => {

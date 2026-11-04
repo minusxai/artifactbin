@@ -360,6 +360,49 @@ describe.each<[string, SqlService]>([
   it('still refuses a statement that genuinely cannot be planned', async () => {
     expect(await runRow(`update rows set status=nosuch where id=${ROW.id}`)).toMatchObject({ error: expect.stringContaining('no such column: nosuch') });
   });
+  it('evaluates the pattern operators in a filter and a check, as the role view and the live cell check do', async () => {
+    const rule = (permission: Record<string, unknown>): DatasetMutationPolicy => ({ ...policy, table: { ...policy.table, update_permissions: [{ role: 'visitor', permission: { columns: ['body'], filter: {}, ...permission } }] } });
+    const write = (value: string | null, check: Record<string, unknown>) => svc.mutate({ table, sql: 'update rows set body = $body where id = 1', params: { body: value }, policy: rule({ check }) });
+    const admitted = async (value: string | null, check: Record<string, unknown>) => {
+      const out = await write(value, check);
+      if ('affected' in out && out.affected === 1) return true;
+      expect(out).toMatchObject({ error: expect.stringContaining('failed its check') });
+      return false;
+    };
+    // _like is case-sensitive; % and _ are wildcards, \ escapes; newlines are ordinary characters.
+    expect(await admitted('changed', { body: { _like: 'ch%' } })).toBe(true);
+    expect(await admitted('Changed', { body: { _like: 'ch%' } })).toBe(false);
+    expect(await admitted('line one\nline two', { body: { _like: 'line%two' } })).toBe(true);
+    expect(await admitted('50% off', { body: { _like: '50\\%%' } })).toBe(true);
+    expect(await admitted('500 off', { body: { _like: '50\\%%' } })).toBe(false);
+    expect(await admitted('a*b', { body: { _like: 'a_b' } })).toBe(true);
+    expect(await admitted('ab', { body: { _like: 'a_b' } })).toBe(false);
+    // _nlike: a typed word the rule forbids.
+    expect(await admitted('fine text', { body: { _nlike: '%secret%' } })).toBe(true);
+    expect(await admitted('a secret here', { body: { _nlike: '%secret%' } })).toBe(false);
+    // _ilike folds case beyond ASCII, as the role view's matcher does.
+    expect(await admitted('École ouverte', { body: { _ilike: 'éCOLE%' } })).toBe(true);
+    expect(await admitted('Ecole', { body: { _nilike: 'écol%' } })).toBe(true);
+    expect(await admitted('ÉCOLE', { body: { _nilike: 'écol%' } })).toBe(false);
+    // NULL is unknown, so neither the pattern nor its negation admits it.
+    expect(await admitted(null, { body: { _nlike: '%secret%' } })).toBe(false);
+    expect(await admitted(null, { _not: { body: { _like: '%secret%' } } })).toBe(false);
+    // In a filter (row-level security): only the rows whose status matches are written.
+    const filtered = await svc.mutate({ table, sql: "update rows set body = 'x'", params: {}, policy: rule({ filter: { status: { _like: 'op%' } } }) });
+    expect(filtered).toMatchObject({ affected: 1, rows: [{ id: 1, body: 'x', status: 'open' }, table.rows[1]] });
+    // A pattern from the session resolves server-side.
+    const session = { ...rule({ check: { body: { _like: 'X-Hasura-User-Id' } } }), session: { 'x-hasura-user-id': 'u_' } };
+    expect(await svc.mutate({ table, sql: "update rows set body = 'u1' where id = 1", params: {}, policy: session })).toMatchObject({ affected: 1 });
+  });
+  it('reads the row ID (`_id`) from the column the policy names for it, and refuses a rule naming it without one', async () => {
+    const keyed = { ...table, columns: [...table.columns, { name: 'rid', type: 'string' as const }], rows: table.rows.map((r) => ({ ...r, rid: `r${r.id}` })) };
+    const byId = (rowId?: string): DatasetMutationPolicy => ({ ...policy, ...(rowId ? { rowId } : {}), table: { ...policy.table, update_permissions: [{ role: 'visitor', permission: { columns: ['body'], filter: { _id: { _in: ['r2'] } }, check: { _id: { _neq: 'r9' } } } }] } });
+    expect(await svc.mutate({ table: keyed, sql: "update rows set body = 'x'", params: {}, policy: byId('rid') })).toMatchObject({ affected: 1, rows: [keyed.rows[0], { ...keyed.rows[1], body: 'x' }] });
+    expect(await svc.mutate({ table: keyed, sql: "update rows set body = 'x'", params: {}, policy: byId() })).toMatchObject({ error: expect.stringContaining('_id') });
+    // Any other underscore name is still no column.
+    const other = { ...policy, rowId: 'rid', table: { ...policy.table, update_permissions: [{ role: 'visitor', permission: { columns: ['body'], filter: { _rid: { _eq: 'r1' } } } }] } } as DatasetMutationPolicy;
+    expect(await svc.mutate({ table: keyed, sql: "update rows set body = 'x'", params: {}, policy: other })).toHaveProperty('error');
+  });
   it('rejects opaque or unsupported write forms', async () => {
     expect(await run('update rows set body=$body returning *')).toMatchObject({ error: expect.stringContaining('RETURNING') });
     // A CTE-prefixed write is judged on its effect, like any other: the delete filter holds.
