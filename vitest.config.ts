@@ -43,8 +43,11 @@ const leaking = (include: string[], exclude: string[]) => globSync(include, { cw
 const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
 const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
-/** A resolver's `caps.postgres` against a disposable `postgres:17-alpine` with TLS: `integration` only, as the Docker proofs are. */
-const REAL_POSTGRES_RESOLVER_TEST = 'services/app/lib/page-operations/__tests__/database-postgres.test.ts';
+/**
+ * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS: `integration` only,
+ * as the Docker proofs are.
+ */
+const REAL_DATABASE_RESOLVER_TESTS = ['services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
@@ -123,7 +126,7 @@ export default defineConfig({
             '**/*.ui.test.{ts,tsx}',
             ...CHROMIUM_TESTS,
             'scripts/__tests__/reserved-ids-proof.test.mjs',
-            REAL_POSTGRES_RESOLVER_TEST,
+            ...REAL_DATABASE_RESOLVER_TESTS,
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
@@ -147,8 +150,8 @@ export default defineConfig({
             // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
             // a disposable Postgres (a `skipIf` on the image).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
-            // caps.postgres end to end: a resolver through the tunnel to a disposable TLS Postgres (a `skipIf` on the image).
-            REAL_POSTGRES_RESOLVER_TEST,
+            // caps.db end to end: a resolver through the tunnel to a disposable TLS Postgres and MySQL (a `skipIf` on each image).
+            ...REAL_DATABASE_RESOLVER_TESTS,
             ...SERVER_BOOT_TESTS,
           ],
           exclude: ['**/node_modules/**'],

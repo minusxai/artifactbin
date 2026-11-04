@@ -1,6 +1,6 @@
 ---
 name: resolvers
-description: Resolver files for pages, caps.fetch with host-filled secrets, caps.query over linked datasets as the caller, read-only caps.sql, caps.postgres to the owner's database, @auth roles and Test connection.
+description: Resolver files for pages, caps.fetch with host-filled secrets, caps.query over linked datasets as the caller, read-only caps.sql, caps.db to the owner's database, @auth roles and Test connection.
 ---
 ## Read first: dataset or resolver?
 
@@ -21,7 +21,7 @@ it from new versions only.
 
 ## Contents
 
-[File](#the-file) · [caps.fetch](#capsfetch-and-secrets) · [caps.query](#capsquery-datasets-as-the-caller) · [caps.sql](#capssql-read-only-sql) · [caps.postgres](#capspostgres-your-own-database) · [@auth](#auth-roles) · [Page](#calling-from-the-page) · [Library](#library)
+[File](#the-file) · [caps.fetch](#capsfetch-and-secrets) · [caps.query](#capsquery-datasets-as-the-caller) · [caps.sql](#capssql-read-only-sql) · [caps.db](#capsdb-your-own-database) · [@auth](#auth-roles) · [Page](#calling-from-the-page) · [Library](#library)
 
 ## The file
 
@@ -72,7 +72,7 @@ for every status. HTTPS on port 443 only; private, loopback and metadata address
 10 s, 256 KiB request body, 2 MiB response; at most 3 redirects, only for GET/HEAD without secrets.
 `body` is a string (JSON.stringify yourself).
 
-Secrets never appear in code, pages or replies (but see caps.postgres). `export const secrets =
+Secrets never appear in code, pages or replies. `export const secrets =
 {NAME: 'host'}` binds each name to the one host (or `*.example.com`) that may receive it. Write
 `{{NAME}}` in the URL, a header value or the body; the host fills it only in requests to that host and redacts the value from
 responses. `auth: {type: 'google', secret: 'GOOGLE_SA', scopes: [...]}` signs in with a Google
@@ -112,12 +112,13 @@ reads an earlier by name) with inline `tables` (`{columns:[{name, type}], rows}`
 `{[name]: {columns, rows} | {error}}`, only the `only` names if given. Per call: 10,000 input rows, 8 MiB in, 5 s
 per query, 20 s total, 4 MiB out; one of the 32 requests.
 
-## caps.postgres: your own database
+## caps.db: your own database
 
-`secrets = {DB: 'postgres'}` declares a connection the owner sets in Resolvers.
-`db = await caps.postgres('DB')` opens a session (TLS verify-full, public host, port 1024+);
-`db.query(sql, [params])` gives `{rows, columns, command, count}`; then `db.end()`. The password
-enters the run: **use a read-only database user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
+`secrets = {DB: 'postgres'}` (or `'mysql'`) declares a connection the owner sets in Resolvers.
+`db = await caps.db('DB')` opens a session (TLS verify-full, public host, port 1024+);
+`db.query(sql, [params])` (`$1`; MySQL `?`) gives `{rows, columns, command, count}`; then `db.end()`.
+BIGINT and DECIMAL are strings. Your code never sees the password; **use a read-only database
+user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
 
 ## @auth roles
 

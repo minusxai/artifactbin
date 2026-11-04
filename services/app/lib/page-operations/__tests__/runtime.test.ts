@@ -2,11 +2,11 @@ import {it,expect} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '@artifactbin/runner/local';
 import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type PageBackendRecord} from '../backend';
-it('executes a compiled immutable resolver through the retained isolated runner, with caps fetch, postgres, query and sql only',async()=>{
+it('executes a compiled immutable resolver through the retained isolated runner, with caps db, fetch, query and sql only (no caps.postgres)',async()=>{
  const db=new PGlite();let record:PageBackendRecord;
  const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(context.request,operation,args,async()=>record)});
  try{
-  const source='export const typeDefs="type Query { double(n:Int!):Int! caps:String! store:String! } type Mutation { add(n:Int!):Int! @auth(role:editor) }"; export default { double:async({n})=>n*2, caps:async(args,principal,caps)=>Object.keys(caps).sort().join(","), store:async(args,principal,caps)=>typeof caps.store+" "+typeof caps.secrets, add:async({n})=>n+1 };';
+  const source='export const typeDefs="type Query { double(n:Int!):Int! caps:String! store:String! } type Mutation { add(n:Int!):Int! @auth(role:editor) }"; export default { double:async({n})=>n*2, caps:async(args,principal,caps)=>Object.keys(caps).sort().join(","), store:async(args,principal,caps)=>typeof caps.store+" "+typeof caps.secrets+" "+typeof caps.postgres+" "+typeof globalThis.__capabilities.postgres+" "+typeof globalThis.__capabilities.db, add:async({n})=>n+1 };';
   record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend1',pageId:'page1',version:'v1',ownerId:'owner1'};
   expect(record).toMatchObject({secretBindings:[],secretHosts:{},test:false});
   expect(await createBackendCompiler(runner)('export const secrets={API_KEY:"api.example.com"}; export const typeDefs="type Query { test: String! @auth(role: owner) }"; export default { test:()=>"ok" };')).toMatchObject({secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'},test:true});
@@ -14,8 +14,9 @@ it('executes a compiled immutable resolver through the retained isolated runner,
   const call={namespace:'tasks',fileId:'backend1',version:'v1',operation:'query' as const,field:'double',args:{n:2},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
   expect(await invoke(call)).toBe(4);
   expect(await invoke({...call,operation:'mutation',field:'add',args:{n:1}})).toBe(2);
-  expect(await invoke({...call,field:'caps',args:{}})).toBe('fetch,postgres,query,sql');
-  expect(await invoke({...call,field:'store',args:{}})).toBe('undefined undefined');
+  expect(await invoke({...call,field:'caps',args:{}})).toBe('db,fetch,query,sql');
+  // caps.postgres is gone with no alias, on caps and on the worker's host object alike (caps.db replaced it).
+  expect(await invoke({...call,field:'store',args:{}})).toBe('undefined undefined undefined undefined object');
  }finally{await runner.close();await db.close();}
 },20000);
 it('the host fills secrets, the resolver never sees a value, and a 2 MiB response crosses every link',async()=>{
@@ -72,7 +73,7 @@ it('the host fills secrets, the resolver never sees a value, and a 2 MiB respons
   for(const form of [KEY,encodeURIComponent(KEY)])expect(output).not.toContain(form);
   expect(received[0]).toBe(`Bearer ${KEY} /echo?k=${encodeURIComponent(KEY)} ${KEY}`);
   // caps is exactly {fetch, query, sql}; the role is the admitted principal's.
-  expect(JSON.parse(output)).toEqual({keys:['fetch','query','sql','postgres'],named:'undefined',role:'viewer',
+  expect(JSON.parse(output)).toEqual({keys:['fetch','query','sql','db'],named:'undefined',role:'viewer',
    query:{caller:{subject:'viewer1',role:'viewer'},operation:'query',variables:{team:'red'}},
    sql:{caller:{subject:'viewer1',role:'viewer'},args:{sql:'SELECT team, count(*) AS n FROM staff GROUP BY team',params:{min:1}}},
    sqlBatch:{caller:{subject:'viewer1',role:'viewer'},args:{queries:[{name:'a',sql:'SELECT 1'}],tables:{t:{columns:[{name:'v',type:'number'}],rows:[{v:1}]}}}},

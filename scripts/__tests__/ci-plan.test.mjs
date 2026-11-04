@@ -248,14 +248,14 @@ describe('CI avoids duplicate integration setup', () => {
     for (const script of scripts) visit(script);
     expect(seen.size).toBeGreaterThan(scripts.length);
   });
-  it('provisions Chromium and Postgres only for the integration project, in its own job beside the node shards', () => {
+  it('provisions Chromium, Postgres and MySQL only for the integration project, in its own job beside the node shards', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
     expect(jobs.node.steps.filter(step => step.id === 'playwright' || /playwright install|docker pull|test:integration/.test(step.run ?? ''))).toEqual([]);
     const steps = jobs.integration.steps;
     expect(jobs.integration.needs).toEqual(['plan']);
     expect(jobs.integration.if).toBe("needs.plan.outputs.integration == 'true'");
     const run = steps.findIndex(step => step.run === 'npm run test:integration');
-    for (const provision of [step => step.id === 'playwright', step => step.run === 'npx playwright install chromium', step => step.run === 'docker pull postgres:17-alpine']) {
+    for (const provision of [step => step.id === 'playwright', step => step.run === 'npx playwright install chromium', step => step.run === 'docker pull postgres:17-alpine', step => step.run === 'docker pull mysql:8']) {
       const at = steps.findIndex(provision);
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(run);

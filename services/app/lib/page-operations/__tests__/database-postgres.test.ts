@@ -1,5 +1,5 @@
 /**
- * END TO END: a compiled resolver → `caps.postgres` → the worker's postgres.js → the controller's tunnel → a real
+ * END TO END: a compiled resolver → `caps.db` (a `'postgres'` name) → the worker's postgres.js → the controller's tunnel → a real
  * PostgreSQL 17 (a disposable `postgres:17-alpine` container with TLS on, certificates made here by openssl).
  * TLS runs from the driver to the server: `verify-full` accepts the right CA and name (DNS or IP), and refuses a
  * wrong CA, a wrong name and an unknown root; the controller's socket carries no plaintext SQL when TLS is on.
@@ -22,10 +22,10 @@ const READER_PASSWORD='reader-pa55-f0r-tests',BAD_PASSWORD='not-the-reader-passw
 const SOURCE=`export const secrets={PLAIN:'postgres',TLS:'postgres',TLS_IP:'postgres',WRONG_CA:'postgres',WRONG_NAME:'postgres',NO_CA:'postgres',BAD_PASSWORD:'postgres'};
 export const typeDefs="type Query { orders(min:Int!): String probe(name:String!): String session: String }";
 export default {
- orders: async({min},p,caps)=>{const db=await caps.postgres('PLAIN');try{return JSON.stringify(await db.query('select id, item, amount, placed from orders where amount >= $1 order by id',[min]));}finally{await db.end();}},
- probe: async({name},p,caps)=>{const db=await caps.postgres(name);try{return JSON.stringify((await db.query('select ssl, version from pg_stat_ssl where pid = pg_backend_pid()')).rows[0]);}catch(e){return JSON.stringify({code:e.code,message:e.message});}finally{await db.end();}},
+ orders: async({min},p,caps)=>{const db=await caps.db('PLAIN');try{return JSON.stringify(await db.query('select id, item, amount, placed from orders where amount >= $1 order by id',[min]));}finally{await db.end();}},
+ probe: async({name},p,caps)=>{const db=await caps.db(name);try{return JSON.stringify((await db.query('select ssl, version from pg_stat_ssl where pid = pg_backend_pid()')).rows[0]);}catch(e){return JSON.stringify({code:e.code,message:e.message});}finally{await db.end();}},
  session: async(a,p,caps)=>{
-  const db=await caps.postgres('TLS');
+  const db=await caps.db('TLS');
   try{
    await db.query('begin');
    const one=(await db.query('select txid_current() as t')).rows[0].t,two=(await db.query('select txid_current() as t')).rows[0].t;
@@ -36,7 +36,7 @@ export default {
  },
 };`;
 
-describe.skipIf(!dockerAvailable)('caps.postgres against a real PostgreSQL over TLS',()=>{
+describe.skipIf(!dockerAvailable)('caps.db against a real PostgreSQL over TLS',()=>{
  let container='',dir='',port=0;
  let runner:Awaited<ReturnType<typeof createRunner>>,db:PGlite,record:PageBackendRecord,invoke:ReturnType<typeof createBackendInvoker>;
  const written:Buffer[]=[];
@@ -61,7 +61,7 @@ describe.skipIf(!dockerAvailable)('caps.postgres against a real PostgreSQL over 
    `create table orders(id serial primary key, item text not null, amount int not null, placed date not null default '2026-11-01');
     insert into orders(item, amount) values ('tea', 4), ('cake', 12), ('pie', 30);
     create role reader login password '${READER_PASSWORD}'; grant select on orders to reader;`],{stdio:'pipe'});
-  const base={port,database:'shop',user:'reader',password:READER_PASSWORD};
+  const base={kind:'postgres',port,database:'shop',user:'reader',password:READER_PASSWORD};
   const values:Record<string,string>=Object.fromEntries(Object.entries({
    PLAIN:{...base,host:'127.0.0.1',tls:'disable'},
    TLS:{...base,host:'db.example.com',tls:'verify-full',ca:read('ca.crt')},

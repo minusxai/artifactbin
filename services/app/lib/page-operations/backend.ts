@@ -1,6 +1,6 @@
 import { transform } from 'esbuild';
 import { randomUUID } from 'node:crypto';
-import { DATASET_ROLES, RESOLVER_DATABASE_BINDING, RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type DatasetRole, type HtmlJson, type PageResolverFieldCall, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson, type RunSnapshot } from '@artifactbin/contracts';
+import { DATASET_ROLES, isResolverDatabaseKind, RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type DatasetRole, type HtmlJson, type PageResolverFieldCall, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson, type RunSnapshot } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
 import {readPinnedBackendSecret,secretHostMap} from '@/lib/html-backend-secrets';
@@ -23,9 +23,10 @@ const limits={timeoutMs:RESOLVER_LIMITS.wallMs,cpuMs:200,memoryMiB:64,maxRequest
 export const RESOLVER_THREW='resolver_error: ';
 /**
  * `caps` is `fetch` (with host-filled `{{NAME}}` placeholders), `query` (the page's datasets as the caller, GraphQL),
- * `sql` (the same, read-only SQL) and `postgres` (a named owner database connection through the runner's tunnel), nothing else.
+ * `sql` (the same, read-only SQL) and `db` (a named owner database connection, Postgres or MySQL, through the runner's
+ * tunnel), nothing else.
  */
-const CAPS=`Object.freeze({fetch:G(async(url,init)=>{const o=init??{};const r=await host.artifactbin.call('pageBackend.fetch',{url,method:o.method,headers:o.headers,body:o.body,auth:o.auth});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({...r.headers}),text:G(async()=>r.body),json:G(async()=>JSON.parse(r.body))});}),query:G((query,variables)=>C('pageBackend.query',{query,variables:variables??null})),sql:G((sql,params)=>C('pageBackend.sql',typeof sql==='string'?{sql,params:params??null}:sql)),postgres:G(async(name)=>{const id=await D(()=>host.postgres.open(name));return Object.freeze({query:G((sql,params)=>D(()=>host.postgres.query(id,sql,params??null))),end:G(()=>D(()=>host.postgres.end(id)))});})})`;
+const CAPS=`Object.freeze({fetch:G(async(url,init)=>{const o=init??{};const r=await host.artifactbin.call('pageBackend.fetch',{url,method:o.method,headers:o.headers,body:o.body,auth:o.auth});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({...r.headers}),text:G(async()=>r.body),json:G(async()=>JSON.parse(r.body))});}),query:G((query,variables)=>C('pageBackend.query',{query,variables:variables??null})),sql:G((sql,params)=>C('pageBackend.sql',typeof sql==='string'?{sql,params:params??null}:sql)),db:G(async(name)=>{const id=await D(()=>host.db.open(name));return Object.freeze({query:G((sql,params)=>D(()=>host.db.query(id,sql,params??null))),end:G(()=>D(()=>host.db.end(id)))});})})`;
 /** A host call whose refusal (code: detail) reaches resolver code as an Error carrying that code. */
 const CALL=`const D=async(f)=>{try{return await f();}catch(e){const m=String(e&&e.message||e),i=m.indexOf(': ');const error=Error(i>0?m.slice(i+2):m);error.code=i>0?m.slice(0,i):m;throw error;}};const C=(operation,args)=>D(()=>host.artifactbin.call(operation,args));`;
 /** The runner compiler's fixed import allowlist is authoritative. No host evaluation. */
@@ -117,7 +118,7 @@ export function createBackendCompiler(runner:RunnerService){return async(source:
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
 /** Every pinned secret value that can still be read, and each connection's password; a missing or transferred one cannot be in the reason. */
 async function pinnedValues(backend:PageBackendRecord,read:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<string[]>{
- const values=await Promise.all((backend.secretBindings??[]).map(name=>read(backend,name).then(value=>backend.secretHosts?.[name]===RESOLVER_DATABASE_BINDING?[value,connectionPassword(value)??'']:[value],()=>[])));
+ const values=await Promise.all((backend.secretBindings??[]).map(name=>read(backend,name).then(value=>isResolverDatabaseKind(backend.secretHosts?.[name])?[value,connectionPassword(value)??'']:[value],()=>[])));
  return values.flat().filter(Boolean);
 }
 /**
@@ -144,7 +145,7 @@ export async function pageBackendCapability(request:RunStart,operation:string,ar
  const backend=request.artifactVersion?await load(request.artifactId,request.artifactVersion):null;
  const principal=request.input.principal;
  if(!backend||backend.backendId!==request.artifactId||backend.version!==request.artifactVersion||backend.ownerId!==request.userId||backend.compiled!==request.program.source||!principal||typeof principal!=='object'||Array.isArray(principal)||principal.tenant!==backend.pageId)throw Error('backend_capability_forbidden');
- // Resolver code may reach any host operation by name; only fetch, query, sql and the runner worker's postgres are offered.
+ // Resolver code may reach any host operation by name; only fetch, query, sql and the runner worker's db are offered.
  // Fetch secret values stay on the host; a connection's settings go to the runner worker (its driver), not to resolver code.
  const port=operation==='artifactbin.pageBackend.query'?datasets?.query:operation==='artifactbin.pageBackend.sql'?datasets?.sql:null;
  if(port!==null){

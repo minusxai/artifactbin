@@ -30,7 +30,7 @@ export interface RunnerOptions {
      */
     prestartedWorkers?: number;
     ceilings?: Partial<RunnerLimits>;
-    /** `caps.postgres` tunnels (database-tunnel.ts). `allowLoopback` is controller configuration for development only. */
+    /** `caps.db` tunnels (database-tunnel.ts). `allowLoopback` is controller configuration for development only. */
     database?: DatabaseTunnelOptions;
 }
 interface Active {

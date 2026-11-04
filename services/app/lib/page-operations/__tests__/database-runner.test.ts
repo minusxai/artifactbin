@@ -1,17 +1,19 @@
 /**
- * `caps.postgres` through the whole resolver path — compiled backend, real runner and worker, controller tunnel —
- * against minimal loopback servers that speak just enough of the Postgres wire protocol: one that echoes the
- * cleartext password it is sent back in its error, and one that never answers. (A real server is the
- * integration test, database-postgres.test.ts.) What readers can see never carries the password; a run that ends,
- * is cancelled or loses its worker closes its sockets; a name the page does not declare is refused.
+ * `caps.db` through the whole resolver path — compiled backend, real runner and worker, controller tunnel — for each
+ * kind, against minimal loopback servers that speak just enough of its wire protocol: one that echoes the password
+ * it is sent back in its error (Postgres: sent in clear on request; MySQL: decrypted from caching_sha2_password's RSA
+ * exchange with a key the server makes), and one that never answers. (Real servers are the integration tests,
+ * database-postgres.test.ts and database-mysql.test.ts.) What readers can see never carries the password; a run that
+ * ends, is cancelled or loses its worker closes its sockets; a name the page does not declare is refused.
  */
 import {execFileSync} from 'node:child_process';
+import {constants,generateKeyPairSync,privateDecrypt,randomBytes} from 'node:crypto';
 import net from 'node:net';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '@artifactbin/runner/local';
-import {CHUNK_BYTES,WINDOW_BYTES} from '@artifactbin/runner/worker-database';
-import {RESOLVER_DATABASE_LIMITS,type RunnerService,type RunStart} from '@artifactbin/contracts';
+import {CHUNK_BYTES,DATABASE_KINDS,DATABASE_OPERATION,WINDOW_BYTES} from '@artifactbin/runner/worker-database';
+import {RESOLVER_DATABASE_KINDS,RESOLVER_DATABASE_LIMITS,RESOLVER_DATABASE_OPERATION,type RunnerService,type RunStart} from '@artifactbin/contracts';
 import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type PageBackendRecord} from '../backend';
 import {createResolverFetch} from '../public-fetch';
 
@@ -34,37 +36,106 @@ function echoingServer(){
  });
  return s;
 }
+/**
+ * A MySQL server that asks for caching_sha2_password, demands full authentication, hands out its own RSA key,
+ * decrypts the password the client sends with it and answers an access-denied error quoting that password.
+ */
+function echoingMysqlServer(){
+ const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+ const pem=publicKey.export({type:'spki',format:'pem'});
+ return net.createServer(socket=>{
+  socket.on('error',()=>{});
+  const scramble=randomBytes(20).map(b=>b%94+33);
+  const packet=(seq:number,payload:Buffer)=>{const head=Buffer.alloc(4);head.writeUIntLE(payload.length,0,3);head[3]=seq;socket.write(Buffer.concat([head,payload]));};
+  const caps=0x1|0x8|0x200|0x8000|0x80000|0x200000;
+  const flags=Buffer.alloc(2);
+  packet(0,Buffer.concat([Buffer.from([10]),Buffer.from('8.0.99-echo\0'),Buffer.from([1,0,0,0]),scramble.subarray(0,8),Buffer.from([0]),(flags.writeUInt16LE(caps&0xffff),Buffer.from(flags)),Buffer.from([255,2,0]),(flags.writeUInt16LE(caps>>>16),Buffer.from(flags)),Buffer.from([21]),Buffer.alloc(10),scramble.subarray(8),Buffer.from([0]),Buffer.from('caching_sha2_password\0')]));
+  let buffered=Buffer.alloc(0),step=0;
+  socket.on('data',b=>{
+   buffered=Buffer.concat([buffered,b]);
+   while(buffered.length>=4&&buffered.length>=4+buffered.readUIntLE(0,3)){
+    const length=buffered.readUIntLE(0,3),seq=buffered[3]!,body=buffered.subarray(4,4+length);buffered=buffered.subarray(4+length);
+    step++;
+    if(step===1)packet(seq+1,Buffer.concat([Buffer.from([0xfe]),Buffer.from('caching_sha2_password\0'),scramble,Buffer.from([0])]));
+    else if(step===2)packet(seq+1,Buffer.from([1,4]));
+    else if(step===3)packet(seq+1,Buffer.concat([Buffer.from([1]),Buffer.from(pem)]));
+    else{
+     const mixed=privateDecrypt({key:privateKey,oaepHash:'sha1',padding:constants.RSA_PKCS1_OAEP_PADDING},body);
+     const sent=Buffer.from(mixed.map((v,i)=>v^scramble[i%scramble.length]!)).toString().replace(/\0$/,'');
+     const code=Buffer.alloc(2);code.writeUInt16LE(1045);
+     packet(seq+1,Buffer.concat([Buffer.from([0xff]),code,Buffer.from('#28000'),Buffer.from(`Access denied: password "${sent}" was rejected`)]));
+     socket.end();
+    }
+   }
+  });
+ });
+}
+/**
+ * A MySQL server that accepts any login, then answers every statement but the session's time zone with a LOCAL
+ * INFILE request for a worker file. It records the client's capability flags and every byte sent after a request.
+ */
+const hostile={flags:[] as number[],infile:[] as Buffer[]};
+function hostileMysqlServer(){
+ return net.createServer(socket=>{
+  socket.on('error',()=>{});
+  const packet=(seq:number,payload:Buffer)=>{const head=Buffer.alloc(4);head.writeUIntLE(payload.length,0,3);head[3]=seq;socket.write(Buffer.concat([head,payload]));};
+  const ok=(seq:number)=>packet(seq,Buffer.from([0,0,0,2,0,0,0]));
+  const caps=0x1|0x8|0x80|0x200|0x8000|0x10000|0x80000|0x200000,flags=Buffer.alloc(2),scramble=randomBytes(20).map(b=>b%94+33);
+  packet(0,Buffer.concat([Buffer.from([10]),Buffer.from('8.0.99-hostile\0'),Buffer.from([2,0,0,0]),scramble.subarray(0,8),Buffer.from([0]),(flags.writeUInt16LE(caps&0xffff),Buffer.from(flags)),Buffer.from([255,2,0]),(flags.writeUInt16LE(caps>>>16),Buffer.from(flags)),Buffer.from([21]),Buffer.alloc(10),scramble.subarray(8),Buffer.from([0]),Buffer.from('mysql_native_password\0')]));
+  let buffered=Buffer.alloc(0),authed=false,requested=false;
+  socket.on('data',b=>{
+   buffered=Buffer.concat([buffered,b]);
+   while(buffered.length>=4&&buffered.length>=4+buffered.readUIntLE(0,3)){
+    const length=buffered.readUIntLE(0,3),seq=buffered[3]!,body=buffered.subarray(4,4+length);buffered=buffered.subarray(4+length);
+    if(!authed){authed=true;hostile.flags.push(body.readUInt32LE(0));ok(seq+1);}
+    else if(requested){hostile.infile.push(Buffer.from(body));if(!length){requested=false;ok(seq+1);}}
+    else if(body.subarray(1).toString().startsWith('SET time_zone'))ok(seq+1);
+    else{requested=true;packet(seq+1,Buffer.concat([Buffer.from([0xfb]),Buffer.from('/etc/passwd')]));}
+   }
+  });
+ });
+}
 const sockets:net.Socket[]=[],closed:net.Socket[]=[];
 /** A server that reads everything and answers nothing (reading, so it sees the peer close). */
 function silentServer(){return net.createServer(socket=>{sockets.push(socket);socket.resume();socket.on('error',()=>{});socket.on('close',()=>closed.push(socket));});}
 const listen=(s:net.Server)=>new Promise<number>(r=>s.listen(0,'127.0.0.1',()=>r((s.address() as net.AddressInfo).port)));
 
-const SOURCE=`export const secrets={WAREHOUSE:'postgres',SILENT:'postgres',API_KEY:'api.example.com'};
-export const typeDefs="type Query { caught: String rethrown: String wrapped: String refusals: String hang: String }";
+const SOURCE=`export const secrets={WAREHOUSE:'postgres',SILENT:'postgres',SHOP:'mysql',SILENT_MY:'mysql',HOSTILE:'mysql',API_KEY:'api.example.com'};
+export const typeDefs="type Query { caught(name:String!): String rethrown(name:String!): String wrapped(name:String!): String refusals: String hang(name:String!): String infile: String }";
 export default {
- caught: async(a,p,caps)=>{const db=await caps.postgres('WAREHOUSE');try{await db.query('select 1');return 'ran';}catch(e){return JSON.stringify({code:e.code,message:e.message,stack:String(e.stack),own:Object.keys(e)});}},
- rethrown: async(a,p,caps)=>{const db=await caps.postgres('WAREHOUSE');await db.query('select 1');return 'ran';},
- wrapped: async(a,p,caps)=>{const db=await caps.postgres('WAREHOUSE');try{await db.query('select 1');}catch(e){throw new Error('wrapped '+e.message);}return 'ran';},
+ caught: async({name},p,caps)=>{const db=await caps.db(name);try{await db.query('select 1');return 'ran';}catch(e){return JSON.stringify({code:e.code,message:e.message,stack:String(e.stack),own:Object.keys(e)});}},
+ rethrown: async({name},p,caps)=>{const db=await caps.db(name);await db.query('select 1');return 'ran';},
+ wrapped: async({name},p,caps)=>{const db=await caps.db(name);try{await db.query('select 1');}catch(e){throw new Error('wrapped '+e.message);}return 'ran';},
  refusals: async(a,p,caps)=>{
   const code=f=>f().then(()=>'ran',e=>e.code??e.message);
   return JSON.stringify({
-   missing:await code(()=>caps.postgres('MISSING')),
-   fetchSecret:await code(()=>caps.postgres('API_KEY')),
-   badName:await code(()=>caps.postgres('lower')),
-   direct:await code(()=>globalThis.__capabilities.artifactbin.call('pageBackend.postgres',{name:'WAREHOUSE'})),
+   missing:await code(()=>caps.db('MISSING')),
+   fetchSecret:await code(()=>caps.db('API_KEY')),
+   badName:await code(()=>caps.db('lower')),
+   direct:await code(()=>globalThis.__capabilities.artifactbin.call('pageBackend.db',{name:'WAREHOUSE'})),
+   directMysql:await code(()=>globalThis.__capabilities.artifactbin.call('pageBackend.db',{name:'SHOP'})),
    asFetch:await code(()=>caps.fetch('https://api.example.com/?p={{WAREHOUSE}}')),
+   asFetchMysql:await code(()=>caps.fetch('https://api.example.com/?p={{SHOP}}')),
+   // caps.postgres is gone, with no alias; the old operation is refused like any unknown one.
+   postgres:typeof caps.postgres,
+   oldOperation:await code(()=>globalThis.__capabilities.artifactbin.call('pageBackend.postgres',{name:'WAREHOUSE'})),
   });
  },
- hang: async(a,p,caps)=>{const db=await caps.postgres('SILENT');await db.query('select 1');return 'answered';},
+ hang: async({name},p,caps)=>{const db=await caps.db(name);await db.query('select 1');return 'answered';},
+ infile: async(a,p,caps)=>{const db=await caps.db('HOSTILE');try{await db.query("select 'anything'");return 'ran';}catch(e){return e.code+': '+e.message;}finally{await db.end();}},
 };`;
 
 let runner:Awaited<ReturnType<typeof createRunner>>,db:PGlite,record:PageBackendRecord,invoke:ReturnType<typeof createBackendInvoker>;
 const servers:net.Server[]=[];const runIds:string[]=[];
 beforeAll(async()=>{
- const echo=echoingServer(),silent=silentServer();servers.push(echo,silent);
+ const echo=echoingServer(),echoMysql=echoingMysqlServer(),silent=silentServer(),hostileMysql=hostileMysqlServer();servers.push(echo,echoMysql,silent,hostileMysql);
+ const silentPort=await listen(silent),base={host:'127.0.0.1',database:'d',user:'u',password:PASSWORD,tls:'disable'};
  const values:Record<string,string>={
-  WAREHOUSE:JSON.stringify({host:'127.0.0.1',port:await listen(echo),database:'d',user:'u',password:PASSWORD,tls:'disable'}),
-  SILENT:JSON.stringify({host:'127.0.0.1',port:await listen(silent),database:'d',user:'u',password:PASSWORD,tls:'disable'}),
+  WAREHOUSE:JSON.stringify({...base,kind:'postgres',port:await listen(echo)}),
+  SILENT:JSON.stringify({...base,kind:'postgres',port:silentPort}),
+  SHOP:JSON.stringify({...base,kind:'mysql',port:await listen(echoMysql)}),
+  SILENT_MY:JSON.stringify({...base,kind:'mysql',port:silentPort}),
+  HOSTILE:JSON.stringify({...base,kind:'mysql',port:await listen(hostileMysql)}),
  };
  const readSecret=async(_b:PageBackendRecord,name:string)=>values[name]??Promise.reject(Error('backend_secret_unavailable'));
  db=new PGlite();
@@ -76,27 +147,30 @@ beforeAll(async()=>{
  invoke=createBackendInvoker(recording,async()=>record,{readSecret,startRetryDelaysMs:[1]});
 },30000);
 afterAll(async()=>{await runner?.close();await db?.close();for(const s of servers)s.close();});
-const call=(field:string,signal=new AbortController().signal)=>({namespace:'db',fileId:'b1',version:'v1',operation:'query' as const,field,args:{},principal:{tenant:'page1',subject:'owner1',role:'owner' as const},signal});
-const failure=(field:string)=>invoke(call(field)).then(()=>{throw Error('expected a failure');},(e:{code:string;detail?:string;shown?:string})=>e);
+const call=(field:string,signal=new AbortController().signal,args:Record<string,string>={})=>({namespace:'db',fileId:'b1',version:'v1',operation:'query' as const,field,args,principal:{tenant:'page1',subject:'owner1',role:'owner' as const},signal});
+const failure=(field:string,name:string)=>invoke(call(field,undefined,{name})).then(()=>{throw Error('expected a failure');},(e:{code:string;detail?:string;shown?:string})=>e);
 
 describe('the password stays out of everything a reader or the owner can see',()=>{
- it('declares connections as secrets bound to postgres',()=>{
-  expect(record).toMatchObject({secretBindings:['API_KEY','SILENT','WAREHOUSE'],secretHosts:{WAREHOUSE:'postgres',SILENT:'postgres',API_KEY:'api.example.com'}});
+ it('declares connections as secrets bound to their database kind',()=>{
+  expect(record).toMatchObject({secretBindings:['API_KEY','HOSTILE','SHOP','SILENT','SILENT_MY','WAREHOUSE'],secretHosts:{WAREHOUSE:'postgres',SILENT:'postgres',SHOP:'mysql',SILENT_MY:'mysql',HOSTILE:'mysql',API_KEY:'api.example.com'}});
  });
- it('redacts it from a driver error resolver code catches, which carries no settings either',async()=>{
-  const out=JSON.parse(await invoke(call('caught')) as string);
-  expect(out).toMatchObject({code:'database_error',message:'28P01 password "[redacted]" was rejected'});
-  expect(JSON.stringify(out)).not.toContain(PASSWORD);expect(JSON.stringify(out)).not.toContain('127.0.0.1');
- },20000);
- it('redacts it from a failed run\'s reason, owner detail and resolver-thrown message',async()=>{
-  const rethrown=await failure('rethrown');
-  expect(rethrown.code).toBe('backend_failed');expect(rethrown.detail).toContain('[redacted]');
-  const wrapped=await failure('wrapped');
-  expect(wrapped.shown).toBe('wrapped 28P01 password "[redacted]" was rejected');
-  for(const e of [rethrown,wrapped])expect(JSON.stringify({...e,message:(e as unknown as Error).message})).not.toContain(PASSWORD);
- },20000);
+ const echoed={postgres:{name:'WAREHOUSE',message:'28P01 password "[redacted]" was rejected'},mysql:{name:'SHOP',message:'28000 Access denied: password "[redacted]" was rejected'}};
+ describe.each(Object.entries(echoed))('%s',(_kind,{name,message})=>{
+  it('redacts it from a driver error resolver code catches, which carries no settings either',async()=>{
+   const out=JSON.parse(await invoke(call('caught',undefined,{name})) as string);
+   expect(out).toMatchObject({code:'database_error',message});
+   expect(JSON.stringify(out)).not.toContain(PASSWORD);expect(JSON.stringify(out)).not.toContain('127.0.0.1');
+  },20000);
+  it('redacts it from a failed run\'s reason, owner detail and resolver-thrown message',async()=>{
+   const rethrown=await failure('rethrown',name);
+   expect(rethrown.code).toBe('backend_failed');expect(rethrown.detail).toContain('[redacted]');
+   const wrapped=await failure('wrapped',name);
+   expect(wrapped.shown).toBe('wrapped '+message);
+   for(const e of [rethrown,wrapped])expect(JSON.stringify({...e,message:(e as unknown as Error).message})).not.toContain(PASSWORD);
+  },20000);
+ });
  it('never stores it in the runner\'s runs, receipts or events',async()=>{
-  await until(()=>runIds.length>=3);
+  await until(()=>runIds.length>=6);
   for(const runId of runIds){
    const snapshot=await runner.getRun({userId:'owner1',runId});
    expect(JSON.stringify(snapshot)).not.toContain(PASSWORD);
@@ -110,18 +184,26 @@ describe('the password stays out of everything a reader or the owner can see',()
 
 describe('refusals',()=>{
  it('refuses a name the page does not declare, a fetch secret, resolver code asking for the settings directly, and fetch filling a connection',async()=>{
-  expect(JSON.parse(await invoke(call('refusals')) as string)).toEqual({missing:'unknown_connection',fetchSecret:'unknown_connection',badName:'invalid_request',direct:'backend_capability_forbidden',asFetch:'secret_host_forbidden: WAREHOUSE'});
+  expect(JSON.parse(await invoke(call('refusals')) as string)).toEqual({missing:'unknown_connection',fetchSecret:'unknown_connection',badName:'invalid_request',direct:'backend_capability_forbidden',directMysql:'backend_capability_forbidden',
+   asFetch:'secret_host_forbidden: WAREHOUSE',asFetchMysql:'secret_host_forbidden: SHOP',postgres:'undefined',oldOperation:'backend_capability_forbidden'});
+ },20000);
+ it('mysql: offers neither LOCAL INFILE nor multiple statements, and sends no file when a server asks for one',async()=>{
+  const answer=await invoke(call('infile')) as string;
+  expect(answer).toMatch(/^database_error: As a result of LOCAL INFILE command server wants to read \/etc\/passwd file/);
+  // CLIENT_LOCAL_FILES (0x80) and CLIENT_MULTI_STATEMENTS (0x10000) off; an empty packet is all the server got.
+  expect(hostile.flags.length).toBe(1);expect(hostile.flags[0]!&0x80).toBe(0);expect(hostile.flags[0]!&0x10000).toBe(0);
+  expect(hostile.infile.map(b=>b.length)).toEqual([0]);
  },20000);
  it('refuses the connection operation for another page\'s admitted run, a forged program and another owner',async()=>{
   const read=async()=>{throw Error('must not read');};
   const request:RunStart={requestId:'r',pageBackendOperation:'query',userId:'owner1',artifactId:'b1',artifactVersion:'v1',program:{source:record.compiled,language:'javascript'},input:{kind:'invoke',principal:{tenant:'page1',subject:null}}};
   const forgeries:RunStart[]=[{...request,input:{kind:'invoke',principal:{tenant:'page2',subject:null}}},{...request,program:{source:'forged',language:'javascript'}},{...request,userId:'owner2'},{...request,input:{kind:'schema'}}];
   for(const forged of forgeries)
-   await expect(pageBackendCapability(forged,'artifactbin.pageBackend.postgres',{name:'WAREHOUSE'},async()=>record,read)).rejects.toThrow('backend_capability_forbidden');
+   for(const name of ['WAREHOUSE','SHOP'])await expect(pageBackendCapability(forged,RESOLVER_DATABASE_OPERATION,{name},async()=>record,read)).rejects.toThrow('backend_capability_forbidden');
  });
 });
 
-describe('every tunnel closes with its run',()=>{
+describe.each([['postgres','SILENT'],['mysql','SILENT_MY']])('every %s tunnel closes with its run',(_kind,name)=>{
  const hung=async(start:(signal:AbortController)=>Promise<unknown>,end:(controller:AbortController)=>void)=>{
   const before=sockets.length,controller=new AbortController();
   const outcome=start(controller).catch(e=>e);
@@ -132,15 +214,15 @@ describe('every tunnel closes with its run',()=>{
   return {outcome:await outcome,closedAfterMs:Date.now()-ended};
  };
  it('when the reader cancels the call',async()=>{
-  const {outcome,closedAfterMs}=await hung(c=>invoke(call('hang',c.signal)),c=>c.abort());
+  const {outcome,closedAfterMs}=await hung(c=>invoke(call('hang',c.signal,{name})),c=>c.abort());
   expect((outcome as {code:string}).code).toBe('deadline');expect(closedAfterMs).toBeLessThan(3000);
  },20000);
  it('when the run reaches its time limit',async()=>{
-  const {outcome}=await hung(c=>invoke(call('hang',c.signal)),()=>{});
+  const {outcome}=await hung(c=>invoke(call('hang',c.signal,{name})),()=>{});
   expect((outcome as {code:string}).code).toBe('backend_failed');expect((outcome as {detail:string}).detail).toBe('timeout');
  },20000);
  it('when the worker is killed',async()=>{
-  const {outcome,closedAfterMs}=await hung(c=>invoke(call('hang',c.signal)),()=>{
+  const {outcome,closedAfterMs}=await hung(c=>invoke(call('hang',c.signal,{name})),()=>{
    // Every worker of this process (spares too); the pool replaces them.
    const children=execFileSync('ps',['-A','-o','pid=,ppid=,command=']).toString().split('\n').map(l=>l.trim().split(/\s+/)).filter(([,ppid,...cmd])=>Number(ppid)===process.pid&&/runner-worker\.mjs|docker start/.test(cmd.join(' ')));
    expect(children.length).toBeGreaterThan(0);
@@ -150,6 +232,7 @@ describe('every tunnel closes with its run',()=>{
  },20000);
 });
 
-it('keeps the worker\'s window and chunk within the controller\'s limits',()=>{
+it('keeps the worker\'s window, chunk, operation and drivers equal to the contracts\' (the worker runs without them)',()=>{
  expect(WINDOW_BYTES).toBe(RESOLVER_DATABASE_LIMITS.windowBytes);expect(CHUNK_BYTES).toBe(RESOLVER_DATABASE_LIMITS.chunkBytes);
+ expect(DATABASE_OPERATION).toBe(RESOLVER_DATABASE_OPERATION);expect(DATABASE_KINDS).toEqual([...RESOLVER_DATABASE_KINDS]);
 });

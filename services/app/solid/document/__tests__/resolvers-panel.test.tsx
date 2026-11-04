@@ -119,3 +119,27 @@ it('saves a Postgres connection as one write-only form and says to use a read-on
   expect((panel.getByLabelText('Password for WAREHOUSE') as HTMLInputElement).value).toBe('');
   expect(document.body.innerHTML).not.toContain(VALUE);
 });
+
+it('shows each connection with its declared type and that type\'s default port, and says the password stays in the worker', async () => {
+  const calls: Call[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ url, method, body });
+    const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'shop', backendId: 'b1', version: 'v1', test: false, secrets: { SHOP: 'mysql', WAREHOUSE: 'postgres' }, set: [] }] });
+    return reply({ names: method === 'PUT' ? ['SHOP'] : [] });
+  }));
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = within(await screen.findByRole('region', { name: 'Resolver shop' }));
+  expect(panel.getByText('MySQL connection')).toBeTruthy();
+  expect(panel.getByText('Postgres connection')).toBeTruthy();
+  expect((panel.getByLabelText('Port for SHOP') as HTMLInputElement).value).toBe('3306');
+  expect((panel.getByLabelText('Port for WAREHOUSE') as HTMLInputElement).value).toBe('5432');
+  for (const hint of panel.getAllByText(/Use a read-only database user/)) expect(hint.textContent).toContain('The password stays in the runner\'s worker process and never reaches resolver code.');
+  expect(document.body.textContent).not.toMatch(/sandboxed run|editors can read/);
+  const fill = { Host: 'db.example.com', Database: 'shop', User: 'reader', Password: VALUE };
+  for (const [label, value] of Object.entries(fill)) fireEvent.input(panel.getByLabelText(`${label} for SHOP`), { target: { value } });
+  fireEvent.click(panel.getAllByRole('button', { name: 'Save connection' })[0]!);
+  await waitFor(() => expect(panel.getByText('Set')).toBeTruthy());
+  expect(calls.find(call => call.method === 'PUT')).toEqual({ url: '/api/my/resolvers/b1/v1/secrets', method: 'PUT', body: { name: 'SHOP', connection: { host: 'db.example.com', port: 3306, database: 'shop', user: 'reader', password: VALUE } } });
+});
