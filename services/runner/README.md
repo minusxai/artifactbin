@@ -94,6 +94,10 @@ messages over the worker link.
   ciphertext. Plaintext (`tls: 'disable'`) and loopback targets need
   `RUNNER__DATABASE_LOOPBACK=true`, a development and test setting of the
   controller that no page can change; it never admits private or link-local space.
+- TLS refusals reach resolver code by name (`database-errors.mjs`): a server without
+  TLS is `tls_unsupported`, a chain to a root the connection does not trust (no or the
+  wrong `ca`) `tls_untrusted_certificate`, a certificate for another host
+  `tls_name_mismatch`; other failures keep `database_error: CODE`.
 - Limits (`RESOLVER_DATABASE_LIMITS`): 4 tunnels per run, 16 per owner and 8 per
   page open at once (per controller), 5 s to resolve and connect, 10 s idle, 16 MiB
   from and 4 MiB to the database per run, and a 256 KiB credit window per tunnel and

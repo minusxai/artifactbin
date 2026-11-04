@@ -166,3 +166,61 @@ it.each([[['184.169.146.94'], true], [[], false]] as const)('lists the deploymen
   expect(panel.getByRole('button', { name: 'Copy the IPs to allow for WAREHOUSE' })).toBeTruthy();
   expect(panel.queryByRole('button', { name: 'Copy the IPs to allow for API_KEY' })).toBeNull();
 });
+
+const PEM = '-----BEGIN CERTIFICATE-----\nMIIBroot\n-----END CERTIFICATE-----\n';
+function serveConnection(graphql?: () => unknown) {
+  const calls: Call[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ url, method, body });
+    const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'shop', backendId: 'b1', version: 'v1', test: true, secrets: { WAREHOUSE: 'postgres' }, set: [] }] });
+    if (url === '/api/artifacts/Abc123/graphql') return reply(graphql?.() ?? { data: { shop: { test: 'ok' } } });
+    return reply({ names: method === 'PUT' ? ['WAREHOUSE'] : [] });
+  }));
+  return calls;
+}
+const advanced = (panel: ReturnType<typeof within>) => panel.getByText('Advanced').closest('details') as HTMLDetailsElement;
+
+it('offers an optional CA certificate under Advanced, with where to get one, and sends it when filled', async () => {
+  const calls = serveConnection();
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = within(await screen.findByRole('region', { name: 'Resolver shop' }));
+  expect(advanced(panel).open).toBe(false);
+  const field = panel.getByLabelText('CA certificate (PEM) for WAREHOUSE') as HTMLTextAreaElement;
+  expect(field.tagName).toBe('TEXTAREA');
+  expect(advanced(panel).contains(field)).toBe(true);
+  const help = document.getElementById(field.getAttribute('aria-describedby')!)!;
+  expect(help.textContent).toContain('AWS RDS: download your region\'s bundle from truststore.pki.rds.amazonaws.com');
+  expect(help.textContent).toMatch(/Cloud SQL: .*server CA certificate/);
+  expect(help.textContent).toMatch(/Supabase: .*SSL Configuration/);
+  for (const [label, value] of Object.entries({ Host: 'db.example.com', Database: 'shop', User: 'reader', Password: VALUE })) fireEvent.input(panel.getByLabelText(`${label} for WAREHOUSE`), { target: { value } });
+  const save = panel.getByRole('button', { name: 'Save connection' }) as HTMLButtonElement;
+  // Checked as the contracts check it: a PEM certificate.
+  fireEvent.input(field, { target: { value: 'not a certificate' } });
+  expect(save.disabled).toBe(true);
+  expect(panel.getByText(/Paste a PEM certificate/)).toBeTruthy();
+  fireEvent.input(field, { target: { value: 'x'.repeat(12 * 1024) + PEM } });
+  expect(save.disabled).toBe(true);
+  expect(panel.getByText('The CA certificate must be 12 KiB or less.')).toBeTruthy();
+  fireEvent.input(field, { target: { value: PEM } });
+  expect(save.disabled).toBe(false);
+  expect(advanced(panel).open).toBe(true);
+  fireEvent.click(save);
+  await waitFor(() => expect(panel.getByText('Set')).toBeTruthy());
+  expect(calls.find(call => call.method === 'PUT')?.body).toEqual({ name: 'WAREHOUSE', connection: { host: 'db.example.com', port: 5432, database: 'shop', user: 'reader', password: VALUE, ca: PEM } });
+});
+
+it('opens Advanced by itself for an RDS or Supabase host and after an untrusted-certificate test', async () => {
+  serveConnection(() => ({ data: { shop: null }, errors: [{ message: 'Backend execution failed', extensions: { code: 'backend_failed', detail: 'tls_untrusted_certificate: add your provider\'s CA certificate to the connection (RDS, Cloud SQL and Supabase need one)' } }] }));
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = within(await screen.findByRole('region', { name: 'Resolver shop' }));
+  const host = panel.getByLabelText('Host for WAREHOUSE');
+  for (const [value, open] of [['shop.abc123.us-east-1.rds.amazonaws.com', true], ['db.abcdefgh.supabase.co', true], ['db.example.com', false]] as const) {
+    fireEvent.input(host, { target: { value } });
+    expect(advanced(panel).open).toBe(open);
+  }
+  fireEvent.click(panel.getByRole('button', { name: 'Test connection' }));
+  expect(await panel.findByRole('alert')).toHaveTextContent('tls_untrusted_certificate');
+  expect(advanced(panel).open).toBe(true);
+});

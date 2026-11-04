@@ -2,7 +2,7 @@
  * END TO END: a compiled resolver → `caps.db` (a `'mysql'` name) → the worker's mysql2 → the controller's tunnel → a
  * real MySQL 8 (a disposable `mysql:8` container with TLS on, certificates made here by openssl), the same cases as
  * database-postgres.test.ts. TLS runs from the driver to the server: `verify-full` accepts the right CA and name (DNS
- * or IP), and refuses a wrong CA, a wrong name and an unknown root; the controller's socket carries no plaintext SQL
+ * or IP), and refuses a wrong CA, a wrong name, an unknown root and a second server with TLS off (each with its own code); the controller's socket carries no plaintext SQL
  * when TLS is on. Also the type mapping (README) and the refusal of LOCAL INFILE and multiple statements by a server
  * that allows both. The runner's address policy is the development opt-in (the container listens on loopback), with an
  * injected lookup so test names reach it. Runs in the `integration` project (CI's integration job and runner design
@@ -21,7 +21,7 @@ import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type Pa
 const IMAGE='mysql:8';
 const dockerAvailable=spawnSync('docker',['image','inspect',IMAGE],{stdio:'ignore'}).status===0;
 const READER_PASSWORD='reader-pa55-f0r-tests',BAD_PASSWORD='not-the-reader-password',OWNER_PASSWORD='owner-pa55';
-const SOURCE=`export const secrets={PLAIN:'mysql',TLS:'mysql',TLS_IP:'mysql',WRONG_CA:'mysql',WRONG_NAME:'mysql',NO_CA:'mysql',BAD_PASSWORD:'mysql',OWNER:'mysql'};
+const SOURCE=`export const secrets={PLAIN:'mysql',TLS:'mysql',TLS_IP:'mysql',WRONG_CA:'mysql',WRONG_NAME:'mysql',NO_CA:'mysql',NO_TLS:'mysql',BAD_PASSWORD:'mysql',OWNER:'mysql'};
 export const typeDefs="type Query { orders(min:Int!): String probe(name:String!): String session: String types: String refusals: String }";
 const attempt=(f)=>f().then(r=>r,e=>({code:e.code,message:e.message}));
 export default {
@@ -61,7 +61,7 @@ export default {
 };`;
 
 describe.skipIf(!dockerAvailable)('caps.db against a real MySQL 8 over TLS',()=>{
- let container='',dir='',port=0;
+ let container='',plain='',dir='',port=0,plainPort=0;
  let runner:Awaited<ReturnType<typeof createRunner>>,db:PGlite,record:PageBackendRecord,invoke:ReturnType<typeof createBackendInvoker>;
  const written:Buffer[]=[];
  beforeAll(async()=>{
@@ -76,11 +76,16 @@ describe.skipIf(!dockerAvailable)('caps.db against a real MySQL 8 over TLS',()=>
   // allows LOCAL INFILE, so refusing it is the client's doing.
   container=execFileSync('docker',['run','--rm','-d','-e',`MYSQL_ROOT_PASSWORD=${OWNER_PASSWORD}`,'-e','MYSQL_DATABASE=shop','-e',`CA=${read('ca.crt')}`,'-e',`CERT=${read('server.crt')}`,'-e',`KEY=${read('server.key')}`,'-p','127.0.0.1::3306','--entrypoint','sh',IMAGE,'-c',
    'mkdir -p /tmp/tls && printf "%s\\n" "$CA" > /tmp/tls/ca.crt && printf "%s\\n" "$CERT" > /tmp/tls/server.crt && printf "%s\\n" "$KEY" > /tmp/tls/server.key && chown -R mysql /tmp/tls && chmod 600 /tmp/tls/server.key && exec docker-entrypoint.sh mysqld --ssl-ca=/tmp/tls/ca.crt --ssl-cert=/tmp/tls/server.crt --ssl-key=/tmp/tls/server.key --local-infile=1'],{encoding:'utf8'}).trim();
-  port=Number(execFileSync('docker',['port',container,'3306/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
+  // A second server with TLS off (an empty tls_version list), started before either is waited for.
+  plain=execFileSync('docker',['run','--rm','-d','-e',`MYSQL_ROOT_PASSWORD=${OWNER_PASSWORD}`,'-p','127.0.0.1::3306',IMAGE,'--tls-version='],{encoding:'utf8'}).trim();
+  const portOf=(id:string)=>Number(execFileSync('docker',['port',id,'3306/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
+  port=portOf(container);plainPort=portOf(plain);
   // Over TCP: the entrypoint's initialization server listens on its socket only.
   const sql=(text:string)=>spawnSync('docker',['exec',container,'mysql','-h127.0.0.1','-uroot',`-p${OWNER_PASSWORD}`,'shop','-e',text],{encoding:'utf8'});
-  for(let attempt=0;;attempt++){
-   if(sql('select 1').status===0)break;
+  // The TLS-off server needs no setup, only to listen on TCP: mysqladmin ping succeeds on any answer, a refused login included.
+  const ready=(id:string)=>id===container?sql('select 1').status===0:spawnSync('docker',['exec',id,'mysqladmin','-h127.0.0.1','ping'],{stdio:'ignore'}).status===0;
+  for(const id of [container,plain])for(let attempt=0;;attempt++){
+   if(ready(id))break;
    if(attempt>180)throw Error(`${IMAGE} never became ready`);
    await new Promise(r=>setTimeout(r,500));
   }
@@ -98,6 +103,7 @@ describe.skipIf(!dockerAvailable)('caps.db against a real MySQL 8 over TLS',()=>
    WRONG_CA:{...base,host:'db.example.com',tls:'verify-full',ca:read('other.crt')},
    WRONG_NAME:{...base,host:'wrong.example.com',tls:'verify-full',ca:read('ca.crt')},
    NO_CA:{...base,host:'db.example.com',tls:'verify-full'},
+   NO_TLS:{...base,host:'127.0.0.1',port:plainPort,tls:'verify-full',ca:read('ca.crt')},
    BAD_PASSWORD:{...base,host:'db.example.com',tls:'verify-full',ca:read('ca.crt'),password:BAD_PASSWORD},
    OWNER:{...base,host:'db.example.com',tls:'verify-full',ca:read('ca.crt'),user:'root',password:OWNER_PASSWORD},
   }).map(([name,value])=>[name,JSON.stringify(value)]));
@@ -111,10 +117,10 @@ describe.skipIf(!dockerAvailable)('caps.db against a real MySQL 8 over TLS',()=>
   record={...(await createBackendCompiler(runner)(SOURCE)),source:SOURCE,backendId:'b1',pageId:'page1',version:'v1',ownerId:'owner1'};
   invoke=createBackendInvoker(runner,async()=>record,{readSecret});
  },180_000);
- afterAll(async()=>{await runner?.close();await db?.close();if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});if(dir)rmSync(dir,{recursive:true,force:true});});
+ afterAll(async()=>{await runner?.close();await db?.close();for(const id of [container,plain])if(id)spawnSync('docker',['rm','-f',id],{stdio:'ignore'});if(dir)rmSync(dir,{recursive:true,force:true});});
  const query=async(field:string,args:Record<string,unknown>={})=>{written.length=0;const out=await invoke({namespace:'db',fileId:'b1',version:'v1',operation:'query',field,args:args as never,principal:{tenant:'page1',subject:'viewer1',role:'viewer'},signal:new AbortController().signal});return JSON.parse(out as string);};
  const TLS_VERSION={Variable_name:'Ssl_version',Value:expect.stringMatching(/^TLSv1\.[23]$/)};
- const UNTRUSTED=/HANDSHAKE_SSL_ERROR (unable to verify the first certificate|self-signed certificate in certificate chain|unable to get local issuer certificate)/;
+ const UNTRUSTED={code:'tls_untrusted_certificate',message:'add your provider\'s CA certificate to the connection (RDS, Cloud SQL and Supabase need one)'};
 
  it('returns rows, columns and the command from a parameterized query',async()=>{
   expect(await query('orders',{min:10})).toEqual({rows:[{id:2,item:'cake',amount:12,placed:'2026-11-01T00:00:00.000Z'},{id:3,item:'pie',amount:30,placed:'2026-11-01T00:00:00.000Z'}],columns:['id','item','amount','placed'],command:'SELECT',count:2});
@@ -128,9 +134,12 @@ describe.skipIf(!dockerAvailable)('caps.db against a real MySQL 8 over TLS',()=>
   expect(Buffer.concat(written).toString('latin1')).toContain('Ssl_version');
  },45_000);
  it('refuses a certificate from another root, for another name, or with no configured root',async()=>{
-  expect(await query('probe',{name:'WRONG_CA'})).toEqual({code:'database_error',message:expect.stringMatching(UNTRUSTED)});
-  expect(await query('probe',{name:'WRONG_NAME'})).toEqual({code:'database_error',message:'ERR_TLS_CERT_ALTNAME_INVALID'});
-  expect(await query('probe',{name:'NO_CA'})).toEqual({code:'database_error',message:expect.stringMatching(UNTRUSTED)});
+  expect(await query('probe',{name:'WRONG_CA'})).toEqual(UNTRUSTED);
+  expect(await query('probe',{name:'WRONG_NAME'})).toEqual({code:'tls_name_mismatch',message:expect.stringContaining('does not name this host')});
+  expect(await query('probe',{name:'NO_CA'})).toEqual(UNTRUSTED);
+ },45_000);
+ it('names a server with TLS off',async()=>{
+  expect(await query('probe',{name:'NO_TLS'})).toEqual({code:'tls_unsupported',message:'the database server does not offer TLS; enable TLS on the server'});
  },45_000);
  it('keeps one session per handle, and leaves read-only enforcement to the database user',async()=>{
   expect(await query('session')).toEqual({sameTransaction:true,write:expect.stringMatching(/^42000 INSERT command denied to user 'reader'@'[^']+' for table [`']?orders[`']?$/)});

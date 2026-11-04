@@ -2,7 +2,7 @@
  * END TO END: a compiled resolver → `caps.db` (a `'postgres'` name) → the worker's postgres.js → the controller's tunnel → a real
  * PostgreSQL 17 (a disposable `postgres:17-alpine` container with TLS on, certificates made here by openssl).
  * TLS runs from the driver to the server: `verify-full` accepts the right CA and name (DNS or IP), and refuses a
- * wrong CA, a wrong name and an unknown root; the controller's socket carries no plaintext SQL when TLS is on.
+ * wrong CA, a wrong name, an unknown root and a second server with TLS off (each with its own code); the controller's socket carries no plaintext SQL when TLS is on.
  * The runner's address policy is the development opt-in (the container listens on loopback), with an injected
  * lookup so test names reach it. Runs in the `integration` project (CI's integration job and runner design
  * validation, the latter with the Docker worker via RUNNER_TEST_IMAGE); skipped without the image.
@@ -19,7 +19,7 @@ import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type Pa
 
 const dockerAvailable=spawnSync('docker',['image','inspect','postgres:17-alpine'],{stdio:'ignore'}).status===0;
 const READER_PASSWORD='reader-pa55-f0r-tests',BAD_PASSWORD='not-the-reader-password';
-const SOURCE=`export const secrets={PLAIN:'postgres',TLS:'postgres',TLS_IP:'postgres',WRONG_CA:'postgres',WRONG_NAME:'postgres',NO_CA:'postgres',BAD_PASSWORD:'postgres'};
+const SOURCE=`export const secrets={PLAIN:'postgres',TLS:'postgres',TLS_IP:'postgres',WRONG_CA:'postgres',WRONG_NAME:'postgres',NO_CA:'postgres',NO_TLS:'postgres',BAD_PASSWORD:'postgres'};
 export const typeDefs="type Query { orders(min:Int!): String probe(name:String!): String session: String }";
 export default {
  orders: async({min},p,caps)=>{const db=await caps.db('PLAIN');try{return JSON.stringify(await db.query('select id, item, amount, placed from orders where amount >= $1 order by id',[min]));}finally{await db.end();}},
@@ -37,7 +37,7 @@ export default {
 };`;
 
 describe.skipIf(!dockerAvailable)('caps.db against a real PostgreSQL over TLS',()=>{
- let container='',dir='',port=0;
+ let container='',plain='',dir='',port=0,plainPort=0;
  let runner:Awaited<ReturnType<typeof createRunner>>,db:PGlite,record:PageBackendRecord,invoke:ReturnType<typeof createBackendInvoker>;
  const written:Buffer[]=[];
  beforeAll(async()=>{
@@ -51,9 +51,12 @@ describe.skipIf(!dockerAvailable)('caps.db against a real PostgreSQL over TLS',(
   // The key must belong to the server's user with mode 0600: written inside the container before the entrypoint.
   container=execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=owner-pass','-e','POSTGRES_DB=shop','-e',`CERT=${read('server.crt')}`,'-e',`KEY=${read('server.key')}`,'-p','127.0.0.1::5432','--entrypoint','sh','postgres:17-alpine','-c',
    'printf "%s\\n" "$CERT" > /tmp/server.crt && printf "%s\\n" "$KEY" > /tmp/server.key && chown postgres /tmp/server.crt /tmp/server.key && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key'],{encoding:'utf8'}).trim();
-  port=Number(execFileSync('docker',['port',container,'5432/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
-  for(let attempt=0;;attempt++){
-   if(spawnSync('docker',['exec',container,'pg_isready','-h','127.0.0.1','-U','postgres','-d','shop'],{stdio:'ignore'}).status===0)break;
+  // A second server with TLS off (the image's default), started before either is waited for.
+  plain=execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=owner-pass','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
+  const portOf=(id:string)=>Number(execFileSync('docker',['port',id,'5432/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
+  port=portOf(container);plainPort=portOf(plain);
+  for(const id of [container,plain])for(let attempt=0;;attempt++){
+   if(spawnSync('docker',['exec',id,'pg_isready','-h','127.0.0.1','-U','postgres'],{stdio:'ignore'}).status===0)break;
    if(attempt>120)throw Error('postgres:17-alpine never became ready');
    await new Promise(r=>setTimeout(r,500));
   }
@@ -69,6 +72,7 @@ describe.skipIf(!dockerAvailable)('caps.db against a real PostgreSQL over TLS',(
    WRONG_CA:{...base,host:'db.example.com',tls:'verify-full',ca:read('other.crt')},
    WRONG_NAME:{...base,host:'wrong.example.com',tls:'verify-full',ca:read('ca.crt')},
    NO_CA:{...base,host:'db.example.com',tls:'verify-full'},
+   NO_TLS:{...base,host:'127.0.0.1',port:plainPort,tls:'verify-full',ca:read('ca.crt')},
    BAD_PASSWORD:{...base,host:'db.example.com',tls:'verify-full',ca:read('ca.crt'),password:BAD_PASSWORD},
   }).map(([name,value])=>[name,JSON.stringify(value)]));
   const readSecret=async(_b:PageBackendRecord,name:string)=>values[name]??Promise.reject(Error('backend_secret_unavailable'));
@@ -81,7 +85,7 @@ describe.skipIf(!dockerAvailable)('caps.db against a real PostgreSQL over TLS',(
   record={...(await createBackendCompiler(runner)(SOURCE)),source:SOURCE,backendId:'b1',pageId:'page1',version:'v1',ownerId:'owner1'};
   invoke=createBackendInvoker(runner,async()=>record,{readSecret});
  },120_000);
- afterAll(async()=>{await runner?.close();await db?.close();if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});if(dir)rmSync(dir,{recursive:true,force:true});});
+ afterAll(async()=>{await runner?.close();await db?.close();for(const id of [container,plain])if(id)spawnSync('docker',['rm','-f',id],{stdio:'ignore'});if(dir)rmSync(dir,{recursive:true,force:true});});
  const query=async(field:string,args:Record<string,unknown>={})=>{written.length=0;const out=await invoke({namespace:'db',fileId:'b1',version:'v1',operation:'query',field,args:args as never,principal:{tenant:'page1',subject:'viewer1',role:'viewer'},signal:new AbortController().signal});return JSON.parse(out as string);};
 
  it('returns rows, columns and the command from a parameterized query',async()=>{
@@ -95,10 +99,14 @@ describe.skipIf(!dockerAvailable)('caps.db against a real PostgreSQL over TLS',(
   expect(await query('probe',{name:'PLAIN'})).toEqual({ssl:false,version:null});
   expect(Buffer.concat(written).toString('latin1')).toContain('pg_stat_ssl');
  },45_000);
+ const UNTRUSTED={code:'tls_untrusted_certificate',message:'add your provider\'s CA certificate to the connection (RDS, Cloud SQL and Supabase need one)'};
  it('refuses a certificate from another root, for another name, or with no configured root',async()=>{
-  expect(await query('probe',{name:'WRONG_CA'})).toEqual({code:'database_error',message:expect.stringMatching(/UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_GET_ISSUER_CERT/)});
-  expect(await query('probe',{name:'WRONG_NAME'})).toEqual({code:'database_error',message:'ERR_TLS_CERT_ALTNAME_INVALID'});
-  expect(await query('probe',{name:'NO_CA'})).toEqual({code:'database_error',message:expect.stringMatching(/UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_GET_ISSUER_CERT/)});
+  expect(await query('probe',{name:'WRONG_CA'})).toEqual(UNTRUSTED);
+  expect(await query('probe',{name:'WRONG_NAME'})).toEqual({code:'tls_name_mismatch',message:expect.stringContaining('does not name this host')});
+  expect(await query('probe',{name:'NO_CA'})).toEqual(UNTRUSTED);
+ },45_000);
+ it('names a server with TLS off, which postgres.js meets as a reset',async()=>{
+  expect(await query('probe',{name:'NO_TLS'})).toEqual({code:'tls_unsupported',message:'the database server does not offer TLS; enable TLS on the server'});
  },45_000);
  it('keeps one session per handle, and leaves read-only enforcement to the database user',async()=>{
   expect(await query('session')).toEqual({sameTransaction:true,write:'42501 permission denied for table orders'});
