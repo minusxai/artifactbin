@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { applyRegionRevision, createRegionState, normalizeRegionHtml, regionHtml, regionMarkdown, type RegionKind } from '..';
+import { applyRegionRevision, createRegionState, normalizeRegionHtml, openRegionDoc, regionHtml, regionMarkdown, type RegionKind } from '..';
 
 const emptyUpdate = (update: Uint8Array) => {
   const { structs, ds } = Y.decodeUpdate(update);
@@ -55,8 +55,7 @@ describe('regionMarkdown', () => {
     const { state, snapshot } = createRegionState('rich', saved);
     const markdown = regionMarkdown('rich', saved).replace('item', 'item, revised');
     const { update } = applyRegionRevision({ kind: 'rich', live: state, savedSnapshot: snapshot, markdown });
-    const after = new Y.Doc({ gc: false });
-    Y.applyUpdate(after, state);
+    const after = openRegionDoc(state);
     Y.applyUpdate(after, update);
     expect(regionHtml('rich', Y.encodeStateAsUpdate(after))).toBe('<p data-af-id="a">alpha</p><ul data-af-id="l"><li data-af-id="i"><p>item, revised</p></li></ul>');
   });

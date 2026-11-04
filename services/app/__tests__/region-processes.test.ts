@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
-import { editableRegions, regionHtml, regionText } from '@/lib/live-regions';
+import { editableRegions, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { createRegionSessions, type RegionSessions } from '@/lib/region-sessions';
 import { getDb, PostgresDb, SCHEMA_STATEMENTS, type Db } from '@/lib/platform';
 import { nativeHtml } from './native-html-fixture';
@@ -38,9 +38,7 @@ interface Scenario { pageId: string; regionId: string; alice: AccessActor; bob: 
 async function editor(sessions: RegionSessions, actor: AccessActor, scenario: Scenario) {
   const opened = await sessions.open(actor, scenario.pageId, scenario.regionId);
   if (opened.status !== 200) throw new Error(`open ${opened.status} ${JSON.stringify(opened.body)}`);
-  const doc = new Y.Doc({ gc: false });
-  doc.clientID = opened.body.clientId;
-  Y.applyUpdate(doc, Buffer.from(opened.body.state, 'base64'), 'server');
+  const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { clientId: opened.body.clientId });
   return { doc, seq: opened.body.seq, clientId: opened.body.clientId };
 }
 
@@ -74,7 +72,7 @@ async function concurrentTyping(scenario: Scenario) {
     expect(all).toEqual(Array.from({ length: 2 * ROUNDS }, (_unused, i) => b.seq + 1 + i));
 
     const replay = async (frames: ReturnType<typeof sseStream>) => {
-      const replica = new Y.Doc();
+      const replica = openRegionDoc(undefined, { gc: true });
       let to = b.seq;
       const deadline = Date.now() + 10_000;
       while (to < b.seq + 2 * ROUNDS && Date.now() < deadline) {
@@ -89,8 +87,7 @@ async function concurrentTyping(scenario: Scenario) {
       expect(to).toBe(b.seq + 2 * ROUNDS);
       return replica;
     };
-    const base = new Y.Doc();
-    Y.applyUpdate(base, Y.encodeStateAsUpdate(a.doc));
+    const base = openRegionDoc(Y.encodeStateAsUpdate(a.doc), { gc: true });
     const [seenOne, seenTwo] = await Promise.all([replay(streamOne), replay(streamTwo)]);
     for (const seen of [seenOne, seenTwo]) {
       Y.applyUpdate(seen, Y.encodeStateAsUpdate(base));

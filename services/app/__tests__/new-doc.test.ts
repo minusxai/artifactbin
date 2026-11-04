@@ -13,7 +13,7 @@ import { GET as read, PATCH as patch, PUT as replace } from '@/app/api/artifacts
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { autofixHtml } from '@/lib/html-autofix';
-import { editableRegions, regionText } from '@/lib/live-regions';
+import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { createRegionSessions, type RegionSessions } from '@/lib/region-sessions';
 import { getDb } from '@/lib/platform';
 import { listOwnedArtifacts } from '@/lib/workspace';
@@ -57,9 +57,7 @@ async function newDoc(label: string) {
 async function typeAtStart(live: RegionSessions, owner: AccessActor, id: string, regionId: string, text: string) {
   const opened = await live.open(owner, id, regionId);
   if (opened.status !== 200) throw new Error(`open ${opened.status}`);
-  const doc = new Y.Doc();
-  doc.clientID = opened.body.clientId;
-  Y.applyUpdate(doc, Buffer.from(opened.body.state, 'base64'));
+  const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { gc: true, clientId: opened.body.clientId });
   const before = Y.encodeStateVector(doc);
   regionText(doc).insert(0, text, {});
   expect((await live.update(owner, id, regionId, { clientId: opened.body.clientId, update: Y.encodeStateAsUpdate(doc, before) })).status).toBe(200);

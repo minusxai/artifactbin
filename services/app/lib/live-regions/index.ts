@@ -14,11 +14,14 @@
  *           declared regions).
  * Refusals: LiveRegionRefusal, typed by `code`.
  *
+ * Documents: openRegionDoc (region-doc.ts, with forkRegionDoc inside) is the one way a region or cell document is opened.
+ *
  * No storage, transport or UI: bytes in, bytes out. Every client starts from the server's state bytes.
  */
 export { regionSchema, safeHref, type RegionKind } from './schema';
 export { LiveRegionRefusal } from './refusal';
-export { applyRegionRevision, createRegionState, normalizeRegionHtml, regionHtml, regionText } from './state';
+export { openRegionDoc, regionText } from './region-doc';
+export { applyRegionRevision, createRegionState, normalizeRegionHtml, regionHtml } from './state';
 export { regionMarkdown } from './markdown';
 export { compactRegion } from './compaction';
 export { validateRegionUpdate } from './validate';

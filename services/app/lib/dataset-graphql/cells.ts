@@ -28,7 +28,7 @@ export interface DatasetCell {
   source: string;
   field: string;
   rowId: string;
-  /** The row as stored (every column), for the update rule's filter. */
+  /** The row as stored (every column) with its `_id` carried (ID_COLUMN), for the update rule's filter and check. */
   row: Record<string, unknown>;
   /** The cell's text ('' for null). */
   value: string;
@@ -60,7 +60,9 @@ export async function locateDatasetCell(dataset: ArtifactRow, rowId: string, col
     if (index < 0) continue;
     const declared = table.columns.find((c) => ('field' in column ? names[i]!.columns[c.name] === column.field : c.name === column.source));
     if (!declared) return 'no_column';
-    const row = rows[index]!, raw = row[declared.name];
+    const stored = rows[index]!, raw = stored[declared.name];
+    // The row as the generated API serves it: its `_id` carried, so a rule naming `_id` reads it (dataset-permissions view).
+    const row = { ...stored, [ID_COLUMN]: rowId };
     return {
       table, tableId, source: declared.name, field: names[i]!.columns[declared.name]!, rowId, row,
       value: typeof raw === 'string' ? raw : raw === null || raw === undefined ? '' : String(raw),

@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
-import { createRegionState, LiveRegionRefusal, regionHtml, regionText, validateRegionUpdate, type RegionKind } from '..';
+import { createRegionState, LiveRegionRefusal, openRegionDoc, regionHtml, regionText, validateRegionUpdate, type RegionKind } from '..';
 import { Room } from './harness';
 import { checkConvergence } from './property';
 
@@ -16,9 +16,7 @@ const CLIENT = 7;
 
 /** A client of a region that started from the server's bytes, recording each update it makes. */
 function client(state: Uint8Array, clientId = CLIENT) {
-  const doc = new Y.Doc({ gc: false });
-  doc.clientID = clientId;
-  Y.applyUpdate(doc, state, 'server');
+  const doc = openRegionDoc(state, { clientId });
   const updates: Uint8Array[] = [];
   doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== 'server') updates.push(update); });
   return { doc, text: regionText(doc), updates, last: () => updates.at(-1)! };
@@ -71,9 +69,7 @@ describe('validateRegionUpdate accepts', () => {
 
   it('content a gc-on client collected before sending (deleted content of its own id)', () => {
     const state = region();
-    const doc = new Y.Doc();
-    doc.clientID = CLIENT;
-    Y.applyUpdate(doc, state);
+    const doc = openRegionDoc(state, { gc: true, clientId: CLIENT });
     const before = Y.encodeStateVector(doc);
     regionText(doc).insert(0, 'gone', {});
     regionText(doc).delete(0, 4);
@@ -96,11 +92,11 @@ describe('validateRegionUpdate refuses', () => {
     const other = client(state);
     other.doc.getText('other').insert(0, 'x');
     expect(refusal(() => validateRegionUpdate('rich', state, other.last(), CLIENT)).code).toBe('outside_region');
-    const map = new Y.Doc();
-    map.clientID = CLIENT;
+    // A map key on the region root itself (Y.Text keeps attributes in its own map).
+    const map = openRegionDoc(undefined, { gc: true, clientId: CLIENT });
     let update: Uint8Array | undefined;
     map.on('update', (u: Uint8Array) => { update = u; });
-    map.getMap('region').set('key', 'value');
+    regionText(map).setAttribute('key', 'value');
     expect(refusal(() => validateRegionUpdate('rich', state, update!, CLIENT)).code).toBe('outside_region');
   });
 
@@ -188,7 +184,7 @@ describe('validateRegionUpdate refuses', () => {
     const big = client(state);
     big.text.insert(0, 'x'.repeat(REGION_UPDATE_MAX_BYTES + 10), {});
     expect(refusal(() => validateRegionUpdate('rich', state, big.last(), CLIENT)).code).toBe('too_large');
-    const full = new Y.Doc({ gc: false });
+    const full = openRegionDoc();
     regionText(full).insert(0, `${'y'.repeat(REGION_TEXT_MAX_UNITS - 5)}\n`, {});
     const fullState = Y.encodeStateAsUpdate(full);
     const more = client(fullState);
@@ -207,7 +203,7 @@ describe('validateRegionUpdate never refuses an honest editor', () => {
       for (let i = 0; i < count && from.outbox.length; i++) {
         const update = from.outbox[0]!;
         const check = validateRegionUpdate(this.kind, Y.encodeStateAsUpdate(this.server), update, from.doc.clientID);
-        expect(regionText(check.doc).toString()).toBe((() => { const copy = new Y.Doc({ gc: false }); Y.applyUpdate(copy, Y.encodeStateAsUpdate(this.server)); Y.applyUpdate(copy, update); return regionText(copy).toString(); })());
+        expect(regionText(check.doc).toString()).toBe((() => { const copy = openRegionDoc(Y.encodeStateAsUpdate(this.server)); Y.applyUpdate(copy, update); return regionText(copy).toString(); })());
         checked++;
         send.call(this, from, 1);
       }

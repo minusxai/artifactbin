@@ -9,7 +9,7 @@ import * as Y from 'yjs';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { createUser } from '@/lib/accounts';
 import { artifactState, createArtifact, getArtifactById, revertArtifactFor } from '@/lib/artifacts';
-import { editableRegions, normalizeRegionHtml, regionHtml, regionText } from '@/lib/live-regions';
+import { editableRegions, normalizeRegionHtml, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { identityForUser } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
@@ -73,9 +73,7 @@ async function join(person: Person, regionId = rich) {
   const response = await open(person, pageId, regionId);
   expect(response.status).toBe(200);
   const reply = await response.json() as { clientId: number; seq: number; state: string; kind: string; savedVersion: number };
-  const doc = new Y.Doc({ gc: false });
-  doc.clientID = reply.clientId;
-  Y.applyUpdate(doc, Buffer.from(reply.state, 'base64'), 'server');
+  const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
   const pending: Uint8Array[] = [];
   doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== 'server') pending.push(update); });
   return {
@@ -175,8 +173,7 @@ describe('opening a region', () => {
     expect(new Set(replies.map((reply) => reply.clientId)).size).toBe(4);
     expect(replies.map((reply) => reply.seq).sort()).toEqual([1, 2, 3, 4]);
     expect(replies.every((reply) => reply.savedVersion === 1)).toBe(true);
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, Buffer.from(replies[0]!.state, 'base64'));
+    const doc = openRegionDoc(Buffer.from(replies[0]!.state, 'base64'), { gc: true });
     expect(regionHtml('rich', Y.encodeStateAsUpdate(doc))).toBe(regionHtml('rich', Buffer.from(replies[3]!.state, 'base64')));
     expect(regionText(doc).toString()).toContain('Hello world');
   });
@@ -197,8 +194,7 @@ describe('updates', () => {
     expect(await retry.json()).toEqual({ seq: first.body.seq, duplicate: true });
     // Structs written under the owner's client id (or one no open issued), by the editor: refused, never stored.
     const forge = (clientId: number) => {
-      const doc = new Y.Doc({ gc: false });
-      Y.applyUpdate(doc, Y.encodeStateAsUpdate(b.doc));
+      const doc = openRegionDoc(Y.encodeStateAsUpdate(b.doc));
       doc.clientID = clientId;
       const before = Y.encodeStateVector(doc);
       regionText(doc).insert(0, 'forged ', {});
@@ -212,7 +208,7 @@ describe('updates', () => {
     const mismatched = await send(editor, { clientId: a.reply.clientId, update: Buffer.from(Y.mergeUpdates(b.pending)).toString('base64') });
     expect([mismatched.status, await mismatched.json()]).toEqual([422, { error: 'foreign_client' }]);
     expect((await b.push()).status).toBe(200);
-    expect((await rows('region_updates')).some((row) => regionText((() => { const d = new Y.Doc(); Y.applyUpdate(d, row.update as Uint8Array); return d; })()).toString().includes('forged'))).toBe(false);
+    expect((await rows('region_updates')).some((row) => regionText(openRegionDoc(row.update as Uint8Array, { gc: true })).toString().includes('forged'))).toBe(false);
   });
 
   it('refuses out_of_order with the server\'s state vector, and the client recovers by resending from it', async () => {
@@ -256,8 +252,7 @@ describe('the stream', () => {
     const stale = await stream(editor, `${rich}:0`);
     const [reset] = await framesUntil(stale.frames!, (frame) => frame.type === 'reset');
     expect(reset).toMatchObject({ type: 'reset', regionId: rich, seq: Number(row!.last_seq) });
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, Buffer.from(reset!.state as string, 'base64'));
+    const doc = openRegionDoc(Buffer.from(reset!.state as string, 'base64'), { gc: true });
     expect(regionText(doc).toString()).toContain('saved Hello');
     const ahead = await stream(editor, `${rich}:999`);
     expect((await framesUntil(ahead.frames!, (frame) => frame.type === 'reset'))[0]).toMatchObject({ seq: Number(row!.last_seq) });

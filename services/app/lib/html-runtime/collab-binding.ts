@@ -19,7 +19,7 @@
  */
 import * as Y from 'yjs';
 import type { CollabStatus } from '@artifactbin/contracts';
-import { cellText, spliceText, textSplice } from '../live-regions/cells';
+import { cellText, openRegionDoc, spliceText, textSplice } from '../live-regions/cells';
 import type { CellLink, CellPeer, CellPort } from './frame-cells';
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
@@ -146,9 +146,7 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
     const typed = doc ? cellText(doc).toString() : null;
     const unsaved = doc !== null && stored < posted;
     doc?.destroy();
-    const next = new Y.Doc();
-    next.clientID = clientId;
-    Y.applyUpdate(next, state, REMOTE);
+    const next = openRegionDoc(state, { gc: true, clientId });
     next.on('update', (update: Uint8Array, origin: unknown) => {
       if (origin === REMOTE || next !== doc) return;
       posted++;

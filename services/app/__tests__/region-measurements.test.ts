@@ -13,7 +13,7 @@ import * as Y from 'yjs';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
-import { compactRegion, createRegionState, editableRegions, regionText, validateRegionUpdate } from '@/lib/live-regions';
+import { compactRegion, createRegionState, editableRegions, openRegionDoc, regionText, validateRegionUpdate } from '@/lib/live-regions';
 import { createRegionSessions } from '@/lib/region-sessions';
 import { getDb } from '@/lib/platform';
 import { nativeHtml } from './native-html-fixture';
@@ -33,10 +33,8 @@ const percentile = (sorted: number[], p: number) => sorted[Math.min(sorted.lengt
 it.skipIf(!measure)('(a) state size over 500 saves of a 2,000-word region with typing between saves', () => {
   let page: { html: string; ledger: ReturnType<typeof canonicalizeHtmlPage>['ledger'] } = canonicalizeHtmlPage(nativeHtml(`<article data-af-editable="rich">${paragraphs(2_000)}</article>`));
   const regionId = editableRegions(page.html)[0]!.id;
-  const server = new Y.Doc({ gc: false });
-  Y.applyUpdate(server, createRegionState('rich', editableRegions(page.html)[0]!.inner).state);
-  const editor = new Y.Doc({ gc: false });
-  Y.applyUpdate(editor, Y.encodeStateAsUpdate(server));
+  const server = openRegionDoc(createRegionState('rich', editableRegions(page.html)[0]!.inner).state);
+  const editor = openRegionDoc(Y.encodeStateAsUpdate(server));
   const rows: Record<string, number>[] = [];
   const sample = (saves: number, snapshot: number) => rows.push({ saves, stateBytes: Y.encodeStateAsUpdate(server).byteLength, snapshotBytes: snapshot, htmlBytes: page.html.length, textUnits: regionText(server).length });
   sample(0, 0);
@@ -66,12 +64,9 @@ it.skipIf(!measure)('(b) server time per validated update into a 10,000-word reg
   const sessions = createRegionSessions({ db: getDb, keepaliveFrame: () => '', subscribe: async (channel, handler, onLost) => (await getDb()).listen(channel, handler, onLost) });
   const opened = await sessions.open(actor, row.id, regionId);
   if (opened.status !== 200) throw new Error('open');
-  const doc = new Y.Doc({ gc: false });
-  doc.clientID = opened.body.clientId;
-  Y.applyUpdate(doc, Buffer.from(opened.body.state, 'base64'));
+  const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { clientId: opened.body.clientId });
   const stateBytes = Buffer.from(opened.body.state, 'base64').byteLength;
-  const server = new Y.Doc({ gc: false });
-  Y.applyUpdate(server, Buffer.from(opened.body.state, 'base64'));
+  const server = openRegionDoc(Buffer.from(opened.body.state, 'base64'));
   const route: number[] = [], validation: number[] = [];
   for (let i = 0; i < 300; i++) {
     const before = Y.encodeStateVector(doc);

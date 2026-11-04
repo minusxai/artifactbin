@@ -13,17 +13,20 @@
  */
 import * as Y from 'yjs';
 import { diffHunks } from './diff';
+import { forkRegionDoc, openRegionDoc, regionText } from './region-doc';
 import { LiveRegionRefusal } from './refusal';
 
-/** The cell's text in a live document: the region root (lines.ts regionText), named here so the page library loads no schema. */
-export const cellText = (doc: Y.Doc): Y.Text => doc.getText('region');
+export { openRegionDoc };
+
+/** The cell's text in a live document (opened by openRegionDoc): the region root, read without loading the schema. */
+export const cellText: (doc: Y.Doc) => Y.Text = regionText;
 /** The cell's value: the text as it is. */
 export const cellValue = (doc: Y.Doc): string => cellText(doc).toString();
 
 const snapshotOf = (doc: Y.Doc): Uint8Array => Y.encodeSnapshot(Y.snapshot(doc));
 
 export function createCellState(value: string): { state: Uint8Array; snapshot: Uint8Array } {
-  const doc = new Y.Doc({ gc: false });
+  const doc = openRegionDoc();
   if (value) cellText(doc).insert(0, value);
   return { state: Y.encodeStateAsUpdate(doc), snapshot: snapshotOf(doc) };
 }
@@ -52,14 +55,13 @@ function rewrite(text: Y.Text, before: string, after: string): void {
  */
 export function applyCellRevision(input: { live: Uint8Array; savedSnapshot: Uint8Array | null | undefined; value: string }): { update: Uint8Array; snapshot: Uint8Array; base: string } {
   if (!input.savedSnapshot?.length) throw new LiveRegionRefusal('missing_snapshot');
-  const live = new Y.Doc({ gc: false });
-  Y.applyUpdate(live, input.live);
+  const live = openRegionDoc(input.live);
   let snapshot: Y.Snapshot;
   try { snapshot = Y.decodeSnapshot(input.savedSnapshot); } catch { throw new LiveRegionRefusal('snapshot_mismatch', ['undecodable']); }
   const known = Y.decodeStateVector(Y.encodeStateVector(live));
   const strangers = [...snapshot.sv].filter(([client, clock]) => (known.get(client) ?? 0) < clock);
   if (strangers.length) throw new LiveRegionRefusal('snapshot_mismatch', strangers.map(([client]) => String(client)));
-  const fork = Y.createDocFromSnapshot(live, snapshot);
+  const fork = forkRegionDoc(live, snapshot);
   const text = cellText(fork), base = text.toString();
   fork.transact(() => rewrite(text, base, input.value));
   return { update: Y.encodeStateAsUpdate(fork, Y.encodeStateVector(live)), snapshot: snapshotOf(fork), base };
@@ -67,7 +69,7 @@ export function applyCellRevision(input: { live: Uint8Array; savedSnapshot: Uint
 
 /** The value a snapshot of a live document holds (the cell as it last saw the dataset). */
 export function snapshotValue(live: Y.Doc, snapshot: Uint8Array): string {
-  return cellValue(Y.createDocFromSnapshot(live, Y.decodeSnapshot(snapshot)));
+  return cellValue(forkRegionDoc(live, Y.decodeSnapshot(snapshot)));
 }
 
 /** The smallest splice turning `before` into `after`: one deletion and one insertion at `index`, or null. */

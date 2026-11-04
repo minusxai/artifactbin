@@ -23,9 +23,9 @@ import { keymap } from 'prosemirror-keymap';
 import type { Node as PMNode } from 'prosemirror-model';
 import { Plugin, Selection, TextSelection, type Command, type EditorState } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import { applyUpdate, Doc, mergeUpdates } from 'yjs';
+import { applyUpdate, mergeUpdates } from 'yjs';
 import type { RegionFrameMessage, RegionKind } from '@artifactbin/contracts';
-import { editorState, regionCommands, regionText } from '../live-regions/browser';
+import { editorState, openRegionDoc, regionCommands, regionText } from '../live-regions/browser';
 import { safeHref } from '../live-regions/href';
 import { captureRegionCaret, createRegionCaretPainter, type RegionCaretPaint } from '../html-bridge/region-carets';
 import { installRegionEditorStyles } from './region-editor-styles';
@@ -231,10 +231,8 @@ function defaultKey(state: EditorState, key: string): ReturnType<EditorState['tr
 
 export function mountRegionEditor(options: RegionEditorOptions): RegionEditor {
   const { win, root, regionId, kind, post } = options;
-  const doc = new Doc({ gc: false });
   let clientId = options.clientId;
-  doc.clientID = clientId;
-  applyUpdate(doc, options.state, REMOTE);
+  const doc = openRegionDoc(options.state, { clientId });
   // Yjs moves to a fresh client id when a remote change carries its own; this session's id is the server's.
   const ownId = () => { if (doc.clientID !== clientId) doc.clientID = clientId; };
   ownId();

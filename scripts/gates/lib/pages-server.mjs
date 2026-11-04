@@ -1,6 +1,11 @@
 /**
  * A SERVER THAT SERVES EVERY DOCUMENT ON ITS OWN ORIGIN (APP__PAGES_HOST=lvh.me), for the gates that need one.
  *
+ * `pagesHost` names another pages host for the server it boots: `localhost` serves documents at `<hex id>.localhost`, a
+ * site of its own beside the app's `app.lvh.me` (production's shape: Chromium then runs the frame out of process).
+ * Chromium and this process resolve `*.localhost` to loopback themselves. A base is driven rather than a server booted
+ * only when it already frames documents under that host (its app page's `frame-src` names `*.<host>:<port>`).
+ *
  * The gate runner's servers boot without the setting, so a gate that frames documents boots its own production
  * server (dist/server.mjs, as scripts/gates.mjs does) with `APP__PAGES_HOST=lvh.me` and the app at
  * `http://app.lvh.me:<port>` — unless the base it is handed already serves pages (a developer's
@@ -8,6 +13,7 @@
  * (`browserArgs`) and in this process (node's dns.lookup), so no DNS is needed.
  *
  *   const pages = await pagesServer(process.argv[2], 'frame-editor');
+ *   const crossSite = await pagesServer(process.argv[2], 'live-regions-oop', { pagesHost: 'localhost' });
  *   // pages.app, pages.port, pages.origin(id), pages.browserArgs, pages.booted; pages.stop() on exit (also automatic)
  */
 import { spawn } from 'node:child_process';
@@ -29,22 +35,30 @@ const freePort = () => new Promise((resolve, reject) => {
   probe.listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); });
 });
 
-/** Does the server on this port serve pages at lvh.me? Its apex is not a document and answers every path 404 `not_found`. */
-async function servesPages(port) {
+/** Does the server on this port serve pages at `host`? Its apex is not a document and answers every path 404 `not_found`. */
+async function servesPages(port, host = PAGES_HOST) {
   try {
-    const res = await fetch(`http://${PAGES_HOST}:${port}/`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`http://${host}:${port}/`, { signal: AbortSignal.timeout(3000) });
     return res.status === 404 && (await res.json().catch(() => ({}))).error === 'not_found';
   } catch { return false; }
 }
+/** Does the app on this port frame documents under `host`? Its pages' `frame-src` says so (another host's apex may 404 alike). */
+async function framesPagesAt(port, host) {
+  try {
+    const res = await fetch(`http://app.${PAGES_HOST}:${port}/login`, { signal: AbortSignal.timeout(3000) });
+    const frameSrc = (res.headers.get('content-security-policy') ?? '').split(';').find((directive) => directive.trim().startsWith('frame-src')) ?? '';
+    return frameSrc.split(/\s+/).includes(`http://*.${host}:${port}`);
+  } catch { return false; }
+}
 
-export async function pagesServer(given, name) {
+export async function pagesServer(given, name, { pagesHost = PAGES_HOST } = {}) {
   let child = null;
   let scratch = null;
   const stop = () => { if (child && child.exitCode === null) child.kill('SIGKILL'); if (scratch) rmSync(scratch, { recursive: true, force: true }); scratch = null; };
   process.on('exit', stop);
   const url = given ? new URL(given) : null;
   const givenPort = url ? Number(url.port || (url.protocol === 'https:' ? 443 : 80)) : null;
-  let port = givenPort && await servesPages(givenPort) ? givenPort : null;
+  let port = givenPort && await servesPages(givenPort, pagesHost) && (pagesHost === PAGES_HOST || await framesPagesAt(givenPort, pagesHost)) ? givenPort : null;
   if (!port) {
     const bundle = path.join(ROOT, 'dist/server.mjs');
     if (!existsSync(bundle)) throw new Error(`the ${name} gate boots its own server from dist/server.mjs: run \`npm run build\` first`);
@@ -62,7 +76,7 @@ export async function pagesServer(given, name) {
         NODE_ENV: 'production',
         APP__PORT: String(port),
         APP__PUBLIC_BASE_URL: `http://app.${PAGES_HOST}:${port}`,
-        APP__PAGES_HOST: PAGES_HOST,
+        APP__PAGES_HOST: pagesHost,
         APP__ASSETS_ORIGIN: '',
         AUTH__SECRET: process.env.AUTH__SECRET || `gate-${name}-${Date.now()}`,
         DATABASE_URL: 'pglite://memory',
@@ -76,7 +90,7 @@ export async function pagesServer(given, name) {
     let up = false;
     for (let i = 0; i < 120 && !up; i++) {
       if (child.exitCode !== null) throw new Error(`the ${name} server exited with ${child.exitCode}`);
-      up = await servesPages(port);
+      up = await servesPages(port, pagesHost);
       if (!up) await new Promise((r) => setTimeout(r, 500));
     }
     if (!up) throw new Error(`the ${name} server never answered`);
@@ -84,7 +98,7 @@ export async function pagesServer(given, name) {
   return {
     port,
     app: `http://app.${PAGES_HOST}:${port}`,
-    origin: (id) => `http://${pagesLabel(id)}.${PAGES_HOST}:${port}`,
+    origin: (id) => `http://${pagesLabel(id)}.${pagesHost}:${port}`,
     browserArgs: PAGES_BROWSER_ARGS,
     booted: !!child,
     stop,

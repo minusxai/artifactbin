@@ -8,7 +8,7 @@ import * as Y from 'yjs';
 import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { editableRegions, regionText } from '@/lib/live-regions';
+import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { createRegionSessions, type RegionSessions } from '@/lib/region-sessions';
 import { getDb } from '@/lib/platform';
 import { nativeHtml } from './native-html-fixture';
@@ -40,9 +40,7 @@ function instance(leaveGraceMs: number): RegionSessions {
 async function type(text: string) {
   const opened = await sessions.open(owner, pageId, regionId);
   if (opened.status !== 200) throw new Error(`open ${opened.status}`);
-  const doc = new Y.Doc();
-  doc.clientID = opened.body.clientId;
-  Y.applyUpdate(doc, Buffer.from(opened.body.state, 'base64'));
+  const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { gc: true, clientId: opened.body.clientId });
   const before = Y.encodeStateVector(doc);
   regionText(doc).insert(0, text, {});
   const sent = await sessions.update(owner, pageId, regionId, { clientId: opened.body.clientId, update: Y.encodeStateAsUpdate(doc, before) });
