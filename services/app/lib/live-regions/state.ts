@@ -233,7 +233,7 @@ interface RegionRevision {
 export function applyRegionRevision(input: RegionRevisionInput): RegionRevision {
   const { kind } = input;
   if ((input.html === undefined) === (input.markdown === undefined)) throw new TypeError('applyRegionRevision takes exactly one of html or markdown');
-  const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!), 'refuse');
+  const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!, kind), 'refuse');
   if (!input.savedSnapshot?.length) throw new LiveRegionRefusal('missing_snapshot');
   const live = liveDocument(input.live);
   let snapshot: Y.Snapshot;

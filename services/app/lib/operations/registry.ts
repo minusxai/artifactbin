@@ -4,6 +4,7 @@ import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, g
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
+import { REGION_OPERATIONS } from './regions';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
@@ -776,5 +777,5 @@ export const OPERATIONS: Operation[] = [
   ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, mutateDatasetOp,
-  exportArtifactOp, refreshAssetOp,
+  exportArtifactOp, refreshAssetOp, ...REGION_OPERATIONS,
 ];
