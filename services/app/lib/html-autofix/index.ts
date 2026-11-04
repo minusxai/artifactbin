@@ -11,14 +11,17 @@
  *          viewport     missing viewport meta → width=device-width, initial-scale=1
  *          design-system-meta  (D2) data-af-design-system / data-af-dark on <html> → the artifactbin:design-system meta
  *          design-system-link  a copied <link data-af="design-system"> → removed; the platform stylesheet carries every system
+ *          duplicate-data-af-id a later static element repeating an identity → its data-af-id dropped, so the server mints a new one
+ *  ROUTINE hand-written ids     with `newPage` (no companion): every static data-af-id dropped; the platform assigns them
  *  REFUSED script-syntax        an inline script or JSON block that does not parse, at its HTML-file line
- *          duplicate-data-af-id two elements with one identity (the server refuses these too)
- *          duplicate-id         two elements with one HTML id
+ *          duplicate-data-af-id a repeated identity inside a <template> (copies would collide; nothing to renumber)
  *          missing-asset        a relative local reference with no file behind it (checked only when `exists` is given)
+ *  WARNED  duplicate-id         two elements with one HTML id
  *          comment-view         a state block's data-af-comment-fields/-exclude/-version the runtime would refuse (no view saved)
  *          pwa-metadata         an install setting publish would silently ignore
  *
- * IDs are never assigned or renumbered here: the server's identity ledger owns them (lib/html-page canonicalizeHtmlPage).
+ * IDs are never assigned here: the server's identity ledger owns them (lib/html-page canonicalizeHtmlPage); dropping
+ * one only lets the server mint it.
  */
 import {parse as parseJs} from 'acorn';
 import {initSync,parse as parseImports} from 'es-module-lexer';
@@ -30,7 +33,7 @@ import {normalizeDesignSelection} from '../html-page/design-system.ts';
 import {parseCommentViewFieldList} from '../../../contracts/src/comment-view-state.ts';
 initSync();
 
-type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link';
+type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link' | 'duplicate-data-af-id';
 type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata' | 'comment-view';
 interface AutofixLine { line: number; text: string }
 interface AutofixFix { rule: AutofixRule; reason: string; before: AutofixLine[]; after: AutofixLine[] }
@@ -38,9 +41,11 @@ interface AutofixProblem { rule: AutofixProblemRule; line: number; column: numbe
 export interface AutofixOptions {
   /** Whether a local reference exists, given its path relative to the HTML file (normalized, no query/hash). */
   exists?: (relativePath: string) => boolean;
+  /** A page with no published identity yet: hand-written static data-af-ids are dropped (the platform assigns them). */
+  newPage?: boolean;
 }
 /** `routine` names platform-owned pieces added because they were missing (not author mistakes). */
-export interface AutofixResult { html: string; changed: boolean; fixes: AutofixFix[]; problems: AutofixProblem[]; routine: string[] }
+export interface AutofixResult { html: string; changed: boolean; fixes: AutofixFix[]; problems: AutofixProblem[]; warnings: AutofixProblem[]; routine: string[] }
 
 const lineAt = (source: string, offset: number): number => { let line = 1; for (let i = 0; i < offset && i < source.length; i++) if (source.charCodeAt(i) === 10) line++; return line; };
 const columnAt = (source: string, offset: number): number => offset - source.lastIndexOf('\n', offset - 1);
@@ -96,14 +101,37 @@ export function autofixHtml(input: string, options: AutofixOptions = {}): Autofi
     if (design.removedLinks.length) pending.push({ rule: 'design-system-link', reason: 'the platform adds the design-system stylesheet and fonts; no copy is uploaded', before: design.removedLinks, inserted: [] });
   }
 
+  // 4. Static identities: hand-written ones on a new page, and a later copy of a repeated one, are dropped for the server to mint.
+  const ids = parseSource(html), seenIds = new Set<string>(), drops: Element[] = [];
+  let handWritten = 0;
+  for (const element of ids.elements) {
+    const id = attribute(element, 'data-af-id');
+    if (id === null) continue;
+    if (options.newPage) { handWritten++; drops.push(element); continue; }
+    if (!seenIds.has(id)) { seenIds.add(id); continue; }
+    drops.push(element);
+    pending.push({ rule: 'duplicate-data-af-id', reason: `"${id}" repeats an earlier element's id; this copy gets a new one from the platform`, before: [{ line: lineOf(html, element), text: startTag(html, element) }], inserted: [] });
+  }
+  if (drops.length) html = applyEdits(html, drops.map((element) => dropAttribute(html, element, 'data-af-id')));
+  if (handWritten) routine.push(`dropped ${handWritten} hand-written data-af-id (the platform assigns them)`);
+
   for (const fix of pending) fixes.push({ rule: fix.rule, reason: fix.reason, before: fix.before, after: fix.inserted.filter(Boolean).map((text) => placed(html, text)) });
-  return { html, changed: html !== input, fixes, problems: findProblems(html, options), routine };
+  const found = findProblems(html, options), warned = new Set<AutofixProblemRule>(['duplicate-id', 'pwa-metadata', 'comment-view']);
+  return { html, changed: html !== input, fixes, problems: found.filter((problem) => !warned.has(problem.rule)), warnings: found.filter((problem) => warned.has(problem.rule)), routine };
+}
+
+/** Remove one attribute with the whitespace before it. */
+function dropAttribute(source: string, element: Element, name: string) {
+  const at = element.sourceCodeLocation!.attrs![name]!;
+  let start = at.startOffset;
+  while (start > 0 && /\s/.test(source[start - 1]!)) start--;
+  return { start, end: at.endOffset, text: '' };
 }
 
 const JS_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module', 'text/ecmascript', 'application/ecmascript']);
 const JSON_TYPES = new Set(['application/json', 'importmap', 'application/ld+json', 'speculationrules']);
 
-/** Refusals only: nothing here edits the source. */
+/** Refusals and warnings (autofixHtml splits them): nothing here edits the source. */
 function findProblems(html: string, options: AutofixOptions = {}): AutofixProblem[] {
   const document = parseSource(html);
   const all = [...document.elements, ...document.templateElements];
@@ -259,12 +287,12 @@ export interface AutofixReportOptions {
 }
 
 /** The human report every entry point prints. It always starts with `autofix:`; --json callers get the full result instead. */
-export function formatAutofixReport(result: Pick<AutofixResult, 'fixes' | 'problems'>, options: AutofixReportOptions = {}): string {
-  const { fixes, problems } = result, limit = options.limit ?? 8, file = options.file ?? 'page';
+export function formatAutofixReport(result: Pick<AutofixResult, 'fixes' | 'problems'> & { warnings?: AutofixProblem[] }, options: AutofixReportOptions = {}): string {
+  const { fixes, problems } = result, warnings = result.warnings ?? [], limit = options.limit ?? 8, file = options.file ?? 'page';
   const lines: string[] = [];
-  if (!fixes.length && !problems.length) lines.push('autofix: clean');
+  if (!fixes.length && !problems.length && !warnings.length) lines.push('autofix: clean');
   else {
-    const counts = [fixes.length ? `${fixes.length} ${options.dryRun ? 'to fix' : 'fixed'}` : '', problems.length ? `${problems.length} problem${problems.length === 1 ? '' : 's'} to fix by hand` : ''].filter(Boolean).join(', ');
+    const counts = [fixes.length ? `${fixes.length} ${options.dryRun ? 'to fix' : 'fixed'}` : '', problems.length ? `${problems.length} problem${problems.length === 1 ? '' : 's'} to fix by hand` : '', warnings.length ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ');
     lines.push(`autofix: ${counts}${options.landed ? ` — ${options.landed}` : ''}`);
   }
   let shown = 0;
@@ -278,7 +306,11 @@ export function formatAutofixReport(result: Pick<AutofixResult, 'fixes' | 'probl
     if (shown++ >= limit) break;
     lines.push(`  refused ${file}:${problem.line}:${problem.column} ${problem.message}`, `    ${problem.snippet}`);
   }
-  const hidden = fixes.length + problems.length - Math.min(shown, fixes.length + problems.length);
+  for (const warning of warnings) {
+    if (shown++ >= limit) break;
+    lines.push(`  warning ${file}:${warning.line}:${warning.column} ${warning.message}`, `    ${warning.snippet}`);
+  }
+  const total = fixes.length + problems.length + warnings.length, hidden = total - Math.min(shown, total);
   if (hidden > 0) lines.push(`  … and ${hidden} more (full detail: --json)`);
   if (options.routine?.length) lines.push(`  routine: ${options.routine.join(', ')}`);
   return lines.join('\n') + '\n';

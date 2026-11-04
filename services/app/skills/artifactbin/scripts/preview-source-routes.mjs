@@ -65,7 +65,8 @@ const file=resolve(base,requested==='/'?'index.html':requested.slice(1));const r
       previewAutofix(base,file,(await readPreviewFile(base,file)).toString('utf8'));res.setHeader(
       'Content-Type','application/json');
 return end(200,JSON.stringify({clean:!result.fixes.length&&!result.problems.length,fixes:
-      result.fixes,problems:result.problems,routine:result.routine,file:requested}));
+      result.fixes,problems:result.problems,warnings:result.warnings,routine:result.routine,
+      file:requested}));
    }
  return null;
 }

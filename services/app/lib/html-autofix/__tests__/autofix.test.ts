@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {autofixHtml,formatAutofixReport,scriptFingerprint} from '../index';
 const findProblems=(html:string,options?:Parameters<typeof autofixHtml>[1])=>autofixHtml(html,options).problems;
+const findWarnings=(html:string)=>autofixHtml(html).warnings;
 import {canonicalizeHtmlPage} from '../../html-page';
 
 const page=(head:string,body='<h1>Hi</h1>')=>`<!doctype html>\n<html>\n<head>\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
@@ -8,19 +9,21 @@ const OK='<meta charset="utf-8">\n<meta name="viewport" content="width=device-wi
 const rules=(html:string)=>autofixHtml(html).fixes.map(fix=>fix.rule);
 
 describe('autofix rules',()=>{
- it('names invalid install metadata that publish would silently ignore',()=>{
-  const bad=findProblems(page(OK+'\n<meta name="artifactbin:pwa-theme-color" content="green">\n<meta name="artifactbin:pwa-icon" content="logo.png">\n<meta name="artifactbin:pwa-nmae" content="x">'));
+ it('warns about invalid install metadata that publish would silently ignore, without refusing',()=>{
+  const bad=findWarnings(page(OK+'\n<meta name="artifactbin:pwa-theme-color" content="green">\n<meta name="artifactbin:pwa-icon" content="logo.png">\n<meta name="artifactbin:pwa-nmae" content="x">'));
   expect(bad.map(problem=>problem.rule)).toEqual(['pwa-metadata','pwa-metadata','pwa-metadata']);
   expect(bad[0]!.message).toContain('six-digit hex');expect(bad[2]!.message).toContain('unknown setting');
-  expect(findProblems(page(OK+'\n<meta name="artifactbin:pwa-enabled" content="true">\n<meta name="artifactbin:pwa-theme-color" content="#234b35">'))).toEqual([]);
+  expect(findProblems(page(OK+'\n<meta name="artifactbin:pwa-theme-color" content="green">'))).toEqual([]);
+  expect(formatAutofixReport(autofixHtml(page(OK+'\n<meta name="artifactbin:pwa-theme-color" content="green">')))).toMatch(/^autofix: 1 warning\n  warning page:\d+:\d+ artifactbin:pwa-theme-color: content must be a six-digit hex/);
+  expect(findWarnings(page(OK+'\n<meta name="artifactbin:pwa-enabled" content="true">\n<meta name="artifactbin:pwa-theme-color" content="#234b35">'))).toEqual([]);
  });
- it('accepts saved comment view attributes and names an invalid field list',()=>{
+ it('accepts saved comment view attributes and warns about an invalid field list',()=>{
   const state=(attributes:string)=>page(OK+`\n<script type="application/json" data-af="state" ${attributes}>{"tab":"a","draft":""}</script>`);
-  for(const ok of ['',`data-af-comment-exclude='["draft"]'`,`data-af-comment-fields='["tab"]'`,`data-af-comment-version="v1" data-af-comment-fields='["tab"]'`])expect(findProblems(state(ok))).toEqual([]);
-  const bad=findProblems(state(`data-af-comment-exclude='draft'`));
+  for(const ok of ['',`data-af-comment-exclude='["draft"]'`,`data-af-comment-fields='["tab"]'`,`data-af-comment-version="v1" data-af-comment-fields='["tab"]'`])expect(findWarnings(state(ok))).toEqual([]);
+  const bad=findWarnings(state(`data-af-comment-exclude='draft'`));expect(findProblems(state(`data-af-comment-exclude='draft'`))).toEqual([]);
   expect(bad.map(problem=>problem.rule)).toEqual(['comment-view']);
   expect(bad[0]!.message).toContain('data-af-comment-exclude');expect(bad[0]!.message).toContain('["draft"]');
-  for(const attributes of [`data-af-comment-exclude='["draft","draft"]'`,`data-af-comment-fields='[]'`,`data-af-comment-fields='["a-b"]'`,'data-af-comment-version=""'])expect(findProblems(state(attributes)).map(problem=>problem.rule),attributes).toEqual(['comment-view']);
+  for(const attributes of [`data-af-comment-exclude='["draft","draft"]'`,`data-af-comment-fields='[]'`,`data-af-comment-fields='["a-b"]'`,'data-af-comment-version=""'])expect(findWarnings(state(attributes)).map(problem=>problem.rule),attributes).toEqual(['comment-view']);
  });
  it('leaves a correct page byte-identical and reports clean',()=>{
   const html=page(OK),result=autofixHtml(html,{exists:()=>true});
@@ -60,9 +63,24 @@ describe('autofix rules',()=>{
   expect(problems[1]!.message).toContain('JSON');
   expect(autofixHtml(html).html).toBe(html);
  });
- it('refuses duplicate data-af-id and duplicate id, but not ids inside templates',()=>{
-  const problems=findProblems(page(OK,'<p id="a" data-af-id="n1">1</p><p id="a" data-af-id="n1">2</p><template><i id="t"></i><i id="t"></i></template>'));
-  expect(problems.map(problem=>problem.rule).sort()).toEqual(['duplicate-data-af-id','duplicate-id']);
+ it('renumbers a repeated static data-af-id, warns about a repeated id, and refuses only a repeat inside a template',()=>{
+  const html=page(OK,'<p id="a" data-af-id="n1">1</p><p id="a" data-af-id="n1">2</p><template><i id="t"></i><i id="t"></i></template>');
+  const result=autofixHtml(html);
+  expect(result.problems).toEqual([]);expect(result.warnings.map(w=>w.rule)).toEqual(['duplicate-id']);
+  expect(result.fixes.map(fix=>fix.rule)).toEqual(['duplicate-data-af-id']);
+  expect(result.html).toContain('<p id="a" data-af-id="n1">1</p><p id="a">2</p>');
+  // The server then mints the copy's id: the canonical page has two distinct identities.
+  expect(canonicalizeHtmlPage(result.html).nodeIds.filter(id=>id==='n1')).toHaveLength(1);
+  expect(formatAutofixReport(result)).toMatch(/fixed duplicate-data-af-id: "n1" repeats an earlier element's id/);
+  const template=autofixHtml(page(OK,'<template><i data-af-id="x"></i><b data-af-id="x"></b></template>'));
+  expect(template.problems.map(problem=>problem.rule)).toEqual(['duplicate-data-af-id']);
+ });
+ it('drops hand-written static data-af-ids on a new page as a routine change',()=>{
+  const html=page(OK,'<h1 data-af-id="hero">Hi</h1>\n<p data-af-id = "lede" class="x">Lede</p><script>document.body.dataset.x="data-af-id=1"</script>');
+  const result=autofixHtml(html,{newPage:true});
+  expect(result.html).toContain('<h1>Hi</h1>\n<p class="x">Lede</p>');expect(result.html).toContain('"data-af-id=1"');
+  expect(result.routine).toContain('dropped 2 hand-written data-af-id (the platform assigns them)');expect(result.problems).toEqual([]);
+  expect(autofixHtml(html).html).toBe(html);
  });
  it('refuses missing relative local assets only, with file lines',()=>{
   const html=page(OK+'\n<link rel="stylesheet" href="./style.css">\n<link rel="af-dataset" href="ref:ABCDEF" data-af-name="d">','<img src="img/a.png"><img src="https://x.test/a.png"><img src="ref:ABCDEF"><script type="module">import "./lib.js";</script>');

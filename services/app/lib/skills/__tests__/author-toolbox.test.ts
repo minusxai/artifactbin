@@ -51,7 +51,7 @@ it('classifies unreadable successful write bodies as unknown without automatic r
 it('names what a version conflict changed and the one re-read step, and never claims a newer version for another 409',async()=>{
  const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const refused=(body:Record<string,unknown>)=>makeClient('https://example.test',{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body,{status:409})}).request('/api/artifacts/PAGE12',{method:'PUT',body:{},unsafe:true}).catch((error:any)=>error);
- const step='since your read. Run read.mjs ID --output fresh.html, reapply your edits to that file and publish it; do not resume this journal.';
+ const step='since your read. Run read.mjs ID --output page.html, reapply your edits to that file and publish it; do not resume this journal.';
  expect(await refused({error:'version_conflict',currentVersion:4,changed:'content'})).toMatchObject({code:'version_conflict',exit:4,recovery:`A newer version was published ${step}`});
  expect(await refused({error:'version_conflict',currentVersion:3,changed:'details'})).toMatchObject({recovery:`The title, description or metadata changed ${step}`});
  const other=await refused({error:'policy_locked',detail:'owner only'});
@@ -283,9 +283,9 @@ it('serve runs autofix on the served bytes and leaves the file alone unless aske
    expect(served).toContain('<meta charset="utf-8">');expect(served).toContain('name="viewport"');
    expect(await readFile(file,'utf8')).toBe(source);
    await fetch(session.url);expect(reports).toHaveLength(1);
-   expect(reports[0]).toMatch(/^autofix: 2 fixed, 1 problem/);expect(reports[0]).toContain('served fixed; file unchanged (run autofix.mjs to write)');
+   expect(reports[0]).toMatch(/^autofix: 2 fixed, 1 warning/);expect(reports[0]).toContain('served fixed; file unchanged (run autofix.mjs to write)');
    const findings=await (await fetch(new URL('/__af_preview/autofix?path=/',session.url))).json();
-   expect(findings.problems).toEqual([expect.objectContaining({rule:'duplicate-id',line:1})]);
+   expect(findings.problems).toEqual([]);expect(findings.warnings).toEqual([expect.objectContaining({rule:'duplicate-id',line:1})]);
   }finally{await session.close();}
   const writing=await startPreview({root,revisionIntervalMs:60000,autofix:{write:true}});
   try{await fetch(writing.url);expect(await readFile(file,'utf8')).toContain('<meta charset="utf-8">');}finally{await writing.close();}
@@ -550,4 +550,87 @@ it('repeats a status read through a transient network failure but never resubmit
   const result=await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher,retryDelays:[0,0]});
   expect(result.smokePassed).toBe(true);expect(ops).toEqual(['script','status','status','close']);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+/** A fake server for publish/read: GET a page head, POST/PUT a page; every request is recorded. */
+function fakePages(head:{id:string,version:number,state:string,html:string,format?:string,sharing_revision?:number}){
+ const sent:any[]=[];
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input)),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):undefined;sent.push({method,path:url.pathname,body});
+  if(method==='GET')return Response.json({format:'html',sharing_revision:0,...head});
+  const version=method==='PUT'?head.version+1:1;
+  return Response.json({id:method==='PUT'?url.pathname.split('/').at(-1):'NEW123',url:'https://h.test/a/X',version,state:'c'.repeat(64),html:body.html,format:'html'},{status:method==='PUT'?200:201});};
+ return {sent,fetcher};
+}
+it('publish refuses an empty page and starter placeholders by line, and drops hand-written ids on a new page',async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const home=await mkdtemp(path.join(tmpdir(),'publish-guard-')),dir=path.join(home,'project');await (await import('node:fs/promises')).mkdir(dir);const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:''});
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ try{
+  const file=path.join(dir,'index.html');
+  for(const empty of ['','\n  \n','<!doctype html><html><head><title>x</title></head><body>\n</body></html>']){
+   await writeFile(file,empty);
+   await expect(publishCommand({values:{},positionals:[file]},options)).rejects.toMatchObject({code:'empty_page',exit:2,recovery:expect.stringContaining('Write the page into index.html')});
+  }
+  await writeFile(file,'<!doctype html>\n<title>[Household budget]</title>\n<link rel="af-dataset" data-af-name="t" href="ref:DATASET_ID">\n<p>Hi</p>');
+  const refused=await publishCommand({values:{},positionals:[file]},options).catch((error:any)=>error);
+  expect(refused).toMatchObject({code:'autofix_refused'});
+  expect(refused.details.autofix.problems.map((p:any)=>[p.rule,p.line])).toEqual([['starter-placeholder',2],['starter-placeholder',3]]);
+  expect(refused.details.autofix.report).toContain('ref:DATASET_ID is a starter placeholder: publish that data first');
+  expect(refused.details.autofix.report).toContain('starter placeholder [Household budget] is still in the page');
+  expect(sent).toEqual([]);
+  // A new page with hand-written and repeated data-af-ids publishes; none of them is sent.
+  await writeFile(file,'<!doctype html>\n<h1 data-af-id="hero">Hi</h1><p data-af-id="hero">Lede</p>');
+  const done=await publishCommand({values:{},positionals:[file]},options);
+  expect(sent.at(-1).method).toBe('POST');expect(sent.at(-1).body.html).not.toContain('data-af-id="hero"');
+  expect(done.autofix.routine).toContain('dropped 2 hand-written data-af-id (the platform assigns them)');
+  expect(done.next).toBe('Next: when the whole request is done, send your reply and, in the same response, run node scripts/comment.mjs watch NEW123 --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
+  expect(JSON.parse(await readFile(file+'.af.json','utf8')).id).toBe('NEW123');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+it('publish FILE --artifact ID replaces that page over its current head when the file has no usable companion',async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const home=await mkdtemp(path.join(tmpdir(),'publish-artifact-')),dir=path.join(home,'project');await (await import('node:fs/promises')).mkdir(dir);const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:'<h1 data-af-id="af-1">Old</h1>',sharing_revision:4});
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ try{
+  const file=path.join(dir,'index.html');await writeFile(file,'<!doctype html>\n<h1 data-af-id="af-1">New</h1>');
+  const done=await publishCommand({values:{artifact:'PAGE12',visibility:'public'},positionals:[file]},options);
+  expect(sent.map(r=>r.method+' '+r.path)).toEqual(['GET /api/artifacts/PAGE12','PUT /api/artifacts/PAGE12']);
+  // The head is the baseline; ids are carried as written; a visibility change names the sharing revision read with it.
+  expect(sent[1].body).toMatchObject({expectedVersion:3,expectedState:'a'.repeat(64),expectedSharingRevision:4,visibility:'public'});
+  expect(sent[1].body.html).toContain('data-af-id="af-1"');
+  expect(done).toMatchObject({id:'PAGE12',version:4,updatedInPlace:true,note:'index.html replaced page PAGE12 (its version 3 was the baseline).'});
+  expect(JSON.parse(await readFile(file+'.af.json','utf8'))).toMatchObject({id:'PAGE12',version:4});
+  // Overwritten later (a starter copied over it): the refusal names the real cause and the one recovery.
+  await writeFile(file,'<!doctype html>\n<h1>Starter</h1>');
+  const refused=await publishCommand({values:{},positionals:[file]},options).catch((error:any)=>error);
+  expect(refused).toMatchObject({code:'invalid_baseline',message:'index.html was overwritten after it was saved (its af-authoring marker no longer matches index.html.af.json), so publish cannot tell what it replaces.'});
+  expect(refused.recovery).toContain('node scripts/publish.mjs index.html --artifact PAGE12');
+  // With --artifact the same file recovers by itself.
+  sent.length=0;
+  expect(await publishCommand({values:{artifact:'PAGE12'},positionals:[file]},options)).toMatchObject({id:'PAGE12'});
+  expect(sent.map(r=>r.method)).toEqual(['GET','PUT']);expect(sent[1].body).not.toHaveProperty('expectedSharingRevision');
+  // A companion that belongs to the named page is the baseline itself: no head read.
+  sent.length=0;await writeFile(file,(await readFile(file,'utf8')).replace('Starter','Edited'));
+  await publishCommand({values:{artifact:'PAGE12'},positionals:[file]},options);expect(sent.map(r=>r.method)).toEqual(['PUT']);
+  await expect(publishCommand({values:{artifact:'PAGE12',group:'team'},positionals:[path.join(dir,'index.html')]},{...options,fetcher:async()=>Response.json({format:'html',id:'OTHER1',version:1,state:'a'.repeat(64)})})).rejects.toMatchObject({code:'group_not_for_update'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+it('read --output refreshes an unchanged pair in place and saves beside a file with edits of its own',async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {readCommand}=await import('../../../skills/artifactbin/scripts/read.mjs');
+ const dir=await mkdtemp(path.join(tmpdir(),'read-refresh-'));let version=3;
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t'},fetcher:async()=>Response.json({id:'PAGE12',format:'html',version,state:'a'.repeat(64),html:`<h1 data-af-id="h">v${version}</h1>`})};
+ try{
+  const file=path.join(dir,'page.html');
+  expect((await readCommand({values:{output:file},positionals:['PAGE12']},options)).source).toBe(file);
+  version=4;const again=await readCommand({values:{output:file},positionals:['PAGE12']},options);
+  expect(again.source).toBe(file);expect(again).not.toHaveProperty('note');expect(await readFile(file,'utf8')).toContain('v4');
+  expect(JSON.parse(await readFile(file+'.af.json','utf8')).version).toBe(4);
+  await writeFile(file,(await readFile(file,'utf8')).replace('v4','my edit'));version=5;
+  const beside=await readCommand({values:{output:file},positionals:['PAGE12']},options);
+  expect(beside.source).toBe(path.join(dir,'page.fresh.html'));expect(beside.note).toBe('page.html has changes of its own since it was read, so this read went to page.fresh.html: reapply what you need there, then publish that file.');
+  expect(await readFile(file,'utf8')).toContain('my edit');expect(await readFile(beside.source,'utf8')).toContain('v5');
+  expect((await readCommand({values:{output:file},positionals:['PAGE12']},options)).source).toBe(path.join(dir,'page.fresh-2.html'));
+ }finally{await rm(dir,{recursive:true,force:true});}
 });

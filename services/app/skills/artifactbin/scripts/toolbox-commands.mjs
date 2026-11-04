@@ -44,7 +44,6 @@ const commands = {
       strict: flag('boolean'),
       create: flag('boolean'),
       artifact: flag(),
-      baseline: flag(),
       request: flag(),
       resume: flag()
     }

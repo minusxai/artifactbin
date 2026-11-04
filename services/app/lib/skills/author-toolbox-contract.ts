@@ -4,6 +4,8 @@ export interface AuthorBaseline {
  sourceFile:string; pair:string; historical:boolean;
  root:string; entryPath:string; dependencyReceipts:ReadonlyArray<{path:string;kind:'asset'|'dataset';id:string;revision:string;state?:string;sha256?:string}>;
  retainedBackends:ReadonlyArray<{name:string;href:string}>;
+ /** The saved source's hash (read --output refreshes an unchanged file in place) and the sharing revision seen with it. */
+ sha256?:string; sharingRevision?:number;
 }
 export interface AuthorJournal {
  kind:'author-request'; schema:1; server:string; method:'POST'|'PUT'|'PATCH'; path:string; key:string;
@@ -16,4 +18,7 @@ export interface CommentCheckpoint {kind:'comment-checkpoint';schema:1;server:st
 /** Check diagnostics stay at the top level on success and refusal. */
 export interface AuthorCheckResult {
  smokePassed:boolean; checks:ReadonlyArray<Record<string,unknown>>; unverified:ReadonlyArray<string>; note:string;
+ /** A passing hosted check's Reply block facts (toolbox-check-reply.mjs replyFacts). */
+ reply?:{id:string;link:string;builtWith?:string;permissions:ReadonlyArray<{id:string;name:string;lines:string[]}>};
+ slideLinks?:string[];
 }
