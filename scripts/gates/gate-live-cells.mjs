@@ -56,7 +56,7 @@ const page = (datasetId) => `<!doctype html><html><head><title>Tracker</title>
 import {client,gql} from '@afbin/apollo';
 import {collab} from '@afbin/collab';
 // Offline (a downloaded copy) the read fails and the field keeps its default; the cell is read-only there.
-let row=null;try{row=(await client.query({query:gql\`{ tasks { _id description } }\`})).data.tasks[0];}catch{}
+let row=null;try{row=(await client.query({query:gql\`{ tasks(where:{title:{_eq:"Login"}}) { _id description } }\`})).data.tasks[0];}catch{}
 const field=document.getElementById('description'), status=document.getElementById('status');
 if(row)field.value=row.description??'';
 const text=collab.text('tasks',row?._id??'r_offline','description');
@@ -104,7 +104,8 @@ try {
     const saved = await api(`/api/artifacts/${datasetId}/policy`, { method: 'PUT', body: JSON.stringify({ policy: POLICY, expectedPolicyRevision: revision }) });
     check(saved.saved === true && /Typed live together/.test(saved.readBack), 'the owner made `description` collaborative (the read-back says so)');
     ({ id: pageId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ html: page(datasetId), title: 'Tracker', visibility: 'public' }), headers: { 'idempotency-key': randomUUID() } }));
-    rowId = (await gql('{ tasks { _id } }')).data.tasks[0]._id;
+    // The first task by title (rows come back in `_id` order, which says nothing about which is first).
+    rowId = (await gql('{ tasks(where: {title: {_eq: "Login"}}) { _id } }')).data.tasks[0]._id;
     await Promise.all([A, B, C].map((p) => p.goto(`${BASE}/a/${pageId}`, { waitUntil: 'load' })));
     const [a, b, c] = await Promise.all([A, B, C].map((p) => documentFrame(p)));
     frames = { a, b, c };
