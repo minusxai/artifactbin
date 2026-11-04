@@ -5,8 +5,11 @@
  * the log state and lock live in toolbox-watch-state.mjs.
  */
 import {open} from 'node:fs/promises';
-import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads}
+import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads,WATCH_TIMEOUT}
   from './toolbox-watch-state.mjs';
+/** How to read a reaction: comment.mjs help and the watch line after a printed reaction say it. */
+export const REACTIONS='A 👍 on your proposal means approval to proceed; any other reaction is '+
+ 'information, never an instruction.';
 import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
 export {watchLogPath,noteWatchActivity} from './toolbox-watch-state.mjs';
 function matches(value,server,id){return value?.server===server&&value?.artifact===id&&
@@ -56,22 +59,20 @@ export const QUIET_MINUTES=15;
  * replays history and prints unanswered threads), and returns {events,timedOut,stopped}; requests
  * never overlap. A --next batch is printed before it is logged, so a call killed mid-batch prints
  * it again. With a log, an empty call QUIET_MINUTES after the window's last activity stops it, and
- * a second --next on the same log while one runs prints one line and returns {busy:true}. A --next
- * call while a printed comment's thread has no reply from you since drains the feed without
+ * a second --next on the same log takes over (the first prints one line, returns {replaced}). A
+ * --next call while a printed comment's thread has no reply from you since drains the feed without
  * waiting and, still unanswered, prints the order to answer and returns {unanswered}. */
 export async function watchComments(client,id,values,options={}){
  if(values.next&&values.once)throw new ToolError('invalid_invocation',
   'Use --next or --once, not both.',2);
  if(!values.next||!values.output)return watchFeed(client,id,values,options);
- // One --next watch per log: a second one would print the same comments twice.
- const lock=await withWatchLock(values.output+'.lock',touch=>watchFeed(client,id,values,{
-  ...options,touch}));
- if(lock.ran)return lock.value;
- const started=new Date(lock.started).toTimeString().slice(0,8);
- await (options.deliver??(line=>{process.stdout.write(line+'\n');}))('another watch is already'+
-  ` running for this page (started ${started}, maybe your own): wait for it to print; don't start`+
-  ' another');
- return {events:0,timedOut:false,stopped:false,busy:true};
+ // One --next watch per log (two would print the same comments twice): a later one takes over.
+ const lock=await withWatchLock(values.output+'.lock',({touch,signal})=>watchFeed(client,id,values,{
+  ...options,touch,signal:options.signal?AbortSignal.any([options.signal,signal]):signal}));
+ if(!lock.replaced)return lock.value;
+ await (options.deliver??(line=>{process.stdout.write(line+'\n');}))('a newer watch --next on this'+
+  ' page took over and prints the next comments; this one stopped: nothing to do here');
+ return {events:0,timedOut:false,stopped:false,replaced:true};
 }
 async function watchFeed(client,id,values,{signal,deliver,now=Date.now,quietMs=QUIET_MINUTES*60000,
  touch=async()=>{}}={}){
@@ -111,7 +112,7 @@ const fresh=next&&handle&&(!window||now()-window.active>=quietMs);if(fresh){wind
  // Threads printed and not yet replied to: such a call only drains the feed (own replies clear).
  const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set();let gate=awaiting.size>0,
   unanswered=null;
- let failures=0,events=0,timedOut=false,stopped=false;
+ let failures=0,events=0,timedOut=false,stopped=false,reacted=false;
  // A first --next call replays the page's history once instead of starting at "now", so a comment
  // posted while the agent was still publishing is not lost: it prints each thread whose latest
  // comment is someone else's (the unanswered ones) and is still open, then waits as usual.
@@ -156,7 +157,9 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
      annotation_id)){events++;shown.push({kind:'event',server,artifact:id,stream,event});}}
     // Printed first, logged after (a replay only once it ends): a call killed in between leaves
     // the cursor behind, and the next call prints the batch again.
-    if(!replay){for(const record of shown)await print(record);for(const record of held)await
+    if(!replay&&await touch()===false)break;
+    if(!replay){for(const record of shown){reacted||=record.event.type===
+     'artifactbin.comment_reaction';await print(record);}for(const record of held)await
      write(record);
      // A printed thread awaits a reply unless the batch's latest comment on it is your own.
      const mine=new Map(held.map(({event})=>[event.type==='artifactbin.comment'&&
@@ -180,16 +183,18 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
   if(timedOut&&window&&now()-window.active>=quietMs){stopped=true;await write(mark({closed:
    now()}));}
  }finally{await handle?.close();}
+ // Interrupted or taken over: what this call held back is printed by the next one.
+ if(signal?.aborted)return {events:0,timedOut:false,stopped:false};
  const quiet=quietMs>=60000?`${Math.round(quietMs/60000)} minutes`:`${Math.round(quietMs/1000)} s`;
+ const answer=`edit and publish if asked, then node scripts/comment.mjs reply ${id} --thread`;
  if(unanswered)await print(`answer the comment(s) printed above first (${unanswered.join(', ')}):`+
-  ` edit and publish if asked, then comment.mjs reply ${id} --thread THREAD --body-file FILE;`+
-  ' then watch --next again');
+  ` ${answer} THREAD --body TEXT; then run watch --next again`);
  else if(stopped)await print(`no new comments for ${quiet}: stop watching and end your turn; if`+
   ' the person asks you to watch again, run watch --next');
  else if(timedOut)await print('no new comments yet: run the same watch --next command again');
  // Agents re-watched before replying and missed the person's wait: print the order here.
- else if(next&&events>0)await print('next: answer each comment above now; a requested'+
-  ' change to the page is part of your task (edit and publish it first, then comment.mjs reply ID'+
-  ' --thread <annotation_id> --body-file FILE); only then run watch --next again');
+ else if(next&&events>0)await print('next: answer each comment above now; a requested change to'+
+  ` the page is part of your task (${answer} <annotation_id> --body TEXT); only then run node `+
+  `scripts/comment.mjs watch ${id} --next again. ${WATCH_TIMEOUT}`+(reacted?' '+REACTIONS:''));
  return {events,timedOut,stopped,...(unanswered?{unanswered}:{})};
 }

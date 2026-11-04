@@ -3,7 +3,7 @@
  * Retired endpoints/brands remain forbidden on every surface. */
 import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree, joinSoftBreaks} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
-import { monitoringGuidance } from '@/lib/artifact-wire';
+import { monitoringGuidance, WATCH_LOOP } from '@/lib/artifact-wire';
 import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbin/scripts/toolbox-comments.mjs';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
@@ -228,34 +228,30 @@ it('links the monitoring guide to a served section that teaches the watch and it
  expect(text).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
 });
 
-it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
- const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}};
- expect(hint.monitoring.instruction).toContain('background');
- expect(hint.monitoring.instruction).toContain('existing comments');
-});
-
 /**
- * A WATCH NOTHING READS ANSWERS NOTHING. In the preview-then-monitor eval every run that started the watch with a tool
- * that wakes the agent per output line answered the comment; every run that started it as a plain background job did
- * not. Every surface that tells an agent to watch says so in harness-neutral words, with the bounded fallback.
+ * ONE WATCH MODE FOR EVERY HARNESS (H1): a blocking request, handled, then repeated, never a background job. The
+ * monitor instruction and the served guide's watch section carry the same loop sentence (WATCH_LOOP) word for word.
  */
-it('teaches every surface to watch with a tool that wakes the agent, never a plain background job, and to poll without one', () => {
+it('teaches the monitor as one blocking request at a time, started in the reply response after publishing content', () => {
  const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}}).monitoring;
- const surfaces = {instruction};
- for (const [name, text] of Object.entries(surfaces)) {
-  expect(text, name).toContain('After the first successful save or local preview');
-  expect(text, name).toContain('do not ask first');
-  // The same ending as the skill's watch: reply first, answer then watch again, stop after the shared quiet time.
-  expect(text, name).toContain('write your full reply first');
-  expect(text, name).toContain('then watch again');
-  expect(text, name).toContain(`Stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
-  expect(text, name).toContain(`a later watch starts a new ${SKILL_QUIET_MINUTES} minutes`);
-  expect(text, name).not.toMatch(/until the session ends|the user says stop/);
-  expect(text, name).not.toContain('only when requested');
-  expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
-  expect(text, name).toContain('plain background job');
-  expect(text, name).toContain('between work steps');
- }
+ expect(instruction).toContain('After publishing page content, reply and start the monitor in the same response');
+ expect(instruction).toContain('do not ask first');
+ expect(instruction).toContain('one blocking request at a time');
+ expect(instruction).toContain('existing comments');
+ expect(instruction).toContain(WATCH_LOOP);
+ expect(WATCH_LOOP).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
+ expect(instruction).toContain(`a later watch starts a new ${SKILL_QUIET_MINUTES} minutes`);
+ for (const retired of ['background job', 'wakes you', 'between work steps', 'first successful save', 'until the session ends', 'only when requested'])
+  expect(instruction, retired).not.toContain(retired);
+});
+it('keeps the monitor instruction and the served watch guide on the same loop sentence', () => {
+ const {guide} = (monitoringGuidance(BASE, 'abc123', 'html') as {monitoring:{guide:string}}).monitoring;
+ const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
+ const text = publicGuideText(topic!, BASE)!;
+ const section = text.slice(text.indexOf('## Watch for comments'));
+ const end = section.indexOf('\n## ', 3);
+ expect(end < 0 ? section : section.slice(0, end)).toContain(WATCH_LOOP);
+ expect(text).toContain(`(#${anchor})`);
 });
 
 

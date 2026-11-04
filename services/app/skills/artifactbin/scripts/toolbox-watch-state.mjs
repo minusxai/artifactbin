@@ -1,9 +1,8 @@
 /**
  * Internal: the state a watch --next keeps beside its log: where the log lives, the watching
- * window (opened, activity, closed records), the threads printed and not yet answered, and the
- * one-watch-at-a-time lock, an exclusive <log>.lock holding the watch's pid, a token and when it
- * started. A lock is stale when that pid is gone (a killed watch) or nothing has touched it for two
- * minutes (a running watch touches it on every poll); a stale lock is taken over once.
+ * window (opened, activity, closed records), the threads printed and not yet answered, the
+ * one-watch-at-a-time lock (<log>.lock holding the watch's pid, a token and when it started; a
+ * later watch takes it over) and the Next lines that send the agent back to the watch.
  * Used by: toolbox-comments.mjs (watch --next), toolbox-publish.mjs (activity), and the
  * comment-reactions-toolbox tests.
  */
@@ -57,44 +56,41 @@ export async function openThreads(client,id,threads,signal){
   open.add(a.id));cursor=listed.next_cursor;if(!cursor)break;}}catch{return [];}
  return threads.filter(thread=>!open.has(thread));
 }
+/** A lock nobody touched for this long belongs to no running watch (pid reuse): it is never
+ * signalled. */
 const STALE_MS=120000;
-/** The holder of a lock, or null when it is stale: its pid is gone, it has not been touched for
- * STALE_MS, or (unreadable, as while being written) it is that old. */
-async function holder(file){
- let held,info;try{[held,info]=await Promise.all([readFile(file,'utf8'),stat(file)]);}catch(error){
-  if(error.code==='ENOENT')return null;throw error;}
- const lock=(()=>{try{return JSON.parse(held);}catch{return null;}})();
- if(Date.now()-info.mtimeMs>STALE_MS)return null;if(!Number.isSafeInteger(lock?.pid))return {};
- try{process.kill(lock.pid,0);return lock;}catch(error){return error.code==='ESRCH'?null:lock;}
+/** Watches running in this process, by lock token: a takeover aborts one directly. */
+const running=new Map();
+const readLock=file=>readFile(file,'utf8').then(JSON.parse).catch(()=>null);
+/** Runs run({touch,signal}) holding the lock and releases it on every exit (return, throw,
+ * abort). A later watch on the same log always takes the lock over: the one it replaces is
+ * aborted (in this process) or sent SIGTERM (another live process, which comment.mjs turns into
+ * the same abort), and its touch() answers false from then on. Returns {value,replaced}. */
+export async function withWatchLock(file,run){
+ const token=randomUUID(),temp=`${file}.${token}`,info=await stat(file).catch(()=>null),
+  previous=info?await readLock(file):null;
+ await writeFile(temp,JSON.stringify({pid:process.pid,token,started:Date.now()}),{mode:0o600});
+ await rename(temp,file);
+ if(previous?.pid===process.pid)running.get(previous.token)?.abort();
+ else if(Number.isSafeInteger(previous?.pid)&&Date.now()-info.mtimeMs<STALE_MS)try{
+  process.kill(previous.pid,'SIGTERM');}catch{}
+ const controller=new AbortController(),owns=async()=>(await readLock(file))?.token===token;
+ running.set(token,controller);
+ const touch=async()=>{if(!await owns()){controller.abort();return false;}
+  await utimes(file,new Date(),new Date()).catch(()=>{});return true;};
+ try{const value=await run({touch,signal:controller.signal});return {value,replaced:!await owns()};}
+ finally{running.delete(token);
+  // Moved aside first, so a lock another watch took meanwhile is put back, never deleted.
+  const aside=`${file}.${token}.done`;if(await rename(file,aside).then(()=>true,()=>false)){
+   if((await readLock(aside))?.token!==token)await link(aside,file).catch(()=>{});
+   await unlink(aside).catch(()=>{});}}
 }
-/** The lock appears whole (linked from a written temp file). A stale one is moved aside, and
- * only if what moved is still that stale lock is it removed; anything else is put back. Returns
- * the token, or null while another watch holds it. hooks.beforeTakeover is a test seam. */
-async function take(file,hooks={}){
- const token=randomUUID(),temp=`${file}.${token}`;await writeFile(temp,JSON.stringify({pid:
-  process.pid,token,started:Date.now()}),{mode:0o600});
- try{for(let attempt=0;attempt<2;attempt++){
-  try{await link(temp,file);return token;}catch(error){if(error.code!=='EEXIST')throw error;}
-  const before=await readFile(file,'utf8').catch(()=>null);
-  if(await holder(file))return null;
-  await hooks.beforeTakeover?.();
-  const aside=`${file}.${token}.stale`;try{await rename(file,aside);}catch(error){
-   if(error.code==='ENOENT')continue;throw error;}
-  if(await readFile(aside,'utf8').catch(()=>null)!==before){await link(aside,file).catch(
-   ()=>{});await unlink(aside).catch(()=>{});return null;}
-  await unlink(aside).catch(()=>{});
- }return null;}finally{await unlink(temp).catch(()=>{});}
-}
-/** Runs run(touch) holding the lock and releases it on every exit (return, throw, abort):
- * {ran:true,value}; while another watch holds it, {ran:false,started} (when that one began).
- * touch() marks the lock alive. */
-export async function withWatchLock(file,run,hooks){
- const token=await take(file,hooks);if(!token){const held=await readFile(file,'utf8').then(
-  JSON.parse).catch(()=>({}));return {ran:false,started:Number(held.started)||Date.now()};}
- try{return {ran:true,value:await run(()=>utimes(file,new Date(),new Date()).catch(()=>{}))};}
- finally{await readFile(file,'utf8').then(held=>JSON.parse(held).token===token&&unlink(file))
-  .catch(()=>{});}
-}
-/** The step after publishing or answering on a page, printed after the result (runTool). */
-export const watchNext=id=>'Next: when the request is done, send your reply (the URL as asked) '+
- `and, in that same response, run node scripts/comment.mjs watch ${id} --next.`;
+/** The shell rule of a blocking watch, in comment.mjs help and every printed watch line. */
+export const WATCH_TIMEOUT='Give your shell tool a timeout of at least 300000 ms; never wrap the '+
+ 'command in timeout(1).';
+/** The step after publishing page content (publish.mjs) or a clean check (check.mjs). */
+export const watchNext=id=>'Next: when the whole request is done, send your reply and, in the '+
+ `same response, run node scripts/comment.mjs watch ${id} --next. ${WATCH_TIMEOUT}`;
+/** The step after answering a comment (comment.mjs reply). */
+export const watchAgain=id=>`Next: run node scripts/comment.mjs watch ${id} --next again. `+
+ WATCH_TIMEOUT;
