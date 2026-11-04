@@ -18,6 +18,7 @@ const asReply = <T extends object>(answer: RegionAnswer<T>): OpReply =>
 const NOT_FOUND = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it (writes need edit access): existence is never revealed' };
 const REGION_NOT_FOUND = { status: 404, code: 'region_not_found', fix: `name one of the regions the reply lists (\`regions\`), or ${DOC_REGION} for a doc's one rich region` };
 const AMBIGUOUS = { status: 409, code: 'region_ambiguous', fix: `the page has several rich regions: name one from \`regions\` instead of ${DOC_REGION}` };
+const TEXT_FORMATS: readonly RegionFormat[] = ['markdown', 'html'];
 const region = z.string().describe(`A region's data-af-id, or ${DOC_REGION} for the page's only rich region (a doc's text).`);
 
 const readRegionOp: Operation = {
@@ -25,14 +26,15 @@ const readRegionOp: Operation = {
   title: 'Read a live region',
   http: { method: 'GET', path: '/api/artifacts/{id}/regions/{regionId}' },
   description: `Read one editable region (data-af-editable) of a saved page as Markdown (default) or HTML, with the saved version it is from; ${DOC_REGION} is a doc's text. Pass that version as base_version to write_region. People's unsaved typing is not in it: call save_regions first to include it.`,
-  input: { id: z.string(), regionId: region, format: z.enum(['markdown', 'html']).optional() },
+  input: { id: z.string(), regionId: region, format: z.enum(TEXT_FORMATS as [RegionFormat, ...RegionFormat[]]).optional() },
   annotations: { readOnly: true },
-  example: { input: { id: 'aB3xK9', regionId: DOC_REGION, format: 'markdown' } },
+  example: { input: { id: 'aB3xK9', regionId: DOC_REGION } },
   errors: [NOT_FOUND, REGION_NOT_FOUND, AMBIGUOUS],
   async run(ctx, input) {
-    const format: RegionFormat = input.format === 'html' ? 'html' : 'markdown';
-    if (input.format !== undefined && input.format !== 'markdown' && input.format !== 'html') return { status: 400, body: { error: 'invalid_format' } };
-    return asReply(await store().read(ctx.actor, String(input.id), String(input.regionId), format));
+    // The region's text representation (never a page format): Markdown unless HTML is asked for.
+    const format = input.format ?? TEXT_FORMATS[0];
+    if (!TEXT_FORMATS.includes(format as RegionFormat)) return { status: 400, body: { error: 'invalid_format' } };
+    return asReply(await store().read(ctx.actor, String(input.id), String(input.regionId), format as RegionFormat));
   },
 };
 

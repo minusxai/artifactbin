@@ -13,6 +13,8 @@
  *      of exactly that markup) leaves only region HTML on both sides, and after the save;
  *   5. reconnect: B goes offline while both type, comes back, and nothing typed is lost;
  *   6. an owner whole-page PUT at the current expectedVersion while B has unsaved typing keeps both;
+ *   6b. an agent's Markdown write of the region (bearer, `PUT /regions/_doc` from the version it read) while B has
+ *      unsaved typing: one new version holding both, merged into both open pages live, without a reload;
  *   7. a comment B anchors inside the region after typing saves first and anchors to that version;
  *   8. the last editor leaving saves a version, which the viewer's open page then shows.
  *
@@ -241,6 +243,24 @@ try {
     check(saved.includes('Owner PUT line.') && saved.includes('unsaved-by-B'), 'the version the PUT made holds both');
   });
 
+  await section('an agent writes the region as Markdown while B has unsaved typing: both open pages merge it live', async () => {
+    await caretAtEnd(b, B, '[data-af-id="p2"]');
+    await B.keyboard.type(' typing-before-agent');
+    await both([a, b], 'typing-before-agent');
+    // A reload would drop these: the open pages must take the agent's text as they are.
+    await Promise.all([a, b].map((frame) => frame.evaluate(() => { window.__gateAgentMarker = 'kept'; })));
+    const read = await api('/regions/_doc?format=markdown');
+    check(read.regionId === 'notes' && !read.markdown.includes('typing-before-agent'), `the agent reads the saved region as Markdown, without B's unsaved typing (v${read.version})`);
+    const written = await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-agent-write-${stamp}` }, body: JSON.stringify({ markdown: `${read.markdown}\n\nAgent line from **Markdown**.`, base_version: read.version }) });
+    check(written.version === read.version + 1, `the agent's write is saved as one new version (v${read.version} → v${written.version})`);
+    check(written.html.includes('Agent line from <strong>Markdown</strong>.') && written.html.includes('typing-before-agent'), 'the version the agent saved holds its line and B\'s typing');
+    const [atA, atB] = await both([a, b], 'Agent line from Markdown.', 'typing-before-agent');
+    check(atA === atB && atB?.includes('Agent line from Markdown.') && atB?.includes('typing-before-agent'), 'both open editors show the agent\'s line and keep B\'s typing');
+    check((await marked(b, 'strong')).includes('Markdown'), 'the agent\'s Markdown bold arrives as bold');
+    const kept = await Promise.all([a, b].map((frame) => frame.evaluate(() => window.__gateAgentMarker).catch(() => null)));
+    check(kept.every((value) => value === 'kept'), `neither open page reloaded (${JSON.stringify(kept)})`);
+  });
+
   await section('a comment inside the region after typing anchors to the saved version', async () => {
     await caretAtEnd(b, B, '[data-af-id="p2"]');
     await B.keyboard.type(' commentword');
@@ -290,7 +310,7 @@ try {
     check(after?.version > before.version, `the last editor leaving saved a version (v${before.version} → v${after?.version})`);
     const saved = savedRegion(after?.html ?? '');
     check(foreign(savedShape(saved), SAVED_ATTRS).length === 0, `the saved region is region HTML only (${foreign(savedShape(saved), SAVED_ATTRS).join(' ') || 'clean'})`);
-    check(['Word item', 'Docs item', 'online-A', 'offline-B', 'ime:仮名', 'Owner PUT line.'].every((part) => saved.includes(part)), 'every leg\'s text is in the saved version');
+    check(['Word item', 'Docs item', 'online-A', 'offline-B', 'ime:仮名', 'Owner PUT line.', 'Agent line from'].every((part) => saved.includes(part)), 'every leg\'s text is in the saved version');
     check((await until(() => textOf(c), (text) => text?.includes('leaving-B'), 15_000))?.includes('leaving-B'), 'the viewer\'s open page shows the leave save');
     check(traffic.get(C).length === 0, `the viewer made no region request (${traffic.get(C).map((entry) => entry.url).join(' ') || 'none'})`);
     check(await c.locator(REGION).getAttribute('contenteditable') === null, 'the viewer never had an editor');
