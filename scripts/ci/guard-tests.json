@@ -11,6 +11,7 @@
   "scripts/__tests__/v3-ci.test.mjs",
   "scripts/__tests__/workflows.test.mjs",
   "services/app/lib/skills/__tests__/skill-archive-budget.test.ts",
+  "services/app/lib/skills/__tests__/retired-phrasing.test.ts",
   "services/app/lib/skills/__tests__/skill-code-shape.test.ts",
   "services/app/lib/skills/__tests__/skill-tree.test.ts"
 ]

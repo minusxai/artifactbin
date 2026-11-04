@@ -194,7 +194,7 @@ const UNSERVABLE: OperationError = { status: 410, code: 'unservable_document', f
  * policy was set, nobody could replace its content and nothing said why.
  */
 /** Every observed-head miss: `changed` says what moved since the read; access-setting changes never refuse a content write. */
-const VERSION_CONFLICT: OperationError = { status: 409, code: 'version_conflict', fix: "changed says what moved since your read: content (a newer currentVersion), details (title, description or metadata, same version), sharing or policy (that revision). Re-read, reapply your change to what you read and retry with the new currentVersion and currentState" };
+const VERSION_CONFLICT: OperationError = { status: 409, code: 'version_conflict', fix: "changed says what moved since your read: content (a newer currentVersion), details (title, description or metadata, same version), sharing or policy (that revision). Re-read the artifact, reapply your change to what you read and send it again with the new version and state as expectedVersion and expectedState" };
 const POLICY_LOCKED: OperationError = { status: 409, code: 'policy_locked', fix: "this dataset has a write policy — only its OWNER may replace its content, and nobody may revert it (viewers' rows are in it). Fork it, or ask the owner" };
 const POLICY_MISMATCH: OperationError = { status: 400, code: 'policy_mismatch', fix: 'the replacement no longer has a table or column the dataset policy grants — detail names it. Keep that column, or change the policy first with set_dataset_policy' };
 
@@ -236,7 +236,7 @@ const updateArtifactOp: Operation = {
     OWNER_ONLY,
     VERSION_CONFLICT,
     // A folder has no content, and this door is where that is enforced — so it
-    // is declared HERE and not only on edit_artifact. The code is the same word
+    // is declared HERE, on the content door. The code is the same word
     // the data tiers answer; the FIX has to be different, because "replace it
     // whole instead" is the thing that just failed.
     { status: 400, code: 'not_editable', fix: 'a folder has no content — send title, visibility or parent_id instead; its page is its listing' },
@@ -386,7 +386,7 @@ const getVersionOp: Operation = {
 
 const updateMetadataOp: Operation = {
  name:'update_metadata', title:'Update metadata without a content version', http:{method:'PATCH',path:'/api/artifacts/{id}'},
- description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Visibility, linkRole, access or shares may carry the observed sharing_revision as expectedSharingRevision (refused with changed: sharing when it moved; without it the settings apply); a policy needs expectedPolicyRevision. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
+ description:'Change only the supplied metadata fields, conditional on the observed head: send its version and state as expectedVersion and expectedState. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Visibility, linkRole, access or shares may carry the observed sharing_revision as expectedSharingRevision (refused with changed: sharing when it moved; without it the settings apply); a policy needs expectedPolicyRevision. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
  input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
   title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
   visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
@@ -613,7 +613,7 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact to adapt an existing document, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document that reads a private one is refused by name instead of copied broken. Forking an APP copies the datasets its <Mutation> declarations WRITE — rows, columns, access and write policy — under your account and repoints the page at the copies; datasets it only READS keep their ref. Pass dry_run: true to be told which datasets that would copy, creating nothing. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders are not forkable. Answers the create reply plus forked_from and datasets — the copies it made, each with its own forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact to adapt an existing document, then edit the copy with update_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document that reads a private one is refused by name instead of copied broken. Forking an APP copies the datasets its <Mutation> declarations WRITE — rows, columns, access and write policy — under your account and repoints the page at the copies; datasets it only READS keep their ref. Pass dry_run: true to be told which datasets that would copy, creating nothing. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders are not forkable. Answers the create reply plus forked_from and datasets — the copies it made, each with its own forked_from.',
   input: {
     id: z.string(),
     dry_run: z.boolean().optional().describe('answer { datasets } — the datasets a fork would copy under your account, in the order the page names them — and create nothing'),
@@ -747,7 +747,7 @@ const queryResourceOp:Operation={
  description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows.',
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
  annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
- errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter with --param'}],
+ errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'}],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
 };
 

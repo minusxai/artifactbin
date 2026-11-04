@@ -17,8 +17,11 @@ import configuredServer from './toolbox-config.mjs';
 import {parseCommand} from './toolbox-commands.mjs';
 import {commandHelp} from './toolbox-description.mjs';
 import {checkDigest} from './toolbox-check-digest.mjs';export {checkDigest};
-// toolbox-journal and toolbox-watch-state import helpers back from here: safe, none used at load.
+// toolbox-journal, toolbox-watch-state import helpers from here: safe, none used at load.
 export {createJournal,journalIntent,resumeJournal} from './toolbox-journal.mjs';
+/** Sign-in as SKILL.md words it: a given email, else ask; then wait for the code. */
+const LOGIN='node scripts/auth.mjs login --email ADDRESS',SIGN_IN='Use an email the user already '+
+  'gave (otherwise ask for it), then wait for the emailed code. Never search for credentials.';
 export function resolveTarget(value,selected){
  let id=value,server=selected;
 if(/^https?:/i.test(value??'')){const url=new URL(value);if(url.username||url.password||url.search||
@@ -64,7 +67,7 @@ if(env.ARTIFACTBIN_TOKEN){if(env.ARTIFACTBIN_URL!==server)throw new ToolError(
     token:env.ARTIFACTBIN_TOKEN};}
   const shared=await platform();let saved=await shared.readCredentials(server,root);
 if(!saved)throw new ToolError('auth_required','No saved grant for this origin.',3,
-    'Run auth.mjs login --email ADDRESS.');
+    `Run ${LOGIN}. ${SIGN_IN}`);
 if(saved.expiresAt&&saved.expiresAt<Date.now()+30000){try{saved=await shared.refreshCredentials(
     saved,root,{fetch:fetcher});}catch(error){throw new ToolError(error.code??'auth_required',
     'Saved grant could not be refreshed; credentials retained.',
@@ -136,10 +139,7 @@ const causeOf=error=>{const line=String(error?.message??'').split('\n')[0].repla
   return line?' Cause: '+line:'';};
 export function toolFailure(name,error){
 if(authLapse(error))return {ok:false,code:'auth_required',message:
-  'Sign-in expired: run node scripts/auth.mjs login --email ADDRESS',recovery:
-  'Ask the user for their email, run the command, then ask for the emailed code. Never search '
-  +'for credentials.'};
-// A broken install names the missing module (a path, not a secret), not a generic failure.
+  `Sign-in expired: run ${LOGIN}`,recovery:SIGN_IN};
 if(error?.code==='ERR_MODULE_NOT_FOUND'){
   const missing=/Cannot find (?:module|package) '([^']+)'/.exec(String(error.message))?.[1];
   return {ok:false,code:error.code,message:missing?`Missing module ${missing}: the skill `
