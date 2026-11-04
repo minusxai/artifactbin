@@ -25,3 +25,4 @@ export { validateRegionUpdate } from './validate';
 export { editableRegions, isRegionId, type PageRegion } from './page-regions';
 export { editorState, regionCommands } from './editor';
 export { absolutePosition, relativePosition } from './binding';
+export { applyCellRevision, cellValue, createCellState, snapshotValue } from './cells';

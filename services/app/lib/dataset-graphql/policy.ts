@@ -62,6 +62,14 @@ const readBack = (policy: DatasetPermissions, row: ArtifactRow) => {
   return { readBack: back.text, readBackTables: back.tables, warnings: back.warnings };
 };
 
+/** Collaborative columns (`@afbin/collab`) hold text: a number or boolean column cannot be typed in live. */
+function collaborativeTypeErrors(policy: DatasetPermissions, tables: readonly DatasetTable[]): DatasetPermissionsIssue[] {
+  return policy.tables.flatMap((t, i) => (t.collaborative_columns ?? []).flatMap((name, j) => {
+    const column = tables.find((d) => d.schema === t.table.schema && d.name === t.table.name)?.columns.find((c) => c.name === name);
+    return column && column.type !== 'string' ? [{ path: `tables[${i}].collaborative_columns[${j}]`, message: `"${name}" is a ${column.type} column; only text columns can be collaborative` }] : [];
+  }));
+}
+
 /** GET: the policy as v3, its revision, the roles rules may name, each table's GraphQL names and the read-back. */
 export async function readDatasetPermissions(actor: AccessActor, id: string): Promise<PolicyReply> {
   const found = await editable(actor, id);
@@ -109,6 +117,8 @@ export async function writeDatasetPermissions(actor: AccessActor, id: string, bo
     return invalid([{ path: 'expectedPolicyRevision', message: 'expected the nonnegative integer revision GET answered' }]);
   const checked = validateDatasetPermissions(value, shapeOf(tables));
   if (!checked.ok) return invalid(checked.errors);
+  const untyped = collaborativeTypeErrors(checked.policy, tables);
+  if (untyped.length) return invalid(untyped);
   const kept = keepDatasetConfiguration(checked.policy, row.dataset_policy);
   if (kept.errors.length) return invalid(kept.errors);
   const current = row.policy_revision ?? 0;

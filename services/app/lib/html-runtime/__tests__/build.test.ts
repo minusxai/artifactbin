@@ -193,3 +193,20 @@ it('ships the region editor only as its own lazily loaded module, at most 100 Ki
  expect(inputs.some(input=>input.includes('prosemirror-view'))).toBe(true);
  expect(inputs.filter(input=>/parse5|prosemirror-markdown|markdown-it|lib\/html-page\/|live-regions\/(?:compaction|source-html|state)\.ts/.test(input))).toEqual([]);
 });
+
+it('ships @afbin/collab as its own small module over the page reader: Yjs, no ProseMirror, mapped for every hosted page',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.collabPath).toBe('/af/collab.js');
+ const collab=assets.collab!;
+ // Small: Yjs and the binding, gzipped as served.
+ expect(gzipSync(collab).byteLength).toBeLessThanOrEqual(40*1024);
+ expect(collab).not.toContain('ProseMirror');
+ // The frame's cell port is the reader's own (one bridge), imported, never bundled twice.
+ expect(collab).toMatch(/from\s*"@afbin\/reader"/);
+ expect(assets.reader).not.toMatch(/yjs|Y\.Doc/);
+ // Mapped for every hosted page (not only framed live ones), so an author's import always resolves; a page the app
+ // does not frame answers readonly. Offline, only from the copy's own embedded block (no network).
+ expect(assets.core).toMatch(/new URL\("\/af\/collab\.js"/);
+ expect(assets.core).toContain('[data-af="collab"]');
+ expect(assets.core).toMatch(/"@afbin\/collab":\w+/);
+});

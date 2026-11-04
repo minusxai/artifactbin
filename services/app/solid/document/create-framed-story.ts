@@ -5,10 +5,15 @@ import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
+import type { CellEditing, startCellEditing } from './cell-editing';
+import { CELL_READONLY, isCellKey } from '@artifactbin/contracts';
 
 /** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
 export type RegionEditingLoader = () => Promise<{ startRegionEditing: typeof startRegionEditing }>;
 const loadRegionEditing: RegionEditingLoader = () => import('./region-editing');
+/** Live dataset text cells (@afbin/collab) are an intentional lazy browser chunk too: loaded when a signed-in reader's frame first asks for one. */
+export type CellEditingLoader = () => Promise<{ startCellEditing: typeof startCellEditing }>;
+const loadCellEditing: CellEditingLoader = () => import('./cell-editing');
 
 // The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
 import { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
@@ -138,6 +143,8 @@ interface FramedStoryOptions {
    * Live editing of the page's editable regions, for a reader who may edit this page (never a viewer or commenter):
    * once the frame's controller runs, the saved page names its regions and the frame is told them (region-editing).
    */
+  /** How the cell relay loads (tests); default the lazy chunk. */
+  loadCells?: CellEditingLoader;
   regions?: {
     enabled: Accessor<boolean>;
     /** The saved head's HTML, as an editor reads it (ArtifactBackend.load). */
@@ -260,6 +267,25 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     }));
     onCleanup(() => { stopped = true; stopEditing(); });
   }
+  // Live dataset text cells, for any reader of the page: a signed-out reader's frame is told `readonly` here, with no
+  // request made and no chunk loaded; a signed-in one's cells are relayed by cell-editing, whose server decides.
+  let cells: CellEditing | null = null, cellsLoading: Promise<void> | null = null, cellsStopped = false;
+  const signedIn = () => options.htmlContext?.().uploadSession?.state === 'signed-in';
+  createEffect(on(current, (bridge) => {
+    if (!bridge) return;
+    onCleanup(bridge.subscribeRegion((message) => {
+      if (message.kind !== 'region-open' || !isCellKey(message.regionId) || cells) return;
+      if (!signedIn()) { bridge.sendRegion({ kind: 'region-closed', regionId: message.regionId, reason: CELL_READONLY }); return; }
+      const key = message.regionId;
+      cellsLoading ??= (options.loadCells ?? loadCellEditing)().then(({ startCellEditing }) => {
+        if (!cellsStopped && !cells && current()) cells = startCellEditing({ id: options.id, bridge: current()! });
+      }, () => { cellsLoading = null; });
+      void cellsLoading?.then(() => cells?.open(key));
+    }));
+  }));
+  // A document that goes (the frame reloads) ends its cells' sessions; the next one opens its own.
+  createEffect(on(nonce, (signed) => { if (!signed) cells?.attached(); }, { defer: true }));
+  onCleanup(() => { cellsStopped = true; cells?.dispose(); cells = null; });
   onCleanup(() => {
     const bridge = current();
     setCurrent(null);

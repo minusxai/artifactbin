@@ -22,7 +22,7 @@ export type RegionAnswer<T> = { status: 200; body: T } | { status: 404; body?: R
 export const NOT_FOUND = { status: 404 } as const;
 const STATUS: Record<RegionRefusalCode, 404 | 409 | 413 | 422> = {
   region_not_found: 404, region_ambiguous: 409, out_of_order: 409, region_snapshot_missing: 409, too_large: 413,
-  unsupported_content: 422, foreign_client: 422, outside_region: 422,
+  unsupported_content: 422, foreign_client: 422, outside_region: 422, check_violation: 422,
 };
 export const refuse = (error: RegionRefusalCode, extra: Omit<RegionRefusalBody, 'error'> = {}): RegionAnswer<never> =>
   ({ status: STATUS[error], body: { error, ...extra } }) as RegionAnswer<never>;
@@ -66,7 +66,25 @@ export interface RegionStore {
   flush(actor: AccessActor, artifactId: string, options?: { idleBefore?: string }): Promise<RegionAnswer<RegionFlushReply>>;
 }
 
-export function regionStore(db: () => Promise<Db>, now: () => number): RegionStore {
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/**
+ * What every session scope (a page region, a dataset cell) shares: the advisory document and holder caches, one
+ * transaction per decision with typed refusals, a fresh client id per open, and the acceptance of one validated
+ * update. Scopes differ only in who may and where the row comes from; the row is keyed (artifact_id, region_id).
+ */
+export interface SessionCore {
+  documentOf(tx: Tx, artifactId: string, row: RegionRow): Promise<Y.Doc>;
+  transact<T>(work: (tx: Tx) => Promise<{ answer: RegionAnswer<T>; after?: () => void }>): Promise<RegionAnswer<T>>;
+  /** Assigns a fresh client id to `actor` and logs its first (empty) update; returns the open's reply fields. */
+  issue(tx: Tx, artifactId: string, row: RegionRow, doc: Y.Doc, actor: AccessActor): Promise<{ clientId: number; seq: number; after: () => void }>;
+  /** Holder check, validation, log and wakeup of one client update to a locked row. */
+  accept(tx: Tx, artifactId: string, row: RegionRow, request: { clientId: number; update: Uint8Array }, actor: AccessActor, admit?: (doc: Y.Doc) => RegionRefusalCode | null): Promise<{ answer: RegionAnswer<RegionUpdateReply>; after?: () => void }>;
+  /** Drop a document this process built (its row changed in a way the stamp cannot tell). */
+  forget(artifactId: string, regionId: string): void;
+}
+
+export function sessionCore(db: () => Promise<Db>, now: () => number): SessionCore {
   /** Advisory: the last documents this process built, by region, with the stamp they hold. Least recent dropped first. */
   const docs = new Map<string, { stamp: string; doc: Y.Doc }>();
   const take = (key: string, at: string): Y.Doc | undefined => {
@@ -82,16 +100,64 @@ export function regionStore(db: () => Promise<Db>, now: () => number): RegionSto
   /** Advisory: which actor holds a client id (rows are never rewritten, so a binding never changes). */
   const holders = new Map<string, string>();
 
-  async function documentOf(tx: Parameters<Parameters<Db['transaction']>[0]>[0], artifactId: string, row: RegionRow): Promise<Y.Doc> {
-    return take(`${artifactId}/${row.region_id}`, stamp(row)) ?? liveRegionDoc(tx, artifactId, row);
-  }
+  return {
+    async documentOf(tx, artifactId, row) {
+      return take(`${artifactId}/${row.region_id}`, stamp(row)) ?? liveRegionDoc(tx, artifactId, row);
+    },
+    async transact(work) {
+      let result: Awaited<ReturnType<typeof work>>;
+      try { result = await (await db()).transaction(work); } catch (error) { return refusalOf(error); }
+      result.after?.();
+      return result.answer;
+    },
+    async issue(tx, artifactId, row, doc, actor) {
+      const regionId = row.region_id;
+      const used = Y.decodeStateVector(Y.encodeStateVector(doc));
+      let clientId: number;
+      do clientId = randomInt(1, 2 ** 32 - 1);
+      while (used.has(clientId) || (await tx.query('SELECT 1 FROM region_updates WHERE artifact_id = $1 AND region_id = $2 AND client_id = $3 LIMIT 1', [artifactId, regionId, clientId])).rows.length);
+      const seq = row.last_seq + 1;
+      await logRegionUpdate(tx, artifactId, regionId, seq, clientId, EMPTY_UPDATE, actor);
+      await tx.query('UPDATE region_states SET last_seq = $3 WHERE artifact_id = $1 AND region_id = $2', [artifactId, regionId, seq]);
+      return { clientId, seq, after: () => { keep(`${artifactId}/${regionId}`, stamp(row, seq), doc); holders.set(`${artifactId}/${regionId}/${row.created_at}/${clientId}`, actorKey(actor)); } };
+    },
+    async accept(tx, artifactId, row, request, actor, admit) {
+      const regionId = row.region_id;
+      const holderKey = `${artifactId}/${regionId}/${row.created_at}/${request.clientId}`;
+      let holder = holders.get(holderKey);
+      if (holder === undefined) {
+        const first = (await tx.query<{ actor_user_id: string | null; actor_token_id: string | null }>(
+          'SELECT actor_user_id, actor_token_id FROM region_updates WHERE artifact_id = $1 AND region_id = $2 AND client_id = $3 ORDER BY seq LIMIT 1',
+          [artifactId, regionId, request.clientId],
+        )).rows[0];
+        if (first) holders.set(holderKey, holder = actorKey({ userId: first.actor_user_id, tokenId: first.actor_token_id }));
+      }
+      if (holder !== actorKey(actor)) return { answer: refuse('foreign_client') };
+      const key = `${artifactId}/${regionId}`;
+      const doc = take(key, stamp(row)) ?? await liveRegionDoc(tx, artifactId, row);
+      const check = validateRegionUpdate(row.kind, doc, request.update, request.clientId);
+      if (check.duplicate) return { answer: { status: 200, body: { seq: row.last_seq, duplicate: true } }, after: () => keep(key, stamp(row), doc) };
+      // The scope's own rule on the merged result (a cell's `check`); the document held the update, so it is dropped.
+      const refused = admit?.(doc);
+      if (refused) return { answer: refuse(refused) };
+      const seq = row.last_seq + 1;
+      const at = new Date(now()).toISOString();
+      await logRegionUpdate(tx, artifactId, regionId, seq, request.clientId, request.update, actor);
+      const fold = seq - row.state_seq >= FOLD_EVERY;
+      await tx.query(
+        `UPDATE region_states SET last_seq = $3, last_update_at = $4, dirty_since = COALESCE(dirty_since, $4)${fold ? ', state = $5, state_seq = $3' : ''}
+         WHERE artifact_id = $1 AND region_id = $2`,
+        [artifactId, regionId, seq, at, ...(fold ? [Buffer.from(Y.encodeStateAsUpdate(doc))] : [])],
+      );
+      await notifyRegions(tx, artifactId, `${regionId}:${seq}`);
+      return { answer: { status: 200, body: { seq } }, after: () => keep(key, stamp(row, seq), doc) };
+    },
+    forget(artifactId, regionId) { docs.delete(`${artifactId}/${regionId}`); },
+  };
+}
 
-  async function transact<T>(work: (tx: Parameters<Parameters<Db['transaction']>[0]>[0]) => Promise<{ answer: RegionAnswer<T>; after?: () => void }>): Promise<RegionAnswer<T>> {
-    let result: { answer: RegionAnswer<T>; after?: () => void };
-    try { result = await (await db()).transaction(work); } catch (error) { return refusalOf(error); }
-    result.after?.();
-    return result.answer;
-  }
+export function regionStore(db: () => Promise<Db>, now: () => number, core: SessionCore = sessionCore(db, now)): RegionStore {
+  const { documentOf, transact } = core;
 
   return {
     async open(actor, artifactId, regionId) {
@@ -106,18 +172,9 @@ export function regionStore(db: () => Promise<Db>, now: () => number): RegionSto
           row = await regionRow(tx, artifactId, page.version, region);
         }
         const doc = await documentOf(tx, artifactId, row!);
-        const used = Y.decodeStateVector(Y.encodeStateVector(doc));
-        let clientId: number;
-        do clientId = randomInt(1, 2 ** 32 - 1);
-        while (used.has(clientId) || (await tx.query('SELECT 1 FROM region_updates WHERE artifact_id = $1 AND region_id = $2 AND client_id = $3 LIMIT 1', [artifactId, regionId, clientId])).rows.length);
-        const seq = row!.last_seq + 1;
-        await logRegionUpdate(tx, artifactId, regionId, seq, clientId, EMPTY_UPDATE, actor);
-        await tx.query('UPDATE region_states SET last_seq = $3 WHERE artifact_id = $1 AND region_id = $2', [artifactId, regionId, seq]);
+        const { clientId, seq, after } = await core.issue(tx, artifactId, row!, doc, actor);
         const opened: RegionOpenReply = { regionId, kind: row!.kind, clientId, seq, state: base64(Y.encodeStateAsUpdate(doc)), savedVersion: row!.saved_version };
-        return {
-          answer: { status: 200, body: opened },
-          after: () => { keep(`${artifactId}/${regionId}`, stamp(row!, seq), doc); holders.set(`${artifactId}/${regionId}/${row!.created_at}/${clientId}`, actorKey(actor)); },
-        };
+        return { answer: { status: 200, body: opened }, after };
       });
     },
 
@@ -129,31 +186,7 @@ export function regionStore(db: () => Promise<Db>, now: () => number): RegionSto
         if (!page || page.format !== 'html') return { answer: NOT_FOUND };
         const [row] = await lockedRegionRows(tx, artifactId, regionId);
         if (!row) return { answer: refuse('region_not_found') };
-        const holderKey = `${artifactId}/${regionId}/${row.created_at}/${request.clientId}`;
-        let holder = holders.get(holderKey);
-        if (holder === undefined) {
-          const first = (await tx.query<{ actor_user_id: string | null; actor_token_id: string | null }>(
-            'SELECT actor_user_id, actor_token_id FROM region_updates WHERE artifact_id = $1 AND region_id = $2 AND client_id = $3 ORDER BY seq LIMIT 1',
-            [artifactId, regionId, request.clientId],
-          )).rows[0];
-          if (first) holders.set(holderKey, holder = actorKey({ userId: first.actor_user_id, tokenId: first.actor_token_id }));
-        }
-        if (holder !== actorKey(actor)) return { answer: refuse('foreign_client') };
-        const key = `${artifactId}/${regionId}`;
-        const doc = await documentOf(tx, artifactId, row);
-        const check = validateRegionUpdate(row.kind, doc, request.update, request.clientId);
-        if (check.duplicate) return { answer: { status: 200, body: { seq: row.last_seq, duplicate: true } }, after: () => keep(key, stamp(row), doc) };
-        const seq = row.last_seq + 1;
-        const at = new Date(now()).toISOString();
-        await logRegionUpdate(tx, artifactId, regionId, seq, request.clientId, request.update, actor);
-        const fold = seq - row.state_seq >= FOLD_EVERY;
-        await tx.query(
-          `UPDATE region_states SET last_seq = $3, last_update_at = $4, dirty_since = COALESCE(dirty_since, $4)${fold ? ', state = $5, state_seq = $3' : ''}
-           WHERE artifact_id = $1 AND region_id = $2`,
-          [artifactId, regionId, seq, at, ...(fold ? [Buffer.from(Y.encodeStateAsUpdate(doc))] : [])],
-        );
-        await notifyRegions(tx, artifactId, `${regionId}:${seq}`);
-        return { answer: { status: 200, body: { seq } }, after: () => keep(key, stamp(row, seq), doc) };
+        return core.accept(tx, artifactId, row, request, actor);
       });
     },
 

@@ -170,6 +170,11 @@ export interface DatasetTableConfiguration {
 export interface DatasetTablePermissions {
   table: DatasetTableName;
   configuration?: DatasetTableConfiguration;
+  /**
+   * Text columns (source names) the page library `@afbin/collab` may bind live: everyone the update rule lets change
+   * the cell types in it together (contracts region-sessions CellScope). Owner-set; absent means none.
+   */
+  collaborative_columns?: string[];
   select_permissions?: DatasetPermissionEntry<DatasetSelectPermission>[];
   insert_permissions?: DatasetPermissionEntry<DatasetInsertPermission>[];
   update_permissions?: DatasetPermissionEntry<DatasetUpdatePermission>[];

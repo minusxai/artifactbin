@@ -26,13 +26,15 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const morphBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./live-morph.ts',import.meta.url))],format:'esm'});
  // The region editor (./region-editor: ProseMirror and Yjs) loads only when the parent opens a region session for an editor.
  const regionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'}});
+ // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
+ const collabBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./collab.ts',import.meta.url))],format:'esm',plugins:[{name:'shared-reader',setup(builder){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}}]});
  const chrome=await buildPortableChrome();
  // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
  // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
- const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsBuild.outputFiles![0]!.text};
+ const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
- const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath}=RUNTIME_MODULE_PATHS;
+ const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,collabPath}=RUNTIME_MODULE_PATHS;
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door.ts',import.meta.url)))};
 import {startNativeHtmlTableScroll} from ${JSON.stringify(fileURLToPath(new URL('./table-scroll.ts',import.meta.url)))};
@@ -57,6 +59,8 @@ const portableEngine=engineBlock?blob(JSON.parse(engineBlock.textContent)):new U
 const chromeBlock=document.querySelector('[data-af="chrome"]');
 const chrome=chromeBlock?blob(JSON.parse(chromeBlock.textContent)):new URL(${JSON.stringify(chromePath)},document.currentScript.src||location.href).href;
 const live=config.appOrigin&&!config.offline&&window.parent!==window;
+const collabBlock=document.querySelector('[data-af="collab"]');
+const collab=collabBlock?blob(JSON.parse(collabBlock.textContent)):config.offline?null:new URL(${JSON.stringify(collabPath)},document.currentScript.src||location.href).href;
 // The source this document loaded, before its deferred and module scripts run: what a new version is compared against (./live-morph LOADED_SOURCE).
 // A framed page rebuilt from a new version (./live-morph rebuild) puts the reader back where the previous document left them.
 if(live)restoreReadingPlace(window,config.pageId);
@@ -66,10 +70,10 @@ const sharedBlock=config.offline?document.querySelector('[data-af="offline-modul
 const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
 if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
 const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/(?:libraries\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|af\\/components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,document.currentScript.src||location.href).href;
-const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
+const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
 if(config.offline&&window.parent===window){void import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin)).catch(()=>document.documentElement.setAttribute('data-af-connection','unavailable'));}
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,collab:guarded.collab,collabPath};
 }

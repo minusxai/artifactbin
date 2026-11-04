@@ -35,8 +35,8 @@ export interface RegionSession { regionId: string; kind: RegionKind; clientId: n
 export interface RegionClientEvents {
   /** Updates other writers made (and possibly this client's own, which Yjs ignores), in order, up to `seq`. */
   remote(regionId: string, updates: Uint8Array[], seq: number): void;
-  /** The server stored this client's updates up to `seq`. */
-  ack(regionId: string, seq: number): void;
+  /** The server stored this client's updates up to `seq`; `settled`: nothing this client wrote waits to be sent. */
+  ack(regionId: string, seq: number, settled?: boolean): void;
   /** The region's session ended: a refusal code or the server's `closed` reason. */
   closed(regionId: string, reason: string): void;
   /** Unsaved edits were saved as page version `version`. */
@@ -163,7 +163,7 @@ export function createRegionClient(id: string, events: RegionClientEvents, ports
       const reply = await response.json().catch(() => null) as RegionUpdateReply | null;
       region.inflight = null;
       region.attempt = 0;
-      if (reply && Number.isSafeInteger(reply.seq)) events.ack(region.regionId, reply.seq);
+      if (reply && Number.isSafeInteger(reply.seq)) events.ack(region.regionId, reply.seq, !region.queue.length);
       if (region.queue.length) void post(region);
       else { if (region.closing) release(region); notifyIdle(); }
       return;

@@ -1,8 +1,9 @@
 /**
  * POST /api/artifacts/:id/regions/:regionId/updates — one client update (contract RegionUpdateRequest), validated
- * before it is stored or relayed: RegionUpdateReply, or a refusal (409 out_of_order, 413 too_large, 422).
+ * before it is stored or relayed: RegionUpdateReply, or a refusal (409 out_of_order, 413 too_large, 422). A cell key
+ * (contract CellScope) is a dataset text cell's update.
  */
-import { REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
+import { isCellKey, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
 import { json } from '@/lib/http';
 import { answer, browserEditor, regionSessions } from '../../doors';
 
@@ -20,5 +21,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   try { body = JSON.parse(text) as typeof body; } catch { return json({ error: 'invalid_json' }, 400); }
   const { clientId, update } = body ?? {};
   if (!Number.isInteger(clientId) || typeof update !== 'string' || !BASE64.test(update)) return json({ error: 'invalid_update' }, 400);
-  return answer(await regionSessions().update(actor, id, regionId, { clientId: clientId as number, update: new Uint8Array(Buffer.from(update, 'base64')) }));
+  const input = { clientId: clientId as number, update: new Uint8Array(Buffer.from(update, 'base64')) };
+  if (isCellKey(regionId)) return answer(await regionSessions().cells.update(actor, id, regionId, input));
+  return answer(await regionSessions().update(actor, id, regionId, input));
 }

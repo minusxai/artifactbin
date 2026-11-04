@@ -77,8 +77,10 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const portableReader=input.offline&&input.reader?`<script type="application/json" data-af="reader">${JSON.stringify(input.reader).replace(/</g,'\\u003c')}</script>`:'';
   const canonical=input.offline?portableScript(input.portable?{...input.portable,renderedDigest:portableRenderedDigest(serialize(document))}:{version:1,source:input.html,renderedDigest:portableRenderedDigest(serialize(document))}):'';
   const chrome=input.offline&&input.chrome?`<script type="application/json" data-af="chrome">${JSON.stringify(input.chrome).replace(/</g,'\\u003c')}</script>`:'';
+  // A page binding live cells gets the cell library too: offline it is read-only (the reader's cell port has no parent).
+  const collab=input.offline&&input.collab&&/["']@afbin\/collab["']/.test(input.html)?`<script type="application/json" data-af="collab">${JSON.stringify(input.collab).replace(/</g,'\\u003c')}</script>`:'';
   const engine=input.offline&&input.portableEngine?`<script type="application/json" data-af="portable-engine">${JSON.stringify(input.portableEngine).replace(/</g,'\\u003c')}</script>`:'';
-  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}${chrome}${engine}<script data-af="core">${safeCore}</script>`);
+  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}${chrome}${engine}${collab}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {
     node.parentNode = head;
     if ('attrs' in node && node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='core') && input.platformScriptNonce) node.attrs.push({name:'nonce',value:input.platformScriptNonce});

@@ -3,3 +3,4 @@ export {authorizeDatasetBinding,DatasetBindingUnsupportedError} from './authorit
 export {datasetGraphqlSchema,executeDatasetGraphql,executeLinkedDatasetGraphql,isDatasetGraphqlTarget,loadPageDatasets,pageDatasetRoots,type PageDatasets} from './hasura';
 export {readLinkedDatasetTables} from './sql-read';
 export {datasetPermissionTemplates,readDatasetPermissions,writeDatasetPermissions} from './policy';
+export {locateDatasetCell,writeDatasetCells,type DatasetCell} from './cells';

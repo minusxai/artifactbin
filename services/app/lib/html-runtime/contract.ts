@@ -46,6 +46,8 @@ export interface HtmlAssemblyInput {
   /** Shared offline chrome, with the same platform components and compiled stylesheet. */
   chrome?: string;
   portableEngine?: string;
+  /** `@afbin/collab`, embedded only in portable exports of a page that imports it (read-only there: no network). */
+  collab?: string;
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
   /** Embedded assets work without a network; connection is a separate explicit capability. */
@@ -54,8 +56,8 @@ export interface HtmlAssemblyInput {
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string; regions?:string; regionsPath?:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string; regions?:string; regionsPath?:string; collab?:string; collabPath?:string }
 /** D17: the platform runtime's flat public addresses (core: lib/html-page/core-script). No version or hash; strong ETag and `no-cache`. */
-export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',regionsPath:'/af/regions.js'} as const;
+export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',regionsPath:'/af/regions.js',collabPath:'/af/collab.js'} as const;
 /** `Symbol.for` key under which core records its build id for the lazy modules' skew guard (build.server). */
 export const RUNTIME_BUILD_KEY='afbin.runtime-build';

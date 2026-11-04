@@ -201,7 +201,8 @@ Diagrams and maps use the direct libraries below.
 | Overlays | `af-dialog`, `af-popover`, `af-tooltip` |
 | Identity/status | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
 | Prose/diagrams | `af-markdown`, `af-isometric` |
-| Data/media | `af-data-table`, `af-file-upload` |
+| Data/media | `af-data-table`, `af-file-upload`; typing in a dataset cell together: `@afbin/collab`
+  ([datasets](references/datasets.md#type-together-afbincollab)) |
 | Slides | `af-slide-deck` (with `af-slide`) |
 
 For native HTML visualizations, use the direct library APIs rather than a custom chart or map

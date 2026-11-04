@@ -111,3 +111,25 @@ it('preserves HTTP DNS provenance in offline downloads without granting connecti
     expect(doc.querySelector('link[data-af="platform-styles"]')).toBeNull();
     expect(JSON.parse(doc.querySelector('[data-af="runtime"]')!.textContent!).appearance).toEqual({ designSystem: 'phosphor', mode: 'dark' });
   });
+it('carries the live-cell library in a download of a page that imports it, and only then', async () => {
+  const actor = await mintAccountToken('native-download-collab');
+  const cells = '<!doctype html><html><head><title>Cells</title></head><body><textarea id="d">Saved value</textarea><script type="module">import {collab} from "@afbin/collab";collab.text("tasks","r_abc","description").bind(document.getElementById("d"));</script></body></html>';
+  const created = await POST(request('/api/artifacts', { method: 'POST', token: actor.token, json: { html: cells, visibility: 'private' } }));
+  expect(created.status, await created.clone().text()).toBe(201);
+  const id = (await created.json()).id as string;
+  const response = await download(request(`/a/${id}/download`, { token: actor.token }), params(id));
+  expect(response.status, await response.clone().text()).toBe(200);
+  const html = await response.text();
+  const doc = new JSDOM(html).window.document;
+  // The module rides as an inert JSON block the core maps to a blob URL (no network); the page still imports it by name.
+  const block = doc.querySelector('script[type="application/json"][data-af="collab"]');
+  expect(block).not.toBeNull();
+  expect(JSON.parse(block!.textContent!)).toContain('@afbin/reader');
+  expect(doc.querySelector('script[data-af="core"]')!.textContent).toContain('[data-af="collab"]');
+  expect([...doc.querySelectorAll('script[type="module"]')].map((script) => script.textContent).join('')).toMatch(/from\s*["']@afbin\/collab["']/);
+  // The canonical source travels without it; a page that does not import the library carries none.
+  expect(readPortableDocument(html).source).not.toContain('data-af="collab"');
+  const { actor: other, id: plain } = await publish('private');
+  const without = new JSDOM(await (await download(request(`/a/${plain}/download`, { token: other.token }), params(plain))).text()).window.document;
+  expect(without.querySelector('[data-af="collab"]')).toBeNull();
+});

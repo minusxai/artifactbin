@@ -48,6 +48,10 @@ it('keeps core-provided author runtime imports in self-contained native pages',(
  const html='<script type="module">import {client,gql} from "@afbin/apollo"; import "@afbin/reader"; import "@afbin/chrome"; import "@afbin/portable"; console.log(client,gql);</script>';
  expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
 });
+it('keeps the live dataset cell library (@afbin/collab) a core-provided import',()=>{
+ const html='<script type="module">import {collab} from "@afbin/collab"; console.log(collab);</script>';
+ expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
+});
 it('resolves local backend TypeScript into the native atomic backend source contract',()=>{
  const source='export const typeDefs="type Query { count:Int! }"; export default {count:()=>1};';
  const plan=planPublicationBundle('<link rel="af-resolver" data-af-name="jobs" href="./api.ts">',{entryPath:'index.html',files:[file('api.ts',source,'text/typescript')]});
