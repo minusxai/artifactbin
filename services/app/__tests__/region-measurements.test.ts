@@ -31,7 +31,7 @@ const paragraphs = (words: number, perParagraph = 50) => Array.from({ length: Ma
 const percentile = (sorted: number[], p: number) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]!;
 
 it.skipIf(!measure)('(a) state size over 500 saves of a 2,000-word region with typing between saves', () => {
-  let page = canonicalizeHtmlPage(nativeHtml(`<article data-af-editable="rich">${paragraphs(2_000)}</article>`));
+  let page: { html: string; ledger: ReturnType<typeof canonicalizeHtmlPage>['ledger'] } = canonicalizeHtmlPage(nativeHtml(`<article data-af-editable="rich">${paragraphs(2_000)}</article>`));
   const regionId = editableRegions(page.html)[0]!.id;
   const server = new Y.Doc({ gc: false });
   Y.applyUpdate(server, createRegionState('rich', editableRegions(page.html)[0]!.inner).state);

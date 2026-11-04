@@ -2,7 +2,7 @@
  * Live region sessions through their HTTP doors (contract @artifactbin/contracts region-sessions): who may open, send
  * and stream (editors only, the uniform 404 for everyone else), the open's row and snapshot, validated updates relayed
  * to other editors' streams, retries and recovery, resets, saving as page versions, an author's whole-page PUT merged
- * with editors' unsaved typing, regions closed by a PUT or a revert, and erasure removing the rows.
+ * with editors' unsaved typing, and regions closed by a PUT or a revert. (Erasure: lib/operations region-erase.test.)
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -10,7 +10,6 @@ import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { createUser } from '@/lib/accounts';
 import { artifactState, createArtifact, getArtifactById, revertArtifactFor } from '@/lib/artifacts';
 import { editableRegions, normalizeRegionHtml, regionHtml, regionText } from '@/lib/live-regions';
-import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import { identityForUser } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
@@ -380,19 +379,5 @@ describe('whole-page writes that leave nothing to merge into', () => {
     expect(archived.source).toContain('typed saved Hello world');
     expect((await getArtifactById(pageId))!.source).not.toContain('typed');
     expect(await rows('region_states')).toEqual([]);
-  });
-});
-
-describe('erasure', () => {
-  it('erasing a test user\'s pages deletes their region rows', async () => {
-    const id = `usr_testuser_${Math.random().toString(36).slice(2, 10)}`;
-    await (await db()).query("INSERT INTO users (id, email, kind) VALUES ($1, $2, 'testuser')", [id, `mxmx_test_${id}@example.test`]);
-    const person = { id, email: `mxmx_test_${id}@example.test` };
-    const row = await createArtifact(null, id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
-    const regionId = editableRegions(row.source!).find((region) => region.kind === 'rich')!.id;
-    expect((await open(person, row.id, regionId)).status).toBe(200);
-    expect((await rows('region_states', row.id)).length).toBe(1);
-    await eraseTestUser(id);
-    for (const table of ['region_states', 'region_updates', 'region_snapshots']) expect([table, await rows(table, row.id)]).toEqual([table, []]);
   });
 });
