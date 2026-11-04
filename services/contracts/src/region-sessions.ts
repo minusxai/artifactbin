@@ -136,7 +136,11 @@ export type RegionParentMessage =
   | { kind: 'regions-enabled'; regionIds: string[] }
   | { kind: 'region-session'; regionId: string; regionKind: RegionKind; clientId: number; state: Uint8Array; seq: number }
   | { kind: 'region-remote'; regionId: string; updates: Uint8Array[]; seq: number }
-  | { kind: 'region-ack'; regionId: string; seq: number }
+  /**
+   * `settled` (cells): everything the frame wrote is stored — the count of its `region-update`s the page had received
+   * then, so the frame knows whether what it wrote since is still pending.
+   */
+  | { kind: 'region-ack'; regionId: string; seq: number; settled?: number }
   | { kind: 'region-closed'; regionId: string; reason: string }
   | { kind: 'region-paint'; carets: (RegionCaret & { id: string; label: string })[] }
   | { kind: 'region-command'; regionId: string; name: string; args?: Record<string, unknown> };

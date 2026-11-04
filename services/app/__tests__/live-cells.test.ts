@@ -122,7 +122,7 @@ const gqlAsOwner = (query: string, variables: Record<string, unknown> = {}) => c
 beforeEach(async () => {
   const person = async (name: string) => { const user = await createUser({ email: `mxmx_test_cells_${name}@example.com` }); return { id: user.id, email: user.email! }; };
   const token = await mintAccountToken('cells_owner');
-  owner = { id: token.userId, email: token.email };
+  owner = { id: token.userId!, email: token.email! };
   ownerToken = token.token;
   [editor, viewer, reader] = await Promise.all(['editor', 'viewer', 'reader'].map(person));
   const publish = async (body: object) => {

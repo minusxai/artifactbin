@@ -95,8 +95,8 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
  return publicRevalidatedResponse(request,await htmlCore(),JS);
 }
 
-/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/regions.js), always this build's bytes. */
-export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions';
+/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/regions.js, /af/collab.js), always this build's bytes. */
+export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions'|'collab';
 export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
  const source=(await htmlAssets())[module];
  if(!source)return new Response('Not found',{status:404});

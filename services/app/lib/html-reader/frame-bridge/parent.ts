@@ -1,4 +1,4 @@
-import {REGION_UPDATE_MAX_BYTES,type RegionCaret,type RegionFrameMessage,type RegionParentMessage,type UploadContext} from '@artifactbin/contracts';
+import {isCellKey,REGION_UPDATE_MAX_BYTES,type RegionCaret,type RegionFrameMessage,type RegionParentMessage,type UploadContext} from '@artifactbin/contracts';
 import {isRegionId,isRegionPosition} from '@/lib/html-presence/model';
 /** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
 const loadUploadRelay=()=>import('./upload');
@@ -87,9 +87,10 @@ export function regionFrameMessage(payload: unknown): RegionFrameMessage | null 
   if (!payload || typeof payload !== 'object') return null;
   const raw = payload as Record<string, unknown>;
   switch (raw.kind) {
-    case 'region-open': return isRegionId(raw.regionId) ? { kind: 'region-open', regionId: raw.regionId } : null;
+    // A dataset text cell (@afbin/collab) opens and updates under its cell key, as a region does under its id.
+    case 'region-open': return isRegionId(raw.regionId) || isCellKey(raw.regionId) ? { kind: 'region-open', regionId: raw.regionId } : null;
     case 'region-update':
-      return isRegionId(raw.regionId) && raw.update instanceof Uint8Array && raw.update.byteLength > 0 && raw.update.byteLength <= REGION_UPDATE_MAX_BYTES
+      return (isRegionId(raw.regionId) || isCellKey(raw.regionId)) && raw.update instanceof Uint8Array && raw.update.byteLength > 0 && raw.update.byteLength <= REGION_UPDATE_MAX_BYTES
         ? { kind: 'region-update', regionId: raw.regionId, update: raw.update } : null;
     case 'region-caret':
       if (!isRegionId(raw.regionId) || !isRegionPosition(raw.anchor) || !isRegionPosition(raw.head) || !regionName(raw.block)) return null;
@@ -307,7 +308,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     subscribe(listener: (event: unknown) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     sendRegion(message: RegionParentMessage) {
       if (message.kind === 'regions-enabled') { if (message.regionIds.length) regionsOn = true; }
-      else if (!regionsOn) return;
+      // A cell's messages answer the frame's own `region-open`: never gated on page regions.
+      else if (!regionsOn && !('regionId' in message && isCellKey(message.regionId))) return;
       post(message);
     },
     regionsEnabled: () => regionsOn && !closed,

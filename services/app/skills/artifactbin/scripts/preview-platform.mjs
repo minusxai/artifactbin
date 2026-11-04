@@ -11,9 +11,9 @@
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 
-// regions (the live region editor) is served for completeness; Save HTML never embeds it
-// (an offline page never opens a session).
-const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions)\.js$/;
+// regions (the live region editor) and collab (live dataset cells) are served for completeness; Save HTML never
+// embeds them (an offline page never opens a session).
+const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|collab)\.js$/;
 const LIBRARY=/^\/libraries\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/;
 const COMPONENT=/^\/af\/components\/[a-z][a-z0-9-]*\.js$/;
 const MAX_BYTES=8_000_000;

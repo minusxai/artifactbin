@@ -13,11 +13,10 @@
  */
 import * as Y from 'yjs';
 import { diffHunks } from './diff';
-import { regionText } from './lines';
 import { LiveRegionRefusal } from './refusal';
 
-/** The cell's text in a live document. */
-export const cellText = regionText;
+/** The cell's text in a live document: the region root (lines.ts regionText), named here so the page library loads no schema. */
+export const cellText = (doc: Y.Doc): Y.Text => doc.getText('region');
 /** The cell's value: the text as it is. */
 export const cellValue = (doc: Y.Doc): string => cellText(doc).toString();
 
