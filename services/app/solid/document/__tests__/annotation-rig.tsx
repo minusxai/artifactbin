@@ -201,6 +201,7 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
       pickOnOpen={p().pickOnOpen}
       pickRequested={p().pickRequested}
       editId={p().editId}
+      beforeComment={p().beforeComment}
       railHost={p().railHost}
       railSheet={p().railSheet}
       panelWidth={p().panelWidth}

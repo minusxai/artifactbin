@@ -1,3 +1,4 @@
+import type { RegionCaret } from '@artifactbin/contracts';
 import type { PresenceCursor, PresenceFrame, PresenceGeometry, PresenceRange, PresenceViewer } from './contract';
 /** A reader announces itself every heartbeat; it stays on the roster for three, so two lost beats never drop it. */
 export const PRESENCE_HEARTBEAT_MS = 15_000;
@@ -15,6 +16,22 @@ export const PRESENCE_ROSTER_CAP = 25;
 /** The label of a reader without a public handle (publish.server); named readers rank before guests in a capped frame. */
 export const PRESENCE_GUEST_LABEL = 'Guest';
 const nodeId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256;
+/** The largest Yjs relative position a region caret carries, in bytes. */
+const REGION_POSITION_MAX_BYTES = 256;
+/** A Yjs relative position as base64: canonical alphabet and padding, at most REGION_POSITION_MAX_BYTES once decoded. */
+export function isRegionPosition(value: unknown): value is string {
+  if (typeof value !== 'string' || !value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return value.length / 4 * 3 - padding <= REGION_POSITION_MAX_BYTES;
+}
+/** A region's element id (`data-af-id`): the shape canonicalizeHtmlPage writes. */
+export const isRegionId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(value);
+/** A collaborator's caret inside an editable region, or null: a region id and two bounded relative positions, nothing else. */
+export function regionCaret(input: unknown): RegionCaret | null {
+  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : null;
+  if (!raw || !isRegionId(raw.regionId) || !isRegionPosition(raw.anchor) || !isRegionPosition(raw.head)) return null;
+  return { regionId: raw.regionId, anchor: raw.anchor, head: raw.head };
+}
 /** Presence semantics: normalized node-relative cursors, exact fingerprinted text offsets and a short TTL. */
 export function presenceGeometry(input: unknown): PresenceGeometry {
   const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {};
@@ -26,7 +43,8 @@ export function presenceGeometry(input: unknown): PresenceGeometry {
     const ranges = raw.selection as PresenceRange[];
     if (ranges.every(r => r && nodeId(r.nodeId) && Number.isInteger(r.start) && Number.isInteger(r.end) && Number.isInteger(r.length) && r.start >= 0 && r.end > r.start && r.end <= r.length && r.length <= 100_000 && typeof r.fingerprint === 'string' && /^[a-f0-9]{8}$/.test(r.fingerprint))) selection = ranges.map(r=>({nodeId:r.nodeId,start:r.start,end:r.end,length:r.length,fingerprint:r.fingerprint}));
   }
-  return { cursor, selection };
+  const region = regionCaret(raw.region);
+  return { cursor, selection, ...(region ? { region } : {}) };
 }
 /** Bounded ephemeral roster; the injected clock makes expiration independent of delivery timing. */
 export function presenceRoster(entries: readonly PresenceViewer[], revision: string, now: number): PresenceViewer[] {

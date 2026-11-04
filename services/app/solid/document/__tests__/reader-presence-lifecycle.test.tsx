@@ -111,3 +111,26 @@ it('retains a pagehide before host readiness and resumes that session on pagesho
  window.dispatchEvent(new Event('pageshow'));await waitFor(()=>expect(published.at(-1)?.visible).toBe(true));
  view.unmount();
 });
+it('publishes the frame\'s region caret and paints collaborators\' region carets back, only into a frame with regions enabled',async()=>{
+ const {startReaderPresence}=await import('../reader-presence-engine');
+ let regionListener=(_message:unknown)=>{},enabled=false;
+ const sentRegion:unknown[]=[],painted:unknown[]=[],published:Array<Record<string,unknown>>=[];
+ const controller={send:(command:unknown)=>painted.push(command),subscribe:()=>()=>{},subscribeRegion:(listener:(message:unknown)=>void)=>{regionListener=listener;return()=>{regionListener=()=>{};};},sendRegion:(message:unknown)=>sentRegion.push(message),regionsEnabled:()=>enabled} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const prefs={visible:true,shareCursor:true,shareSelection:true,showCursors:true,showSelections:true};
+ const engine=startReaderPresence({revision:'1',nonce:'n',active:true,controller,backend:{publishPresence:async input=>{published.push(input as unknown as Record<string,unknown>);return 'own';}},preferences:()=>prefs,changed:()=>{}});
+ await waitFor(()=>expect(published).toHaveLength(1));
+ regionListener({kind:'region-caret',regionId:'af-6',anchor:'AQID',head:'BAUG',marks:[],block:'paragraph'});
+ await waitFor(()=>expect(published.at(-1)?.region).toEqual({regionId:'af-6',anchor:'AQID',head:'BAUG'}),{timeout:1000});
+ const peer={id:'peer',label:'Ada',revision:'1',seen:Date.now(),cursor:null,selection:null,region:{regionId:'af-6',anchor:'AQID',head:'AQID'}};
+ engine.receive({viewers:[peer],total:2});
+ expect(sentRegion).toEqual([]);
+ expect(painted.at(-1)).toMatchObject({type:'mx:presence',viewers:[{id:'peer',label:'Ada'}]});
+ expect((painted.at(-1) as {viewers:Array<Record<string,unknown>>}).viewers[0]).not.toHaveProperty('region');
+ enabled=true;engine.receive({viewers:[peer],total:2});
+ expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[{regionId:'af-6',anchor:'AQID',head:'AQID',id:'peer',label:'Ada'}]});
+ prefs.showCursors=false;engine.update();
+ expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[]});
+ regionListener({kind:'region-blur'});
+ await waitFor(()=>expect(published.at(-1)).not.toHaveProperty('region'),{timeout:1000});
+ engine.dispose();
+});

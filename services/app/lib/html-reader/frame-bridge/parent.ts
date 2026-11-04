@@ -1,4 +1,5 @@
-import type {UploadContext} from '@artifactbin/contracts';
+import {REGION_UPDATE_MAX_BYTES,type RegionFrameMessage,type RegionParentMessage,type UploadContext} from '@artifactbin/contracts';
+import {isRegionId,isRegionPosition} from '@/lib/html-presence/model';
 /** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
 const loadUploadRelay=()=>import('./upload');
 /** Parent transport for the native HTML reader. Messages must come from the
@@ -36,6 +37,16 @@ interface FrameBridgeParentOptions {
 }
 
 export interface FrameBridgeParent extends IslandStoryController {
+  /**
+   * A region message to the frame's editor (contracts region-sessions). Until `regions-enabled` names a region for the
+   * current document, every other region message is dropped: a reader's frame is never told of a session. A document
+   * that loads anew starts with regions off.
+   */
+  sendRegion(message: RegionParentMessage): void;
+  /** Whether the current document has regions enabled (a `regions-enabled` with at least one region was sent to it). */
+  regionsEnabled(): boolean;
+  /** The frame's region messages, validated (regionFrameMessage). Returns the stop. */
+  subscribeRegion(listener: (message: RegionFrameMessage) => void): () => void;
   /** The editor's newer head pointer and source, which the frame's controller reads live. */
   refreshUploadContext():void;
   setContext(editId: string, source: string | null): void;
@@ -61,6 +72,29 @@ export function urlValuesOf(data: unknown): string | null {
   if (type !== STORY_URL_VALUES_MESSAGE || typeof search !== 'string' || search.length > MAX_URL_VALUES) return null;
   return /^\??[^#\s]*$/.test(search) ? search : null;
 }
+
+/** Short names the frame's editor reports (active marks, the caret's block type). */
+const regionName=(value:unknown):value is string=>typeof value==='string'&&/^[a-z][a-z0-9_-]{0,31}$/i.test(value);
+/** A region message from the frame as the page will take it (contracts RegionFrameMessage, rebuilt field by field), or null. */
+export function regionFrameMessage(payload: unknown): RegionFrameMessage | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const raw = payload as Record<string, unknown>;
+  switch (raw.kind) {
+    case 'region-open': return isRegionId(raw.regionId) ? { kind: 'region-open', regionId: raw.regionId } : null;
+    case 'region-update':
+      return isRegionId(raw.regionId) && raw.update instanceof Uint8Array && raw.update.byteLength > 0 && raw.update.byteLength <= REGION_UPDATE_MAX_BYTES
+        ? { kind: 'region-update', regionId: raw.regionId, update: raw.update } : null;
+    case 'region-caret':
+      if (!isRegionId(raw.regionId) || !isRegionPosition(raw.anchor) || !isRegionPosition(raw.head) || !regionName(raw.block)) return null;
+      if (!Array.isArray(raw.marks) || raw.marks.length > 16 || !raw.marks.every(regionName)) return null;
+      return { kind: 'region-caret', regionId: raw.regionId, anchor: raw.anchor, head: raw.head, marks: [...raw.marks] as string[], block: raw.block };
+    case 'region-blur': return { kind: 'region-blur' };
+    case 'region-slash':
+      return isRegionId(raw.regionId) && Number.isFinite(raw.x) && Number.isFinite(raw.y) ? { kind: 'region-slash', regionId: raw.regionId, x: raw.x as number, y: raw.y as number } : null;
+    default: return null;
+  }
+}
+const REGION_FRAME_KINDS = new Set(['region-open', 'region-update', 'region-caret', 'region-blur', 'region-slash']);
 
 /** The response headers a relayed answer keeps: what the controller reads. */
 const KEPT_HEADERS = ['content-type', 'retry-after'];
@@ -128,6 +162,9 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   /** Commands the page sent before the frame's controller ran: posted on `ready`, in order. */
   const backlog: FrameBridgeParentPayload[] = [];
   const listeners = new Set<(event: unknown) => void>();
+  const regionListeners = new Set<(message: RegionFrameMessage) => void>();
+  /** The current document was told which regions it may edit (sendRegion `regions-enabled`). */
+  let regionsOn = false;
   /** The page's bars over the frame's top edge (setTopInset): every new frame controller is told on `ready`. */
   let inset = 0;
   /**
@@ -156,6 +193,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     attached = false;
     // What the page sent to the old document's controller does not carry over to the new one's.
     backlog.length = 0;
+    regionsOn = false;
     options.onReady?.('');
     attach();
   };
@@ -200,6 +238,11 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       return;
     }
     if (data.key !== key) return;
+    if (REGION_FRAME_KINDS.has(payload.kind)) {
+      const message = regionFrameMessage(payload);
+      if (message) for (const listener of [...regionListeners]) listener(message);
+      return;
+    }
     switch (payload.kind) {
       case 'ready':
         if (typeof payload.nonce !== 'string' || !payload.nonce) return;
@@ -248,6 +291,13 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     send(command: unknown) { post({ kind: 'send', command }); },
     invalidate(datasets: string[]) { post({ kind: 'send', command: { type: STORY_DATA_MESSAGE, datasets } }); },
     subscribe(listener: (event: unknown) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    sendRegion(message: RegionParentMessage) {
+      if (message.kind === 'regions-enabled') { if (message.regionIds.length) regionsOn = true; }
+      else if (!regionsOn) return;
+      post(message);
+    },
+    regionsEnabled: () => regionsOn && !closed,
+    subscribeRegion(listener: (message: RegionFrameMessage) => void) { regionListeners.add(listener); return () => { regionListeners.delete(listener); }; },
     /** The frame's viewport in this page's viewport: its content box, inside the iframe's border. */
     getViewportRect() {
       const box = frame.getBoundingClientRect();
@@ -265,6 +315,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     dispose() {
       close('disposed');
       listeners.clear();
+      regionListeners.clear();
       win.removeEventListener('message', onMessage);
       frame.removeEventListener('load', onLoad);
     },

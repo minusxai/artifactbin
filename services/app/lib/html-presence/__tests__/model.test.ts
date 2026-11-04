@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {presenceFrame,presenceGeometry,presenceRoster,PRESENCE_FRAME_INTERVAL_MS,PRESENCE_GUEST_LABEL,PRESENCE_HEARTBEAT_MS,PRESENCE_POINTER_THROTTLE_MS,PRESENCE_REAUTHORIZE_MS,PRESENCE_ROSTER_CAP,PRESENCE_TTL_MS} from '../model';
+import {presenceFrame,presenceGeometry,presenceRoster,regionCaret,PRESENCE_FRAME_INTERVAL_MS,PRESENCE_GUEST_LABEL,PRESENCE_HEARTBEAT_MS,PRESENCE_POINTER_THROTTLE_MS,PRESENCE_REAUTHORIZE_MS,PRESENCE_ROSTER_CAP,PRESENCE_TTL_MS} from '../model';
 it('bounds public geometry and strips text and arbitrary fields',()=>{
  expect(presenceGeometry({cursor:{nodeId:'a',x:.5,y:.2,token:'secret'},selection:[{nodeId:'a',start:1,end:3,length:5,fingerprint:'1234abcd',quote:'private'}]})).toEqual({cursor:{nodeId:'a',x:.5,y:.2},selection:[{nodeId:'a',start:1,end:3,length:5,fingerprint:'1234abcd'}]});
  expect(presenceGeometry({cursor:{nodeId:'a',x:Infinity,y:0},selection:[{nodeId:'a',start:3,end:1,length:5,fingerprint:'1234abcd'}]})).toEqual({cursor:null,selection:null});
@@ -28,4 +28,15 @@ it('caps a frame at 25 entries, named readers before guests and then the most re
  expect(frame.viewers.slice(2).map(v=>v.seen)).toEqual(Array.from({length:23},(_,i)=>1_039-i));
  expect(presenceFrame(guests.slice(0,3),'1',1_100)).toEqual({viewers:[...guests.slice(0,3)].reverse(),total:3});
  expect(presenceFrame([],'1',0)).toEqual({viewers:[],total:0});
+});
+it('carries a region caret only as a region id and two base64 relative positions of at most 256 bytes',()=>{
+ const anchor=Buffer.alloc(256,7).toString('base64'),head='AQID';
+ expect(anchor).toHaveLength(344);
+ expect(presenceGeometry({cursor:null,selection:null,region:{regionId:'af-6',anchor,head,text:'secret'}})).toEqual({cursor:null,selection:null,region:{regionId:'af-6',anchor,head}});
+ for(const region of [null,'x',{regionId:'af-6',anchor:Buffer.alloc(257).toString('base64'),head},{regionId:'af-6',anchor:'A'.repeat(344),head},{regionId:'af-6',anchor:'not base64',head},{regionId:'af-6',anchor:'',head},{regionId:'6 bad',anchor,head},{regionId:'af-6',anchor,head:7},{regionId:'af-6',anchor:'AQI',head}])
+  expect(presenceGeometry({cursor:null,selection:null,region})).toEqual({cursor:null,selection:null});
+ expect(regionCaret({regionId:'r',anchor:head,head})).toEqual({regionId:'r',anchor:head,head});
+ // The roster keeps it; a publication that fits the presence door's 6000 bytes carries the largest caret.
+ expect(presenceRoster([{id:'one',label:'A',revision:'2',seen:1,cursor:null,selection:null,region:{regionId:'af-6',anchor,head:anchor}}],'2',2)[0]!.region).toEqual({regionId:'af-6',anchor,head:anchor});
+ expect(JSON.stringify({session:'0'.repeat(36),revision:'2',visible:true,cursor:{nodeId:'x'.repeat(256),x:1,y:1},selection:Array.from({length:8},()=>({nodeId:'x'.repeat(256),start:0,end:1,length:1,fingerprint:'12345678'})),region:{regionId:'r'.repeat(128),anchor,head:anchor}}).length).toBeLessThan(6000);
 });
