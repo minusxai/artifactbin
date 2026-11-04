@@ -82,6 +82,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-html-rich-components.mjs` | Check rich HTML component content through publication and reading. | `gates.mjs` |
 | `scripts/gates/gate-native-core.mjs` | Immediate reader, lazy author import, trusted relay and self-contained offline client behavior. | `gates.mjs` |
 | `scripts/gates/gate-live-regions.mjs` | Two editors type into one editable region at once: convergence, carets, key-to-peer latency, IME, Word/Docs paste, reconnect, owner PUT, comment save and leave save; a viewer never opens a session. | `gates.mjs` |
+| `scripts/gates/gate-new-doc.mjs` | Create → Document makes a doc and opens it ready to type: the region opens with no press, keys typed at once land in the title and body, and a save keeps them and names the doc by its heading. | `gates.mjs` |
 | `scripts/gates/gate-presence.mjs` | Reader cursors, selections and preferences stay isolated across accounts and tabs on the shared document stream. | `gates.mjs` |
 | `scripts/gates/gate-private-preview-save.mjs` | Save a private preview and verify its reader handover. | `gates.mjs` |
 | `scripts/gates/gate-media.mjs` | Files, images and web URLs from the author to a stranger's browser. | `gates.mjs` |

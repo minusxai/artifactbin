@@ -11,16 +11,33 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 function open() {
   render(() => <WorkspaceCreate parentId="folder1" onCreated={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Template' }));
   // The submenu flyout is named by the item that opens it.
-  return within(screen.getByRole('menu', { name: 'Artifact' }));
+  return within(screen.getByRole('menu', { name: 'Template' }));
 }
+const created = () => { const [url, init] = vi.mocked(fetch).mock.calls[0]!; expect(url).toBe('/api/my/artifacts'); return JSON.parse(init!.body as string); };
+
+it('creates a doc from the first item of the Create menu: private, marked a doc, its body one rich region', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'doc123' }, { status: 201 })));
+  render(() => <WorkspaceCreate parentId="folder1" onCreated={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  const items = within(screen.getByRole('menu', { name: 'Create menu' })).getAllByRole('menuitem');
+  expect(items[0]).toHaveAccessibleName('Document');
+  fireEvent.click(items[0]!);
+  await waitFor(() => expect(openDocument).toHaveBeenCalledWith('/a/doc123'));
+  expect(replaceDocument).not.toHaveBeenCalled();
+  const body = created();
+  expect(body).toMatchObject({ visibility: 'private', parent_id: 'folder1', template: 'doc' });
+  expect(body.html).toContain('<title>Untitled document</title>');
+  expect(body.html).toContain('<article data-af-editable="rich"><h1></h1><p></p></article>');
+  expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
+});
 
 it.each([
-  ['Blank document', 'doc'], ['Article', 'editorial'], ['Presentation', 'deck'],
+  ['Article', 'editorial'], ['Presentation', 'deck'],
   ['Dashboard', 'dashboard'], ['Plan', 'plan'], ['Landing page', 'landing'],
   ['Scrollytelling', 'scrolly'], ['App', 'app'],
-])('creates %s privately and preserves the current page in browser history', async (label, template) => {
+])('creates %s from a template privately and preserves the current page in browser history', async (label) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'new123' }, { status: 201 })));
   const item = open().getByRole('menuitem', { name: label });
   fireEvent.mouseEnter(item.parentElement!);
@@ -28,30 +45,30 @@ it.each([
   fireEvent.click(item);
   await waitFor(() => expect(openDocument).toHaveBeenCalledWith('/a/new123'));
   expect(replaceDocument).not.toHaveBeenCalled();
-  const [url, init] = vi.mocked(fetch).mock.calls[0];
-  expect(url).toBe('/api/my/artifacts');
-  const body=JSON.parse(init!.body as string);
+  const body = created();
   expect(body).toMatchObject({ visibility:'private',parent_id:'folder1' });
   expect(body.html).toContain('<!doctype html>');
-  expect(body.html).toContain(template==='doc'?'Untitled document':`Untitled ${label.toLowerCase()}`);
+  expect(body.html).toContain(`Untitled ${label.toLowerCase()}`);
+  expect(body.html).not.toContain('data-af-editable');
   expect(body).not.toHaveProperty('markup');
   expect(body).not.toHaveProperty('template');
   expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Template' }));
   expect(screen.getByRole('menuitem', { name: label })).toBeEnabled();
 });
 
 it('reports a failed creation beside the button for retry without navigating', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'unavailable' }, { status: 503 })));
-  fireEvent.click(open().getByRole('menuitem', { name: 'Blank document' }));
+  render(() => <WorkspaceCreate onCreated={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Document' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not create');
   expect(replaceDocument).not.toHaveBeenCalled();
   expect(openDocument).not.toHaveBeenCalled();
   // Choosing an item closes the menu; reopening it offers the same item again.
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
-  expect(screen.getByRole('menuitem', { name: 'Blank document' })).toBeEnabled();
+  expect(screen.getByRole('menuitem', { name: 'Document' })).toBeEnabled();
 });
 
 it('preserves group destination in folder creation and asset editor links', async () => {
@@ -110,7 +127,7 @@ it('shows a failed folder creation inside the dialog and keeps the name for anot
 it('offers retained artifact, folder and asset creation without retired programs', () => {
  render(() => <WorkspaceCreate onCreated={() => {}} />);
  fireEvent.click(screen.getByRole('button', {name:'Create'}));
- for (const name of ['Artifact', 'Upload HTML', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
+ for (const name of ['Document', 'Template', 'Upload HTML', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
  expect(screen.queryByRole('menuitem', {name:'Program'})).not.toBeInTheDocument();
 });
 

@@ -2,7 +2,7 @@
 import { createSignal, Show, type JSX } from 'solid-js';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import Plus from 'lucide-solid/icons/plus';
-import FilePlus2 from 'lucide-solid/icons/file-plus-2';
+import LayoutTemplate from 'lucide-solid/icons/layout-template';
 import FolderPlus from 'lucide-solid/icons/folder-plus';
 import FileUp from 'lucide-solid/icons/file-up';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
@@ -57,8 +57,10 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
     pageDataChanged(); props.onCreated(); setDialog(false); setName('');
   };
   const starterItem = (starter: (typeof ARTIFACT_STARTERS)[number]) => { const Icon = TYPE_ICONS[starter.template]; return { label: starter.label, text: starter.label, icon: () => <Icon size={14} class="shrink-0 text-muted" aria-hidden="true" />, disabled: busy(), onSelect: () => void createArtifact(starter.template) }; };
+  // "New" is a doc, ready to type in (lib/workspace artifactStarter); the other kinds start from a template.
   const entries = (): MenuEntry[] => [
-    { label: 'Artifact', text: 'Artifact', icon: () => <FilePlus2 size={14} />, items: [starterItem(ARTIFACT_STARTERS[0]!), { section: 'Templates', items: ARTIFACT_STARTERS.slice(1).map(starterItem) }] },
+    starterItem(ARTIFACT_STARTERS[0]!),
+    { label: 'Template', text: 'Template', icon: () => <LayoutTemplate size={14} />, items: ARTIFACT_STARTERS.slice(1).map(starterItem) },
     { label: 'Upload HTML', text: 'Upload HTML', icon: () => <FileUp size={14} />, onSelect: () => setUploadHtml(true) },
     { label: 'Folder', text: 'Folder', icon: () => <FolderPlus size={14} />, onSelect: choose },
     { section: 'assets', items: [

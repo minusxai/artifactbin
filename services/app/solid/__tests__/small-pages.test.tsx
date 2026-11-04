@@ -10,7 +10,7 @@ vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }))
 let session: unknown;
 let profileStatus = 200;
 let startStatus = 200;
-const calls: Array<{ url: string; method: string }> = [];
+const calls: Array<{ url: string; method: string; body?: string }> = [];
 beforeEach(() => {
   vi.clearAllMocks();
   calls.length = 0;
@@ -18,10 +18,10 @@ beforeEach(() => {
   startStatus = 200;
   session = { user: null, kind: 'none', onboarded: true };
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), method: init?.method ?? 'GET' });
+    calls.push({ url: String(url), method: init?.method ?? 'GET', ...(url === '/api/my/artifacts' && typeof init?.body === 'string' ? { body: init.body } : {}) });
     if (url === '/api/page/session') return Response.json(session);
     if (url === '/api/auth/email-otp/send-verification-otp' || url === '/api/auth/sign-in/email-otp') return Response.json({});
-    if (url === '/api/start' || url === '/api/start?mode=blank') return Response.json({ id: 'doc_1' }, { status: startStatus });
+    if (url === '/api/start' || url === '/api/my/artifacts') return Response.json({ id: 'doc_1' }, { status: startStatus });
     if (url === '/api/my/profile/image' && init?.method === 'PUT') return Response.json({ image: '/api/users/new_1/avatar?v=1' });
     if (url === '/api/my/profile' && init?.method === 'PATCH') return Response.json(profileStatus === 200 ? { username: 'chosen' } : { error: 'username_taken' }, { status: profileStatus });
     if (url === '/api/my/profile') return Response.json({ username: 'initial', image: null });
@@ -51,11 +51,14 @@ it('holds the login callback for an anonymous reader without redirecting away', 
   expect(window.location.search).toContain('intent%3Dlike');
 });
 
-it('starts one artifact and leaves the Solid route for its document', async () => {
+it('starts one doc and leaves the Solid route for it', async () => {
   window.history.replaceState(null, '', '/start');
   render(() => <App />);
-  await waitFor(() => expect(calls.filter(call => call.url === '/api/start?mode=blank')).toHaveLength(1));
-  expect(calls).toContainEqual({ url: '/api/start?mode=blank', method: 'POST' });
+  await waitFor(() => expect(calls.filter(call => call.url === '/api/my/artifacts')).toHaveLength(1));
+  const [create] = calls.filter(call => call.url === '/api/my/artifacts');
+  expect(create!.method).toBe('POST');
+  expect(JSON.parse(create!.body!)).toMatchObject({ template: 'doc', visibility: 'private', html: expect.stringContaining('data-af-editable="rich"') });
+  expect(calls.some(call => call.url === '/api/start')).toBe(false);
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1'));
 });
 
@@ -64,7 +67,7 @@ it('preserves explicit external-agent handoff instead of opening the editor', as
   render(() => <App />);
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1'));
   expect(calls).toContainEqual({ url: '/api/start', method: 'POST' });
-  expect(calls.some(call => call.url === '/api/start?mode=blank')).toBe(false);
+  expect(calls.some(call => call.url === '/api/my/artifacts')).toBe(false);
 });
 
 it('shows an uncertain start failure and never retries it', async () => {
@@ -72,7 +75,7 @@ it('shows an uncertain start failure and never retries it', async () => {
   window.history.replaceState(null, '', '/start');
   render(() => <App />);
   expect(await screen.findByRole('alert')).toHaveTextContent('The request may have completed');
-  expect(calls.filter(call => call.url === '/api/start?mode=blank')).toHaveLength(1);
+  expect(calls.filter(call => call.url === '/api/my/artifacts')).toHaveLength(1);
   expect(replaceDocument).not.toHaveBeenCalled();
 });
 

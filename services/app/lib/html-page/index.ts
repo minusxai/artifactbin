@@ -6,6 +6,7 @@ import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
 import { normalizeDesignSelection } from './design-system.ts';
 export { normalizeDesignSelection, htmlAppearance } from './design-system.ts';
+export { firstHeadingText, withPageTitle } from './page-title.ts';
 import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata,HtmlPwaSettings,HtmlAssetLinks } from './contracts';
 export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPwaSettings } from './contracts';
 const CORE=RUNTIME_CORE_PATH;

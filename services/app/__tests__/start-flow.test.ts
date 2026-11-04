@@ -24,10 +24,10 @@ describe('native start flow',()=>{
    expect(row.source).not.toMatch(/<Markdown|Copy agent instructions|Waiting for your agent/);
   }
  });
- it('normal and explicit blank starts create readable native pages with tokenless HTTP instructions',async()=>{
+ it('the agent start creates a readable native page with tokenless HTTP instructions',async()=>{
   const account=await mintAccountToken('start');
-  for(const path of ['/api/start','/api/start?mode=blank']){
-   const response=await startRoute(request(path,{method:'POST',token:account.token}));expect(response.status).toBe(201);
+  {
+   const response=await startRoute(request('/api/start',{method:'POST',token:account.token}));expect(response.status).toBe(201);
    const body=await response.json();expect(Object.keys(body).sort()).toEqual(['edit_id','id','prompt','url']);
    expect(body.url).toBe(`http://localhost:3000/a/${body.id}`);expect(body.url).not.toContain('/edit');
    expect(body.prompt).toBe(existingPaste('http://localhost:3000',body.id));expect(body.prompt).toContain('/llms.txt');
