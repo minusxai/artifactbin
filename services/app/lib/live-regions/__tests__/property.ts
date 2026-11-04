@@ -108,8 +108,11 @@ export function runScenario({ clients: count, region, ops }: Scenario): { lost: 
           const all = positions(client);
           const from = pick(all, step.at);
           const $from = client.state.doc.resolve(from);
-          const end = Math.min(from + step.length, $from.end());
-          client.select(from).type('**').select(end + 2).type('**');
+          // The closing delimiters go the same distance before the block's end: the opening ones can complete a
+          // shortcut themselves (`*x` + `*` is italic), which shortens the block, so a fixed `end + 2` can fall past it.
+          const tail = $from.end() - Math.min(from + step.length, $from.end());
+          const $open = client.select(from).type('**').state.selection.$head;
+          client.select(Math.max($open.pos, $open.end() - tail)).type('**');
           break;
         }
         case 'delete': {
