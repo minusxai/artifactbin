@@ -4,6 +4,7 @@ import {
   type HtmlSelectionActions,
 } from "../selection-actions";
 import { htmlSelection } from "../../html-bridge/selection";
+import { REGION_EDITOR_ATTR } from "../region-editor";
 let actions: HtmlSelectionActions | undefined;
 afterEach(() => {
   actions?.dispose();
@@ -129,6 +130,26 @@ it("does not offer selection actions inside editable content", () => {
   expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(
     true,
   );
+});
+
+it("offers Comment on a selection inside a mounted region editor, whose right click menu stays native", () => {
+  const chosen = setup();
+  const region = document.querySelector("p")!;
+  region.setAttribute("contenteditable", "true");
+  region.setAttribute(REGION_EDITOR_ATTR, "rich");
+  select();
+  expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(
+    false,
+  );
+  (
+    document.querySelector(
+      '[data-mx-selection-action="annotate"]',
+    ) as HTMLElement
+  ).click();
+  expect(chosen).toEqual(["annotate"]);
+  const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+  region.dispatchEvent(menu);
+  expect(menu.defaultPrevented).toBe(false);
 });
 
 it("preserves the chosen button through a full pointer gesture", () => {

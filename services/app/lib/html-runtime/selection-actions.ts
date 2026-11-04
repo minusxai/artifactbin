@@ -45,6 +45,15 @@ export function createHtmlSelectionActions({
       'input,textarea,select,[contenteditable]:not([contenteditable="false"])',
     );
   };
+  /** A selection in a mounted region editor (region-editor REGION_EDITOR_ATTR) is page text an editor may comment on. */
+  const selectable = (node: Node | null) => {
+    const element =
+      node?.nodeType === 1 ? (node as Element) : node?.parentElement;
+    const host = element?.closest(
+      'input,textarea,select,[contenteditable]:not([contenteditable="false"])',
+    );
+    return !host || host.hasAttribute("data-af-region-editor");
+  };
   const coarse = () => win.matchMedia?.("(pointer: coarse)").matches === true;
   const show = (selected: StoryEditSelection, x?: number, y?: number) => {
     active = selected;
@@ -79,8 +88,8 @@ export function createHtmlSelectionActions({
     if (
       !enabled ||
       !native?.toString().trim() ||
-      editable(native.anchorNode) ||
-      editable(native.focusNode)
+      !selectable(native.anchorNode) ||
+      !selectable(native.focusNode)
     ) {
       hide();
       return;
