@@ -76,8 +76,9 @@ export const GATE_SPECS = Object.freeze([
   // 16s alone in `node scripts/gate-container.mjs --cpus 4 live-regions`; CI weight pending its first run.
   { name: 'live-regions', needsMail: true, serialGroup: 'clipboard', seconds: 20, timeoutMs: 60_000 },
   // Two signed-in writers and a signed-out reader on one @afbin/collab dataset cell (latency timed, p95 within a second).
-  // 10s in `node scripts/gate-container.mjs --cpus 4 live-cells live-regions new-doc`; CI weight pending its first run.
-  { name: 'live-cells', needsMail: true, seconds: 10, timeoutMs: 60_000 },
+  // 35s in `node scripts/gate-container.mjs --cpus 4 live-cells live-regions new-doc` (two leave saves are waited
+  // for: the early-typing and the leave legs); CI weight pending its first run.
+  { name: 'live-cells', needsMail: true, seconds: 35, timeoutMs: 90_000 },
   // One owner: Create → Document, then type at once with no press (the doc's region opens and takes the caret on load).
   // CI weight pending its first run.
   { name: 'new-doc', needsMail: true, seconds: 10, timeoutMs: 60_000 },
