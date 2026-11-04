@@ -1,13 +1,11 @@
 /**
- * Internal: check.mjs's two browsers: hosted server browser sessions (one per viewport,
- * receipt-safe status polling and close) and a disposable local Chromium limited to the
- * preview's origin.
+ * Internal: check.mjs's hosted browser: server browser sessions, one per viewport, with
+ * receipt-safe status polling and close; a busy or refusing browser is retried here (bounded).
  * Used by: check.mjs (re-export), toolbox-check-command.mjs.
  */
 import {randomUUID} from 'node:crypto';
 import {platform, ToolError} from './toolbox-client.mjs';
-import {inspectPage} from './toolbox-check-inspect.mjs';
-import {checkScript, checkTarget, summarizeCheck} from './toolbox-check-script.mjs';
+import {checkScript, summarizeCheck} from './toolbox-check-script.mjs';
 
 function origin(value) {
   const url = new URL(value);
@@ -33,13 +31,15 @@ export async function checkHosted(
 ) {
   server = origin(server);
   if (!token && !requester) throw Error('Supply ARTIFACTBIN_TOKEN outside page code.');
-  // The server holds a few browser sessions at once; a full server is a known, retryable state,
+  // The server holds a few browser sessions at once; a full server is a known, transient state,
   // not an unexplained failure. It refuses a create with a 200 receipt naming no session (or an
-  // error status carrying the same code), through either transport.
+  // error status carrying the same code), through either transport. The check waits it out itself.
   const capacity = (error = {}) =>
     ['SESSION_CAPACITY', 'SESSION_ACTOR_CAPACITY'].includes(error.code) &&
-    new ToolError('browser_busy', error.message ?? 'All browser sessions are in use.', 1,
-      'Run checks one at a time; wait a few seconds and retry.');
+    new ToolError('browser_busy', (error.message ?? 'All browser sessions are in use.') +
+      ' The check waited for a free browser for about 40 s.', 1,
+      'Let your other checks finish first, then run this check once more.');
+  const pause = () => new Promise(resolve => setTimeout(resolve, busyDelayMs));
   async function request(body) {
     if (requester) {
       const result = await requester(body).catch(error => { throw capacity(error) || error; });
@@ -74,7 +74,21 @@ export async function checkHosted(
   }
   // Each viewport runs in its own fresh session, concurrently: no viewer-local state leaks between
   // viewports and the check takes the slowest viewport's time, not the sum.
+  // A browser that is busy or refused to start never ran the steps: that viewport starts over in a
+  // new session (bounded); anything after an accepted submission is reported, never replayed.
+  // Status reads repeat through a transient network failure in the transport (safe to repeat).
   async function inspectViewport(viewport) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await inspectOnce(viewport);
+      } catch (error) {
+        const limit = {browser_busy: 8, browser_session_failed: 2}[error?.code] ?? 0;
+        if (attempt >= limit) throw error;
+        await pause();
+      }
+    }
+  }
+  async function inspectOnce(viewport) {
     const session_id = randomUUID(),
       execution_id = randomUUID(),
       out = [];
@@ -95,20 +109,8 @@ export async function checkHosted(
         ...(viewer ? {viewer} : {})
       };
       let run;
-      // Creating the session waits up to ~20 s for a free browser slot (another check's sessions
-      // close when it ends) before reporting browser_busy.
-      const submit = async () => {
-        for (let attempt = 0; ; attempt++) {
-          try {
-            return await request(body);
-          } catch (error) {
-            if (error?.code !== 'browser_busy' || attempt >= 4) throw error;
-            await new Promise(resolve => setTimeout(resolve, busyDelayMs));
-          }
-        }
-      };
       try {
-        run = await submit();
+        run = await request(body);
         // Only a session the server created is closed later.
         accepted = run.session_id === session_id;
       } catch (error) {
@@ -124,7 +126,9 @@ export async function checkHosted(
       }
       if (run.session_id !== session_id && run.status === 'failed' && run.error?.code)
         throw new ToolError('browser_session_failed', `The server browser refused the check (${
-          run.error.code}): ${run.error.message ?? 'no detail'}`, 1, 'Retry the check once.');
+          run.error.code}): ${run.error.message ?? 'no detail'}`, 1,
+          'The check tried three times; this is the server, not your page: tell the user the ' +
+          'browser check could not run.');
       if (run.session_id !== session_id || run.execution_id !== execution_id)
         throw Error('Mismatched browser receipt.');
       for (
@@ -153,48 +157,4 @@ export async function checkHosted(
   const busy = settled.find(result => result.status === 'rejected');
   if (busy) throw busy.reason;
   return summarizeCheck(settled.flatMap(result => result.value));
-}
-// Local: a disposable headless Chromium that can only reach the preview's own origin.
-export async function checkLocal({target, viewports, steps = '', capture = false}, chromium) {
-  const selected = checkTarget(target);
-  if (selected.mode !== 'local') throw Error('Local checks require a loopback preview URL.');
-  // launch() creates a disposable temporary profile; never attach to an existing browser or
-  // userDataDir.
-  let browser;
-  try {
-    browser = await chromium.launch({headless: true});
-  } catch {
-    throw new ToolError(
-      'browser_dependency_missing',
-      'Chromium could not start in this harness.',
-      1,
-      'Install the Playwright Chromium build and its OS dependencies.'
-    );
-  }
-  try {
-    const context = await browser.newContext({serviceWorkers: 'block'});
-    await context.route('**/*', route => {
-      const url = new URL(route.request().url());
-      return url.origin === selected.origin ? route.continue() : route.abort('blockedbyclient');
-    });
-    const checks = [];
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    for (const viewport of viewports) {
-      const page = await context.newPage();
-      try {
-        checks.push(
-          await inspectPage(
-            page,
-            {target, viewport, capture, compareReload: viewport === viewports[0]},
-            steps ? new AsyncFunction('page', 'step', steps) : null
-          )
-        );
-      } finally {
-        await page.close();
-      }
-    }
-    return summarizeCheck(checks);
-  } finally {
-    await browser.close();
-  }
 }

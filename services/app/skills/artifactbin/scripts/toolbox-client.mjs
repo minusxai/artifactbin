@@ -17,8 +17,7 @@ import configuredServer from './toolbox-config.mjs';
 import {parseCommand} from './toolbox-commands.mjs';
 import {commandHelp} from './toolbox-description.mjs';
 import {checkDigest} from './toolbox-check-digest.mjs';export {checkDigest};
-// toolbox-journal.mjs imports helpers back from this module; the cycle is safe because neither
-// module uses the other's exports while loading.
+// toolbox-journal and toolbox-watch-state import helpers back from here: safe, none used at load.
 export {createJournal,journalIntent,resumeJournal} from './toolbox-journal.mjs';
 export function resolveTarget(value,selected){
  let id=value,server=selected;
@@ -170,7 +169,8 @@ try{parsed=parseCommand(name,args);}catch(error){throw new ToolError('invalid_in
     error.message,2,'Read --help.');}
   if(parsed.values.help){process.stdout.write(commandHelp(name)+
  "\n--no-update disables update checks and activation.\n");return;}
-if(parsed.values.output&&!parsed.values.append){const destination=await safeParent(
+  // read decides about an existing --output itself (it refreshes an unchanged pair in place).
+if(parsed.values.output&&!parsed.values.append&&name!=='read'){const destination=await safeParent(
     parsed.values.output);let exists=false;try{await lstat(destination);exists=true;}catch(error){
     if(error.code!=='ENOENT')throw error;}if(exists)throw new ToolError('output_exists',
     'Output already exists.',2,'Choose a new output path; existing files are retained.');}
@@ -178,20 +178,23 @@ if(parsed.values.output&&!parsed.values.append){const destination=await safePare
   if(result===undefined)return;
   const envelope={ok:true,code:'completed',...result};
   const data=JSON.stringify(envelope,null,parsed.values.json?0:2)+'\n';
-if(parsed.values.output&&!result.outputOwned){await exclusive(parsed.values.output,data);if(
-    name==='check')process.stdout.write(checkDigest(envelope,parsed.values.output));
-    }else process.stdout.write(data);
-  // A publish that added data-af-ids says so below the JSON, and the next step (reply and watch)
-  // comes last, where a tail of the output still shows it.
-  for(const note of [result.rewritten,result.next])if(typeof note==='string'&&
-   !parsed.values.json)process.stderr.write(note+'\n');
+  if(name==='check')await checkOutput(envelope,data,parsed.values);
+  else if(parsed.values.output&&!result.outputOwned)await exclusive(parsed.values.output,data);
+  else process.stdout.write(data);
+  // Notes last on stderr, with --json and --output too: ids publish added, then the next step.
+  for(const note of [result.rewritten,result.note,result.next])if(typeof note==='string')
+   process.stderr.write(note+'\n');
  }catch(error){
   const envelope=toolFailure(name,error);
-if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.output,JSON.stringify(
-    envelope,null,2)+'\n');process.stdout.write(checkDigest(envelope,parsed.values.output));}catch{
-    process.stderr.write('Could not save check output; existing files were retained.\n');}}
+if(name==='check'&&parsed)await checkOutput(envelope,JSON.stringify(envelope,null,2)+'\n',
+    parsed.values,false).catch(()=>process.stderr.write('Could not save check output.\n'));
 if(parsed?.values.json)process.stdout.write(JSON.stringify(envelope)+'\n');
     else process.stderr.write(envelope.code+': '+envelope.message+' '+envelope.recovery+'\n');
     process.exitCode=toolExit(error);
  }
 }
+/** check's output: the digest always (stderr when --json puts the JSON on stdout), the JSON in
+ * --output FILE when given. */
+async function checkOutput(envelope,data,{output,json},printJson=true){if(output)await exclusive(
+  output,data);else if(json&&printJson)process.stdout.write(data);(json&&!output?process.stderr:
+  process.stdout).write(checkDigest(envelope,output));}
