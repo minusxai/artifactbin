@@ -107,6 +107,8 @@ it('the idle backstop saves a region dirty and quiet for REGION_IDLE_SAVE_MS, an
   fireIdleChecks(); await sessions.settle();
   expect(await version()).toBe(1);
   await type('second ');
+  // The backstop's own condition, under the page lock: a save asked for as idle finds this region typed in just now.
+  expect(await sessions.flush(owner, pageId, { idleBefore: new Date(now - REGION_IDLE_SAVE_MS).toISOString() })).toEqual({ status: 200, body: { version: 1 } });
   now += 2_000;
   fireIdleChecks(); await sessions.settle();
   expect(await version()).toBe(1);

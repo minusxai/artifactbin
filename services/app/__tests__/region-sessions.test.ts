@@ -196,12 +196,24 @@ describe('updates', () => {
     expect(b.text.toString()).toContain('Owner says Hello world');
     const retry = await send(owner, { clientId: a.reply.clientId, update: Buffer.from(first.update).toString('base64') });
     expect(await retry.json()).toEqual({ seq: first.body.seq, duplicate: true });
-    b.text.insert(0, 'x', {});
-    const stolen = await send(editor, { clientId: a.reply.clientId, update: Buffer.from(Y.mergeUpdates(b.pending)).toString('base64') });
+    // Structs written under the owner's client id (or one no open issued), by the editor: refused, never stored.
+    const forge = (clientId: number) => {
+      const doc = new Y.Doc({ gc: false });
+      Y.applyUpdate(doc, Y.encodeStateAsUpdate(b.doc));
+      doc.clientID = clientId;
+      const before = Y.encodeStateVector(doc);
+      regionText(doc).insert(0, 'forged ', {});
+      return Buffer.from(Y.encodeStateAsUpdate(doc, before)).toString('base64');
+    };
+    const stolen = await send(editor, { clientId: a.reply.clientId, update: forge(a.reply.clientId) });
     expect([stolen.status, await stolen.json()]).toEqual([422, { error: 'foreign_client' }]);
-    const forged = await send(editor, { clientId: 12345, update: Buffer.from(Y.mergeUpdates(b.pending)).toString('base64') });
+    const forged = await send(editor, { clientId: 12345, update: forge(12345) });
     expect([forged.status, await forged.json()]).toEqual([422, { error: 'foreign_client' }]);
+    b.text.insert(0, 'x', {});
+    const mismatched = await send(editor, { clientId: a.reply.clientId, update: Buffer.from(Y.mergeUpdates(b.pending)).toString('base64') });
+    expect([mismatched.status, await mismatched.json()]).toEqual([422, { error: 'foreign_client' }]);
     expect((await b.push()).status).toBe(200);
+    expect((await rows('region_updates')).some((row) => regionText((() => { const d = new Y.Doc(); Y.applyUpdate(d, row.update as Uint8Array); return d; })()).toString().includes('forged'))).toBe(false);
   });
 
   it('refuses out_of_order with the server\'s state vector, and the client recovers by resending from it', async () => {
@@ -327,6 +339,20 @@ describe('a whole-page PUT while editors type', () => {
     expect(await rows('region_states')).toEqual([]);
     expect(await rows('region_updates')).toEqual([]);
     expect(await rows('region_snapshots')).toEqual([]);
+  });
+
+  it('a region left clean by a save carries its snapshot to the new version, so the next PUT merges instead of refusing', async () => {
+    const a = await join(owner);
+    await join(owner, plain);
+    a.text.insert(0, 'Only rich. ', {});
+    await a.push();
+    expect(await (await flush(owner)).json()).toEqual({ version: 2 });
+    const snapshots = (await rows('region_snapshots')).filter((row) => row.version === 2).map((row) => row.region_id).sort();
+    expect(snapshots).toEqual([plain, rich].sort());
+    const saved = (await getArtifactById(pageId))!.source!;
+    const response = await put(saved.replace('Outside', 'Outside, edited'));
+    expect(response.status).toBe(200);
+    expect((await savedRegion(plain)).inner).toBe('Title');
   });
 
   it('a PUT from a stale version is the existing version conflict, and changes no region row', async () => {
