@@ -73,7 +73,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'native-core', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   { name: 'presence', needsMail: true, seconds: 25, timeoutMs: 90_000 },
   // Two editors and a viewer on one editable region; its key-to-peer latency is measured, so it shares the isolated bin.
-  { name: 'live-regions', needsMail: true, serialGroup: 'clipboard', seconds: 30, timeoutMs: 90_000 },
+  // 16s alone in `node scripts/gate-container.mjs --cpus 4 live-regions`; CI weight pending its first run.
+  { name: 'live-regions', needsMail: true, serialGroup: 'clipboard', seconds: 20, timeoutMs: 60_000 },
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
   { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },
