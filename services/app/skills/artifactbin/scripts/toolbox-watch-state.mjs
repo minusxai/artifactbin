@@ -88,14 +88,12 @@ export async function withWatchLock(file,run){
 /** The shell rule of a blocking watch, in comment.mjs help and every printed watch line. */
 export const WATCH_TIMEOUT='Give your shell tool a timeout of at least 300000 ms; never wrap the '+
  'command in timeout(1).';
-/** The step after publishing page content (publish.mjs) or a clean check (check.mjs). */
-export const watchNext=id=>'Next: when the whole request is done, send your reply and, in the '+
- `same response, run node scripts/comment.mjs watch ${id} --next. ${WATCH_TIMEOUT}`;
+/** The step after publishing page content (publish.mjs) or answering a comment (comment.mjs reply):
+ * the reply to the user is message text, never only tool calls. */
+export const watchNext=id=>'Next: when the whole request is done, write your reply to the user as '+
+ 'message text and, in that same response, run node scripts/comment.mjs watch '+
+ `${id} --next. ${WATCH_TIMEOUT}`;
 /** The step after a clean check's Reply block: that block is the reply, word for word. */
-export const replyNext=id=>'Next: when the whole request is done, send the Reply block above as '+
- 'your reply, '+
- 'word for word (unless the user prescribed the reply), and, in the same response, run '+
- `node scripts/comment.mjs watch ${id} --next. ${WATCH_TIMEOUT}`;
-/** The step after answering a comment (comment.mjs reply). */
-export const watchAgain=id=>`Next: run node scripts/comment.mjs watch ${id} --next again. `+
- WATCH_TIMEOUT;
+export const replyNext=id=>'Next: when the whole request is done, write the Reply block above as '+
+ 'your message text, word for word (unless the user prescribed the reply), and, in that same '+
+ `response, run node scripts/comment.mjs watch ${id} --next. ${WATCH_TIMEOUT}`;

@@ -447,7 +447,7 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
  try{
   const replied=await commentCommand({sub:'reply',values:{thread:'T1',body:'Done: shorter intro.',resolve:true},positionals:['PAGE12']},options);
   expect(sent.at(-1)).toEqual({method:'POST',path:'/api/artifacts/PAGE12/annotations/T1',body:{reply:'Done: shorter intro.',resolve:true,expected_revision:7}});
-  expect(replied.next).toBe('Next: run node scripts/comment.mjs watch PAGE12 --next again. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
+  expect(replied.next).toBe('Next: when the whole request is done, write your reply to the user as message text and, in that same response, run node scripts/comment.mjs watch PAGE12 --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
   for(const sub of ['resolve','reopen'] as const){await commentCommand({sub,values:{thread:'T1'},positionals:['PAGE12']},options);expect(sent.at(-1).body).toEqual({[sub]:true,expected_revision:7});}
   // An edit of a reply finds the thread that holds it.
   await commentCommand({sub:'edit',values:{comment:'R1',body:'Fixed typo'},positionals:['PAGE12']},options);
