@@ -3,7 +3,7 @@
  * ending on a clean pass with the Reply block and the watch line.
  * Used by: toolbox-client.mjs (runTool; re-exported as checkDigest), author-toolbox.test.ts.
  */
-import {watchNext} from './toolbox-watch-state.mjs';
+import {replyNext} from './toolbox-watch-state.mjs';
 
 /** One line per viewport so a saved check needs no second call to read it; the file keeps full
  * evidence. */
@@ -92,16 +92,19 @@ export function checkDigest(envelope,file){
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';
 }
+/** A clean pass whose steps proved no labelled behaviour still proves each viewport loads. */
+const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.viewer+' ':''}${
+ c.viewport.width}x${c.viewport.height}: the page loads without errors`).join(' | ');
 /** ONE block holding everything a reply states, copied as printed: the link, Built with,
  * Tested/Not tested, the slide images and who can do what; then the watch line. */
 function replyBlock({reply,slideLinks,checks},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
  return ['Reply block (send it as printed, up to the Next: line, unless the user prescribed the'+
   ' reply):',reply.link,
-  ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+tested,
+  ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+(tested||loads(checks)),
   'Not tested: anything not listed in Tested:, visual appearance'+(guest?
    ', and sharing between two signed-in users (the guest is signed out)':''),
   ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),
   ...(reply.permissions.length?['Who can do what:',...reply.permissions.flatMap(({name,id,lines})=>
-   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),watchNext(reply.id)];
+   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),replyNext(reply.id)];
 }
