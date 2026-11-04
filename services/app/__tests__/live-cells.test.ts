@@ -324,9 +324,7 @@ describe('saving through the dataset', () => {
         const actor = identityForUser(editor.id, null, editor.email) as AccessActor;
         const opened = await other.cells.open(actor, pageId, key(blue));
         if (opened.status !== 200) throw new Error(`open ${opened.status}`);
-        const doc = new Y.Doc();
-        doc.clientID = opened.body.clientId;
-        Y.applyUpdate(doc, Buffer.from(opened.body.state, 'base64'));
+        const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { gc: true, clientId: opened.body.clientId });
         const before = Y.encodeStateVector(doc);
         doc.getText('region').insert(0, 'B: ');
         expect((await other.cells.update(actor, pageId, key(blue), { clientId: opened.body.clientId, update: Y.encodeStateAsUpdate(doc, before) })).status).toBe(200);
