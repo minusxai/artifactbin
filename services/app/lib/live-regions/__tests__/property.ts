@@ -57,7 +57,7 @@ const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain((clien
   );
   return fc.record({ clients: fc.constant(clients), region: fc.constantFrom(...REGIONS.keys()), ops: fc.array(op, { minLength: 1, maxLength: maxOps }) });
 });
-type Scenario = { clients: number; region: number; ops: Op[] };
+export type Scenario = { clients: number; region: number; ops: Op[] };
 
 /** Cursor positions inside text blocks, in document order. */
 const positions = (client: Client) => {
@@ -69,8 +69,8 @@ const pick = <T>(list: readonly T[], at: number) => list[at % list.length]!;
 const TRACKED = /[一-鿿]/gu;
 const tracked = (text: string) => text.match(TRACKED) ?? [];
 
-/** One run; returns the number of characters lost to the known limitation. */
-function runScenario({ clients: count, region, ops }: Scenario): { lost: number; typed: number } {
+/** One run (a shrunk counterexample replays through it); returns the number of characters lost to the known limitation. */
+export function runScenario({ clients: count, region, ops }: Scenario): { lost: number; typed: number } {
   const room = new Room('rich', REGIONS[region]!);
   const clients = Array.from({ length: count }, (_unused, index) => room.join(String.fromCharCode(65 + index)));
   let next = 0x4e00;
@@ -201,16 +201,17 @@ function mulberry(seed: number) {
 }
 
 /**
- * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed and the shrunk
- * counterexample of a failure; replay it with `fc.assert(property, { seed, path })`.
+ * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed, path and shrunk
+ * counterexample of a failure: `replay` re-runs exactly that case (with the same `maxOps`), and the shrunk
+ * counterexample becomes a fixed `runScenario` case in convergence.property.test.ts, so pr fast keeps it.
  */
-export function checkConvergence(runs: number, maxOps: number): { typed: number; lost: number } {
+export function checkConvergence(runs: number, maxOps: number, replay?: { seed: number; path: string }): { typed: number; lost: number } {
   const totals = { typed: 0, lost: 0 };
   fc.assert(fc.property(scenario(maxOps), (run) => {
     const result = runScenario(run);
     totals.typed += result.typed;
     totals.lost += result.lost;
-  }), { numRuns: runs });
-  expect(totals.typed, 'the runs typed text').toBeGreaterThan(runs);
+  }), { numRuns: runs, ...replay });
+  if (!replay) expect(totals.typed, 'the runs typed text').toBeGreaterThan(runs);
   return totals;
 }

@@ -21,7 +21,7 @@ import { Plugin, PluginKey, Selection, TextSelection, type Command, type EditorS
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import * as Y from 'yjs';
-import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs } from './lines';
+import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
 import type { RegionKind } from './schema';
 
 interface BindingState { binding: Binding; pending: readonly Transaction[] }
@@ -47,6 +47,43 @@ function writeStep(text: Y.Text, kind: RegionKind, step: { getMap(): { forEach(f
 }
 
 const char = (linear: Linear, offset: number) => (offset >= 0 && offset < linear.length ? linear.units(offset, offset + 1)[0]?.ch : undefined);
+const unit = (linear: Linear, offset: number): Unit | undefined => (offset >= 0 && offset < linear.length ? linear.units(offset, offset + 1)[0] : undefined);
+const sameAttrs = (a: Unit, b: Unit) => keysOf(b.ch).every((key) => (a.attrs[key] ?? null) === (b.attrs[key] ?? null));
+
+/**
+ * Where an edit of only line ends goes. Line ends make a place ambiguous: "\n"s inserted or deleted next to a "\n"
+ * can go on either side of it with the same characters, but each place keeps different existing line ends, and those
+ * carry their blocks' ids and attributes. The edit takes the place whose kept line ends already are what the document
+ * shows; on a tie, one line end to the right (Enter at a block's end keeps the block's own "\n" with its text), then
+ * the step's own place, then further right. Sliding blindly past every adjacent "\n" carried an Enter at the end of a
+ * block past the following empty block's line end too, giving that block's line end to the new one.
+ */
+function place(old: Linear, next: Linear, base: number, from: number, inserted: number, deleted: number, clip: number): number {
+  const places = [from];
+  for (let at = from; ; at++) {
+    const slides = inserted && !deleted
+      ? at + inserted < Math.min(clip, next.length) && char(next, at) === '\n' && char(next, at + inserted) === '\n'
+      : !!deleted && !inserted && at - base + deleted < old.length && char(old, at - base) === '\n' && char(old, at - base + deleted) === '\n';
+    if (!slides) break;
+    places.push(at + 1);
+  }
+  if (places.length === 1) return from;
+  // Past the last place every candidate leaves the same units; before `from` nothing differs.
+  const end = places.at(-1)! + inserted;
+  const misses = (at: number) => {
+    let count = 0;
+    for (let offset = from; offset < end; offset++) {
+      if (offset >= at && offset < at + inserted) continue;
+      const have = unit(old, offset < at ? offset - base : offset - base - inserted + deleted), want = unit(next, offset);
+      if (have && want && !sameAttrs(have, want)) count++;
+    }
+    return count;
+  };
+  const [own, ...right] = places;
+  let best = right[0]!, fewest = misses(best);
+  for (const at of [own!, ...right.slice(1)]) { const count = misses(at); if (count < fewest) { best = at; fewest = count; } }
+  return best;
+}
 
 function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, oldTo: number, start: number, newTo: number, clip: number): void {
   const before = old.units(oldFrom, oldTo), after = next.units(start, newTo);
@@ -56,10 +93,7 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - 1 - suffix]!.ch === after[after.length - 1 - suffix]!.ch) suffix++;
   const deleted = before.length - prefix - suffix, inserted = after.length - prefix - suffix;
   const base = start - oldFrom;
-  let at = start + prefix;
-  // Only line ends slide: everywhere else the step's own position is the user's.
-  if (inserted && !deleted) while (at + inserted < Math.min(clip, next.length) && char(next, at) === '\n' && char(next, at + inserted) === '\n') at++;
-  if (deleted && !inserted) while (at - base + deleted < old.length && char(old, at - base) === '\n' && char(old, at - base + deleted) === '\n') at++;
+  const at = place(old, next, base, start + prefix, inserted, deleted, clip);
   if (deleted) text.delete(at, deleted);
   if (inserted) insertUnits(text, at, next.units(at, at + inserted));
   // Attributes: the range itself, and the "\n" of the line it ends in (a join or an open paste changes that
@@ -71,7 +105,8 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   const formats: [number, Attrs][] = [];
   for (const offset of offsets) {
     if (offset >= at && offset < at + inserted) continue;
-    const want = offset === lineEnd - 1 && offset >= rangeEnd ? next.units(offset, offset + 1)[0]! : after[offset - start]!;
+    // From the whole document: a slid edit reaches past the step's own range.
+    const want = next.units(offset, offset + 1)[0];
     const have = old.units(oldAt(offset), oldAt(offset) + 1)[0];
     if (!want || !have) continue;
     const change: Attrs = {};
