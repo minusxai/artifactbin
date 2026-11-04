@@ -5,10 +5,11 @@
  * queries, aggregates, downloads, page reads and forks see exactly the same rows.
  *
  * The filter is evaluated here, in three-valued logic, and it FAILS CLOSED: a row is visible only when
- * its predicate is TRUE. NULL, a type mismatch, an unknown operator or column, the platform row ID
- * (`_id`, served by the generated API in a later PR) and a missing session value all leave the row
- * out; a predicate naming a column the table no longer has, or a session value the request lacks,
- * hides every row.
+ * its predicate is TRUE. NULL, a type mismatch, an unknown operator or column and a missing session
+ * value all leave the row out; a predicate naming a column the table no longer has, or a session value
+ * the request lacks, hides every row. The platform row ID (`_id`) is read from the column a door that
+ * serves IDs carries them in (DATASET_ROW_ID_COLUMN: the generated API, a live cell's row); rows of a
+ * door without IDs (SQL, downloads) have none, so a rule naming `_id` keeps none of them there.
  *
  * The filter may read columns the rule hides (it runs on the server). A column list shows only the columns it
  * names (and DOOR_COLUMNS): a column the head no longer declares, read from an archived revision, stays hidden. Which rows are kept depends only on
@@ -16,7 +17,7 @@
  * (content-addressed: a new revision is a new object key, a new rule a new key); a full view
  * (`columns:"*"`, `filter:{}`, no limit) is the rows themselves, with nothing evaluated or copied.
  */
-import { DATASET_ROW_ID, type DatasetBoolExp, type DatasetSelectPermission, type Scalar } from '@artifactbin/contracts';
+import { DATASET_ROW_ID, DATASET_ROW_ID_COLUMN, type DatasetBoolExp, type DatasetSelectPermission, type Scalar } from '@artifactbin/contracts';
 import { datasetPatternMatch } from '@artifactbin/utils/dataset-policy';
 
 type Row = Record<string, unknown>;
@@ -102,19 +103,19 @@ function evaluate(exp: DatasetBoolExp, row: Row, session: DatasetSession): Truth
     if (key === '_or') return Array.isArray(value) ? or(value.map((e) => evaluate(e, row, session))) : null;
     if (key === '_not') return value && typeof value === 'object' ? not(evaluate(value as DatasetBoolExp, row, session)) : null;
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    return comparison(row[key], value as Record<string, unknown>, session);
+    return comparison(row[key === DATASET_ROW_ID ? DATASET_ROW_ID_COLUMN : key], value as Record<string, unknown>, session);
   }));
 }
 
 /**
  * The stored positions a rule keeps, in stored order. `columns` are the table's declared source columns:
- * a predicate naming anything else (a dropped column, the `_id` the generated API adds later) keeps none.
+ * a predicate naming anything else (a dropped column) keeps none; `_id` reads each row's carried ID.
  */
 export function keptRows(rows: readonly Row[], columns: readonly string[], permission: DatasetSelectPermission, session: DatasetSession): number[] {
   const filter = permission.filter ?? {};
   const cap = permission.limit ?? Number.POSITIVE_INFINITY;
   const known = new Set(columns);
-  for (const name of namedColumns(filter)) if (name === DATASET_ROW_ID || !known.has(name)) return [];
+  for (const name of namedColumns(filter)) if (name !== DATASET_ROW_ID && !known.has(name)) return [];
   const kept: number[] = [];
   try {
     for (let i = 0; i < rows.length && kept.length < cap; i++) if (evaluate(filter, rows[i]!, session) === true) kept.push(i);
@@ -129,7 +130,7 @@ export function keptRows(rows: readonly Row[], columns: readonly string[], permi
  * The columns a door adds to stored rows, never stored or declared (the page GraphQL row ID): a column list
  * keeps them. Everything else a list does not name is hidden, declared or not (an archived revision's column).
  */
-const DOOR_COLUMNS: ReadonlySet<string> = new Set(['__af_graphql_row_id']);
+const DOOR_COLUMNS: ReadonlySet<string> = new Set([DATASET_ROW_ID_COLUMN]);
 
 /** Does this rule show the column? */
 export function shows(permission: DatasetSelectPermission, name: string): boolean {
@@ -146,7 +147,8 @@ const keptCache = new Map<string, number[]>();
  */
 export function viewRows(rows: readonly Row[], columns: readonly string[], permission: DatasetSelectPermission, session: DatasetSession, objectKey?: string): Row[] {
   if (unrestricted(permission)) return rows as Row[];
-  const key = objectKey ? JSON.stringify([objectKey, rows.length, columns, permission.filter ?? {}, permission.limit ?? null, session]) : null;
+  // Kept positions depend only on the object, rule and session, except when the rule reads the row IDs a door carries.
+  const key = objectKey && !namedColumns(permission.filter ?? {}).has(DATASET_ROW_ID) ? JSON.stringify([objectKey, rows.length, columns, permission.filter ?? {}, permission.limit ?? null, session]) : null;
   let kept = key ? keptCache.get(key) : undefined;
   if (kept) { keptCache.delete(key!); keptCache.set(key!, kept); }
   else {

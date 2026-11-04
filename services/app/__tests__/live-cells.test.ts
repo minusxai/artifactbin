@@ -480,6 +480,21 @@ describe('text the dataset will not take', () => {
     expect((await (await getDb()).query("SELECT 1 FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%'", [datasetId])).rows).toHaveLength(1);
   });
 
+  it('an update rule filtering on the row ID (_id) admits that row\'s cell, to open and to save', async () => {
+    const head = (await getArtifactById(datasetId))!;
+    const policy = POLICY();
+    const viewerRule = policy.tables[0]!.update_permissions.find((entry) => entry.role === 'viewer')!;
+    (viewerRule.permission as Record<string, unknown>).filter = { _id: { _eq: red } };
+    (viewerRule.permission as Record<string, unknown>).check = { _id: { _neq: blue } };
+    expect((await patchMetadata(ownerToken, datasetId, { policy, expectedPolicyRevision: head.policy_revision ?? 0 })).status).toBe(200);
+    expect((await open(viewer, key(blue))).status).toBe(404);
+    const a = await join(viewer);
+    a.text.insert(0, 'By id: ');
+    expect((await a.push()).status).toBe(200);
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
+    expect((await stored())[0]!.description).toBe('By id: Fix the login bug');
+  });
+
   it('a save the dataset refuses closes the cell for everyone (closed: rejected) and leaves nothing dirty', async () => {
     const a = await join(viewer);
     const watching = await stream(viewer, `${key(red)}:${a.reply.seq}`);

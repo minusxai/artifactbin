@@ -104,19 +104,21 @@ describe('Hasura v2 write permission compatibility', () => {
     expect(Object.values(out.params)).toContain('u1');
     expect(out.sql).not.toContain('u1');
   });
-  it('compiles the pattern operators to the engine matcher it is handed, and refuses them without one', () => {
+  it('compiles the pattern operators to the engine library matcher, and _id to the row ID column it is handed', () => {
     const out = compilePolicyPredicate(
-      { _and: [{ body: { _like: 'a%' } }, { body: { _nilike: 'X-Hasura-User-Id' } }] },
-      ['body'],
+      { _and: [{ body: { _like: 'a%' } }, { body: { _nilike: 'X-Hasura-User-Id' } }, { _id: { _eq: 'r_1' } }] },
+      ['body', 'rid'],
       { 'x-hasura-user-id': 'u1' },
       'p',
-      { patternMatch: 'match_fn' },
+      { rowId: 'rid' },
     );
-    expect(out.sql).toContain('match_fn("body", $p_0, 0)');
-    expect(out.sql).toContain('(NOT match_fn("body", $p_1, 1))');
-    expect(out.params).toEqual({ p_0: 'a%', p_1: 'u1' });
-    expect(() => compilePolicyPredicate({ body: { _like: 'a%' } }, ['body'], {})).toThrow(/pattern/);
-    expect(() => compilePolicyPredicate({ body: { _like: 3 } } as never, ['body'], {}, 'p', { patternMatch: 'f' })).toThrow(/text pattern/);
+    expect(out.sql).toContain('like_matches("body", $p_0)');
+    expect(out.sql).toContain('(NOT ilike_matches("body", $p_1))');
+    expect(out.sql).toContain('"rid" = $p_2');
+    expect(out.params).toEqual({ p_0: 'a%', p_1: 'u1', p_2: 'r_1' });
+    expect(() => compilePolicyPredicate({ _id: { _eq: 'r_1' } }, ['body'], {})).toThrow(/row ID/);
+    expect(() => compilePolicyPredicate({ _rid: { _eq: 'r_1' } }, ['_rid'], {}, 'p', { rowId: 'rid' })).toThrow(/unsupported predicate/);
+    expect(() => compilePolicyPredicate({ body: { _like: 3 } } as never, ['body'], {})).toThrow(/text pattern/);
     expect(datasetPatternMatch('École', 'éCOLE', true)).toBe(true);
     expect(datasetPatternMatch('École', 'éCOLE', false)).toBe(false);
     expect(datasetPatternMatch(null, '%', false)).toBeNull();

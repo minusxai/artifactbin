@@ -15,11 +15,12 @@
  *  - presets on the written rows, then `check` on the result;
  *  - an effect outside the operation (REPLACE deleting a row, an UPDATE that
  *    moves a rowid) is refused.
- * `compilePolicyPredicate` emits the filter and check as SQL; its pattern operators call `datasetPatternMatch`,
- * registered here as an engine function, the matcher the app's role view and live cell check use too.
+ * `compilePolicyPredicate` emits the filter and check as SQL; its pattern operators call the library's
+ * `like_matches`/`ilike_matches` (utils `datasetPatternMatch`, the matcher the app's role view uses too), and `_id`
+ * reads the policy's `rowId` column.
  */
 import type { ColumnType, DatasetColumn, DatasetMutationPolicy, DatasetOperation, DeletePermission, DryRunMutationsInput, DryRunMutationsResult, InsertPermission, MutationAnalysis, MutationInput, MutationOutcome, Row, Scalar, StatementAnalysis, UpdatePermission } from '@artifactbin/contracts';
-import { compilePolicyPredicate, datasetPatternMatch, policyValue } from '@artifactbin/utils/dataset-policy';
+import { compilePolicyPredicate, policyValue } from '@artifactbin/utils/dataset-policy';
 import { inferColumns } from '@artifactbin/utils/shape';
 import { DEFAULT_CAPS } from '../caps';
 import { SqliteDatabase, TimedOut, sqlValue, type Prepared } from './database';
@@ -136,12 +137,8 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
     const op = statement.analysis.kind as DatasetOperation;
     const p = input.policy;
     const permission = p ? admit(p, op, statement.analysis, names, input.params) : null;
-    const patternMatch = p ? db.internalFunction((value, pattern, insensitive) => {
-      const matched = datasetPatternMatch(value, pattern, insensitive === 1);
-      return matched === null ? null : matched ? 1 : 0;
-    }, 3) : undefined;
     if (p && permission && 'filter' in permission) {
-      const filter = compilePolicyPredicate(permission.filter, names, p.session, '__policy_filter', { patternMatch });
+      const filter = compilePolicyPredicate(permission.filter, names, p.session, '__policy_filter', { rowId: p.rowId });
       effect.visible = new Set(db.exec(`SELECT rowid AS id FROM ${target} WHERE ${filter.sql}`, bindOf(filter.params)).map((r) => Number(r.id)));
     }
     // Row identity by rowid before the statement runs (a deleted row's identity is gone afterwards; UPDATE never moves a rowid).
@@ -172,7 +169,7 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
       db.exec(`UPDATE ${target} SET ${sets.join(', ')} WHERE ${writtenRows}`, bind);
     }
     if (p && permission && 'check' in permission && permission.check && op !== 'delete') {
-      const check = compilePolicyPredicate(permission.check, names, p.session, '__policy_check', { patternMatch });
+      const check = compilePolicyPredicate(permission.check, names, p.session, '__policy_check', { rowId: p.rowId });
       const [failed] = db.exec(`SELECT count(*) AS n FROM ${target} WHERE ${writtenRows} AND (${check.sql}) IS NOT TRUE`, { ...bindOf(check.params), $__policy_ids: ids });
       if (Number(failed?.n)) refuse('a resulting row failed its check');
     }

@@ -12,6 +12,7 @@
  */
 import { SQL_FUNCTIONS, type SqlFunctionSpec } from '@artifactbin/contracts';
 import { normalizeTimestamp } from '@artifactbin/utils/shape';
+import { datasetPatternMatch } from '@artifactbin/utils/dataset-policy';
 
 type SqlValue = string | number | null | bigint | Uint8Array | Int8Array | ArrayBuffer;
 type Kind = 'date' | 'timestamp';
@@ -497,6 +498,10 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
       return m ? (m[g === undefined ? 0 : integer('regexp_extract', g)] ?? null) : null;
     },
   },
+  // The one LIKE matcher (utils datasetPatternMatch): the generated API's where, the rules' filters and checks, and
+  // the role view all decide a pattern with it. A value that is not text is unknown (null), as SQL's LIKE on a type.
+  like_matches: { kind: 'scalar', call: ([text, p]) => { const m = datasetPatternMatch(text, p, false); return m === null ? null : bool(m); } },
+  ilike_matches: { kind: 'scalar', call: ([text, p]) => { const m = datasetPatternMatch(text, p, true); return m === null ? null : bool(m); } },
   list_contains: {
     kind: 'scalar',
     call: ([l, v]) => bool(list('list_contains', l!).includes(v)),

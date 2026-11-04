@@ -394,6 +394,15 @@ describe.each<[string, SqlService]>([
     const session = { ...rule({ check: { body: { _like: 'X-Hasura-User-Id' } } }), session: { 'x-hasura-user-id': 'u_' } };
     expect(await svc.mutate({ table, sql: "update rows set body = 'u1' where id = 1", params: {}, policy: session })).toMatchObject({ affected: 1 });
   });
+  it('reads the row ID (`_id`) from the column the policy names for it, and refuses a rule naming it without one', async () => {
+    const keyed = { ...table, columns: [...table.columns, { name: 'rid', type: 'string' as const }], rows: table.rows.map((r) => ({ ...r, rid: `r${r.id}` })) };
+    const byId = (rowId?: string): DatasetMutationPolicy => ({ ...policy, ...(rowId ? { rowId } : {}), table: { ...policy.table, update_permissions: [{ role: 'visitor', permission: { columns: ['body'], filter: { _id: { _in: ['r2'] } }, check: { _id: { _neq: 'r9' } } } }] } });
+    expect(await svc.mutate({ table: keyed, sql: "update rows set body = 'x'", params: {}, policy: byId('rid') })).toMatchObject({ affected: 1, rows: [keyed.rows[0], { ...keyed.rows[1], body: 'x' }] });
+    expect(await svc.mutate({ table: keyed, sql: "update rows set body = 'x'", params: {}, policy: byId() })).toMatchObject({ error: expect.stringContaining('_id') });
+    // Any other underscore name is still no column.
+    const other = { ...policy, rowId: 'rid', table: { ...policy.table, update_permissions: [{ role: 'visitor', permission: { columns: ['body'], filter: { _rid: { _eq: 'r1' } } } }] } } as DatasetMutationPolicy;
+    expect(await svc.mutate({ table: keyed, sql: "update rows set body = 'x'", params: {}, policy: other })).toHaveProperty('error');
+  });
   it('rejects opaque or unsupported write forms', async () => {
     expect(await run('update rows set body=$body returning *')).toMatchObject({ error: expect.stringContaining('RETURNING') });
     // A CTE-prefixed write is judged on its effect, like any other: the delete filter holds.

@@ -58,6 +58,11 @@ export interface DatasetMutationPolicy {
    * the dataset). Only then do `backend_only` entries apply.
    */
   trusted?: boolean;
+  /**
+   * The column of the engine's table holding each row's platform ID, which a rule's `_id` reads (the generated API's
+   * writes carry it). Without one a rule naming `_id` refuses the write.
+   */
+  rowId?: string;
 }
 interface DatasetPrincipal {
   groupId?: string | null;

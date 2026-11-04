@@ -6,12 +6,14 @@
  *
  *  - Values are bound parameters (`$w0`…); identifiers are the role's visible source columns, looked up again
  *    by GraphQL name (defence in depth behind schema validation), quoted.
- *  - SQLite semantics are pinned to Hasura's (Postgres): `_like` is case-sensitive (compiled to GLOB),
- *    `_ilike` is `LIKE … ESCAPE '\'` (ASCII case folding), `asc` sorts nulls last and `desc` nulls first.
+ *  - SQLite semantics are pinned to Hasura's (Postgres): `_like` is case-sensitive and `_ilike` folds case as
+ *    Unicode does, both through the engine library's `like_matches`/`ilike_matches` (utils patternSql, the
+ *    matcher the rules' filters and checks use too); `asc` sorts nulls last and `desc` nulls first.
  *  - `_id asc` is always the final ordering, so offset paging is deterministic.
  *  - A null operand is refused (use `_is_null`); empty `_and` is true, empty `_or` false, `{}` true.
  */
 import { DATASET_GRAPHQL_READ_LIMITS, DATASET_PERMISSION_LIMITS, type Scalar } from '@artifactbin/contracts';
+import { patternSql } from '@artifactbin/utils/dataset-policy';
 import { ID_COLUMN, quote } from './model';
 import { operatorsFor, orderable, summable, type HasuraColumn, type HasuraTableModel } from './hasura-schema';
 import type { DatasetStatement } from './types';
@@ -34,21 +36,6 @@ const ID: HasuraColumn = { field: '_id', source: ID_COLUMN, type: 'String' };
 function column(t: HasuraTableModel, field: string): HasuraColumn {
   if (field === '_id') return ID;
   return t.columns.find((c) => c.field === field) ?? refuse(`unknown column "${field}" on ${t.root}`);
-}
-
-/** A LIKE pattern (`%`, `_`, `\` escapes) as a GLOB pattern: case-sensitive, literal `*?[` bracketed. */
-function globOf(pattern: string): string {
-  let out = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i]!;
-    const literal = c === '\\' && i + 1 < pattern.length ? pattern[++i]! : null;
-    const ch = literal ?? c;
-    if (literal === null && c === '%') out += '*';
-    else if (literal === null && c === '_') out += '?';
-    else if (ch === '*' || ch === '?' || ch === '[') out += `[${ch}]`;
-    else out += ch;
-  }
-  return out;
 }
 
 interface Budget { predicates: number }
@@ -112,18 +99,11 @@ class WhereCompiler {
           if (typeof value !== 'boolean') refuse('_is_null takes true or false');
           parts.push(`${q} IS ${value ? '' : 'NOT '}NULL`);
           break;
-        case '_like': case '_nlike': {
+        case '_like': case '_nlike': case '_ilike': case '_nilike':
+          // The engine library's matcher, as the rules' filters and checks and the role view decide a pattern.
           if (typeof value !== 'string') refuse(`${op} takes a string`);
-          const match = `${q} GLOB ${this.bind(globOf(value as string))}`;
-          parts.push(op === '_like' ? match : `NOT (${match})`);
+          parts.push(patternSql(op, q, this.bind(value))!);
           break;
-        }
-        case '_ilike': case '_nilike': {
-          if (typeof value !== 'string') refuse(`${op} takes a string`);
-          const match = `${q} LIKE ${this.bind(value)} ESCAPE '\\'`;
-          parts.push(op === '_ilike' ? match : `NOT (${match})`);
-          break;
-        }
         default: refuse(`${c.field} has no operator ${op}`);
       }
     }

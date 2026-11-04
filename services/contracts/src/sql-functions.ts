@@ -50,6 +50,8 @@ export const SQL_FUNCTIONS: readonly SqlFunctionSpec[] = [
   { name: 'regexp_matches', arity: [2], kind: 'scalar', signature: 'regexp_matches(text, pattern) → boolean', summary: 'JavaScript regular expression syntax.' },
   { name: 'regexp_replace', arity: [3], kind: 'scalar', signature: 'regexp_replace(text, pattern, replacement) → text', summary: 'Replaces every match.' },
   { name: 'regexp_extract', arity: [2, 3], kind: 'scalar', signature: 'regexp_extract(text, pattern[, group]) → text', summary: 'The first match, or one of its groups.' },
+  { name: 'like_matches', arity: [2], kind: 'scalar', signature: 'like_matches(text, pattern) → boolean', summary: "LIKE over the whole text: % any run, _ one character, \\ escapes the next; case-sensitive. The generated API's and dataset rules' _like." },
+  { name: 'ilike_matches', arity: [2], kind: 'scalar', signature: 'ilike_matches(text, pattern) → boolean', summary: "like_matches folding case as Unicode does ('É' matches 'é'). The generated API's and dataset rules' _ilike." },
   { name: 'list_contains', arity: [2], kind: 'scalar', signature: 'list_contains(list, value) → boolean', summary: 'Whether a JSON list holds the value.' },
   { name: 'list_has_any', arity: [2], kind: 'scalar', signature: 'list_has_any(list, list) → boolean', summary: 'Whether two JSON lists share a value.' },
   { name: 'to_list', arity: [1], kind: 'scalar', signature: 'to_list(text) → list', summary: "The list text names ([\"a\",\"b\"], [a, b], ['a', 'b']) as a JSON list of text, a bare null as null; fails on text that names none." },

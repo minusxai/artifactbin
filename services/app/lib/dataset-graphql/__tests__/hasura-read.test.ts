@@ -30,11 +30,11 @@ describe('where', () => {
     expect(where({ _id: { _eq: 'r_1' } }).sql).toBe('(("__af_graphql_row_id" = $w0))');
   });
 
-  it('_like/_nlike are case-sensitive (GLOB), _ilike/_nilike case-insensitive (LIKE … ESCAPE)', () => {
-    expect(where({ region: { _like: '%we_t*[x]\\%' } })).toEqual({ sql: '(("Region" GLOB $w0))', params: { w0: '*we?t[*][[]x]%' } });
-    expect(where({ region: { _nlike: 'a%' } }).sql).toBe('((NOT ("Region" GLOB $w0)))');
-    expect(where({ region: { _ilike: 'A%' } })).toEqual({ sql: `(("Region" LIKE $w0 ESCAPE '\\'))`, params: { w0: 'A%' } });
-    expect(where({ region: { _nilike: 'A%' } }).sql).toBe(`((NOT ("Region" LIKE $w0 ESCAPE '\\')))`);
+  it('the pattern operators call the engine library matcher, the pattern bound as written', () => {
+    expect(where({ region: { _like: '%we_t*[x]\\%' } })).toEqual({ sql: '((like_matches("Region", $w0)))', params: { w0: '%we_t*[x]\\%' } });
+    expect(where({ region: { _nlike: 'a%' } }).sql).toBe('(((NOT like_matches("Region", $w0))))');
+    expect(where({ region: { _ilike: 'A%' } })).toEqual({ sql: '((ilike_matches("Region", $w0)))', params: { w0: 'A%' } });
+    expect(where({ region: { _nilike: 'A%' } }).sql).toBe('(((NOT ilike_matches("Region", $w0))))');
   });
 
   it('_and, _or, _not; empty _and is true, empty _or is false, {} is true', () => {

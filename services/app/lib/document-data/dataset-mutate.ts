@@ -187,7 +187,8 @@ export async function mutateDataset(
     try{
       policy=tableMutationPolicy(decision,selected);
       // Identity allocation is platform-owned; users cannot select this column in their schema.
-      if(identity&&policy)policy={...policy,table:{...policy.table,insert_permissions:policy.table.insert_permissions?.map(entry=>({...entry,permission:{...entry.permission,...(Array.isArray(entry.permission.columns)?{columns:[...entry.permission.columns,identity.column]}:{})}}))}};
+      // A rule's `_id` reads the identity column (utils compilePolicyPredicate `rowId`).
+      if(identity&&policy)policy={...policy,rowId:identity.column,table:{...policy.table,insert_permissions:policy.table.insert_permissions?.map(entry=>({...entry,permission:{...entry.permission,...(Array.isArray(entry.permission.columns)?{columns:[...entry.permission.columns,identity.column]}:{})}}))}};
       const statements=guard.statements??[{sql,params}];
       if(!statements.length||statements.length>100)throw new Error('Invalid dataset mutation batch');
       let currentRows=rows,affected=0;
