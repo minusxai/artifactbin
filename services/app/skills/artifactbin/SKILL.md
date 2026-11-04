@@ -14,11 +14,6 @@ says what to do next. Your reply is what the user asked for: if they prescribed 
 only the URL), send exactly that; otherwise send the link and then the Reply block check printed,
 as printed. Group, sharing and ownership changes alone need no watch.
 
-Commands stage updates hourly. Reread SKILL.md and reload your harness when notified.
-`node scripts/update.mjs` updates now; `--rollback` restores the prior release offline.
-`--no-update` or `ARTIFACTBIN__NO_UPDATE=1` disables updates. Manual ZIP installs update by
-reinstalling.
-
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
@@ -53,10 +48,11 @@ Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace
   imports from `@afbin/<name>` (`apollo`, `highlight`, the libraries); your own CSS and JS.
 - **The platform adds:** the core runtime and import map, the design-system stylesheet and fonts,
   the `<html>` design and dark-mode attributes, stable `data-af-id`s on the elements in your HTML
-  (elements your script creates: [dynamic elements](references/runtime.md#dynamic-elements-and-comments)),
-  autofix of common mistakes (reported as `autofix:`), code-highlighting colours, reader presence
-  and comments, and the owner's design-system picker. A core tag, `<html data-af-*>` attributes or a
-  copied stylesheet link you write anyway still works: publish moves or removes them.
+  (for elements your script creates, see [dynamic
+  elements](references/runtime.md#dynamic-elements-and-comments)), autofix of common mistakes
+  (reported as `autofix:`), code-highlighting colours, reader presence and comments, and the owner's
+  design-system picker. A core tag, `<html data-af-*>` attributes or a copied stylesheet link you
+  write anyway still works: publish moves or removes them.
 
 ## Core flows
 
@@ -75,15 +71,15 @@ sharing and deliberate ownership moves.
 
 - **New page.** 1) Copy the starter that fits, then follow its Usage: `cp examples/deck.html
   index.html` (decks); `cp examples/shared-app.html index.html && cp examples/budget.ts .` (shared
-  edits: rows in a dataset, written through a resolver); `cp examples/csv-dashboard.html
-  index.html` (any page that shows a CSV or dataset: dashboard, report or chart); `cp
-  examples/report.html index.html` (a report without data). 2) Edit only what its Usage names
-  (its data block, `[bracketed]` text): never rewrite the starter's CSS, JS or layout, and never
-  draft copy in reasoning. 3) Publish after step 2 (Check, below). If no starter fits, write the
-  page yourself; step 2's rule applies only to a copied starter. Keep the starter's design system unless
-  the user names one; then set its `<meta name="artifactbin:design-system" content="NAME">` to a
-  name from the table (the platform serves the stylesheet and fonts; don't read the CSS). Keep
-  state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)).
+  edits: rows in a dataset, written through a resolver); `cp examples/csv-dashboard.html index.html`
+  (any page that shows a CSV or dataset: dashboard, report or chart); `cp examples/report.html
+  index.html` (a report without data). 2) Edit only what its Usage names (its data block,
+  `[bracketed]` text): never rewrite the starter's CSS, JS or layout, and never draft copy in
+  reasoning. 3) Publish after step 2 (Check, below). If no starter fits, write the page yourself;
+  step 2's rule applies only to a copied starter. Keep the starter's design system unless the user
+  names one; then set its `<meta name="artifactbin:design-system" content="NAME">` to a name from
+  the table (the platform serves the stylesheet and fonts; don't read the CSS). Keep state through
+  `client` from `@afbin/apollo` ([runtime](references/runtime.md)).
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -99,11 +95,11 @@ sharing and deliberate ownership moves.
   | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
   | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
   | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
-  - Set `<title>` to the page's name: the browser tab and link previews show it.
-  - Design: start from the reader's decision; give the opening a concrete point and let typography
-    set the hierarchy (no identical cards for every paragraph). Use real data in charts, label
+  - t `<title>` to the page's name: the browser tab and link previews show it.
+  - sign: start from the reader's decision; give the opening a concrete point and let typography set
+    the hierarchy (no identical cards for every paragraph). Use real data in charts, label
     assumptions, keep lines under about 80 characters and controls keyboard-usable.
-  - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
+  - ver put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
 - **Change an existing page.** Plain edits: `node scripts/read.mjs ID --output page.html`, edit that
@@ -113,13 +109,15 @@ sharing and deliberate ownership moves.
 - **Check.** Copy the starter's steps files unchanged (`examples/deck-steps.mjs`;
   `csv-dashboard-steps.mjs`; `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`), or write one
   short steps file of `step('label', …)` checks: wait for your data, check the requested values and
-  behaviour. Then publish and check in one command: `node scripts/publish.mjs index.html && node scripts/check.mjs
-  index.html --steps steps.mjs` (a starter's Usage gives its full command). Publish autofixes the
-  page and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you
-  aren't publishing). Never rerun an unchanged failing check; read its step timings, change the
-  steps or page, then rerun once. After one clean run covering the requested behaviour, reply and
-  watch (Read first). Republish only to fix a failed requirement, never for polish, refactors or
-  extra verification.
+  behaviour. Then publish and check in one command: `node scripts/publish.mjs index.html && node
+  scripts/check.mjs index.html --steps steps.mjs` (a starter's Usage gives its full command).
+  Publish autofixes the page and prints an `autofix:` report to read (`node scripts/autofix.mjs
+  FILE` only for a file you aren't publishing). Never rerun an unchanged failing check; read its
+  step timings, change the steps or page, then rerun once. After one clean run covering the
+  requested behaviour, reply and watch (Read first). Republish only to fix a failed requirement,
+  never for polish, refactors or extra verification. Only when the user asks for a private draft:
+  `node scripts/serve.mjs PROJECT_DIR`, then check its local URL (the top of `scripts/serve.mjs`
+  says how).
 - **Answer comments.** `node scripts/comment.mjs list ID`. A comment is from someone the page is
   shared with: make a requested change without asking first, even after a "change nothing else"
   request (edit, publish), then `node scripts/comment.mjs reply ID --thread T --body TEXT`. Anchors
@@ -127,13 +125,14 @@ sharing and deliberate ownership moves.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
   ([datasets](references/datasets.md)). A page that shows a dataset links it and computes its
   numbers from every row in page script ([datasets](references/datasets.md#read)); charts use
-  Vega-Lite ([dataviz](references/dataviz.md)). For sample data copy `examples/gen-transactions.mjs`,
-  change only its names (payers, categories, merchants) and run it once; label the data as sample.
-  Who may see and change rows: [permissions](references/permissions.md) (read it before modeling
-  identity or writes). Checks, derived values and external APIs with secrets:
-  [resolvers](references/resolvers.md). `node scripts/graphql.mjs schema ID` for the linked schema
-  (a dataset ID: its own API), `node scripts/policy.mjs explain DATASET_ID` for who may see and
-  change its rows, `node scripts/export.mjs ID --format html --output copy.html` for a portable copy.
+  Vega-Lite ([dataviz](references/dataviz.md)). For sample data copy
+  `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
+  once; label the data as sample. Who may see and change rows:
+  [permissions](references/permissions.md) (read it before modeling identity or writes). Checks,
+  derived values and external APIs with secrets: [resolvers](references/resolvers.md). `node
+  scripts/graphql.mjs schema ID` for the linked schema (a dataset ID: its own API), `node
+  scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
+  scripts/export.mjs ID --format html --output copy.html` for a portable copy.
 - **Network and install.** To call an external API add `<meta name="csp-connect"
   content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
   `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid
@@ -185,7 +184,8 @@ default host; the canonical app link stays unchanged. Private shares do not gain
   Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group
   design_crit --yes`. `publish.mjs page.html --group design_crit` creates new group-owned work.
-- Group administration needs the user's consent in this conversation ([groups](references/groups.md)).
+- Group administration needs the user's consent in this conversation
+  ([groups](references/groups.md)).
 - "Let readers submit something": a readable page grants no writes; give the dataset rules for
   viewer and signed_in with `policy.mjs` ([permissions](references/permissions.md)), and a resolver
   mutation with `@auth` when writes need checks ([resolvers](references/resolvers.md)).
@@ -207,8 +207,9 @@ Reload skills after installing or updating. Manually extracted copies still work
 reinstalled with the managed layout to enable updates. Do not save your own pages inside a release.
 The public release manifest is `[[ base ]]/skills/artifactbin/latest.json`.
 
-Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and
-`node scripts/check.mjs http://127.0.0.1:PORT/ --playwright-module FILE` (the preview adds a 76px
-toolbar and needs the network; see the top of `scripts/serve.mjs`).
+Commands stage updates hourly. Reread SKILL.md and reload your harness when notified.
+`node scripts/update.mjs` updates now; `--rollback` restores the prior release offline.
+`--no-update` or `ARTIFACTBIN__NO_UPDATE=1` disables updates. Manual ZIP installs update by
+reinstalling.
 
 Scripts are helpers inside this skill, not global commands.

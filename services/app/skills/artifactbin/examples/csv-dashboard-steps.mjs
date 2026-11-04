@@ -31,4 +31,5 @@ await step(PLACEHOLDERS_OK?'no stray text outside main':'no [placeholders] or st
   if(PLACEHOLDERS_OK)return;
   const left=await page.evaluate(()=>[document.title,document.querySelector('main')?.textContent
     ??''].some(text=>/\[[^\]]*[a-z][^\]]*\]/i.test(text)));
-  if(left)throw Error('starter text left in the page or <title>: replace every [bracketed] part');});
+  if(left)throw Error('starter text left in the page or <title>: replace every [bracketed]'+
+    ' part');});

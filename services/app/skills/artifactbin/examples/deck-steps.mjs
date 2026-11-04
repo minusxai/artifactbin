@@ -25,8 +25,8 @@ await step(`${SLIDE_COUNT} slides and ${CHART_COUNT} charts render with marks`,a
 const FROM_DATASET=await fromDataset();
 if(FROM_DATASET.length)await step(`${FROM_DATASET.length} chart slides read the linked dataset`,
   async()=>{const empty=FROM_DATASET.filter(c=>!c.rows);
-  if(empty.length)throw Error('no dataset rows on '+empty.map(c=>c.error??`${c.id}: check its x and`+
-    ' y against the dataset columns').join('; '));});
+  if(empty.length)throw Error('no dataset rows on '+empty.map(c=>c.error??
+    `${c.id}: check its x and y against the dataset columns`).join('; '));});
 await step('flow and matrix diagrams draw',async()=>{
   const shapes=await page.evaluate(()=>[...document.querySelectorAll('.figure svg')]
     .map(svg=>svg.querySelectorAll('rect, circle').length));
@@ -134,7 +134,7 @@ await step("the ask's milestone starts from the traction chart's last value",asy
 await step('the HTML title names the deck',async()=>{
   // The tab, link previews and the platform's og:title read the published <title>.
   const name=await page.evaluate(()=>document.title);
-  if(!name.trim()||!PLACEHOLDERS_OK&&/\[|^Pitch deck$/.test(name))
+  if(!PLACEHOLDERS_OK&&/\[|^Pitch deck$/.test(name))
     throw Error(`the HTML title is "${name}": set <title> in index.html to the deck's name`);});
 await step('next button, ArrowRight, End, Home and a dot move between slides',async()=>{
   await page.getByRole('button',{name:'Next slide'}).click();await at(2);

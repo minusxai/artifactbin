@@ -311,16 +311,17 @@ it('summarizes duplicate and unstable data-af-id evidence without overstating ei
  const clean=checkDigest({ok:true,...summarizeCheck([{...base,ids:{total:3,duplicates:0,items:[]},idStability:{checked:false,created:0}}])},'qa.json');
  expect(clean).not.toMatch(/warning|duplicate/i);expect(clean).toContain('clean pass');
 });
-it('teaches script-created element IDs in the main steps and no longer names data-af="meta"',async()=>{
+it('teaches script-created element IDs once, in runtime.md, linked from SKILL.md, and no longer names data-af="meta"',async()=>{
  const {readFile}=await import('node:fs/promises');
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
  expect(skill).not.toContain('data-af="meta"');
  expect(skill).toContain('data-af="state"');
  expect(skill).toContain('artifactbin:design-system');
- const steps=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
- expect(steps).toContain('afId');expect(steps).toContain('references/runtime.md#dynamic-elements-and-comments');
+ // One data-af-id rule (rulings H8): SKILL.md links it and restates none of it.
+ expect(skill).toContain('references/runtime.md#dynamic-elements-and-comments');expect(skill).not.toContain('afId');
  const runtime=await readFile(new URL('../../../skills/artifactbin/references/runtime.md',import.meta.url),'utf8');
- expect(runtime).toContain('## Dynamic elements and comments');
+ expect(runtime).toContain('## Dynamic elements and comments');expect(runtime).toContain('`<list>-<record id>-<role>`');
+ expect(runtime).toContain("item.dataset.afId='garden-job-'+job.id;");
 });
 it('publish --group resolves the group first and sends an explicit destination only when you can edit it',async()=>{
  const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');

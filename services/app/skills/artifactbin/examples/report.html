@@ -7,6 +7,8 @@ Usage: cp examples/report.html index.html; replace every [bracketed] part and th
   sections' text with yours (keep the CSS, JS and layout); write steps.mjs for the requested
   content and controls; then node scripts/publish.mjs index.html && node scripts/check.mjs
   index.html --steps steps.mjs
+Gotchas: the route drawing is an illustration, not a chart: figures from data belong in a page
+  started from csv-dashboard.html. Check desktop and 390px widths and every control by keyboard.
 Built with: one HTML page in semantic HTML and CSS; an inline SVG illustration; a disclosure
   whose open state is kept per viewer in @afbin/apollo local state.
 -->
@@ -37,8 +39,8 @@ main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!
 </head><body><main>
 <p class="muted">[Field report · illustrative pilot]</p>
 <h1 class="t-display-xl">[A cooler walk home]</h1>
-<p class="lead">[Three small planting changes could make the route between the library and the garden
-easier to walk in summer.]</p>
+<p class="lead">[Three small planting changes could make the route between the library and the
+garden easier to walk in summer.]</p>
 <div class="layout"><article>
 <section class="rule"><h2 class="t-title">Start where people pause</h2>
 <p>The sample route has a long exposed stretch followed by a shaded bench. This proposal puts new
