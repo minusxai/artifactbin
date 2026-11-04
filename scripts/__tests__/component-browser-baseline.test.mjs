@@ -633,21 +633,48 @@ it('proves used font bytes through imported stylesheet URLs rather than losing t
 
 it('clicks the exact retained authored target when the browser exposes no native role',()=>{const frame={getByRole:vi.fn(),locator:vi.fn().mockReturnValue('retained-target')};expect(actionTarget(frame,{role:'button',name:'Summary',authoredId:'summary-1'})).toBe('retained-target');expect(frame.locator).toHaveBeenCalledWith('[id=\"summary-1\"]');expect(frame.getByRole).not.toHaveBeenCalled();});
 
+/**
+ * Settles a capture whose only clock is its own step bounds. Its file writes run for real while virtual time moves
+ * only to the capture's next pending timer (every mocked step here settles in microtasks, so a pending timer is a
+ * blocked step), so a 20ms bound fires at virtual 20ms however slow the runner is. A real wall-clock deadline far
+ * above any write ends a capture that never sets a bound at all.
+ */
+async function settleOnVirtualClock(start,missing){
+ vi.useFakeTimers({toFake:['setTimeout','clearTimeout','Date']});
+ try{
+  const began=Date.now(),deadline=performance.now()+10_000;
+  const settled=start().then(()=>Error('capture resolved'),error=>error);
+  for(;;){
+   const error=await Promise.race([settled,new Promise(resolve=>setImmediate(resolve))]);
+   if(error)return {error,virtualMs:Date.now()-began};
+   if(performance.now()>deadline)return {error:Error(missing),virtualMs:Date.now()-began};
+   if(vi.getTimerCount())await vi.advanceTimersToNextTimerAsync();
+  }
+ }finally{vi.useRealTimers();}
+}
+
 it('bounds a stuck readiness hook, records its phase, and closes the context to cancel its poll',async()=>{
- const directory=await setup();let cancel,closed=0;
+ const directory=await setup();let cancel,closed=0,run;
  const blocked=new Promise((_,reject)=>{cancel=()=>reject(Error('context closed'));});
  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async()=>({text:'Present',controls:[],rows:[],overflow:0})};
  const browser={newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{closed++;cancel();}})};
- const run=captureBrowserBaseline({browser,mount:async()=>({frame,ready:()=>blocked}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,readyTimeoutMs:20,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded',states:[{id:'initial',actions:[]}]}]});
- try{const error=await Promise.race([run.catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(Error('missing bounded readiness')),200))]);expect(error.message).toContain('Reader ready exceeded 20ms');expect(closed).toBe(1);const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'ready'});}finally{cancel();await run.catch(()=>{});}
+ try{
+  const {error,virtualMs}=await settleOnVirtualClock(()=>run=captureBrowserBaseline({browser,mount:async()=>({frame,ready:()=>blocked}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,readyTimeoutMs:20,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded',states:[{id:'initial',actions:[]}]}]}),'missing bounded readiness');
+  expect(error.message).toContain('Reader ready exceeded 20ms');expect(virtualMs).toBe(20);expect(closed).toBe(1);
+  const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'ready'});
+ }finally{cancel();await run?.catch(()=>{});}
 });
 it('bounds an unresolved font evaluation and retains the specific camera phase',async()=>{
- const directory=await setup();let cancel,closed=0;
+ const directory=await setup();let cancel,closed=0,run;
  const blocked=new Promise((_,reject)=>{cancel=()=>reject(Error('context closed'));});
  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Present',controls:[],rows:[],overflow:0}:blocked};
  const browser={newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{closed++;cancel();}})};
- const run=captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded-font',states:[{id:'initial',actions:[]}]}]});
- try{const error=await Promise.race([run.catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(Error('missing bounded font wait')),200))]);expect(error.message).toContain('Reader fonts-ready exceeded 20ms');expect(closed).toBe(1);const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'fonts-ready'});}finally{cancel();await run.catch(()=>{});}
+ try{
+  const {error,virtualMs}=await settleOnVirtualClock(()=>run=captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded-font',states:[{id:'initial',actions:[]}]}]}),'missing bounded font wait');
+  // fonts-ready's 20ms bound, then the failure font-status probe's own 20ms bound on the same stuck frame.
+  expect(error.message).toContain('Reader fonts-ready exceeded 20ms');expect(virtualMs).toBe(40);expect(closed).toBe(1);
+  const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'fonts-ready'});
+ }finally{cancel();await run?.catch(()=>{});}
 });
 
 it('proves fonts on visible text inside display-contents identities without counting hidden text',async()=>{

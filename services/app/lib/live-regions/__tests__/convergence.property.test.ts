@@ -6,8 +6,13 @@
  * deleted (I4, strict). The long run is convergence.soak.test.ts, full CI only.
  */
 import { it } from 'vitest';
-import { checkConvergence } from './property';
+import { checkConvergence, runScenario } from './property';
 
 it('converges and keeps text under 15 random interleavings of up to 30 operations', () => {
   checkConvergence(15, 30);
+});
+
+// Shrunk counterexamples from the soak, replayed exactly on every run.
+it('soak seed 660187254: one editor splits the start of the quote, then the end of the list item before it', () => {
+  runScenario({ clients: 2, region: 0, ops: [{ op: 'split', client: 1, at: 5963 }, { op: 'split', client: 1, at: 9998 }] });
 });

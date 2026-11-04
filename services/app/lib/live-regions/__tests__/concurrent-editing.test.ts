@@ -413,6 +413,16 @@ describe('ids', () => {
     expect(room.invariants()).toBe(`<p></p><p data-af-id="${id}">Hello</p>`);
   });
 
+  it('Enter at the end of a block before an empty one: the new line end goes between them, and typing in the empty block stays there', () => {
+    const [room, A, B] = open('<ul><li>deep</li></ul><p></p><p>tail</p>');
+    const empty = idsOf(room.html())[3];
+    A.select(A.blockStart(1)).type('X');
+    B.select(B.find('deep', { after: true })).key('Enter');
+    const html = room.invariants();
+    expect(bare(html)).toBe('<ul><li><p>deep</p></li><li><p></p></li></ul><p>X</p><p>tail</p>');
+    expect(html).toContain(`<p data-af-id="${empty}">X</p>`);
+  });
+
   /** Copies blocks `from`..`to` (inclusive) through the editor's own clipboard serializer. */
   const copyBlocks = (client: Client, from: number, to: number) => client.view.serializeForClipboard(client.state.doc.slice(client.blockStart(from) - 1, client.blockStart(to, true) + 1)).dom.innerHTML;
 
