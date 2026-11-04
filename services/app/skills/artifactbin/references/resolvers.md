@@ -96,7 +96,7 @@ It returns `data`; refusals throw an Error with `code` (`permission_denied`,
 ## caps.sql: read-only SQL
 
 `await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs, window functions,
-`date_trunc`...) over the linked datasets as the caller and returns `{columns, rows}`. Data changes only through `caps.query` mutations. A single-table dataset
+`date_trunc`...) over the linked datasets as the caller and returns `{columns, rows}`. A single-table dataset
 is the table `<link>`, a multi-table one `<link>.<table>`; each has `_id`. You see what `caps.query`
 would; a dataset whose rule for you lacks `allow_aggregations` refuses the
 call. Bind values as `$name`:
@@ -118,7 +118,8 @@ per query, 20 s total, 4 MiB out; one of the 32 requests.
 `db.query(sql, [params])` (`$1`; MySQL `?`) gives `{rows, columns, command, count}`; then `db.end()`.
 BIGINT and DECIMAL are strings. Your code never sees the password; **use a read-only database
 user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
-Databases that only accept listed IPs: get them from `GET /api/outbound-ips` and tell the owner to allow them (or add them yourself if you have access to their cloud).
+RDS, Cloud SQL and Supabase need `ca` (the provider's CA bundle, PEM) in the connection (Resolvers → Advanced).
+IP allowlists: the owner allows `GET /api/outbound-ips` (or you do, with access to their cloud).
 
 ## @auth roles
 

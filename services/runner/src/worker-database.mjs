@@ -4,6 +4,7 @@
 // a handle, rows and redacted errors. TLS runs here, end to end to the database; the controller forwards ciphertext.
 import { isIP } from "node:net";
 import { Duplex } from "node:stream";
+import { describeDatabaseError } from "./database-errors.mjs";
 
 /** RESOLVER_DATABASE_OPERATION in services/contracts (this file runs without the repository's packages). */
 export const DATABASE_OPERATION = "artifactbin.pageBackend.db";
@@ -73,6 +74,8 @@ export function createDatabaseHost({ send, call }) {
         opened_() { this.opened = true; this.wake(); }
         data(payload) {
             const bytes = Buffer.from(String(payload), "base64");
+            // The server's first byte, before any TLS: postgres.js reads its answer to SSLRequest ('S' or 'N') itself.
+            this.firstByte ??= bytes[0];
             this.pendingAck += bytes.length;
             if (this.push(bytes)) this.flushAck();
         }
@@ -111,23 +114,6 @@ export function createDatabaseHost({ send, call }) {
         else if (msg.type === "tunnel_closed") socket.closed(typeof msg.error === "string" ? msg.error : null);
     }
 
-    /**
-     * One line, bounded, the password removed; a tunnel refusal is its bare code, a server error
-     * `database_error: SQLSTATE message`, anything else `database_error: CODE` (a TLS refusal is Node's code).
-     */
-    function describe(error, secrets) {
-        let text;
-        if (error?.tunnel) text = String(error.code);
-        else if (error?.name === "PostgresError") text = `database_error: ${error.code ?? ""} ${error.message}`;
-        // mysql2: a server error carries its SQLSTATE; never `error.sql`, the statement.
-        else if (typeof error?.sqlState === "string" && typeof error.sqlMessage === "string") text = `database_error: ${error.sqlState} ${error.sqlMessage}`;
-        // mysql2 overwrites a TLS failure's code with HANDSHAKE_SSL_ERROR: a name mismatch (it carries the checked
-        // host and certificate) is reported by Node's code, as postgres.js reports it; others by OpenSSL's reason.
-        else if (error?.code === "HANDSHAKE_SSL_ERROR") text = `database_error: ${error.reason !== undefined && error.cert ? "ERR_TLS_CERT_ALTNAME_INVALID" : `HANDSHAKE_SSL_ERROR ${error.message}`}`;
-        else text = `database_error: ${error?.code && typeof error.code === "string" ? error.code : String(error?.message ?? "failed")}`;
-        for (const secret of secrets) if (secret) text = text.split(secret).join("[redacted]");
-        return text.split(/\r?\n/, 1)[0].slice(0, 300);
-    }
     const plain = (value) => value instanceof Uint8Array ? new Uint8Array(value) : Array.isArray(value) ? value.map(plain) : value;
     const plainRow = (row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, plain(v)]));
     const tlsOf = (c) => c.tls === "disable" ? null : { rejectUnauthorized: true, minVersion: "TLSv1.2", ...(c.ca ? { ca: c.ca } : {}) };
@@ -135,10 +121,13 @@ export function createDatabaseHost({ send, call }) {
     /** postgres.js: one connection (max 1), lazily connected by the first query, reconnected after a loss. */
     function postgresClient(postgres, c) {
         const tls = tlsOf(c);
+        // The connection's socket: a server without TLS answers SSLRequest 'N', and postgres.js then starts TLS anyway,
+        // which the server drops (a reset like any other), so the refusal is known by that byte.
+        let current = null;
         const sql = postgres({
             host: c.host, port: c.port, database: c.database, username: c.user, password: c.password,
             ssl: tls ? { ...tls, host: c.host, ...(isIP(c.host) ? {} : { servername: c.host }) } : false,
-            socket: () => tunnel(c.grant, c.host, c.port).ready,
+            socket: () => (current = tunnel(c.grant, c.host, c.port)).ready,
             // One connection per handle, so statements on a handle share a session (and a transaction).
             max: 1, idle_timeout: null, max_lifetime: null, connect_timeout: 10, fetch_types: false,
             // Its notice default prints to stdout, which is the controller link.
@@ -147,7 +136,10 @@ export function createDatabaseHost({ send, call }) {
         });
         return {
             async query(text, params) {
-                const result = await sql.unsafe(text, params);
+                const result = await sql.unsafe(text, params).catch((error) => {
+                    if (tls && current?.firstByte === 78 && error && typeof error === "object" && !error.tunnel) error.tlsUnsupported = true;
+                    throw error;
+                });
                 return { rows: Array.from(result, plainRow), columns: (result.columns ?? []).map((c) => c.name), command: result.command ?? null, count: result.count ?? null };
             },
             end: () => sql.end({ timeout: 1 }),
@@ -240,7 +232,7 @@ export function createDatabaseHost({ send, call }) {
             if (params !== undefined && params !== null && !Array.isArray(params)) throw Error("invalid_request: params must be an array");
             try {
                 return await client.client.query(text, params ?? []);
-            } catch (error) { throw Error(describe(error, client.secrets)); }
+            } catch (error) { throw Error(describeDatabaseError(error, client.secrets)); }
         },
         async end(id) {
             const client = clients.get(id);
