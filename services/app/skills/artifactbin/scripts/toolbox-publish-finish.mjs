@@ -42,7 +42,7 @@ const companion=output+'.af.json',write=inPlace?atomicWrite:exclusive;await writ
     JSON.stringify({kind:'data-baseline',schema:1,server:saved.server,id:receipt.id,version:
     receipt.version,state:receipt.state,format:receipt.format,...(body.file?{contentType:
     body.file.contentType,filename:body.file.filename}:{}),sourceFile:path.basename(output),
-    historical:false},null,2)+'\n');pair={source:output,baseline:companion};
+    historical:false,sha256:hash(bytes)},null,2)+'\n');pair={source:output,baseline:companion};
  }
 const result={id:receipt.id,url:receipt.url,...(receipt.user_page_url?{user_page_url:
   receipt.user_page_url}:{}),version:receipt.version,journal,...pair,...(

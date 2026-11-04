@@ -44,7 +44,6 @@ const commands = {
       strict: flag('boolean'),
       create: flag('boolean'),
       artifact: flag(),
-      baseline: flag(),
       request: flag(),
       resume: flag()
     }
@@ -84,10 +83,11 @@ const commands = {
   comment: {
     sub: {
       list: {status: flag(), cursor: flag(), limit: flag()},
-      add: {anchor: flag(), 'body-file': flag(), request: flag(), resume: flag()},
+      add: {anchor: flag(), body: flag(), 'body-file': flag(), request: flag(), resume: flag()},
       reply: {
         thread: flag(),
         'expected-revision': flag(),
+        body: flag(),
         'body-file': flag(),
         resolve: flag('boolean'),
         request: flag(),
@@ -96,6 +96,7 @@ const commands = {
       edit: {
         comment: flag(),
         'expected-revision': flag(),
+        body: flag(),
         'body-file': flag(),
         request: flag(),
         resume: flag()

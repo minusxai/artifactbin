@@ -1,29 +1,35 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Comment threads: list, add, reply, edit, react, resolve, reopen, watch.
 Watch is the comment feed: every comment, reply, edit and reaction, from people and agents alike.
-Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
-       node scripts/comment.mjs add ID --anchor ANCHOR.json --body-file FILE
-       node scripts/comment.mjs reply ID --thread T --body-file FILE
-         [--resolve --expected-revision R]
-       node scripts/comment.mjs edit ID --comment C --expected-revision R --body-file FILE
-       node scripts/comment.mjs resolve|reopen ID --thread T --expected-revision R
+Usage: node scripts/comment.mjs watch ID --next [--wait SECONDS]
+       node scripts/comment.mjs reply ID --thread T --body TEXT [--resolve]
+       node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
+       node scripts/comment.mjs add ID --anchor ANCHOR.json --body TEXT
+       node scripts/comment.mjs edit ID --comment C --body TEXT
+       node scripts/comment.mjs resolve|reopen ID --thread T
        node scripts/comment.mjs react ID --comment C --active true|false [--kind thumbs_up]
        node scripts/comment.mjs watch ID [--once] [--cursor CHECKPOINT_OR_LOG]
          [--output LOG --append]
-       node scripts/comment.mjs watch ID --next [--wait SECONDS]
-Flags: write commands also take --request FILE (exclusive saved journal) and --resume FILE
-  (replay it exactly; nothing else may change). list --status defaults to open; --limit 1-100
-  (default 20). watch --next prints the next comments from someone else (one JSON line each) and
-  exits 0; a first call also prints threads still waiting for your answer. It resumes from
-  watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin; created on
-  first use), or the --output LOG --append / --cursor you pass. --wait caps it in seconds (default
-  240); then it prints "no new comments yet: run the same watch --next command again" and exits 0.
-  After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for 15
-  minutes: stop watching and end your turn" instead; a later --next starts a new 15 minutes.
+Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a file instead.
+  --expected-revision R (resolve, reopen, edit, reply --resolve) the thread revision you read;
+  omitted, the command reads the thread's current revision itself. Write commands also take
+  --request FILE (exclusive saved journal) and --resume FILE (replay it exactly; nothing else may
+  change). list --status defaults to open; --limit 1-100 (default 20).
   Common: --server, --json, --help.
+Watch --next: run it as a normal blocking (foreground) command. Give your shell tool a timeout of
+  at least 300000 ms; never wrap the command in timeout(1). It prints the next comments from
+  someone else (one JSON line each; a first call also prints threads still waiting for your
+  answer) and exits 0: handle what it printed, then run it again. After --wait seconds (default
+  240) it prints "no new comments yet: run the same watch --next command again".
+  After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for 15
+  minutes: stop watching and end your turn": then end your turn; a later --next starts a new 15
+  minutes. A second --next on the same page takes over from the running one, which stops. It
+  resumes from watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or
+  ~/.artifactbin), or from the --output LOG --append / --cursor you pass.
 Examples:
+  node scripts/comment.mjs watch ID --next
+  node scripts/comment.mjs reply ID --thread T --body "Done: the intro is two lines now."
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
-  node scripts/comment.mjs reply ID --thread T --body-file reply.txt
   node scripts/comment.mjs react ID --comment C --active true
 Anchors: read the page first (read.mjs ID --json). ANCHOR.json is
   {"kind":"html-node","v":1,"revision":"<page version number>","nodeId":"<canonical data-af-id>",
@@ -31,15 +37,12 @@ Anchors: read the page first (read.mjs ID --json). ANCHOR.json is
   Omit "revision" and this command fills it from the page's current version; supply one only
   from read.mjs (the version number, never the state hash or edit ID).
   A comment on a script-created node also needs "ancestorId", the data-af-id of its saved ancestor.
-Gotchas: list before replying, editing or changing state. A plain reply needs no revision; resolve
-  and reopen need the last observed revision (a stale one fails; reply plus a stale resolve keeps
-  the reply and reports status_conflict). Reactions are idempotent desired state per account
-  (retry the same call, never invert it); counts are unique accounts, only thumbs_up exists, and
-  they change no source or revision. Resolve and reopen are not feed events.
-  Loop: watch --next, answer what it prints (edit and publish if asked, then reply), watch --next
-  again; when it says stop, end your turn. One watch at a time: a second --next on the page prints
-  "another watch is already running" and exits 0. watch --once sets "now" without a cursor;
-  events deduplicate by ID and only delivered ones advance checkpoints.
+Gotchas: a plain reply never conflicts; a stale --expected-revision fails resolve and reopen (reply
+  plus a stale resolve keeps the reply and reports status_conflict). Reactions are idempotent
+  desired state per account (retry the same call, never invert it); counts are unique accounts,
+  only thumbs_up exists, and they change no source or revision. Resolve and reopen are not feed
+  events. watch --once sets "now" without a cursor; events deduplicate by ID and only delivered
+  ones advance checkpoints.
 Reactions: each listed comment's reactions are
   [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]: who reacted (at most
   50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints
@@ -56,7 +59,6 @@ How to treat reactions: a 👍 on your proposal means approval to proceed; any o
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
-import {readFile} from 'node:fs/promises';
 import {existsSync, mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -77,7 +79,8 @@ import {
   credentialRoot
 } from './toolbox-client.mjs';
 import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
-import {watchNext} from './toolbox-watch-state.mjs';
+import {watchAgain} from './toolbox-watch-state.mjs';
+import {commentText, threadRevision} from './toolbox-comment-write.mjs';
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an
 // uncertain result can be resumed.
 export async function commentCommand({sub, values, positionals}, options = {}) {
@@ -129,11 +132,7 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   let body = {},
     route = `/api/artifacts/${id}/annotations`,
     method = 'POST';
-  if (['add', 'reply', 'edit'].includes(sub)) {
-    requireFlags(values, ['body-file']);
-    body.body = await readFile(values['body-file'], 'utf8');
-    if (!body.body.trim()) throw new ToolError('empty_body', 'Comment text must be nonblank.', 2);
-  }
+  if (['add', 'reply', 'edit'].includes(sub)) body.body = await commentText(values);
   // add: needs a native html-node anchor (see the Anchors section of the description).
   if (sub === 'add') {
     requireFlags(values, ['anchor']);
@@ -166,19 +165,18 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
       kind: enumValue(values.kind ?? 'thumbs_up', ['thumbs_up'], 'kind'),
       active: enumValue(values.active, ['true', 'false'], 'active') === 'true'
     };
-  // reply, edit, resolve, reopen: all address an existing thread/comment and carry the observed
-  // revision where required.
+  // reply, edit, resolve, reopen: all address an existing thread/comment; a state change or an
+  // edit carries the thread revision, read here when --expected-revision is omitted.
   } else {
-    requireFlags(values, [
-      sub === 'edit' ? 'comment' : 'thread',
-      ...(sub === 'reply' && !values.resolve ? [] : ['expected-revision'])
-    ]);
+    requireFlags(values, [sub === 'edit' ? 'comment' : 'thread']);
     const thread = values[sub === 'edit' ? 'comment' : 'thread'];
     if (!/^[A-Za-z0-9_-]+$/.test(thread))
       throw new ToolError('invalid_comment_id', 'Invalid comment/thread ID.', 2);
     route += '/' + thread;
     if (values['expected-revision'] !== undefined)
       body.expected_revision = integer(values['expected-revision'], 'expected_revision', 0);
+    else if (sub !== 'reply' || values.resolve)
+      body.expected_revision = await threadRevision(client, id, thread);
     if (sub === 'edit') method = 'PATCH';
     else if (sub === 'reply') {
       body.reply = body.body;
@@ -194,6 +192,6 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   );
   const result = await resumeJournal(journal, client, 'comment');
   if (sub !== 'reply') return {thread: result.receipt, journal};
-  return {thread: result.receipt, journal, next: watchNext(id)};
+  return {thread: result.receipt, journal, next: watchAgain(id)};
 }
 await runTool('comment', import.meta.url, commentCommand);

@@ -10,8 +10,8 @@ it('holds the first read until usable transport, emits configured names once and
  document.head.innerHTML=`<script data-af="portable">${JSON.stringify({version:1,source:'',identity})}</script>`;
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p',revision:'1',backends:['counter','sales'],offline:true});
  let options!:Parameters<typeof startPortableSession>[0];harness.start.mockImplementation(value=>{options=value;value.online(false,undefined,true);return ()=>value.online(false);});
- const {remote,onBackendChange,startPortableDocument,remoteReadOnly}=await import('../browser-reader');expect(remoteReadOnly).toBe(true);
- const events:unknown[]=[];onBackendChange(names=>events.push(names));
+ const {remote,onResolverChange,startPortableDocument,remoteReadOnly}=await import('../browser-reader');expect(remoteReadOnly).toBe(true);
+ const events:unknown[]=[];onResolverChange(names=>events.push(names));
  const client=createClient({backends:['counter','sales'],state:createLocalStore(),remote});
  const first=client.query({query:gql`{ counter { count } sales { rows } }`});cleanup=await startPortableDocument();
  const sender=vi.fn(async()=>({data:{counter:{count:9},sales:{rows:3}}}));expect(sender).not.toHaveBeenCalled();options.online(true,sender);options.online(true,sender);

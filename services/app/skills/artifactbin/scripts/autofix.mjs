@@ -9,8 +9,9 @@ Examples:
   node scripts/autofix.mjs ./project/index.html
   node scripts/autofix.mjs ./project/index.html --dry-run --json
 Gotchas: HTML files only. The file is rewritten atomically only when something was fixed. Exit 1
-  means problems remain for you to fix (for example duplicate ids); fixes already made stay
-  written. Run it yourself only for a file you are not publishing or serving.
+  means problems remain for you to fix (for example a script syntax error); fixes already made
+  stay written. Warnings (a repeated HTML id, ignored install metadata) never fail it. Run it
+  yourself only for a file you are not publishing or serving.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
@@ -41,15 +42,17 @@ export function localExists(file, root, mapped = () => false) {
   };
 }
 // Run the autofix rules over one HTML source; `exists` lets a rule tell a real local file from a
-// missing one.
-export function autofixSource(source, {file, root, mapped}) {
-  return autofixHtml(source, {exists: localExists(file, root ?? path.dirname(file), mapped)});
+// missing one, and `newPage` (no companion yet) drops hand-written data-af-ids.
+export function autofixSource(source, {file, root, mapped, newPage = false}) {
+  const exists = localExists(file, root ?? path.dirname(file), mapped);
+  return autofixHtml(source, {exists, newPage});
 }
 /** Full detail for --json and saved results; the printed report is capped. */
 export const autofixDetail = (result, report) => ({
   clean: !result.fixes.length && !result.problems.length,
   fixes: result.fixes,
   problems: result.problems,
+  warnings: result.warnings,
   routine: result.routine,
   ...(report ? {report} : {})
 });

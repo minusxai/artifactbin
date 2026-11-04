@@ -8,9 +8,9 @@ it('the emitted author module watches backend results with explicit loading with
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
  vi.stubGlobal('addEventListener',()=>{});vi.stubGlobal('removeEventListener',()=>{});
  let finish!:(value:unknown)=>void;
- const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onBackendChange(){},onResolverChange(){},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");},watchUploadContext:()=>({unsubscribe(){}}),bindFileUpload:()=>()=>{}};
+ const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onResolverChange(){},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");},watchUploadContext:()=>({unsubscribe(){}}),bindFileUpload:()=>()=>{}};
  vi.stubGlobal('__builtWatchReader',fixture);
- const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onBackendChange,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
+ const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
  const readerUrl='data:text/javascript;base64,'+Buffer.from(reader).toString('base64');
  const source=assets.apollo.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(readerUrl));
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
@@ -24,4 +24,22 @@ it('the emitted author module watches backend results with explicit loading with
  expect(results.at(-1)).toEqual({data:{filter:'private',orders:{total:17}},loading:false});
  expect(runtime.readViewerDocument()).toEqual({filter:'private'});
  subscription.unsubscribe();
+});
+
+it('a published page that calls onBackendChange still subscribes through the built runtime (live-page compatibility)',async()=>{
+ const assets=await buildHtmlAssets();
+ vi.stubGlobal('document',{querySelector:()=>null});vi.stubGlobal('location',{hash:''});
+ vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
+ vi.stubGlobal('addEventListener',()=>{});vi.stubGlobal('removeEventListener',()=>{});
+ const listeners:Function[]=[];
+ const fixture={config:{pageId:'legacy-name',revision:'1',backends:['orders'],initialState:{}},remote:{online:()=>true,execute:async()=>({data:{}})},startFrameBridge(){},onResolverChange(listener:Function){listeners.push(listener);return {unsubscribe(){}};},remoteReadOnly:false,uploadFile:()=>{throw Error('unused');},watchUploadContext(){},bindFileUpload(){}};
+ vi.stubGlobal('__legacyNameReader',fixture);
+ const reader='const r=globalThis.__legacyNameReader;export const {config,remote,startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
+ const source=assets.apollo.replace(/(["'])@afbin\/reader\1/g,JSON.stringify('data:text/javascript;base64,'+Buffer.from(reader).toString('base64')));
+ const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ const changed:unknown[]=[];
+ expect(runtime.onBackendChange).toBe(runtime.onResolverChange);
+ runtime.onBackendChange((names:string[])=>changed.push(names)).unsubscribe();
+ listeners.at(-1)!(['orders']);
+ expect(changed).toEqual([['orders']]);
 });

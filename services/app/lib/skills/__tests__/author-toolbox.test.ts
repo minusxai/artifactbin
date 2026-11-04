@@ -51,7 +51,7 @@ it('classifies unreadable successful write bodies as unknown without automatic r
 it('names what a version conflict changed and the one re-read step, and never claims a newer version for another 409',async()=>{
  const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const refused=(body:Record<string,unknown>)=>makeClient('https://example.test',{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body,{status:409})}).request('/api/artifacts/PAGE12',{method:'PUT',body:{},unsafe:true}).catch((error:any)=>error);
- const step='since your read. Run read.mjs ID --output fresh.html, reapply your edits to that file and publish it; do not resume this journal.';
+ const step='since your read. Run read.mjs ID --output page.html, reapply your edits to that file and publish it; do not resume this journal.';
  expect(await refused({error:'version_conflict',currentVersion:4,changed:'content'})).toMatchObject({code:'version_conflict',exit:4,recovery:`A newer version was published ${step}`});
  expect(await refused({error:'version_conflict',currentVersion:3,changed:'details'})).toMatchObject({recovery:`The title, description or metadata changed ${step}`});
  const other=await refused({error:'policy_locked',detail:'owner only'});
@@ -148,25 +148,26 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(passed).toMatch(/full result qa\.json/);
  expect(passed).toMatch(/390x844: no errors; fits; contrast ok; task \{"total":42\}/);
  expect(passed).toMatch(/unverified: visual appearance/);
- // Screenshot paths stay in the saved file; agents without image input otherwise try to open them.
- expect(passed).not.toContain('/tmp/390x844.png');
- // Only a fully clean pass tells the author they may stop.
- expect(passed).toMatch(/clean pass: write the reply with the link as text now, in this turn, then call comment.mjs/);
- // The watch ends itself after a quiet spell (comment.mjs): the digest names that stop, never "until the user stops you".
- expect(passed).toMatch(/watch ID --next \(again after every answer\) until it says stop; don't open qa JSON or/);
- expect(passed).not.toMatch(/until the user stops/);
+ // The digest names the screenshots it saved (M7).
+ expect(passed).toContain('  screenshots: /tmp/390x844.png');
+ // A clean pass of a published page ends with the Reply block and the watch line; this envelope has no reply facts (a local preview).
+ expect(passed).toContain('clean pass on the local preview: publish the page, then check the published page; its clean pass prints the Reply block.');
+ expect(passed).not.toMatch(/until the user stops|Verified:|Reply block \(/);
  const failed=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,pageErrors:['boom'],overflow:{viewport:390,content:512,fits:false},contrast:{checked:9,belowAA:2,unreadable:1,low:[{text:'Stop the loss',ratio:1.01,need:3}]},error:'Expected 7 labels'},{error:'session closed'}]},'qa.json');
  expect(failed).toContain('check check_failed: smoke failed');
  expect(failed).toMatch(/pageErrors 1: boom; overflow 512>390; contrast 2 below AA \(1 under 2:1; 1\.01:1 "Stop the loss".*\); task error: Expected 7 labels/);
  expect(failed).toContain('  session closed');
  // A guest run is labelled; a clean deck pass lists its slide images and says not to fetch them.
- const guestDeck=checkDigest({ok:true,code:'completed',smokePassed:true,slideLinks:['https://h/a/X/export?format=png&slide=1'],checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}}]},'qa.json');
- expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("  slide images: list them as printed; don't fetch them.\nReply block (copy as printed):");expect(guestDeck).toContain('\nSlide images:\nhttps://h/a/X/export?format=png&slide=1');expect(guestDeck).not.toMatch(/curl/);
- // A passing run lists exactly the step labels it proved, per viewport, and what it did not.
- const proved=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
- expect(proved).toContain('Verified: 390x844: target saves | guest 390x844: guest reads it');expect(proved).toContain('Not verified: anything not listed in Verified:, visual appearance, and sharing between two signed-in users');
- // One block for the reply to copy: what ran and what did not, never one without the other.
- expect(proved).toContain('Reply block (copy as printed):\nTested: 390x844: target saves | guest 390x844: guest reads it\nNot tested: anything not listed in Tested:, visual appearance');
+ const reply={id:'X',link:'https://h/a/X',builtWith:'one HTML page; Vega-Lite charts',permissions:[{id:'DATA12',name:'targets',lines:['Table public.targets','- Owner, editors: see and change everything.']}]};
+ const guestDeck=checkDigest({ok:true,code:'completed',smokePassed:true,reply,slideLinks:['https://h/a/X/export?format=png&slide=1'],checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}}]},'qa.json');
+ expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("  clean pass: nothing left to fix; don't open the qa JSON or fetch the slide images.\nReply block (send it as printed, up to the Next: line):\nhttps://h/a/X\n");expect(guestDeck).toContain('\nSlide images:\nhttps://h/a/X/export?format=png&slide=1\n');expect(guestDeck).not.toMatch(/curl/);
+ // A passing run lists exactly the step labels it proved, per viewport, and what it did not, inside ONE Reply block (H10/H11).
+ const proved=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
+ expect(proved).not.toContain('Verified');
+ expect(proved.slice(proved.indexOf('Reply block'))).toBe(['Reply block (send it as printed, up to the Next: line):','https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: anything not listed in Tested:, visual appearance, and sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','Next: when the whole request is done, send your reply and, in the same response, run node scripts/comment.mjs watch X --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).',''].join('\n'));
+ // Several linked datasets each name themselves before their read-back lines.
+ const two=checkDigest({ok:true,smokePassed:true,reply:{...reply,permissions:[...reply.permissions,{id:'DATA34',name:'rows',lines:['Table public.rows']}]},checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,verified:['a']}]});
+ expect(two).toContain('Who can do what:\ntargets (ref:DATA12):\nTable public.targets\n- Owner, editors: see and change everything.\nrows (ref:DATA34):\nTable public.rows\nNext:');expect(two).toContain('check completed: smoke passed\n');
  // A failed or flawed run points at the summary itself, as a pass does.
  expect(failed).toContain("fix the named slides/elements from this output; don't open qa JSON.");expect(passed).not.toContain('fix the named');
  // An overflow names the element that sticks out.
@@ -202,22 +203,23 @@ it('checks a published file by its paired page and refuses an unpublished one',a
   await writeFile(file+'.af.json',JSON.stringify({id:'PAGE12',server:'https://pages.example'}));
   // The pair supplies id and server, so the hosted request goes to that server for /a/PAGE12.
   const seen:string[]=[];
-  await checkCommand({values:{},positionals:[file]},{env:{ARTIFACTBIN_URL:'https://pages.example',ARTIFACTBIN_TOKEN:'t'},fetcher:async(input:any,init:any)=>{seen.push(String(input)+' '+(init?.body??''));throw Error('stop');}}).catch(error=>seen.push('error '+error.message));
+  await checkCommand({values:{},positionals:[file]},{env:{ARTIFACTBIN_URL:'https://pages.example',ARTIFACTBIN_TOKEN:'t'},retryDelays:[],fetcher:async(input:any,init:any)=>{seen.push(String(input)+' '+(init?.body??''));throw Error('stop');}}).catch(error=>seen.push('error '+error.message));
   expect(seen.some(entry=>entry.startsWith('https://pages.example/api/browser-sessions')&&entry.includes('/a/PAGE12'))).toBe(true);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
-it('replies without --expected-revision but still requires it to resolve or edit',async()=>{
+it('replies with text alone, and a resolve without --expected-revision reads the thread revision first',async()=>{
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-reply-')),calls:any[]=[],file=path.join(root,'body.md');await writeFile(file,'Thanks');
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return Response.json({id:'ann_root',revision:2,thread:[]});}};
+ const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});
+  return Response.json((init?.method??'GET')==='GET'?{annotations:[{id:'ann_root',revision:2,thread:[{id:'ann_root'}]}],next_cursor:null}:{id:'ann_root',revision:3,thread:[]});}};
  try{
   await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file},positionals:['PAGE12']},options);
   expect(calls[0].url).toBe('https://example.test/api/artifacts/PAGE12/annotations/ann_root');expect(JSON.parse(calls[0].body)).toEqual({reply:'Thanks'});
-  await expect(commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,resolve:true},positionals:['PAGE12']},options)).rejects.toThrow();
-  await expect(commentCommand({sub:'resolve',values:{thread:'ann_root'},positionals:['PAGE12']},options)).rejects.toThrow();
+  await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,resolve:true},positionals:['PAGE12']},options);
+  expect(calls[1].url).toMatch(/\/api\/artifacts\/PAGE12\/annotations\?status=all/);expect(JSON.parse(calls[2].body)).toEqual({reply:'Thanks',expected_revision:2,resolve:true});
   await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,resolve:true,'expected-revision':'3'},positionals:['PAGE12']},options);
-  expect(JSON.parse(calls[1].body)).toEqual({reply:'Thanks',expected_revision:3,resolve:true});expect(calls).toHaveLength(2);
+  expect(JSON.parse(calls[3].body)).toEqual({reply:'Thanks',expected_revision:3,resolve:true});expect(calls).toHaveLength(4);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('retries a keyed comment write through 502/503 with one key, and never retries a 409',async()=>{
@@ -281,9 +283,9 @@ it('serve runs autofix on the served bytes and leaves the file alone unless aske
    expect(served).toContain('<meta charset="utf-8">');expect(served).toContain('name="viewport"');
    expect(await readFile(file,'utf8')).toBe(source);
    await fetch(session.url);expect(reports).toHaveLength(1);
-   expect(reports[0]).toMatch(/^autofix: 2 fixed, 1 problem/);expect(reports[0]).toContain('served fixed; file unchanged (run autofix.mjs to write)');
+   expect(reports[0]).toMatch(/^autofix: 2 fixed, 1 warning/);expect(reports[0]).toContain('served fixed; file unchanged (run autofix.mjs to write)');
    const findings=await (await fetch(new URL('/__af_preview/autofix?path=/',session.url))).json();
-   expect(findings.problems).toEqual([expect.objectContaining({rule:'duplicate-id',line:1})]);
+   expect(findings.problems).toEqual([]);expect(findings.warnings).toEqual([expect.objectContaining({rule:'duplicate-id',line:1})]);
   }finally{await session.close();}
   const writing=await startPreview({root,revisionIntervalMs:60000,autofix:{write:true}});
   try{await fetch(writing.url);expect(await readFile(file,'utf8')).toContain('<meta charset="utf-8">');}finally{await writing.close();}
@@ -499,4 +501,136 @@ it('publish --name sends a new dataset\'s GraphQL root in the create body, and o
   await expect(publishCommand({values:{server,name:'renamed'},positionals:[csv]},options)).rejects.toMatchObject({code:'name_not_for_update',exit:2});
   expect(seen).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+it('reads Built with from the page starter comment, and only datasets with a stored policy for who can do what',async()=>{
+ const {builtWith,datasetLinks,replyFacts}=await import('../../../skills/artifactbin/scripts/toolbox-check-reply.mjs');
+ const {readFile}=await import('node:fs/promises');
+ const app=await readFile(new URL('../../../skills/artifactbin/examples/shared-app.html',import.meta.url),'utf8');
+ expect(builtWith(app)).toMatch(/^one HTML page; .* through its generated API\.$/);expect(builtWith(app)).not.toContain('//');
+ expect(builtWith('<!-- Example: x.\nBuilt with: one HTML page and\n  a CSV dataset. -->\n<p>x</p>')).toBe('one HTML page and a CSV dataset.');
+ expect(builtWith('<p>no starter</p>')).toBeNull();
+ const html='<link rel="af-dataset" data-af-name="targets" href="ref:DATA12"><link href="ref:DATA34" rel="af-dataset" data-af-name="rows"><link rel="stylesheet" href="ref:CSS123">';
+ expect(datasetLinks(html)).toEqual([{id:'DATA12',name:'targets'},{id:'DATA34',name:'rows'}]);
+ const client={request:async(route:string)=>route.endsWith('DATA12/policy')?{source:'v3',readBack:'Table public.targets\n- Owner, editors: see and change everything.\n'}:{source:'none',readBack:'Table public.rows\n- Owner, editors: see and change everything.'}};
+ expect(await replyFacts(client,'https://h.test','PAGE12',html)).toEqual({id:'PAGE12',link:'https://h.test/a/PAGE12',permissions:[{id:'DATA12',name:'targets',lines:['Table public.targets','- Owner, editors: see and change everything.']}]});
+});
+it('checks a deck at deck viewports without --viewport and attaches the reply facts to a passing run',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'check-deck-'));
+ const html='<link rel="af-dataset" data-af-name="sales" href="ref:DATA12"><script>// Built with: one HTML page from a SLIDES data block\n</script><section data-af-slide>One</section>';
+ const sizes:string[]=[];
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));
+  if(url.pathname==='/a/PAGE12/raw')return new Response(html);
+  if(url.pathname==='/api/artifacts/DATA12/policy')return Response.json({source:'v3',readBack:'Table public.sales\n- Signed-out link holders: see rows.'});
+  if(url.pathname==='/api/artifacts/DATA12')return Response.json({id:'DATA12'});
+  const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  const size=/"width":(\d+),"height":(\d+)/.exec(body.code)!;sizes.push(size[1]+'x'+size[2]);
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:Number(size[1]),height:Number(size[2])},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:1,content:1,fits:true}}});};
+ try{
+  const result=await checkCommand({values:{},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher});
+  expect(sizes.sort()).toEqual(['1200x630','1280x800']);
+  expect(result.reply).toEqual({id:'PAGE12',link:'https://h.test/a/PAGE12',builtWith:'one HTML page from a SLIDES data block',permissions:[{id:'DATA12',name:'sales',lines:['Table public.sales','- Signed-out link holders: see rows.']}]});
+  // An explicit --viewport wins.
+  sizes.length=0;await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher});
+  expect(sizes).toEqual(['390x844']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('repeats a status read through a transient network failure but never resubmits a lost script',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'check-status-retry-'));const ops:string[]=[];let blips=1;
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));if(url.pathname!=='/api/browser-sessions')return new Response('<p>page</p>');
+  const body=JSON.parse(String(init.body));ops.push(body.op);
+  if(body.op==='script')throw Error('connection reset');
+  if(body.op==='status'&&blips-->0)throw Error('connection reset');
+  if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:390,height:844},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}}});};
+ try{
+  const result=await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher,retryDelays:[0,0]});
+  expect(result.smokePassed).toBe(true);expect(ops).toEqual(['script','status','status','close']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+/** A fake server for publish/read: GET a page head, POST/PUT a page; every request is recorded. */
+function fakePages(head:{id:string,version:number,state:string,html:string,format?:string,sharing_revision?:number}){
+ const sent:any[]=[];
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input)),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):undefined;sent.push({method,path:url.pathname,body});
+  if(method==='GET')return Response.json({format:'html',sharing_revision:0,...head});
+  const version=method==='PUT'?head.version+1:1;
+  return Response.json({id:method==='PUT'?url.pathname.split('/').at(-1):'NEW123',url:'https://h.test/a/X',version,state:'c'.repeat(64),html:body.html,format:'html'},{status:method==='PUT'?200:201});};
+ return {sent,fetcher};
+}
+it('publish refuses an empty page and starter placeholders by line, and drops hand-written ids on a new page',async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const home=await mkdtemp(path.join(tmpdir(),'publish-guard-')),dir=path.join(home,'project');await (await import('node:fs/promises')).mkdir(dir);const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:''});
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ try{
+  const file=path.join(dir,'index.html');
+  for(const empty of ['','\n  \n','<!doctype html><html><head><title>x</title></head><body>\n</body></html>']){
+   await writeFile(file,empty);
+   await expect(publishCommand({values:{},positionals:[file]},options)).rejects.toMatchObject({code:'empty_page',exit:2,recovery:expect.stringContaining('Write the page into index.html')});
+  }
+  await writeFile(file,'<!doctype html>\n<title>[Household budget]</title>\n<link rel="af-dataset" data-af-name="t" href="ref:DATASET_ID">\n<p>Hi</p>');
+  const refused=await publishCommand({values:{},positionals:[file]},options).catch((error:any)=>error);
+  expect(refused).toMatchObject({code:'autofix_refused'});
+  expect(refused.details.autofix.problems.map((p:any)=>[p.rule,p.line])).toEqual([['starter-placeholder',2],['starter-placeholder',3]]);
+  expect(refused.details.autofix.report).toContain('ref:DATASET_ID is a starter placeholder: publish that data first');
+  expect(refused.details.autofix.report).toContain('starter placeholder [Household budget] is still in the page');
+  expect(sent).toEqual([]);
+  // A new page with hand-written and repeated data-af-ids publishes; none of them is sent.
+  await writeFile(file,'<!doctype html>\n<h1 data-af-id="hero">Hi</h1><p data-af-id="hero">Lede</p>');
+  const done=await publishCommand({values:{},positionals:[file]},options);
+  expect(sent.at(-1).method).toBe('POST');expect(sent.at(-1).body.html).not.toContain('data-af-id="hero"');
+  expect(done.autofix.routine).toContain('dropped 2 hand-written data-af-id (the platform assigns them)');
+  expect(done.next).toBe('Next: when the whole request is done, send your reply and, in the same response, run node scripts/comment.mjs watch NEW123 --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
+  expect(JSON.parse(await readFile(file+'.af.json','utf8')).id).toBe('NEW123');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+it('publish FILE --artifact ID replaces that page over its current head when the file has no usable companion',async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const home=await mkdtemp(path.join(tmpdir(),'publish-artifact-')),dir=path.join(home,'project');await (await import('node:fs/promises')).mkdir(dir);const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:'<h1 data-af-id="af-1">Old</h1>',sharing_revision:4});
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ try{
+  const file=path.join(dir,'index.html');await writeFile(file,'<!doctype html>\n<h1 data-af-id="af-1">New</h1>');
+  const done=await publishCommand({values:{artifact:'PAGE12',visibility:'public'},positionals:[file]},options);
+  expect(sent.map(r=>r.method+' '+r.path)).toEqual(['GET /api/artifacts/PAGE12','PUT /api/artifacts/PAGE12']);
+  // The head is the baseline; ids are carried as written; a visibility change names the sharing revision read with it.
+  expect(sent[1].body).toMatchObject({expectedVersion:3,expectedState:'a'.repeat(64),expectedSharingRevision:4,visibility:'public'});
+  expect(sent[1].body.html).toContain('data-af-id="af-1"');
+  expect(done).toMatchObject({id:'PAGE12',version:4,updatedInPlace:true,note:'index.html replaced page PAGE12 (its version 3 was the baseline).'});
+  expect(JSON.parse(await readFile(file+'.af.json','utf8'))).toMatchObject({id:'PAGE12',version:4});
+  // Overwritten later (a starter copied over it): the refusal names the real cause and the one recovery.
+  await writeFile(file,'<!doctype html>\n<h1>Starter</h1>');
+  const refused=await publishCommand({values:{},positionals:[file]},options).catch((error:any)=>error);
+  expect(refused).toMatchObject({code:'invalid_baseline',message:'index.html was overwritten after it was saved (its af-authoring marker no longer matches index.html.af.json), so publish cannot tell what it replaces.'});
+  expect(refused.recovery).toContain('node scripts/publish.mjs index.html --artifact PAGE12');
+  // With --artifact the same file recovers by itself.
+  sent.length=0;
+  expect(await publishCommand({values:{artifact:'PAGE12'},positionals:[file]},options)).toMatchObject({id:'PAGE12'});
+  expect(sent.map(r=>r.method)).toEqual(['GET','PUT']);expect(sent[1].body).not.toHaveProperty('expectedSharingRevision');
+  // A companion that belongs to the named page is the baseline itself: no head read.
+  sent.length=0;await writeFile(file,(await readFile(file,'utf8')).replace('Starter','Edited'));
+  await publishCommand({values:{artifact:'PAGE12'},positionals:[file]},options);expect(sent.map(r=>r.method)).toEqual(['PUT']);
+  await expect(publishCommand({values:{artifact:'PAGE12',group:'team'},positionals:[path.join(dir,'index.html')]},{...options,fetcher:async()=>Response.json({format:'html',id:'OTHER1',version:1,state:'a'.repeat(64)})})).rejects.toMatchObject({code:'group_not_for_update'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+it('read --output refreshes an unchanged pair in place and saves beside a file with edits of its own',async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {readCommand}=await import('../../../skills/artifactbin/scripts/read.mjs');
+ const dir=await mkdtemp(path.join(tmpdir(),'read-refresh-'));let version=3;
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t'},fetcher:async()=>Response.json({id:'PAGE12',format:'html',version,state:'a'.repeat(64),html:`<h1 data-af-id="h">v${version}</h1>`})};
+ try{
+  const file=path.join(dir,'page.html');
+  expect((await readCommand({values:{output:file},positionals:['PAGE12']},options)).source).toBe(file);
+  version=4;const again=await readCommand({values:{output:file},positionals:['PAGE12']},options);
+  expect(again.source).toBe(file);expect(again).not.toHaveProperty('note');expect(await readFile(file,'utf8')).toContain('v4');
+  expect(JSON.parse(await readFile(file+'.af.json','utf8')).version).toBe(4);
+  await writeFile(file,(await readFile(file,'utf8')).replace('v4','my edit'));version=5;
+  const beside=await readCommand({values:{output:file},positionals:['PAGE12']},options);
+  expect(beside.source).toBe(path.join(dir,'page.fresh.html'));expect(beside.note).toBe('page.html has changes of its own since it was read, so this read went to page.fresh.html: reapply what you need there, then publish that file.');
+  expect(await readFile(file,'utf8')).toContain('my edit');expect(await readFile(beside.source,'utf8')).toContain('v5');
+  expect((await readCommand({values:{output:file},positionals:['PAGE12']},options)).source).toBe(path.join(dir,'page.fresh-2.html'));
+ }finally{await rm(dir,{recursive:true,force:true});}
 });

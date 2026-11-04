@@ -10,7 +10,10 @@ import {prepareBundle} from './toolbox-publication-bundle.mjs';
 import {finishPublication} from './toolbox-publish-finish.mjs';
 export {finishPublication};
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,
-  hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
+  hash,platform,journalIntent,createJournal,resumeJournal,within,resolveTarget} from
+  './toolbox-client.mjs';
+import {refuseEmpty,placeholderProblems,headBaseline,dataBaseline} from
+  './toolbox-publish-guard.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
 import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
 import {TEMPLATES,applyTemplate,routineChanges} from './toolbox-publish-dataset.mjs';
@@ -46,39 +49,34 @@ if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='d
    'For an existing dataset use policy.mjs template and set.');
 if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_dataset',
    '--name sets a new dataset\'s GraphQL root name.',2);
- let baseline=null,source=bytes.toString('utf8');
- const sidecar=await optionalFile(values.baseline??file+'.af.json');
- if(!values.create&&sidecar){
-  if(type==='html')({baseline}=await loadPair(file,server,values.baseline));
-  else{
-baseline=JSON.parse(sidecar);if(baseline.kind!=='data-baseline'||baseline.server!==server||
-     baseline.sourceFile!==path.basename(file)||baseline.historical||baseline.schema!==1||
-     !/^[A-Za-z0-9]{6,12}$/.test(baseline.id??'')||!Number.isSafeInteger(baseline.version)||
-     baseline.version<1||!/^[a-f0-9]{64}$/.test(baseline.state??''))throw new ToolError(
-     'invalid_baseline','Data source requires a matching current-head companion.',2,
-     'Publish the file its companion was saved with, or read.mjs ID --output fresh.json. Never '+
-     'copy or hand-edit .af.json companions.');
-  }
-}else if(!values.create&&type==='html'&&(sourceIdentity(source)||
-   /data-af\s*=\s*["'](?:portable|runtime|offline-source)|data-af-id\s*=/i.test(source.replace(
-   /(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2\s*>)/gi,'$1$3'))))throw new ToolError(
-   'baseline_missing',
-   'This HTML has data-af-id attributes or an authoring marker but no companion '+path.basename(
-   file)+'.af.json, so its page identity is unknown. For a new page, delete the data-af-id values '+
-   'you wrote (publish adds its own) or rerun with --create.',2,UNPAIRED);
-if(values.artifact){if(!baseline||!values.baseline)throw new ToolError('baseline_required',
-   '--artifact requires --baseline; never infer a fresh head.',2);const {resolveTarget}=
-   await import('./toolbox-client.mjs');if(resolveTarget(values.artifact,
-   server).id!==baseline.id)throw new ToolError('identity_mismatch',
-   'Artifact and baseline IDs differ.',2);}
+ let baseline=null,source=bytes.toString('utf8'),replaced=null;
+ const sidecar=await optionalFile(file+'.af.json'),target=values.artifact?resolveTarget(
+  values.artifact,server).id:null;
+ // The companion is the baseline; --artifact ID replaces that page over its current head when
+ // the companion is missing, broken or belongs to another page (H7).
+ if(!values.create&&sidecar)try{baseline=type==='html'?(await loadPair(file,server)).baseline:
+  dataBaseline(sidecar,file,server);}catch(error){if(!target||!/baseline/.test(error.code))
+  throw error;}
+ if(target&&baseline?.id!==target&&!values.create){if(values.group!==undefined||values.personal)
+  throw new ToolError('destination_not_for_update','--group and --personal place a new page; '+
+  '--artifact replaces an existing one.',2,'Drop --group/--personal.');baseline=await
+  headBaseline(client,target,type);replaced=`${path.basename(file)} replaced page ${target} `+
+  `(its version ${baseline.version} was the baseline).`;}
+ const identity=!baseline&&!values.create&&type==='html'?sourceIdentity(source):null;
+ if(identity?.id)throw new ToolError('baseline_missing',`${path.basename(file)} came from page `+
+  `${identity.id} but its companion ${path.basename(file)}.af.json is missing.`,2,UNPAIRED(
+  path.basename(file),identity.id));
+ const exported=/data-af\s*=\s*["'](?:portable|runtime|offline-source)/i;
+ if(!baseline&&!values.create&&type==='html'&&exported.test(source))throw new ToolError(
+  'exported_source','This HTML is an exported page, '+
+  'not authoring source.',2,'Publish it as a new page with --create, or over a page with '+
+  '--artifact ID.');
 if(values.template&&baseline)throw new ToolError('template_not_for_update',
    '--template applies only when a dataset is created.',2,
    'Use policy.mjs template ID and policy.mjs set ID for an existing dataset.');
 if(values.name!==undefined&&baseline)throw new ToolError('name_not_for_update',
    '--name applies only when a dataset is created; its GraphQL name never changes.',2,
    'Drop --name, or publish a new dataset with --create.');
-if(values.baseline&&!baseline&&!values.create)throw new ToolError('baseline_missing',
-   'The explicitly selected baseline is unavailable.',2);
 if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=
    recoverPortableSource(source)??source;}source=source.replace(
    /<!-- af-authoring:[A-Za-z0-9_-]+ -->/g,'');baseline=null;}
@@ -93,7 +91,9 @@ const root=await realpath(values.root??baseline?.root??path.dirname(file));if(!w
 const {autofixSource,autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=
     await import('./preview-html.mjs');
   const published=new Set((baseline?.dependencyReceipts??[]).map(receipt=>receipt.path));
-  fixed=autofixSource(source,{file,root,mapped:name=>published.has(name)});
+  refuseEmpty(source,file);
+  fixed=autofixSource(source,{file,root,mapped:name=>published.has(name),newPage:!baseline});
+  fixed.problems=[...fixed.problems,...placeholderProblems(source)].sort((a,b)=>a.line-b.line);
   if(fixed.problems.length||values.strict&&fixed.fixes.length){
 const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
      'nothing published or written',routine:fixed.routine});log(report);
@@ -128,6 +128,9 @@ let dataset=source;if(extension==='.json'){try{dataset=JSON.parse(source);}catch
    'base64')}};
 if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.expectedState=
    baseline.state;}
+ // A visibility change on an update names the sharing revision it saw, when the baseline has one.
+ if(baseline&&values.visibility&&Number.isSafeInteger(baseline.sharingRevision))
+  body.expectedSharingRevision=baseline.sharingRevision;
  else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
@@ -171,7 +174,8 @@ intent.source.output=path.join(path.dirname(file),path.basename(file,
  const published=await watched(client,await finishPublication(await resumeJournal(journal,client,
   'publish')),options);
  // A page's author ends by replying and watching for comments: say so as the last line printed.
- const done=type==='html'?{...published,next:watchNext(published.id)}:published;
+ const done={...published,...(replaced?{note:[replaced,published.note].filter(Boolean).join(' ')}:
+  {}),...(type==='html'?{next:watchNext(published.id)}:{})};
  if(type==='dataset'&&values.template)return {...done,permissions:await applyTemplate(client,
   done.id,values.template,values['owner-column'])};
  if(!fixed)return done;

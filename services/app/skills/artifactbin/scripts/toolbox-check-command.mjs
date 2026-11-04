@@ -17,14 +17,16 @@ import {
   exclusive
 } from './toolbox-client.mjs';
 import {checkTarget, loadChromium, stepsBody, summarizeCheck} from './toolbox-check-script.mjs';
-import {checkHosted, checkLocal} from './toolbox-check-hosted.mjs';
+import {checkHosted} from './toolbox-check-hosted.mjs';
+import {checkLocal} from './toolbox-check-local.mjs';
+import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts}
+  from './toolbox-check-reply.mjs';
 
 // CLI entry: choose local preview or hosted page, run the viewports, save screenshots, then fail if
 // smoke failed.
 export async function checkCommand({values, positionals}, options = {}) {
   let input = positional(positionals),
     paired = null;
-  const widths = values.viewport ?? ['1280x800', '390x844'];
   // A published file stands for its page: index.html reads the id and server from
   // index.html.af.json.
   if (/\.html?$/i.test(input) && !/^https?:\/\//i.test(input)) {
@@ -40,18 +42,21 @@ export async function checkCommand({values, positionals}, options = {}) {
       );
     input = paired.id;
   }
-  if (widths.length > 8)
+  if ((values.viewport?.length ?? 0) > 8)
     throw new ToolError('viewport_limit', 'At most eight viewports are supported.', 2);
-  const viewports = widths.map(value => {
-    const match = /^(\d+)x(\d+)$/.exec(value);
-    if (!match || [match[1], match[2]].some(n => Number(n) < 240 || Number(n) > 3840))
-      throw new ToolError(
-        'invalid_viewport',
-        'Use WIDTHxHEIGHT with dimensions from 240 to 3840.',
-        2
-      );
-    return {width: Number(match[1]), height: Number(match[2])};
-  });
+  // Without --viewport a deck gets the deck sizes and any other page desktop and phone.
+  const sized = html => (values.viewport ?? (isDeck(html) ? DECK_VIEWPORTS : PAGE_VIEWPORTS))
+    .map(value => {
+      const match = /^(\d+)x(\d+)$/.exec(value);
+      if (!match || [match[1], match[2]].some(n => Number(n) < 240 || Number(n) > 3840))
+        throw new ToolError(
+          'invalid_viewport',
+          'Use WIDTHxHEIGHT with dimensions from 240 to 3840.',
+          2
+        );
+      return {width: Number(match[1]), height: Number(match[2])};
+    });
+  sized('');
   const steps = values.steps ? stepsBody(await readFile(values.steps, 'utf8')) : '';
   if (Buffer.byteLength(steps) > 48000)
     throw new ToolError('steps_too_large', 'Task steps exceed 48 KB.', 2);
@@ -66,8 +71,10 @@ export async function checkCommand({values, positionals}, options = {}) {
         2
       );
     const chromium = await loadChromium(values['playwright-module']);
+    const html = await fetch(checkTarget(input).target, {signal: AbortSignal.timeout(3000)})
+      .then(response => response.text()).catch(() => '');
     result = await checkLocal(
-      {target: checkTarget(input).target, viewports, steps, capture: true},
+      {target: checkTarget(input).target, viewports: sized(html), steps, capture: true},
       chromium
     );
     // The preview's autofix findings for this page (lib/html-autofix), listed first in the summary.
@@ -97,19 +104,11 @@ export async function checkCommand({values, positionals}, options = {}) {
         'Use --guest-steps and --cleanup-steps with the self viewer.',
         2
       );
-    const requester = body => client.request('/api/browser-sessions', {method: 'POST', body});
-    // Warm up: plain reads of the page and its linked datasets first, so the first hosted run
-    // does not meet a cold start. Never fails the check; capped at 5 s.
-    await Promise.race([
-      (async () => {
-        const html = await (await client.request(`/a/${id}/raw`, {raw: true})).text();
-        const refs = [...html.matchAll(/<link\b[^>]*\baf-dataset\b[^>]*>/g)].flatMap(
-          ([tag]) => tag.match(/href="ref:([A-Za-z0-9]+)"/)?.slice(1) ?? []
-        );
-        await Promise.allSettled(refs.map(ref => client.request('/api/artifacts/' + ref)));
-      })().catch(() => {}),
-      new Promise(resolve => setTimeout(resolve, 5000).unref?.())
-    ]);
+    // A status read is safe to repeat through a restart; a script submission never is.
+    const requester = body => client.request('/api/browser-sessions',
+      {method: 'POST', body, safeToRepeat: body.op === 'status'});
+    // The page source first: it picks deck viewports and warms the linked datasets (5 s cap).
+    const html = await pageSource(client, id), viewports = sized(html);
     const run = async (file, who) => {
       const found = await checkHosted({
         target: '/a/' + id,
@@ -146,6 +145,8 @@ export async function checkCommand({values, positionals}, options = {}) {
         );
     }
     if (extra.length) result = summarizeCheck([...result.checks, ...extra]);
+    // A clean pass ends on the Reply block: what it states beyond the run comes from the page.
+    if (result.smokePassed) result.reply = await replyFacts(client, server, id, html);
     // A deck's slide image links for the reply.
     const count = result.checks.find(check => check?.slides?.count)?.slides.count;
     if (count)

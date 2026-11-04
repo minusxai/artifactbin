@@ -38,7 +38,7 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   bridge.receive({ kind: 'fetch-result', call: fetch.call as number, status: 200, headers: {}, body: JSON.stringify({ data: { orders: { total: 9 } } }) });
   expect((await query).data).toEqual({ orders: { total: 9 } });
   const invalidations: unknown[] = [];
-  const subscription = runtime.onBackendChange((names) => invalidations.push(names));
+  const subscription = runtime.onResolverChange((names) => invalidations.push(names));
   bridge.receive({ kind: 'send', command: { type: 'mx:data', datasets: ['dataset1', 'unrelated'] } });
   expect(invalidations).toEqual([['orders']]);
   subscription.unsubscribe();

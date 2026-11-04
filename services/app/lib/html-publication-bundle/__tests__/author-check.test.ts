@@ -85,11 +85,25 @@ it('waits for a free browser session and names a full server instead of failing 
  // Never created, so never closed.
  expect(ops.filter(op=>op==='close')).toHaveLength(1);
  const closes:string[]=[];
- await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{const body=JSON.parse(String(init?.body));if(body.op==='close')closes.push(body.session_id);return busy();})).rejects.toMatchObject({code:'browser_busy',message:expect.stringContaining('at most 2 browser sessions')});
+ await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{const body=JSON.parse(String(init?.body));if(body.op==='close')closes.push(body.session_id);return busy();})).rejects.toMatchObject({code:'browser_busy',message:expect.stringContaining('at most 2 browser sessions'),recovery:expect.not.stringMatching(/retry/i)});
  expect(closes).toEqual([]);
  await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async()=>Response.json({error:refusal.error},{status:429}))).rejects.toMatchObject({code:'browser_busy'});
  // Any other refusal of a create names the server's code and message instead of a mismatched receipt.
- await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async()=>Response.json({...refusal,error:{code:'SANDBOX_UNAVAILABLE',message:'The browser sandbox could not start.'}}))).rejects.toMatchObject({code:'browser_session_failed',message:expect.stringContaining('(SANDBOX_UNAVAILABLE): The browser sandbox could not start.')});
+ // A refusal to start never ran the steps: the check tries three times itself, then names the server's code; its recovery never says retry.
+ let sandboxScripts=0;
+ const sandbox=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async()=>{sandboxScripts++;return Response.json({...refusal,error:{code:'SANDBOX_UNAVAILABLE',message:'The browser sandbox could not start.'}});}).catch((error:any)=>error);
+ expect(sandbox).toMatchObject({code:'browser_session_failed',message:expect.stringContaining('(SANDBOX_UNAVAILABLE): The browser sandbox could not start.')});
+ expect(sandboxScripts).toBe(3);expect(sandbox.recovery).not.toMatch(/retry/i);
+ // Once it starts on a later attempt, the check simply passes.
+ let starts=0;
+ expect((await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',busyDelayMs:5,requester:async(body:any)=>{if(body.op==='close')return {session_id:body.session_id,status:'closed'};if(starts++<1)return {...refusal,error:{code:'SANDBOX_UNAVAILABLE',message:'x'}};return {session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:ok};}})).smokePassed).toBe(true);
+ // A lost submission is observed through status, never replayed.
+ const lost:string[]=[];
+ expect((await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',busyDelayMs:5,requester:async(body:any)=>{lost.push(body.op);
+  if(body.op==='script')throw Object.assign(Error('lost'),{code:'network_unavailable'});
+  if(body.op==='close')return {session_id:body.session_id,status:'closed'};
+  return {session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:ok};}})).smokePassed).toBe(true);
+ expect(lost).toEqual(['script','status','close']);
  // check.mjs sends through the signed-in client (requester): the same refusal waits there too.
  let requesterRefusals=1;const requested:string[]=[];
  const viaClient=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',busyDelayMs:5,requester:async(body:any)=>{requested.push(body.op);
