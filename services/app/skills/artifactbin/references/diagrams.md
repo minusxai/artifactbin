@@ -9,7 +9,7 @@ Use the pinned Pele direct library. It reads Mermaid syntax and produces SVG wit
 
 ## Minimal example
 
-Load the chosen design-system CSS as usual. Map its semantic tokens to Pele so light/dark colors update through CSS without rerendering:
+The platform loads the page's design-system CSS. Map its semantic tokens to Pele so light/dark colors update through CSS without rerendering:
 
 ```html
 <style>
@@ -35,10 +35,10 @@ Load the chosen design-system CSS as usual. Map its semantic tokens to Pele so l
 }
 </style>
 <figure>
-  <div id="workflow" class="diagram" data-af-id="workflow-diagram"
+  <div id="workflow" class="diagram"
     role="img" aria-label="Draft moves to review, then approval or changes"></div>
   <figcaption>Request review flow</figcaption>
-  <p id="workflow-status" data-af-id="workflow-status" role="status" hidden></p>
+  <p id="workflow-status" role="status" hidden></p>
 </figure>
 <script type="module">
 import {mount} from "@afbin/pele-flowchart";
@@ -90,7 +90,7 @@ URL `click` links work; JavaScript callbacks are ignored. Default schemes are HT
 
 ## Offline
 
-Only referenced registered modules enter a downloaded page. The example renders offline without a CDN. Remote images, fonts or application data still require their own admitted resources; keep design-system fonts inside the project and prefer portable text labels. Library cost is paid only by pages that import it.
+Only referenced registered modules enter a downloaded page. The example renders offline without a CDN. Remote images, fonts or application data still require their own admitted resources; the platform serves design-system fonts; prefer portable text labels. Library cost is paid only by pages that import it.
 
 Previously downloaded self-contained files keep their embedded code.
 

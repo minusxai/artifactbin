@@ -6,9 +6,9 @@
  * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your Apollo value back.
  * Examples:
  *   <script type="application/json" data-af="state">{"index":0}</script>
- *   <af-slide-deck data-af-id="quarterly-deck" index="0">
- *   <af-slide data-af-id="quarterly-intro"><h1>Review</h1></af-slide>
- *   <af-slide data-af-id="quarterly-next"><h2>Next</h2></af-slide></af-slide-deck>
+ *   <af-slide-deck index="0">
+ *   <af-slide><h1>Review</h1></af-slide>
+ *   <af-slide><h2>Next</h2></af-slide></af-slide-deck>
  *   import {client,gql} from "@afbin/apollo"; import "@afbin/slide-deck";
  *   const deck=document.querySelector("af-slide-deck"), q=gql`{index}`;
  *   const sub=client.watchQuery({query:q}).subscribe(({data})=>{
@@ -16,7 +16,7 @@
  *   deck.addEventListener("af-change",e=>client.updateQuery({query:q},
  *     s=>({...s,index:e.detail.value})));
  *   window.addEventListener("pagehide",()=>sub.unsubscribe(),{once:true});
- * Gotchas: slides are not export-marked: for slide images use your own data-af-slide sections.
+ * Gotchas: slides are not export-marked; a presentation deck starts from examples/deck.html.
  *   Slide IDs stay stable when reordered or edited. Check keyboard navigation and print layout
  *   in the actual page.
  */

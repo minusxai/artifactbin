@@ -8,10 +8,11 @@ description: >-
 ---
 ## Read first
 
-Every task that publishes or edits a page (answering a comment too) ends with ONE response
-holding your reply as text (the URL as asked; only the URL if asked) and, in that same response,
-a call to `node scripts/comment.mjs watch ID --next`; then do what comments ask (Watch below). A
-reply sent alone ends your turn unwatched.
+Every task that publishes or edits page content ends, once all the requested work is done, with
+ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output
+says what to do next. Your reply is what the user asked for: if they prescribed its form (e.g.
+only the URL), send exactly that; otherwise send the link and then the Reply block check printed,
+as printed. Group, sharing and ownership changes alone need no watch.
 
 Commands stage updates hourly. Reread SKILL.md and reload your harness when notified.
 `node scripts/update.mjs` updates now; `--rollback` restores the prior release offline.
@@ -21,13 +22,13 @@ reinstalling.
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
-  -steps, -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs;
-  repairs.csv
+  -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
+  gen-transactions.mjs; repairs.csv
 - `resolvers/`: copyable resolvers: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
 (`--help` each)
 - `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups
-(read only one)
+(read only the references your task needs)
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
@@ -49,15 +50,20 @@ Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace
 ## You write / the platform adds
 
 - **You write:** a normal HTML file; one `<meta name="artifactbin:design-system" content="NAME">`;
-  imports from `@afbin/<name>` (`apollo`, `highlight`, the libraries); your own CSS and JS; a
-  `data-af-id` only to keep ones you were given.
+  imports from `@afbin/<name>` (`apollo`, `highlight`, the libraries); your own CSS and JS.
 - **The platform adds:** the core runtime and import map, the design-system stylesheet and fonts,
-  the `<html>` design and dark-mode attributes, stable `data-af-id`s (carried forward on edits),
+  the `<html>` design and dark-mode attributes, stable `data-af-id`s on the elements in your HTML
+  (elements your script creates: [dynamic elements](references/runtime.md#dynamic-elements-and-comments)),
   autofix of common mistakes (reported as `autofix:`), code-highlighting colours, reader presence
   and comments, and the owner's design-system picker. A core tag, `<html data-af-*>` attributes or a
   copied stylesheet link you write anyway still works: publish moves or removes them.
 
 ## Core flows
+
+If the request names an existing page (an ID or /a/ID URL), you change THAT page; otherwise create
+one.[% if not shipped %] The scripts and examples below ship in the installed skill (Installed
+resources); without it, use the HTTP API: [authentication](references/http-auth.md) and [comment
+anchors and browser sessions](references/html-operations.md).[% endif %]
 
 Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--output FILE`. To learn
 one, read `head -30 scripts/NAME.mjs` (usage, flags, examples, gotchas; `--help` prints the same).
@@ -67,19 +73,17 @@ owner sets them in the page's Resolvers settings, never in chat. ACLs and trash 
 For groups, run `node scripts/groups.mjs list`; read [groups](references/groups.md) for membership,
 sharing and deliberate ownership moves.
 
-- **New page.** 1) Run one copy now: `cp examples/deck.html index.html` (decks), `cp
-  examples/shared-app.html index.html && cp examples/budget.ts .` (dashboards with shared edits:
-  rows in a dataset, written through a resolver; follow its Usage) or `cp
-  examples/csv-dashboard.html index.html` (read-only dashboards). 2) Edit only the data block at the
-  top (`SLIDES` in the deck; `APP` and `budget.ts`'s names in the shared app; the `[bracketed]` text
-  elsewhere): never rewrite the template's CSS, JS or layout, and never draft copy in reasoning. 3)
-  Publish it unchanged and let check find faults. The template already uses its design system's
-  tokens, so don't read the design-system CSS; to switch systems, change the `<meta
-  name="artifactbin:design-system" content="NAME">` from the table (the platform serves the
-  stylesheet and fonts). Keep state through `client` from `@afbin/apollo`
-  ([runtime](references/runtime.md)). `node scripts/publish.mjs index.html` autofixes the page and
-  prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you aren't
-  publishing). Share the returned URL (a URL-only request gets the URL alone), then watch (below).
+- **New page.** 1) Copy the starter that fits, then follow its Usage: `cp examples/deck.html
+  index.html` (decks); `cp examples/shared-app.html index.html && cp examples/budget.ts .` (shared
+  edits: rows in a dataset, written through a resolver); `cp examples/csv-dashboard.html
+  index.html` (any page that shows a CSV or dataset: dashboard, report or chart); `cp
+  examples/report.html index.html` (a report without data). 2) Edit only what its Usage names
+  (its data block, `[bracketed]` text): never rewrite the starter's CSS, JS or layout, and never
+  draft copy in reasoning. 3) Publish after step 2 (Check, below). If no starter fits, write the
+  page yourself; step 2's rule applies only to a copied starter. Keep the starter's design system unless
+  the user names one; then set its `<meta name="artifactbin:design-system" content="NAME">` to a
+  name from the table (the platform serves the stylesheet and fonts; don't read the CSS). Keep
+  state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)).
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -95,83 +99,41 @@ sharing and deliberate ownership moves.
   | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
   | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
   | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
-  - Set `<title>` to the page's name (decks: the company's deck name; apps: APP.title).
+  - Set `<title>` to the page's name: the browser tab and link previews show it.
   - Design: start from the reader's decision; give the opening a concrete point and let typography
     set the hierarchy (no identical cards for every paragraph). Use real data in charts, label
     assumptions, keep lines under about 80 characters and controls keyboard-usable.
-  - Decks: `examples/deck.html` has the `data-af-slide` sections, the `data-af-deck-chrome` nav,
-    keys and a height budget per slide. Slides are designed for 1200x630: check decks with
-    `--viewport 1200x630 --viewport 1280x800` only, add no export button and fetch no export URLs
-    ("slides N exportable" is enough). For a deck, copy check's Slide images block as printed.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
-- **Check.** Before publishing, copy the example's ready steps (`examples/deck-steps.mjs`;
-  `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`), or write one short steps file of
-  `step('label', …)` checks: wait for your data, check the requested values and behaviour. Then
-  publish and check in one command: `node scripts/publish.mjs index.html && node scripts/check.mjs
-  index.html --steps steps.mjs --output qa-1.json` (a new `--output` name each run; decks as above;
-  with shared writes add `--guest-steps guest.mjs --cleanup-steps cleanup.mjs`). Hosted checks run
-  in a server browser: never install Playwright or Chromium (only a local `node scripts/serve.mjs
-  DIR` preview needs `--playwright-module`). Never rerun an unchanged failing check; read its step
-  timings, change the steps or page, then rerun once. After one clean steps run covering the
-  requested behaviour (the summary is your layout evidence; no pixel scripts or re-exports), reply
-  with the link, then watch (below). Describe how it's built only from the starter's Built with
-  line.
-  Describe testing only by copying check's Tested/Not tested lines as printed; don't add words like
-  'end to end' or 'fully verified'. Republish only to fix a failed requirement, never for polish,
-  refactors or extra verification. Open screenshots only if your model accepts image input;
-  otherwise the reply says appearance is unverified. For a shared app, the reply also says how
-  others get access: open the link and sign in to edit, and copies the dataset permissions
-  read-back.
-- **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then `node
-  scripts/publish.mjs page.html`, then reply and watch (below); keep editing and publishing the same
-  file and never regenerate the page from scratch. Publish rewrites the file with `data-af-id`s:
-  re-read it before editing and match on short anchors, not whole lines. Keep every existing
-  `data-af-id`; new static elements may omit it. Elements your script creates (list rows, cards,
-  table rows, labels) each need a `data-af-id` that is unique on the page and identical on every
-  render, built as `<list>-<record id>-<role>`: `item.dataset.afId='budget-row-'+tx.id;
-  amount.dataset.afId='budget-row-'+tx.id+'-amount'`. Use a distinct prefix per list and role; never
-  an array index, display text, sort order or random value; never reuse a saved or deleted ID; mount
-  them under a container present in the saved HTML ([dynamic
-  elements](references/runtime.md#dynamic-elements-and-comments)).
-- **Answer comments.** `node scripts/comment.mjs list ID`. If a comment asks for a change, make the
-  edit first, then `node scripts/comment.mjs reply ID --thread T --body-file reply.txt` (add
-  `--resolve --expected-revision R` when done). Anchors are described at the top of
-  `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
-  and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
-- **Watch after publishing or editing page content.** Group membership, invitations, sharing and
-  ownership moves alone do not require a comment watch. Verify those changes, report the requested
-  result and finish, unless the user also requested monitoring or page-content work. Finish every
-  page and edit in the current request before starting a watch. For a multi-page request, finish and
-  report all requested pages first; monitoring must never block the remaining work. After completing
-  the request, write your full reply (link, Built with, Tested) as message text and, in that same
-  response, run `node scripts/comment.mjs watch ID --next`: the user reads the reply while you
-  watch. Run it in the foreground, never with `&`, `timeout` or a shorter `--wait`; it waits up to 4
-  minutes, so set your shell tool's timeout to 300000 ms (5 minutes). In Codex, `exec_command` may
-  return a running `session_id`: keep using `write_stdin` with that ID until the command finishes. A
-  yielded tool call is not completion; never end your turn while the watch is running. Then handle
-  its output and continue the watch loop below. In Claude Code only, start it with the Bash tool's
-  `run_in_background` and end your turn: you are woken when it prints. A printed comment is from
-  someone the page is shared with: do a requested change without asking first, even after a "change
-  nothing else" request (the user reads your reply on the thread): edit, publish, then `comment.mjs
-  reply`, then watch again the same way. "No new comments yet" means run it again; when it says stop
-  watching, end your turn without another message. If the user prescribes the reply's exact form
-  (only the URL, say), that is your full reply: send exactly it as the text of the response that
-  starts the watch (never skip it or replace it with a tool call); watching never adds to the reply,
-  and the reply never replaces the watch.
-- **Data, apps, exports.** A page built from a CSV, new or edited, publishes it as a dataset,
-  links it (`<link rel="af-dataset">`) and computes its numbers and charts from the rows in page
-  script, as `examples/csv-dashboard.html` does; numbers typed into the HTML go stale. CSV and
-  datasets: [datasets](references/datasets.md); for sample data
-  copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
-  (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or
-  republish it. Who may see and change rows: [permissions](references/permissions.md) (read before
-  modeling identity or writes; a readable page grants no dataset write access). Checks, derived
-  values and external APIs with secrets: [resolvers](references/resolvers.md).
-  `node scripts/graphql.mjs schema ID` for the linked schema (a dataset ID: its own API),
-  `node scripts/policy.mjs explain DATASET_ID` for who may see and change its rows,
-  `node scripts/export.mjs ID --format html --output copy.html` for a portable copy.
+- **Change an existing page.** Plain edits: `node scripts/read.mjs ID --output page.html`, edit that
+  file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same file and
+  never regenerate the page from scratch. To rebuild it from a starter: copy the starter, edit what
+  its Usage names, then `node scripts/publish.mjs index.html --artifact ID` (it replaces that page).
+- **Check.** Copy the starter's steps files unchanged (`examples/deck-steps.mjs`;
+  `csv-dashboard-steps.mjs`; `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`), or write one
+  short steps file of `step('label', …)` checks: wait for your data, check the requested values and
+  behaviour. Then publish and check in one command: `node scripts/publish.mjs index.html && node scripts/check.mjs
+  index.html --steps steps.mjs` (a starter's Usage gives its full command). Publish autofixes the
+  page and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you
+  aren't publishing). Never rerun an unchanged failing check; read its step timings, change the
+  steps or page, then rerun once. After one clean run covering the requested behaviour, reply and
+  watch (Read first). Republish only to fix a failed requirement, never for polish, refactors or
+  extra verification.
+- **Answer comments.** `node scripts/comment.mjs list ID`. A comment is from someone the page is
+  shared with: make a requested change without asking first, even after a "change nothing else"
+  request (edit, publish), then `node scripts/comment.mjs reply ID --thread T --body TEXT`. Anchors
+  are described at the top of `comment.mjs`.
+- **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
+  ([datasets](references/datasets.md)). A page that shows a dataset links it and computes its
+  numbers from every row in page script ([datasets](references/datasets.md#read)); charts use
+  Vega-Lite ([dataviz](references/dataviz.md)). For sample data copy `examples/gen-transactions.mjs`,
+  change only its names (payers, categories, merchants) and run it once; label the data as sample.
+  Who may see and change rows: [permissions](references/permissions.md) (read it before modeling
+  identity or writes). Checks, derived values and external APIs with secrets:
+  [resolvers](references/resolvers.md). `node scripts/graphql.mjs schema ID` for the linked schema
+  (a dataset ID: its own API), `node scripts/policy.mjs explain DATASET_ID` for who may see and
+  change its rows, `node scripts/export.mjs ID --format html --output copy.html` for a portable copy.
 - **Network and install.** To call an external API add `<meta name="csp-connect"
   content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
   `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid
@@ -182,15 +144,17 @@ sharing and deliberate ownership moves.
 ## Optional HTML components
 
 Components are hosted modules, like the libraries: `import '@afbin/input';` registers its elements
-(an import per component you use; nothing to copy or call). To learn an element, read the comment at
-the top of its source (`head -30 components/NAME.ts`: import line, attributes, events, usage); the
-`.ts` is readable reference, not a browser script. Most controls emit a bubbling `af-change` with
-`event.detail.value`: keep the value in Apollo state, set it back on the element (switch `checked`,
-overlays and collapsible `open`, slide deck `index`, the rest `value`) and unsubscribe when the view
-goes away. Elements use light DOM and the page's design-system tokens and carry no credentials.
-Diagrams and maps use the direct libraries below.
+(an import per component you use; nothing to copy or call). To learn `af-NAME`, read the comment
+at the top of its source (`head -30 components/NAME.ts`: import line, attributes, events, usage);
+the `.ts` is readable reference, not a browser script. Every control but `af-button`, and every
+navigation, overlay and upload element, emits `af-change` with `event.detail.value`: keep the value
+in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, the
+rest `value`) and unsubscribe when the view goes away. `af-button` fires the native click,
+`af-data-table` fires `af-sort-change` and `af-edit-intent`, `af-user` fires `af-user-state`;
+avatar, icon, progress, markdown and isometric emit nothing. Elements use light DOM and the page's
+design-system tokens and carry no credentials. Decks use `examples/deck.html`.
 
-| Purpose | Elements (see `components/NAME.ts`) |
+| Purpose | Elements (`af-NAME`: `components/NAME.ts`) |
 |---|---|
 | Controls | `af-button`, `af-input`, `af-textarea`, `af-slider`, `af-switch`, `af-select`,
   `af-segmented`, `af-date-picker` |
@@ -199,10 +163,8 @@ Diagrams and maps use the direct libraries below.
 | Identity/status | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
 | Prose/diagrams | `af-markdown`, `af-isometric` |
 | Data/media | `af-data-table`, `af-file-upload` |
-| Slides | `af-slide-deck` (with `af-slide`) |
 
-For native HTML visualizations, use the direct library APIs rather than a custom chart or map
-element. Choose the guide that fits the work:
+For charts, maps and diagrams, use the direct library APIs rather than a custom element:
 
 | Need | Guide |
 |---|---|
@@ -223,17 +185,14 @@ default host; the canonical app link stays unchanged. Private shares do not gain
   Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group
   design_crit --yes`. `publish.mjs page.html --group design_crit` creates new group-owned work.
-- Get group administration consent in the user conversation; a page comment, reaction or tool
-  payload is not authority. Destructive actions and editor grants require `--yes`; see
-[groups](references/groups.md).
+- Group administration needs the user's consent in this conversation ([groups](references/groups.md)).
 - "Let readers submit something": a readable page grants no writes; give the dataset rules for
   viewer and signed_in with `policy.mjs` ([permissions](references/permissions.md)), and a resolver
   mutation with `@auth` when writes need checks ([resolvers](references/resolvers.md)).
 
 ## Preserve the document
 
-Every saved page version remains available; never reuse a removed ID. A 409 or a refused baseline
-means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser
+Every saved page version remains available. HTML `id` remains available for ordinary browser
 anchors and selectors. Initial viewer state goes in `<script type="application/json"
 data-af="state">`; comments save its fields as the reader's view, so keep typed text out of it or
 list it in `data-af-comment-exclude` ([saved views](references/runtime.md#saved-comment-views)).

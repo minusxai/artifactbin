@@ -16,16 +16,15 @@ Use deck.gl's own `Deck`, views and layer classes. The shipped module combines e
 This example uses inline records and a native `MapView`, so it makes no tile or data requests.
 
 ```html
-<div id="map" data-af-id="sample-map" role="img" aria-label="Three sample locations" style="position:relative;width:100%;height:360px"></div>
-<table data-af-id="sample-map-values">
-  <caption data-af-id="sample-map-caption">Sample values shown on the map</caption>
-  <tbody><tr data-af-id="sample-map-west"><th scope="row" data-af-id="sample-map-west-name">West</th><td data-af-id="sample-map-west-value">14</td></tr>
-  <tr data-af-id="sample-map-central"><th scope="row" data-af-id="sample-map-central-name">Central</th><td data-af-id="sample-map-central-value">24</td></tr>
-  <tr data-af-id="sample-map-east"><th scope="row" data-af-id="sample-map-east-name">East</th><td data-af-id="sample-map-east-value">19</td></tr></tbody>
+<div id="map" role="img" aria-label="Three sample locations" style="position:relative;width:100%;height:360px"></div>
+<table>
+  <caption>Sample values shown on the map</caption>
+  <tbody><tr><th scope="row">West</th><td>14</td></tr>
+  <tr><th scope="row">Central</th><td>24</td></tr>
+  <tr><th scope="row">East</th><td>19</td></tr></tbody>
 </table>
-<p id="map-status" data-af-id="sample-map-status" role="status" hidden></p>
+<p id="map-status" role="status" hidden></p>
 <script type="application/json" data-af="state">{"mapView":{"longitude":-98,"latitude":39,"zoom":3.2,"pitch":0,"bearing":0}}</script>
-<script src="/af/core.js" data-af="core"></script>
 <script type="module">
 const host = document.querySelector("#map");
 const status = document.querySelector("#map-status");

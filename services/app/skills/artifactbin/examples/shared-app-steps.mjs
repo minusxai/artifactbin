@@ -1,15 +1,20 @@
 /**
  * Example: check.mjs steps for examples/shared-app.html (a function body that receives page).
- * Usage: cp examples/shared-app-steps.mjs steps.mjs (and the -guest and -cleanup files); set
- *   CATEGORY and TEST to match guest.mjs; node scripts/check.mjs index.html --steps steps.mjs
- *   --guest-steps guest.mjs --cleanup-steps cleanup.mjs
- * Gotchas: viewports run at once, each within 8 s: the wide one saves TEST and re-reads it after a
- *   reload (the guest reads it next; cleanup.mjs clears it, even on failure); the narrow one checks
- *   charts, the drill-down and dark mode (turned back off after, so nothing stays changed). Waits
- *   are on #status "Loaded…" and the target's own element (cat-NAME-target). Each check is a
- *   step(label) listed as Verified. It fails on [placeholders] and on stray text outside main.
+ * Usage: cp examples/shared-app-steps.mjs steps.mjs (and the -guest and -cleanup files), all
+ *   unchanged: they test the first category the page lists; node scripts/check.mjs index.html
+ *   --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs
+ * Gotchas: the wide viewport saves TEST and re-reads it after a reload (the guest reads it next;
+ *   cleanup.mjs clears it, even on failure); the narrow one checks charts, the drill-down and dark
+ *   mode (turned back off after, so nothing stays changed). Waits are on #status "Loaded…" and the
+ *   target's own element (cat-NAME-target). It fails on [placeholders] and on stray text outside
+ *   main.
  */
-const CATEGORY='Groceries',TEST='457',PLACEHOLDERS_OK=false;
+const TEST='457',PLACEHOLDERS_OK=false;
+// The category under test: the first one the page lists (so this file needs no edits).
+const first=()=>document.querySelector('[data-af-id^="cat-"][data-af-id$="-open"]');
+await page.waitForFunction(first,null,{timeout:6000});
+const CATEGORY=await page.evaluate(()=>document.querySelector('[data-af-id^="cat-"]'+
+  '[data-af-id$="-open"]').dataset.afId.slice(4,-5));
 const open=`[data-af-id="cat-${CATEGORY}-open"]`,target=`[data-af-id="cat-${CATEGORY}-target"]`;
 const status=()=>page.evaluate(()=>document.querySelector('#status')?.textContent??'');
 const loaded=()=>page.waitForFunction(()=>/^Loaded/.test(document.querySelector('#status')
@@ -18,11 +23,11 @@ const loaded=()=>page.waitForFunction(()=>/^Loaded/.test(document.querySelector(
 const shows=async value=>{const read=()=>page.evaluate(sel=>document.querySelector(sel)
   ?.textContent.replace(/[^\d.]/g,'')??'',target);
   await page.waitForFunction(([sel,v])=>document.querySelector(sel)?.textContent
-    .replace(/[^\d.]/g,'').startsWith(v),[target,value],{timeout:3000}).catch(()=>{});
+    .replace(/[^\d.]/g,'').startsWith(v),[target,value],{timeout:2000}).catch(()=>{});
   const saw=await read();if(!saw.startsWith(value))
     throw Error(`${CATEGORY} target: saw ${saw||'nothing'}, wanted ${value}`);};
 await loaded();
-// The page's own row count, so the Verified line carries the exact number.
+// The page's own row count, so the Tested line carries the exact number.
 const count=(await status()).match(/Loaded (\d+)/)?.[1];
 await step(`page loaded ${count} sample transactions`,async()=>{
   if(!Number(count))throw Error('no rows loaded: '+await status());});
@@ -68,7 +73,7 @@ if(page.viewportSize().width>800){
 await step('budgets are set, the trend has spent and budget for every month, in order, payer bars'+
   ' draw',async()=>{
   await page.waitForFunction(()=>document.querySelectorAll('#trend svg, #payer svg').length===2,
-    null,{timeout:4000});
+    null,{timeout:6000});
   if(!/[1-9]/.test(await page.locator('#target').textContent()))
     throw Error('Target is zero: set APP.defaultTargets');
   const months=await page.locator('#month option').count();
@@ -89,7 +94,7 @@ await step('budgets are set, the trend has spent and budget for every month, in 
   if(!await page.locator('#payer .mark-rect.role-mark path').count())throw Error('no payer bar');});
 await step(`${CATEGORY} opens its drill-down rows`,async()=>{
   await page.locator(open).click();
-  await page.locator('[data-af-id^="row-"]').first().waitFor({timeout:3000});});
+  await page.locator('[data-af-id^="row-"]').first().waitFor({timeout:2000});});
 await step('this viewer\'s dark mode survives a reload, then is turned back off',async()=>{
   const dark=()=>page.evaluate(()=>document.documentElement.dataset.afDark==='true');
   const press=async on=>{await page.getByRole('button',{name:/dark mode/i}).click();

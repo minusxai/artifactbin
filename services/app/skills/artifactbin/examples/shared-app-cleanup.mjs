@@ -1,10 +1,14 @@
 /**
  * Example: check.mjs cleanup steps for examples/shared-app.html: clears the test target.
- * Usage: cp examples/shared-app-cleanup.mjs cleanup.mjs; keep CATEGORY equal to steps.mjs; pass it
- *   as --cleanup-steps (check.mjs runs it signed in after the other steps, even when they fail).
+ * Usage: cp examples/shared-app-cleanup.mjs cleanup.mjs (unchanged); pass it as --cleanup-steps.
  * Gotchas: an empty target field clears the saved target, so the APP.defaultTargets show again.
  */
-const CATEGORY='Groceries',open=`[data-af-id="cat-${CATEGORY}-open"]`;
+// The category under test: the first one the page lists (so this file needs no edits).
+const first=()=>document.querySelector('[data-af-id^="cat-"][data-af-id$="-open"]');
+await page.waitForFunction(first,null,{timeout:6000});
+const CATEGORY=await page.evaluate(()=>document.querySelector('[data-af-id^="cat-"]'+
+  '[data-af-id$="-open"]').dataset.afId.slice(4,-5));
+const open=`[data-af-id="cat-${CATEGORY}-open"]`;
 await step(`the ${CATEGORY} test target is cleared back to its default`,async()=>{
   await page.waitForFunction(()=>/^Loaded/.test(document.querySelector('#status')?.textContent),
     null,{timeout:6000});

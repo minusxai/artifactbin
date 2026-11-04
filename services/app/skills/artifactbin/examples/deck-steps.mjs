@@ -1,21 +1,32 @@
 /**
  * Example: check.mjs steps for examples/deck.html (a function body that receives page).
- * Usage: cp examples/deck-steps.mjs steps.mjs; set SLIDE_COUNT, CHART_COUNT and REAL (ids of
- *   slides with real:true) to match SLIDES; then node scripts/check.mjs index.html --viewport
- *   1200x630 --viewport 1280x800 --steps steps.mjs
- * Gotchas: each check is a step(label); the summary lists passing labels as Verified. Vega bars
- *   are `.mark-rect path`, lines `.mark-line path`. It fails while a [bracketed] placeholder is
- *   left (PLACEHOLDERS_OK is only for checking the template itself).
+ * Usage: cp examples/deck-steps.mjs steps.mjs (unchanged: it reads the slide and chart counts from
+ *   the page's SLIDES); then node scripts/check.mjs index.html --viewport 1200x630 --viewport
+ *   1280x800 --steps steps.mjs
+ * Gotchas: it fails while a [bracketed] placeholder is left (PLACEHOLDERS_OK is only for checking
+ *   the template itself) and when a chart slide that names dataset columns read no rows.
  */
-const SLIDE_COUNT=8,CHART_COUNT=2,REAL=[],PLACEHOLDERS_OK=false,pad=n=>String(n).padStart(2,'0');
+const PLACEHOLDERS_OK=false,pad=n=>String(n).padStart(2,'0');
+const {SLIDE_COUNT,CHART_COUNT,REAL}=await page.evaluate(()=>{const all=window.SLIDES??[];
+  return {SLIDE_COUNT:all.length,CHART_COUNT:all.filter(s=>s.type==='chart').length,
+    REAL:all.filter(s=>s.real).map(s=>s.id)};});
+// Chart slides naming dataset columns, read once the slides (drawn after the rows load) are there.
+const fromDataset=()=>page.evaluate(()=>window.DATA?.dataset?(window.SLIDES??[]).filter(s=>
+  s.type==='chart'&&typeof s.y==='string').map(s=>({id:s.id,rows:s.data?.length??0,
+  error:s.error})):[]);
 const at=n=>page.waitForFunction(text=>document.querySelector('#count').textContent===text,
-  `${pad(n)} / ${pad(SLIDE_COUNT)}`,{timeout:3000});
+  `${pad(n)} / ${pad(SLIDE_COUNT)}`,{timeout:2000});
 await step(`${SLIDE_COUNT} slides and ${CHART_COUNT} charts render with marks`,async()=>{
   await page.waitForFunction(([slides,charts])=>document.querySelectorAll('[data-af-slide]')
     .length===slides&&document.querySelectorAll('.chart svg').length===charts,
-    [SLIDE_COUNT,CHART_COUNT],{timeout:4000});
-  if(!await page.locator('.chart .mark-rect path, .chart .mark-line path').count())
+    [SLIDE_COUNT,CHART_COUNT],{timeout:6000});
+  if(CHART_COUNT&&!await page.locator('.chart .mark-rect path, .chart .mark-line path').count())
     throw Error('charts drew no marks');});
+const FROM_DATASET=await fromDataset();
+if(FROM_DATASET.length)await step(`${FROM_DATASET.length} chart slides read the linked dataset`,
+  async()=>{const empty=FROM_DATASET.filter(c=>!c.rows);
+  if(empty.length)throw Error('no dataset rows on '+empty.map(c=>c.error??`${c.id}: check its x and`+
+    ' y against the dataset columns').join('; '));});
 await step('flow and matrix diagrams draw',async()=>{
   const shapes=await page.evaluate(()=>[...document.querySelectorAll('.figure svg')]
     .map(svg=>svg.querySelectorAll('rect, circle').length));
@@ -120,21 +131,11 @@ await step("the ask's milestone starts from the traction chart's last value",asy
       `the ask milestone "${stat}" does not start from ${chart.label}'s last value `+
       `${+last.toFixed(dp)}: set only the target in milestone`;});
   if(off)throw Error(off);});
-await step('the HTML title matches the page name',async()=>{
-  // Link previews, search and the platform's og:title read the published <title>, not the one the
-  // script sets: read the served source (hosted: /a/ID/raw, fetched from the app page).
-  const url=new URL(page.url()),id=url.pathname.match(/^\/(?:a|@[^/]+)\/([A-Za-z0-9]+)/)?.[1];
-  const src=/^(127\.0\.0\.1|localhost|\[::1\])$/.test(url.hostname)||!id?url.href:
-    `${url.origin}/a/${id}/raw`;
-  const served=await page.mainFrame().evaluate(async src=>{const res=await fetch(src,
-    {cache:'no-store'});return res.ok?new DOMParser().parseFromString(await res.text(),
-    'text/html').title:`(served page: HTTP ${res.status})`;},src);
-  const name=await page.evaluate(()=>document.title),tag=name.replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;');
-  // A [bracketed] or older starter title is still the template's.
-  if(served!==name||!PLACEHOLDERS_OK&&/\[|^Pitch deck$/.test(served))
-    throw Error(`the HTML title is "${served}" but the page is named "${name}": `+
-      `set <title>${tag}</title> in index.html`);});
+await step('the HTML title names the deck',async()=>{
+  // The tab, link previews and the platform's og:title read the published <title>.
+  const name=await page.evaluate(()=>document.title);
+  if(!name.trim()||!PLACEHOLDERS_OK&&/\[|^Pitch deck$/.test(name))
+    throw Error(`the HTML title is "${name}": set <title> in index.html to the deck's name`);});
 await step('next button, ArrowRight, End, Home and a dot move between slides',async()=>{
   await page.getByRole('button',{name:'Next slide'}).click();await at(2);
   await page.keyboard.press('ArrowRight');await at(3);

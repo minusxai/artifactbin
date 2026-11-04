@@ -4,10 +4,9 @@ description: Normal HTML scripts and Apollo state, viewer-local persistence, sha
 ---
 ## Read first
 
-Load the one core script before author scripts. It supplies the import mapping; normal CSS/JS runs in the browser without a JSX compiler.
+The platform loads the core runtime and its import map; normal CSS/JS runs in the browser without a JSX compiler.
 
 ```html
-<script src="/af/core.js" data-af="core"></script>
 <script type="application/json" data-af="state">{"count":0}</script>
 <button id="increment" type="button">Add one</button>
 <output id="count">0</output>
@@ -37,7 +36,7 @@ The reader starts immediately. The client engine loads on the first `@afbin/apol
 
 ## Dynamic elements and comments
 
-The server numbers elements present in saved HTML; preserve those returned `data-af-id` values. It cannot number elements your script creates later. Give each such element a stable identity derived from an immutable record ID and its role, not an array index, display text, sort order or a fresh random value on every render:
+Elements in your saved HTML need no `data-af-id`: publish numbers them and carries the numbers across edits. Elements your script creates need one, stable across renders and loads, built as `<list>-<record id>-<role>` from an immutable record ID, never an array index, display text, sort order or random value:
 
 ```js
 const item=document.createElement('li');
@@ -49,13 +48,11 @@ item.append(title);
 document.querySelector('#jobs').append(item);
 ```
 
-Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Use distinct prefixes for different lists and roles; avoid duplicate IDs (`check.mjs` fails on duplicates and warns when IDs differ between two loads). Never reuse a deleted job’s IDs, or borrow a source element’s identity.
-
-Keep dynamic nodes under a saved source ancestor with stable IDs. Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. Comment anchors are described atop `scripts/comment.mjs`.
+Use a distinct prefix per list and role, keep each ID unique on the page, never reuse a deleted record's IDs, and mount the elements under a container in the saved HTML (`#jobs`). Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. Comment anchors are described atop `scripts/comment.mjs`.
 
 ## Saved comment views
 
-A comment saves the reader's view: every top-level field of the state block's JSON (backend namespaces excepted). Keep typed text (drafts, notes, search boxes), tokens and personal information out of the state block, or exclude it:
+A comment saves the reader's view: every top-level field of the state block's JSON (linked dataset and resolver names excepted). Keep typed text (drafts, notes, search boxes), tokens and personal information out of the state block, or exclude it:
 
 ```html
 <script type="application/json" data-af="state" data-af-comment-exclude='["draft"]'>
@@ -65,7 +62,7 @@ A comment saves the reader's view: every top-level field of the state block's JS
 
 `data-af-comment-fields='["screen","tab"]'` saves only the named fields instead. Lists hold unique simple field names; an invalid one saves no view and `autofix` refuses it. A saved view restores only while the field set (or an explicit `data-af-comment-version`) is unchanged. Views are bounded JSON (32 KiB): fields that do not fit are left out; incompatible snapshots show a message without changing state.
 
-Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. Backend data and mutations are never captured or replayed. This is saved comment context, not live sharing or following another reader's local state. Target identity rules still apply if the restored screen no longer contains that element.
+Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. Dataset and resolver data and mutations are never captured or replayed. This is saved comment context, not live sharing or following another reader's local state. Target identity rules still apply if the restored screen no longer contains that element.
 
 ## Local mutations
 
@@ -116,5 +113,3 @@ Use a real admitted image ID. Download packs readable PNG, JPEG, GIF, WebP and A
 
 Data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not packed; do not promise them offline. Packing adds no backend data or credentials. Test the download without a network.
 
-
-For an unpublished local project, read the top of `scripts/serve.mjs`.

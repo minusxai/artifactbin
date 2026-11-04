@@ -23,7 +23,7 @@ databases. Reach your own Postgres from a resolver with `caps.fetch` ([resolvers
 <link rel="af-dataset" data-af-name="orders" href="ref:DATASET_ID">
 ```
 
-Replace `DATASET_ID` before publishing. `data-af-name` is unique across a page's links. Live is the
+`data-af-name` is unique across a page's links. Live is the
 default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version and is read-only.
 
 ## Contents

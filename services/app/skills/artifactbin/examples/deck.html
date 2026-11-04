@@ -3,15 +3,21 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="redline">
-<title>[Company] pitch deck</title><!-- must match the deck name: "<cover company> pitch deck" -->
+<title>[Company] pitch deck</title>
 <script type="module" id="slides-data">
 // Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only
-//   SLIDES and <title> (no drafts, not the CSS or JS); then node scripts/publish.mjs index.html &&
-//   node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+//   <title> (the deck's name for the tab and link previews), DATA and SLIDES (no drafts, not the
+//   CSS or JS); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html
+//   --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+//   Charts from a dataset: publish the CSV (--type dataset), add <link rel="af-dataset"
+//   data-af-name="NAME" href="ref:ID"> after <title>, set DATA.dataset to NAME and give each such
+//   chart slide x and y column names instead of data; the deck reads every row before drawing.
 // Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
 //   traction, business model, competition, ask); N topics means N slides. Types: cover is the
-//   problem slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3},
-//   bullets {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow
+//   problem slide {label "Problem · Company", title ≤40 characters (default: the <title>), text one
+//   line, stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y}] or dataset columns x, y
+//   (rows sorted by the column named in order, default x; y summed per x unless aggregate is
+//   mean, min, max or last; where {col:value} keeps matching rows), format ".1f", unit "$#B"}, flow
 //   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,
 //   from (traction chart id), milestone (target only; shown as "last traction value → target"),
 //   items≤3 [{label,amount} or {label,pct}]} (shows sum, shares; titled from these). Titles ≤2
@@ -19,8 +25,9 @@
 //   a chart counts cumulatively. Unique ids key data-af-id. Every slide shows "Illustrative
 //   figures"; real:true removes it. The comment at the top may stay as it is.
 // Built with: one HTML page from a SLIDES data block; Vega-Lite charts; keyboard and click
-//   navigation; per-slide PNG export.
-// The only part to edit: one entry per slide, rendered by the template below.
+//   navigation.
+// The only part to edit: DATA, and one SLIDES entry per slide, rendered by the template below.
+window.DATA = {dataset: ''}; // a linked dataset's data-af-name, or '' when charts carry their data
 window.SLIDES = [
   {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',
     text:'[Who pays it, in one line.]',
@@ -76,9 +83,27 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 <script type="module">
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
+import {client,gql} from '@afbin/apollo';
 const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
-// The tab title comes from the cover's company; script-made nodes take data-af-ids from slide ids.
-document.title=`${SLIDES[0].label.split('·').pop().trim()} pitch deck`;
+// Chart slides that name dataset columns read every row first (1000 a page; a short page is the
+// last), one value per x in read order, so the ask's from and every label use the real numbers.
+const AGG={sum:v=>v.reduce((a,b)=>a+b,0),mean:v=>AGG.sum(v)/v.length,min:v=>Math.min(...v),
+  max:v=>Math.max(...v),last:v=>v.at(-1)};
+for(const s of SLIDES.filter(s=>s.type==='chart'&&window.DATA?.dataset&&typeof s.y==='string')){
+  try{const name=window.DATA.dataset,cols=[s.x,s.y,s.order??s.x,...Object.keys(s.where??{})],rows=[];
+    // gql also takes a one-string array, so the query is built from the slide's column names.
+    const query=gql([`query Rows($o:Int!){${name}(order_by:{${s.order??s.x}:asc},limit:1000,offset:$o)`+
+      `{_id ${[...new Set(cols)].join(' ')}}}`]);
+    for(let o=0;;o+=1000){const result=await client.query({query,variables:{o}});
+      if(result.errors?.length)throw Error(result.errors[0].message);
+      rows.push(...result.data[name]);if(result.data[name].length<1000)break;}
+    const groups=new Map();for(const row of rows)if(Number.isFinite(row[s.y])&&Object.entries(
+      s.where??{}).every(([col,value])=>row[col]===value))groups.set(String(row[s.x]),[...groups
+      .get(String(row[s.x]))??[],row[s.y]]);
+    s.data=[...groups].map(([x,all])=>({x,y:AGG[s.aggregate??'sum'](all)}));
+  }catch(error){s.data=[];s.error=`${s.label}: ${error.message}`;}
+}
+// Script-made nodes take data-af-ids from slide ids.
 const make=(node,attrs,text)=>{for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);
   if(text!==undefined)node.textContent=text;return node;};
 const el=(tag,id,attrs={},text)=>make(document.createElement(tag),{...attrs,'data-af-id':id},text);
@@ -121,7 +146,8 @@ SLIDES.forEach((s,n)=>{
   const id='slide-'+s.id,section=el('section',id,{'data-af-slide':'',class:surface[s.type]??'',
     'aria-label':`Slide ${n+1}: ${s.label}`});
   section.append(el('p',id+'-label',{class:'t-label soft'},n?`${pad(n+1)} · ${s.label}`:s.label));
-  section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},s.title));
+  section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},
+    s.title??document.title));
   // The ask computes its total and shares (rounded to sum to 100), so the parts always add up,
   // and starts its milestone from the from chart's last value, so the two slides agree.
   if(s.type==='ask'){const parts=s.items??[],v=p=>p.amount??p.pct??0,fmt=x=>s.unit.replace('#',
@@ -146,6 +172,7 @@ SLIDES.forEach((s,n)=>{
   if(s.type==='chart'){
     const host=el('div',id+'-chart',{class:'chart',role:'img','aria-label':s.title});
     section.append(host);charts.push({s,host});
+    if(s.error)section.append(el('p',id+'-error',{class:'t-body',role:'status'},s.error));
   }
   if(!s.real)section.append(el('p',id+'-badge',{class:'t-label illustrative'},badge));
   deck.append(section);
