@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { cellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts';
-import { createCellState } from '../../live-regions/cells';
+import { createCellState, openRegionDoc } from '../../live-regions/cells';
 import { createCellPort } from '../frame-cells';
 import { createCollabText, mergeEarlyTyping, type CollabError, type CollabText } from '../collab-binding';
 
@@ -22,7 +22,7 @@ function harness(options: { writable?: boolean } = {}) {
   const frame = cells.attach((message) => posted.push(message));
   const say = (message: RegionParentMessage) => frame.receive(message as { kind: string; regionId?: unknown });
   /** The server's copy: the session state, then whatever peers and this client write. */
-  const server = new Y.Doc({ gc: false });
+  const server = openRegionDoc();
   return { posted, cells, frame, say, server };
 }
 const texts: CollabText[] = [];
@@ -38,9 +38,7 @@ function open(value: string, h = harness()) {
 }
 /** Another person's edit, made on a replica of the server, as the update the parent would relay. */
 function peerEdit(server: Y.Doc, work: (text: Y.Text) => void, clientID = 99) {
-  const peer = new Y.Doc({ gc: false });
-  peer.clientID = clientID;
-  Y.applyUpdate(peer, Y.encodeStateAsUpdate(server));
+  const peer = openRegionDoc(Y.encodeStateAsUpdate(server), { clientId: clientID });
   const before = Y.encodeStateVector(peer);
   work(peer.getText('region'));
   const update = Y.encodeStateAsUpdate(peer, before);

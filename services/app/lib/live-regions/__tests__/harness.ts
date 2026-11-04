@@ -11,12 +11,12 @@ import * as Y from 'yjs';
 import { installEditorGeometry } from '../../../test/setup/editor-geometry';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../../html-page';
 import { attribute, parseSource } from '../../html-page/html-source';
-import { applyRegionRevision, compactRegion, createRegionState, editorState, normalizeRegionHtml, regionCommands, regionHtml, regionText, type RegionKind } from '..';
+import { applyRegionRevision, compactRegion, createRegionState, editorState, normalizeRegionHtml, openRegionDoc, regionCommands, regionHtml, regionText, type RegionKind } from '..';
 import { stopCapturing } from '../binding';
 import { writeRegion } from '../html';
 import { ID_ATTRS } from '../schema';
 import { documentUnits } from '../lines';
-import { liveDocument, readDocument } from '../state';
+import { readDocument } from '../state';
 
 // jsdom has no layout; every file that opens a room gets the editor geometry stubs.
 let restoreGeometry: () => void;
@@ -80,9 +80,7 @@ export class Client {
   readonly received = new Set<number>();
   online = true;
   constructor(readonly room: Room, readonly name: string, clientID: number) {
-    this.doc = new Y.Doc();
-    this.doc.clientID = clientID;
-    Y.applyUpdate(this.doc, Y.encodeStateAsUpdate(room.server), REMOTE);
+    this.doc = openRegionDoc(Y.encodeStateAsUpdate(room.server), { gc: true, clientId: clientID });
     room.log.forEach((_update, index) => this.received.add(index));
     this.doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== REMOTE) this.outbox.push(update); });
     const mount = document.createElement('div');
@@ -146,7 +144,7 @@ export class Client {
 }
 
 export class Room {
-  readonly server = new Y.Doc({ gc: false });
+  readonly server = openRegionDoc();
   readonly log: Uint8Array[] = [];
   readonly clients: Client[] = [];
   page: { html: string; ledger: HtmlIdentityLedger };
@@ -243,7 +241,7 @@ export class Room {
       client.state.doc.forEach((block) => { for (const name of ID_ATTRS) if (typeof block.attrs[name] === 'string') blockIds.push(block.attrs[name]); });
       expect(new Set(blockIds).size, `I3 ${client.name}'s ids ${blockIds}`).toBe(blockIds.length);
     }
-    expect(() => readDocument(this.kind, liveDocument(this.state)).check(), 'I2 server').not.toThrow();
+    expect(() => readDocument(this.kind, openRegionDoc(this.state)).check(), 'I2 server').not.toThrow();
     expect(new Set(idsOf(html)).size, `I3 ${html}`).toBe(idsOf(html).length);
     // I5 on a copy: compaction must succeed and touch nothing outside the region.
     const page = compactRegion({ savedHtml: this.page.html, ledger: this.page.ledger, regionId: this.regionId, state: this.state });

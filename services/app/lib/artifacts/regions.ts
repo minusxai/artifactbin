@@ -18,7 +18,7 @@
  */
 import * as Y from 'yjs';
 import { regionsChannel } from '@artifactbin/contracts';
-import { applyRegionRevision, compactRegion, editableRegions, LiveRegionRefusal, type RegionKind } from '@/lib/live-regions';
+import { applyRegionRevision, compactRegion, editableRegions, LiveRegionRefusal, openRegionDoc, type RegionKind } from '@/lib/live-regions';
 import type { HtmlIdentityLedger } from '../html-page';
 import type { AccessActor } from '@/lib/accounts';
 import { editorScope, type ArtifactRow } from '@/lib/artifact-access';
@@ -70,8 +70,7 @@ export async function regionUpdatesAfter(q: Queryable, artifactId: string, regio
 
 /** A region's live document: its folded state and every update logged after it. */
 export async function liveRegionDoc(q: Queryable, artifactId: string, row: Pick<RegionRow, 'region_id' | 'state' | 'state_seq' | 'last_seq'>): Promise<Y.Doc> {
-  const doc = new Y.Doc({ gc: false });
-  Y.applyUpdate(doc, row.state);
+  const doc = openRegionDoc(row.state);
   if (row.last_seq > row.state_seq) for (const { update } of await regionUpdatesAfter(q, artifactId, row.region_id, row.state_seq, row.last_seq - row.state_seq)) Y.applyUpdate(doc, update);
   return doc;
 }

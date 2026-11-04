@@ -6,13 +6,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import type { RegionOpenReply, RegionStreamFrame } from '@artifactbin/contracts';
+import { openRegionDoc } from '../../live-regions/cells';
 import { createRegionClient, decodeBase64, encodeBase64, REGION_BATCH_MS, type RegionClientEvents } from '../region-http';
 
 interface FakeStream { url: string; onMessage?: (data: string) => void; onReconnect?: () => void; closed: boolean }
 
 /** The region server, as the contract describes it. */
 function fakeServer() {
-  let doc = new Y.Doc();
+  let doc = openRegionDoc(undefined, { gc: true });
   const calls: Array<{ path: string; init: RequestInit; body: unknown }> = [];
   const stored: Uint8Array[] = [];
   let seq = 0;
@@ -21,7 +22,7 @@ function fakeServer() {
     get doc() { return doc; },
     calls, stored,
     /** The server loses everything after `state` (the test's stand-in for a store that is behind the client). */
-    rollback(state: Uint8Array) { doc = new Y.Doc(); Y.applyUpdate(doc, state); },
+    rollback(state: Uint8Array) { doc = openRegionDoc(state, { gc: true }); },
     seq: () => seq,
     /** Hold replies until released, to observe in-flight requests. */
     hold: false,
@@ -30,8 +31,7 @@ function fakeServer() {
     failNext: null as null | 'network' | 'server' | { status: number; body: unknown },
     refuseOpen: false,
     edit(write: (text: Y.Text) => void): Uint8Array {
-      const remote = new Y.Doc();
-      Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+      const remote = openRegionDoc(Y.encodeStateAsUpdate(doc), { gc: true });
       const before = Y.encodeStateVector(remote);
       write(remote.getText('region'));
       const update = Y.encodeStateAsUpdate(remote, before);
@@ -60,8 +60,7 @@ function fakeServer() {
         if (failure) return json(failure.body, failure.status);
         const update = decodeBase64((body as { update: string }).update);
         const before = Y.encodeStateVector(doc);
-        const trial = new Y.Doc();
-        Y.applyUpdate(trial, Y.encodeStateAsUpdate(doc));
+        const trial = openRegionDoc(Y.encodeStateAsUpdate(doc), { gc: true });
         Y.applyUpdate(trial, update);
         const pending = trial.store as unknown as { pendingStructs: unknown; pendingDs: unknown };
         if (pending.pendingStructs || pending.pendingDs) return json({ error: 'out_of_order', stateVector: encodeBase64(before) }, 409);
@@ -99,9 +98,7 @@ function setup() {
   const frame = (value: RegionStreamFrame) => { for (const stream of live()) stream.onMessage?.(JSON.stringify(value)); };
   /** A local editor that starts from the session's state and produces updates as the frame would. */
   const editor = (state: Uint8Array) => {
-    const doc = new Y.Doc();
-    doc.clientID = 42;
-    Y.applyUpdate(doc, state);
+    const doc = openRegionDoc(state, { gc: true, clientId: 42 });
     return {
       doc,
       type(at: number, text: string): Uint8Array { const before = Y.encodeStateVector(doc); doc.getText('region').insert(at, text); return Y.encodeStateAsUpdate(doc, before); },

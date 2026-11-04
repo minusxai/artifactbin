@@ -7,19 +7,11 @@ import * as Y from 'yjs';
 import type { Node as PMNode } from 'prosemirror-model';
 import { alignPairs, diffHunks, similarity } from './diff';
 import { readRegion, writeRegion } from './html';
-import { documentUnits, insertUnits, keysOf, Linear, readText, regionText, type Attrs, type Unit } from './lines';
+import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
+import { forkRegionDoc, openRegionDoc, regionText } from './region-doc';
 import { LiveRegionRefusal } from './refusal';
 import { ID_ATTRS, regionSchema, type RegionKind } from './schema';
 import { htmlSource, markdownSource } from './source-html';
-
-export { regionText };
-
-/** A live state as a document that can reopen old snapshots. */
-export function liveDocument(state: Uint8Array): Y.Doc {
-  const doc = new Y.Doc({ gc: false });
-  Y.applyUpdate(doc, state);
-  return doc;
-}
 
 /** The merged document, read through the schema: always valid, whatever peers wrote. */
 export const readDocument = (kind: RegionKind, doc: Y.Doc): PMNode => readText(kind, regionText(doc)).doc;
@@ -35,14 +27,14 @@ export function normalizeRegionHtml(kind: RegionKind, html: string): string {
  * the content would double).
  */
 export function createRegionState(kind: RegionKind, html: string): { state: Uint8Array; snapshot: Uint8Array } {
-  const doc = new Y.Doc({ gc: false });
+  const doc = openRegionDoc();
   insertUnits(regionText(doc), 0, documentUnits(kind, readRegion(kind, htmlSource(html), 'refuse')));
   return { state: Y.encodeStateAsUpdate(doc), snapshot: encodeSnapshot(doc) };
 }
 
 /** The region HTML of a state, in normal form, sanitized. */
 export function regionHtml(kind: RegionKind, state: Uint8Array): string {
-  return writeRegion(kind, readDocument(kind, liveDocument(state)));
+  return writeRegion(kind, readDocument(kind, openRegionDoc(state)));
 }
 
 export const encodeSnapshot = (doc: Y.Doc): Uint8Array => Y.encodeSnapshot(Y.snapshot(doc));
@@ -235,7 +227,7 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   if ((input.html === undefined) === (input.markdown === undefined)) throw new TypeError('applyRegionRevision takes exactly one of html or markdown');
   const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!, kind), 'refuse');
   if (!input.savedSnapshot?.length) throw new LiveRegionRefusal('missing_snapshot');
-  const live = liveDocument(input.live);
+  const live = openRegionDoc(input.live);
   let snapshot: Y.Snapshot;
   try { snapshot = Y.decodeSnapshot(input.savedSnapshot); } catch { throw new LiveRegionRefusal('snapshot_mismatch', ['undecodable']); }
   if (!snapshot.sv.size) throw new LiveRegionRefusal('missing_snapshot');
@@ -247,7 +239,7 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   const known = Y.decodeStateVector(Y.encodeStateVector(live));
   const strangers = [...snapshot.sv].filter(([client, clock]) => (known.get(client) ?? 0) < clock);
   if (strangers.length) throw new LiveRegionRefusal('snapshot_mismatch', strangers.map(([client]) => String(client)));
-  const fork = Y.createDocFromSnapshot(live, snapshot);
+  const fork = forkRegionDoc(live, snapshot);
   const text = regionText(fork);
   fork.transact(() => rewrite(kind, text, keepUnchanged(kind, readText(kind, text).doc, revision)));
   return { update: Y.encodeStateAsUpdate(fork, Y.encodeStateVector(live)), snapshot: encodeSnapshot(fork) };
