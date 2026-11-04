@@ -1,19 +1,19 @@
 /**
- * A region's shared state: one Yjs document per region, built once by the server from the saved HTML and kept with
- * `gc: false`, so every saved version's snapshot can be reopened for as long as it is kept. Everything here is a
- * pure function of bytes: states, updates and snapshots go in and come out as `Uint8Array`.
+ * A region's shared state: one Yjs document per region holding ONE Y.Text (lines.ts), built once by the server from
+ * the saved HTML and kept with `gc: false`, so every saved version's snapshot can be reopened for as long as it is
+ * kept. Everything here is a pure function of bytes: states, updates and snapshots go in and come out as `Uint8Array`.
  */
 import * as Y from 'yjs';
-import { prosemirrorToYXmlFragment, updateYFragment, yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import type { Node as PMNode } from 'prosemirror-model';
+import { diffHunks } from './diff';
 import { readRegion, writeRegion } from './html';
+import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
 import { LiveRegionRefusal } from './refusal';
 import { ID_ATTRS, regionSchema, type RegionKind } from './schema';
 import { htmlSource, markdownSource } from './source-html';
 
-/** The shared type a region's document is bound through. */
-const FRAGMENT = 'region';
-export const regionFragment = (doc: Y.Doc): Y.XmlFragment => doc.getXmlFragment(FRAGMENT);
+/** The shared text a region is bound through. */
+export const regionText = (doc: Y.Doc): Y.Text => doc.getText('region');
 
 /** A live state as a document that can reopen old snapshots. */
 export function liveDocument(state: Uint8Array): Y.Doc {
@@ -22,27 +22,8 @@ export function liveDocument(state: Uint8Array): Y.Doc {
   return doc;
 }
 
-/**
- * The merged tree, read through the schema, always a valid document: concurrent deletions can leave a rich region
- * with no block at all (it reads as one empty paragraph). Reading may drop elements the schema refuses, so callers
- * read a copy.
- */
-export function readDocument(kind: RegionKind, doc: Y.Doc): PMNode {
-  const schema = regionSchema(kind);
-  const read = yXmlFragmentToProseMirrorRootNode(regionFragment(doc), schema);
-  if (read.type.contentMatch.matchFragment(read.content)?.validEnd) return read;
-  if (kind === 'text') return schema.topNodeType.create(null, schema.nodes.textblock!.create(null, read.textContent ? schema.text(read.textContent) : null));
-  return read.type.createAndFill(null, read.content) ?? read.type.createAndFill()!;
-}
-
-/**
- * THE ONE CALL OF `updateYFragment`. y-prosemirror marks it `@private @unstable`; the package is pinned exactly and
- * every path that diffs a tree into a region's state (republish, agent edit, compaction's id write-back) comes
- * through here, so the tests of those paths are its tests.
- */
-function diffInto(doc: Y.Doc, target: PMNode): void {
-  doc.transact(() => updateYFragment(doc, regionFragment(doc), target, { mapping: new Map(), isOMark: new Map() }));
-}
+/** The merged document, read through the schema: always valid, whatever peers wrote. */
+export const readDocument = (kind: RegionKind, doc: Y.Doc): PMNode => readText(kind, regionText(doc)).doc;
 
 /** A region's normal form: what publish stores for it. Refuses content the kind cannot hold. */
 export function normalizeRegionHtml(kind: RegionKind, html: string): string {
@@ -56,7 +37,7 @@ export function normalizeRegionHtml(kind: RegionKind, html: string): string {
  */
 export function createRegionState(kind: RegionKind, html: string): { state: Uint8Array; snapshot: Uint8Array } {
   const doc = new Y.Doc({ gc: false });
-  prosemirrorToYXmlFragment(readRegion(kind, htmlSource(html), 'refuse'), regionFragment(doc));
+  insertUnits(regionText(doc), 0, documentUnits(kind, readRegion(kind, htmlSource(html), 'refuse')));
   return { state: Y.encodeStateAsUpdate(doc), snapshot: encodeSnapshot(doc) };
 }
 
@@ -66,6 +47,80 @@ export function regionHtml(kind: RegionKind, state: Uint8Array): string {
 }
 
 export const encodeSnapshot = (doc: Y.Doc): Uint8Array => Y.encodeSnapshot(Y.snapshot(doc));
+
+/** A text whose last line lost its "\n" to concurrent deletions gets it back before anyone writes past it. */
+function terminate(kind: RegionKind, text: Y.Text): PMNode {
+  const { doc, terminated } = readText(kind, text);
+  if (!terminated) text.insert(text.length, '\n', {});
+  return doc;
+}
+
+const lines = (units: readonly Unit[]): Unit[][] => {
+  const out: Unit[][] = [];
+  let line: Unit[] = [];
+  for (const unit of units) { line.push(unit); if (unit.ch === '\n') { out.push(line); line = []; } }
+  return out;
+};
+const changes = (have: Attrs, want: Unit): Attrs | null => {
+  const change: Attrs = {};
+  for (const key of keysOf(want.ch)) if ((have[key] ?? null) !== (want.attrs[key] ?? null)) change[key] = (want.attrs[key] ?? null) as never;
+  return Object.keys(change).length ? change : null;
+};
+
+/** Word, run of spaces, or any other single character: the units a line is compared in. */
+const TOKEN = /[\p{L}\p{N}\p{M}_]+|[ \t]+|[\s\S]/gu;
+function tokens(units: readonly Unit[]): { text: string; start: number }[] {
+  const text = units.map((unit) => unit.ch).join('');
+  return [...text.matchAll(TOKEN)].map((match) => ({ text: match[0], start: match.index! }));
+}
+/** The differing ranges of two lines, in units, found word by word (a rewritten word is replaced whole, so text
+ * someone typed next to it stays next to it instead of landing between two of its letters). */
+function lineHunks(before: readonly Unit[], after: readonly Unit[]) {
+  const a = tokens(before), b = tokens(after);
+  const at = (list: { start: number }[], index: number, total: number) => (index < list.length ? list[index]!.start : total);
+  return diffHunks(a.map((token) => token.text), b.map((token) => token.text)).map((hunk) => ({
+    aStart: at(a, hunk.aStart, before.length), aEnd: at(a, hunk.aEnd, before.length),
+    bStart: at(b, hunk.bStart, after.length), bEnd: at(b, hunk.bEnd, after.length),
+  }));
+}
+
+/** One line rewritten in place at `start`: a word diff, then the attributes of what it kept. */
+function rewriteLine(text: Y.Text, start: number, before: readonly Unit[], after: readonly Unit[]): void {
+  const hunks = lineHunks(before, after);
+  for (const hunk of [...hunks].reverse()) {
+    if (hunk.aEnd > hunk.aStart) text.delete(start + hunk.aStart, hunk.aEnd - hunk.aStart);
+    if (hunk.bEnd > hunk.bStart) insertUnits(text, start + hunk.aStart, after.slice(hunk.bStart, hunk.bEnd));
+  }
+  // Kept units: before index i ↔ after index j between the hunks.
+  let i = 0, j = 0;
+  const kept = (count: number) => {
+    for (let k = 0; k < count; k++, i++, j++) { const change = changes(before[i]!.attrs, after[j]!); if (change) text.format(start + j, 1, change); }
+  };
+  for (const hunk of hunks) { kept(hunk.aStart - i); i = hunk.aEnd; j = hunk.bEnd; }
+  kept(before.length - i);
+}
+
+/**
+ * Rewrites a region's text to `target`: a line diff, and within each changed line a character diff and its
+ * attributes. Only what changed is touched, so whatever else is in the text (other people's concurrent typing,
+ * merged later) stays where it was typed; a deleted line takes only its own characters with it.
+ */
+function rewrite(kind: RegionKind, text: Y.Text, target: PMNode): void {
+  const base = terminate(kind, text);
+  const before = lines(documentUnits(kind, base)), after = lines(documentUnits(kind, target));
+  const key = (line: readonly Unit[]) => JSON.stringify(line);
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of before) { starts.push(offset); offset += line.length; }
+  starts.push(offset);
+  const hunks = diffHunks(before.map(key), after.map(key));
+  for (const hunk of [...hunks].reverse()) {
+    const paired = Math.min(hunk.aEnd - hunk.aStart, hunk.bEnd - hunk.bStart);
+    if (hunk.aEnd - hunk.aStart > paired) text.delete(starts[hunk.aStart + paired]!, starts[hunk.aEnd]! - starts[hunk.aStart + paired]!);
+    if (hunk.bEnd - hunk.bStart > paired) insertUnits(text, starts[hunk.aStart + paired]!, after.slice(hunk.bStart + paired, hunk.bEnd).flat());
+    for (let k = paired - 1; k >= 0; k--) rewriteLine(text, starts[hunk.aStart + k]!, before[hunk.aStart + k]!, after[hunk.bStart + k]!);
+  }
+}
 
 const withoutIds = (block: PMNode): PMNode => {
   const attrs: Record<string, unknown> = { ...block.attrs };
@@ -143,8 +198,8 @@ interface RegionRevision {
 /**
  * The THREE-WAY apply of a republish or an agent edit. The revision was made from a saved version, not from the live
  * state: diffing it against the live state would treat everyone's synced, unsaved typing as deleted. So the saved
- * version is reopened from its snapshot, the revision is diffed into that fork, and only the fork's new operations
- * are merged. A revision without a snapshot is refused.
+ * version is reopened from its snapshot, the revision is diffed into that fork (a line and character diff of its
+ * text), and only the fork's new operations are merged. A revision without a snapshot is refused.
  */
 export function applyRegionRevision(input: RegionRevisionInput): RegionRevision {
   const { kind } = input;
@@ -158,23 +213,27 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   const strangers = [...snapshot.sv].filter(([client, clock]) => (known.get(client) ?? 0) < clock);
   if (strangers.length) throw new LiveRegionRefusal('snapshot_mismatch', strangers.map(([client]) => String(client)));
   const fork = Y.createDocFromSnapshot(live, snapshot);
-  diffInto(fork, keepUnchanged(kind, readDocument(kind, liveDocument(Y.encodeStateAsUpdate(fork))), revision));
+  const text = regionText(fork);
+  fork.transact(() => rewrite(kind, text, keepUnchanged(kind, readText(kind, text).doc, revision)));
   return { update: Y.encodeStateAsUpdate(fork, Y.encodeStateVector(live)), snapshot: encodeSnapshot(fork) };
 }
 
 /** Writes the given ids onto a state's own blocks (block i takes block i's ids), as an update; nothing else changes. */
 export function writeIds(kind: RegionKind, doc: Y.Doc, ids: readonly Record<string, string | null>[]): Uint8Array {
   const before = Y.encodeStateVector(doc);
-  const current = readDocument(kind, liveDocument(Y.encodeStateAsUpdate(doc)));
   if (kind === 'rich') {
-    const blocks: PMNode[] = [];
-    current.forEach((block, _offset, index) => {
-      const next = ids[index] ?? {};
-      const attrs: Record<string, unknown> = { ...block.attrs };
-      for (const name of ID_ATTRS) if (name in block.type.spec.attrs!) attrs[name] = next[name] ?? null;
-      blocks.push(block.type.create(attrs, block.content, block.marks));
+    const text = regionText(doc);
+    doc.transact(() => {
+      const linear = new Linear(kind, terminate(kind, text));
+      linear.blocks.forEach((block, index) => {
+        const end = block.offset + block.length - 1;
+        const [unit] = linear.units(end, end + 1);
+        const wanted: Unit = { ch: '\n', attrs: { ...unit!.attrs } };
+        for (const name of ID_ATTRS) { const id = ids[index]?.[name]; if (id) wanted.attrs[name] = id; else delete wanted.attrs[name]; }
+        const change = changes(unit!.attrs, wanted);
+        if (change) text.format(end, 1, change);
+      });
     });
-    diffInto(doc, regionSchema(kind).nodes.doc!.create(null, blocks));
   }
   return Y.encodeStateAsUpdate(doc, before);
 }

@@ -1,6 +1,6 @@
 /**
- * The editor side of a live region: the ProseMirror state a browser edits, bound to the region's Yjs fragment.
- * Sync and undo are y-prosemirror's; this adds the id dedupe filter, Markdown input rules, the flat-block commands
+ * The editor side of a live region: the ProseMirror state a browser edits, bound to the region's Y.Text by
+ * binding.ts (sync and per-person undo). This adds the id dedupe filter, Markdown input rules, the flat-block commands
  * and a clipboard that reads and writes the region's own HTML (html.ts), so a paste passes the same sanitizer as
  * the server and a copy is the saved form, ids included (the dedupe drops repeats on paste).
  */
@@ -9,9 +9,10 @@ import { InputRule, inputRules } from 'prosemirror-inputrules';
 import { keymap } from 'prosemirror-keymap';
 import { DOMParser, DOMSerializer, Fragment, Slice, type Node as PMNode, type Schema } from 'prosemirror-model';
 import { EditorState, Plugin, PluginKey, TextSelection, type Command, type Transaction } from 'prosemirror-state';
-import { initProseMirrorDoc, redoCommand, undoCommand, ySyncPlugin, yUndoPlugin } from 'y-prosemirror';
 import type * as Y from 'yjs';
+import { bindingPlugin, redo, undo } from './binding';
 import { readRegion, writeRegion, type SourceNode } from './html';
+import { readText } from './lines';
 import { ID_ATTRS, MAX_DEPTH, regionSchema, safeHref, type ListType, type RegionKind } from './schema';
 
 /** A browser DOM subtree as html.ts's element tree. */
@@ -151,8 +152,7 @@ export function regionCommands(kind: RegionKind): RegionCommands {
   const heading = (level: number): Command => (rich ? bind((state) => withAttrs(state, (node) => (node.type.name === 'textblock' ? { level } : null))) : none);
   const list = (type: ListType | null): Command => (rich ? bind((state) => withAttrs(state, (node) => (type ? { list: type, depth: Math.max(1, node.attrs.depth) } : { list: null, depth: 0 }))) : none);
   const quote = (on: boolean): Command => (rich ? bind((state) => withAttrs(state, () => ({ quote: on }))) : none);
-  /** Converting to or from a code block replaces the block (a new Yjs element): text typed in it at that moment by
-   * someone else is lost. The tests pin this. */
+  /** Converting to or from a code block reformats the block's lines; nobody's concurrent typing is touched. */
   const codeBlock = (on: boolean): Command => (rich ? (state, dispatch) => {
     const block = currentBlock(state);
     const type = on ? schema.nodes.code_block! : schema.nodes.textblock!;
@@ -173,7 +173,7 @@ export function regionCommands(kind: RegionKind): RegionCommands {
     dispatch?.(tr);
     return true;
   } : none);
-  return { splitBlock, backspace, indent, outdent, heading, list, quote, codeBlock, strong: mark('strong'), em: mark('em'), code: mark('code'), link, undo: undoCommand, redo: redoCommand };
+  return { splitBlock, backspace, indent, outdent, heading, list, quote, codeBlock, strong: mark('strong'), em: mark('em'), code: mark('code'), link, undo, redo };
 }
 
 /** Markdown typed at the start of a block: `# `..`###### `, `- `/`* `, `1. `, `> `, ```` ``` ````, `---`. */
@@ -204,11 +204,10 @@ function markdownRules(kind: RegionKind): Plugin {
       const $start = state.doc.resolve(start);
       const node = $start.parent;
       if ($start.depth !== 1 || node.type !== schema.nodes.textblock || node.attrs.list || node.content.size !== end - start) return null;
+      // The rule is a new line before the paragraph, which keeps its text, ids and anyone's concurrent typing.
       const from = $start.before(1);
-      const tr = state.tr.replaceWith(from, from + node.nodeSize, [
-        schema.nodes.rule!.create({ quote: node.attrs.quote, afId: node.attrs.afId, quoteId: node.attrs.quoteId }),
-        schema.nodes.textblock!.create({ quote: node.attrs.quote }),
-      ]);
+      // Inserted while the dashes are still there, so the new line is unambiguously the one before the paragraph.
+      const tr = state.tr.insert(from, schema.nodes.rule!.create({ quote: node.attrs.quote })).delete(start + 1, end + 1);
       return tr.setSelection(TextSelection.create(tr.doc, from + 2));
     }),
   ];
@@ -221,10 +220,9 @@ const MARK_SHORTCUTS = [
   { match: /(?<!`)`([^`]+)`$/, mark: 'code', width: 1 },
 ];
 /**
- * `**x**`, `*x*` and `` `x` `` typed: the closing delimiter, then the opening one, are deleted and the mark added, each
- * in its own transaction. y-prosemirror diffs a changed text as ONE replaced range, so deleting both delimiters in one
- * transaction would delete and re-insert everything between them, and a concurrent edit of that text would see it
- * duplicated. (An InputRule returns one transaction, so this is a plugin of its own.)
+ * `**x**`, `*x*` and `` `x` `` typed: the closing delimiter, then the opening one, are deleted and the mark added,
+ * as three steps of one transaction; the binding writes each step as its own small edit, so the text between the
+ * delimiters is never rewritten.
  */
 function markShortcuts(kind: RegionKind): Plugin {
   const schema = regionSchema(kind);
@@ -240,9 +238,10 @@ function markShortcuts(kind: RegionKind): Plugin {
           if (!found) continue;
           const type = schema.marks[shortcut.mark]!;
           const start = from - (found[0].length - text.length);
-          if (shortcut.width > 1) view.dispatch(view.state.tr.delete(from - (shortcut.width - 1), from));
-          view.dispatch(view.state.tr.delete(start, start + shortcut.width));
-          view.dispatch(view.state.tr.addMark(start, start + found[1]!.length, type.create()).removeStoredMark(type));
+          const tr = view.state.tr;
+          if (shortcut.width > 1) tr.delete(from - (shortcut.width - 1), from);
+          tr.delete(start, start + shortcut.width).addMark(start, start + found[1]!.length, type.create()).removeStoredMark(type);
+          view.dispatch(tr);
           return true;
         }
         return false;
@@ -252,15 +251,14 @@ function markShortcuts(kind: RegionKind): Plugin {
 }
 
 /**
- * The editor plugins of a region bound to its fragment: y-prosemirror sync and undo (each person undoes only their
- * own edits), the id dedupe, Markdown input rules, the keymap and the region clipboard.
+ * The editor plugins of a region bound to its text: the binding (sync, and undo of the person's own edits), the id
+ * dedupe, Markdown input rules, the keymap and the region clipboard.
  */
-function editorPlugins(kind: RegionKind, fragment: Y.XmlFragment, mapping?: ReturnType<typeof initProseMirrorDoc>['mapping']): Plugin[] {
+function editorPlugins(kind: RegionKind, text: Y.Text, terminated: boolean): Plugin[] {
   const schema = regionSchema(kind);
   const commands = regionCommands(kind);
   return [
-    ySyncPlugin(fragment, mapping ? { mapping } : {}),
-    yUndoPlugin({ protectedNodes: new Set(['textblock']) }),
+    bindingPlugin(kind, text, terminated),
     idDedupe(),
     markShortcuts(kind),
     markdownRules(kind),
@@ -289,9 +287,8 @@ function editorPlugins(kind: RegionKind, fragment: Y.XmlFragment, mapping?: Retu
   ];
 }
 
-/** The editor state of a region: its document is read from the fragment (synchronously), never parsed by the client. */
-export function editorState(kind: RegionKind, fragment: Y.XmlFragment): EditorState {
-  const schema = regionSchema(kind);
-  const initial = fragment.length ? initProseMirrorDoc(fragment, schema) : null;
-  return EditorState.create({ schema, doc: initial?.doc ?? schema.topNodeType.createAndFill()!, plugins: editorPlugins(kind, fragment, initial?.mapping) });
+/** The editor state of a region: its document is read from the shared text, never parsed by the client. */
+export function editorState(kind: RegionKind, text: Y.Text): EditorState {
+  const { doc, terminated } = readText(kind, text);
+  return EditorState.create({ schema: regionSchema(kind), doc, plugins: editorPlugins(kind, text, terminated) });
 }

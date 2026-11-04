@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * Property test, short run (the ui project, so every affected `npm test` and full CI): random interleavings of every
  * edit kind across 2–5 editors with random delivery, duplication and partitions converge to one valid page (I1–I6)

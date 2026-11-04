@@ -1,8 +1,10 @@
+// @vitest-environment jsdom
 /**
  * Named concurrent-editing scenarios through real EditorViews: keys go through the keymap, typed Markdown through
  * handleTextInput (so input rules fire), pastes through the clipboard parser. Every scenario ends with the room's
  * invariants (I1 identical HTML everywhere, I2 schema-valid, I3 unique ids, I5 compaction, I6 normal form) and states
- * its text (I4): what must survive, and, where y-prosemirror cannot keep it, the KNOWN LIMITATION that loses it.
+ * its text (I4): what must survive. Nothing typed is ever lost; the one pinned limitation is formatting (two people
+ * bolding overlapping ranges).
  * Client ids are fixed (A=1, B=2, C=3), so Yjs's tie-breaks, and so the expected HTML, are deterministic.
  */
 import { afterEach, describe, expect, it } from 'vitest';
@@ -29,8 +31,6 @@ interface Scenario {
   expected: string;
   /** I4: text typed by someone that must be present. */
   kept?: string[];
-  /** Known limitation, pinned: typed text y-prosemirror loses here (its block was removed or recreated concurrently). */
-  lost?: string[];
 }
 const runScenarios = (scenarios: Scenario[]) => it.each(scenarios.map((scenario) => [scenario.name, scenario] as const))('%s', (_name, scenario) => {
   const [room, A, B, C] = open(scenario.region, scenario.clients, scenario.kind);
@@ -38,7 +38,6 @@ const runScenarios = (scenarios: Scenario[]) => it.each(scenarios.map((scenario)
   const html = room.invariants();
   expect(bare(html)).toBe(scenario.expected);
   for (const text of scenario.kept ?? []) expect(html, `I4 kept ${JSON.stringify(text)}`).toContain(text);
-  for (const text of scenario.lost ?? []) expect(html, `known limitation: ${JSON.stringify(text)} is lost`).not.toContain(text);
 });
 
 describe('Markdown shortcuts, concurrently', () => {
@@ -47,10 +46,10 @@ describe('Markdown shortcuts, concurrently', () => {
       region: '<p>Hello world</p>',
       run: (_room, A, B) => { A.select(A.blockStart(0)).type('# '); B.select(B.find('Hello', { after: true })).type(' there'); },
       expected: '<h1>Hello there world</h1>', kept: ['there'] },
-    { name: 'A types "- " while B presses Enter in the same paragraph: the first half becomes the item',
+    { name: 'A types "- " while B presses Enter in the same paragraph: the list item is the part after the Enter, whose line end A formatted',
       region: '<p>Hello world</p>',
       run: (_room, A, B) => { A.select(A.blockStart(0)).type('- '); B.select(B.find('Hello', { after: true })).key('Enter'); },
-      expected: '<ul><li><p>Hello</p></li></ul><p>world</p>', kept: ['Hello', 'world'] },
+      expected: '<p>Hello</p><ul><li><p>world</p></li></ul>', kept: ['Hello', 'world'] },
     { name: 'A types "> " while B deletes the paragraph: the paragraph stays deleted',
       region: '<p>Keep</p><p>Quote me</p><p>End</p>',
       run: (_room, A, B) => { A.select(A.blockStart(1)).type('> '); B.delete(B.blockStart(1) - 1, B.blockStart(1, true) + 1); },
@@ -74,43 +73,47 @@ describe('Markdown shortcuts, concurrently', () => {
       region: '<p>--</p><p>Next para</p>',
       run: (_room, A, B) => { A.select(A.blockStart(0, true)).type('-'); B.select(B.find('para', { after: true })).type(' more'); },
       expected: '<hr><p></p><p>Next para more</p>', kept: ['Next para more'] },
-    { name: '"---" while someone types in the same paragraph: the rule goes before, their typing stays in the paragraph',
+    { name: '"---" while someone types at the start of the same paragraph: the rule goes before, their typing stays in the paragraph',
       region: '<p>--</p>',
       run: (_room, A, B) => { A.select(A.blockStart(0, true)).type('-'); B.select(B.blockStart(0)).type('typed '); },
       expected: '<hr><p>typed</p>', kept: ['typed'] },
-    { name: 'known limitation: converting to a code block while someone types in it loses their typing',
+    { name: '"---" while someone types at the end of the same paragraph: the rule goes before, their typing stays in the paragraph',
+      region: '<p>--</p>',
+      run: (_room, A, B) => { A.select(A.blockStart(0, true)).type('-'); B.select(B.blockStart(0, true)).type(' typed'); },
+      expected: '<hr><p>typed</p>', kept: ['typed'] },
+    { name: 'converting to a code block while someone types in it keeps their typing',
       region: '<p>let x = 1</p>',
       run: (_room, A, B) => { A.select(A.blockStart(0)).type('```'); B.select(B.blockStart(0, true)).type(';'); },
-      expected: '<pre><code>let x = 1</code></pre>', lost: [';'] },
+      expected: '<pre><code>let x = 1;</code></pre>', kept: ['let x = 1;'] },
   ]);
 });
 
 describe('structure', () => {
   runScenarios([
-    { name: 'known limitation: concurrent Enter at the same position duplicates the text after it (each split copies it)',
+    { name: 'concurrent Enter at the same position: two line breaks, nothing duplicated',
       region: '<p>Hello world</p>',
       run: (_room, A, B) => { A.select(A.find('Hello', { after: true })).key('Enter'); B.select(B.find('Hello', { after: true })).key('Enter'); },
-      expected: '<p>Hello</p><p>world</p><p>world</p>' },
-    { name: 'known limitation: Backspace-joining two paragraphs while B types in the second loses B\'s typing; the first paragraph\'s id survives',
+      expected: '<p>Hello</p><p></p><p>world</p>', kept: ['Hello', 'world'] },
+    { name: 'Backspace-joining two paragraphs while B types in the second keeps B\'s typing',
       region: '<p>First</p><p>Second</p>',
       run: (_room, A, B) => { A.select(A.blockStart(1)).key('Backspace'); B.select(B.find('Second', { after: true })).type(' typed'); },
-      expected: '<p>FirstSecond</p>', lost: ['typed'] },
+      expected: '<p>FirstSecond typed</p>', kept: ['FirstSecond typed'] },
     { name: 'concurrent indent and outdent of one list item: the outdent\'s list removal and one depth win',
       region: '<ul><li>a</li><li>b</li><li>c</li></ul>',
       run: (_room, A, B) => { A.select(A.find('c')).key('Tab'); B.select(B.find('c')).key('Tab', { shift: true }); },
       expected: '<ul><li><p>a</p></li><li><p>b</p></li></ul><p>c</p>' },
-    { name: 'known limitation: deleting a block someone is typing in loses their typing',
+    { name: 'deleting a block someone is typing in: the block goes, their typing survives',
       region: '<p>Keep</p><p>Doomed text</p><p>End</p>',
       run: (_room, A, B) => { A.delete(A.blockStart(1) - 1, A.blockStart(1, true) + 1); B.select(B.find('Doomed', { after: true })).type(' more'); },
-      expected: '<p>Keep</p><p>End</p>', lost: ['more'] },
+      expected: '<p>Keep</p><p>moreEnd</p>', kept: ['more'] },
     { name: 'deleting the whole region while B types in its first block keeps B\'s typing',
       region: '<p>One</p><p>Two</p>',
       run: (_room, A, B) => { A.delete(A.blockStart(0), A.blockStart(1, true)); B.select(B.find('One', { after: true })).type(' typed'); },
       expected: '<p>typed</p>', kept: ['typed'] },
-    { name: 'known limitation: deleting the whole region while B types in a later block loses B\'s typing',
+    { name: 'deleting the whole region while B types in a later block keeps B\'s typing',
       region: '<p>One</p><p>Two</p>',
       run: (_room, A, B) => { A.delete(A.blockStart(0), A.blockStart(1, true)); B.select(B.find('Two', { after: true })).type(' typed'); },
-      expected: '<p></p>', lost: ['typed'] },
+      expected: '<p>typed</p>', kept: ['typed'] },
     { name: 'nested lists three deep: typing in the deepest item while another user adds a fourth level',
       region: '<ul><li>a<ul><li>b<ol><li>c</li></ol></li></ul></li></ul>',
       run: (_room, A, B) => { A.select(A.find('c', { after: true })).type(' typed'); B.select(B.find('c', { after: true })).key('Enter').type('d').key('Tab'); },
@@ -295,14 +298,14 @@ describe('republish and agent edits (three-way)', () => {
     expect(bare(room.invariants())).toBe('<h2>Goals</h2><p>First paragraph about the plan [p1].</p><p>Second [p2] paragraph, revised by the author.</p>');
   });
 
-  it('known limitation: the author deletes a block the reader is typing in, and the reader\'s typing in it goes too', () => {
+  it('the author deletes a block the reader is typing in: the block goes, the reader\'s synced and unsent typing survive', () => {
     const [room, A] = open(base);
     A.select(A.find('Second', { after: true })).type(' [typed]');
     room.sync();
     A.select(A.find('[typed]', { after: true })).type(' [unsent]');
     room.republish((region) => region.replace(/<p[^>]*>Second[^<]*<\/p>/, ''));
     const html = room.invariants();
-    expect(bare(html)).toBe('<h2>Goals</h2><p>First paragraph about the plan.</p>');
+    expect(bare(html)).toBe('<h2>Goals</h2><p>First paragraph about the plan.</p><p>[typed] [unsent]</p>');
   });
 
   it('the author changes p to h2 while a reader types in it: the reader\'s typing stays', () => {

@@ -1,10 +1,9 @@
 /**
  * The editing schema of a live region. Blocks are FLAT: a heading, list item or quoted paragraph is one `textblock`
  * whose structure lives in attributes (`level`, `list`, `depth`, `quote`), and nested `ul/ol/li/blockquote` exist
- * only in the saved HTML (html.ts builds and reads them). y-prosemirror deletes and recreates a Yjs element whose
- * node type changes or that moves under a new parent, which loses whatever another user was typing in it at that
- * moment; an attribute change keeps the element, so `# `, `- `, `1. `, `> `, indent and outdent keep concurrent
- * typing. Code blocks stay a separate type (no marks, preformatted text): converting to one recreates the block.
+ * only in the saved HTML (html.ts builds and reads them). Flat blocks map one to one onto the lines of the region's
+ * Y.Text (lines.ts): a block's attributes are its line's "\n" attributes, so a structural change is a format and
+ * never recreates anything. Code blocks stay a separate type (no marks, preformatted text) over code lines.
  *
  * Every element of a stored page carries `data-af-id`. A block keeps the ids of the elements it stands for: its own
  * (`afId`), the `<li>` it opens (`itemId`), the `<ul>/<ol>` it opens (`listId`) and the `<blockquote>` it opens

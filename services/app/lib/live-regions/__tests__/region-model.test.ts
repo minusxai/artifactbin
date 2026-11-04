@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { attribute, parseSource } from '../../html-page/html-source';
-import { applyRegionRevision, compactRegion, createRegionState, LiveRegionRefusal, normalizeRegionHtml, regionFragment, regionHtml, regionSchema, safeHref, type RegionKind } from '..';
+import { applyRegionRevision, compactRegion, createRegionState, LiveRegionRefusal, normalizeRegionHtml, regionHtml, regionSchema, regionText, safeHref, type RegionKind } from '..';
 
 const refusal = (run: () => unknown): LiveRegionRefusal => {
   try { run(); } catch (error) { if (error instanceof LiveRegionRefusal) return error; throw error; }
@@ -149,25 +149,17 @@ describe('sanitization: authored content is refused by name, never silently rewr
     expect(safeHref(href)).toBe(expected);
   });
 
-  it('the merged state is stripped, not refused: foreign elements, attributes, unsafe links and junk ids vanish', () => {
+  it('the merged state is stripped, not refused: foreign attributes, embeds, unsafe links, junk ids and bad values vanish; text never does', () => {
     const doc = new Y.Doc();
-    const fragment = regionFragment(doc);
-    const script = new Y.XmlElement('script');
-    script.insert(0, [new Y.XmlText('alert(1)')]);
-    const block = new Y.XmlElement('textblock');
-    block.setAttribute('level', 9 as never);
-    block.setAttribute('onclick', 'x()');
-    block.setAttribute('afId', '"><script>alert(1)</script>');
-    const text = new Y.XmlText();
-    text.insert(0, 'ok ');
-    text.insert(3, 'link', { link: { href: 'javascript:alert(1)' } });
-    block.insert(0, [text]);
-    const quote = new Y.XmlElement('textblock');
-    quote.setAttribute('quote', 'yes' as never);
-    quote.setAttribute('list', 'weird' as never);
-    quote.insert(0, [new Y.XmlText('q')]);
-    fragment.insert(0, [script, block, quote]);
-    expect(regionHtml('rich', Y.encodeStateAsUpdate(doc))).toBe('<h6>ok link</h6><p>q</p>');
+    const text = regionText(doc);
+    text.insert(0, 'ok ', { onclick: 'x()' });
+    text.insertEmbed(3, { script: 'alert(1)' });
+    text.insert(4, 'link', { link: 'javascript:alert(1)', bold: 'yes' });
+    text.insert(8, '\n', { level: 9, onclick: 'x()', afId: '"><script>alert(1)</script>' });
+    text.insert(9, 'q\n', { quote: 'yes', list: 'weird' } as never);
+    text.insert(11, 'held\n', { rule: true });
+    text.insert(16, 'tail without its line end');
+    expect(regionHtml('rich', Y.encodeStateAsUpdate(doc))).toBe('<h6>ok link</h6><p>q</p><p>held</p><p>tail without its line end</p>');
   });
 });
 
@@ -193,14 +185,15 @@ describe('agent Markdown (prosemirror-markdown, CommonMark, raw HTML off)', () =
 });
 
 describe('three-way revision (republish and agent edits)', () => {
-  /** A reader's edit made straight on the Yjs tree: text inserted into block `index`. */
+  /** A reader's edit made straight on the shared text: text inserted at `offset` within line `index`. */
   const readerTypes = (state: Uint8Array, index: number, offset: number, text: string, clientID = 7) => {
     const doc = new Y.Doc();
     doc.clientID = clientID;
     Y.applyUpdate(doc, state);
     const before = Y.encodeStateVector(doc);
-    const block = regionFragment(doc).get(index) as Y.XmlElement;
-    (block.get(0) as Y.XmlText).insert(offset, text);
+    const shared = regionText(doc);
+    const lineStart = shared.toString().split('\n').slice(0, index).reduce((sum, line) => sum + line.length + 1, 0);
+    shared.insert(lineStart + offset, text);
     return Y.encodeStateAsUpdate(doc, before);
   };
   const base = '<h2 data-af-id="h">Goals</h2><p data-af-id="p1">First paragraph about the plan.</p><p data-af-id="p2">Second paragraph that the author will revise.</p>';
@@ -248,7 +241,7 @@ describe('three-way revision (republish and agent edits)', () => {
     const { update } = applyRegionRevision({ kind: 'rich', live, savedSnapshot: compactSnapshot(live), html: base.replace('Goals', 'Aims') });
     const doc = new Y.Doc();
     Y.applyUpdate(doc, apply(live, update));
-    expect(((regionFragment(doc).get(1) as Y.XmlElement).get(0) as Y.XmlText).toString()).toBe('First paragraph about the plan. ');
+    expect(regionText(doc).toString().split('\n')[1]).toBe('First paragraph about the plan. ');
   });
 });
 
@@ -265,10 +258,9 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
     const doc = new Y.Doc();
     Y.applyUpdate(doc, state);
     const before = Y.encodeStateVector(doc);
-    const block = new Y.XmlElement('textblock');
-    for (const [name, value] of Object.entries({ level: 0, list: null, depth: 0, quote: false, ...attrs })) if (value !== null) block.setAttribute(name, value as never);
-    block.insert(0, [new Y.XmlText(text)]);
-    regionFragment(doc).push([block]);
+    const shared = regionText(doc);
+    shared.insert(shared.length, `${text}\n`, {});
+    shared.format(shared.length - 1, 1, attrs as never);
     return Y.encodeStateAsUpdate(doc, before);
   };
   const check = (page: { html: string }, saved: ReturnType<typeof published>) => {
@@ -334,7 +326,7 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
     const doc = new Y.Doc();
     Y.applyUpdate(doc, state);
     const before = Y.encodeStateVector(doc);
-    ((regionFragment(doc).get(0) as Y.XmlElement).get(0) as Y.XmlText).insert(5, ' & safe <title>');
+    regionText(doc).insert(5, ' & safe <title>');
     const page = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: apply(state, Y.encodeStateAsUpdate(doc, before)) });
     check(page, saved);
     expect(page.html).toContain(`data-af-editable="text" data-af-id="${saved.regionId}">Plain &amp; safe &lt;title&gt; title</h1>`);

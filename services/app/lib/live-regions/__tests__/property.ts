@@ -4,16 +4,16 @@
  * an agent's Markdown edit, compaction) mixed with delivery (partial sends, receives in reverse, shuffled or
  * duplicated order, partitions that heal). After the run everyone reconnects and the room's invariants hold.
  *
- * I4 is tracked by character: every character typed is unique (a CJK ideograph), so each is present at the end,
- * or was deleted on purpose (a range someone deleted, a block an author or agent rewrote), or belongs to someone who
- * used undo, or is the KNOWN LIMITATION: its block was removed or replaced concurrently (a join, a block deletion, a
- * code-block conversion), which the server's history (gc: false) must show. Anything else fails the run.
+ * I4 is STRICT and tracked by character: every character typed is unique (a CJK ideograph), so each is present at
+ * the end unless someone deleted it: a range someone deleted while seeing it, a block an author or agent rewrote, or
+ * its own typist's undo. Nothing else may remove a character: not a join, a split, a block deletion around it, a
+ * type change or a code-block conversion. (Concurrent overlapping formatting is the one pinned limitation, and it
+ * removes no text.)
  */
 import fc from 'fast-check';
 import { DOMParser as PMDOMParser } from 'prosemirror-model';
 import { defaultMarkdownSerializer, schema as markdownSchema } from 'prosemirror-markdown';
 import { expect } from 'vitest';
-import * as Y from 'yjs';
 import { Room, type Client } from './harness';
 
 type Op =
@@ -70,7 +70,7 @@ const TRACKED = /[一-鿿]/gu;
 const tracked = (text: string) => text.match(TRACKED) ?? [];
 
 /** One run; returns the number of characters lost to the known limitation. */
-function runScenario({ clients: count, region, ops }: Scenario): { lostToLimitation: number; typed: number } {
+function runScenario({ clients: count, region, ops }: Scenario): { lost: number; typed: number } {
   const room = new Room('rich', REGIONS[region]!);
   const clients = Array.from({ length: count }, (_unused, index) => room.join(String.fromCharCode(65 + index)));
   let next = 0x4e00;
@@ -187,38 +187,14 @@ function runScenario({ clients: count, region, ops }: Scenario): { lostToLimitat
     for (const client of clients) client.online = true;
     const html = room.invariants();
     const present = new Set(tracked(html));
-    let lostToLimitation = 0;
-    const items = itemsByCharacter(room.server);
-    for (const [character, typist] of owner) {
-      if (present.has(character) || deliberate.has(character) || undid.has(typist)) continue;
-      const holders = items.get(character) ?? [];
-      const explained = holders.length > 0 && holders.every((item) => item.deleted && blockRemoved(item));
-      expect(explained, `I4: ${JSON.stringify(character)} typed by ${typist.name} vanished from a block that still exists`).toBe(true);
-      lostToLimitation++;
-    }
-    return { lostToLimitation, typed: owner.size };
+    const lost = [...owner].filter(([character, typist]) => !present.has(character) && !deliberate.has(character) && !undid.has(typist));
+    expect(lost.map(([character, typist]) => `${character} typed by ${typist.name}`), 'I4: characters nobody deleted are gone').toEqual([]);
+    return { lost: lost.length, typed: owner.size };
   } finally {
     room.destroy();
   }
 }
 
-/** Every text item of the server's full history (gc: false keeps deleted content), by character. */
-function itemsByCharacter(doc: Y.Doc): Map<string, Y.Item[]> {
-  const out = new Map<string, Y.Item[]>();
-  for (const structs of doc.store.clients.values()) {
-    for (const struct of structs) {
-      if (!(struct instanceof Y.Item) || !(struct.content instanceof Y.ContentString)) continue;
-      for (const character of tracked(struct.content.str)) out.set(character, [...(out.get(character) ?? []), struct]);
-    }
-  }
-  return out;
-}
-/** The item's text, or the block holding it, was deleted: the block was removed or replaced. */
-const blockRemoved = (item: Y.Item) => {
-  const text = item.parent as Y.AbstractType<unknown>;
-  const block = text._item?.parent as Y.AbstractType<unknown> | undefined;
-  return !!(text._item?.deleted || block?._item?.deleted);
-};
 function mulberry(seed: number) {
   let state = seed >>> 0;
   return () => { state = (state + 0x6d2b79f5) >>> 0; let t = state; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -228,12 +204,12 @@ function mulberry(seed: number) {
  * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed and the shrunk
  * counterexample of a failure; replay it with `fc.assert(property, { seed, path })`.
  */
-export function checkConvergence(runs: number, maxOps: number): { typed: number; lostToLimitation: number } {
-  const totals = { typed: 0, lostToLimitation: 0 };
+export function checkConvergence(runs: number, maxOps: number): { typed: number; lost: number } {
+  const totals = { typed: 0, lost: 0 };
   fc.assert(fc.property(scenario(maxOps), (run) => {
     const result = runScenario(run);
     totals.typed += result.typed;
-    totals.lostToLimitation += result.lostToLimitation;
+    totals.lost += result.lost;
   }), { numRuns: runs });
   expect(totals.typed, 'the runs typed text').toBeGreaterThan(runs);
   return totals;

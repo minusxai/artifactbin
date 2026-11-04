@@ -4,17 +4,23 @@
  * moves it. Delivery is a star through the server, as the product's will be. Every client starts from the server's
  * state bytes. `invariants()` checks I1–I3, I5 and I6 on a settled room; I4 is each test's (typed text it names).
  */
-import { expect } from 'vitest';
+import { afterAll, beforeAll, expect } from 'vitest';
 import { TextSelection, type Command } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import { yUndoPluginKey } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { installEditorGeometry } from '../../../test/setup/editor-geometry';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../../html-page';
 import { attribute, parseSource } from '../../html-page/html-source';
-import { applyRegionRevision, compactRegion, createRegionState, editorState, normalizeRegionHtml, regionCommands, regionFragment, regionHtml, type RegionKind } from '..';
+import { applyRegionRevision, compactRegion, createRegionState, editorState, normalizeRegionHtml, regionCommands, regionHtml, regionText, type RegionKind } from '..';
+import { stopCapturing } from '../binding';
 import { writeRegion } from '../html';
 import { ID_ATTRS } from '../schema';
 import { liveDocument, readDocument } from '../state';
+
+// jsdom has no layout; every file that opens a room gets the editor geometry stubs.
+let restoreGeometry: () => void;
+beforeAll(() => { restoreGeometry = installEditorGeometry(); });
+afterAll(() => restoreGeometry());
 
 const REMOTE = 'remote';
 const PAGE = (region: string, kind: RegionKind) => {
@@ -50,7 +56,7 @@ export class Client {
     this.doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== REMOTE) this.outbox.push(update); });
     const mount = document.createElement('div');
     document.body.append(mount);
-    this.view = new EditorView(mount, { state: editorState(room.kind, regionFragment(this.doc)) });
+    this.view = new EditorView(mount, { state: editorState(room.kind, regionText(this.doc)) });
   }
   get state() { return this.view.state; }
   /** The region as this editor shows it, and as its Yjs replica reads. */
@@ -104,7 +110,7 @@ export class Client {
   undo() { this.commands.undo(this.state, this.view.dispatch, this.view); return this.step(); }
   redo() { this.commands.redo(this.state, this.view.dispatch, this.view); return this.step(); }
   /** One user action is one undo step. */
-  private step() { yUndoPluginKey.getState(this.state)?.undoManager.stopCapturing(); return this; }
+  private step() { stopCapturing(this.state); return this; }
   destroy() { this.view.destroy(); this.view.dom.parentElement?.remove(); }
 }
 
