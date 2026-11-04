@@ -109,7 +109,11 @@ function runScenario({ clients: count, region, ops }: Scenario): { lost: number;
           const from = pick(all, step.at);
           const $from = client.state.doc.resolve(from);
           const end = Math.min(from + step.length, $from.end());
-          client.select(from).type('**').select(end + 2).type('**');
+          const before = client.state.doc.content.size;
+          client.select(from).type('**');
+          // The opening ** can itself complete a bold (an undo left a literal ** just before it): the input rule
+          // has then already applied and removed the markers, so there is nothing to close.
+          if (client.state.doc.content.size === before + 2) client.select(end + 2).type('**');
           break;
         }
         case 'delete': {
