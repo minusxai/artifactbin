@@ -121,7 +121,7 @@ describe('replace and revert', () => {
     const stale = await revertArtifactFor(owner, v1.id, 1, { expectedVersion: 1 });
     expect(isVersionNotArchived(stale) && [stale.refusal!.status, (await stale.refusal!.json()).error]).toEqual([409, 'version_conflict']);
     const staleState = await revertArtifactFor(owner, v1.id, 1, { expectedState: artifactState(v1) });
-    expect(isVersionNotArchived(staleState) && (await staleState.refusal!.json()).error).toBe('state_conflict');
+    expect(isVersionNotArchived(staleState) && await staleState.refusal!.json()).toEqual({ error: 'version_conflict', currentVersion: 2, currentState: artifactState(v2), changed: 'content' });
     const done = await revertArtifactFor(owner, v1.id, 1, { expectedVersion: 2, expectedState: artifactState(v2) }) as ArtifactRow;
     expect(done).toMatchObject({ version: 3, title: 'First' });
   });
@@ -143,8 +143,9 @@ describe('metadata', () => {
     const dry = await setMetadataFor(owner, row.id, { title: 'Dry' }, { dryRun: true }) as ArtifactRow;
     expect(dry.title).toBe('Dry');
     expect((await head(row.id)).title).toBe('Renamed');
-    expect(await setMetadataFor(owner, row.id, { title: 'x' }, { expectedVersion: 7 })).toEqual({ conflict: true, currentVersion: row.version });
-    expect(await setMetadataFor(owner, row.id, { title: 'x' }, { expectedState: 'stale' })).toMatchObject({ conflict: true, reason: 'state_conflict' });
+    expect(await setMetadataFor(owner, row.id, { title: 'x' }, { expectedVersion: 7 })).toEqual({ conflict: true, error: 'version_conflict', currentVersion: row.version, currentState: artifactState(await head(row.id)), changed: 'content' });
+    expect(await setMetadataFor(owner, row.id, { title: 'x' }, { expectedVersion: row.version, expectedState: 'stale' })).toMatchObject({ conflict: true, changed: 'details' });
+    expect(await setMetadataFor(owner, row.id, { link_role: 'editor' }, { expectedSharingRevision: 9 })).toMatchObject({ conflict: true, changed: 'sharing' });
     expect(await setMetadataFor(owner, row.id, { access: 'readwrite' })).toBeNull();
     expect(await setMetadataFor(owner, 'missing', { title: 'x' })).toBeNull();
   });
@@ -154,7 +155,7 @@ describe('metadata', () => {
     const data = await dataset(owner, readAllPolicy());
     // A metadata write replaces the stored version 3 policy.
     const policy = { version: 3 as const, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer' as const, permission: { columns: '*' as const, filter: {} } }] }] };
-    expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 5 })).toMatchObject({ conflict: true, reason: 'state_conflict' });
+    expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 5 })).toMatchObject({ conflict: true, error: 'version_conflict', changed: 'policy' });
     expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 0 })).toMatchObject({ policy_revision: 1, dataset_policy: policy });
     expect(await sql('SELECT revision FROM dataset_policy_audit WHERE dataset_id=$1 ORDER BY revision', [data.id])).toEqual([{ revision: 0 }, { revision: 1 }]);
     const a = await folder(owner, 'A');
@@ -186,7 +187,10 @@ describe('quotas, state and after-commit', () => {
     const doc = (await getArtifactById((await mine(owner)).id))!;
     expect(artifactState({ ...doc, meta: { ...doc.meta, compiledCss: 'x', parsedArtifact: {} } })).toBe(artifactState(doc));
     expect(artifactState({ ...doc, title: 'Other' })).not.toBe(artifactState(doc));
-    expect(artifactState({ ...doc, sharing_revision: 9 })).not.toBe(artifactState(doc));
+    // Access settings are not content: a content write is never refused for them (they fence on their own revisions).
+    for (const access of [{ sharing_revision: 9 }, { policy_revision: 3 }, { visibility: 'public' as const }, { link_role: 'editor' as const }, { access: 'readwrite' as const }, { ancestor_ids: ['folder'] }])
+      expect(artifactState({ ...doc, ...access })).toBe(artifactState(doc));
+    expect(artifactState({ ...doc, version: doc.version + 1 })).not.toBe(artifactState(doc));
   });
 
   it('test caps replace the configured ones; bytes count images, web assets and comment images of the account', async () => {

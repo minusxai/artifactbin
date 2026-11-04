@@ -78,7 +78,12 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
       // can never acquire a write ACL by way of this surface.
       await tx.query(`UPDATE artifacts SET access = $2 WHERE id = $1 AND format = 'dataset'`, [id, patch.access]);
     }
-    if(patch.shares!==undefined)await writeShares(tx,id,patch.shares);
+    // Visibility, link role and access are fenced by the sharing revision (lib/artifacts state), so a change moves it.
+    const before = owned.rows[0];
+    if (patch.visibility && patch.visibility !== before.visibility || patch.linkRole && patch.linkRole !== (before.link_role ?? 'viewer') || patch.access && before.format === 'dataset' && patch.access !== before.access) {
+      await tx.query('UPDATE artifacts SET sharing_revision=$2 WHERE id=$1', [id, (before.sharing_revision ?? 0) + 1]);
+    }
+    if(patch.shares!==undefined)await writeShares(tx,id,patch.shares,before.sharing_revision??0);
     // Dataset subscribers must re-read capabilities even when rows/version
     // have not changed. The existing data wakeup already refreshes queries.
     await tx.query(`SELECT ${notifyArtifactSql('id', 'edit_id')} FROM artifacts WHERE id = $1`, [id]);

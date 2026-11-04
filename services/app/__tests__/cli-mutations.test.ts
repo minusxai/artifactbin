@@ -68,15 +68,20 @@ describe('cli-mutation-recovery', () => {
    const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),{params:Promise.resolve({id:doc.id})});expect((await state.json()).rows).toEqual([{n:1}]);
   });
 
-  it('a governance change during mutation execution prevents the observed-state write from committing',async()=>{
+  it('a policy change during mutation execution prevents the prepared write from committing; a sharing change re-decides access instead',async()=>{
    const db=await getDb();const token=await mintToken('mxmx_test_invocation_race');
-   const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{result:'seed'}],access:'readwrite'}}));const doc=await initial.json();
-   const run=vi.fn(async(...[input,engine]:Parameters<MutationInvocation['run']>)=>{await db.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[doc.id]);return engine.mutate(input);});setMutationInvocation(()=>({run}));
-   try{
-    const req=request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (result) values ('next')",expectedState:doc.state}});req.headers.set('Idempotency-Key','mxmx_test_invocation_race');
-    const result=await mutate(req,{params:Promise.resolve({id:doc.id})});expect(result.status).toBe(409);expect((await result.json()).error).toBe('row_changed');expect(run).toHaveBeenCalledTimes(1);
-    const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),{params:Promise.resolve({id:doc.id})});expect((await state.json()).rows).toEqual([{result:'seed'}]);
-   }finally{setMutationInvocation(undefined);}
+   const attempt=async(column:'policy_revision'|'sharing_revision',key:string)=>{
+    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{result:'seed'}],access:'readwrite'}}));const doc=await initial.json();
+    const run=vi.fn(async(...[input,engine]:Parameters<MutationInvocation['run']>)=>{await db.query(`UPDATE artifacts SET ${column}=${column}+1 WHERE id=$1`,[doc.id]);return engine.mutate(input);});setMutationInvocation(()=>({run}));
+    try{
+     const req=request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (result) values ('next')",expectedState:doc.state,expectedPolicyRevision:0}});req.headers.set('Idempotency-Key',key);
+     const result=await mutate(req,{params:Promise.resolve({id:doc.id})});
+     const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),{params:Promise.resolve({id:doc.id})});
+     return {status:result.status,error:(await result.json()).error,runs:run.mock.calls.length,rows:(await state.json()).rows};
+    }finally{setMutationInvocation(undefined);}
+   };
+   expect(await attempt('policy_revision','mxmx_test_invocation_race')).toEqual({status:409,error:'row_changed',runs:1,rows:[{result:'seed'}]});
+   expect(await attempt('sharing_revision','mxmx_test_invocation_share')).toMatchObject({status:200,runs:1,rows:[{result:'seed'},{result:'next'}]});
   });
 });
 

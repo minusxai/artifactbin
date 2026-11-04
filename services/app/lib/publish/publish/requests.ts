@@ -1,8 +1,8 @@
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
-import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
+import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
-import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
+import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
 import {htmlAssetLinks, htmlBackendNames, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
@@ -146,8 +146,11 @@ export async function replaceArtifactWithBody(
   if (expected instanceof Response) return expected;
   let bundleReceipts:unknown[]=[];
   const bundleSupplied=body.publicationBundle!==undefined;
+  // The caller's own fields: a bundle save injects the head's visibility and shares below, which are no change.
+  const sent=body;
   if(typeof body.html==='string'){
-    if(expected.expectedVersion!==undefined&&expected.expectedVersion!==current.version||expected.expectedState!==undefined&&expected.expectedState!==artifactState(current))return json({error:'version_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
+    // A content write is fenced only on what it replaces (lib/artifacts state): a sharing or policy change since the read never refuses it.
+    const changed=observedChange(current,expected);if(changed)return json(versionConflict(current,changed),409);
     if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return json({error:'bundle_requires_observed_state'},400);
     if(body.publicationBundle!==undefined&&(!actor.tokenId||options.dryRun))return json({error:'bundle_requires_authenticated_commit'},400);
     // Edit access to the page is enough to save a bundle; each file is then
@@ -215,6 +218,8 @@ export async function replaceArtifactWithBody(
   const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
+  const expectedSharingRevision=parseSharingRevision(sent);
+  if(expectedSharingRevision instanceof Response)return expectedSharingRevision;
   /*
    * PLACEMENT IS RESOLVED HERE, AFTER the scope answered `current` above — a
    * row this caller cannot reach is the uniform 404 whatever the body says,
@@ -239,9 +244,8 @@ export async function replaceArtifactWithBody(
   const placement = await placementFor(writerFor(current), parent, { id: current.id, format: current.format }, !!owned);
   if (placement instanceof Response) return placement;
 
-  if (expected.expectedVersion !== undefined && expected.expectedVersion !== current.version || expected.expectedState !== undefined && expected.expectedState !== artifactState(current)) {
-    return json({error:expected.expectedVersion !== undefined && expected.expectedVersion !== current.version?'version_conflict':'state_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
-  }
+  const changed = observedChange(current, expected);
+  if (changed) return json(versionConflict(current, changed), 409);
   const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
@@ -268,15 +272,9 @@ export async function replaceArtifactWithBody(
    * edit-log row and moved the version — the one number a caller reads to learn
    * that a document changed — for a rename. One code path (lib/artifacts
    * setMetadataFor) means the browser renaming a folder and an agent's
-   * `update_artifact` are the same act, down to the trim on the title.
-   *
-   * The CAS is answered here rather than lost with the replace: a caller that
-   * sent `expectedVersion` asked for a refusal, and a door that always says 200
-   * because nothing moves the version is not a door that honoured it.
+   * `update_artifact` are the same act, down to the trim on the title. The
+   * observed version and state were already answered above, as for any write.
    */
-  if (current.format === 'folder' && expected.expectedVersion !== undefined && current.version !== expected.expectedVersion) {
-    return json({ error: 'version_conflict', currentVersion: current.version }, 409);
-  }
   // Resolve advisory effects before the storage transaction so the exact wire reply
   // can be committed atomically without querying outside PGLite's transaction connection.
   const receiptOwner = await documentOwner(current);
@@ -291,15 +289,15 @@ export async function replaceArtifactWithBody(
       ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
-    }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
+    }, {...expected,expectedSharingRevision})
+    : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
   // uniform 404 below for a governed dataset the caller is looking straight
   // at; it is already the answer, and is not re-worded here.
   if (row instanceof Response) return row;
-  if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
+  if (isVersionConflict(row)) { const {conflict:_conflict,...body}=row; return json(body, 409); }
   if (!row) return json({ error: 'not_found' }, 404);
 
   if(row.format==='html')void trackEvent('edit',row.id,{userId:actor.userId??null});

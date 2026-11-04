@@ -57,7 +57,7 @@ describe('cli-governance', () => {
    const shares=[{email:'mxmx_test_reader@example.com',role:'viewer' as const}];
    await updateSharingFor(actor,id,{shares});
    const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{html:nativeSource('<p>Stale write</p>'),shares:[]},true)}),{params:Promise.resolve({id})});
-   expect(result.status).toBe(409);
+   expect(result.status).toBe(409);expect((await result.json()).changed).toBe('sharing');
    expect((await getArtifactById(id))?.source).toContain('Original');expect((await getSharingFor(actor,id))?.shares).toEqual(shares);
   });
 

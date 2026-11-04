@@ -193,6 +193,8 @@ const UNSERVABLE: OperationError = { status: 410, code: 'unservable_document', f
  * to be `not_found` for a dataset the caller was looking straight at: once a
  * policy was set, nobody could replace its content and nothing said why.
  */
+/** Every observed-head miss: `changed` says what moved since the read; access-setting changes never refuse a content write. */
+const VERSION_CONFLICT: OperationError = { status: 409, code: 'version_conflict', fix: "changed says what moved since your read: content (a newer currentVersion), details (title, description or metadata, same version), sharing or policy (that revision). Re-read, reapply your change to what you read and retry with the new currentVersion and currentState" };
 const POLICY_LOCKED: OperationError = { status: 409, code: 'policy_locked', fix: "this dataset has a write policy — only its OWNER may replace its content, and nobody may revert it (viewers' rows are in it). Fork it, or ask the owner" };
 const POLICY_MISMATCH: OperationError = { status: 400, code: 'policy_mismatch', fix: 'the replacement no longer has a table or column the dataset policy grants — detail names it. Keep that column, or change the policy first with set_dataset_policy' };
 
@@ -223,8 +225,8 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Replace native HTML or retained data/media content at its existing artifact ID. Send expectedVersion and expectedState from the observed head. Every accepted save retains the previous version; markup and document_update are retired publication inputs.',
-  input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), ...CONTENT_FIELDS },
+  description: 'Replace native HTML or retained data/media content at its existing artifact ID. Send expectedVersion and expectedState from the observed head; a sharing, visibility or policy change since that read does not refuse it. A write that also sets visibility, linkRole, access or shares may send the observed sharing_revision as expectedSharingRevision to be refused (changed: sharing) when sharing moved since the read; without it the settings apply. Every accepted save retains the previous version; markup and document_update are retired publication inputs.',
+  input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), expectedSharingRevision: z.number().int().min(0).optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
     input: { id: 'aB3xK9', dataset:[{name:'Example',value:2}], expectedVersion: 1, expectedState: 'a'.repeat(64) },
@@ -232,7 +234,7 @@ const updateArtifactOp: Operation = {
   errors: [
     NOT_FOUND,
     OWNER_ONLY,
-    { status: 409, code: 'version_conflict', fix: 'someone wrote meanwhile — re-read, merge, retry with the observed currentVersion and currentState' },
+    VERSION_CONFLICT,
     // A folder has no content, and this door is where that is enforced — so it
     // is declared HERE and not only on edit_artifact. The code is the same word
     // the data tiers answer; the FIX has to be different, because "replace it
@@ -384,13 +386,13 @@ const getVersionOp: Operation = {
 
 const updateMetadataOp: Operation = {
  name:'update_metadata', title:'Update metadata without a content version', http:{method:'PATCH',path:'/api/artifacts/{id}'},
- description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
+ description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Visibility, linkRole, access or shares may carry the observed sharing_revision as expectedSharingRevision (refused with changed: sharing when it moved; without it the settings apply); a policy needs expectedPolicyRevision. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
  input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
   title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
   visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
-  shares:CONTENT_FIELDS.shares,policy:z.record(z.string(),z.unknown()).nullable().optional(),expectedPolicyRevision:z.number().int().min(0).optional()},
+  shares:CONTENT_FIELDS.shares,expectedSharingRevision:z.number().int().min(0).optional(),policy:z.record(z.string(),z.unknown()).nullable().optional(),expectedPolicyRevision:z.number().int().min(0).optional()},
  annotations:{},example:{input:{id:'aB3xK9',title:'Updated title',expectedState:'a'.repeat(64)}},
- errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},{status:409,code:'state_conflict',fix:'Read the current metadata, reconcile your changes and retry with the new state.'}],
+ errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},VERSION_CONFLICT],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
 };
 
@@ -418,6 +420,7 @@ const revertArtifactOp: Operation = {
   example: { input: { id: 'aB3xK9', version: 1, expectedVersion: 2, expectedState: 'a'.repeat(64) } },
   errors: [
     NOT_FOUND,
+    VERSION_CONFLICT,
     { status: 409, code: 'version_not_archived', fix: 'that checkpoint was never archived (save-less edits coalesce) — list_versions shows the real ones' },
     { status: 400, code: 'version_required', fix: 'version must be a positive integer from list_versions' },
     POLICY_LOCKED,
@@ -433,7 +436,6 @@ const revertArtifactOp: Operation = {
     // never archived (save-less edits coalesce). list_versions has the real ones.
     if (isVersionNotArchived(row)) {
       if(row.refusal) return fromResponse(row.refusal);
-      if(row.conflictVersion!==undefined) return reply({error:'version_conflict',currentVersion:row.conflictVersion},409);
       return reply({ error: 'version_not_archived' }, 409);
     }
     if (!row) return reply({ error: 'not_found' }, 404);
@@ -528,6 +530,8 @@ const mutateDatasetOp: Operation = {
     name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and args fill its signature'),
     values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with sql: the $params it binds'),
     args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with name: the declared mutation\'s arguments'),
+    expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('the state the operation was prepared from; refused as row_changed when the dataset moved'),
+    expectedPolicyRevision: z.number().int().min(0).optional().describe('the policy_revision the operation was prepared under; refused as row_changed when the policy changed'),
   },
   annotations: {},
   example: { input: { id: 'aB3xK9', sql: 'insert into public.rows (m, v) values ($m, $v)', values: { m: 'Sep', v: 12 } } },
@@ -537,6 +541,7 @@ const mutateDatasetOp: Operation = {
     { status: 403, code: 'dataset_read_only', fix: 'publish the dataset with access: readwrite, or update its access policy here' },
     { status: 400, code: 'invalid_sql', fix: 'one statement, INSERT/UPDATE/DELETE only, naming a catalog table such as public.rows — the detail says what was wrong' },
     { status: 409, code: 'dataset_full', fix: 'the write would cross the row cap — delete rows or split the dataset' },
+    { status: 409, code: 'row_changed', fix: 'the dataset or its policy changed since the operation was prepared — read it again and prepare a new mutation' },
     { status: 503, code: 'dataset_busy', fix: 'concurrent writes contended — retry after a moment (Retry-After rides the response)' },
   ],
   async run(ctx, input) {

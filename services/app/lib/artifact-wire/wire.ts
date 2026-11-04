@@ -197,6 +197,18 @@ export function parseExpectedVersion(body: Record<string, unknown>, requireVersi
 }
 
 /**
+ * Access settings sit outside the observed state (lib/artifacts state). A write that sets visibility, link role,
+ * access or shares MAY name the `sharing_revision` it read as expectedSharingRevision, and is then refused when that
+ * moved; without it the requested settings apply. Ignored on a write that sets none of them.
+ */
+export function parseSharingRevision(body: Record<string, unknown>): number | undefined | Response {
+  const revision = body.expectedSharingRevision;
+  if (revision === undefined || !['visibility', 'linkRole', 'access', 'shares'].some(key => body[key] !== undefined)) return undefined;
+  if (!Number.isSafeInteger(revision) || Number(revision) < 0) return json({error:'invalid_metadata',field:'expectedSharingRevision'},400);
+  return revision as number;
+}
+
+/**
  * The wire's `parent_id`: the id of a folder artifact, or null for the root.
  * ABSENT is "leave it where it is"; NULL is "move it to the root", and the two
  * must stay distinguishable, which is why this answers `undefined` rather than

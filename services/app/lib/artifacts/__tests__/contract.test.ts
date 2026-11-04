@@ -39,9 +39,10 @@ describe('the edit protocol', () => {
     const v1 = await mine(owner);
     const v2 = await replace(owner, v1, 'Second') as ArtifactRow;
     const staleVersion = await replace(owner, v1, 'Lost');
-    expect(isVersionConflict(staleVersion as ArtifactRow) && staleVersion).toEqual({ conflict: true, currentVersion: v2.version });
+    const head = { error: 'version_conflict', currentVersion: v2.version, currentState: artifactState(v2) };
+    expect(isVersionConflict(staleVersion as ArtifactRow) && staleVersion).toEqual({ conflict: true, ...head, changed: 'content' });
     const staleState = await replace(owner, v2, 'Lost too', { expectedState: artifactState(v1) });
-    expect(staleState).toEqual({ conflict: true, reason: 'state_conflict', currentVersion: v2.version, currentState: artifactState(v2) });
+    expect(staleState).toEqual({ conflict: true, ...head, changed: 'details' });
     expect(await getArtifactById(v1.id)).toMatchObject({ version: v2.version, edit_id: v2.edit_id, title: 'Second' });
   });
 

@@ -48,6 +48,15 @@ it('classifies unreadable successful write bodies as unknown without automatic r
   await expect(client.request(route,{method:'POST',body:{},unsafe:true})).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(calls).toBe(1);
  }
 });
+it('names what a version conflict changed and the one re-read step, and never claims a newer version for another 409',async()=>{
+ const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const refused=(body:Record<string,unknown>)=>makeClient('https://example.test',{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body,{status:409})}).request('/api/artifacts/PAGE12',{method:'PUT',body:{},unsafe:true}).catch((error:any)=>error);
+ const step='since your read. Run read.mjs ID --output fresh.html, reapply your edits to that file and publish it; do not resume this journal.';
+ expect(await refused({error:'version_conflict',currentVersion:4,changed:'content'})).toMatchObject({code:'version_conflict',exit:4,recovery:`A newer version was published ${step}`});
+ expect(await refused({error:'version_conflict',currentVersion:3,changed:'details'})).toMatchObject({recovery:`The title, description or metadata changed ${step}`});
+ const other=await refused({error:'policy_locked',detail:'owner only'});
+ expect(other).toMatchObject({code:'policy_locked',exit:4});expect(other.recovery).not.toContain('version');expect(other.recovery).not.toContain('read.mjs');
+});
 it('exports actual image bytes exclusively and reports dimensions',async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {exportCommand}=await import('../../../skills/artifactbin/scripts/export.mjs');
