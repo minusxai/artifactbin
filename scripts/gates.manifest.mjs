@@ -72,6 +72,8 @@ export const GATE_SPECS = Object.freeze([
   // and 53s here); the seconds below keep a margin for that run's lighter load. Re-read both from CI.
   { name: 'native-core', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   { name: 'presence', needsMail: true, seconds: 25, timeoutMs: 90_000 },
+  // Two editors and a viewer on one editable region; its key-to-peer latency is measured, so it shares the isolated bin.
+  { name: 'live-regions', needsMail: true, serialGroup: 'clipboard', seconds: 30, timeoutMs: 90_000 },
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
   { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },
@@ -138,7 +140,8 @@ export const CI_GATE_SHARDS = 9;
 /** Cross-browser downloads and role journeys keep dedicated bins while their
  * native HTML migrations establish new timings. Every retained gate still runs. */
 export const CI_ISOLATED_GATE_GROUPS = Object.freeze([
-  Object.freeze(['collab-roles']),
+  // live-regions times key-to-peer latency (p95 within one second): measured without a neighbour's browser load.
+  Object.freeze(['collab-roles', 'live-regions']),
   Object.freeze(['offline-file']),
 ]);
 export const CI_ISOLATED_GATES = Object.freeze(CI_ISOLATED_GATE_GROUPS.flat());
