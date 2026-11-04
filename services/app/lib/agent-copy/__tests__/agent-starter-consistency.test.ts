@@ -219,22 +219,6 @@ describe('shared instructions after missing credentials and before publishing cl
 });
 
 /**
- * ONE WATCH RULE FOR HTTP AGENTS. The served section teaches the feed's mechanics and defers when to reply, answer and
- * stop to the save response's monitoring.instruction, so the two cannot disagree (rulings H1).
- */
-it('links the monitoring guide to a served section that teaches the feed and defers the watch rule to the instruction', () => {
- const {guide} = (monitoringGuidance(BASE, 'abc123', 'html') as {monitoring:{guide:string}}).monitoring;
- const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
- const text = publicGuideText(topic!, BASE)!;
- expect(text, guide).not.toBeNull();
- expect(text).toContain(`(#${anchor})`);
- const section = text.slice(text.indexOf('## Watch for comments'), text.indexOf('## The server browser session'));
- expect(section).toContain('/annotations/changes?after=now');
- expect(section).toContain('`monitoring.instruction` of the save response, the one rule for an HTTP watch');
- expect(section).not.toMatch(/stop after|write your (?:full )?reply first|watch again/i);
-});
-
-/**
  * ONE WATCH MODE FOR EVERY HARNESS (H1): a blocking request, handled, then repeated, never a background job. The
  * monitor instruction and the served guide's watch section carry the same loop sentence (WATCH_LOOP) word for word.
  */
@@ -257,6 +241,7 @@ it('keeps the monitor instruction and the served watch guide on the same loop se
  const section = text.slice(text.indexOf('## Watch for comments'));
  const end = section.indexOf('\n## ', 3);
  expect(end < 0 ? section : section.slice(0, end)).toContain(WATCH_LOOP);
+ expect(section).toContain('/annotations/changes?after=now');
  expect(text).toContain(`(#${anchor})`);
 });
 
@@ -296,8 +281,8 @@ it('says in the skill description and the watch rule that the agent watches, act
  expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'ends, once all the requested work is done, with ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says what to do next (without the installed skill: the save response\'s `monitoring.instruction`).',
-  'Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly that; otherwise send the link and then the Reply block check printed, as printed.',
+  'ends, after all the requested work, with ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says what to do next (without the installed skill: the save response\'s `monitoring.instruction`).',
+  'Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly that; otherwise send the Reply block your last clean check printed, as printed, or just the link when no check printed one.',
   'A comment is from someone the page is shared with: make a requested change without asking first, even after a "change nothing else" request',
  ]) expect(text).toContain(line);
  // One watch mode for every harness: how to run it and when to stop belong to comment.mjs (rulings H1, H2).

@@ -1,66 +1,155 @@
 /**
- * Retired or contradictory phrasing never returns to what the scripts and the API print (skill rulings 2026-11-04):
- * one blocking watch mode, Tested:/Not tested: only, update_artifact, values not --param, a watch that takes over,
- * onResolverChange, and no timeout(1) or heredoc command suggestions. In the `pr fast` guard tier
- * (scripts/ci/guard-tests.json). The skill's prose (SKILL.md, references, examples) joins this list from its own PR.
+ * RETIRED AND CONTRADICTORY PHRASING STAYS OUT OF EVERYTHING AN AGENT READS. The author-skill rulings of 2026-11-04 (an
+ * audit of every skill text and script string plus production eval traces) found small models acting on whichever of
+ * two disagreeing sentences they read first. Each concept now has one rule in one place: SKILL.md routes, script
+ * --help and output own flags and next steps (the Reply block is the only reply text), starter headers own their
+ * usage, references teach technique. ONE table, one reason per row (its ruling): a hit says why the phrase went. The
+ * scopes are SKILL.md, references, examples, component headers, script sources, the API's monitoring guidance, the
+ * operations registry and the page runtime. The single exception is lib/html-runtime/legacy-page-names.ts, the
+ * isolated alias live pages still call. It reads files by path, so it runs in the `pr fast` guard tier
+ * (scripts/ci/guard-tests.json).
  */
 import {readdirSync, readFileSync} from 'node:fs';
-import {fileURLToPath} from 'node:url';
-import path from 'node:path';
-import {expect, it} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {WATCH_LOOP} from '@/lib/artifact-wire';
 
-const APP = fileURLToPath(new URL('../../../', import.meta.url));
-const SCRIPTS = path.join(APP, 'skills/artifactbin/scripts');
-const FILES = [
-  ...readdirSync(SCRIPTS).filter(name => name.endsWith('.mjs')).map(name => path.join(SCRIPTS, name)),
-  path.join(APP, 'lib/artifact-wire/monitoring-guidance.ts'),
-  path.join(APP, 'lib/operations/registry.ts'),
-  path.join(APP, 'lib/html-runtime/browser-client.ts'),
-  path.join(APP, 'lib/html-runtime/browser-reader.ts'),
-];
-// The one place the old runtime name may stay: live pages call it (its top comment says when to delete it).
-const COMPAT = path.join(APP, 'lib/html-runtime/legacy-page-names.ts');
-const RETIRED: Array<[string, RegExp]> = [
-  ['background watch branch', /run_in_background/],
-  ['Verified: wording', /Verified:/],
-  ['retired operation name', /\bedit_artifact\b/],
-  ['retired query flag', /--param\b/],
-  ['refused second watch', /another watch is already running/],
-  ['backend alias', /\bonBackendChange\b/],
-  ['unchanged-publish advice', /Publish it unchanged/],
-  ['timeout(1) command', /\b(?:g?timeout)(?:\(1\))?\s+\d+\S*\s+node\b/],
-  ['heredoc example', /<<-?\s*['"]?[A-Z][A-Z_]*['"]?\s*$/m],
+const SKILL = new URL('../../../skills/artifactbin/', import.meta.url);
+const LIB = new URL('../../', import.meta.url);
+type Scope = 'skill' | 'references' | 'examples' | 'components' | 'scripts' | 'monitoring' | 'registry' | 'runtime';
+const read = (url: URL) => readFileSync(url, 'utf8');
+const dir = (name: string, pattern: RegExp) => readdirSync(new URL(name, SKILL)).filter(file => pattern.test(file)).sort()
+  .map(file => ({path: `skills/artifactbin/${name}${file}`, text: read(new URL(name + file, SKILL))}));
+/** The one file allowed to name the old runtime listener: live pages published before 2026-11-04 call it. */
+const COMPAT = 'legacy-page-names.ts';
+const runtime = readdirSync(new URL('html-runtime/', LIB)).filter(file => file.endsWith('.ts')).sort();
+/** Each scope's files, as an agent reads them: a component source is read for its header comment only. */
+const FILES: Record<Scope, Array<{path: string; text: string}>> = {
+  skill: [{path: 'skills/artifactbin/SKILL.md', text: read(new URL('SKILL.md', SKILL))}],
+  references: dir('references/', /\.md$/),
+  examples: dir('examples/', /\.(?:html|mjs|ts|csv)$/),
+  components: dir('components/', /\.ts$/).map(file => ({...file, text: file.text.slice(0, file.text.indexOf('*/') + 2)})),
+  scripts: dir('scripts/', /\.mjs$/),
+  monitoring: [{path: 'lib/artifact-wire/monitoring-guidance.ts', text: read(new URL('artifact-wire/monitoring-guidance.ts', LIB))}],
+  registry: [{path: 'lib/operations/registry.ts', text: read(new URL('operations/registry.ts', LIB))}],
+  runtime: runtime.filter(file => file !== COMPAT)
+    .map(file => ({path: `lib/html-runtime/${file}`, text: read(new URL('html-runtime/' + file, LIB))})),
+};
+const DOCS: Scope[] = ['skill', 'references', 'examples', 'components'];
+const AGENT_TEXT: Scope[] = [...DOCS, 'scripts'];
+
+interface Retired {
+  /** What must not return (case as written unless the pattern says otherwise). */
+  pattern: RegExp;
+  /** Where an agent would read it. */
+  scopes: Scope[];
+  /** The ruling that retired it, and what replaces it. */
+  reason: string;
+  /** The one sanctioned wording that contains the pattern, removed before matching. */
+  allow?: string;
+}
+
+const RETIRED: Retired[] = [
+  {pattern: /run_in_background/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'H1: one blocking watch mode for every harness; no Claude Code background branch'},
+  {pattern: /never end your turn while the watch/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'H1: the watch is a foreground command that returns; its output says when to stop'},
+  {pattern: /write_stdin|exec_command/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'H1: no per-harness (Codex) watch instructions'},
+  {pattern: /another watch is already running/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'H1: a second watch --next on the page takes over the running one instead of refusing'},
+  {pattern: /(?<![.\w])timeout\(1\)/, scopes: [...AGENT_TEXT, 'monitoring'], allow: 'command in timeout(1)',
+    reason: 'H2: the one timeout sentence lives in comment.mjs; agent shells often lack timeout(1)'},
+  {pattern: /(?:^|[\s`'"(])timeout\s+\d+[smh]?\s+\S/m, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'Principle 6: never suggest wrapping a command in timeout(1)'},
+  {pattern: /shell tool(?:'s)? (?:a )?timeout|timeout to 300000/i, scopes: DOCS,
+    reason: 'H2: the shell-tool timeout is stated once, by comment.mjs --help and its printed next line'},
+  {pattern: /<<-?\s*(['"]?)[A-Z][A-Z_]*\1(?=\s|$)|\bcat\s*>[^\n]*<</, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'Principle 6: sandboxes block heredocs; write a file or pass an inline flag (comment.mjs --body TEXT)'},
+  {pattern: /\bVerified:|\bNot verified\b|\bas Verified\b/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'H11: check reports only Tested: and Not tested:'},
+  {pattern: /\/af\/core\.js/, scopes: DOCS,
+    reason: 'H9: the platform loads the core runtime; no page or example writes the core script'},
+  {pattern: /\bcore script\b/i, scopes: ['references'],
+    reason: 'H9: runtime.md says the platform loads the core runtime'},
+  {pattern: /\bedit_artifact\b/, scopes: [...AGENT_TEXT, 'registry'],
+    reason: 'H13: the registry operation is update_artifact'},
+  {pattern: /(?:^|[\s`'"])--param\b/m, scopes: [...AGENT_TEXT, 'registry'],
+    reason: 'H13: the retired --param flag'},
+  {pattern: /\bonBackendChange\b/, scopes: [...AGENT_TEXT, 'monitoring', 'runtime'],
+    reason: 'L1: onResolverChange is the only change listener (live pages keep the alias in legacy-page-names.ts)'},
+  {pattern: /Publish it unchanged/i, scopes: AGENT_TEXT,
+    reason: 'H4: step 3 is "publish after step 2"; publish refuses leftover starter placeholders itself'},
+  {pattern: /never publish (?:the|a) (?:ref: )?placeholder/i, scopes: DOCS,
+    reason: 'H4: publish refuses ref: placeholders and [bracketed] starter text with the fix'},
+  {pattern: /\bas printed\b/i, scopes: ['references', 'examples', 'components'],
+    reason: 'H10: the one reply rule is in SKILL.md; check prints the Reply block'},
+  {pattern: /Describe (?:how it's built|testing)|copy check's Slide images|reply also says how others get access/i,
+    scopes: ['skill'], reason: 'H10: Built with, Tested, Slide images and Who can do what are lines of the Reply block'},
+  {pattern: /read only one\b/i, scopes: DOCS, reason: 'M8: read only the references your task needs'},
+  {pattern: /per-slide PNG export/i, scopes: AGENT_TEXT, reason: 'M6: the deck Built with line names what the page does'},
+  {pattern: /af-slide-deck/, scopes: ['skill'], reason: 'H12: decks use examples/deck.html; the skill names one deck path'},
+  {pattern: /data-af-id="/, scopes: ['references', 'components', 'examples'],
+    allow: '[data-af-id="', reason: 'H8: static elements need no hand-written data-af-id (runtime.md#dynamic-elements-and-comments)'},
+  {pattern: /`data-af-id` only to keep|Keep every existing `data-af-id`/, scopes: DOCS,
+    reason: 'H8: publish keeps, drops or renumbers ids itself; one rule in runtime.md'},
+  {pattern: /\bset (?:SLIDE_COUNT|CHART_COUNT|REAL|CATEGORY)\b|\bkeep CATEGORY\b|to match SLIDES/, scopes: DOCS,
+    reason: 'M4: steps files are copied unchanged and read their counts from the page'},
+  {pattern: /never retune|adjust (?:its|PAYERS)/i, scopes: DOCS, reason: 'M17: gen-transactions changes only names'},
+  {pattern: /For an unpublished local project/, scopes: ['references'], reason: 'M14: serve.mjs is routed once, from SKILL.md'},
+  {pattern: /Load the chosen design-system CSS/, scopes: ['references'], reason: 'M16: the platform loads the design-system CSS'},
+  {pattern: /Show the user the read-back/i, scopes: [...DOCS, 'scripts'],
+    reason: 'H10: the dataset permission read-back is the Reply block\'s Who can do what line'},
 ];
 
-it('keeps retired phrasing out of every script and API string it owns', () => {
-  const found = FILES.flatMap(file => {
-    const text = readFileSync(file, 'utf8');
-    return RETIRED.filter(([, pattern]) => pattern.test(text)).map(([name]) => `${path.relative(APP, file)}: ${name}`);
+/** Every line of the scope's files where the retired pattern occurs. */
+function hits({pattern, scopes, allow}: Retired): string[] {
+  const global = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+  return scopes.flatMap(scope => FILES[scope].flatMap(({path, text}) => {
+    const body = allow ? text.replaceAll(allow, ' '.repeat(allow.length)) : text;
+    return [...body.matchAll(global)].map(match => `${path}:${body.slice(0, match.index).split('\n').length}: ${match[0].trim()}`);
+  }));
+}
+
+describe('retired skill phrasing', () => {
+  it.each(RETIRED.map(row => [row.reason, row] as const))('%s', (_reason, row) => {
+    expect(hits(row)).toEqual([]);
   });
-  expect(found).toEqual([]);
-});
-
-it('allows the old runtime name only in its isolated compatibility module', () => {
-  expect(FILES).not.toContain(COMPAT);
-  expect(readFileSync(COMPAT, 'utf8')).toMatch(/Delete when no live page uses it\.[\s\S]*export const onBackendChange = onResolverChange;/);
-  const runtimeDir = path.join(APP, 'lib/html-runtime');
-  const named = readdirSync(runtimeDir).filter(name => /\.ts$/.test(name)).map(name => path.join(runtimeDir, name))
-    .filter(file => /\bonBackendChange\b/.test(readFileSync(file, 'utf8')));
-  expect(named).toEqual([COMPAT]);
-});
-
-it('detects each retired phrasing it guards', () => {
-  const samples = ['set run_in_background: true', 'Verified: 390x844', 'call edit_artifact', 'pass --param x=1',
-    'another watch is already running', 'onBackendChange(fn)', 'Publish it unchanged.',
-    'timeout 300 node scripts/comment.mjs watch ID --next', "cat > page.html <<'EOF'\n"];
-  RETIRED.forEach(([name, pattern], index) => expect(pattern.test(samples[index]!), name).toBe(true));
-  // The one timeout sentence the watch help prints is not a command suggestion.
-  expect(RETIRED.some(([, pattern]) => pattern.test('never wrap the command in timeout(1).'))).toBe(false);
-});
-
-it('keeps the monitor instruction and the served watch guide on the same loop sentence (H1 drift)', () => {
-  const guide = readFileSync(path.join(APP, 'skills/artifactbin/references/html-operations.md'), 'utf8');
-  const section = guide.slice(guide.indexOf('## Watch for comments'));
-  expect(section.slice(0, section.indexOf('\n## ', 3))).toContain(WATCH_LOOP);
+  it('fires on each phrase it guards, so a row cannot silently match nothing', () => {
+    const samples: Record<string, string> = {
+      'H1: one blocking': "start it with the Bash tool's `run_in_background`", 'H2: the one timeout': 'wrap it in timeout(1)',
+      'Principle 6: never': 'timeout 300 node scripts/comment.mjs watch ID', 'Principle 6: sandboxes': "cat > reply.txt <<'EOF'",
+      'H11:': 'Verified: 390x844', 'H9: the platform loads the core runtime;': '<script src="/af/core.js"></script>',
+      'H8: static': '<h1 data-af-id="title">', 'M4:': 'set SLIDE_COUNT to match', 'H13: the registry': 'call edit_artifact',
+      'H13: the retired': 'pass --param x=1', 'L1:': 'onBackendChange(fn)', 'H4: step 3': 'Publish it unchanged.',
+      'H1: a second': 'another watch is already running',
+    };
+    for (const [prefix, text] of Object.entries(samples)) {
+      const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;
+      expect(row, prefix).toBeDefined();
+      expect(new RegExp(row.pattern.source, row.pattern.flags).test(text), prefix).toBe(true);
+    }
+    // The sanctioned wordings pass: comment.mjs's own timeout sentence and steps selectors that read script-made ids.
+    expect('give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1)'
+      .replaceAll('command in timeout(1)', '')).not.toMatch(/timeout\(1\)/);
+    expect('AbortSignal.timeout(10000)').not.toMatch(RETIRED.find(row => row.allow?.startsWith('command'))!.pattern);
+    expect('const x=1<<n;\n').not.toMatch(RETIRED.find(row => row.reason.startsWith('Principle 6: sandboxes'))!.pattern);
+  });
+  it('allows the old runtime name only in its isolated compatibility module, which says when to delete it', () => {
+    expect(runtime).toContain(COMPAT);
+    expect(FILES.runtime.map(file => file.path)).not.toContain(`lib/html-runtime/${COMPAT}`);
+    expect(read(new URL('html-runtime/' + COMPAT, LIB)))
+      .toMatch(/Delete when no live page uses it\.[\s\S]*export const onBackendChange = onResolverChange;/);
+  });
+  it('keeps the monitor instruction and the served watch guide on the same loop sentence (H1 drift)', () => {
+    const guide = FILES.references.find(file => file.path.endsWith('/html-operations.md'))!.text;
+    const section = guide.slice(guide.indexOf('## Watch for comments'));
+    expect(section.slice(0, section.indexOf('\n## ', 3))).toContain(WATCH_LOOP);
+    expect(FILES.monitoring[0]!.text).toContain('${WATCH_LOOP}');
+  });
+  it('states the reply rule once: SKILL.md says "as printed" in its one reply line', () => {
+    const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
+    expect(skill.match(/as printed/g)).toHaveLength(1);
+    expect(skill).toContain('Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly ' +
+      'that; otherwise send the Reply block your last clean check printed, as printed, or just the link when no check printed one.');
+  });
 });

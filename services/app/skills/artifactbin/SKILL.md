@@ -8,16 +8,17 @@ description: >-
 ---
 ## Read first
 
-Every task that publishes or edits page content ends, once all the requested work is done, with
-ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output
-says what to do next[% if not shipped %] (without the installed skill: the save response's
+Every task that publishes or edits page content ends, after all the requested work, with ONE
+response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says
+what to do next[% if not shipped %] (without the installed skill: the save response's
 `monitoring.instruction`)[% endif %]. Your reply is what the user asked for: if they prescribed its
-form (e.g. only the URL), send exactly that; otherwise send the link and then the Reply block check
-printed, as printed. Group, sharing and ownership changes alone need no watch.
+form (e.g. only the URL), send exactly that; otherwise send the Reply block your last clean check
+printed, as printed, or just the link when no check printed one. Group, sharing and ownership
+changes alone need no watch.
 
-Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
+Skill map (`ls <folder>` lists all; each file's top comment says how to use it):
 
-- `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
+- `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
   gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
@@ -103,11 +104,12 @@ sharing and deliberate ownership moves.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
-- **Change an existing page.** Plain edits: `node scripts/read.mjs ID --output page.html`, edit that
-  file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same file and
-  never regenerate the page from scratch. To rebuild it from a starter: copy the starter, edit what
-  its Usage names and add `--artifact ID` to its publish command (`node scripts/publish.mjs
-  index.html --artifact ID` replaces that page).
+- **Change an existing page.** A request to turn the page into a deck, dashboard, report or app is
+  a rebuild: copy that starter (New page, steps 1-2), then publish it over the page with `node
+  scripts/publish.mjs index.html --artifact ID` instead of the starter's plain publish. Any other
+  change (wording, numbers, a section) is an edit: `node scripts/read.mjs ID --output page.html`,
+  edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same
+  file and never regenerate the page from scratch.
 - **Check.** Copy the starter's steps files (`examples/deck-steps.mjs`; `csv-dashboard-steps.mjs`;
   `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`; they need no edits) and add a step for each
   requested value they don't check, or write one short steps file of `step('label', …)` checks:

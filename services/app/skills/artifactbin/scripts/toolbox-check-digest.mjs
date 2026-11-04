@@ -84,8 +84,8 @@ export function checkDigest(envelope,file){
   !check.slides?.overlapping&&!check.idStability?.unstable);
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
   '  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
- else if(clean&&!envelope.reply)lines.push('  clean pass on the local preview: publish the page,'+
-  ' then check the published page; its clean pass prints the Reply block.');
+ else if(clean&&!envelope.reply)lines.push('  clean pass on the local preview: no Reply block;'+
+  ' a check of the published page prints it.');
  else if(clean)lines.push("  clean pass: nothing left to fix; don't open the qa JSON"+(
   envelope.slideLinks?.length?' or fetch the slide images':'')+'.',...replyBlock(envelope,tested));
  else if((envelope.checks??[]).length)lines.push(
@@ -96,7 +96,8 @@ export function checkDigest(envelope,file){
  * Tested/Not tested, the slide images and who can do what; then the watch line. */
 function replyBlock({reply,slideLinks,checks},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
- return ['Reply block (send it as printed, up to the Next: line):',reply.link,
+ return ['Reply block (send it as printed, up to the Next: line, unless the user prescribed the'+
+  ' reply):',reply.link,
   ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+tested,
   'Not tested: anything not listed in Tested:, visual appearance'+(guest?
    ', and sharing between two signed-in users (the guest is signed out)':''),

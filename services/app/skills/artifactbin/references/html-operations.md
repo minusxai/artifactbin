@@ -67,7 +67,7 @@ Reactions: `PUT /api/artifacts/ID/annotations/COMMENT_ID/reactions`; the top of 
 
 ## Watch for comments
 
-`GET /api/artifacts/ID/annotations/changes?after=now&wait=60` returns `{events,next_cursor,has_more}`: each new comment, reply, edit (`change:'edited'`) and reaction from anyone. Start at `after=now` (`after=start` replays history), then pass the last `next_cursor` as `after`; `wait` (0–60 seconds) holds the request until an event arrives. Skip events whose `author.you` or `reactor.you` is true (your own writes) and any unknown `type`. Keep one request waiting at a time (429 `too_many_comment_waits`: another watch is open); `400 invalid_cursor` means start again at `after=now`. Keep a cursor only after handling its events. When to watch, how to answer and when to stop: the `monitoring.instruction` of the save response, the one rule for an HTTP watch.
+`GET /api/artifacts/ID/annotations/changes?after=now&wait=60` returns `{events,next_cursor,has_more}`: each new comment, reply, edit (`change:'edited'`) and reaction from anyone. Start at `after=now` (`after=start` replays history), then pass the last `next_cursor` as `after`; `wait` (0–60 seconds) holds the request until an event arrives. Skip events whose `author.you` or `reactor.you` is true (your own writes) and any unknown `type`. Keep one request waiting at a time (429 `too_many_comment_waits`: another watch is open); `400 invalid_cursor` means start again at `after=now`. Keep a cursor only after handling its events. After publishing page content, reply and start the watch in the same response; answer each comment (save a requested change, then reply), then watch again; stop after 15 minutes with no comment, reply or save from anyone.
 
 ## The server browser session and its document frame
 

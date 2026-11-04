@@ -13,6 +13,5 @@
   "services/app/lib/skills/__tests__/retired-phrasing.test.ts",
   "services/app/lib/skills/__tests__/skill-archive-budget.test.ts",
   "services/app/lib/skills/__tests__/skill-code-shape.test.ts",
-  "services/app/lib/skills/__tests__/skill-retired-phrases.test.ts",
   "services/app/lib/skills/__tests__/skill-tree.test.ts"
 ]
