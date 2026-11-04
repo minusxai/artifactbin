@@ -8,6 +8,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {expect, it} from 'vitest';
+import {WATCH_LOOP} from '@/lib/artifact-wire';
 
 const APP = fileURLToPath(new URL('../../../', import.meta.url));
 const SCRIPTS = path.join(APP, 'skills/artifactbin/scripts');
@@ -45,4 +46,10 @@ it('detects each retired phrasing it guards', () => {
   RETIRED.forEach(([name, pattern], index) => expect(pattern.test(samples[index]!), name).toBe(true));
   // The one timeout sentence the watch help prints is not a command suggestion.
   expect(RETIRED.some(([, pattern]) => pattern.test('never wrap the command in timeout(1).'))).toBe(false);
+});
+
+it('keeps the monitor instruction and the served watch guide on the same loop sentence (H1 drift)', () => {
+  const guide = readFileSync(path.join(APP, 'skills/artifactbin/references/html-operations.md'), 'utf8');
+  const section = guide.slice(guide.indexOf('## Watch for comments'));
+  expect(section.slice(0, section.indexOf('\n## ', 3))).toContain(WATCH_LOOP);
 });
