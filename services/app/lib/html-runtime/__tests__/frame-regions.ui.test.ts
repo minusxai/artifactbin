@@ -112,7 +112,11 @@ describe('a region session in the page frame', () => {
   it('fetches the editor only for a session, and mounts it IN PLACE on the region element with the session\'s text', async () => {
     const loads = { count: 0 };
     const h = open({ loads });
+    h.root.insertAdjacentHTML('beforeend', '<p data-af-id="a9"><a href="/elsewhere">a link</a></p>');
     h.receive({ kind: 'regions-enabled', regionIds: ['r1', 'missing'] });
+    // A press on a link in the region follows the link; it does not open the region.
+    h.root.querySelector('a')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(h.posted).toEqual([]);
     // Enabled and asked for, but no session yet: no editor bytes.
     h.root.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     expect(h.posted).toEqual([{ kind: 'region-open', regionId: 'r1' }]);
@@ -310,8 +314,10 @@ describe('a region session in the page frame', () => {
     expect(caret()!.style.top).toBe('20px');
     expect(caret()!.textContent).toBe('Ana');
     expect(document.querySelectorAll('[data-af-region-caret]')).toHaveLength(1);
-    // The caret overlay is outside the editable element.
+    // The caret overlay is outside the editable element, and page observers know it as the frame's own.
     expect(h.root.contains(caret())).toBe(false);
+    expect(h.regions.ownsOverlay(caret()!)).toBe(true);
+    expect(h.regions.ownsOverlay(h.root)).toBe(false);
     h.receive({ kind: 'region-remote', regionId: 'r1', updates: [peerEdit(h, (text) => text.insert(0, 'Hi '))], seq: 4 });
     expect(caret()!.style.left).toBe('80px');
     // The same position this editor would encode.

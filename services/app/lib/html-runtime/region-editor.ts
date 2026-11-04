@@ -59,6 +59,8 @@ export interface RegionEditor {
   /** A toolbar or menu command (lib/live-regions regionCommands); false when it does not apply here. */
   command(name: string, args?: Record<string, unknown>): boolean;
   paint(carets: readonly RegionCaretPaint[]): void;
+  /** The caret overlay, which page observers ignore. */
+  owns(node: Node): boolean;
   /** Sends what is gathered now (unless a composition is open). */
   flush(): void;
   destroy(): void;
@@ -186,6 +188,7 @@ export function mountRegionEditor(options: RegionEditorOptions): RegionEditor {
       return done;
     },
     paint(carets) { painter?.paint(carets); },
+    owns: (node) => !!painter?.owns(node),
     flush,
     destroy() {
       if (destroyed) return;

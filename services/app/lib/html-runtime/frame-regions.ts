@@ -30,6 +30,8 @@ export interface FrameRegions {
   receive(payload: { kind: string }): boolean;
   /** Region id → its mounted editor's root: the live morph leaves these to their editors. */
   editing(): ReadonlyMap<string, Element>;
+  /** The editors' caret overlays, which page observers ignore. */
+  ownsOverlay(node: Node): boolean;
   dispose(): void;
 }
 
@@ -76,7 +78,8 @@ export function startFrameRegions({ win, post, load }: FrameRegionsOptions): Fra
     asked.set(id, at);
     post({ kind: 'region-open', regionId: id });
   };
-  const onPress = (event: PointerEvent) => { const id = regionOf(event.target); if (id) ask(id, { x: event.clientX, y: event.clientY }); };
+  // A press on a link follows it (frame-links): it does not open the region under a page that is being left.
+  const onPress = (event: PointerEvent) => { const id = regionOf(event.target); if (id && !(event.target as Element).closest('a[href]')) ask(id, { x: event.clientX, y: event.clientY }); };
   const onFocus = (event: FocusEvent) => { const id = regionOf(event.target); if (id) ask(id, null); };
   doc.addEventListener('pointerdown', onPress, true);
   doc.addEventListener('focusin', onFocus, true);
@@ -172,6 +175,10 @@ export function startFrameRegions({ win, post, load }: FrameRegionsOptions): Fra
       const roots = new Map<string, Element>();
       for (const [id, session] of sessions) if (session.editor) roots.set(id, session.root);
       return roots;
+    },
+    ownsOverlay(node) {
+      for (const session of sessions.values()) if (session.editor?.owns(node)) return true;
+      return false;
     },
     dispose() {
       if (disposed) return;
