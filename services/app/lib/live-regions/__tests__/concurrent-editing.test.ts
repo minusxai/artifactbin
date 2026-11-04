@@ -449,14 +449,14 @@ describe('ids', () => {
     expect(html).toContain(`<p data-af-id="${id}">Mover</p>`);
   });
 
-  it('known limitation: editing a bold run through the editor changes its inline id at compaction', () => {
+  it('editing a bold run through the editor keeps the paragraph id, and no inline element gains one at compaction', () => {
     const [room, A] = open('<p>Hello <strong>bold</strong> text</p>');
-    const strongId = /<strong data-af-id="([^"]+)"/.exec(room.page.html)![1];
+    expect(room.page.html).toMatch(/Hello <strong>bold<\/strong> text/);
+    const [paragraph] = idsOf(room.html());
     A.select(A.find('bold'), A.find('bold', { after: true })).type('rewritten');
     room.sync();
     const page = room.compact();
-    const next = /<strong data-af-id="([^"]+)">rewritten/.exec(page.html)![1];
-    expect(next).not.toBe(strongId);
+    expect(page.html).toContain(`<p data-af-id="${paragraph}">Hello <strong>rewritten</strong> text</p>`);
     expect(bare(room.invariants())).toBe('<p>Hello <strong>rewritten</strong> text</p>');
   });
 

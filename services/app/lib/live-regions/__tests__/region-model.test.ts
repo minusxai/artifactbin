@@ -316,15 +316,16 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
     expect(page.html).toContain(`<p data-af-id="${kept}">keep</p>`);
   });
 
-  it('known limitation: inline element ids are re-derived by text carry-over, so rewriting a bold run changes its id', () => {
+  it('inline elements carry no ids, so rewriting a bold run keeps every id the region has', () => {
     const saved = published('<p>Hello <strong>bold</strong> and <a href="https://x.dev">link</a>.</p>');
-    const [paragraph, strong, link] = ids(saved.inner);
+    expect(saved.inner).toMatch(/^<p data-af-id="[^"]+">Hello <strong>bold<\/strong> and <a href="https:\/\/x.dev">link<\/a>.<\/p>$/);
+    const [paragraph] = ids(saved.inner);
+    expect(ids(saved.inner)).toEqual([paragraph]);
     const editedAfter = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: createRegionState('rich', saved.inner.replace('link</a>.', 'link</a>. More text.')).state });
-    expect(ids(editedAfter.html.slice(editedAfter.html.indexOf(saved.regionId))).slice(0, 3)).toEqual([paragraph, strong, link]);
+    const inner = (html: string) => { const [before, after] = outsideRegion(html, saved.regionId); return html.slice(before.length, html.length - after.length); };
+    expect(ids(inner(editedAfter.html))).toEqual([paragraph]);
     const rewritten = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: createRegionState('rich', saved.inner.replace('>bold<', '>completely different words<')).state });
-    const after = ids(rewritten.html.slice(rewritten.html.indexOf(saved.regionId))).slice(0, 3);
-    expect(after[0]).toBe(paragraph);
-    expect(after[1]).not.toBe(strong);
+    expect(inner(rewritten.html)).toBe(`<p data-af-id="${paragraph}">Hello <strong>completely different words</strong> and <a href="https://x.dev">link</a>.</p>`);
   });
 
   it('compacts a text region', () => {
