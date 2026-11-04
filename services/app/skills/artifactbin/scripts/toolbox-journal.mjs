@@ -1,7 +1,7 @@
 /**
  * Internal: write journals for unsafe requests: saved before sending, replayed with the same
  * Idempotency-Key on resume, and the server receipt saved beside them.
- * Used by: toolbox-client.mjs (re-exported), hence toolbox-publish.mjs, comment.mjs and
+ * Used by: toolbox-client.mjs (re-exported), hence toolbox-publish.mjs, comment.mjs, doc.mjs and
  *   author-toolbox.test.ts.
  */
 import path from 'node:path';
@@ -32,7 +32,9 @@ if(saved.kind!=='author-request'||saved.schema!==1||saved.operation!==operation|
    operation==='publish'&&!/^\/api\/artifacts(?:\/[A-Za-z0-9]{6,12})?$/.test(saved.path??'')||
    operation==='comment'&&
    !/^\/api\/artifacts\/[A-Za-z0-9]{6,12}\/annotations(?:\/[A-Za-z0-9_-]+(?:\/reactions)?)?$/.test(
-   saved.path??''))throw new ToolError('invalid_journal',
+   saved.path??'')||operation==='doc'&&(saved.method!=='PUT'||
+   !/^\/api\/artifacts\/[A-Za-z0-9]{6,12}\/regions\/(?:_doc|[A-Za-z][A-Za-z0-9_-]{0,127})$/.test(
+   saved.path??'')))throw new ToolError('invalid_journal',
    'Journal does not match this origin, operation or supported endpoint.',2);
  try{
 const receipt=await client.request(saved.path,{method:saved.method,body:saved.body,headers:{
