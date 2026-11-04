@@ -7,13 +7,12 @@ import * as Y from 'yjs';
 import type { Node as PMNode } from 'prosemirror-model';
 import { alignPairs, diffHunks, similarity } from './diff';
 import { readRegion, writeRegion } from './html';
-import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
+import { documentUnits, insertUnits, keysOf, Linear, readText, regionText, type Attrs, type Unit } from './lines';
 import { LiveRegionRefusal } from './refusal';
 import { ID_ATTRS, regionSchema, type RegionKind } from './schema';
 import { htmlSource, markdownSource } from './source-html';
 
-/** The shared text a region is bound through. */
-export const regionText = (doc: Y.Doc): Y.Text => doc.getText('region');
+export { regionText };
 
 /** A live state as a document that can reopen old snapshots. */
 export function liveDocument(state: Uint8Array): Y.Doc {

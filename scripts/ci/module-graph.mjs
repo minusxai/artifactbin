@@ -128,12 +128,14 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/html-autofix/index.ts',
   'services/app/lib/html-bridge/presence-selection.ts',
   'services/app/lib/html-bridge/presence.ts',
+  'services/app/lib/html-bridge/region-carets.ts',
   'services/app/lib/html-page/design-system.ts',
   'services/app/lib/html-runtime/browser-client.ts',
   'services/app/lib/html-runtime/browser-portable.ts',
   'services/app/lib/html-runtime/browser-reader.ts',
   'services/app/lib/html-runtime/portable-session.ts',
   'services/app/lib/html-runtime/portable-source.ts',
+  'services/app/lib/html-runtime/region-editor.ts',
   'services/app/lib/html-systems/index.ts',
 
   'services/app/lib/libraries/index.ts',
@@ -160,11 +162,14 @@ const BUNDLED_LEAVES = {
   'lib/chart': ['chart-theme'],
   'lib/data-ingest': ['coerce', 'csv', 'types'],
   'lib/datasets': ['dataset-usage', 'definition', 'graphql-names', 'types'],
-  'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'selection', 'selection-contract', ],
+  'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'region-carets', 'selection', 'selection-contract', ],
   'lib/html-components': ['hosted.json', 'markdown-typography', 'row-identity', 'table-comparison', 'table-values'],
   'lib/html-page': ['core-script', 'design-system', 'html-source', 'pwa-settings'],
   'lib/offline-dependencies': ['contracts'],
   'lib/html-presence': ['contract', 'model', 'preferences', 'reader-session'],
+  // The page frame's lazily loaded region editor (lib/html-runtime/region-editor) enters through `browser`: the index
+  // carries the server's parse5 readers and compaction.
+  'lib/live-regions': ['browser'],
   'lib/html-runtime': ['browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
@@ -235,6 +240,7 @@ export const DEEP_MODULES = {
   // code imports the leaves, because each index re-exports files a bundle would keep.
   'lib/story-edit': { ...bundled('lib/story-edit'), serverOnly: [''] },
   'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
+  'lib/live-regions': { ...bundled('lib/live-regions'), serverOnly: [''] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
   'lib/object-store': { entries: [''] },
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.

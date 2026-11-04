@@ -17,6 +17,9 @@ export type Attrs = Record<string, string | number | boolean>;
 /** One UTF-16 code unit of the region with its attributes (both Y.Text and ProseMirror count code units). */
 export interface Unit { ch: string; attrs: Attrs }
 
+/** The shared text a region is bound through. */
+export const regionText = (doc: Y.Doc): Y.Text => doc.getText('region');
+
 const CHAR_KEYS = ['bold', 'italic', 'code', 'link'] as const;
 const BLOCK_KEYS = ['level', 'list', 'depth', 'quote', 'codeBlock', 'codeContinues', 'rule', ...ID_ATTRS] as const;
 /** The attribute keys a unit of this character owns: block keys on a "\n", marks on anything else. */

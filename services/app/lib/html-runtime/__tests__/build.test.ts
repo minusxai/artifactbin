@@ -1,5 +1,6 @@
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {gzipSync} from 'node:zlib';
+import {fileURLToPath} from 'node:url';
 import { expect, it } from 'vitest';
 import { buildHtmlCore,buildHtmlAssets } from '../build.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
@@ -172,4 +173,23 @@ it('the core sets the platform attributes before authored code, with the viewer 
  expect(root.getAttribute('data-af-design-system')).toBe('nocturne');expect(root.getAttribute('data-af-dark')).toBe('true');
  const viewer=run('https://p.example/?mx-mode=light',{designSystem:'nocturne',mode:'dark'});
  expect(viewer.getAttribute('data-af-dark')).toBe('false');expect(viewer.style.colorScheme).toBe('light');
+});
+
+it('ships the region editor only as its own lazily loaded module, at most 100 KiB gzipped, without the server\'s parsers',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.regionsPath).toBe('/af/regions.js');
+ const regions=assets.regions!;
+ // Production conditions, minified, gzipped as served: the budget the brief sets (100 KiB = 102,400 bytes).
+ expect(gzipSync(regions).byteLength).toBeLessThanOrEqual(100*1024);
+ expect(regions).toContain('ProseMirror');
+ // Readers never carry editor bytes: neither the core nor the reader module holds ProseMirror or Yjs.
+ for(const source of [assets.core,assets.reader,assets.morph!])expect(source).not.toContain('ProseMirror');
+ expect(assets.reader).toContain('@afbin/regions');
+ // Only framed live pages map the module (it is loaded after a region session only).
+ expect(assets.core).toMatch(/"@afbin\/regions":new URL\("\/af\/regions\.js"/);
+ const {build}=await import('esbuild');
+ const graph=await build({entryPoints:[fileURLToPath(new URL('../region-editor.ts',import.meta.url))],bundle:true,write:false,minify:true,format:'esm',platform:'browser',conditions:['production'],metafile:true,logLevel:'silent'});
+ const inputs=Object.keys(graph.metafile.inputs);
+ expect(inputs.some(input=>input.includes('prosemirror-view'))).toBe(true);
+ expect(inputs.filter(input=>/parse5|prosemirror-markdown|markdown-it|lib\/html-page\/|live-regions\/(?:compaction|source-html|state)\.ts/.test(input))).toEqual([]);
 });
