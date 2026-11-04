@@ -85,5 +85,6 @@
   "services/app/lib/live-regions/__tests__/validate.test.ts",
   "services/app/lib/html-page/__tests__/page-title.test.ts",
   "services/app/lib/artifacts/__tests__/doc-title.test.ts",
-  "services/app/lib/live-regions/__tests__/markdown.test.ts"
+  "services/app/lib/live-regions/__tests__/markdown.test.ts",
+  "services/app/lib/live-regions/__tests__/page-regions.test.ts"
 ]
