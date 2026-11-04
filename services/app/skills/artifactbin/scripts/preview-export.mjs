@@ -13,7 +13,7 @@ import walkCss from 'css-tree/walker';
 // one statement of the core addresses.
 import {isRuntimeCoreSrc} from '../../../lib/html-page/core-script.ts';
 initSync();
-const PLATFORM=new Set(['@afbin/apollo','@afbin/reader','@afbin/chrome','@afbin/portable']);
+const PLATFORM=new Set(['@afbin/apollo','@afbin/reader','@afbin/chrome','@afbin/portable','@afbin/collab']);
 const PREFIX='@afbin/local-export/';
 const ORIGIN='http://local-export.invalid';
 const JS=new Set(['text/javascript','application/javascript','application/ecmascript',
