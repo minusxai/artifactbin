@@ -205,6 +205,8 @@ it('ships @afbin/collab as its own small module over the page reader: Yjs, no Pr
  expect(collab).toMatch(/from\s*"@afbin\/reader"/);
  expect(assets.reader).not.toMatch(/yjs|Y\.Doc/);
  // Mapped for every hosted page (not only framed live ones), so an author's import always resolves; a page the app
- // does not frame answers readonly.
- expect(assets.core).toMatch(/"@afbin\/collab":new URL\("\/af\/collab\.js"/);
+ // does not frame answers readonly. Offline, only from the copy's own embedded block (no network).
+ expect(assets.core).toMatch(/new URL\("\/af\/collab\.js"/);
+ expect(assets.core).toContain('[data-af="collab"]');
+ expect(assets.core).toMatch(/"@afbin\/collab":\w+/);
 });
