@@ -27,7 +27,7 @@ describe('settings', () => {
     const config = await configFrom({
       NODE_ENV: 'production', DATABASE_URL: 'postgres://db.example/app', S3_URL: 's3://bucket', TEST_DOMAIN: undefined,
       APP__PORT: '4100', APP__HMR_PORT: '4200', APP__PUBLIC_BASE_URL: 'https://app.example.com', APP__ASSETS_ORIGIN: 'https://assets.example.com',
-      APP__ALIAS_ORIGINS: 'https://alias.example.com', APP__PAGES_HOST: 'Pages.Example.com.',
+      APP__ALIAS_ORIGINS: 'https://alias.example.com', APP__OUTBOUND_IPS: '184.169.146.94, 2600:1F1C::1', APP__PAGES_HOST: 'Pages.Example.com.',
       ADMIN__SECRET: 'admin', AUTH__SECRET: 'auth', ANALYTICS__SECRET: 'analytics', ARTIFACTS__ALLOW_PUBLIC: '0',
       QUOTA__ARTIFACTS_PER_TOKEN: '7', ASSETS__MAX_BYTES_PER_TOKEN: '8', HTTP__TRUSTED_PROXY_HOPS: '3',
       SQL__MAX_ROWS: '50', SQL__MAX_QUERY_ROWS: undefined, SQL__QUERY_TIMEOUT_MS: '900', SQL__SERVICE_URL: 'http://sql',
@@ -47,6 +47,7 @@ describe('settings', () => {
       ['PUBLIC_BASE_URL', 'https://app.example.com'],
       ['ASSETS_ORIGIN', 'https://assets.example.com'],
       ['ALIAS_ORIGINS', ['https://alias.example.com']],
+      ['OUTBOUND_IPS', ['184.169.146.94', '2600:1f1c::1']],
       ['ADMIN_SECRET', 'admin'],
       ['AUTH_SECRET', 'auth'],
       ['ANALYTICS_SECRET', 'analytics'],
@@ -79,7 +80,7 @@ describe('settings', () => {
 
   it('falls back to its defaults when nothing is set', async () => {
     const unset = Object.fromEntries([
-      'APP__PORT', 'APP__HMR_PORT', 'APP__PUBLIC_BASE_URL', 'APP__ASSETS_ORIGIN', 'APP__ALIAS_ORIGINS', 'AUTH__SECRET', 'ANALYTICS__SECRET',
+      'APP__PORT', 'APP__HMR_PORT', 'APP__PUBLIC_BASE_URL', 'APP__ASSETS_ORIGIN', 'APP__ALIAS_ORIGINS', 'APP__OUTBOUND_IPS', 'AUTH__SECRET', 'ANALYTICS__SECRET',
       'ARTIFACTS__ALLOW_PUBLIC',
       'QUOTA__ARTIFACTS_PER_TOKEN', 'ASSETS__MAX_BYTES_PER_TOKEN', 'HTTP__TRUSTED_PROXY_HOPS', 'SQL__MAX_ROWS', 'SQL__MAX_QUERY_ROWS',
       'SQL__QUERY_TIMEOUT_MS', 'OBJECT_STORE__LOCAL_DIR', 'WEB_INGEST__ALLOW_PRIVATE', 'WEB_INGEST__TIMEOUT_MS', 'WEB_INGEST__MAX_PER_HOUR',
@@ -92,6 +93,7 @@ describe('settings', () => {
       ['PUBLIC_BASE_URL', 'http://localhost:3030'],
       ['ASSETS_ORIGIN', null],
       ['ALIAS_ORIGINS', []],
+      ['OUTBOUND_IPS', []],
       ['AUTH_SECRET', 'dev-only-secret-change-me'],
       ['ANALYTICS_SECRET', 'dev-only-secret-change-me'],
       ['ALLOW_PUBLIC_VISIBILITY', false],
@@ -123,6 +125,10 @@ describe('settings', () => {
       ['TRUSTED_PROXY_HOPS', 1],
     ]);
     expect((await configFrom({ HTTP__TRUSTED_PROXY_HOPS: '0' })).TRUSTED_PROXY_HOPS).toBe(1);
+  });
+
+  it('refuses to load a malformed outbound IP list, naming the setting', async () => {
+    await expect(configFrom({ APP__OUTBOUND_IPS: '184.169.146.94,db.example.com' })).rejects.toThrow('APP__OUTBOUND_IPS');
   });
 
   it('refuses to boot without a pages host, naming the setting', async () => {

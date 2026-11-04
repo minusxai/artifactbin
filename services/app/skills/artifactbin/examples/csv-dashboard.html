@@ -1,136 +1,159 @@
 <!doctype html>
-<!--
-Example: a chart computed from every row of a linked dataset, read through its generated GraphQL
-API (repairs(order_by, limit, offset)). Goes with examples/repairs.csv.
-Next: in this copy replace only the [bracketed] text and the data (no drafts elsewhere, no new
-  layouts or controls), write steps.mjs, then run: node scripts/publish.mjs index.html &&
-  node scripts/check.mjs index.html --steps steps.mjs
-Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset), then
-replace the placeholder after ref: in the dataset link below with the returned dataset ID and
-publish this page (node scripts/publish.mjs examples/csv-dashboard.html).
-Gotchas: never publish the placeholder. Field names are the CSV's column names (graphql.mjs
-schema ID lists them). Verify chart values against the source cells, including empty values.
-Copy it as index.html and replace only the [bracketed] text and the data; keep its CSS, JS and
-layout, and add no new controls.
--->
+<!-- Example: a page computed from every row of a linked dataset. Usage: and Gotchas: are above
+DATA; keep this line. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="phosphor">
-<title>[Page title: Repair bench capacity]</title>
+<title>[Repair bench capacity]</title>
 <link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID">
+<script type="module" id="page-data">
+// Usage: node scripts/publish.mjs data.csv --type dataset (examples/repairs.csv is the sample);
+//   cp examples/csv-dashboard.html index.html && cp examples/csv-dashboard-steps.mjs steps.mjs;
+//   put the dataset's id after ref: above and its name in data-af-name and DATA.dataset; edit
+//   only DATA and <title> (the page heading); then node scripts/publish.mjs index.html &&
+//   node scripts/check.mjs index.html --steps steps.mjs
+// Gotchas: labels lists every column the page reads, by its field name (graphql.mjs schema ID
+//   lists them), with the name readers see. Every number comes from the rows: a text is a
+//   function of h, whose h.sum(col), h.mean(col), h.min(col), h.max(col), h.last(col) and
+//   h.count() read every row, h.where({col:value}) the matching rows, h.fmt(n, digits) formats.
+//   Charts: mark bar|line; x, y and an optional series name columns; y is summed per x (and
+//   series) unless aggregate is mean, min, max or last; where:{col:value} keeps matching rows.
+//   Each chart draws with Vega-Lite and lists its values in a table. ids are unique keys.
+// Built with: one HTML page; a published CSV dataset read live through its generated API, every
+//   row; numbers computed in page script; Vega-Lite charts, each with a table of its values.
+window.DATA = {
+  dataset: 'repairs', order: 'week',
+  labels: {week:'Week', completed:'Completed repairs', waiting:'Waiting repairs'},
+  kicker: '[Operations notebook] · sample data',
+  lead: h => `[${h.fmt(h.sum('completed'))} repairs were completed across ${h.count()} weeks.]`,
+  stats: [
+    {id:'completed', label:'[Completed]', value: h => h.fmt(h.sum('completed'))},
+    {id:'waiting', label:'[Waiting in the latest week]', value: h => h.fmt(h.last('waiting'))},
+  ],
+  charts: [
+    {id:'completed', title:'[Completed repairs by week]', mark:'bar', x:'week', y:'completed'},
+    {id:'waiting', title:'[Waiting repairs by week]', mark:'line', x:'week', y:'waiting'},
+  ],
+  sections: [
+    {id:'reading', title:'[How to read this]', text: h => `[Waiting work is a weekly snapshot, so `+
+      `its ${h.count()} values are not added up.]`},
+  ],
+};
+</script>
 <style>
 *{box-sizing:border-box}body{line-height:1.6}
 main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}
-p{max-width:68ch}
-button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);
-border:1px solid currentColor;border-radius:4px}button{cursor:pointer}
-button:disabled{opacity:.55;cursor:wait}
-button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
-.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
-.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}
-.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}
-svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}
-td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}
-.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}
-.layout>*{min-width:0}#chart,.chart svg{max-width:100%;height:auto}
-@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}
-main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+p{max-width:68ch}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
+.number{font-variant-numeric:tabular-nums}[role=status]{min-height:1.6em}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:24px 0}
+.stats div{border-top:2px solid currentColor;padding-top:8px}.stats b{display:block;font-size:28px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:clamp(24px,5vw,56px)}
+.charts>*,.sections>*{min-width:0}.rule{border-top:1px solid var(--border);padding-top:24px}
+.chart{width:100%;min-height:240px}.chart svg{max-width:100%;height:auto}
+table{border-collapse:collapse;width:100%;margin-top:12px}
+td,th{padding:8px;border-bottom:1px solid var(--border);text-align:left}td{text-align:right}
+@media(max-width:640px){h1{font-size:38px!important}main{padding:24px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
-<script type="application/json" data-af="state">{"metric":"completed"}</script>
 </head><body><main>
-<p class="muted">[Kicker: Operations notebook] · sample CSV</p>
-<h1 class="t-display-xl">[Title: Repair bench capacity]</h1>
-<p class="lead">[One-sentence summary: completed repairs and work still waiting, calculated from
-the linked dataset.]</p>
-<div class="toolbar"><label for="metric">Measure</label><select id="metric">
-<option value="completed">Completed repairs</option><option value="waiting">Waiting repairs</option>
-</select><button id="refresh" type="button">Refresh data</button></div>
-<p id="status" role="status" aria-live="polite">Loading the linked sample dataset…</p>
-<div class="layout rule"><section><h2 id="chart-title" class="t-title">Completed repairs by
-week</h2><svg id="chart" viewBox="0 0 640 300" role="img"
-aria-labelledby="chart-title chart-description">
-<desc id="chart-description">The chart loads from the linked CSV dataset.</desc></svg></section>
-<aside><h2 class="t-title">How to read this</h2>
-<p>Figures below are calculated only after every page of rows has loaded.</p>
-<p id="summary" class="number"></p>
-<p class="muted">Illustrative data. Weekly snapshots of waiting work are not summed as a backlog
-total.</p></aside></div><table><caption>Source rows used in this chart</caption><thead><tr>
-<th scope="col">Week</th><th scope="col">Completed</th><th scope="col">Waiting</th></tr></thead>
-<tbody id="rows"></tbody></table>
+<p id="kicker" class="muted"></p>
+<h1 id="title" class="t-display-xl"></h1>
+<p id="lead" class="lead number"></p>
+<p id="status" role="status" aria-live="polite">Loading the linked dataset…</p>
+<div id="stats" class="stats number"></div>
+<div id="charts" class="charts"></div>
+<div id="sections" class="sections"></div>
 </main>
 <script type="module">
 import {client,gql} from '@afbin/apollo';
-const preference=gql`{metric}`;
-// Generated API: the link name is the root and the CSV's columns are its fields; up to 1000 rows
-// per page, ordered by week (and _id), so offset paging is stable.
-const PAGE=1000,rowsQuery=gql`query Rows($offset:Int!){
-  repairs(order_by:{week:asc},limit:1000,offset:$offset){_id week completed waiting}}`;
-let rows=[];
-const status=document.querySelector('#status');
-function render(metric){
- document.querySelector('#metric').value=metric;
- document.querySelector('#chart-title').textContent=
-  (metric==='completed'?'Completed':'Waiting')+' repairs by week';
- const chart=document.querySelector('#chart'),
-  description=document.querySelector('#chart-description');
- // The SVG's <desc> doubles as the text alternative, so keep it in sync with the bars.
- chart.replaceChildren(description);
- description.textContent=rows.map(row=>`${row.week}: ${row[metric]}`).join('; ');
- const max=Math.max(1,...rows.map(row=>row[metric]));
- rows.forEach((row,index)=>{
-  const y=24+index*76,width=430*row[metric]/max;
-  const make=(role,tag,attrs,text)=>{
-   const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
-   el.dataset.afId='repair-chart-'+row.id+'-'+role;
-   for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));
-   if(text!==undefined)el.textContent=text;chart.append(el);
-  };
-  make('week','text',{x:0,y:y+24,fill:'currentColor','font-size':17},row.week);
-  make('bar','rect',{x:120,y,width,height:36,fill:'var(--primary)'});
-  make('value','text',{x:130+width,y:y+24,fill:'currentColor','font-size':17},String(row[metric]));
- });
- document.querySelector('#summary').textContent=metric==='completed'
-  ?`${rows.reduce((n,row)=>n+row.completed,0)} repairs completed across ${rows.length} weeks.`
-  :`${rows.at(-1)?.waiting??0} repairs waiting in the latest loaded week.`;
- const body=document.querySelector('#rows');body.replaceChildren();
- for(const row of rows){
-  const tr=document.createElement('tr');tr.dataset.afId='repair-row-'+row.id;
-  for(const key of ['week','completed','waiting']){
-   const td=document.createElement('td');td.dataset.afId='repair-cell-'+row.id+'-'+key;
-   td.textContent=String(row[key]);tr.append(td);
-  }
-  body.append(tr);
- }
-}
-async function refresh(){
- const button=document.querySelector('#refresh');button.disabled=true;
- status.textContent='Reading dataset rows…';
- try{
-  const loaded=[];
-  // Read every page: a page shorter than PAGE is the last one.
-  for(let offset=0;;offset+=PAGE){
-   const result=await client.query({query:rowsQuery,variables:{offset}});
-   if(result.errors?.length)throw Error(result.errors[0].message);
-   const page=result.data.repairs;
-   for(const row of page){
-    const {week,completed,waiting}=row;
-    if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))
-     throw Error('A row has missing or nonnumeric repair values.');
-    loaded.push({id:row._id,week,completed,waiting});
-   }
-   if(page.length<PAGE)break;
-  }
-  rows=loaded;
-  const {data}=await client.query({query:preference});render(data.metric);
-  status.textContent=`Loaded ${rows.length} sample rows.`;
- }catch(error){status.textContent=error.message||'Could not read this dataset.';}
- finally{button.disabled=false;}
-}
-client.watchQuery({query:preference}).subscribe(({data})=>render(data.metric));
-document.querySelector('#metric').onchange=
- event=>client.updateQuery({query:preference},()=>({metric:event.target.value}));
-document.querySelector('#refresh').onclick=refresh;
-await refresh();
+import * as vega from '@afbin/vega';
+import {compile} from '@afbin/vega-lite';
+const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),PAGE=1000;
+const label=col=>D.labels[col]??col;
+// gql also takes a one-string array, so the query is built from DATA's names. The API returns up to
+// 1000 rows per page, ordered by DATA.order (then _id), so offset paging is stable.
+const rowsQuery=gql([`query Rows($o:Int!){${D.dataset}(order_by:{${D.order}:asc},limit:${PAGE},`+
+  `offset:$o){_id ${Object.keys(D.labels).join(' ')}}}`]);
+let rows=[],views=[];
+async function loadRows(){const out=[];
+  for(let offset=0;;offset+=PAGE){ // a page shorter than PAGE is the last one
+    const result=await client.query({query:rowsQuery,variables:{o:offset}});
+    if(result.errors?.length)throw Error(result.errors[0].message);
+    const page=result.data[D.dataset];out.push(...page);if(page.length<PAGE)break;}
+  return out;}
+const AGG={sum:v=>v.reduce((a,b)=>a+b,0),mean:v=>AGG.sum(v)/v.length,min:v=>Math.min(...v),
+  max:v=>Math.max(...v),last:v=>v.at(-1)};
+const matches=where=>row=>Object.entries(where??{}).every(([col,value])=>row[col]===value);
+// The numbers every text reads; empty cells are left out, never counted as zero.
+function helpers(list){const nums=col=>list.map(row=>row[col]).filter(Number.isFinite);
+  return {count:()=>list.length,last:col=>nums(col).at(-1),where:where=>helpers(list.filter(
+    matches(where))),fmt:(n,digits=0)=>Number.isFinite(n)?n.toLocaleString(undefined,
+    {minimumFractionDigits:digits,maximumFractionDigits:digits}):'–',...Object.fromEntries(['sum',
+    'mean','min','max'].map(name=>[name,col=>nums(col).length?AGG[name](nums(col)):NaN]))};}
+// One value per x (and series), in the order rows were read; the chart and its table share it.
+function values(c){const groups=new Map();
+  for(const row of rows.filter(matches(c.where))){const y=row[c.y];if(!Number.isFinite(y))continue;
+    const x=String(row[c.x]??''),series=c.series?String(row[c.series]??''):'',key=x+'\u0000'+series;
+    if(!groups.has(key))groups.set(key,{x,series,all:[]});groups.get(key).all.push(y);}
+  return [...groups.values()].map(({x,series,all})=>({x,series,y:AGG[c.aggregate??'sum'](all)}));}
+// Script-made nodes take data-af-ids from DATA ids and row values, stable on every render.
+const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
+  if(text!==undefined)n.textContent=text;return n;};
+function table(c,list){const id='chart-'+c.id+'-table',series=[...new Set(list.map(v=>v.series))];
+  const t=node('table',id),head=node('tr',id+'-head'),fmt=helpers([]).fmt;
+  head.append(node('th',id+'-head-x',label(c.x)),...series.map(s=>node('th',`${id}-head-${s}`,
+    s||label(c.y))));
+  t.append(node('caption',id+'-caption',`Values in this chart: ${label(c.y)}`),head);
+  for(const x of new Set(list.map(v=>v.x))){const tr=node('tr',`${id}-row-${x}`);
+    tr.append(node('th',`${id}-row-${x}-x`,x),...series.map(s=>{
+      const y=list.find(v=>v.x===x&&v.series===s)?.y;
+      return node('td',`${id}-row-${x}-${s||'y'}`,fmt(y??NaN,Number.isInteger(y)?0:2));}));
+    t.append(tr);}
+  return t;}
+const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+async function draw(){views.forEach(view=>view.finalize());
+  const ink=token('--foreground'),line=token('--border'),font=token('--font-body'),
+    colors=[1,2,3,4,5].map(n=>token('--chart-'+n)).filter(Boolean);
+  views=await Promise.all(D.charts.map(async c=>{const host=$(`[data-af-id="chart-${c.id}-plot"]`);
+    const spec=compile({description:c.title,width:'container',height:240,background:'transparent',
+      autosize:{type:'fit',contains:'padding'},data:{values:values(c)},mark:c.mark==='line'?
+      {type:'line',strokeWidth:2,point:{filled:true,size:25}}:{type:'bar',cornerRadiusEnd:2},
+      encoding:{x:{field:'x',type:'ordinal',sort:null,title:label(c.x),axis:{labelAngle:0}},
+        y:{field:'y',type:'quantitative',title:label(c.y),scale:{zero:true},axis:{format:'.3~s'}},
+        ...c.series?{color:{field:'series',type:'nominal',title:label(c.series)}}:{},
+        tooltip:[{field:'x',type:'nominal',title:label(c.x)},...c.series?[{field:'series',
+          type:'nominal',title:label(c.series)}]:[],{field:'y',type:'quantitative',
+          title:label(c.y),format:','}]},
+      config:{view:{stroke:null},font,mark:{color:colors[0]||ink},range:{category:colors},
+        axis:{labelColor:ink,titleColor:ink,domainColor:line,tickColor:line,gridColor:line,
+          gridDash:[3,3],labelFontSize:11,titleFontSize:12,titleFontWeight:'normal'},
+        legend:{orient:'top',labelColor:ink,titleColor:ink}}}).spec;
+    const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,
+      renderer:'svg',expr:vega.expressionInterpreter});await view.runAsync();return view;}));}
+function render(){const h=helpers(rows);
+  $('#title').textContent=document.title;$('#kicker').textContent=D.kicker;$('#lead').textContent=
+    D.lead(h);
+  $('#stats').replaceChildren(...D.stats.map(s=>{const box=node('div','stat-'+s.id);
+    box.append(node('span',`stat-${s.id}-label`,s.label),node('b',`stat-${s.id}-value`,
+      s.value(h)));return box;}));
+  $('#charts').replaceChildren(...D.charts.map(c=>{const section=node('section','chart-'+c.id),
+    plot=node('div',`chart-${c.id}-plot`);plot.className='chart';plot.setAttribute('role','img');
+    plot.setAttribute('aria-label',c.title);section.className='rule';
+    section.append(node('h2',`chart-${c.id}-title`,c.title),plot,table(c,values(c)));
+    return section;}));
+  $('#sections').replaceChildren(...D.sections.map(s=>{const section=node('section',
+    'section-'+s.id);section.className='rule';section.append(node('h2',`section-${s.id}-title`,
+    s.title),node('p',`section-${s.id}-text`,s.text(h)));return section;}));}
+// Charts follow the reader's light or dark mode and the owner's design system.
+const theme=new MutationObserver(()=>{if(rows.length)void draw();});
+theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark',
+  'data-af-design-system']});
+addEventListener('pagehide',()=>{theme.disconnect();views.forEach(view=>view.finalize());},
+  {once:true});
+try{rows=await loadRows();render();await draw();
+  status.textContent=`Loaded ${rows.length} rows from the linked dataset.`;
+}catch(error){status.textContent=error.message||'Could not read the linked dataset.';}
 </script>
 </body></html>

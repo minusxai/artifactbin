@@ -40,6 +40,7 @@ import {
   serverOrigin,
   ToolError
 } from './toolbox-client.mjs';
+import {watchNext} from './toolbox-watch-state.mjs';
 
 const REGION = /^(?:_doc|[A-Za-z][A-Za-z0-9_-]{0,127})$/;
 const baselineOf = file => file + '.af.json';
@@ -135,6 +136,7 @@ export async function docCommand({sub, values, positionals}, options = {}) {
   await atomicWrite(file, withNewline(receipt[pair.format] ?? ''));
   await save({...pair, version: receipt.version, pending: undefined});
   return {id: pair.id, regionId: receipt.regionId, version: receipt.version,
-    file: path.resolve(file), ...(pair.pending ? {resumed: true} : {}), journal};
+    file: path.resolve(file), ...(pair.pending ? {resumed: true} : {}), journal,
+    next: watchNext(pair.id)};
 }
 await runTool('doc', import.meta.url, docCommand);

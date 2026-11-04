@@ -117,41 +117,42 @@ import * as r113 from '@/app/api/my/profile/route';
 import * as r114 from '@/app/api/my/resolvers/[id]/[version]/secrets/route';
 import * as r115 from '@/app/api/my/tokens/route';
 import * as r116 from '@/app/api/my/tokens/[id]/route';
-import * as r117 from '@/app/api/page/account/route';
-import * as r118 from '@/app/api/page/artifact/[id]/route';
-import * as r119 from '@/app/api/page/artifact/[id]/view/route';
-import * as r120 from '@/app/api/page/assets/route';
-import * as r121 from '@/app/api/page/frame/[id]/route';
-import * as r122 from '@/app/api/page/home/route';
-import * as r123 from '@/app/api/page/profile/[user]/[[...path]]/route';
-import * as r124 from '@/app/api/page/session/route';
-import * as r125 from '@/app/api/page/trash/route';
-import * as r126 from '@/app/api/preview/route';
-import * as r127 from '@/app/api/query/route';
-import * as r128 from '@/app/api/runner/operations/route';
-import * as r129 from '@/app/api/server/route';
-import * as r130 from '@/app/api/session/token/route';
-import * as r131 from '@/app/api/start/route';
-import * as r132 from '@/app/api/testusers/route';
-import * as r133 from '@/app/api/testusers/[id]/route';
-import * as r134 from '@/app/api/tokens/route';
-import * as r135 from '@/app/api/tokens/[id]/route';
-import * as r136 from '@/app/api/trust/route';
-import * as r137 from '@/app/api/users/[id]/avatar/route';
-import * as r138 from '@/app/api/users/[id]/follow/route';
-import * as r139 from '@/app/assets/export/[id]/route';
-import * as r140 from '@/app/assets/mermaid/[file]/route';
-import * as r141 from '@/app/assets/[hash]/route';
-import * as r142 from '@/app/basemap/[...path]/route';
-import * as r143 from '@/app/email/[id]/route';
-import * as r144 from '@/app/health/route';
-import * as r145 from '@/app/llms/[topic]/route';
-import * as r146 from '@/app/llms.txt/route';
-import * as r147 from '@/app/people/[id]/route';
-import * as r148 from '@/app/skills/artifactbin/latest.json/route';
-import * as r149 from '@/app/skills/artifactbin.zip/route';
-import * as r150 from '@/app/tiles/[...tile]/route';
-import * as r151 from '@/app/workspace/[id]/route';
+import * as r117 from '@/app/api/outbound-ips/route';
+import * as r118 from '@/app/api/page/account/route';
+import * as r119 from '@/app/api/page/artifact/[id]/route';
+import * as r120 from '@/app/api/page/artifact/[id]/view/route';
+import * as r121 from '@/app/api/page/assets/route';
+import * as r122 from '@/app/api/page/frame/[id]/route';
+import * as r123 from '@/app/api/page/home/route';
+import * as r124 from '@/app/api/page/profile/[user]/[[...path]]/route';
+import * as r125 from '@/app/api/page/session/route';
+import * as r126 from '@/app/api/page/trash/route';
+import * as r127 from '@/app/api/preview/route';
+import * as r128 from '@/app/api/query/route';
+import * as r129 from '@/app/api/runner/operations/route';
+import * as r130 from '@/app/api/server/route';
+import * as r131 from '@/app/api/session/token/route';
+import * as r132 from '@/app/api/start/route';
+import * as r133 from '@/app/api/testusers/route';
+import * as r134 from '@/app/api/testusers/[id]/route';
+import * as r135 from '@/app/api/tokens/route';
+import * as r136 from '@/app/api/tokens/[id]/route';
+import * as r137 from '@/app/api/trust/route';
+import * as r138 from '@/app/api/users/[id]/avatar/route';
+import * as r139 from '@/app/api/users/[id]/follow/route';
+import * as r140 from '@/app/assets/export/[id]/route';
+import * as r141 from '@/app/assets/mermaid/[file]/route';
+import * as r142 from '@/app/assets/[hash]/route';
+import * as r143 from '@/app/basemap/[...path]/route';
+import * as r144 from '@/app/email/[id]/route';
+import * as r145 from '@/app/health/route';
+import * as r146 from '@/app/llms/[topic]/route';
+import * as r147 from '@/app/llms.txt/route';
+import * as r148 from '@/app/people/[id]/route';
+import * as r149 from '@/app/skills/artifactbin/latest.json/route';
+import * as r150 from '@/app/skills/artifactbin.zip/route';
+import * as r151 from '@/app/tiles/[...tile]/route';
+import * as r152 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -272,39 +273,40 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/my/resolvers/:id/:version/secrets", dir: "/api/my/resolvers/[id]/[version]/secrets", methods: ["GET","PUT","DELETE"], module: r114 },
   { path: "/api/my/tokens", dir: "/api/my/tokens", methods: ["GET"], module: r115 },
   { path: "/api/my/tokens/:id", dir: "/api/my/tokens/[id]", methods: ["DELETE"], module: r116 },
-  { path: "/api/page/account", dir: "/api/page/account", methods: ["GET"], module: r117 },
-  { path: "/api/page/artifact/:id", dir: "/api/page/artifact/[id]", methods: ["GET"], module: r118 },
-  { path: "/api/page/artifact/:id/view", dir: "/api/page/artifact/[id]/view", methods: ["POST"], module: r119 },
-  { path: "/api/page/assets", dir: "/api/page/assets", methods: ["GET"], module: r120 },
-  { path: "/api/page/frame/:id", dir: "/api/page/frame/[id]", methods: ["GET"], module: r121 },
-  { path: "/api/page/home", dir: "/api/page/home", methods: ["GET"], module: r122 },
-  { path: "/api/page/profile/:user/:path{.*}?", dir: "/api/page/profile/[user]/[[...path]]", methods: ["GET"], module: r123 },
-  { path: "/api/page/session", dir: "/api/page/session", methods: ["GET"], module: r124 },
-  { path: "/api/page/trash", dir: "/api/page/trash", methods: ["GET"], module: r125 },
-  { path: "/api/preview", dir: "/api/preview", methods: ["POST"], module: r126 },
-  { path: "/api/query", dir: "/api/query", methods: ["POST"], module: r127 },
-  { path: "/api/runner/operations", dir: "/api/runner/operations", methods: ["POST"], module: r128 },
-  { path: "/api/server", dir: "/api/server", methods: ["GET"], module: r129 },
-  { path: "/api/session/token", dir: "/api/session/token", methods: ["POST","DELETE"], module: r130 },
-  { path: "/api/start", dir: "/api/start", methods: ["POST"], module: r131 },
-  { path: "/api/testusers", dir: "/api/testusers", methods: ["GET","POST"], module: r132 },
-  { path: "/api/testusers/:id", dir: "/api/testusers/[id]", methods: ["DELETE"], module: r133 },
-  { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r134 },
-  { path: "/api/tokens/:id", dir: "/api/tokens/[id]", methods: ["DELETE"], module: r135 },
-  { path: "/api/trust", dir: "/api/trust", methods: ["GET","POST","DELETE"], module: r136 },
-  { path: "/api/users/:id/avatar", dir: "/api/users/[id]/avatar", methods: ["GET"], module: r137 },
-  { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r138 },
-  { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r139 },
-  { path: "/assets/mermaid/:file", dir: "/assets/mermaid/[file]", methods: ["GET","HEAD"], module: r140 },
-  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r141 },
-  { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r142 },
-  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r143 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r144 },
-  { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r145 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r146 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r147 },
-  { path: "/skills/artifactbin/latest.json", dir: "/skills/artifactbin/latest.json", methods: ["GET"], module: r148 },
-  { path: "/skills/artifactbin.zip", dir: "/skills/artifactbin.zip", methods: ["GET"], module: r149 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r150 },
-  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r151 },
+  { path: "/api/outbound-ips", dir: "/api/outbound-ips", methods: ["GET"], module: r117 },
+  { path: "/api/page/account", dir: "/api/page/account", methods: ["GET"], module: r118 },
+  { path: "/api/page/artifact/:id", dir: "/api/page/artifact/[id]", methods: ["GET"], module: r119 },
+  { path: "/api/page/artifact/:id/view", dir: "/api/page/artifact/[id]/view", methods: ["POST"], module: r120 },
+  { path: "/api/page/assets", dir: "/api/page/assets", methods: ["GET"], module: r121 },
+  { path: "/api/page/frame/:id", dir: "/api/page/frame/[id]", methods: ["GET"], module: r122 },
+  { path: "/api/page/home", dir: "/api/page/home", methods: ["GET"], module: r123 },
+  { path: "/api/page/profile/:user/:path{.*}?", dir: "/api/page/profile/[user]/[[...path]]", methods: ["GET"], module: r124 },
+  { path: "/api/page/session", dir: "/api/page/session", methods: ["GET"], module: r125 },
+  { path: "/api/page/trash", dir: "/api/page/trash", methods: ["GET"], module: r126 },
+  { path: "/api/preview", dir: "/api/preview", methods: ["POST"], module: r127 },
+  { path: "/api/query", dir: "/api/query", methods: ["POST"], module: r128 },
+  { path: "/api/runner/operations", dir: "/api/runner/operations", methods: ["POST"], module: r129 },
+  { path: "/api/server", dir: "/api/server", methods: ["GET"], module: r130 },
+  { path: "/api/session/token", dir: "/api/session/token", methods: ["POST","DELETE"], module: r131 },
+  { path: "/api/start", dir: "/api/start", methods: ["POST"], module: r132 },
+  { path: "/api/testusers", dir: "/api/testusers", methods: ["GET","POST"], module: r133 },
+  { path: "/api/testusers/:id", dir: "/api/testusers/[id]", methods: ["DELETE"], module: r134 },
+  { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r135 },
+  { path: "/api/tokens/:id", dir: "/api/tokens/[id]", methods: ["DELETE"], module: r136 },
+  { path: "/api/trust", dir: "/api/trust", methods: ["GET","POST","DELETE"], module: r137 },
+  { path: "/api/users/:id/avatar", dir: "/api/users/[id]/avatar", methods: ["GET"], module: r138 },
+  { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r139 },
+  { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r140 },
+  { path: "/assets/mermaid/:file", dir: "/assets/mermaid/[file]", methods: ["GET","HEAD"], module: r141 },
+  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r142 },
+  { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r143 },
+  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r144 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r145 },
+  { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r146 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r147 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r148 },
+  { path: "/skills/artifactbin/latest.json", dir: "/skills/artifactbin/latest.json", methods: ["GET"], module: r149 },
+  { path: "/skills/artifactbin.zip", dir: "/skills/artifactbin.zip", methods: ["GET"], module: r150 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r151 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r152 },
 ];

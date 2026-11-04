@@ -11,7 +11,9 @@ Examples:
                                                #   node scripts/publish.mjs page.html
   node scripts/read.mjs ID --json              # record with html, version and state
   node scripts/read.mjs list --limit 50
-Gotchas: --output never overwrites an existing file. HTML pages save as source carrying their
+Gotchas: --output onto a file still unchanged since its read refreshes it and its companion in
+  place; a file with edits of its own is kept and the read goes to FILE.fresh.html beside it
+  (the result's note names it). HTML pages save as source carrying their
   data-af-ids; datasets save as .json rows; images, files and PDFs save raw bytes. The .af.json
   companion is credential-free; never copy or hand-edit it.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
@@ -26,9 +28,11 @@ import {
   integer,
   positional,
   exclusive,
+  hash,
+  platform,
   ToolError
 } from './toolbox-client.mjs';
-import {saveAuthoringPair} from './toolbox-source.mjs';
+import {saveAuthoringPair, readTarget} from './toolbox-source.mjs';
 // read list pages through your artifacts; read ID returns the record, or saves source + baseline
 // with --output.
 export async function readCommand({sub = undefined, values, positionals}, options = {}) {
@@ -48,22 +52,24 @@ export async function readCommand({sub = undefined, values, positionals}, option
   const record =
     await client.request('/api/artifacts/' + id + (version ? '/versions/' + version : ''));
   if (!values.output) return {record};
+  const {output, replace, note} = await readTarget(values.output);
   // HTML: saveAuthoringPair writes the source (with its data-af-ids) and the FILE.af.json baseline
   // publish needs.
   if (record.format === 'html' || typeof record.html === 'string') {
     const pair = await saveAuthoringPair({
       record: {...record, id},
       server,
-      output: values.output,
+      output,
+      replace,
       historical: !!version
     });
-    return {...pair, outputOwned: true};
+    return {...pair, ...(note ? {note} : {}), outputOwned: true};
   }
   // Non-HTML: datasets save as .json rows, images/files/PDFs as raw bytes; anything else has no
   // editable file.
   let bytes;
   if (record.format === 'dataset') {
-    if (path.extname(values.output).toLowerCase() !== '.json')
+    if (path.extname(output).toLowerCase() !== '.json')
       throw new ToolError(
         'dataset_output_extension',
         'Canonical dataset rows require a .json output path.',
@@ -99,16 +105,19 @@ export async function readCommand({sub = undefined, values, positionals}, option
     format: record.format,
     ...(record.contentType ? {contentType: record.contentType} : {}),
     ...(record.filename ? {filename: record.filename} : {}),
-    sourceFile: path.basename(values.output),
-    historical: !!version
+    sourceFile: path.basename(output),
+    historical: !!version,
+    sha256: hash(bytes)
   };
-  await exclusive(values.output, bytes);
-  await exclusive(values.output + '.af.json', JSON.stringify(pair, null, 2) + '\n');
+  const write = replace ? (await platform()).atomicWrite : exclusive;
+  await write(output, bytes);
+  await write(output + '.af.json', JSON.stringify(pair, null, 2) + '\n');
   return {
     id,
     version: record.version,
-    source: path.resolve(values.output),
-    baseline: path.resolve(values.output + '.af.json'),
+    source: path.resolve(output),
+    baseline: path.resolve(output + '.af.json'),
+    ...(note ? {note} : {}),
     outputOwned: true
   };
 }

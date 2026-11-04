@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type RunStart, type RunWait, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
 import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
-import { createWorkerPool, startWorker, type WorkerMessage } from './worker-pool';
+import { createWorkerPool, startWorker, type Worker, type WorkerMessage } from './worker-pool';
 import { createDatabaseTunnels, type DatabaseTunnelOptions, type RunTunnels } from './database-tunnel';
 const worker = fileURLToPath(new URL('./runner-worker.mjs', import.meta.url));
 const defaults: RunnerLimits = { timeoutMs: 30000, cpuMs: 200, memoryMiB: 64, maxRequests: 100, maxOutputBytes: RESOLVER_LIMITS.outputBytes };
@@ -41,6 +41,10 @@ interface Active {
     limits: RunnerLimits;
     controller: AbortController;
     child?: ChildProcessWithoutNullStreams;
+    /** The worker sent `started`: resolver code may have run, so the run never moves to another worker. */
+    accepted?: boolean;
+    /** The run already moved once, off a pooled worker lost before it accepted the run. */
+    moved?: boolean;
     containerCreation?: Promise<void>;
     timer?: ReturnType<typeof setTimeout>;
     finishing?: Promise<void>;
@@ -177,6 +181,10 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             tunnelsOf(id, r).message(msg);
             return;
         }
+        if (msg.type === 'started') {
+            r.accepted = true;
+            return;
+        }
         if (msg.type === 'ready') {
             r.child!.stdin.write(JSON.stringify({ type: 'run', bundle: r.bundle, input: r.request.input, env: r.request.env ?? {}, memoryMiB: r.limits.memoryMiB, cpuMs: r.limits.cpuMs }) + '\n');
             return;
@@ -258,13 +266,35 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             await r.containerCreation;
             if (r.finishing) return;
         }
-        const spawned = options.dockerImage ? startWorker(() => spawn('docker', ['start', '-a', '-i', `afbin-run-${id}`], { stdio: ['pipe', 'pipe', 'pipe'] })) : pool!.take();
-        r.child = spawned.child;
-        spawned.claim({
-            message: msg => { void message(id, msg).catch(e => fail(id, e)); },
-            fault: reason => { if (!r.finishing) fail(id, Error(reason)); },
-            startFailed: () => { void finish(id, 'interrupted', 'worker_start_failed'); },
-            exit: () => { if (!r.finishing) void finish(id, 'interrupted', 'worker_exit'); },
+        hand(id, r, options.dockerImage ? startWorker(() => spawn('docker', ['start', '-a', '-i', `afbin-run-${id}`], { stdio: ['pipe', 'pipe', 'pipe'] })) : pool!.take());
+    }
+    /**
+     * Gives the run to a worker. A pooled worker lost before it accepted the run (it died as a spare, unheard, or at
+     * hand-off) ran no resolver code, so the run moves once to a fresh one; lost after `started`, it ends `worker_exit`.
+     */
+    function hand(id: string, r: Active, worker: Worker) {
+        const child = r.child = worker.child;
+        r.accepted = false;
+        const current = () => r.child === child && !r.finishing;
+        const movable = () => !!pool && !r.accepted && !r.moved;
+        // `close` follows `exit` once stdout is drained, so a `started` the worker wrote before dying has been heard.
+        const lost = () => child.once('close', () => {
+            if (!current()) return;
+            if (!movable()) return void finish(id, 'interrupted', 'worker_exit');
+            r.moved = true;
+            try { hand(id, r, pool!.take()); }
+            catch (e) { fail(id, e); }
+        });
+        worker.claim({
+            message: msg => { if (r.child === child) void message(id, msg).catch(e => fail(id, e)); },
+            fault: reason => {
+                if (!current()) return;
+                // The `run` write met a dead process: its exit decides whether the run moves.
+                if (reason === 'worker_stdin_closed' && movable()) child.kill('SIGKILL');
+                else fail(id, Error(reason));
+            },
+            startFailed: () => { if (current()) void finish(id, 'interrupted', 'worker_start_failed'); },
+            exit: () => { if (!current()) return; if (movable()) lost(); else void finish(id, 'interrupted', 'worker_exit'); },
         });
     }
     async function pump() { if (pumping || closed)

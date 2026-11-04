@@ -17,7 +17,7 @@ export function datasetPageHtml(datasetId, { title = "Live data", mode = "live",
   const body = `<link rel="af-dataset" data-af-name="data" href="ref:${datasetId}" data-af-mode="${mode}"${revision ? ` data-af-revision="${revision}"` : ""}>
 <h1 id="heading">${title}</h1><label>Choice <select id="choice"><option>ramen</option><option>tacos</option><option>salad</option></select></label>
 <button id="vote"${writable ? "" : " disabled"}>Vote</button><button id="refresh">Refresh</button><output id="receipt" role="status"></output><p id="total"></p><div id="tally"></div><svg id="chart" role="img" aria-label="Numeric data" viewBox="0 0 500 220"></svg><table><thead></thead><tbody></tbody></table>`;
-  return pageHtml(title, body, `import {onBackendChange} from '@afbin/apollo';
+  return pageHtml(title, body, `import {onResolverChange} from '@afbin/apollo';
 const columns=${JSON.stringify(columns)};
 const readDataset=${readDataset.toString()};
 const state=gql\`{choice}\`;let current;
@@ -31,5 +31,5 @@ client.watchQuery({query:state}).subscribe(({data})=>{document.querySelector('#c
 document.querySelector('#choice').onchange=event=>client.updateQuery({query:state},()=>({choice:event.target.value}));
 document.querySelector('#refresh').onclick=()=>refresh().catch(()=>{});
 document.querySelector('#vote').onclick=async()=>{document.querySelector('#receipt').textContent='';try{const {data}=await client.query({query:state});const result=await client.mutate({mutation:gql\`mutation($choice:String){insert_data(objects:[{choice:$choice}]){affected_rows}}\`,variables:{choice:data.choice}});if(result.errors?.length)throw Error(result.errors.map(e=>e.message).join('; '));const outcome=result.extensions?.outcomes?.insert_data??'unknown';document.querySelector('#receipt').textContent=outcome;if(outcome==='committed')await refresh();}catch(error){document.querySelector('#receipt').textContent='Write refused: '+error.message}};
-onBackendChange(names=>{if(names.includes('data'))void refresh().catch(()=>{})});await refresh();`, { choice: "ramen" });
+onResolverChange(names=>{if(names.includes('data'))void refresh().catch(()=>{})});await refresh();`, { choice: "ramen" });
 }

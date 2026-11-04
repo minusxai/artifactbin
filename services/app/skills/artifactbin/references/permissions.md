@@ -77,8 +77,11 @@ For something else (everyone signed in edits every row, hidden columns), edit th
    error by its JSON path (exit 2), then read `readBack`, the server's plain-language summary.
 4. `node scripts/policy.mjs set DATASET_ID --file p.json` saves it. Exit 4 means someone changed the
    permissions or the dataset: get again, reapply, set.
-5. Show the user the read-back as printed ("Signed-in link holders: see all rows and columns; add
-   rows…"). `node scripts/policy.mjs explain DATASET_ID` prints it again later.
+5. `node scripts/policy.mjs explain DATASET_ID` prints the read-back again later.
+
+The owner and editors always have full access, so no rule (own rows, say) can be tested signed in
+as the owner: test `anonymous` with check's `--guest-steps` (signed out) and `signed_in` with a
+second account, and write no owner steps that expect a refusal.
 
 Read the warnings too: anonymous can write; a rule uses `X-Hasura-Page-Id` (direct calls are
 denied); an update without `check` lets rows leave the filter; a private dataset never applies

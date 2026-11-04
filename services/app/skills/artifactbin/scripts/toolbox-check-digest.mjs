@@ -1,7 +1,9 @@
 /**
- * Internal: the short text digest check.mjs prints after saving its full JSON result.
+ * Internal: the short text digest check.mjs always prints (--output also saves the full JSON),
+ * ending on a clean pass with the Reply block and the watch line.
  * Used by: toolbox-client.mjs (runTool; re-exported as checkDigest), author-toolbox.test.ts.
  */
+import {replyNext} from './toolbox-watch-state.mjs';
 
 /** One line per viewport so a saved check needs no second call to read it; the file keeps full
  * evidence. */
@@ -20,7 +22,7 @@ export function checkDigest(envelope,file){
   if(autofix.problems.length>5)lines.push(`  … and ${autofix.problems.length-5} more`);
  }
  lines.push(`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':
-  'failed'}; full result ${file}`);
+  'failed'}${file?`; full result ${file}`:''}`);
  for(const check of envelope.checks??[]){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[
@@ -67,33 +69,42 @@ export function checkDigest(envelope,file){
    'text or random values.');
   else if(stability?.skipped)lines.push('  warning: '+clip(stability.skipped,160));
  }
- // What the step labels proved, per viewport, so a reply can quote it instead of inventing claims.
+ // What the step labels proved, per viewport: the Tested: line of the Reply block.
  const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
- let tested='',untested='';
- if(envelope.smokePassed&&done.length){
-  tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
-   c.verified.join('; ')}`).join(' | ');
-  untested='anything not listed in Verified:, visual appearance'+(done.some(c=>
-   c.viewer==='guest')?', and sharing between two signed-in users (the guest is signed out)':'');
-  lines.push('  Verified: '+tested,'  Not verified: '+untested);
- }else if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
+ const tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
+  c.verified.join('; ')}`).join(' | ');
+ if(!(envelope.smokePassed&&done.length)&&envelope.unverified?.length)lines.push(
+  '  unverified: '+envelope.unverified.join(', '));
+ const shots=(envelope.checks??[]).map(check=>check?.screenshot?.path).filter(Boolean);
+ if(shots.length)lines.push('  screenshots: '+shots.join(', '));
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass
  // means where they read it.
+ const clean=envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&
+  check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&
+  !check.slides?.overlapping&&!check.idStability?.unstable);
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
   '  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
- else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&
-  !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
-  !check.idStability?.unstable))lines.push(
-  "  clean pass: write the reply with the link as text now, in this turn, then call comment.mjs\n"+
-  "  watch ID --next (again after every answer) until it says stop; don't open qa JSON or\n"+
-  "  screenshots.\n"+
-  // The don't-fetch note sits above the reply block: agents copy the block's lines verbatim.
-  (envelope.slideLinks?.length?"  slide images: list them as printed; don't fetch them.\n":'')+
-  // One block the reply copies as printed, so it claims exactly what ran and what did not.
-  'Reply block (copy as printed):'+(tested?'\nTested: '+tested+'\nNot tested: '+untested.replace(
-   /Verified:/g,'Tested:'):'')+(envelope.slideLinks?.length?
-   '\nSlide images:\n'+envelope.slideLinks.join('\n'):''));
+ else if(clean&&!envelope.reply)lines.push('  clean pass on the local preview: no Reply block;'+
+  ' a check of the published page prints it.');
+ else if(clean)lines.push("  clean pass: nothing left to fix; don't open the qa JSON"+(
+  envelope.slideLinks?.length?' or fetch the slide images':'')+'.',...replyBlock(envelope,tested));
  else if((envelope.checks??[]).length)lines.push(
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';
+}
+/** A clean pass whose steps proved no labelled behaviour still proves each viewport loads. */
+const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.viewer+' ':''}${
+ c.viewport.width}x${c.viewport.height}: the page loads without errors`).join(' | ');
+/** ONE block holding everything a reply states, copied as printed: the link, Built with,
+ * Tested/Not tested, the slide images and who can do what; then the watch line. */
+function replyBlock({reply,slideLinks,checks},tested){
+ const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
+ return ['Reply block (send it as printed, up to the Next: line, unless the user prescribed the'+
+  ' reply):',reply.link,
+  ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+(tested||loads(checks)),
+  'Not tested: anything not listed in Tested:, visual appearance'+(guest?
+   ', and sharing between two signed-in users (the guest is signed out)':''),
+  ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),
+  ...(reply.permissions.length?['Who can do what:',...reply.permissions.flatMap(({name,id,lines})=>
+   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),replyNext(reply.id)];
 }

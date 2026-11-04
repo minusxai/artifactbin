@@ -17,7 +17,7 @@ export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getAr
 export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';
-export { artifactState } from './state';
+export { artifactState, observedChange, versionConflict } from './state';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; the after-commit emitter; and the deployment's two seams. */
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */

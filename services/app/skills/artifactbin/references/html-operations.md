@@ -5,7 +5,7 @@ description: Native HTML comment anchor contract, HTTP comment operations and wa
 
 ## Read first
 
-Use this guide for the native HTML comment contract over HTTP and the browser session API. Prefer `scripts/comment.mjs` and `scripts/check.mjs`. keep credentials in the API caller, never in page code.
+Use this guide for the native HTML comment contract over HTTP and the browser session API. Prefer `scripts/comment.mjs` and `scripts/check.mjs`. Keep credentials in the API caller, never in page code.
 
 ## Contents
 
@@ -67,7 +67,7 @@ Reactions: `PUT /api/artifacts/ID/annotations/COMMENT_ID/reactions`; the top of 
 
 ## Watch for comments
 
-`GET /api/artifacts/ID/annotations/changes?after=now&wait=60` returns `{events,next_cursor,has_more}`: each new comment, reply, edit (`change:'edited'`) and reaction from anyone. Start at `after=now` (`after=start` replays history), then pass the last `next_cursor` as `after`; `wait` (0–60 seconds) holds the request until an event arrives. Skip events whose `author.you` or `reactor.you` is true (your own writes) and any unknown `type`. Keep one request waiting at a time (429 `too_many_comment_waits`: another watch is open); `400 invalid_cursor` means start again at `after=now`. Keep a cursor only after handling its events. Write your reply first, then watch; answer each comment (save a requested change, then reply), then watch again; stop after 15 minutes with no comment, reply or save from anyone.
+`GET /api/artifacts/ID/annotations/changes?after=now&wait=60` returns `{events,next_cursor,has_more}`: each new comment, reply, edit (`change:'edited'`) and reaction from anyone. Start at `after=now` (`after=start` replays history), then pass the last `next_cursor` as `after`; `wait` (0–60 seconds) holds the request until an event arrives. Skip events whose `author.you` or `reactor.you` is true (your own writes) and any unknown `type`. Keep one request waiting at a time (429 `too_many_comment_waits`: another watch is open); `400 invalid_cursor` means start again at `after=now`. Keep a cursor only after handling its events. After publishing page content, reply and start the watch in the same response; answer each comment (save a requested change, then reply), then watch again; stop after 15 minutes with no comment, reply or save from anyone.
 
 ## The server browser session and its document frame
 
@@ -78,4 +78,3 @@ Call the API directly only when the script cannot: `POST /api/browser-sessions` 
 ## Recovery and limits
 
 Session limits: 20 s/script, 65,536 script bytes, 16 executions, eight pages, 30-minute idle expiry. Bound navigation and assertions below the script limit; avoid `networkidle`. A deadline does not identify its cause: return caught errors plus text/network/overflow before expiry; inspect page errors and the awaited condition. After a hard deadline, inspect the same receipt and use a new read-only execution for diagnostics before considering another action. Text/geometry and unread screenshots leave appearance unverified; clicking with unchanged data does not verify refresh or persistence.
-For slide navigation, use the example at the top of `components/slide-deck.ts`; it retains the selected index in viewer-local Apollo state.

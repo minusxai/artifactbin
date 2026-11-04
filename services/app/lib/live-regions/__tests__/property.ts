@@ -60,7 +60,7 @@ const scenario = (maxOps: number) => fc.integer({ min: 2, max: 5 }).chain((clien
   const ops = fc.tuple(type, fc.array(op, { maxLength: maxOps - 1 })).map(([first, rest]): Op[] => [first, ...rest]);
   return fc.record({ clients: fc.constant(clients), region: fc.constantFrom(...REGIONS.keys()), ops });
 });
-type Scenario = { clients: number; region: number; ops: Op[] };
+export type Scenario = { clients: number; region: number; ops: Op[] };
 
 /** Cursor positions inside text blocks, in document order. */
 const positions = (client: Client) => {
@@ -72,8 +72,8 @@ const pick = <T>(list: readonly T[], at: number) => list[at % list.length]!;
 const TRACKED = /[一-鿿]/gu;
 const tracked = (text: string) => text.match(TRACKED) ?? [];
 
-/** One run; returns the number of characters lost to the known limitation. */
-function runScenario({ clients: count, region, ops }: Scenario): { lost: number; typed: number } {
+/** One run (a shrunk counterexample replays through it); returns the number of characters lost to the known limitation. */
+export function runScenario({ clients: count, region, ops }: Scenario): { lost: number; typed: number } {
   const room = new Room('rich', REGIONS[region]!);
   const clients = Array.from({ length: count }, (_unused, index) => room.join(String.fromCharCode(65 + index)));
   let next = 0x4e00;
@@ -111,12 +111,11 @@ function runScenario({ clients: count, region, ops }: Scenario): { lost: number;
           const all = positions(client);
           const from = pick(all, step.at);
           const $from = client.state.doc.resolve(from);
-          const end = Math.min(from + step.length, $from.end());
-          const before = client.state.doc.content.size;
-          client.select(from).type('**');
-          // The opening ** can itself complete a bold (an undo left a literal ** just before it): the input rule
-          // has then already applied and removed the markers, so there is nothing to close.
-          if (client.state.doc.content.size === before + 2) client.select(end + 2).type('**');
+          // The closing delimiters go the same distance before the block's end: the opening ones can complete a
+          // shortcut themselves (`*x` + `*` is italic), which shortens the block, so a fixed `end + 2` can fall past it.
+          const tail = $from.end() - Math.min(from + step.length, $from.end());
+          const $open = client.select(from).type('**').state.selection.$head;
+          client.select(Math.max($open.pos, $open.end() - tail)).type('**');
           break;
         }
         case 'delete': {
@@ -208,8 +207,9 @@ function mulberry(seed: number) {
 }
 
 /**
- * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed and shrink path of a
- * failure; pass them as `replay` (at the failing run's `maxOps`) to run exactly that counterexample again.
+ * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed, path and shrunk
+ * counterexample of a failure: `replay` (the seed and path, at the failing run's `maxOps`) re-runs exactly that case,
+ * and the shrunk counterexample becomes a fixed `runScenario` case in convergence.property.test.ts, so pr fast keeps it.
  */
 export function checkConvergence(runs: number, maxOps: number, replay?: { seed: number; path: string }): { typed: number; lost: number } {
   const totals = { typed: 0, lost: 0, silent: 0 };

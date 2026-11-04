@@ -6,16 +6,27 @@
  * database-postgres.test.ts and database-mysql.test.ts.) What readers can see never carries the password; a run that
  * ends, is cancelled or loses its worker closes its sockets; a name the page does not declare is refused.
  */
-import {execFileSync} from 'node:child_process';
+import {execFileSync,type ChildProcess} from 'node:child_process';
 import {constants,generateKeyPairSync,privateDecrypt,randomBytes} from 'node:crypto';
+import {once} from 'node:events';
 import net from 'node:net';
-import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '@artifactbin/runner/local';
 import {CHUNK_BYTES,DATABASE_KINDS,DATABASE_OPERATION,WINDOW_BYTES} from '@artifactbin/runner/worker-database';
 import {RESOLVER_DATABASE_KINDS,RESOLVER_DATABASE_LIMITS,RESOLVER_DATABASE_OPERATION,type RunnerService,type RunStart} from '@artifactbin/contracts';
 import {createBackendCompiler,createBackendInvoker,pageBackendCapability,type PageBackendRecord} from '../backend';
 import {createResolverFetch} from '../public-fetch';
+
+/**
+ * Every process the runner spawns, by pid: a test that kills workers waits for their exits, which the pool hears
+ * first (its listener came first), so the next run is never handed a spare that is dead but not yet known to be.
+ */
+const spawned=vi.hoisted(()=>new Map<number,ChildProcess>());
+vi.mock('node:child_process',async original=>{
+ const real=await original<typeof import('node:child_process')>();
+ return {...real,spawn:((...args:Parameters<typeof real.spawn>)=>{const child=(real.spawn as (...a:unknown[])=>ChildProcess)(...args);if(child.pid)spawned.set(child.pid,child);return child;}) as typeof real.spawn};
+});
 
 const PASSWORD='pg-pa55word-0f-the-0wner';
 const until=async(check:()=>boolean,ms=8000)=>{const end=Date.now()+ms;while(!check()){if(Date.now()>end)throw Error('timed out');await new Promise(r=>setTimeout(r,10));}};
@@ -125,10 +136,10 @@ export default {
  infile: async(a,p,caps)=>{const db=await caps.db('HOSTILE');try{await db.query("select 'anything'");return 'ran';}catch(e){return e.code+': '+e.message;}finally{await db.end();}},
 };`;
 
-let runner:Awaited<ReturnType<typeof createRunner>>,db:PGlite,record:PageBackendRecord,invoke:ReturnType<typeof createBackendInvoker>;
+let runner:Awaited<ReturnType<typeof createRunner>>,db:PGlite,record:PageBackendRecord,invoke:ReturnType<typeof createBackendInvoker>,silent:net.Server;
 const servers:net.Server[]=[];const runIds:string[]=[];
 beforeAll(async()=>{
- const echo=echoingServer(),echoMysql=echoingMysqlServer(),silent=silentServer(),hostileMysql=hostileMysqlServer();servers.push(echo,echoMysql,silent,hostileMysql);
+ const echo=echoingServer(),echoMysql=echoingMysqlServer(),hostileMysql=hostileMysqlServer();silent=silentServer();servers.push(echo,echoMysql,silent,hostileMysql);
  const silentPort=await listen(silent),base={host:'127.0.0.1',database:'d',user:'u',password:PASSWORD,tls:'disable'};
  const values:Record<string,string>={
   WAREHOUSE:JSON.stringify({...base,kind:'postgres',port:await listen(echo)}),
@@ -164,6 +175,8 @@ describe('the password stays out of everything a reader or the owner can see',()
   it('redacts it from a failed run\'s reason, owner detail and resolver-thrown message',async()=>{
    const rethrown=await failure('rethrown',name);
    expect(rethrown.code).toBe('backend_failed');expect(rethrown.detail).toContain('[redacted]');
+   // An uncaught capability refusal keeps its code in the owner's detail (Test connection reads it).
+   expect(rethrown.detail).toBe('database_error: '+message);
    const wrapped=await failure('wrapped',name);
    expect(wrapped.shown).toBe('wrapped '+message);
    for(const e of [rethrown,wrapped])expect(JSON.stringify({...e,message:(e as unknown as Error).message})).not.toContain(PASSWORD);
@@ -205,12 +218,14 @@ describe('refusals',()=>{
 
 describe.each([['postgres','SILENT'],['mysql','SILENT_MY']])('every %s tunnel closes with its run',(_kind,name)=>{
  const hung=async(start:(signal:AbortController)=>Promise<unknown>,end:(controller:AbortController)=>void)=>{
-  const before=sockets.length,controller=new AbortController();
+  // The tunnel's own connection, not a socket count polled against a budget; a run that ends first fails at once.
+  const controller=new AbortController(),opened=once(silent,'connection').then(([socket])=>({socket:socket as net.Socket}));
   const outcome=start(controller).catch(e=>e);
-  await until(()=>sockets.length>before);
-  const socket=sockets.at(-1)!;expect(closed).not.toContain(socket);
+  const first=await Promise.race([opened,outcome.then(ended=>({ended}))]);
+  if(!('socket' in first))throw Error('the run ended before its tunnel opened: '+JSON.stringify(first.ended));
+  const {socket}=first;expect(closed).not.toContain(socket);
   const ended=Date.now();end(controller);
-  await until(()=>closed.includes(socket));
+  if(!closed.includes(socket))await once(socket,'close');
   return {outcome:await outcome,closedAfterMs:Date.now()-ended};
  };
  it('when the reader cancels the call',async()=>{
@@ -222,13 +237,17 @@ describe.each([['postgres','SILENT'],['mysql','SILENT_MY']])('every %s tunnel cl
   expect((outcome as {code:string}).code).toBe('backend_failed');expect((outcome as {detail:string}).detail).toBe('timeout');
  },20000);
  it('when the worker is killed',async()=>{
+  let killed:ChildProcess[]=[];
   const {outcome,closedAfterMs}=await hung(c=>invoke(call('hang',c.signal,{name})),()=>{
    // Every worker of this process (spares too); the pool replaces them.
    const children=execFileSync('ps',['-A','-o','pid=,ppid=,command=']).toString().split('\n').map(l=>l.trim().split(/\s+/)).filter(([,ppid,...cmd])=>Number(ppid)===process.pid&&/runner-worker\.mjs|docker start/.test(cmd.join(' ')));
    expect(children.length).toBeGreaterThan(0);
+   killed=children.map(([pid])=>spawned.get(Number(pid))!);expect(killed).not.toContain(undefined);
    for(const [pid] of children)process.kill(Number(pid),'SIGKILL');
   });
   expect((outcome as {code:string}).code).toBe('backend_failed');expect(closedAfterMs).toBeLessThan(3000);
+  // The run ends with its own worker; the killed spares' exits are the pool's to hear before the next run takes one.
+  await Promise.all(killed.map(child=>child.exitCode!==null||child.signalCode!==null||once(child,'exit')));
  },20000);
 });
 

@@ -44,6 +44,8 @@ export default async function(input,host){
  const caps=${CAPS};
  try{return await fn(input.args,principal,caps);}catch(e){
   if(e!==null&&typeof e==='object'&&!__afPlatform.has(e)&&typeof e.message==='string'&&e.message)throw Error(${JSON.stringify(RESOLVER_THREW)}+e.message);
+  // An uncaught capability refusal keeps its code (\`tls_untrusted_certificate: …\`), so the owner's failure detail names it.
+  if(e!==null&&typeof e==='object'&&typeof e.code==='string'&&e.code&&typeof e.message==='string'&&e.message!==e.code&&!e.message.startsWith(e.code+': '))throw Error(e.code+': '+e.message);
   throw e;
  }
  }`;

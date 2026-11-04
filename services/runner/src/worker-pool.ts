@@ -77,7 +77,7 @@ export function startWorker(spawnChild: () => ChildProcessWithoutNullStreams, ho
 }
 
 export interface WorkerPool {
-    /** A started-but-unused worker (ready first, then starting), or a new one. Never one handed out before. */
+    /** A started-but-unused live worker (ready first, then starting), or a new one. Never one handed out before. */
     take(): Worker;
     readonly spares: readonly Worker[];
     close(): Promise<void>;
@@ -92,6 +92,16 @@ export function cpuBudget(read: (path: string) => string = path => readFileSync(
     }
     catch { /* no cgroup v2 quota visible */ }
     return cpus;
+}
+/**
+ * Whether the process may still serve a run, before its exit event says otherwise: not exited, not killed by us and
+ * still present. A dead process that has not been reaped yet still passes `kill(pid, 0)`; the runner moves a run whose
+ * worker is lost before it accepts the run (local.ts), so this check only spares that retry.
+ */
+function alive(child: ChildProcessWithoutNullStreams): boolean {
+    if (child.exitCode !== null || child.signalCode !== null || child.killed || child.pid === undefined) return false;
+    try { process.kill(child.pid, 0); return true; }
+    catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; }
 }
 /** Consecutive idle deaths before the pool stops pre-starting until the next take: a broken binary is not respawned forever. */
 const MAX_IDLE_DEATHS = 3;
@@ -140,6 +150,11 @@ export function createWorkerPool({ size, spawnChild, maxBooting = cpuBudget() }:
         get spares() { return spares; },
         take() {
             if (closed) throw Error('runner_closed');
+            // A spare can die (OOM killer, crash) before its exit is heard; it is never handed out.
+            for (const gone of spares.filter(w => !w.dead && !alive(w.child))) {
+                spares.splice(spares.indexOf(gone), 1);
+                booting.delete(gone);
+            }
             let i = spares.findIndex(w => w.ready && !w.dead);
             if (i < 0) i = spares.findIndex(w => !w.dead);
             const worker = i >= 0 ? spares.splice(i, 1)[0]! : startWorker(spawnChild, hooks);

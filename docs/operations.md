@@ -23,6 +23,13 @@ can accept a link carrying either name as this server while
 still sending every request and credential to `APP__PUBLIC_BASE_URL` alone.
 Unset, nothing changes: each hostname stays a separate server to clients.
 
+`APP__OUTBOUND_IPS` lists the IP addresses this deployment's outbound traffic
+leaves from (resolver database connections, `caps.fetch`, web ingestion), comma-separated
+IPv4 or IPv6. It is served publicly at `GET /api/outbound-ips` and shown beside each
+database connection in the Resolvers panel, so page owners know what to allow in a
+database firewall. It depends on your network (an Elastic IP, a NAT gateway), so it
+is unset by default, which serves an empty list; a malformed entry refuses the boot.
+
 A hosted server needs a stable `AUTH__SECRET`, the correct `APP__PUBLIC_BASE_URL`
 and a login method; the server refuses to start without them. With a loopback
 `APP__PUBLIC_BASE_URL`, login never uses mail at all: each code is printed by the

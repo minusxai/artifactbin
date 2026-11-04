@@ -9,10 +9,12 @@ import {randomUUID} from 'node:crypto';
 import {ToolError,hash,platform,exclusive,jsonFile,optionalFile,
   serverOrigin} from './toolbox-client.mjs';
 const marker=/<!-- af-authoring:([A-Za-z0-9_-]+) -->/g;
-export const UNPAIRED=
-  'New page: remove the data-af-id values you wrote yourself (new pages need none) or rerun with '+
-  '--create. Existing page: run read.mjs ID --output fresh.html, apply your '+
-  'edits to that file and publish it. Never copy or hand-edit .af.json companions.';
+/** The one next step for a file whose companion is missing or no longer matches it. */
+export const pairRecovery=(name,id)=>`To replace page ${id} with ${name}: node `+
+  `scripts/publish.mjs `+
+  `${name} --artifact ${id}. To start again from the page: node scripts/read.mjs ${id} --output `+
+  `${name}. Never copy or hand-edit .af.json companions.`;
+export const UNPAIRED=(name,id)=>pairRecovery(name,id)+' For a new page instead: --create.';
 export function sourceIdentity(source){const all=[...source.matchAll(marker)];if(
   all.length>1)throw new ToolError('ambiguous_identity','Source has multiple authoring identities.',
   2);if(!all.length)return null;try{return JSON.parse(Buffer.from(all[0][1],'base64url').toString(
@@ -34,17 +36,20 @@ export function stampSource(source,identity){return source.replace(marker,
   '')+'\n<!-- af-authoring:'+Buffer.from(JSON.stringify(identity)).toString('base64url')+' -->\n';}
 /** @param {import('../../../lib/skills/author-toolbox-contract').AuthorBaseline} baseline */
 export function validateBaseline(baseline,file,source,server){
- const identity=sourceIdentity(source);
-if(baseline?.kind!=='author-baseline'||baseline.schema!==1||baseline.server!==serverOrigin(server)||
-   !/^[A-Za-z0-9]{6,12}$/.test(baseline.id??'')||!Number.isSafeInteger(baseline.version)||
-   baseline.version<1||!/^[a-f0-9]{64}$/.test(baseline.state??'')||
-   baseline.sourceFile!==path.basename(file)||baseline.historical||!Array.isArray(
-   baseline.dependencyReceipts)||!Array.isArray(baseline.retainedBackends)||
-   identity?.server!==baseline.server||identity?.id!==baseline.id||
-   identity?.pair!==baseline.pair)throw new ToolError('invalid_baseline',
-   'Source and current-head companion baseline must be a complete matching pair.',2,
-   'Publish the file its companion was saved with, or run read.mjs ID --output fresh.html and '+
-   'reapply your edits there. Never copy or hand-edit .af.json companions.');
+ const identity=sourceIdentity(source),name=path.basename(file);
+ const whole=baseline?.kind==='author-baseline'&&baseline.schema===1&&/^[A-Za-z0-9]{6,12}$/.test(
+  baseline.id??'')&&Number.isSafeInteger(baseline.version)&&baseline.version>=1&&
+  /^[a-f0-9]{64}$/.test(baseline.state??'')&&Array.isArray(baseline.dependencyReceipts)&&
+  Array.isArray(baseline.retainedBackends);
+ // Name the real cause: most often the file was overwritten and lost its authoring marker.
+ const cause=!whole?`${name}.af.json is not a readable companion`:baseline.server!==serverOrigin(
+  server)?`${name}.af.json belongs to another server`:baseline.sourceFile!==name?
+  `${name}.af.json belongs to ${baseline.sourceFile} (renamed or copied)`:baseline.historical?
+  `${name} was read from saved version ${baseline.version}`:identity?.server!==baseline.server||
+  identity?.id!==baseline.id||identity?.pair!==baseline.pair?`${name} was overwritten after it `+
+  `was saved (its af-authoring marker no longer matches ${name}.af.json)`:null;
+ if(cause)throw new ToolError('invalid_baseline',cause+', so publish cannot tell what it '+
+  'replaces.',2,pairRecovery(name,whole?baseline.id:'ID'));
 const paths=new Set();for(const receipt of baseline.dependencyReceipts){if(!receipt||
    typeof receipt.path!=='string'||receipt.path.startsWith('/')||receipt.path.split('/').some(part=>
    part==='..'||!part)||receipt.path.includes('\\')||paths.has(receipt.path)||!['asset',
@@ -67,6 +72,8 @@ let source=localReferences?shared.authoringHtml(record.html,{server,pageId:recor
  source=stampSource(restoreBackendHrefs(source,backendLinks),{server,id:record.id,pair});
 const baseline={kind:'author-baseline',schema:1,server,id:record.id,version:record.version,state:
    record.state,format:'html',sourceFile:path.basename(output),pair,historical,root,entryPath,
+   sha256:hash(source),...(Number.isSafeInteger(record.sharing_revision)?{sharingRevision:
+   record.sharing_revision}:{}),
    dependencyReceipts:dependencies,retainedBackends:shared.previewBackendLinks(source)};
  const companion=output+'.af.json';
 if(replace){await shared.atomicWrite(output,source);await shared.atomicWrite(companion,
@@ -83,11 +90,21 @@ try{await exclusive(companion,JSON.stringify(baseline,null,2)+'\n');}catch(error
 return {source:path.resolve(output),baseline:path.resolve(companion),id:record.id,version:
    record.version};
 }
-export async function loadPair(file,server,explicit){
- const source=await readFile(file,'utf8'),bytes=await optionalFile(explicit??file+'.af.json');
-if(!bytes){if(sourceIdentity(source))throw new ToolError('baseline_missing',
-   'Linked source is missing its companion baseline.',2,UNPAIRED);return {source,baseline:null};}
-let baseline;try{baseline=JSON.parse(bytes);}catch{throw new ToolError('invalid_baseline',
-   'Companion baseline is not valid JSON.',2);}
+export async function loadPair(file,server){
+ const source=await readFile(file,'utf8'),bytes=await optionalFile(file+'.af.json');
+if(!bytes)return {source,baseline:null};
+let baseline=null;try{baseline=JSON.parse(bytes);}catch{}
  return {source,baseline:validateBaseline(baseline,file,source,server)};
+}
+/** Where read --output FILE saves: FILE itself while it is new or still exactly what its companion
+ * recorded (refreshed in place), else a FILE.fresh sibling, with a note saying so. */
+export async function readTarget(file){
+ const bytes=await optionalFile(file),saved=await optionalFile(file+'.af.json').then(b=>
+  b&&JSON.parse(b)).catch(()=>null);
+ if(!bytes||saved?.sha256===hash(bytes))return {output:file,replace:Boolean(bytes||saved)};
+ const extension=path.extname(file),stem=file.slice(0,file.length-extension.length);
+ for(let n=1;;n++){const output=`${stem}.fresh${n>1?'-'+n:''}${extension}`;
+  if(!await optionalFile(output)&&!await optionalFile(output+'.af.json'))return {output,replace:
+   false,note:`${path.basename(file)} has changes of its own since it was read, so this read went `+
+   `to ${path.basename(output)}: reapply what you need there, then publish that file.`};}
 }

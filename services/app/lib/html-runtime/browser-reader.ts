@@ -53,16 +53,14 @@ function pendingPortableConnection():boolean {
 }
 const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
-  subscribe(listener){const subscription=onBackendChange((_names,reason)=>listener(reason));return()=>subscription.unsubscribe();},
+  subscribe(listener){const subscription=onResolverChange((_names,reason)=>listener(reason));return()=>subscription.unsubscribe();},
   online: () => portableReadiness.online() || preview?.online()===true || !!domain || !config.offline && !!config.appOrigin && window.parent !== window,
   whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
 const invalidationListeners = new Set<(names: readonly string[],reason?:QueryInvalidation) => void>();
 /** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
-export function onBackendChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
-/** The resolver name for {@link onBackendChange}; both stay exported. */
-export const onResolverChange = onBackendChange;
+export function onResolverChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }

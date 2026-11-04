@@ -21,7 +21,7 @@ import { Plugin, PluginKey, Selection, TextSelection, type Command, type EditorS
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import * as Y from 'yjs';
-import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs } from './lines';
+import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
 import type { RegionKind } from './schema';
 
 interface BindingState { binding: Binding; pending: readonly Transaction[] }
@@ -47,14 +47,18 @@ function writeStep(text: Y.Text, kind: RegionKind, step: { getMap(): { forEach(f
 }
 
 const char = (linear: Linear, offset: number) => (offset >= 0 && offset < linear.length ? linear.units(offset, offset + 1)[0]?.ch : undefined);
-const differences = (have: Attrs, want: { ch: string; attrs: Attrs }) => keysOf(want.ch).filter((key) => (have[key] ?? null) !== (want.attrs[key] ?? null)).length;
+const differences = (have: Attrs, want: Unit) => keysOf(want.ch).filter((key) => (have[key] ?? null) !== (want.attrs[key] ?? null)).length;
 
 /**
- * Where an edit of line ends goes in a run of them. Inserting or deleting "\n"s anywhere in a run of "\n"s gives
- * the same characters, but each place keeps different line ends: the place chosen leaves the fewest block
- * attributes to rewrite on the line ends it keeps, so every kept "\n" stays the end of the block it ended (its ids,
- * a code block's continuation). Ties go right, past the "\n" at the step's place: Enter at a block's end keeps that
- * block's "\n" with its text. Only line ends move: everywhere else the step's own position is the user's.
+ * Where an edit of only line ends goes. Inserting or deleting "\n"s next to a "\n" gives the same characters at any
+ * place in that run of them, but each place keeps different existing line ends, and those carry their blocks' ids and
+ * attributes (a code block's continuation) and the text peers are typing before them. The edit takes the place that
+ * leaves the fewest block attributes to rewrite on the line ends it keeps. On a tie, an insertion goes one line end to
+ * the right (Enter at a block's end keeps the block's own "\n" with its text), then at the step's own place; a
+ * deletion takes the step's own line end (Backspace in an empty block removes the "\n" the editor removed, so a
+ * peer's typing in the block after stays there); both then go on to the right. Sliding to the far end of a run of
+ * empty blocks handed their line ends, and the typing in them, to the wrong block.
+ * Only line ends move: everywhere else the step's own position is the user's.
  * `offset` is in the new text; `runEnd` is the end of the run in the new text, the last line end this can affect.
  */
 function place(old: Linear, next: Linear, base: number, from: number, inserted: number, deleted: number, clip: number): { offset: number; runEnd: number } {
@@ -70,12 +74,13 @@ function place(old: Linear, next: Linear, base: number, from: number, inserted: 
   const cost = (o: number, oldOffset: number) => differences(had[oldOffset - from + base]!.attrs, wanted[o - from]!);
   let current = 0;
   for (let o = from + inserted; o < runEnd; o++) current += cost(o, o - base - inserted + deleted);
-  let best = { offset: from, cost: current };
-  for (let at = from; at < last; at++) {
-    current += cost(at, at - base) - cost(at + inserted, at - base + deleted);
-    if (current <= best.cost) best = { offset: at + 1, cost: current };
-  }
-  return { offset: best.offset, runEnd };
+  const costs = [current];
+  for (let at = from; at < last; at++) costs.push(current += cost(at, at - base) - cost(at + inserted, at - base + deleted));
+  // costs[k] is the place from + k, in tie order.
+  const order = inserted ? [1, 0, ...Array.from({ length: costs.length - 2 }, (_unused, i) => i + 2)] : [...costs.keys()];
+  let best = order[0]!;
+  for (const k of order) if (costs[k]! < costs[best]!) best = k;
+  return { offset: from + best, runEnd };
 }
 
 function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, oldTo: number, start: number, newTo: number, clip: number): void {
@@ -89,18 +94,18 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   const at = place(old, next, base, start + prefix, inserted, deleted, clip);
   if (deleted) text.delete(at.offset, deleted);
   if (inserted) insertUnits(text, at.offset, next.units(at.offset, at.offset + inserted));
-  // Attributes: the range itself with every line end the edit could have gone past, the "\n" of the line it ends in
-  // and, in a code block, the block's last "\n" (a join or an open paste changes that block's attributes, and a code
-  // block keeps its ids and structure on its last line); characters past them keep theirs.
+  // Attributes: the range itself with every line end the edit could have gone past, and every line end of the block
+  // it ends in (a join or an open paste changes that block's attributes, which a code block keeps on each of its lines
+  // and its ids on the last); characters past them keep theirs.
   const rangeEnd = Math.min(clip, Math.max(newTo, at.runEnd));
-  const lineEnd = Math.min(clip, next.lineEnd(Math.max(start, rangeEnd - 1)));
   const blockEnd = Math.min(clip, next.blockEnd(Math.max(start, rangeEnd - 1)));
-  const offsets = [...Array.from({ length: rangeEnd - start }, (_unused, i) => start + i), ...(lineEnd > rangeEnd ? [lineEnd - 1] : []), ...(blockEnd > Math.max(lineEnd, rangeEnd) ? [blockEnd - 1] : [])];
+  const lineEnds = next.units(rangeEnd, blockEnd).flatMap((unit, i) => (unit.ch === '\n' ? [rangeEnd + i] : []));
+  const offsets = [...Array.from({ length: rangeEnd - start }, (_unused, i) => start + i), ...lineEnds];
   const oldAt = (offset: number) => (offset < at.offset ? offset - base : offset - base - inserted + deleted);
   // A join can carry the rest of a code block into the paragraph before it: that text's inner line ends are spaces
   // in a paragraph, so where its characters changed they are rewritten (only then: it is the rest of a block).
-  if (lineEnd > rangeEnd && next.blockAt(lineEnd - 1).type.name !== 'code_block' && old.blockAt(oldAt(lineEnd - 1)).type.name === 'code_block') {
-    for (let offset = rangeEnd; offset < lineEnd - 1; offset++) {
+  if (blockEnd > rangeEnd && next.blockAt(blockEnd - 1).type.name !== 'code_block' && old.blockAt(oldAt(blockEnd - 1)).type.name === 'code_block') {
+    for (let offset = rangeEnd; offset < blockEnd - 1; offset++) {
       const [want] = next.units(offset, offset + 1), [have] = old.units(oldAt(offset), oldAt(offset) + 1);
       if (want && have && want.ch !== have.ch) { text.delete(offset, 1); insertUnits(text, offset, [want]); }
     }
@@ -108,6 +113,7 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   const formats: [number, Attrs][] = [];
   for (const offset of offsets) {
     if (offset >= at.offset && offset < at.offset + inserted) continue;
+    // From the whole document: a slid edit reaches past the step's own range.
     const want = next.units(offset, offset + 1)[0];
     const have = old.units(oldAt(offset), oldAt(offset) + 1)[0];
     if (!want || !have) continue;

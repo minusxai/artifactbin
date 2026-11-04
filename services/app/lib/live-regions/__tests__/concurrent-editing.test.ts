@@ -186,6 +186,28 @@ describe('line ends next to empty lines', () => {
     expect(room.invariants()).toBe(`<p data-af-id="${first}">abc</p><p></p><p data-af-id="${empty}">typed</p><p data-af-id="${last}">z</p>`);
   });
 
+  /** Two paragraphs typed in this session, so no line end in the run tells them apart: only the tie order places the edit. */
+  const unsavedEmpties = () => {
+    const [room, A, B] = open('<p>abc</p><p>z</p>');
+    A.select(A.blockStart(0, true)).key('Enter').key('Enter');
+    room.sync();
+    return [room, A, B] as const;
+  };
+
+  it('Enter at the end of a paragraph before two unsaved empty ones while B types in the first: B\'s text stays in that paragraph', () => {
+    const [room, A, B] = unsavedEmpties();
+    A.select(A.blockStart(0, true)).key('Enter');
+    B.select(B.blockStart(1)).type('typed');
+    expect(bare(room.invariants())).toBe('<p>abc</p><p></p><p>typed</p><p></p><p>z</p>');
+  });
+
+  it('Backspace in the second of two unsaved empty paragraphs while B types in it: the first goes, B\'s text stays in its own paragraph', () => {
+    const [room, A, B] = unsavedEmpties();
+    A.select(A.blockStart(2)).key('Backspace');
+    B.select(B.blockStart(2)).type('typed');
+    expect(bare(room.invariants())).toBe('<p>abc</p><p>typed</p><p>z</p>');
+  });
+
   it('Backspace in an empty paragraph after a paragraph and before another empty one: that paragraph goes, the others keep their ids', () => {
     const [room, A] = open('<p>abc</p><p></p><p></p><p>z</p>', ['A']);
     const [first, , third, last] = idsOf(room.html());
@@ -528,6 +550,16 @@ describe('ids', () => {
     const [id] = idsOf(room.html());
     A.select(A.blockStart(0)).key('Enter');
     expect(room.invariants()).toBe(`<p></p><p data-af-id="${id}">Hello</p>`);
+  });
+
+  it('Enter at the end of a block before an empty one: the new line end goes between them, and typing in the empty block stays there', () => {
+    const [room, A, B] = open('<ul><li>deep</li></ul><p></p><p>tail</p>');
+    const empty = idsOf(room.html())[3];
+    A.select(A.blockStart(1)).type('X');
+    B.select(B.find('deep', { after: true })).key('Enter');
+    const html = room.invariants();
+    expect(bare(html)).toBe('<ul><li><p>deep</p></li><li><p></p></li></ul><p>X</p><p>tail</p>');
+    expect(html).toContain(`<p data-af-id="${empty}">X</p>`);
   });
 
   /** Copies blocks `from`..`to` (inclusive) through the editor's own clipboard serializer. */

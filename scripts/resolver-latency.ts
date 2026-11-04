@@ -88,7 +88,8 @@ async function workerOnce(bundle: string, args: string[], env: NodeJS.ProcessEnv
   if ((await next()).type !== 'ready') throw Error('worker_not_ready');
   const ready = performance.now();
   child.stdin.write(JSON.stringify({ type: 'run', bundle, input: { kind: 'invoke', field: 'ping', args: {}, principal: { tenant: 'bench-page', subject: null, role: 'anonymous' as const } }, env: {}, memoryMiB: 64, cpuMs: 200 }) + '\n');
-  const result = await next();
+  let result = await next();
+  if (result.type === 'started') result = await next();
   if (result.type !== 'result') throw Error(`worker_${result.type}: ${result.error ?? ''}`);
   const done = performance.now();
   const exited = once(child, 'close');

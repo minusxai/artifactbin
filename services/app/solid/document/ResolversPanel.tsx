@@ -9,12 +9,19 @@
  * A name bound to a database kind (RESOLVER_DATABASE_KINDS: `postgres`, `mysql`) is a database connection of that
  * kind: host, port (the kind's default to start), database, user and password, saved together (write-only, like a
  * secret value). The password stays in the runner's worker process and never reaches resolver code; the hint still
- * says to use a read-only database user, since resolver code runs whatever SQL that user may.
+ * says to use a read-only database user, since resolver code runs whatever SQL that user may. When the deployment
+ * names its outbound addresses (`GET /api/outbound-ips`), each connection row lists them to allow in the database's
+ * firewall, with a copy button; none configured (or the read fails), the line is absent. Under Advanced, an optional
+ * CA certificate (PEM) for providers that sign with their own authority (RDS, Cloud SQL, Supabase), checked as the
+ * contracts check it (`databaseConnection`) and sent only when filled. Advanced opens by itself when a CA is the likely
+ * fix: the host is an RDS or Supabase name, or Test connection answered `tls_untrusted_certificate`.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import { isResolverDatabaseKind, type ResolverDatabaseKind } from '@artifactbin/contracts';
 import { Button } from '../ui/Button';
-import { Field, Input } from '../ui/Field';
+import { CopyBlock } from '../ui/CopyBlock';
+import { Disclosure } from '../ui/Disclosure';
+import { Field, Input, Textarea } from '../ui/Field';
 import { ListRow, Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
@@ -28,6 +35,14 @@ async function readResolvers(id: string): Promise<PageResolvers> {
   const response = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/resolvers`);
   if (!response.ok) throw new Error('unavailable');
   return response.json();
+}
+/** The deployment's outbound addresses; any failure reads as none, since the line is only a hint. */
+async function readOutboundIps(): Promise<string[]> {
+  try {
+    const response = await fetch('/api/outbound-ips');
+    const body = response.ok ? await response.json() as { ips?: unknown } : null;
+    return Array.isArray(body?.ips) ? body.ips.filter((ip): ip is string => typeof ip === 'string') : [];
+  } catch { return []; }
 }
 const refusal = (body: unknown, status: number): string => {
   const error = (body as { errors?: { message?: string; extensions?: { code?: string; detail?: string } }[] } | null)?.errors?.[0];
@@ -71,19 +86,27 @@ const CONNECTION_FIELDS = [['host', 'Host', 'text'], ['port', 'Port', 'number'],
 type ConnectionField = typeof CONNECTION_FIELDS[number][0];
 /** Each kind's label and default port; a kind added to RESOLVER_DATABASE_KINDS must be added here (a type error otherwise). */
 const DATABASE_KIND: Record<ResolverDatabaseKind, { label: string; port: string }> = { postgres: { label: 'Postgres', port: '5432' }, mysql: { label: 'MySQL', port: '3306' } };
+/** `databaseConnection`'s rule for `ca` (html-backend-secrets/contracts.ts): a PEM certificate, at most 12 KiB. */
+const CA_MARKER = '-----BEGIN CERTIFICATE-----', CA_MAX = 12 * 1024;
+const caProblem = (ca: string): string | null => !ca.trim() ? null : ca.length > CA_MAX ? 'The CA certificate must be 12 KiB or less.' : !ca.includes(CA_MARKER) ? `Paste a PEM certificate: it starts with ${CA_MARKER}` : null;
+/** Hosts whose provider signs with its own certificate authority (Cloud SQL is usually an IP address, so not here). */
+const OWN_CA_HOST = /\.rds\.amazonaws\.com(?:\.cn)?$|\.supabase\.(?:co|com)$/i;
+const CA_HELP = <>Needed when your provider signs the server's certificate with its own authority. AWS RDS: download your region's bundle from truststore.pki.rds.amazonaws.com. Cloud SQL: download the server CA certificate from the instance's Connections, Security page. Supabase: download the certificate from Database Settings, SSL Configuration.</>;
 
-function ConnectionRow(props: { resolver: PageResolver; name: string; kind: ResolverDatabaseKind; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
+function ConnectionRow(props: { resolver: PageResolver; name: string; kind: ResolverDatabaseKind; set: boolean; outboundIps: string[]; untrusted: boolean; onNames: (names: string[]) => void }): JSX.Element {
   // A row's kind is its resolver version's, fixed for the row's life.
   const kind = DATABASE_KIND[props.kind];
   const [values, setValues] = createSignal<Record<ConnectionField, string>>({ host: '', port: kind.port, database: '', user: '', password: '' });
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
-  const complete = () => CONNECTION_FIELDS.every(([key]) => values()[key].trim() !== '');
+  const [ca, setCa] = createSignal('');
+  const complete = () => CONNECTION_FIELDS.every(([key]) => values()[key].trim() !== '') && !caProblem(ca());
+  const caLikely = () => props.untrusted || OWN_CA_HOST.test(values().host.trim()) || ca().trim() !== '';
   const send = async (method: 'PUT' | 'DELETE') => {
     setBusy(true); setError('');
     try {
       const v = values();
-      const body = method === 'PUT' ? { name: props.name, connection: { host: v.host.trim(), port: Number(v.port), database: v.database, user: v.user, password: v.password } } : { name: props.name };
+      const body = method === 'PUT' ? { name: props.name, connection: { host: v.host.trim(), port: Number(v.port), database: v.database, user: v.user, password: v.password, ...(ca().trim() ? { ca: ca() } : {}) } } : { name: props.name };
       const response = await fetch(`/api/my/resolvers/${encodeURIComponent(props.resolver.backendId)}/${encodeURIComponent(props.resolver.version)}/secrets`, { method, headers: JSON_HEADERS, body: JSON.stringify(body) });
       const answer = await response.json().catch(() => null) as { names?: string[]; error?: string } | null;
       if (!response.ok || !answer?.names) throw new Error(answer?.error ?? 'backend_secret_failed');
@@ -106,8 +129,19 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
           </Field>}
         </For>
       </div>
+      <Disclosure summary="Advanced" open={caLikely()}>
+        <Field label={`CA certificate (PEM) for ${props.name}`} class="mt-2" hint={CA_HELP} error={caProblem(ca())}>
+          <Textarea size="sm" spellcheck={false} autocomplete="off" rows={4} value={ca()} placeholder={`${CA_MARKER}\n…`} disabled={busy()} onInput={(event) => setCa(event.currentTarget.value)} />
+        </Field>
+      </Disclosure>
       <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
       <p class="m-0 font-sans text-xs text-muted">Use a read-only database user: resolver code can run any SQL that user is allowed. The password stays in the runner's worker process and never reaches resolver code. TLS with full certificate verification is required.</p>
+      <Show when={props.outboundIps.length}>
+        <div class="grid gap-1">
+          <p class="m-0 font-sans text-xs text-muted">Allow these IPs in your database firewall:</p>
+          <CopyBlock class="" text={props.outboundIps.join(', ')} label={`Copy the IPs to allow for ${props.name}`} />
+        </div>
+      </Show>
       <div class="flex gap-2">
         <Button type="submit" size="md" disabled={busy() || !complete()}>Save connection</Button>
         <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove connection</Button></Show>
@@ -116,11 +150,12 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
   </ListRow>;
 }
 
-function ResolverSection(props: { id: string; revision: string; resolver: PageResolver }): JSX.Element {
+function ResolverSection(props: { id: string; revision: string; resolver: PageResolver; outboundIps: string[] }): JSX.Element {
   const [set, setSet] = createSignal(props.resolver.set);
   const [testing, setTesting] = createSignal(false);
   const [outcome, setOutcome] = createSignal<TestOutcome | null>(null);
   const names = () => Object.keys(props.resolver.secrets);
+  const untrusted = () => /tls_untrusted_certificate/.test(outcome()?.text ?? '');
   const test = async () => {
     setTesting(true); setOutcome(null);
     try {
@@ -138,7 +173,7 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
         const onNames = (next: string[]) => { setSet(next); setOutcome(null); };
         const kind = props.resolver.secrets[name];
         return isResolverDatabaseKind(kind)
-          ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} onNames={onNames} />
+          ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} outboundIps={props.outboundIps} untrusted={untrusted()} onNames={onNames} />
           : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
       }}
       </For></ul>
@@ -150,12 +185,13 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
 
 export default function ResolversPanel(props: { id: string }): JSX.Element {
   const [page] = createResource(() => props.id, readResolvers);
+  const [outboundIps] = createResource(readOutboundIps, { initialValue: [] });
   return <div class="grid gap-4">
     <p class="m-0 font-sans text-sm text-muted">Secret values are stored encrypted, sent only to their bound host, and never shown again.</p>
     <Show when={!page.loading} fallback={<StatusMessage kind="loading">Loading resolvers…</StatusMessage>}>
       <Show when={!page.error && page()} keyed fallback={<StatusMessage kind="error">Resolvers are unavailable. Refresh and try again.</StatusMessage>}>{(current) =>
         <Show when={current.resolvers.length} fallback={<StatusMessage kind="empty">This page has no resolvers.</StatusMessage>}>
-          <For each={current.resolvers}>{(resolver) => <ResolverSection id={props.id} revision={current.revision} resolver={resolver} />}</For>
+          <For each={current.resolvers}>{(resolver) => <ResolverSection id={props.id} revision={current.revision} resolver={resolver} outboundIps={outboundIps()} />}</For>
         </Show>}
       </Show>
     </Show>

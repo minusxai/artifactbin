@@ -1,4 +1,4 @@
-import {artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
+import {artifactToWire,committedOpenAnnotations,parseShareEntries,parseSharingRevision,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
 import { artifactState, getArtifactFor, getOwnedArtifactFor, isParentRefusal, isVersionConflict, resolveParent, setMetadataFor, type MetadataPatch } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor } from '@/lib/accounts';
@@ -11,7 +11,7 @@ export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Re
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);
  const expected=parseExpectedVersion(body,false);if(expected instanceof Response)return expected;
  if(!expected.expectedState)return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
- const allowed=new Set(['expectedState','expectedVersion','expectedPolicyRevision','policy','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);
+ const allowed=new Set(['expectedState','expectedVersion','expectedPolicyRevision','policy','expectedSharingRevision','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);
  if(Object.keys(body).some(key=>!allowed.has(key)))return json({error:'invalid_metadata',allowed:[...allowed]},400);
  const governs='parent_id' in body;
  if(governs&&!await getOwnedArtifactFor(actor,id))return json({error:'owner_only'},403);
@@ -35,11 +35,12 @@ export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Re
  const visibility=parseVisibilityValue(body.visibility,!!(current.user_id||current.group_id));if(visibility instanceof Response)return visibility;if(visibility)patch.visibility=visibility;
  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;if(link)patch.link_role=link;
  const access=parseAccessValue(body.access,current.format);if(access instanceof Response)return access;if(access)patch.access=access;
+ const expectedSharingRevision=parseSharingRevision(body);if(expectedSharingRevision instanceof Response)return expectedSharingRevision;
  const parent=parseParentField(body);if(parent instanceof Response)return parent;
  if(parent!==undefined){const placement=await resolveParent(writerFor(current),parent,{id,format:current.format});if(isParentRefusal(placement))return json(placement,400);patch.ancestor_ids=placement.ancestor_ids;}
  if(!Object.keys(patch).length)return json({error:'empty_metadata'},400);
- const row=await setMetadataFor(actor,id,patch,{...expected,expectedPolicyRevision:body.expectedPolicyRevision as number|undefined,allowEditor:!governs,dryRun});
+ const row=await setMetadataFor(actor,id,patch,{...expected,expectedPolicyRevision:body.expectedPolicyRevision as number|undefined,expectedSharingRevision,allowEditor:!governs,dryRun});
  if(!row)return json({error:'not_found'},404);
- if(isVersionConflict(row))return json({error:row.reason??'version_conflict',currentState:row.currentState,currentVersion:row.currentVersion},409);
+ if(isVersionConflict(row)){const {conflict:_conflict,...conflict}=row;return json(conflict,409);}
  return dryRun?json({valid:true,dry_run:true,state:artifactState(current),commit_checks:['authorization','observed_state']}):json(await artifactToWire(row,base,committedOpenAnnotations(row)));
 }

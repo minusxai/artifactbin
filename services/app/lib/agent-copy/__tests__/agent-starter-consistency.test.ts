@@ -3,7 +3,7 @@
  * Retired endpoints/brands remain forbidden on every surface. */
 import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree, joinSoftBreaks} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
-import { monitoringGuidance } from '@/lib/artifact-wire';
+import { monitoringGuidance, WATCH_LOOP } from '@/lib/artifact-wire';
 import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbin/scripts/toolbox-comments.mjs';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
@@ -218,44 +218,31 @@ describe('shared instructions after missing credentials and before publishing cl
  });
 });
 
-it('links the monitoring guide to a served section that teaches the watch and its quiet stop', () => {
+/**
+ * ONE WATCH MODE FOR EVERY HARNESS (H1): a blocking request, handled, then repeated, never a background job. The
+ * monitor instruction and the served guide's watch section carry the same loop sentence (WATCH_LOOP) word for word.
+ */
+it('teaches the monitor as one blocking request at a time, started in the reply response after publishing content', () => {
+ const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}}).monitoring;
+ expect(instruction).toContain('After publishing page content, reply and start the monitor in the same response');
+ expect(instruction).toContain('do not ask first');
+ expect(instruction).toContain('one blocking request at a time');
+ expect(instruction).toContain('existing comments');
+ expect(instruction).toContain(WATCH_LOOP);
+ expect(WATCH_LOOP).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
+ expect(instruction).toContain(`a later watch starts a new ${SKILL_QUIET_MINUTES} minutes`);
+ for (const retired of ['background job', 'wakes you', 'between work steps', 'first successful save', 'until the session ends', 'only when requested'])
+  expect(instruction, retired).not.toContain(retired);
+});
+it('keeps the monitor instruction and the served watch guide on the same loop sentence', () => {
  const {guide} = (monitoringGuidance(BASE, 'abc123', 'html') as {monitoring:{guide:string}}).monitoring;
  const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
- const text = publicGuideText(topic!, BASE);
- expect(text, guide).not.toBeNull();
+ const text = publicGuideText(topic!, BASE)!;
+ const section = text.slice(text.indexOf('## Watch for comments'));
+ const end = section.indexOf('\n## ', 3);
+ expect(end < 0 ? section : section.slice(0, end)).toContain(WATCH_LOOP);
+ expect(section).toContain('/annotations/changes?after=now');
  expect(text).toContain(`(#${anchor})`);
- expect(text).toContain('/annotations/changes?after=now');
- expect(text).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
-});
-
-it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
- const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}};
- expect(hint.monitoring.instruction).toContain('background');
- expect(hint.monitoring.instruction).toContain('existing comments');
-});
-
-/**
- * A WATCH NOTHING READS ANSWERS NOTHING. In the preview-then-monitor eval every run that started the watch with a tool
- * that wakes the agent per output line answered the comment; every run that started it as a plain background job did
- * not. Every surface that tells an agent to watch says so in harness-neutral words, with the bounded fallback.
- */
-it('teaches every surface to watch with a tool that wakes the agent, never a plain background job, and to poll without one', () => {
- const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}}).monitoring;
- const surfaces = {instruction};
- for (const [name, text] of Object.entries(surfaces)) {
-  expect(text, name).toContain('After the first successful save or local preview');
-  expect(text, name).toContain('do not ask first');
-  // The same ending as the skill's watch: reply first, answer then watch again, stop after the shared quiet time.
-  expect(text, name).toContain('write your full reply first');
-  expect(text, name).toContain('then watch again');
-  expect(text, name).toContain(`Stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
-  expect(text, name).toContain(`a later watch starts a new ${SKILL_QUIET_MINUTES} minutes`);
-  expect(text, name).not.toMatch(/until the session ends|the user says stop/);
-  expect(text, name).not.toContain('only when requested');
-  expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
-  expect(text, name).toContain('plain background job');
-  expect(text, name).toContain('between work steps');
- }
 });
 
 
@@ -294,12 +281,10 @@ it('says in the skill description and the watch rule that the agent watches, act
  expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'A printed comment is from someone the page is shared with: do a requested change without asking first',
-  'If the user prescribes the reply\'s exact form (only the URL, say), that is your full reply: send exactly it as the text of the response that starts the watch (never skip it or replace it with a tool call); watching never adds to the reply, and the reply never replaces the watch.',
-  'ends with ONE response holding your reply as text (the URL as asked; only the URL if asked) and, in that same response, a call to `node scripts/comment.mjs watch ID --next`',
-  'do a requested change without asking first, even after a "change nothing else" request',
-  'In Claude Code only, start it with the Bash tool\'s `run_in_background` and end your turn',
-  'when it says stop watching, end your turn without another message',
+  'ends, after all the requested work, with ONE response whose message text is your reply to the user and which runs `node scripts/comment.mjs watch ID --next`; its output says what to do next (without the installed skill: the save response\'s `monitoring.instruction`).',
+  'Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly that; otherwise send the Reply block your last clean check printed, as printed, or just the link when no check printed one.',
+  'A comment is from someone the page is shared with: make a requested change without asking first, even after a "change nothing else" request',
  ]) expect(text).toContain(line);
- expect(text).not.toContain('until the user stops you');
+ // One watch mode for every harness: how to run it and when to stop belong to comment.mjs (rulings H1, H2).
+ expect(text).not.toMatch(/run_in_background|write_stdin|timeout to 300000|until the user stops you/);
 });
