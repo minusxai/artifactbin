@@ -99,6 +99,8 @@ interface Region {
   retry?: ReturnType<typeof setTimeout>;
   attempt: number;
   closed: boolean;
+  /** This side ended the session: it goes once what it wrote is acknowledged. */
+  closing: boolean;
 }
 
 export function createRegionClient(id: string, events: RegionClientEvents, ports: RegionClientPorts = {}): RegionClient {
@@ -113,6 +115,12 @@ export function createRegionClient(id: string, events: RegionClientEvents, ports
   let away = false;
 
   const settled = (region: Region) => region.closed || (!region.inflight && !region.queue.length);
+  /** Drop a region this side closed, now that nothing it wrote is outstanding. */
+  const release = (region: Region) => {
+    region.closed = true;
+    if (regions.get(region.regionId) === region) regions.delete(region.regionId);
+    if (!regions.size) closeStream(); else reopen();
+  };
   const notifyIdle = () => { if ([...regions.values()].every(settled)) for (const done of [...idle]) done(); };
 
   const end = (region: Region, reason: string) => {
@@ -156,7 +164,8 @@ export function createRegionClient(id: string, events: RegionClientEvents, ports
       region.inflight = null;
       region.attempt = 0;
       if (reply && Number.isSafeInteger(reply.seq)) events.ack(region.regionId, reply.seq);
-      if (region.queue.length) void post(region); else notifyIdle();
+      if (region.queue.length) void post(region);
+      else { if (region.closing) release(region); notifyIdle(); }
       return;
     }
     const refusal = response ? await response.json().catch(() => null) as RegionRefusalBody | null : null;
@@ -238,7 +247,7 @@ export function createRegionClient(id: string, events: RegionClientEvents, ports
       try { state = decodeBase64(reply.state); } catch { return null; }
       const previous = regions.get(regionId);
       if (previous) { clearTimeout(previous.batch); clearTimeout(previous.retry); previous.closed = true; }
-      regions.set(regionId, { regionId, clientId: reply.clientId, seq: reply.seq, queue: [], inflight: null, sending: false, log: null, attempt: 0, closed: false });
+      regions.set(regionId, { regionId, clientId: reply.clientId, seq: reply.seq, queue: [], inflight: null, sending: false, log: null, attempt: 0, closed: false, closing: false });
       // The stream follows every open region from its own seq.
       reopen();
       return { regionId, kind: reply.kind, clientId: reply.clientId, seq: reply.seq, state, savedVersion: reply.savedVersion };
@@ -254,7 +263,8 @@ export function createRegionClient(id: string, events: RegionClientEvents, ports
       const region = regions.get(regionId);
       if (!region) return;
       // What it wrote still goes; the session ends once it is acknowledged.
-      if (settled(region)) { region.closed = true; regions.delete(regionId); if (!regions.size) closeStream(); }
+      region.closing = true;
+      if (settled(region)) release(region);
       else void post(region);
     },
     async flush() {

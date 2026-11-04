@@ -293,6 +293,26 @@ describe('createRegionClient', () => {
     expect(t.seen.closed.at(-1)).toEqual(['r1', 'access']);
   });
 
+  it('closing a region from this side sends what it wrote, then drops it from the stream', async () => {
+    const t = setup();
+    const session = await t.client.open('r1');
+    const local = t.editor(session!.state);
+    t.server.hold = true;
+    t.client.push('r1', local.type(0, 'last words'));
+    t.client.close('r1');
+    await settle();
+    expect(t.updatePosts()).toHaveLength(1);
+    expect(t.live()).toHaveLength(1);
+    t.server.hold = false;
+    t.server.held.shift()!();
+    await settle();
+    expect(t.server.text()).toBe('last words');
+    expect(t.live()).toEqual([]);
+    t.client.push('r1', local.type(0, 'ignored '));
+    await vi.advanceTimersByTimeAsync(REGION_BATCH_MS * 4);
+    expect(t.updatePosts()).toHaveLength(1);
+  });
+
   it('flush sends pending edits first, waits for their acks, then saves and returns the version', async () => {
     const t = setup();
     const session = await t.client.open('r1');

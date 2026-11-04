@@ -102,7 +102,9 @@ export function startRegionEditing(options: RegionEditingOptions): RegionEditing
     if (!kind || open.has(regionId)) return;
     open.add(regionId);
     const session = await client.open(regionId);
-    if (disposed || !open.has(regionId)) return;
+    if (disposed) return;
+    // The document that asked is gone (a new one attached meanwhile): the session it would have used ends.
+    if (!open.has(regionId)) { if (session) client.close(regionId); return; }
     if (!session) { open.delete(regionId); bridge.sendRegion({ kind: 'region-closed', regionId, reason: 'refused' }); return; }
     bridge.sendRegion({ kind: 'region-session', regionId, regionKind: session.kind, clientId: session.clientId, state: session.state, seq: session.seq });
   };
