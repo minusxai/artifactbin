@@ -1,6 +1,7 @@
 /**
  * Example: check.mjs cleanup steps for examples/shared-app.html: clears the test target.
- * Usage: cp examples/shared-app-cleanup.mjs cleanup.mjs (unchanged); pass it as --cleanup-steps.
+ * Usage: cp examples/shared-app-cleanup.mjs cleanup.mjs (no edits needed); pass it as
+ *   --cleanup-steps.
  * Gotchas: an empty target field clears the saved target, so the APP.defaultTargets show again.
  */
 // The category under test: the first one the page lists (so this file needs no edits).

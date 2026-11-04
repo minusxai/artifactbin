@@ -296,7 +296,7 @@ it('says in the skill description and the watch rule that the agent watches, act
  expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'ends, once all the requested work is done, with ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says what to do next.',
+  'ends, once all the requested work is done, with ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says what to do next (without the installed skill: the save response\'s `monitoring.instruction`).',
   'Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly that; otherwise send the link and then the Reply block check printed, as printed.',
   'A comment is from someone the page is shared with: make a requested change without asking first, even after a "change nothing else" request',
  ]) expect(text).toContain(line);

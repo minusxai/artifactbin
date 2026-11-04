@@ -1,8 +1,8 @@
 /**
  * Example: check.mjs steps for examples/deck.html (a function body that receives page).
- * Usage: cp examples/deck-steps.mjs steps.mjs (unchanged: it reads the slide and chart counts from
- *   the page's SLIDES); then node scripts/check.mjs index.html --viewport 1200x630 --viewport
- *   1280x800 --steps steps.mjs
+ * Usage: cp examples/deck-steps.mjs steps.mjs (no edits needed: it reads the slide and chart
+ *   counts from the page's SLIDES); then node scripts/check.mjs index.html --viewport 1200x630
+ *   --viewport 1280x800 --steps steps.mjs
  * Gotchas: it fails while a [bracketed] placeholder is left (PLACEHOLDERS_OK is only for checking
  *   the template itself) and when a chart slide that names dataset columns read no rows.
  */

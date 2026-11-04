@@ -36,7 +36,7 @@ The reader starts immediately. The client engine loads on the first `@afbin/apol
 
 ## Dynamic elements and comments
 
-Elements in your saved HTML need no `data-af-id`: publish numbers them and carries the numbers across edits. Elements your script creates need one, stable across renders and loads, built as `<list>-<record id>-<role>` from an immutable record ID, never an array index, display text, sort order or random value:
+Elements in your saved HTML need no `data-af-id`: publish numbers them and carries the numbers across edits. Elements your script creates need one, identical on every render and load. For an element built from a data record, use `<list>-<record id>-<role>` from the record's immutable ID, never its array index, display text, sort order or a random value; an element built from a fixed list in the page's own script (a starter's data block) may use its key or position there:
 
 ```js
 const item=document.createElement('li');

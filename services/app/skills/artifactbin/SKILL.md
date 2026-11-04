@@ -10,20 +10,21 @@ description: >-
 
 Every task that publishes or edits page content ends, once all the requested work is done, with
 ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output
-says what to do next. Your reply is what the user asked for: if they prescribed its form (e.g.
-only the URL), send exactly that; otherwise send the link and then the Reply block check printed,
-as printed. Group, sharing and ownership changes alone need no watch.
+says what to do next[% if not shipped %] (without the installed skill: the save response's
+`monitoring.instruction`)[% endif %]. Your reply is what the user asked for: if they prescribed its
+form (e.g. only the URL), send exactly that; otherwise send the link and then the Reply block check
+printed, as printed. Group, sharing and ownership changes alone need no watch.
 
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
   gen-transactions.mjs; repairs.csv
-- `resolvers/`: copyable resolvers: public-url, http-json, google-sheets, bigquery, supabase, neon
+- `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
 (`--help` each)
 - `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups
-(read only the references your task needs)
+(read only those your task needs)
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
@@ -95,22 +96,24 @@ sharing and deliberate ownership moves.
   | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
   | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
   | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
-  - t `<title>` to the page's name: the browser tab and link previews show it.
-  - sign: start from the reader's decision; give the opening a concrete point and let typography set
-    the hierarchy (no identical cards for every paragraph). Use real data in charts, label
+  - Set `<title>` to the page's name: the browser tab and link previews show it.
+  - Design: start from the reader's decision; give the opening a concrete point and let typography
+    set the hierarchy (no identical cards for every paragraph). Use real data in charts, label
     assumptions, keep lines under about 80 characters and controls keyboard-usable.
-  - ver put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
+  - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
 - **Change an existing page.** Plain edits: `node scripts/read.mjs ID --output page.html`, edit that
   file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same file and
   never regenerate the page from scratch. To rebuild it from a starter: copy the starter, edit what
-  its Usage names, then `node scripts/publish.mjs index.html --artifact ID` (it replaces that page).
-- **Check.** Copy the starter's steps files unchanged (`examples/deck-steps.mjs`;
-  `csv-dashboard-steps.mjs`; `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`), or write one
-  short steps file of `step('label', …)` checks: wait for your data, check the requested values and
-  behaviour. Then publish and check in one command: `node scripts/publish.mjs index.html && node
-  scripts/check.mjs index.html --steps steps.mjs` (a starter's Usage gives its full command).
+  its Usage names and add `--artifact ID` to its publish command (`node scripts/publish.mjs
+  index.html --artifact ID` replaces that page).
+- **Check.** Copy the starter's steps files (`examples/deck-steps.mjs`; `csv-dashboard-steps.mjs`;
+  `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`; they need no edits) and add a step for each
+  requested value they don't check, or write one short steps file of `step('label', …)` checks:
+  wait for your data, check the requested values and behaviour. Then publish and check in one
+  command: `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps
+  steps.mjs` (a starter's Usage gives its full command).
   Publish autofixes the page and prints an `autofix:` report to read (`node scripts/autofix.mjs
   FILE` only for a file you aren't publishing). Never rerun an unchanged failing check; read its
   step timings, change the steps or page, then rerun once. After one clean run covering the

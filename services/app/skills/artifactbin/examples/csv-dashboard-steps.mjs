@@ -1,9 +1,9 @@
 /**
  * Example: check.mjs steps for examples/csv-dashboard.html (a function body that receives page).
- * Usage: cp examples/csv-dashboard-steps.mjs steps.mjs (unchanged: it reads the counts from the
- *   page); then node scripts/check.mjs index.html --steps steps.mjs
+ * Usage: cp examples/csv-dashboard-steps.mjs steps.mjs (no edits needed: it reads the counts from
+ *   the page); then node scripts/check.mjs index.html --steps steps.mjs
  * Gotchas: it waits for #status "Loaded N rows", then checks that every DATA chart drew marks and
- *   a table, and that no [bracketed] starter text is left. Add steps for the requested numbers.
+ *   a table, and that no [bracketed] starter text is left. Add a step for each requested number.
  */
 const PLACEHOLDERS_OK=false;
 const status=()=>page.evaluate(()=>document.querySelector('#status')?.textContent??'');

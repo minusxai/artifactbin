@@ -3,11 +3,15 @@
  * modules, and the data-driven ones, filled with the sample CSV (examples/repairs.csv) through a stubbed
  * `@afbin/apollo` client, build their GraphQL query from their DATA block, compute every number from the rows, hand
  * Vega-Lite a spec naming those values with titled tooltips, and pass their own copy-unchanged steps files. jsdom runs
- * the page scripts with the hosted modules stubbed; the libraries themselves have their own coverage.
+ * the page scripts with the hosted modules stubbed; every spec a page hands Vega-Lite is then compiled and rendered
+ * headless by the pinned vega and vega-lite packages, as the page's no-eval interpreter would.
  */
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import {afterEach, expect, it} from 'vitest';
+import * as vega from 'vega';
+import {compile} from 'vega-lite';
+import {expressionInterpreter} from 'vega-interpreter';
 
 const EXAMPLES = new URL('../../../skills/artifactbin/examples/', import.meta.url);
 const read = (name: string) => readFileSync(new URL(name, EXAMPLES), 'utf8');
@@ -187,4 +191,17 @@ it('reads a linked dataset into deck chart slides before drawing, and its steps 
   expect((await steps(failed.dom, source)).failure).toContain('no dataset rows on Traction: no field week');
   // Without a dataset the deck sends no query.
   expect((await load(read('deck.html'), rowsAnswer('repairs'))).queries).toEqual([]);
+});
+
+it('hands Vega-Lite specs that the pinned libraries compile and render with marks, in every data starter', async () => {
+  const pages = [await load(read('csv-dashboard.html'), rowsAnswer('repairs')), await load(read('deck.html'), rowsAnswer('repairs'))];
+  const specs = pages.flatMap(page => page.specs);
+  expect(specs.length).toBeGreaterThanOrEqual(4);
+  for (const spec of specs) {
+    const view = new vega.View(vega.parse(compile(spec as never).spec, undefined, {ast: true}),
+      {renderer: 'none', expr: expressionInterpreter as never});
+    const svg = await view.toSVG();
+    view.finalize();
+    expect(svg, JSON.stringify(spec.mark)).toMatch(/class="mark-(?:rect|line|symbol)[^"]*"[^>]*>\s*<path/);
+  }
 });
