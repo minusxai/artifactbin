@@ -62,11 +62,11 @@ one.[% if not shipped %] The scripts and examples below ship in the installed sk
 resources); without it, use the HTTP API: [authentication](references/http-auth.md) and [comment
 anchors and browser sessions](references/html-operations.md).[% endif %]
 
-Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--output FILE`. To learn
-one, read `head -30 scripts/NAME.mjs` (usage, flags, examples, gotchas; `--help` prints the same).
-Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
-(`node scripts/auth.mjs status`). Dataset permissions: `policy.mjs`. Resolver secrets: the page
-owner sets them in the page's Resolvers settings, never in chat. ACLs and trash have no script.
+Every script takes `--help`, `--json` and an exclusive `--output FILE`; all but `serve.mjs` take
+`--server ORIGIN`. To learn one, read `head -30 scripts/NAME.mjs` (usage, flags, examples, gotchas;
+`--help` prints the same). Use these scripts, never shell-built HTTP wrappers. Reuse the saved
+sign-in (`node scripts/auth.mjs status`). Dataset permissions: `policy.mjs`. Resolver secrets: the
+page owner sets them in the page's Resolvers settings, never in chat. ACLs and trash have no script.
 For groups, run `node scripts/groups.mjs list`; read [groups](references/groups.md) for membership,
 sharing and deliberate ownership moves.
 
