@@ -131,3 +131,21 @@ export function hostNameSyntax(raw: string): string | null {
   if (labels.length < 2 || !labels.every((label) => LABEL.test(label))) return null;
   return /^[a-z]/.test(labels.at(-1)!) ? host : null;
 }
+
+/**
+ * This deployment's outbound addresses (`APP__OUTBOUND_IPS`): the IPs every outbound connection leaves from, so a
+ * page owner can allow them in a firewall. A comma-separated list of IP literals (canonical IPv4, or IPv6 without
+ * brackets or a zone), trimmed, IPv6 lowercased, duplicates and blank entries dropped. Unset or blank is `[]`.
+ * Anything else throws: half a list is worse than a refused boot, since the missing half is an address an owner
+ * never allows.
+ */
+export function parseOutboundIps(value: string | undefined): readonly string[] {
+  const ips: string[] = [];
+  for (const entry of (value ?? '').split(',')) {
+    const ip = entry.trim().toLowerCase();
+    if (!ip) continue;
+    if (!parseIPv4(ip) && !parseIPv6(ip)) throw new Error(`APP__OUTBOUND_IPS must be comma-separated IP addresses; "${entry.trim()}" is not one.`);
+    if (!ips.includes(ip)) ips.push(ip);
+  }
+  return ips;
+}

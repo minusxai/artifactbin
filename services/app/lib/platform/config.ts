@@ -1,6 +1,7 @@
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
+import { parseOutboundIps } from '@artifactbin/utils/public-address';
 import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
 
 /**
@@ -255,6 +256,14 @@ export { parseAliasOrigins };
 export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
+ * THE ADDRESSES THIS DEPLOYMENT'S OUTBOUND TRAFFIC LEAVES FROM: resolver database connections, `caps.fetch`, web
+ * ingestion, webhooks. Served publicly at `GET /api/outbound-ips` and shown beside each database connection in the
+ * Resolvers panel, so an owner knows what to allow in a database firewall. Comma-separated IP addresses (IPv4 or
+ * IPv6); deployment-specific, so empty by default. A malformed entry throws at module load (`parseOutboundIps`).
+ */
+export let OUTBOUND_IPS = parseOutboundIps(env('APP', 'OUTBOUND_IPS'));
+
+/**
  * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/http/pages-origin) — the only way a document is rendered.
  * The hostname documents are served under, one label per document: `<hex(id)>.<pages host>`, and the
  * app page frames that origin. It may be a subdomain of the app's registrable domain or a domain of its
@@ -376,7 +385,7 @@ export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
  * every file; production code never calls either.
  */
 const SETTING_DEFAULTS = {
-  publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, userPagesHost: USER_PAGES_HOST,
+  publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, userPagesHost: USER_PAGES_HOST, outboundIps: OUTBOUND_IPS,
   browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
   testDomain: TEST_DOMAIN,
 };
@@ -386,6 +395,7 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
   if ('assetsOrigin' in settings) ASSETS_ORIGIN = settings.assetsOrigin!;
   if ('aliasOrigins' in settings) ALIAS_ORIGINS = settings.aliasOrigins!;
   if ('userPagesHost' in settings) USER_PAGES_HOST = settings.userPagesHost!;
+  if ('outboundIps' in settings) OUTBOUND_IPS = settings.outboundIps!;
   if ('browserServiceUrl' in settings) BROWSER_SERVICE_URL = settings.browserServiceUrl;
   if ('internalServiceSecret' in settings) INTERNAL_SERVICE_SECRET = settings.internalServiceSecret;
   if ('sqlServiceUrl' in settings) SQL_SERVICE_URL = settings.sqlServiceUrl;
@@ -395,7 +405,7 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
 }
 export function resetConfigOverrides(): void {
   PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
-  USER_PAGES_HOST = SETTING_DEFAULTS.userPagesHost; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
+  USER_PAGES_HOST = SETTING_DEFAULTS.userPagesHost; OUTBOUND_IPS = SETTING_DEFAULTS.outboundIps; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
   TEST_DOMAIN = SETTING_DEFAULTS.testDomain;
   envOverrides.clear();
