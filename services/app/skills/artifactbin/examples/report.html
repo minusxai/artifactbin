@@ -1,17 +1,22 @@
 <!doctype html>
 <!--
-Example: a responsive illustrated field report in semantic HTML and CSS, with viewer-local
-disclosure state (data-af="state"). Standalone: no other files.
-Usage: node scripts/publish.mjs examples/report.html
-  Check: node scripts/check.mjs ID --steps steps.mjs
-Gotchas: figures and tasks are sample content; adapt, never publish as-is. Verify desktop and
-390px, keyboard focus, labels, overflow and console errors; test each changed control.
+Example: a responsive illustrated report without data, in semantic HTML and CSS, with
+viewer-local disclosure state (data-af="state"). Standalone: no other files. A report built from
+a CSV or dataset starts from examples/csv-dashboard.html instead.
+Usage: cp examples/report.html index.html; replace every [bracketed] part and the sample
+  sections' text with yours (keep the CSS, JS and layout); write steps.mjs for the requested
+  content and controls; then node scripts/publish.mjs index.html && node scripts/check.mjs
+  index.html --steps steps.mjs
+Gotchas: the route drawing is an illustration, not a chart: figures from data belong in a page
+  started from csv-dashboard.html. Check desktop and 390px widths and every control by keyboard.
+Built with: one HTML page in semantic HTML and CSS; an inline SVG illustration; a disclosure
+  whose open state is kept per viewer in @afbin/apollo local state.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="dossier">
-<title>A cooler walk home</title>
+<title>[A cooler walk home]</title>
 
 <style>
 *{box-sizing:border-box}body{line-height:1.6}
@@ -32,10 +37,10 @@ main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!
 </style>
 <script type="application/json" data-af="state">{"showMethod":false}</script>
 </head><body><main>
-<p class="muted">Field report · illustrative pilot</p>
-<h1 class="t-display-xl">A cooler walk home</h1>
-<p class="lead">Three small planting changes could make the route between the library and the garden
-easier to walk in summer.</p>
+<p class="muted">[Field report · illustrative pilot]</p>
+<h1 class="t-display-xl">[A cooler walk home]</h1>
+<p class="lead">[Three small planting changes could make the route between the library and the
+garden easier to walk in summer.]</p>
 <div class="layout"><article>
 <section class="rule"><h2 class="t-title">Start where people pause</h2>
 <p>The sample route has a long exposed stretch followed by a shaded bench. This proposal puts new

@@ -1,11 +1,16 @@
 /**
  * Example: check.mjs guest steps for examples/shared-app.html: a second, signed-out session reads
  *   the target the signed-in steps saved, cannot save, and keeps its own light mode.
- * Usage: cp examples/shared-app-guest.mjs guest.mjs; keep CATEGORY and TEST equal to steps.mjs.
- * Gotchas: it runs after the self steps, on the wide viewport only. It proves read access for
- *   another session, not sharing between two signed-in users.
+ * Usage: cp examples/shared-app-guest.mjs guest.mjs (no edits needed; TEST equals steps.mjs's).
+ * Gotchas: it proves read access for another session, not sharing between two signed-in users.
  */
-const CATEGORY='Groceries',TEST='457',open=`[data-af-id="cat-${CATEGORY}-open"]`;
+const TEST='457';
+// The category under test: the first one the page lists (so this file needs no edits).
+const first=()=>document.querySelector('[data-af-id^="cat-"][data-af-id$="-open"]');
+await page.waitForFunction(first,null,{timeout:6000});
+const CATEGORY=await page.evaluate(()=>document.querySelector('[data-af-id^="cat-"]'+
+  '[data-af-id$="-open"]').dataset.afId.slice(4,-5));
+const open=`[data-af-id="cat-${CATEGORY}-open"]`;
 await page.waitForFunction(()=>/^Loaded/.test(document.querySelector('#status')?.textContent),
   null,{timeout:6000});
 await step('shared target visible to a second (guest) session',async()=>{

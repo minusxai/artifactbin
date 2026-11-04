@@ -3,24 +3,28 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="redline">
-<title>[Company] pitch deck</title><!-- must match the deck name: "<cover company> pitch deck" -->
+<title>[Company] pitch deck</title>
 <script type="module" id="slides-data">
 // Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only
-//   SLIDES and <title> (no drafts, not the CSS or JS); then node scripts/publish.mjs index.html &&
-//   node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+//   <title> (the deck's name for the tab and link previews), DATA and SLIDES (no drafts, not the
+//   CSS or JS); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html
+//   --steps steps.mjs. Charts from a dataset: publish the CSV (--type dataset), add <link
+//   rel="af-dataset" data-af-name="NAME" href="ref:ID"> after <title>, set DATA.dataset to NAME and
+//   give those chart slides x and y columns instead of data.
 // Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
 //   traction, business model, competition, ask); N topics means N slides. Types: cover is the
-//   problem slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3},
-//   bullets {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow
-//   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,
-//   from (traction chart id), milestone (target only; shown as "last traction value → target"),
-//   items≤3 [{label,amount} or {label,pct}]} (shows sum, shares; titled from these). Titles ≤2
-//   lines; they may only state numbers, time spans or comparisons the slide itself shows. Say if
-//   a chart counts cumulatively. Unique ids key data-af-id. Every slide shows "Illustrative
-//   figures"; real:true removes it. The comment at the top may stay as it is.
-// Built with: one HTML page from a SLIDES data block; Vega-Lite charts; keyboard and click
-//   navigation; per-slide PNG export.
-// The only part to edit: one entry per slide, rendered by the template below.
+//   problem slide {label "Problem · Company", title ≤40 characters (default: the <title>), text one
+//   line, stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y}] or dataset columns x, y
+//   (y summed per x, sorted by the column order, default x), format ".1f", unit "$#B"}, flow
+//   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit, from
+//   (traction chart id), milestone (target only; shown as "last traction value → target"), items≤3
+//   [{label,amount} or {label,pct}]} (shows sum, shares; titled from these). Titles ≤2 lines; they
+//   may only state numbers, time spans or comparisons the slide itself shows. Say if a chart counts
+//   cumulatively. Unique ids key data-af-id. Every slide shows "Illustrative figures"; real:true
+//   removes it. The comment at the top may stay as it is.
+// Built with: one HTML page from a SLIDES block; Vega-Lite charts; keyboard and click navigation.
+// The only part to edit: DATA, and one SLIDES entry per slide, rendered by the template below.
+window.DATA = {dataset: ''}; // a linked dataset's data-af-name, or '' when charts carry their data
 window.SLIDES = [
   {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',
     text:'[Who pays it, in one line.]',
@@ -67,23 +71,29 @@ nav button{font:inherit;color:inherit;background:none;border:1px solid currentCo
   height:12px;padding:0;border-radius:50%}nav .dot[aria-current=true]{background:var(--ds-red)}
 button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 @media(max-width:720px){[data-af-slide]{padding:28px 20px 84px;height:auto;min-height:100vh}}
-</style></head><body>
-<main id="deck"></main>
+</style></head><body><main id="deck"></main>
 <nav data-af-deck-chrome aria-label="Slides">
 <button id="prev" type="button" aria-label="Previous slide">←</button><span id="dots"></span>
 <button id="next" type="button" aria-label="Next slide">→</button>
 <span id="count" class="t-mono" aria-live="polite">01 / 01</span></nav>
 <script type="module">
-import * as vega from '@afbin/vega';
-import {compile} from '@afbin/vega-lite';
+import * as vega from '@afbin/vega';import {compile} from '@afbin/vega-lite';
+import {client,gql} from '@afbin/apollo';
 const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
-// The tab title comes from the cover's company; script-made nodes take data-af-ids from slide ids.
-document.title=`${SLIDES[0].label.split('·').pop().trim()} pitch deck`;
+// Chart slides naming dataset columns first read every row (1000 a page) and sum y per x.
+const DATASET=window.DATA?.dataset;
+for(const s of DATASET?SLIDES.filter(s=>s.type==='chart'&&typeof s.y==='string'):[])try{
+  const by=s.order??s.x,sums=new Map(),query=gql([`query Rows($o:Int!){${DATASET}(order_by:{${by}:`+
+    `asc},limit:1000,offset:$o){_id ${[...new Set([s.x,s.y,by])].join(' ')}}}`]); // 1-string array
+  for(let o=0,page=[];!o||page.length===1000;o+=1000){const r=await client.query({query,
+    variables:{o}});if(r.errors?.length)throw Error(r.errors[0].message);page=r.data[DATASET];
+    for(const row of page)if(Number.isFinite(row[s.y]))sums.set(String(row[s.x]),
+      (sums.get(String(row[s.x]))??0)+row[s.y]);}
+  s.data=[...sums].map(([x,y])=>({x,y}));}catch(e){s.data=[];s.error=s.label+': '+e.message;}
 const make=(node,attrs,text)=>{for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);
   if(text!==undefined)node.textContent=text;return node;};
 const el=(tag,id,attrs={},text)=>make(document.createElement(tag),{...attrs,'data-af-id':id},text);
-const svgEl=(tag,attrs,text)=>make(document.createElementNS('http://www.w3.org/2000/svg',tag),attrs,
-  text);
+const svgEl=(t,a,x)=>make(document.createElementNS('http://www.w3.org/2000/svg',t),a,x);
 const list=(id,items)=>{const ul=el('ul',id,{class:'items t-body'});
   items.slice(0,3).forEach((item,n)=>ul.append(el('li',`${id}-${n}`,{},item)));return ul;};
 function flow(s){
@@ -101,27 +111,23 @@ function flow(s){
     lines.forEach((line,k)=>text.append(svgEl('tspan',{x:x+(w-70)/2,dy:k?22:0},line)));
     if(n<steps.length-1)svg.append(svgEl('path',{d:`M${x+w-56} 110h40m-10-8 10 8-10 8`,fill:'none',
       stroke:'currentColor','stroke-width':2}));
-  });
-  return svg;}
-function matrix(s){
-  const svg=svgEl('svg',{viewBox:'0 0 900 300',role:'img','aria-label':`${s.x} by ${s.y}`});
-  svg.append(svgEl('path',{d:'M450 10v260M200 140h500',stroke:'currentColor','stroke-width':2}));
-  svg.append(svgEl('text',{x:700,y:165,'text-anchor':'end','font-size':15,fill:'currentColor'},
-    `${s.x} →`));
-  svg.append(svgEl('text',{x:460,y:26,'font-size':15,fill:'currentColor'},`↑ ${s.y}`));
-  s.points.forEach((p,n)=>{
-    const cx=200+p.x*500,cy=270-p.y*260;
-    svg.append(svgEl('circle',{cx,cy,r:9,fill:n===0?'var(--ds-red)':'currentColor'}));
-    svg.append(svgEl('text',{x:cx+14,y:cy+5,'font-size':16,fill:'currentColor'},p.label));
-  });
-  svg.append(svgEl('text',{x:890,y:296,'text-anchor':'end','font-size':13,fill:'currentColor'},
-    'Positions are illustrative'));return svg;}
+  });return svg;}
+function matrix(s){const ink={fill:'currentColor'},svg=svgEl('svg',{viewBox:'0 0 900 300',
+  role:'img','aria-label':`${s.x} by ${s.y}`});
+  svg.append(svgEl('path',{d:'M450 10v260M200 140h500',stroke:'currentColor','stroke-width':2}),
+    svgEl('text',{x:700,y:165,'text-anchor':'end','font-size':15,...ink},`${s.x} →`),
+    svgEl('text',{x:460,y:26,'font-size':15,...ink},`↑ ${s.y}`),svgEl('text',{x:890,y:296,
+      'text-anchor':'end','font-size':13,...ink},'Positions are illustrative'));
+  s.points.forEach((p,n)=>{const cx=200+p.x*500,cy=270-p.y*260;svg.append(svgEl('circle',{cx,cy,
+    r:9,fill:n===0?'var(--ds-red)':'currentColor'}),svgEl('text',{x:cx+14,y:cy+5,'font-size':16,
+    ...ink},p.label));});return svg;}
 const surface={cover:'red cover',ask:'ink'},charts=[],badge='Illustrative figures';
 SLIDES.forEach((s,n)=>{
   const id='slide-'+s.id,section=el('section',id,{'data-af-slide':'',class:surface[s.type]??'',
     'aria-label':`Slide ${n+1}: ${s.label}`});
   section.append(el('p',id+'-label',{class:'t-label soft'},n?`${pad(n+1)} · ${s.label}`:s.label));
-  section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},s.title));
+  section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},
+    s.title??document.title));
   // The ask computes its total and shares (rounded to sum to 100), so the parts always add up,
   // and starts its milestone from the from chart's last value, so the two slides agree.
   if(s.type==='ask'){const parts=s.items??[],v=p=>p.amount??p.pct??0,fmt=x=>s.unit.replace('#',
@@ -139,14 +145,11 @@ SLIDES.forEach((s,n)=>{
       el('p',`${id}-stat-${k}-value`,{class:'t-numeral'},stat.value),
       el('p',`${id}-stat-${k}-label`,{class:'t-body-s soft'},stat.label)));}
   if(s.items)section.append(list(id+'-items',s.items));
-  if(s.type==='flow'||s.type==='matrix'){
-    const figure=el('div',id+'-figure',{class:'figure'});
-    figure.append(s.type==='flow'?flow(s):matrix(s));section.append(figure);
-  }
-  if(s.type==='chart'){
-    const host=el('div',id+'-chart',{class:'chart',role:'img','aria-label':s.title});
-    section.append(host);charts.push({s,host});
-  }
+  if(s.type==='flow'||s.type==='matrix')section.appendChild(el('div',id+'-figure',
+    {class:'figure'})).append(s.type==='flow'?flow(s):matrix(s));
+  if(s.type==='chart')charts.push({s,host:section.appendChild(el('div',id+'-chart',{class:'chart',
+    role:'img','aria-label':s.title}))});
+  if(s.error)section.append(el('p',id+'-error',{class:'t-body',role:'status'},s.error));
   if(!s.real)section.append(el('p',id+'-badge',{class:'t-label illustrative'},badge));
   deck.append(section);
   document.querySelector('#dots').append(el('button','dot-'+s.id,{class:'dot',type:'button',
@@ -164,15 +167,11 @@ prev.onclick=()=>go(index-1);next.onclick=()=>go(index+1);dots.forEach(dot=>dot.
 document.addEventListener('keydown',event=>{
   const to={ArrowRight:index+1,PageDown:index+1,ArrowLeft:index-1,PageUp:index-1,Home:0,
     End:slides.length-1}[event.key];
-  if(to!==undefined&&!event.target.closest?.('input,select')){event.preventDefault();go(to);}
-});
-// Keep the counter on the slide under the middle of the view, not a stale observer entry.
+  if(to!==undefined&&!event.target.closest?.('input,select')){event.preventDefault();go(to);}});
 const sync=()=>{const i=slides.findIndex(slide=>{const box=slide.getBoundingClientRect();
-  return box.top<=innerHeight/2&&box.bottom>innerHeight/2;});if(i>=0)show(i);};
+  return box.top<=innerHeight/2&&box.bottom>innerHeight/2;});if(i>=0)show(i);};show(0);
 const seen=new IntersectionObserver(sync,{threshold:.6});slides.forEach(slide=>seen.observe(slide));
-show(0);
-const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-let views=[];
+const token=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();let views=[];
 async function drawCharts(){views.forEach(view=>view.finalize());
   const ink=token('--ds-ink'),font=token('--font-body'),red=token('--ds-red');
   views=await Promise.all(charts.map(async({s,host})=>{

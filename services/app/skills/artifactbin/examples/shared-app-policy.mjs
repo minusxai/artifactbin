@@ -5,7 +5,7 @@
  * Usage: node scripts/policy.mjs get TARGETS_ID --output policy.json, then
  *   node examples/shared-app-policy.mjs policy.json (rewrites its rules, keeps its revision), then
  *   node scripts/policy.mjs set TARGETS_ID --file policy.json --dry-run; read readBack, then the
- *   same set without --dry-run. Show the user the read-back.
+ *   same set without --dry-run.
  * Gotchas: each request matches exactly one role, so the write rules list viewer and signed_in.
  *   Owners and editors always have full access. Own rows only (each person edits what they added):
  *   policy.mjs template own-rows ID --owner-column COLUMN instead.

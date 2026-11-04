@@ -151,7 +151,7 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // The digest names the screenshots it saved (M7).
  expect(passed).toContain('  screenshots: /tmp/390x844.png');
  // A clean pass of a published page ends with the Reply block and the watch line; this envelope has no reply facts (a local preview).
- expect(passed).toContain('clean pass on the local preview: publish the page, then check the published page; its clean pass prints the Reply block.');
+ expect(passed).toContain('clean pass on the local preview: no Reply block; a check of the published page prints it.');
  expect(passed).not.toMatch(/until the user stops|Verified:|Reply block \(/);
  const failed=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,pageErrors:['boom'],overflow:{viewport:390,content:512,fits:false},contrast:{checked:9,belowAA:2,unreadable:1,low:[{text:'Stop the loss',ratio:1.01,need:3}]},error:'Expected 7 labels'},{error:'session closed'}]},'qa.json');
  expect(failed).toContain('check check_failed: smoke failed');
@@ -160,11 +160,11 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A guest run is labelled; a clean deck pass lists its slide images and says not to fetch them.
  const reply={id:'X',link:'https://h/a/X',builtWith:'one HTML page; Vega-Lite charts',permissions:[{id:'DATA12',name:'targets',lines:['Table public.targets','- Owner, editors: see and change everything.']}]};
  const guestDeck=checkDigest({ok:true,code:'completed',smokePassed:true,reply,slideLinks:['https://h/a/X/export?format=png&slide=1'],checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}}]},'qa.json');
- expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("  clean pass: nothing left to fix; don't open the qa JSON or fetch the slide images.\nReply block (send it as printed, up to the Next: line):\nhttps://h/a/X\n");expect(guestDeck).toContain('\nSlide images:\nhttps://h/a/X/export?format=png&slide=1\n');expect(guestDeck).not.toMatch(/curl/);
+ expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("  clean pass: nothing left to fix; don't open the qa JSON or fetch the slide images.\nReply block (send it as printed, up to the Next: line, unless the user prescribed the reply):\nhttps://h/a/X\n");expect(guestDeck).toContain('\nSlide images:\nhttps://h/a/X/export?format=png&slide=1\n');expect(guestDeck).not.toMatch(/curl/);
  // A passing run lists exactly the step labels it proved, per viewport, and what it did not, inside ONE Reply block (H10/H11).
  const proved=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
  expect(proved).not.toContain('Verified');
- expect(proved.slice(proved.indexOf('Reply block'))).toBe(['Reply block (send it as printed, up to the Next: line):','https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: anything not listed in Tested:, visual appearance, and sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','Next: when the whole request is done, send your reply and, in the same response, run node scripts/comment.mjs watch X --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).',''].join('\n'));
+ expect(proved.slice(proved.indexOf('Reply block'))).toBe(['Reply block (send it as printed, up to the Next: line, unless the user prescribed the reply):','https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: anything not listed in Tested:, visual appearance, and sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','Next: when the whole request is done, send your reply and, in the same response, run node scripts/comment.mjs watch X --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).',''].join('\n'));
  // Several linked datasets each name themselves before their read-back lines.
  const two=checkDigest({ok:true,smokePassed:true,reply:{...reply,permissions:[...reply.permissions,{id:'DATA34',name:'rows',lines:['Table public.rows']}]},checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,verified:['a']}]});
  expect(two).toContain('Who can do what:\ntargets (ref:DATA12):\nTable public.targets\n- Owner, editors: see and change everything.\nrows (ref:DATA34):\nTable public.rows\nNext:');expect(two).toContain('check completed: smoke passed\n');
@@ -311,16 +311,17 @@ it('summarizes duplicate and unstable data-af-id evidence without overstating ei
  const clean=checkDigest({ok:true,...summarizeCheck([{...base,ids:{total:3,duplicates:0,items:[]},idStability:{checked:false,created:0}}])},'qa.json');
  expect(clean).not.toMatch(/warning|duplicate/i);expect(clean).toContain('clean pass');
 });
-it('teaches script-created element IDs in the main steps and no longer names data-af="meta"',async()=>{
+it('teaches script-created element IDs once, in runtime.md, linked from SKILL.md, and no longer names data-af="meta"',async()=>{
  const {readFile}=await import('node:fs/promises');
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
  expect(skill).not.toContain('data-af="meta"');
  expect(skill).toContain('data-af="state"');
  expect(skill).toContain('artifactbin:design-system');
- const steps=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
- expect(steps).toContain('afId');expect(steps).toContain('references/runtime.md#dynamic-elements-and-comments');
+ // One data-af-id rule (rulings H8): SKILL.md links it and restates none of it.
+ expect(skill).toContain('references/runtime.md#dynamic-elements-and-comments');expect(skill).not.toContain('afId');
  const runtime=await readFile(new URL('../../../skills/artifactbin/references/runtime.md',import.meta.url),'utf8');
- expect(runtime).toContain('## Dynamic elements and comments');
+ expect(runtime).toContain('## Dynamic elements and comments');expect(runtime).toContain('`<list>-<record id>-<role>`');
+ expect(runtime).toContain("item.dataset.afId='garden-job-'+job.id;");
 });
 it('publish --group resolves the group first and sends an explicit destination only when you can edit it',async()=>{
  const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');

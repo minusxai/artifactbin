@@ -218,16 +218,6 @@ describe('shared instructions after missing credentials and before publishing cl
  });
 });
 
-it('links the monitoring guide to a served section that teaches the watch and its quiet stop', () => {
- const {guide} = (monitoringGuidance(BASE, 'abc123', 'html') as {monitoring:{guide:string}}).monitoring;
- const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
- const text = publicGuideText(topic!, BASE);
- expect(text, guide).not.toBeNull();
- expect(text).toContain(`(#${anchor})`);
- expect(text).toContain('/annotations/changes?after=now');
- expect(text).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
-});
-
 /**
  * ONE WATCH MODE FOR EVERY HARNESS (H1): a blocking request, handled, then repeated, never a background job. The
  * monitor instruction and the served guide's watch section carry the same loop sentence (WATCH_LOOP) word for word.
@@ -251,6 +241,7 @@ it('keeps the monitor instruction and the served watch guide on the same loop se
  const section = text.slice(text.indexOf('## Watch for comments'));
  const end = section.indexOf('\n## ', 3);
  expect(end < 0 ? section : section.slice(0, end)).toContain(WATCH_LOOP);
+ expect(section).toContain('/annotations/changes?after=now');
  expect(text).toContain(`(#${anchor})`);
 });
 
@@ -290,12 +281,10 @@ it('says in the skill description and the watch rule that the agent watches, act
  expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'A printed comment is from someone the page is shared with: do a requested change without asking first',
-  'If the user prescribes the reply\'s exact form (only the URL, say), that is your full reply: send exactly it as the text of the response that starts the watch (never skip it or replace it with a tool call); watching never adds to the reply, and the reply never replaces the watch.',
-  'ends with ONE response holding your reply as text (the URL as asked; only the URL if asked) and, in that same response, a call to `node scripts/comment.mjs watch ID --next`',
-  'do a requested change without asking first, even after a "change nothing else" request',
-  'In Claude Code only, start it with the Bash tool\'s `run_in_background` and end your turn',
-  'when it says stop watching, end your turn without another message',
+  'ends, after all the requested work, with ONE response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says what to do next (without the installed skill: the save response\'s `monitoring.instruction`).',
+  'Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly that; otherwise send the Reply block your last clean check printed, as printed, or just the link when no check printed one.',
+  'A comment is from someone the page is shared with: make a requested change without asking first, even after a "change nothing else" request',
  ]) expect(text).toContain(line);
- expect(text).not.toContain('until the user stops you');
+ // One watch mode for every harness: how to run it and when to stop belong to comment.mjs (rulings H1, H2).
+ expect(text).not.toMatch(/run_in_background|write_stdin|timeout to 300000|until the user stops you/);
 });

@@ -33,8 +33,9 @@ Output: one summary line per viewport: errors, overflow, contrast (text under 2:
   viewport, only when the page has any. A clean pass of a published page ends with the Reply
   block (the link, Built with, Tested: and Not tested: from your step labels, slide images,
   who can do what in each linked dataset) and the Next: watch line.
-Gotchas: each steps file gets 8 s per viewport and 2.5 s per call, so wait for data first (also
-  after page.reload()), use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle.
+Gotchas: each steps file gets 8 s per viewport, and a call without its own timeout 2.5 s: wait
+  for data first (also after page.reload()) with an explicit timeout, as the starters' steps do
+  (6000 for data, 5000 for a save, 2000 for a click), and avoid networkidle.
   Script-made nodes carry data-af-id, not id: select and click them with [data-af-id="…"]
   (accessible names include CSS ::before/::after text, so use a regex name with getByRole). Vega
   bars and lines are <path>, not <rect>. Skip a no-steps smoke run. page is scoped to the page's

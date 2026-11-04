@@ -10,11 +10,10 @@ Name question, unit, grain, source, period, timezone and missing/partial data. R
 
 ## Bootstrap
 
-Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The core import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. `serve.mjs` and downloads resolve the same names.
+Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The platform's import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. `serve.mjs` and downloads resolve the same names.
 
 ```html
 <div id="chart" role="img" aria-label="Completed tasks by category"></div>
-<script src="/af/core.js"></script>
 <script type="module">
 import * as vega from "@afbin/vega";
 import {compile} from "@afbin/vega-lite";
@@ -33,7 +32,7 @@ window.addEventListener("pagehide", () => view.finalize(), {once:true});
 </script>
 ```
 
-For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. The hosted `View` shows a themed tooltip by default (design tokens, light/dark; closes on leave, Escape, outside press, `finalize()`): give each chart a `tooltip` encoding. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Add table, resizing, theme and teardown below. Steps: bars are `.mark-rect path`, not `<rect>`.
+For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. The hosted `View` shows a themed tooltip by default (design tokens, light/dark; closes on leave, Escape, outside press, `finalize()`): give each chart a `tooltip` encoding. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Add table, resizing, theme and teardown below.
 
 ## Contents
 
@@ -67,7 +66,7 @@ Tooltips list fields by `title`: name each for readers, never raw columns (`{"fi
 
 ## Data and lifetime
 
-Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read shared facts with `client.query` under linked `data-af-name`. Discover dataset IDs; collect all pages at one revision or use supported server aggregates. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `watchQuery` can render linked backend data directly and refreshes it on invalidation; `onBackendChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
+Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read shared facts with `client.query` under linked `data-af-name`. Discover dataset IDs; collect all pages at one revision or use supported server aggregates. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `watchQuery` can render linked dataset data directly and refreshes it on invalidation; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
 
 Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, unsubscribe client listeners and remove listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
 
