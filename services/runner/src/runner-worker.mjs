@@ -39,6 +39,8 @@ readline
     }
     if (msg.type !== "run")
         return;
+    // Before any resolver code: a worker lost before the controller hears this ran none, so the run may move.
+    send({ type: "started" });
     try {
         isolate = new ivm.Isolate({ memoryLimit: msg.memoryMiB ?? 64 });
         const context = isolate.createContextSync();

@@ -47,6 +47,14 @@ it('replaces a killed spare and stops respawning a binary that never starts',asy
  await until(()=>broken.spares.length===0&&starts>=3);await new Promise(r=>setTimeout(r,300));expect(starts).toBeLessThanOrEqual(4);
  const onDemand=broken.take();expect(onDemand.ready).toBe(false);onDemand.child.kill('SIGKILL');
 });
+it('never hands out a spare whose process was killed before its exit was heard',async()=>{
+ const p=pool(2);await until(()=>p.spares.length===2&&p.spares.every(w=>w.ready));
+ const victim=p.spares[0]!.child;victim.kill('SIGKILL');
+ const taken=p.take();
+ expect(taken.child.pid).not.toBe(victim.pid);expect(taken.child.killed).toBe(false);
+ expect(p.spares.map(w=>w.child.pid)).not.toContain(victim.pid);
+ taken.child.kill('SIGKILL');await until(()=>exited(victim));
+});
 it('a spare that speaks before it is claimed is discarded, and close kills every spare',async()=>{
  const p=pool(1,()=>spawn(process.execPath,['-e','console.log(JSON.stringify({type:"result",result:1}));setInterval(()=>{},1000)'],{stdio:['pipe','pipe','pipe']}));
  const first=p.spares[0]!.child;await until(()=>exited(first));
