@@ -19,6 +19,7 @@
     "esbuild": "0.28.2",
     "fast-text-encoding": "1.0.6",
     "isolated-vm": "5.0.4",
+    "mysql2": "3.24.6",
     "postgres": "3.4.9"
   }
 }

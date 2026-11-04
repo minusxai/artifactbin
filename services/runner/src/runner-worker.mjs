@@ -43,15 +43,15 @@ readline
         isolate = new ivm.Isolate({ memoryLimit: msg.memoryMiB ?? 64 });
         const context = isolate.createContextSync();
         const reference = new ivm.Reference(isolateInvoke);
-        const postgres = ["open", "query", "end"].map(name => new ivm.Reference(database[name]));
+        const db = ["open", "query", "end"].map(name => new ivm.Reference(database[name]));
         context.evalSync("globalThis.window=globalThis;globalThis.self=globalThis;");
         context.evalClosureSync(`globalThis.__capabilities = (() => {
    const invoke=(op,args)=>$0.apply(undefined,[op,args],{arguments:{copy:true},result:{promise:true,copy:true}});
    const host=(ref,args)=>ref.apply(undefined,args,{arguments:{copy:true},result:{promise:true,copy:true}});
    return Object.freeze({ artifactbin:Object.freeze({read:args=>invoke('read',args),reply:args=>invoke('reply',args),call:(operation,args)=>invoke('artifactbin.'+operation,args)}),
-     postgres:Object.freeze({open:name=>host($2,[name]),query:(id,sql,params)=>host($3,[id,sql,params]),end:id=>host($4,[id])}),
+     db:Object.freeze({open:name=>host($2,[name]),query:(id,sql,params)=>host($3,[id,sql,params]),end:id=>host($4,[id])}),
      emit:event=>invoke('emit',event),env:Object.freeze($1)});
- })();`, [reference, new ivm.ExternalCopy(msg.env ?? {}).copyInto(), ...postgres]);
+ })();`, [reference, new ivm.ExternalCopy(msg.env ?? {}).copyInto(), ...db]);
         context.evalSync(msg.bundle, { timeout: msg.cpuMs ?? 1000 });
         const result = await context.evalClosure("return Program.default($0,globalThis.__capabilities)", [msg.input], {
             arguments: { copy: true },

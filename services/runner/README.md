@@ -31,31 +31,54 @@ receive validated arguments, a trusted principal and exactly four capabilities:
 `caps.fetch`, whose `{{NAME}}` secret placeholders the host fills for the one
 declared host, `caps.query` over the page's datasets as the caller,
 `caps.sql`, read-only SQL over the same datasets as the caller, and
-`caps.postgres`, a session on a database connection the page owner configured
-(below). Fetch secret values never enter a run. **A database connection's
-password does**: it is the one exception, for database connections only. Page
-editors are trusted to see it, so owners should configure a read-only database
-user; read-only enforcement is that user's, not Artifactbin's. Source files must
+`caps.db`, a session on a Postgres or MySQL connection the page owner configured
+(below). Secret values never reach resolver code. A database connection's
+password goes to the worker process, where the driver uses it, and never into the
+isolate: resolver code gets a handle, rows and redacted errors. Resolver code can
+still run any SQL the connection's user may, so owners should configure a
+read-only database user; read-only enforcement is that user's, not Artifactbin's. Source files must
 contain no credentials. Browser code cannot call the internal runner as an arbitrary command
 service or obtain backend source as a browser module.
 
 Programs receive no filesystem, shell, Node modules or native network access.
 Supported imports are pinned by `src/compiler.ts`.
 
-## Database connections (`caps.postgres`)
+## Database connections (`caps.db`)
 
-A backend declares a connection as a secret bound to `'postgres'`
-(`secrets = {WAREHOUSE: 'postgres'}`); the owner stores host, port, database,
-user and password (optional `tls` and `ca`) in the Resolvers panel, sealed in the
-same table and cipher as secret values. The sandbox keeps no network: bytes travel
-as tunnel messages over the worker link.
+A backend declares a connection as a secret bound to a database kind, one of
+`RESOLVER_DATABASE_KINDS` in `services/contracts` (`secrets = {WAREHOUSE: 'postgres'}`
+or `{SHOP: 'mysql'}`; any other word fails the publish, naming the supported kinds).
+The owner stores host, port, database, user and password (optional `tls` and `ca`)
+in the Resolvers panel, sealed in the same table and cipher as secret values, with
+the declared kind: a later version that declares the name as another kind gets
+`connection_unavailable`. The sandbox keeps no network: bytes travel as tunnel
+messages over the worker link.
 
-- `caps.postgres(name)` reaches the worker (`src/worker-database.mjs`), which asks the
-  host for the connection (`artifactbin.pageBackend.postgres`, an operation the
-  isolate itself may not call) and runs the pinned driver, postgres.js 3.4.9, in
-  the worker process: inside the network-less container in production, outside
-  the V8 isolate. Resolver code gets a handle, rows and errors with the password
-  redacted; the driver parses the server's bytes in the worker process.
+- `caps.db(name)` reaches the worker (`src/worker-database.mjs`), which asks the
+  host for the connection (`artifactbin.pageBackend.db`, an operation the
+  isolate itself may not call) and runs the pinned driver for its kind,
+  postgres.js 3.4.9 or mysql2 3.24.6 (each loaded on first use), in the worker
+  process: inside the network-less container in production, outside the V8
+  isolate. The password stays there and never reaches resolver code, which gets a
+  handle, rows and errors with the password redacted; the driver parses the
+  server's bytes in the worker process. One connection per handle, so a
+  transaction spans calls; it reconnects after a loss.
+- A handle is `{query(sql, params), end()}` and a query answers
+  `{rows, columns, command, count}` for both kinds. Postgres: `$1` placeholders,
+  `command` is the server's tag. MySQL: `?` placeholders, sent as a server-side
+  prepared statement (`execute`; never client-side escaping), or as plain text
+  without params; `command` is the statement's first word, upper-cased; `count`
+  is the rows returned, or the rows matched (`affectedRows`, with `FOUND_ROWS`)
+  for a write; a `CALL` answers its first result set. mysql2 runs with `LOCAL
+  INFILE` and multiple statements off (client flags cleared, no infile stream, so a
+  server's file request gets an empty answer), no generated parser code
+  (`disableEval`), and its session `time_zone` set to UTC.
+- Types: BIGINT (and, in MySQL's prepared path, any integer expression typed
+  BIGINT such as `true`) and DECIMAL/NUMERIC are strings, as postgres.js answers
+  int8 and numeric; DATE, DATETIME and TIMESTAMP are Dates in UTC; binary values
+  (BLOB, BINARY, BIT, bytea) are bytes (`Uint8Array`); JSON is parsed; other
+  numbers are numbers. MySQL has no boolean: `TINYINT(1)` is `0`/`1`; TIME is a
+  string.
 - The controller turns the host's answer into a grant for exactly that host and
   port (`src/database-tunnel.ts`). The run's `tunnel_open` names the grant, never
   an address. The controller resolves the name once, refuses it if any answer is
@@ -66,7 +89,8 @@ as tunnel messages over the worker link.
   any lookup. Ports below 1024 are refused: database servers listen on
   unprivileged ports, and the tunnel must not relay to SMTP, HTTP or SSH.
 - TLS runs from the driver to the database (`verify-full`, the server name or IP
-  checked against the certificate; `ca` adds a root), so the controller forwards
+  checked against the certificate; `ca` adds a root; mysql2 with `verifyIdentity`,
+  and a server without TLS is refused, never downgraded), so the controller forwards
   ciphertext. Plaintext (`tls: 'disable'`) and loopback targets need
   `RUNNER__DATABASE_LOOPBACK=true`, a development and test setting of the
   controller that no page can change; it never admits private or link-local space.

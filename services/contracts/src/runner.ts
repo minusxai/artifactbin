@@ -35,7 +35,7 @@ export const RESOLVER_LIMITS = Object.freeze({
   runWaitMs: 20_000,
 });
 /**
- * `caps.postgres`: the database tunnel's limits, enforced by the runner controller that opens the TCP
+ * `caps.db`: the database tunnel's limits, enforced by the runner controller that opens the TCP
  * connection (services/runner `database-tunnel.ts`). Counts per owner and per page are per controller.
  */
 export const RESOLVER_DATABASE_LIMITS = Object.freeze({
@@ -61,9 +61,16 @@ export const RESOLVER_DATABASE_LIMITS = Object.freeze({
   minPort: 1024,
 });
 /** The host operation that answers a named connection; the worker calls it, resolver code cannot. */
-export const RESOLVER_DATABASE_OPERATION = 'artifactbin.pageBackend.postgres';
-/** The `secrets` export binding value that declares a Postgres connection instead of a fetch secret. */
-export const RESOLVER_DATABASE_BINDING = 'postgres';
+export const RESOLVER_DATABASE_OPERATION = 'artifactbin.pageBackend.db';
+/**
+ * The database kinds `caps.db` connects to, THE ONE LIST: a `secrets` export binding of one of these
+ * (`{DB: 'postgres'}`, `{DB: 'mysql'}`) declares a connection of that kind instead of a fetch secret. Compile-time
+ * validation, the stored connection, the Resolvers panel and the runner worker's driver choice all read it.
+ */
+export const RESOLVER_DATABASE_KINDS = Object.freeze(['postgres', 'mysql'] as const);
+export type ResolverDatabaseKind = (typeof RESOLVER_DATABASE_KINDS)[number];
+export const isResolverDatabaseKind = (value: unknown): value is ResolverDatabaseKind =>
+  typeof value === 'string' && (RESOLVER_DATABASE_KINDS as readonly string[]).includes(value);
 /** What a run receipt records for one `caps.fetch`: never a query string, header value or body. */
 export interface ResolverFetchReceipt {
   method: string;

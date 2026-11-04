@@ -8,7 +8,7 @@ const request:RunStart={requestId:'r1',pageBackendOperation:'mutation',userId:'o
 const v2={...record,secretBindings:['KEY'],secretHosts:{KEY:'api.example.com'}};
 it('offers resolver code fetch, query and sql only: secret values, the removed store and unknown operations are refused',async()=>{
  const read=vi.fn(async()=>'private-value'),fetcher=vi.fn(),query=vi.fn();
- for(const [operation,args] of [['artifactbin.pageBackend.secrets.get',{name:'KEY'}],['artifactbin.pageBackend.store.get',{}],['artifactbin.pageBackend.store.set',{value:1,expected:0}],['artifactbin.other',{}]] as const)
+ for(const [operation,args] of [['artifactbin.pageBackend.secrets.get',{name:'KEY'}],['artifactbin.pageBackend.store.get',{}],['artifactbin.pageBackend.store.set',{value:1,expected:0}],['artifactbin.other',{}],['artifactbin.pageBackend.postgres',{name:'KEY'}]] as const)
   await expect(pageBackendCapability(request,operation,args,async()=>v2,read,fetcher,{query,sql:query})).rejects.toThrow('backend_capability_forbidden');
  expect(read).not.toHaveBeenCalled();expect(fetcher).not.toHaveBeenCalled();expect(query).not.toHaveBeenCalled();
 });
@@ -19,20 +19,27 @@ it('refuses forged admitted code before fetching',async()=>{
  expect(fetcher).not.toHaveBeenCalled();
 });
 
-describe('caps.postgres on the host',()=>{
- const connection={host:'db.example.com',port:5432,database:'shop',user:'reader',password:'pg-secret',tls:'verify-full'};
- const v3={...record,secretBindings:['API_KEY','WAREHOUSE'],secretHosts:{API_KEY:'api.example.com',WAREHOUSE:'postgres'}};
- const op='artifactbin.pageBackend.postgres';
- it('answers the owner\'s stored connection for a declared postgres name, and nothing for any other name',async()=>{
-  const read=vi.fn(async(_b:unknown,name:string)=>name==='WAREHOUSE'?JSON.stringify(connection):'api-key');
+describe('caps.db on the host',()=>{
+ const connection={kind:'postgres',host:'db.example.com',port:5432,database:'shop',user:'reader',password:'pg-secret',tls:'verify-full'};
+ const shop={...connection,kind:'mysql',port:3306,password:'my-secret'};
+ const v3={...record,secretBindings:['API_KEY','SHOP','WAREHOUSE'],secretHosts:{API_KEY:'api.example.com',SHOP:'mysql',WAREHOUSE:'postgres'}};
+ const op='artifactbin.pageBackend.db';
+ it('answers the owner\'s stored connection, with its kind, for a declared database name, and nothing for any other name',async()=>{
+  const read=vi.fn(async(_b:unknown,name:string)=>name==='WAREHOUSE'?JSON.stringify(connection):name==='SHOP'?JSON.stringify(shop):'api-key');
   expect(await pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>v3,read)).toEqual(connection);
+  expect(await pageBackendCapability(request,op,{name:'SHOP'},async()=>v3,read)).toEqual(shop);
+  read.mockClear();
   for(const [args,code] of [[{name:'API_KEY'},'unknown_connection: API_KEY'],[{name:'MISSING'},'unknown_connection: MISSING'],[{name:'lower'},'invalid_request: connection name'],[null,'invalid_request: connection name'],[{name:'constructor'},'invalid_request: connection name']] as const)
    await expect(pageBackendCapability(request,op,args as never,async()=>v3,read)).rejects.toThrow(code);
-  expect(read).toHaveBeenCalledTimes(1);
+  expect(read).not.toHaveBeenCalled();
  });
  it('fails closed on an unset or malformed stored value, and without a secret reader',async()=>{
-  for(const read of [async()=>{throw Error('backend_secret_unavailable');},async()=>'not json',async()=>JSON.stringify({...connection,port:22}),async()=>JSON.stringify({...connection,host:'127.1'})])
+  for(const read of [async()=>{throw Error('backend_secret_unavailable');},async()=>'not json',async()=>JSON.stringify({...connection,port:22}),async()=>JSON.stringify({...connection,host:'127.1'}),
+   // A value stored for another kind (a later version redeclared the name), or with none or an unknown one.
+   async()=>JSON.stringify({...connection,kind:'mysql'}),async()=>JSON.stringify({...connection,kind:undefined}),async()=>JSON.stringify({...connection,kind:'mssql'})])
    await expect(pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>v3,read)).rejects.toThrow('connection_unavailable: WAREHOUSE');
+  // A binding that is not a supported kind is no connection, whatever is stored.
+  await expect(pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>({...v3,secretHosts:{WAREHOUSE:'mssql'}}),async()=>JSON.stringify(connection))).rejects.toThrow('unknown_connection: WAREHOUSE');
   await expect(pageBackendCapability(request,op,{name:'WAREHOUSE'},async()=>v3)).rejects.toThrow('backend_capability_forbidden');
  });
  it('checks the admitted code, owner and page first',async()=>{
@@ -44,8 +51,11 @@ describe('caps.postgres on the host',()=>{
  it('redacts each connection password from a failed run\'s detail and shown message',async()=>{
   const runner={start:async()=>({runId:'run1'}),getRun:async()=>({status:'failed',output:null,receipt:{reason:RESOLVER_THREW+'login with pg-secret failed',requests:[]}}),cancel:async()=>{}} as unknown as RunnerService;
   const call={namespace:'db',fileId:'backend1',version:'v1',operation:'query' as const,field:'x',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
-  const error=await createBackendInvoker(runner,async()=>({...v3,compiled:'bundle'}),{readSecret:async(_b,name)=>name==='WAREHOUSE'?JSON.stringify(connection):'api-key'})(call).catch(e=>e);
+  const error=await createBackendInvoker(runner,async()=>({...v3,compiled:'bundle'}),{readSecret:async(_b,name)=>name==='WAREHOUSE'?JSON.stringify(connection):name==='SHOP'?JSON.stringify(shop):'api-key'})(call).catch(e=>e);
   expect(error).toBeInstanceOf(FieldFailed);expect(error.shown).toBe('login with [redacted] failed');expect(error.detail).toBe('login with [redacted] failed');
+  const mysql={...runner,getRun:async()=>({status:'failed',output:null,receipt:{reason:RESOLVER_THREW+'login with my-secret failed',requests:[]}})} as unknown as RunnerService;
+  const other=await createBackendInvoker(mysql,async()=>({...v3,compiled:'bundle'}),{readSecret:async(_b,name)=>name==='WAREHOUSE'?JSON.stringify(connection):name==='SHOP'?JSON.stringify(shop):'api-key'})(call).catch(e=>e);
+  expect(other.shown).toBe('login with [redacted] failed');expect(other.detail).toBe('login with [redacted] failed');
  });
 });
 

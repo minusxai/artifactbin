@@ -59,16 +59,19 @@ values; failures are `auth_key_invalid` or `auth_failed`. Size and time limits a
 4 MiB per runner message and remote callback reply, 15 s wall time and a 16 s app
 wait.
 
-## `caps.postgres`
+## `caps.db`
 
-`const db = await caps.postgres(name)` opens a session on a connection the pinned version declares as
-`secrets = {NAME: 'postgres'}` and the owner configured (`database.ts`: `unknown_connection` for any other name,
-`connection_unavailable` when unset; `caps.fetch` refuses such a name as `secret_host_forbidden`). `db.query(sql,
-params?)` answers `{rows, columns, command, count}`; `db.end()` closes it. The settings, password included, go to
-the runner worker's driver, never to resolver code; the runner tunnels the bytes (services/runner README, *Database
-connections*). The password enters the sandboxed run: editors are trusted to see it, so owners use a read-only
-database user. A failed run's reason is redacted of each connection's password as of a secret value. Owners set a
-connection with `PUT {name, connection: {host, port, database, user, password, tls?, ca?}}` on the secrets address.
+`const db = await caps.db(name)` opens a session on a connection the pinned version declares with a database kind
+(`secrets = {NAME: 'postgres'}` or `{NAME: 'mysql'}`, RESOLVER_DATABASE_KINDS) and the owner configured
+(`database.ts`: `unknown_connection` for any other name, `connection_unavailable` when unset or stored for another
+kind; `caps.fetch` refuses such a name as `secret_host_forbidden`). `db.query(sql, params?)` answers
+`{rows, columns, command, count}` (`$1` placeholders for Postgres, `?` for MySQL); `db.end()` closes it. There is no
+`caps.postgres`. The settings, password included, go to the runner worker's driver for the kind, never to resolver
+code; the runner tunnels the bytes (services/runner README, *Database connections*, which also lists the type
+mapping and MySQL's differences). Resolver code never sees the password, but it can run any SQL the connection's
+user may, so owners use a read-only database user. A failed run's reason is redacted of each connection's password
+as of a secret value. Owners set a connection with `PUT {name, connection: {host, port, database, user, password,
+tls?, ca?}}` on the secrets address; it is stored with the declared kind.
 
 ## `caps.query`
 

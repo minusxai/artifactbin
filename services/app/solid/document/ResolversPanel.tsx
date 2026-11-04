@@ -6,11 +6,13 @@
  * runs `{ <name> { test } }` as the owner against the listed revision and shows the string, or the refusal code with
  * the owner-only detail.
  *
- * A name bound to `postgres` is a database connection: host, port, database, user and password, saved together
- * (write-only, like a secret value). Its password enters the resolver's sandboxed run, so the hint says to use a
- * read-only database user.
+ * A name bound to a database kind (RESOLVER_DATABASE_KINDS: `postgres`, `mysql`) is a database connection of that
+ * kind: host, port (the kind's default to start), database, user and password, saved together (write-only, like a
+ * secret value). The password stays in the runner's worker process and never reaches resolver code; the hint still
+ * says to use a read-only database user, since resolver code runs whatever SQL that user may.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
+import { isResolverDatabaseKind, type ResolverDatabaseKind } from '@artifactbin/contracts';
 import { Button } from '../ui/Button';
 import { Field, Input } from '../ui/Field';
 import { ListRow, Panel } from '../ui/Panel';
@@ -67,9 +69,13 @@ function SecretRow(props: { resolver: PageResolver; name: string; host: string; 
 
 const CONNECTION_FIELDS = [['host', 'Host', 'text'], ['port', 'Port', 'number'], ['database', 'Database', 'text'], ['user', 'User', 'text'], ['password', 'Password', 'password']] as const;
 type ConnectionField = typeof CONNECTION_FIELDS[number][0];
+/** Each kind's label and default port; a kind added to RESOLVER_DATABASE_KINDS must be added here (a type error otherwise). */
+const DATABASE_KIND: Record<ResolverDatabaseKind, { label: string; port: string }> = { postgres: { label: 'Postgres', port: '5432' }, mysql: { label: 'MySQL', port: '3306' } };
 
-function ConnectionRow(props: { resolver: PageResolver; name: string; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
-  const [values, setValues] = createSignal<Record<ConnectionField, string>>({ host: '', port: '5432', database: '', user: '', password: '' });
+function ConnectionRow(props: { resolver: PageResolver; name: string; kind: ResolverDatabaseKind; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
+  // A row's kind is its resolver version's, fixed for the row's life.
+  const kind = DATABASE_KIND[props.kind];
+  const [values, setValues] = createSignal<Record<ConnectionField, string>>({ host: '', port: kind.port, database: '', user: '', password: '' });
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const complete = () => CONNECTION_FIELDS.every(([key]) => values()[key].trim() !== '');
@@ -89,7 +95,7 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; set: boole
   return <ListRow class="items-end">
     <div class="grid min-w-40 gap-1">
       <span class="font-mono text-sm text-fg">{props.name}</span>
-      <span class="font-sans text-xs text-muted">Postgres connection</span>
+      <span class="font-sans text-xs text-muted">{kind.label} connection</span>
       <span><Badge tone={props.set ? 'accent' : 'dim'}>{props.set ? 'Set' : 'Not set'}</Badge></span>
     </div>
     <form class="grid flex-1 gap-2" onSubmit={(event) => { event.preventDefault(); if (complete()) void send('PUT'); }}>
@@ -101,7 +107,7 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; set: boole
         </For>
       </div>
       <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
-      <p class="m-0 font-sans text-xs text-muted">Use a read-only database user: the password reaches the resolver's sandboxed run, and page editors can read it. TLS with full certificate verification is required.</p>
+      <p class="m-0 font-sans text-xs text-muted">Use a read-only database user: resolver code can run any SQL that user is allowed. The password stays in the runner's worker process and never reaches resolver code. TLS with full certificate verification is required.</p>
       <div class="flex gap-2">
         <Button type="submit" size="md" disabled={busy() || !complete()}>Save connection</Button>
         <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove connection</Button></Show>
@@ -130,8 +136,9 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
     <Show when={names().length} fallback={<StatusMessage kind="empty">This resolver declares no secrets.</StatusMessage>}>
       <ul class="m-0 list-none p-0"><For each={names()}>{(name) => {
         const onNames = (next: string[]) => { setSet(next); setOutcome(null); };
-        return props.resolver.secrets[name] === 'postgres'
-          ? <ConnectionRow resolver={props.resolver} name={name} set={set().includes(name)} onNames={onNames} />
+        const kind = props.resolver.secrets[name];
+        return isResolverDatabaseKind(kind)
+          ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} onNames={onNames} />
           : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
       }}
       </For></ul>

@@ -182,6 +182,8 @@ jobs:
       # download alone, not an apt pass (~30s).
       - run: npx playwright install chromium
       - run: docker pull postgres:17-alpine
+      # The resolver caps.db end-to-end test starts its own TLS MySQL from this image (and skips without it).
+      - run: docker pull mysql:8
       # The test global setup builds the server reader behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
