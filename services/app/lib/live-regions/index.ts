@@ -10,6 +10,8 @@
  *           compactRegion (merged state → saved page, its id write-back and its snapshot).
  * Browser:  editorState (its plugins: sync, undo, id dedupe, Markdown shortcuts, keymap, clipboard), regionCommands,
  *           relativePosition / absolutePosition (Yjs relative positions, for cursors and presence).
+ *           validateRegionUpdate (every incoming update, before it is stored or relayed), editableRegions (a page's
+ *           declared regions).
  * Refusals: LiveRegionRefusal, typed by `code`.
  *
  * No storage, transport or UI: bytes in, bytes out. Every client starts from the server's state bytes.
@@ -18,5 +20,7 @@ export { regionSchema, safeHref, type RegionKind } from './schema';
 export { LiveRegionRefusal } from './refusal';
 export { applyRegionRevision, createRegionState, normalizeRegionHtml, regionHtml, regionText } from './state';
 export { compactRegion } from './compaction';
+export { validateRegionUpdate } from './validate';
+export { editableRegions, isRegionId } from './page-regions';
 export { editorState, regionCommands } from './editor';
 export { absolutePosition, relativePosition } from './binding';
