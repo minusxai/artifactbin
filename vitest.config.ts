@@ -26,7 +26,7 @@ const SERVER_BOOT_TESTS = [
 ];
 
 /** Long property runs (thousands of random cases): heavy like the tests above, so `integration` alone runs them. */
-const PROPERTY_SOAK_TESTS = ['services/app/lib/live-regions/__tests__/convergence.soak.test.ts'];
+const PROPERTY_SOAK_TESTS = ['services/app/lib/live-regions/__tests__/convergence.soak.test.ts', 'services/app/lib/live-regions/__tests__/cells.soak.test.ts'];
 
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
 const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))];
