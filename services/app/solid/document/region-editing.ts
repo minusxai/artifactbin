@@ -12,6 +12,9 @@
  *    (lib/annotations/region-comment); it is read again after every saved version, which identifies new blocks.
  *  - `pagehide` leaves (pending edits go with keepalive; the stream closes, so the server's last-editor save runs);
  *    `pageshow` from the back-forward cache resumes.
+ *  - A DOC (`autoOpen`: a page "New" made, one rich region for its whole body) is edited the moment it loads: its first
+ *    region's session opens with no press, through the same messages a press sends. The first time, the frame takes
+ *    the focus and is asked for the caret (`region-command` `focus`), so the person types straight into the title.
  */
 import type { RegionFrameMessage, RegionKind, RegionParentMessage } from '@artifactbin/contracts';
 import { createRegionClient, type RegionClient, type RegionClientEvents } from '@/lib/artifact-backend/region-http';
@@ -53,6 +56,10 @@ export interface RegionEditingOptions {
   win?: EventTarget;
   /** A save made a new page version. */
   onSaved?: (version: number) => void;
+  /** Open the page's first region as soon as the frame is told its regions, without a press (a doc). */
+  autoOpen?: boolean;
+  /** Moves the page's focus into the frame (the first auto-open), so keys reach the editor there. */
+  focusFrame?: () => void;
 }
 
 export interface RegionEditing {
@@ -75,6 +82,8 @@ export function startRegionEditing(options: RegionEditingOptions): RegionEditing
   let disposed = false;
   let loaded = false;
   let attached = false;
+  /** The first auto-open (the one that takes the focus) happened. */
+  let autoOpened = false;
   /** Regions with a session (or one being opened) for the current document. */
   const open = new Set<string>();
   const kinds = () => new Map(page.regions.map((region) => [region.id, region.kind]));
@@ -87,7 +96,14 @@ export function startRegionEditing(options: RegionEditingOptions): RegionEditing
   };
   const client = (options.createClient ?? ((next: RegionClientEvents) => createRegionClient(options.id, next)))(events);
 
-  const enable = () => { if (attached && loaded && page.regions.length && !disposed) bridge.sendRegion({ kind: 'regions-enabled', regionIds: page.regions.map((region) => region.id) }); };
+  const enable = () => {
+    if (!attached || !loaded || !page.regions.length || disposed) return;
+    bridge.sendRegion({ kind: 'regions-enabled', regionIds: page.regions.map((region) => region.id) });
+    if (!options.autoOpen) return;
+    const first = page.regions.find((region) => region.kind === 'rich') ?? page.regions[0]!;
+    void openRegion(first.id, !autoOpened);
+    autoOpened = true;
+  };
   const read = async () => {
     const html = await options.loadHtml().catch(() => null);
     if (disposed || html === null) return;
@@ -97,7 +113,7 @@ export function startRegionEditing(options: RegionEditingOptions): RegionEditing
     if (first) { if (page.regions.length) listen(); enable(); }
   };
 
-  const openRegion = async (regionId: string) => {
+  const openRegion = async (regionId: string, focus = false) => {
     const kind = kinds().get(regionId);
     if (!kind || open.has(regionId)) return;
     open.add(regionId);
@@ -107,6 +123,8 @@ export function startRegionEditing(options: RegionEditingOptions): RegionEditing
     if (!open.has(regionId)) { if (session) client.close(regionId); return; }
     if (!session) { open.delete(regionId); bridge.sendRegion({ kind: 'region-closed', regionId, reason: 'refused' }); return; }
     bridge.sendRegion({ kind: 'region-session', regionId, regionKind: session.kind, clientId: session.clientId, state: session.state, seq: session.seq });
+    // The frame keeps a command for a region whose editor is still loading and gives it to the editor once mounted.
+    if (focus) { options.focusFrame?.(); bridge.sendRegion({ kind: 'region-command', regionId, name: 'focus' }); }
   };
   let stop = () => {};
   const listen = () => {

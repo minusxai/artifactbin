@@ -7,6 +7,7 @@ import Users from 'lucide-solid/icons/users';
 import Image from 'lucide-solid/icons/image';
 import FolderInput from 'lucide-solid/icons/folder-input';
 import MessageSquare from 'lucide-solid/icons/message-square';
+import Bot from 'lucide-solid/icons/bot';
 import { RenameDocument } from './RenameDocument';
 import { DeleteAction } from './DeleteAction';
 import { InstallArtifactLink } from './InstallArtifact';
@@ -46,6 +47,8 @@ interface DocumentActionsProps {
   hideFork?: boolean;
   /** Open the page's sharing dialog (the panel closes under it). */
   onShare?: () => void;
+  /** A doc's editors: open the agent handoff (the paste an agent starts from), solid/document/AgentHandoffDialog. */
+  onHandToAgent?: () => void;
 }
 /** Controls own only panel state; the document page owns editing and annotation lifetimes. */
 export function DocumentActions(props: DocumentActionsProps): JSX.Element {
@@ -65,6 +68,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={!props.archived && props.accountSession}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="People" onClick={() => setPeopleOpen((open) => !open)}><Users size={14} />people</Button></Show>
       <Show when={activeEditor() && props.onSettings}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="Artifact settings" onClick={props.onSettings}><Settings size={14} />artifact settings</Button></Show>
       <Show when={activeEditor() && props.onSocialPreview}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="Edit social preview" onClick={props.onSocialPreview}><Image size={14} />social preview</Button></Show>
+      <Show when={activeEditor() && props.onHandToAgent}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="Hand to an agent" onClick={props.onHandToAgent}><Bot size={14} />hand to an agent</Button></Show>
       <Show when={activeEditor() && props.onRenamed}><RenameDocument id={props.id} title={props.title} onRenamed={props.onRenamed!} /></Show>
       <Show when={activeCommenter()}><Button variant="ghost" size="sm" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW_BUTTON}><MessageSquare size={14} /><span class="flex-1 text-left">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></Button></Show>
       <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} look="row" /></Show>

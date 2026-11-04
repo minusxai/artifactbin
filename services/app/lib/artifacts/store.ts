@@ -26,6 +26,7 @@ import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { closeLiveRegions, planRegionMerge, planRegionSave, type RegionPlan } from './regions';
+import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
@@ -452,9 +453,10 @@ async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: Artif
   const plan = await planRegionSave(tx, current, await pageLedger(tx, current), options);
   if (!plan) return unchanged();
   if (plan.html === current.source) return unchanged(await plan.commit(tx, null, actor));
+  const named = docTitleAfterSave(current, plan.html), html = named?.html ?? plan.html;
   const input: ArtifactInput = {
-    format: 'html', source: plan.html,
-    meta: { ...current.meta, htmlIdentity: plan.ledger, htmlScriptFingerprint: scriptFingerprint(plan.html), htmlLibraries: libraryVersions(), htmlIdentityCarry: undefined },
+    format: 'html', source: html, ...(named ? { title: named.title } : {}),
+    meta: { ...current.meta, htmlIdentity: plan.ledger, htmlScriptFingerprint: scriptFingerprint(html), htmlLibraries: libraryVersions(), htmlIdentityCarry: undefined },
   };
   await write.validateContent(input);
   const updated = await write.publish(input);

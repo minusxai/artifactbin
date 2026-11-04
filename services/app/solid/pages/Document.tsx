@@ -34,7 +34,6 @@ import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
-import {PendingReaderAction} from '../document/PendingReaderAction';
 import {PendingReaderDialog} from '../document/PendingReaderDialog';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
@@ -42,7 +41,7 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** Dialogs and controls load on first use. Discussion tools load when there are comments or the reader requests them.
  * SelectionActions stays eager so the first native selection/right-click retains its capability bridge. */
-const CopyAgentButton = lazy(() => import('../components/CopyAgentButton').then(m => ({default:m.CopyAgentButton})));
+const AgentHandoffDialog = lazy(() => import('../document/AgentHandoffDialog').then(m => ({default:m.AgentHandoffDialog})));
 const NotFoundPage = lazy(() => import('./NotFound').then(m => ({default:m.NotFoundPage})));
 const ReaderPresenceControls = lazy(() => import('../document/ReaderPresenceControls').then(m => ({ default: m.ReaderPresenceControls })));
 const DocumentActions = lazy(() => import('../document/DocumentActions').then(m => ({ default: m.DocumentActions })));
@@ -129,6 +128,9 @@ export function DocumentPage(): JSX.Element {
     setDiscussionActive(needsCommentPresentation({ canRead: comments().canReadComments, active: discussionActive(), linked: !!(new URLSearchParams(location.search).get('comment') || new URLSearchParams(location.search).get('thread')), railOpen: railOpen(), composing: !!initialAnnotationSelection(), picking: pickRequested(), openCount: openAnnotationCount(), liveCount: liveAnnotations()?.length ?? 0 }));
   });
   const [sharingOpen, setSharingOpen] = createSignal(false);
+  const [handoffOpen, setHandoffOpen] = createSignal(false);
+  /** A doc ("New" made it: one rich region for its whole body) is edited from the moment it loads, and can be handed to an agent. */
+  const isDoc = () => (live()?.template ?? page?.surface?.template) === 'doc';
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = createSignal(false);
   const [previewHead, setPreviewHead] = createSignal<{ source: string; editId: string; version: number } | null>(null);
@@ -270,7 +272,7 @@ export function DocumentPage(): JSX.Element {
           uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
         }) : undefined,
         // Live editing of the page's editable regions: editors of the head only (a viewer or commenter never opens one).
-        regions: backend ? { enabled: editable, loadHtml: async () => (await backend.load())?.html ?? null } : undefined,
+        regions: backend ? { enabled: editable, loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc' } : undefined,
       });
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
@@ -339,11 +341,12 @@ export function DocumentPage(): JSX.Element {
         openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
         onShare={() => { close(); setSharingOpen(true); }}
+        onHandToAgent={isDoc() ? () => { close(); setHandoffOpen(true); } : undefined}
         onDeleted={isOwner() ? () => window.location.assign('/') : undefined} /></></Suspense>} />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
-      <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
-        <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent" />}><CopyAgentButton id={id!} template="doc" /></Suspense></div>
+      <Show when={editable() && isDoc() && handoffOpen()}>
+        <Suspense fallback={<PendingReaderDialog title="Hand to an agent" onClose={() => setHandoffOpen(false)} />}><AgentHandoffDialog id={id!} template="doc" onClose={() => setHandoffOpen(false)} /></Suspense>
       </Show>
       <Show when={page?.surface?.pwaEnabled && location.pathname === artifactAppPath(id!) && new URLSearchParams(location.search).has('install')}><ReaderNotice label="App installation" load={() => import('../document/InstallArtifact')}>{({InstallArtifact}) => <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />}</ReaderNotice></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>

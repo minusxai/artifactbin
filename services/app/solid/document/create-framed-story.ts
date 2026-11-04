@@ -143,6 +143,8 @@ interface FramedStoryOptions {
     /** The saved head's HTML, as an editor reads it (ArtifactBackend.load). */
     loadHtml: () => Promise<string | null>;
     onSaved?: (version: number) => void;
+    /** A doc: its region opens for this editor as the page loads, with the focus (region-editing `autoOpen`). */
+    autoOpen?: boolean;
     load?: RegionEditingLoader;
   };
 }
@@ -202,7 +204,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
         loading = false;
         const bridge = current();
         if (stopped || !bridge || !regions.enabled() || editing) return;
-        editing = startRegionEditing({ id: options.id, bridge, loadHtml: regions.loadHtml, onSaved: regions.onSaved });
+        editing = startRegionEditing({ id: options.id, bridge, loadHtml: regions.loadHtml, onSaved: regions.onSaved, autoOpen: regions.autoOpen, focusFrame: () => frame.focus({ preventScroll: true }) });
         if (nonce()) editing.attached();
       }, () => { loading = false; });
     }));

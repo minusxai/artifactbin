@@ -7,6 +7,7 @@ import {nativeCspDeclarations} from '@/lib/trust';
 import { json, thrownMessage } from '../../http';
 import {socialPreviewImage, socialPreviewImageValue, type StoredContent} from '@/lib/document';
 import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
+import {STORY_TEMPLATE_NAMES} from '@/lib/validation';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
@@ -112,7 +113,10 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return json({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
       const assets=htmlAssetLinks(source);if(assets.refs.length>128)return json({error:'invalid_refs'},400);
       for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return json({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
-      return {format:'html',source,meta:{refs,htmlCsp:csp.extensions},derivedTitle:metadata.title,derivedDescription:metadata.description};
+      // The page's starter kind (`doc`: a page that is one editable region, opened for its editors on load). A replace
+      // carries the stored one unless the body names another (lib/publish requests), so an agent's write keeps a doc a doc.
+      const template=(STORY_TEMPLATE_NAMES as readonly unknown[]).includes(body.template)?{template:body.template as string}:{};
+      return {format:'html',source,meta:{refs,htmlCsp:csp.extensions,...template},derivedTitle:metadata.title,derivedDescription:metadata.description};
     }
     catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
   }

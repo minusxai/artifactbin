@@ -13,6 +13,15 @@ it('returns a signed-out creator to this exact start entry after email login', a
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/login?callbackUrl=%2Fstart%3Fagent%3D1'));
   expect(fetch).toHaveBeenCalledOnce();
 });
+it('returns a signed-out person who chose New to /start after email login, from the doc create door', async () => {
+  window.history.replaceState(null, '', '/start');
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('{}', { status: 401 }));
+  vi.stubGlobal('fetch', fetch);
+  render(() => <StartPage />);
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/login?callbackUrl=%2Fstart'));
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(fetch.mock.calls[0]![0]).toBe('/api/my/artifacts');
+});
 it('does not repeat a creation or redirect to login after an uncertain server failure', async () => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError('Failed to fetch'));
   vi.stubGlobal('fetch', fetch);

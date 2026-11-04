@@ -110,6 +110,48 @@ describe('startRegionEditing', () => {
     expect(told).not.toMatch(/token|leak|cookie|bearer|authorization|secret|savedVersion/i);
   });
 
+  it('a doc (autoOpen) opens its first rich region with no press, takes the focus once, and opens it again for a new document', async () => {
+    const frame = fakeBridge(), server = fakeClient();
+    const focusFrame = vi.fn();
+    const editing = startRegionEditing({ id: 'doc1', bridge: frame.bridge, loadHtml: async () => PAGE, createClient: server.make, win: new EventTarget(), autoOpen: true, focusFrame });
+    editing.attached();
+    await settle();
+    expect(server.calls).toEqual(['open notes']);
+    expect(frame.sent).toEqual([
+      { kind: 'regions-enabled', regionIds: ['title', 'notes'] },
+      { kind: 'region-session', regionId: 'notes', regionKind: 'rich', clientId: 7, state: new Uint8Array([1, 2, 3]), seq: 3 },
+      { kind: 'region-command', regionId: 'notes', name: 'focus' },
+    ]);
+    expect(focusFrame).toHaveBeenCalledOnce();
+    // The frame asking for the same region (a press) opens nothing more.
+    frame.say({ kind: 'region-open', regionId: 'notes' });
+    await settle();
+    expect(server.calls).toEqual(['open notes']);
+    // A new document in the frame: the session ends and the region opens again, without taking the focus a second time.
+    editing.attached();
+    await settle();
+    expect(server.calls).toEqual(['open notes', 'close notes', 'open notes']);
+    expect(frame.sent.slice(3)).toEqual([
+      { kind: 'regions-enabled', regionIds: ['title', 'notes'] },
+      { kind: 'region-session', regionId: 'notes', regionKind: 'rich', clientId: 7, state: new Uint8Array([1, 2, 3]), seq: 3 },
+    ]);
+    expect(focusFrame).toHaveBeenCalledOnce();
+  });
+
+  it('a page that is not a doc opens nothing until the frame asks, and a doc whose open is refused takes no focus', async () => {
+    const plain = fakeBridge(), server = fakeClient();
+    startRegionEditing({ id: 'doc1', bridge: plain.bridge, loadHtml: async () => PAGE, createClient: server.make, win: new EventTarget() }).attached();
+    await settle();
+    expect(server.calls).toEqual([]);
+    expect(plain.sent).toEqual([{ kind: 'regions-enabled', regionIds: ['title', 'notes'] }]);
+    const refused = fakeBridge(), closed = fakeClient(), focusFrame = vi.fn();
+    closed.refuse();
+    startRegionEditing({ id: 'doc1', bridge: refused.bridge, loadHtml: async () => PAGE, createClient: closed.make, win: new EventTarget(), autoOpen: true, focusFrame }).attached();
+    await settle();
+    expect(refused.sent.at(-1)).toEqual({ kind: 'region-closed', regionId: 'notes', reason: 'refused' });
+    expect(focusFrame).not.toHaveBeenCalled();
+  });
+
   it('a refused open closes the region in the frame', async () => {
     const frame = fakeBridge(), server = fakeClient();
     server.refuse();
