@@ -79,5 +79,6 @@
   "services/app/lib/live-regions/__tests__/region-model.test.ts",
   "services/app/lib/live-regions/__tests__/binding.test.ts",
   "services/app/lib/live-regions/__tests__/concurrent-editing.test.ts",
-  "services/app/lib/live-regions/__tests__/convergence.property.test.ts"
+  "services/app/lib/live-regions/__tests__/convergence.property.test.ts",
+  "services/app/lib/annotations/__tests__/region-comment.test.ts"
 ]
