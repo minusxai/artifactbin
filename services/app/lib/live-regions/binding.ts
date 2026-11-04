@@ -47,6 +47,36 @@ function writeStep(text: Y.Text, kind: RegionKind, step: { getMap(): { forEach(f
 }
 
 const char = (linear: Linear, offset: number) => (offset >= 0 && offset < linear.length ? linear.units(offset, offset + 1)[0]?.ch : undefined);
+const differences = (have: Attrs, want: { ch: string; attrs: Attrs }) => keysOf(want.ch).filter((key) => (have[key] ?? null) !== (want.attrs[key] ?? null)).length;
+
+/**
+ * Where an edit of line ends goes in a run of them. Inserting or deleting "\n"s anywhere in a run of "\n"s gives
+ * the same characters, but each place keeps different line ends: the place chosen leaves the fewest block
+ * attributes to rewrite on the line ends it keeps, so every kept "\n" stays the end of the block it ended (its ids,
+ * a code block's continuation). Ties go right, past the "\n" at the step's place: Enter at a block's end keeps that
+ * block's "\n" with its text. Only line ends move: everywhere else the step's own position is the user's.
+ * `offset` is in the new text; `runEnd` is the end of the run in the new text, the last line end this can affect.
+ */
+function place(old: Linear, next: Linear, base: number, from: number, inserted: number, deleted: number, clip: number): { offset: number; runEnd: number } {
+  let last = from;
+  // Each move passes one line end, which must be one in both texts (a code line end joined into a paragraph is not).
+  if (inserted && !deleted) while (last + inserted < Math.min(clip, next.length) && char(next, last) === '\n' && char(next, last + inserted) === '\n' && char(old, last - base) === '\n') last++;
+  if (deleted && !inserted) while (last < clip && last - base + deleted < old.length && char(old, last - base) === '\n' && char(old, last - base + deleted) === '\n' && char(next, last) === '\n') last++;
+  const runEnd = last + inserted;
+  if (last === from) return { offset: from, runEnd };
+  // A kept line end at new offset o was old o - base before the edit's place, and old o - base - inserted + deleted
+  // after it. Moving the place one right moves the line end at new offset `place` from after it to before it.
+  const wanted = next.units(from, runEnd), had = old.units(from - base, last - base + deleted);
+  const cost = (o: number, oldOffset: number) => differences(had[oldOffset - from + base]!.attrs, wanted[o - from]!);
+  let current = 0;
+  for (let o = from + inserted; o < runEnd; o++) current += cost(o, o - base - inserted + deleted);
+  let best = { offset: from, cost: current };
+  for (let at = from; at < last; at++) {
+    current += cost(at, at - base) - cost(at + inserted, at - base + deleted);
+    if (current <= best.cost) best = { offset: at + 1, cost: current };
+  }
+  return { offset: best.offset, runEnd };
+}
 
 function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, oldTo: number, start: number, newTo: number, clip: number): void {
   const before = old.units(oldFrom, oldTo), after = next.units(start, newTo);
@@ -56,22 +86,29 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - 1 - suffix]!.ch === after[after.length - 1 - suffix]!.ch) suffix++;
   const deleted = before.length - prefix - suffix, inserted = after.length - prefix - suffix;
   const base = start - oldFrom;
-  let at = start + prefix;
-  // Only line ends slide: everywhere else the step's own position is the user's.
-  if (inserted && !deleted) while (at + inserted < Math.min(clip, next.length) && char(next, at) === '\n' && char(next, at + inserted) === '\n') at++;
-  if (deleted && !inserted) while (at - base + deleted < old.length && char(old, at - base) === '\n' && char(old, at - base + deleted) === '\n') at++;
-  if (deleted) text.delete(at, deleted);
-  if (inserted) insertUnits(text, at, next.units(at, at + inserted));
-  // Attributes: the range itself, and the "\n" of the line it ends in (a join or an open paste changes that
-  // block's attributes); characters past the range keep theirs.
-  const rangeEnd = Math.min(clip, Math.max(newTo, at + inserted));
+  const at = place(old, next, base, start + prefix, inserted, deleted, clip);
+  if (deleted) text.delete(at.offset, deleted);
+  if (inserted) insertUnits(text, at.offset, next.units(at.offset, at.offset + inserted));
+  // Attributes: the range itself with every line end the edit could have gone past, the "\n" of the line it ends in
+  // and, in a code block, the block's last "\n" (a join or an open paste changes that block's attributes, and a code
+  // block keeps its ids and structure on its last line); characters past them keep theirs.
+  const rangeEnd = Math.min(clip, Math.max(newTo, at.runEnd));
   const lineEnd = Math.min(clip, next.lineEnd(Math.max(start, rangeEnd - 1)));
-  const offsets = [...Array.from({ length: rangeEnd - start }, (_unused, i) => start + i), ...(lineEnd > rangeEnd ? [lineEnd - 1] : [])];
-  const oldAt = (offset: number) => (offset < at ? offset - base : offset - base - inserted + deleted);
+  const blockEnd = Math.min(clip, next.blockEnd(Math.max(start, rangeEnd - 1)));
+  const offsets = [...Array.from({ length: rangeEnd - start }, (_unused, i) => start + i), ...(lineEnd > rangeEnd ? [lineEnd - 1] : []), ...(blockEnd > Math.max(lineEnd, rangeEnd) ? [blockEnd - 1] : [])];
+  const oldAt = (offset: number) => (offset < at.offset ? offset - base : offset - base - inserted + deleted);
+  // A join can carry the rest of a code block into the paragraph before it: that text's inner line ends are spaces
+  // in a paragraph, so where its characters changed they are rewritten (only then: it is the rest of a block).
+  if (lineEnd > rangeEnd && next.blockAt(lineEnd - 1).type.name !== 'code_block' && old.blockAt(oldAt(lineEnd - 1)).type.name === 'code_block') {
+    for (let offset = rangeEnd; offset < lineEnd - 1; offset++) {
+      const [want] = next.units(offset, offset + 1), [have] = old.units(oldAt(offset), oldAt(offset) + 1);
+      if (want && have && want.ch !== have.ch) { text.delete(offset, 1); insertUnits(text, offset, [want]); }
+    }
+  }
   const formats: [number, Attrs][] = [];
   for (const offset of offsets) {
-    if (offset >= at && offset < at + inserted) continue;
-    const want = offset === lineEnd - 1 && offset >= rangeEnd ? next.units(offset, offset + 1)[0]! : after[offset - start]!;
+    if (offset >= at.offset && offset < at.offset + inserted) continue;
+    const want = next.units(offset, offset + 1)[0];
     const have = old.units(oldAt(offset), oldAt(offset) + 1)[0];
     if (!want || !have) continue;
     const change: Attrs = {};

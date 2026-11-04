@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { canonicalizeHtmlPage } from '../../html-page';
-import { LiveRegionRefusal, normalizeRegionHtml } from '..';
+import { LiveRegionRefusal, normalizeRegionHtml, regionText } from '..';
 import { writeRegion } from '../html';
 import { bare, idsOf, Room, type Client } from './harness';
 
@@ -123,6 +123,111 @@ describe('structure', () => {
       run: (_room, A) => { A.select(A.find('a', { after: true })).key('Enter').key('Enter').type('after'); },
       expected: '<ul><li><p>a</p></li></ul><p>after</p>', kept: ['after'] },
   ]);
+});
+
+/**
+ * A line end inserted or deleted next to another line end could go at any place in that run of "\n"s: every place
+ * gives the same characters. The binding picks the one that keeps every other line end's attributes (code
+ * continuation, ids), and writes whatever still differs, so the shared text holds exactly what the editor shows.
+ * One editor alone, where no peer's re-render can hide a wrong write.
+ */
+describe('line ends next to empty lines', () => {
+  it('soak seed -1228318490: ``` in an empty region, synced, B presses Enter twice at the code block\'s start and an agent republishes the unchanged region: one three-line code block everywhere', () => {
+    const [room, A, B] = open('');
+    A.select(A.blockStart(0)).type('```');
+    room.sync();
+    B.select(B.blockStart(0)).key('Enter');
+    B.select(B.blockStart(0)).key('Enter');
+    room.agent('');
+    expect(room.invariants()).toBe('<pre><code>\n\n</code></pre>');
+  });
+
+  runScenarios([
+    { name: 'Enter twice in an empty code block: one code block of three lines',
+      region: '', clients: ['A'],
+      run: (_room, A) => { A.select(A.blockStart(0)).type('```').key('Enter').key('Enter').type('end'); },
+      expected: '<pre><code>\n\nend</code></pre>', kept: ['end'] },
+    { name: 'Enter after a code block\'s text, before its empty last line: one code block, one more line',
+      region: '<pre><code>x\n\n</code></pre>', clients: ['A'],
+      run: (_room, A) => { A.select(A.find('x', { after: true })).key('Enter'); },
+      expected: '<pre><code>x\n\n\n</code></pre>' },
+    { name: 'Enter twice at the start of a new, empty code block: the second Enter passes the block\'s last line end, and it is still one code block',
+      region: '', clients: ['A'],
+      run: (_room, A) => { A.select(A.blockStart(0)).type('```').key('Enter'); A.select(A.blockStart(0)).key('Enter'); },
+      expected: '<pre><code>\n\n</code></pre>' },
+  ]);
+
+  it('Enter at the end of a code block before an empty paragraph: the code block gains a line and keeps its id, the paragraph keeps its own', () => {
+    const [room, A] = open('<pre><code>x\n</code></pre><p></p><p>z</p>', ['A']);
+    const [code, empty, last] = idsOf(room.html());
+    A.select(A.blockStart(0, true)).key('Enter');
+    expect(room.invariants()).toBe(`<pre data-af-id="${code}"><code>x\n\n</code></pre><p data-af-id="${empty}"></p><p data-af-id="${last}">z</p>`);
+  });
+
+  it('Enter at the end of a paragraph before an empty paragraph: the new block goes between them without an id, both keep theirs', () => {
+    const [room, A] = open('<p>abc</p><p></p><p>z</p>', ['A']);
+    const [first, empty, last] = idsOf(room.html());
+    A.select(A.blockStart(0, true)).key('Enter');
+    expect(room.invariants()).toBe(`<p data-af-id="${first}">abc</p><p></p><p data-af-id="${empty}"></p><p data-af-id="${last}">z</p>`);
+  });
+
+  it('Enter in an empty paragraph before another empty paragraph: the new block goes after the first, both keep their ids', () => {
+    const [room, A] = open('<p></p><p></p><p>z</p>', ['A']);
+    const [first, second, last] = idsOf(room.html());
+    A.select(A.blockStart(0)).key('Enter');
+    expect(room.invariants()).toBe(`<p data-af-id="${first}"></p><p></p><p data-af-id="${second}"></p><p data-af-id="${last}">z</p>`);
+  });
+
+  it('Enter at the end of a paragraph while B types in the empty paragraph after it: B\'s text stays in that paragraph, with its id', () => {
+    const [room, A, B] = open('<p>abc</p><p></p><p>z</p>');
+    const [first, empty, last] = idsOf(room.html());
+    A.select(A.blockStart(0, true)).key('Enter');
+    B.select(B.blockStart(1)).type('typed');
+    expect(room.invariants()).toBe(`<p data-af-id="${first}">abc</p><p></p><p data-af-id="${empty}">typed</p><p data-af-id="${last}">z</p>`);
+  });
+
+  it('Backspace in an empty paragraph after a paragraph and before another empty one: that paragraph goes, the others keep their ids', () => {
+    const [room, A] = open('<p>abc</p><p></p><p></p><p>z</p>', ['A']);
+    const [first, , third, last] = idsOf(room.html());
+    A.select(A.blockStart(1)).key('Backspace');
+    expect(room.invariants()).toBe(`<p data-af-id="${first}">abc</p><p data-af-id="${third}"></p><p data-af-id="${last}">z</p>`);
+  });
+});
+
+/**
+ * Deletions that join blocks of different kinds, or remove line ends next to formatted ones, through one editor that
+ * opened its region from state bytes, as every editor does.
+ */
+describe('joins and deletions at formatted line ends', () => {
+  it('Backspace at the start of the second of two empty paragraphs removes the first; the paragraph after keeps no attribute of its line end', () => {
+    const [room, A] = open('<p>abc</p><p></p><p></p><p>z</p>', ['A']);
+    const [first, , third, last] = idsOf(room.html());
+    A.select(A.blockStart(2)).key('Backspace');
+    expect(room.invariants()).toBe(`<p data-af-id="${first}">abc</p><p data-af-id="${third}"></p><p data-af-id="${last}">z</p>`);
+  });
+
+  it('deleting from the end of the second of two empty paragraphs into the paragraph after: one block with that paragraph\'s text, and no line end\'s id on the text', () => {
+    const [room, A] = open('<p>abc</p><p></p><p></p><p>z</p>', ['A']);
+    A.delete(A.blockStart(2), A.blockStart(3));
+    expect(bare(room.invariants())).toBe('<p>abc</p><p></p><p>z</p>');
+    expect(regionText(room.server).toDelta().filter((op: { insert: string; attributes?: object }) => op.insert !== '\n' && op.attributes)).toEqual([]);
+  });
+
+  it('deleting from an empty paragraph into the code block after it: the code\'s text joins the paragraph and its line break is a space there, in the shared text too', () => {
+    const [room, A] = open('<p>a</p><p></p><pre><code>\n</code></pre><p></p>', ['A']);
+    const [first, empty, , last] = idsOf(room.html());
+    A.delete(A.blockStart(1), A.blockStart(2));
+    // The saved form drops the paragraph's trailing space; the shared text holds it, as the editor does.
+    expect(room.invariants()).toBe(`<p data-af-id="${first}">a</p><p data-af-id="${empty}"></p><p data-af-id="${last}"></p>`);
+    expect(regionText(room.server).toString()).toBe('a\n \n\n');
+  });
+
+  it('deleting from one code block into the next: one code block, with the first one\'s id on its last line end', () => {
+    const [room, A] = open('<p></p><pre><code>a\nb\n</code></pre><pre><code>\n</code></pre><p>q</p>', ['A']);
+    const [empty, code, , last] = idsOf(room.html());
+    A.delete(A.find('b'), A.blockStart(2));
+    expect(room.invariants()).toBe(`<p data-af-id="${empty}"></p><pre data-af-id="${code}"><code>a\n\n</code></pre><p data-af-id="${last}">q</p>`);
+  });
 });
 
 describe('text', () => {

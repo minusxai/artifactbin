@@ -168,6 +168,23 @@ describe('agent Markdown (prosemirror-markdown, CommonMark, raw HTML off)', () =
   });
 });
 
+describe('the shared text', () => {
+  it('a replica that read its formatted state from bytes deletes a line end without spreading the attributes before it', () => {
+    // State bytes first, then the text: how every replica and fork opens a region. Yjs integrated the formats as
+    // a plain type's, so its search markers stayed on, and a deletion found through one dropped the marker ending the
+    // previous line end's id: "z" took that id.
+    const { state } = createRegionState('rich', '<p data-af-id="af-1">abc</p><p data-af-id="af-2"></p><p data-af-id="af-3"></p><p data-af-id="af-4">z</p>');
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, state);
+    const text = regionText(doc);
+    text.delete(5, 1);
+    expect(text.toDelta()).toEqual([
+      { insert: 'abc' }, { insert: '\n', attributes: { afId: 'af-1' } }, { insert: '\n', attributes: { afId: 'af-2' } },
+      { insert: 'z' }, { insert: '\n', attributes: { afId: 'af-4' } },
+    ]);
+  });
+});
+
 describe('three-way revision (republish and agent edits)', () => {
   /** A reader's edit made straight on the shared text: text inserted at `offset` within line `index`. */
   const readerTypes = (state: Uint8Array, index: number, offset: number, text: string, clientID = 7) => {
