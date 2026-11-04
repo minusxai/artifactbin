@@ -75,6 +75,10 @@ export const GATE_SPECS = Object.freeze([
   // Two editors and a viewer on one editable region; its key-to-peer latency is measured, so it shares the isolated bin.
   // 16s alone in `node scripts/gate-container.mjs --cpus 4 live-regions`; CI weight pending its first run.
   { name: 'live-regions', needsMail: true, serialGroup: 'clipboard', seconds: 20, timeoutMs: 60_000 },
+  // The same region with the document frame out of process (pages on another site, `<hex id>.localhost`, and site
+  // isolation on, as desktop Chrome has it): IME through the frame's own CDP target. Boots its own server.
+  // 8s against a dev server driven directly (no boot); CI weight pending its first run.
+  { name: 'live-regions-oop', needsMail: true, seconds: 25, timeoutMs: 90_000 },
   // Two signed-in writers and a signed-out reader on one @afbin/collab dataset cell (latency timed, p95 within a second).
   // 35s in `node scripts/gate-container.mjs --cpus 4 live-cells live-regions new-doc` (two leave saves are waited
   // for: the early-typing and the leave legs); CI weight pending its first run.
