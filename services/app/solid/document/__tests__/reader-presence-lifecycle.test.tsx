@@ -134,3 +134,14 @@ it('publishes the frame\'s region caret and paints collaborators\' region carets
  await waitFor(()=>expect(published.at(-1)).not.toHaveProperty('region'),{timeout:1000});
  engine.dispose();
 });
+
+it('a presence session started again (a new revision) publishes the region caret the frame last reported',async()=>{
+ const {startReaderPresence}=await import('../reader-presence-engine');
+ const published:Array<Record<string,unknown>>=[];
+ const caret={regionId:'af-6',anchor:'AQID',head:'BAUG'};
+ const controller={send:()=>{},subscribe:()=>()=>{},subscribeRegion:()=>()=>{},sendRegion:()=>{},regionsEnabled:()=>true,regionCaret:()=>caret} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const prefs={visible:true,shareCursor:true,shareSelection:true,showCursors:true,showSelections:true};
+ const engine=startReaderPresence({revision:'2',nonce:'n',active:true,controller,backend:{publishPresence:async input=>{published.push(input as unknown as Record<string,unknown>);return 'own';}},preferences:()=>prefs,changed:()=>{}});
+ await waitFor(()=>expect(published.at(-1)?.region).toEqual(caret),{timeout:1000});
+ engine.dispose();
+});

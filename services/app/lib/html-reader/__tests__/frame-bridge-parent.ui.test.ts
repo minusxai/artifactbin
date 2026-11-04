@@ -190,6 +190,23 @@ describe('createFrameBridgeParent', () => {
   });
 });
 
+describe('the frame\'s region caret', () => {
+  it('is the last region-caret the current document sent, none after region-blur or once a new document loads', () => {
+    const t = setup();
+    t.say({ kind: 'ready', nonce: 'n' });
+    expect(t.bridge.regionCaret()).toBeNull();
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: [], block: 'paragraph' });
+    expect(t.bridge.regionCaret()).toEqual({ regionId: 'r1', anchor: 'AA==', head: 'AQ==' });
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AA==', marks: [], block: 'not valid!' });
+    expect(t.bridge.regionCaret()).toEqual({ regionId: 'r1', anchor: 'AA==', head: 'AQ==' });
+    t.say({ kind: 'region-blur' });
+    expect(t.bridge.regionCaret()).toBeNull();
+    t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: [], block: 'paragraph' });
+    t.say({ kind: 'hello' });
+    expect(t.bridge.regionCaret()).toBeNull();
+  });
+});
+
 describe('regionFrameMessage', () => {
   it('admits only well-formed region messages within the contract limits', () => {
     expect(regionFrameMessage({ kind: 'region-slash', regionId: 'r1', x: 3, y: 4 })).toEqual({ kind: 'region-slash', regionId: 'r1', x: 3, y: 4 });

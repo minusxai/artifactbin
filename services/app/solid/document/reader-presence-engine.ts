@@ -29,6 +29,9 @@ export function startReaderPresence(options:ReaderPresenceEngineOptions){
   clock:{now:Date.now,setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>),setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>)}
  });
  const unsubscribe=options.controller.subscribe(session.receive);
+ // A session started again (a new revision) shares the caret the editor already reported: it resends only when it moves.
+ const caret='regionCaret' in options.controller?(options.controller as Pick<FrameBridgeParent,'regionCaret'>).regionCaret():null;
+ if(regions&&caret)session.regionCaret(caret);
  const stopRegions=regions?.subscribeRegion(message=>{if(message.kind==='region-caret')session.regionCaret({regionId:message.regionId,anchor:message.anchor,head:message.head});else if(message.kind==='region-blur')session.regionCaret(null);})??(()=>{});
  const leave=()=>{active=false;session.activeChanged();},restore=()=>{active=true;session.activeChanged();};
  window.addEventListener('pagehide',leave);window.addEventListener('pageshow',restore);

@@ -276,6 +276,8 @@ try {
 
   await section('saved versions reach the viewer; the last editor leaving saves one', async () => {
     check((await until(() => textOf(c), (text) => text?.includes('commentword'), 15_000))?.includes('commentword'), 'the viewer\'s open page shows the version the comment saved');
+    // Presence starts again on the new revision; A's caret has not moved since, and still shows.
+    check(await until(() => b.locator('[data-af-region-caret]').count(), (n) => n > 0, 5000) > 0, 'after the save, the editor still sees the owner\'s unmoved caret');
     await caretAtEnd(a, A, '[data-af-id="p1"]');
     await A.keyboard.type(' leaving-A');
     await caretAtEnd(b, B, '[data-af-id="p2"]');

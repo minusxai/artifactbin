@@ -1,4 +1,4 @@
-import {REGION_UPDATE_MAX_BYTES,type RegionFrameMessage,type RegionParentMessage,type UploadContext} from '@artifactbin/contracts';
+import {REGION_UPDATE_MAX_BYTES,type RegionCaret,type RegionFrameMessage,type RegionParentMessage,type UploadContext} from '@artifactbin/contracts';
 import {isRegionId,isRegionPosition} from '@/lib/html-presence/model';
 /** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
 const loadUploadRelay=()=>import('./upload');
@@ -47,6 +47,11 @@ export interface FrameBridgeParent extends IslandStoryController {
   regionsEnabled(): boolean;
   /** The frame's region messages, validated (regionFrameMessage). Returns the stop. */
   subscribeRegion(listener: (message: RegionFrameMessage) => void): () => void;
+  /**
+   * The current document's editor caret: its last `region-caret`, null after `region-blur` or a new document. A presence
+   * session that starts again (a new revision) publishes it at once; the editor sends a caret only when it moves.
+   */
+  regionCaret(): RegionCaret | null;
   /** The editor's newer head pointer and source, which the frame's controller reads live. */
   refreshUploadContext():void;
   setContext(editId: string, source: string | null): void;
@@ -165,6 +170,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const regionListeners = new Set<(message: RegionFrameMessage) => void>();
   /** The current document was told which regions it may edit (sendRegion `regions-enabled`). */
   let regionsOn = false;
+  let caret: RegionCaret | null = null;
   /** The page's bars over the frame's top edge (setTopInset): every new frame controller is told on `ready`. */
   let inset = 0;
   /**
@@ -194,6 +200,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     // What the page sent to the old document's controller does not carry over to the new one's.
     backlog.length = 0;
     regionsOn = false;
+    caret = null;
     options.onReady?.('');
     attach();
   };
@@ -240,6 +247,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     if (data.key !== key) return;
     if (REGION_FRAME_KINDS.has(payload.kind)) {
       const message = regionFrameMessage(payload);
+      if (message?.kind === 'region-caret') caret = { regionId: message.regionId, anchor: message.anchor, head: message.head };
+      else if (message?.kind === 'region-blur') caret = null;
       if (message) for (const listener of [...regionListeners]) listener(message);
       return;
     }
@@ -298,6 +307,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     },
     regionsEnabled: () => regionsOn && !closed,
     subscribeRegion(listener: (message: RegionFrameMessage) => void) { regionListeners.add(listener); return () => { regionListeners.delete(listener); }; },
+    regionCaret: () => caret,
     /** The frame's viewport in this page's viewport: its content box, inside the iframe's border. */
     getViewportRect() {
       const box = frame.getBoundingClientRect();
