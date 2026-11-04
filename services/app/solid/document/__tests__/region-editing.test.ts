@@ -119,8 +119,9 @@ describe('startRegionEditing', () => {
     expect(server.calls).toEqual(['open notes']);
     expect(frame.sent).toEqual([
       { kind: 'regions-enabled', regionIds: ['title', 'notes'] },
-      { kind: 'region-session', regionId: 'notes', regionKind: 'rich', clientId: 7, state: new Uint8Array([1, 2, 3]), seq: 3 },
+      // The focus first, so keys typed while the session opens are held by the frame.
       { kind: 'region-command', regionId: 'notes', name: 'focus' },
+      { kind: 'region-session', regionId: 'notes', regionKind: 'rich', clientId: 7, state: new Uint8Array([1, 2, 3]), seq: 3 },
     ]);
     expect(focusFrame).toHaveBeenCalledOnce();
     // The frame asking for the same region (a press) opens nothing more.
@@ -138,7 +139,7 @@ describe('startRegionEditing', () => {
     expect(focusFrame).toHaveBeenCalledOnce();
   });
 
-  it('a page that is not a doc opens nothing until the frame asks, and a doc whose open is refused takes no focus', async () => {
+  it('a page that is not a doc opens nothing until the frame asks, and a doc whose open is refused is closed in the frame', async () => {
     const plain = fakeBridge(), server = fakeClient();
     startRegionEditing({ id: 'doc1', bridge: plain.bridge, loadHtml: async () => PAGE, createClient: server.make, win: new EventTarget() }).attached();
     await settle();
@@ -148,8 +149,11 @@ describe('startRegionEditing', () => {
     closed.refuse();
     startRegionEditing({ id: 'doc1', bridge: refused.bridge, loadHtml: async () => PAGE, createClient: closed.make, win: new EventTarget(), autoOpen: true, focusFrame }).attached();
     await settle();
+    // The focus moves as the open starts (so keys typed meanwhile are held); a refusal then closes the region, which
+    // drops what the frame held for it.
+    expect(refused.sent.map((message) => message.kind)).toEqual(['regions-enabled', 'region-command', 'region-closed']);
     expect(refused.sent.at(-1)).toEqual({ kind: 'region-closed', regionId: 'notes', reason: 'refused' });
-    expect(focusFrame).not.toHaveBeenCalled();
+    expect(focusFrame).toHaveBeenCalledOnce();
   });
 
   it('a refused open closes the region in the frame', async () => {
@@ -218,6 +222,64 @@ describe('startRegionEditing', () => {
     expect(subject.anchor.revision).toBe('6');
     expect(doc.getText('region').toString()).toBe('unsaved words');
     editing.dispose();
+  });
+});
+
+describe('the editing chrome\'s state and commands', () => {
+  const caret = (regionId: string, marks: string[], block: string): RegionFrameMessage => ({ kind: 'region-caret', regionId, anchor: 'AA==', head: 'AA==', marks, block });
+
+  it('follows this person\'s editor from its first caret (a blur keeps it) until its session ends, and sends commands to it', async () => {
+    const frame = fakeBridge(), server = fakeClient();
+    const toolbar: unknown[] = [], slash: unknown[] = [], links: unknown[] = [];
+    const editing = startRegionEditing({ id: 'doc1', bridge: frame.bridge, loadHtml: async () => PAGE, createClient: server.make, win: new EventTarget(),
+      onToolbar: (state) => toolbar.push(state), onSlash: (at) => slash.push(at), onLink: (request) => links.push(request) });
+    editing.attached();
+    await settle();
+    // Nothing for a region without a session (a forged caret, slash or link from the frame).
+    frame.say(caret('notes', ['strong'], 'h2'));
+    frame.say({ kind: 'region-slash', regionId: 'notes', x: 1, y: 2 });
+    frame.say({ kind: 'region-link', regionId: 'notes', href: null });
+    expect(editing.command('strong')).toBe(false);
+    expect([toolbar, slash, links]).toEqual([[], [], []]);
+    frame.say({ kind: 'region-open', regionId: 'notes' });
+    await settle();
+    frame.say(caret('notes', ['strong'], 'h2'));
+    frame.say({ kind: 'region-blur' });
+    frame.say(caret('notes', [], 'bullet'));
+    expect(toolbar).toEqual([{ regionId: 'notes', kind: 'rich', marks: ['strong'], block: 'h2' }, { regionId: 'notes', kind: 'rich', marks: [], block: 'bullet' }]);
+    frame.say({ kind: 'region-slash', regionId: 'notes', x: 10, y: 20 });
+    frame.say({ kind: 'region-link', regionId: 'notes', href: 'https://a.example/' });
+    expect(slash).toEqual([{ regionId: 'notes', x: 10, y: 20 }]);
+    expect(links).toEqual([{ regionId: 'notes', href: 'https://a.example/' }]);
+    expect(editing.command('list', { type: null })).toBe(true);
+    expect(editing.command('undo')).toBe(true);
+    expect(frame.sent.slice(-2)).toEqual([
+      { kind: 'region-command', regionId: 'notes', name: 'list', args: { type: null } },
+      { kind: 'region-command', regionId: 'notes', name: 'undo' },
+    ]);
+    // The session ends: the chrome goes, and commands have nowhere to go.
+    server.events().closed('notes', 'access');
+    expect(toolbar.at(-1)).toBeNull();
+    expect(slash.at(-1)).toBeNull();
+    expect(editing.command('strong')).toBe(false);
+    // A new document ends it too.
+    frame.say({ kind: 'region-open', regionId: 'notes' });
+    await settle();
+    frame.say(caret('notes', [], 'paragraph'));
+    expect(toolbar.at(-1)).toEqual({ regionId: 'notes', kind: 'rich', marks: [], block: 'paragraph' });
+    editing.attached();
+    expect(toolbar.at(-1)).toBeNull();
+    editing.dispose();
+  });
+
+  it('a doc opened to show a comment (autoFocus false) still opens its region, but asks for no focus', async () => {
+    const frame = fakeBridge(), server = fakeClient(), focusFrame = vi.fn();
+    const editing = startRegionEditing({ id: 'doc1', bridge: frame.bridge, loadHtml: async () => PAGE, createClient: server.make, win: new EventTarget(), autoOpen: true, autoFocus: false, focusFrame });
+    editing.attached();
+    await settle();
+    expect(server.calls).toEqual(['open notes']);
+    expect(frame.sent.map((message) => message.kind)).toEqual(['regions-enabled', 'region-session']);
+    expect(focusFrame).not.toHaveBeenCalled();
   });
 });
 

@@ -10,3 +10,9 @@ export const APP_BAR_H = 44;
  * reserved when it does not — and unchanged by anything inside the session.
  */
 export const RIGHT_RAIL_W = 320;
+
+/**
+ * The region editing toolbar's strip under the app bar (solid/document/RegionToolbar), drawn over the frame's top
+ * edge while a person edits a region: the document reserves it (the bridge's `inset`) instead of moving.
+ */
+export const REGION_TOOLBAR_H = 44;

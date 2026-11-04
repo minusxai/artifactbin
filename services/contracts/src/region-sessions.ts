@@ -147,4 +147,6 @@ export type RegionFrameMessage =
   | { kind: 'region-update'; regionId: string; update: Uint8Array }
   | ({ kind: 'region-caret'; marks: string[]; block: string } & RegionCaret)
   | { kind: 'region-blur' }
-  | { kind: 'region-slash'; regionId: string; x: number; y: number };
+  | { kind: 'region-slash'; regionId: string; x: number; y: number }
+  /** Mod-K in the editor: the parent asks for a link URL (`href` is the link at the caret, if any). */
+  | { kind: 'region-link'; regionId: string; href: string | null };

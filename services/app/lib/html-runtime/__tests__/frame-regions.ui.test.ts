@@ -356,3 +356,242 @@ describe('a saved version arriving while a region is edited', () => {
     expect(texts(h.root)).toEqual(['Saved by flush, with the live text.', 'New block']);
   });
 });
+
+/** The keys' input the frame puts the focus in while a region's editor loads. */
+const keysInput = () => document.querySelector<HTMLTextAreaElement>('textarea[data-af="region-keys"]');
+/** A real key as a browser delivers it to that input: keydown, then (unless it was taken) the text and its input event. */
+function key(input: HTMLTextAreaElement, name: string, init: KeyboardEventInit = {}) {
+  const down = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...init });
+  input.dispatchEvent(down);
+  if (down.defaultPrevented || name.length !== 1 || init.ctrlKey || init.metaKey) return;
+  input.value += name;
+  input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: name }));
+}
+const typeKeys = (input: HTMLTextAreaElement, text: string) => { for (const character of Array.from(text)) key(input, character); };
+/** A composition in that input, as an IME drives it: each step replaces the composing text. */
+function compose(input: HTMLTextAreaElement, steps: string[], commit?: string) {
+  const before = input.value;
+  input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
+  for (const step of steps) {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', keyCode: 229, isComposing: true, bubbles: true, cancelable: true }));
+    input.value = before + step;
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: step, isComposing: true }));
+  }
+  if (commit === undefined) return;
+  input.value = before + commit;
+  input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: commit }));
+  // Firefox's order: the input event after compositionend.
+  input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: commit }));
+}
+/** Pressing the region the way a browser does: pointerdown, then the press focuses the region (it is a tab stop). */
+function press(h: Harness) {
+  h.root.querySelector('p')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  h.root.focus();
+}
+
+describe('keys typed between the press and the editor', () => {
+  it('fetches the editor at the press, holds fast typing in order — Enter and Backspace too — and replays it into the editor when it mounts', async () => {
+    const loads = { count: 0 };
+    const h = open({ loads });
+    h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    press(h);
+    expect(h.posted).toEqual([{ kind: 'region-open', regionId: 'r1' }]);
+    const input = keysInput()!;
+    expect(document.activeElement).toBe(input);
+    // Outside the page's body: neither the live morph nor page observers see it.
+    expect(document.body.contains(input)).toBe(false);
+    expect(h.regions.ownsOverlay(input)).toBe(true);
+    typeKeys(input, 'Hi');
+    key(input, 'Backspace');
+    typeKeys(input, '!');
+    key(input, 'Enter');
+    typeKeys(input, 'Next ');
+    key(input, 'b', { ctrlKey: true });
+    typeKeys(input, 'bold');
+    expect(texts(h.root)).toEqual(['Saved text.']);
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    await settle();
+    expect(h.editors).toHaveLength(1);
+    expect(loads.count).toBe(1);
+    expect(texts(h.root)).toEqual(['H!', 'Next boldLive text', 'Second']);
+    // The editor has the focus the keys' input had.
+    expect(h.editors[0]!.view.hasFocus()).toBe(true);
+    expect(h.root.querySelector('strong')?.textContent).toBe('bold');
+    expect(keysInput()).toBeNull();
+    // The replay is ordinary typing: it goes to the server like any other.
+    await sleep(REGION_BATCH_MS + 30);
+    Y.applyUpdate(h.server, h.updates().at(-1)!.update);
+    expect(serverHtml(h)).toBe('<p>H!</p><p data-af-id="a1">Next <strong>bold</strong>Live text</p><p data-af-id="a2">Second</p>');
+  });
+
+  it('lets an IME composition open when the editor is ready finish first, and takes its text exactly once', async () => {
+    const h = open();
+    h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    press(h);
+    const input = keysInput()!;
+    typeKeys(input, 'a');
+    compose(input, ['k', 'か', 'かn', 'かな']);
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    await settle();
+    // Mounting now would end the composition: the editor waits for it.
+    expect(h.editors).toHaveLength(0);
+    expect(keysInput()).toBe(input);
+    input.value = 'かな';
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'かな' }));
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: 'かな' }));
+    await settle();
+    expect(h.editors).toHaveLength(1);
+    expect(texts(h.root)[0]).toBe('aかなLive text');
+  });
+
+  it('commits a composition that ended before the editor, once, between the keys around it', async () => {
+    const h = open();
+    h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    press(h);
+    const input = keysInput()!;
+    typeKeys(input, 'x');
+    compose(input, ['か', 'かな'], '仮名');
+    key(input, 'Enter');
+    typeKeys(input, 'y');
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    await settle();
+    expect(texts(h.root)).toEqual(['x仮名', 'yLive text', 'Second']);
+  });
+
+  it('drops what was held when the session is refused, and leaves no input behind', async () => {
+    const h = open();
+    h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    press(h);
+    typeKeys(keysInput()!, 'lost');
+    h.receive({ kind: 'region-closed', regionId: 'r1', reason: 'refused' });
+    expect(keysInput()).toBeNull();
+    await settle();
+    expect(h.editors).toHaveLength(0);
+    expect(texts(h.root)).toEqual(['Saved text.']);
+  });
+
+  it('a doc opened with no press (the parent\'s auto-open): `focus` before the session and the editor holds the keys, then puts the caret at the start and types them there', async () => {
+    const h = open();
+    h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    // The focus comes before the session (the parent opens it meanwhile); a focus for a region not enabled does nothing.
+    h.receive({ kind: 'region-command', regionId: 'other', name: 'focus' });
+    expect(keysInput()).toBeNull();
+    h.receive({ kind: 'region-command', regionId: 'r1', name: 'focus' });
+    expect(h.posted).toEqual([]);
+    const input = keysInput()!;
+    expect(document.activeElement).toBe(input);
+    typeKeys(input, 'My ');
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    typeKeys(input, 'title');
+    key(input, 'Enter');
+    typeKeys(input, 'x');
+    await settle();
+    expect(h.editors).toHaveLength(1);
+    expect(texts(h.root)).toEqual(['My title', 'xLive text', 'Second']);
+    expect(h.editors[0]!.view.hasFocus()).toBe(true);
+    expect(keysInput()).toBeNull();
+  });
+});
+
+describe('the focus coming back from the page', () => {
+  it('the editor that had the focus takes it as soon as the frame gets it back at its body, before any command', async () => {
+    const h = open();
+    const editor = await session(h);
+    expect(editor.view.hasFocus()).toBe(true);
+    // The page's slash menu or link dialog took the focus; the frame has it back at its body.
+    (document.activeElement as HTMLElement).blur();
+    expect(editor.view.hasFocus()).toBe(false);
+    window.dispatchEvent(new FocusEvent('focus'));
+    expect(editor.view.hasFocus()).toBe(true);
+    // Not when the person put the focus somewhere else in the page.
+    const field = document.body.appendChild(document.createElement('input'));
+    field.focus();
+    window.dispatchEvent(new FocusEvent('focus'));
+    expect(document.activeElement).toBe(field);
+  });
+});
+
+describe('the editor\'s toolbar, menu and shortcut commands', () => {
+  const keyDown = (editor: RegionEditor, init: KeyboardEventInit) => editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+  const blocks = (root: Element) => [...root.children].map((child) => `${child.tagName.toLowerCase()}${child.getAttribute('data-list') ? `[${child.getAttribute('data-list')}]` : ''}${child.hasAttribute('data-quote') ? '[quote]' : ''}:${child.textContent}`);
+
+  it('the slash menu\'s commands: removeSlash takes the `/` that opens the caret\'s block only, rule draws a divider, paragraph undoes a code block', async () => {
+    const h = open();
+    const editor = await session(h);
+    select(editor, 1 + 'Live'.length);
+    expect(editor.command('removeSlash')).toBe(false);
+    const end = editor.view.state.doc.content.size;
+    editor.view.dispatch(editor.view.state.tr.insert(end, editor.view.state.schema.nodes.textblock!.create()));
+    select(editor, end + 1);
+    typeInto(editor, '/');
+    // Keys typed right after the choice may reach the text before the command does.
+    typeInto(editor, 'ab');
+    expect(editor.command('removeSlash')).toBe(true);
+    expect(texts(h.root)).toEqual(['Live text', 'Second', 'ab']);
+    expect(editor.command('removeSlash')).toBe(false);
+    editor.view.dispatch(editor.view.state.tr.delete(editor.view.state.selection.head - 2, editor.view.state.selection.head));
+    expect(editor.command('heading', { level: 2 })).toBe(true);
+    expect(h.root.lastElementChild!.tagName).toBe('H2');
+    expect(editor.command('rule')).toBe(true);
+    expect([...h.root.children].map((child) => child.tagName)).toEqual(['P', 'P', 'HR', 'H2']);
+    typeInto(editor, 'x');
+    expect(h.root.lastElementChild!.textContent).toBe('x');
+    expect(editor.command('codeBlock', { on: true })).toBe(true);
+    expect(h.root.lastElementChild!.tagName).toBe('PRE');
+    expect(editor.command('paragraph')).toBe(true);
+    expect(h.root.lastElementChild!.outerHTML).toBe('<p>x</p>');
+    // Back to the text: the caret stays; `focus` (a doc opened without a press) takes it to the start.
+    const at = editor.view.state.selection.head;
+    expect(editor.command('resume')).toBe(true);
+    expect(editor.view.state.selection.head).toBe(at);
+    expect(editor.command('focus')).toBe(true);
+    expect(editor.view.state.selection.head).toBe(1);
+    expect(editor.view.hasFocus()).toBe(true);
+  });
+
+  it('link: an empty caret inserts the URL as linked text, a caret on a link changes or removes it, an unsafe URL changes nothing', async () => {
+    const h = open();
+    const editor = await session(h);
+    select(editor, 1 + 'Live '.length);
+    expect(editor.command('link', { href: 'javascript:alert(1)' })).toBe(false);
+    expect(editor.command('link', { href: null })).toBe(false);
+    expect(editor.command('link', { href: 'https://a.example/' })).toBe(true);
+    expect(h.root.firstElementChild!.innerHTML).toBe('Live <a href="https://a.example/">https://a.example/</a>text');
+    // Typing after the link is not part of it.
+    typeInto(editor, '!');
+    expect(h.root.firstElementChild!.innerHTML).toBe('Live <a href="https://a.example/">https://a.example/</a>!text');
+    select(editor, 1 + 'Live https'.length);
+    expect(editor.command('link', { href: '/inside' })).toBe(true);
+    expect(h.root.firstElementChild!.innerHTML).toBe('Live <a href="/inside">https://a.example/</a>!text');
+    expect(editor.command('link', { href: null })).toBe(true);
+    expect(h.root.firstElementChild!.innerHTML).toBe('Live https://a.example/!text');
+  });
+
+  it('Mod-K asks the parent for a link with the one at the caret; Mod-Alt-1..3, Mod-Shift-7/8/9 toggle headings, lists and quote', async () => {
+    const h = open();
+    const editor = await session(h);
+    select(editor, 1 + 'Live'.length);
+    keyDown(editor, { key: 'k', ctrlKey: true });
+    expect(h.posted.at(-1)).toEqual({ kind: 'region-link', regionId: 'r1', href: null });
+    editor.command('link', { href: 'https://b.example/' });
+    select(editor, 1 + 'Live'.length + 3);
+    keyDown(editor, { key: 'k', ctrlKey: true });
+    expect(h.posted.at(-1)).toEqual({ kind: 'region-link', regionId: 'r1', href: 'https://b.example/' });
+    select(editor, 2);
+    keyDown(editor, { key: '2', code: 'Digit2', keyCode: 50, ctrlKey: true, altKey: true });
+    expect(h.root.firstElementChild!.tagName).toBe('H2');
+    keyDown(editor, { key: '2', code: 'Digit2', keyCode: 50, ctrlKey: true, altKey: true });
+    expect(h.root.firstElementChild!.tagName).toBe('P');
+    // Shifted digits arrive as their symbol: the key code names the digit.
+    keyDown(editor, { key: '*', code: 'Digit8', keyCode: 56, ctrlKey: true, shiftKey: true });
+    expect(blocks(h.root)[0]).toMatch(/^p\[bullet\]:/);
+    keyDown(editor, { key: '&', code: 'Digit7', keyCode: 55, ctrlKey: true, shiftKey: true });
+    expect(blocks(h.root)[0]).toMatch(/^p\[ordered\]:/);
+    keyDown(editor, { key: '&', code: 'Digit7', keyCode: 55, ctrlKey: true, shiftKey: true });
+    expect(blocks(h.root)[0]).toMatch(/^p:/);
+    keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
+    expect(blocks(h.root)[0]).toMatch(/^p\[quote\]:/);
+    keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
+    expect(blocks(h.root)[0]).toMatch(/^p:/);
+  });
+});
