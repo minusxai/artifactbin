@@ -15,6 +15,7 @@ import { applyRegionRevision, compactRegion, createRegionState, editorState, nor
 import { stopCapturing } from '../binding';
 import { writeRegion } from '../html';
 import { ID_ATTRS } from '../schema';
+import { documentUnits } from '../lines';
 import { liveDocument, readDocument } from '../state';
 
 // jsdom has no layout; every file that opens a room gets the editor geometry stubs.
@@ -31,6 +32,36 @@ const PAGE = (region: string, kind: RegionKind) => {
 <script type="module">document.title='x';</script>
 </body></html>`;
 };
+/**
+ * A document in the binding's own line encoding, as a Y.Text delta. The exact invariant compares this with each
+ * replica's delta: an editor showing anything its shared text does not hold fails it. A last line left without its
+ * "\n" by concurrent deletions is shown as a line, so its missing "\n" is the one allowed difference.
+ */
+function encodedDelta(kind: RegionKind, doc: import('prosemirror-model').Node, terminated: boolean) {
+  const units = documentUnits(kind, doc);
+  if (!terminated) units.pop();
+  const ops: { insert: string; attributes?: Record<string, unknown> }[] = [];
+  for (const unit of units) {
+    const last = ops.at(-1);
+    const attributes = Object.keys(unit.attrs).length ? unit.attrs : undefined;
+    if (last && JSON.stringify(last.attributes) === JSON.stringify(attributes)) last.insert += unit.ch;
+    else ops.push(attributes ? { insert: unit.ch, attributes } : { insert: unit.ch });
+  }
+  return ops;
+}
+/** A delta in one canonical form: attribute keys sorted, adjacent runs with equal attributes merged (Y.Text keeps
+ * runs apart where an old format marker sat, which is not content). */
+function sortedDelta(delta: unknown[]): { insert: unknown; attributes?: unknown }[] {
+  const sorted = JSON.parse(JSON.stringify(delta, (_key, value) => (value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value))) as { insert: unknown; attributes?: unknown }[];
+  const merged: typeof sorted = [];
+  for (const op of sorted) {
+    const last = merged.at(-1);
+    if (last && typeof last.insert === 'string' && typeof op.insert === 'string' && JSON.stringify(last.attributes) === JSON.stringify(op.attributes)) last.insert += op.insert;
+    else merged.push(op);
+  }
+  return merged;
+}
+
 /** HTML without its ids, for comparisons that are about content. */
 export const bare = (html: string) => html.replace(/ data-af-id="[^"]*"/g, '');
 export const idsOf = (html: string) => [...html.matchAll(/data-af-id="([^"]+)"/g)].map((match) => match[1]!);
@@ -196,10 +227,18 @@ export class Room {
   invariants(): string {
     this.sync();
     const html = this.html();
+    const serverDelta = sortedDelta(regionText(this.server).toDelta());
+    const terminated = regionText(this.server).toString().endsWith('\n');
     for (const client of this.clients) {
+      // Exact: the replica's text equals the server's, and the editor shows exactly that text.
+      expect(sortedDelta(regionText(client.doc).toDelta()), `exact ${client.name}'s replica`).toEqual(serverDelta);
+      expect(sortedDelta(encodedDelta(this.kind, client.state.doc, terminated)), `exact ${client.name}'s editor`).toEqual(serverDelta);
       expect(client.html(), `I1 ${client.name}'s editor`).toBe(html);
       expect(client.replicaHtml(), `I1 ${client.name}'s replica`).toBe(html);
       expect(() => client.state.doc.check(), `I2 ${client.name}`).not.toThrow();
+      const breaks: string[] = [];
+      client.state.doc.forEach((block) => { if (block.type.name !== 'code_block' && /[\r\n]/.test(block.textContent)) breaks.push(block.textContent); });
+      expect(breaks, `exact ${client.name}: a line break inside a paragraph is a block boundary in the shared text`).toEqual([]);
       const blockIds: string[] = [];
       client.state.doc.forEach((block) => { for (const name of ID_ATTRS) if (typeof block.attrs[name] === 'string') blockIds.push(block.attrs[name]); });
       expect(new Set(blockIds).size, `I3 ${client.name}'s ids ${blockIds}`).toBe(blockIds.length);

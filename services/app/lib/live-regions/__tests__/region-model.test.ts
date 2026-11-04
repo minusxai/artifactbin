@@ -199,10 +199,33 @@ describe('three-way revision (republish and agent edits)', () => {
     }
   });
 
+  it('refuses an empty snapshot instead of re-inserting the whole region', () => {
+    const { state } = createRegionState('rich', base);
+    const error = refusal(() => applyRegionRevision({ kind: 'rich', live: state, savedSnapshot: Y.encodeSnapshot(Y.emptySnapshot), html: base.replace('Goals', 'Aims') }));
+    expect(error.code).toBe('missing_snapshot');
+  });
+
   it('refuses a snapshot of another live state', () => {
     const { state } = createRegionState('rich', base);
     const other = createRegionState('rich', '<p>other</p>');
     expect(refusal(() => applyRegionRevision({ kind: 'rich', live: state, savedSnapshot: other.snapshot, html: base })).code).toBe('snapshot_mismatch');
+  });
+
+  describe('a block inserted or deleted next to an edited block while a reader types in it', () => {
+    const saved = '<p data-af-id="a1">alpha</p><p data-af-id="b1">beta</p><p data-af-id="d1">delta</p>';
+    const reader = () => { const region = createRegionState('rich', saved); return { ...region, live: apply(region.state, readerTypes(region.state, 1, 'beta'.length, 'XX')) }; };
+    it.each([
+      ['the author deletes the block before', { html: '<p data-af-id="b1">beta gamma</p><p data-af-id="d1">delta</p>' }, '<p data-af-id="b1">betaXX gamma</p><p data-af-id="d1">delta</p>'],
+      ['the author inserts a block before', { html: '<p data-af-id="a1">alpha</p><p data-af-id="n1">new para</p><p data-af-id="b1">beta gamma</p><p data-af-id="d1">delta</p>' }, '<p data-af-id="a1">alpha</p><p data-af-id="n1">new para</p><p data-af-id="b1">betaXX gamma</p><p data-af-id="d1">delta</p>'],
+      ['the author inserts a block after', { html: '<p data-af-id="a1">alpha</p><p data-af-id="b1">beta gamma</p><p data-af-id="n1">new para</p><p data-af-id="d1">delta</p>' }, '<p data-af-id="a1">alpha</p><p data-af-id="b1">betaXX gamma</p><p data-af-id="n1">new para</p><p data-af-id="d1">delta</p>'],
+      ['the author deletes the block after', { html: '<p data-af-id="a1">alpha</p><p data-af-id="b1">beta gamma</p>' }, '<p data-af-id="a1">alpha</p><p data-af-id="b1">betaXX gamma</p>'],
+      ['an agent inserts a block before (Markdown, no ids)', { markdown: 'alpha\n\nnew para\n\nbeta gamma\n\ndelta' }, '<p data-af-id="a1">alpha</p><p>new para</p><p data-af-id="b1">betaXX gamma</p><p data-af-id="d1">delta</p>'],
+      ['an agent deletes the block before (Markdown, no ids)', { markdown: 'beta gamma\n\ndelta' }, '<p data-af-id="b1">betaXX gamma</p><p data-af-id="d1">delta</p>'],
+    ])('%s: the reader\'s text stays in its block and ids stay with their content', (_name, revision, expected) => {
+      const { live, snapshot } = reader();
+      const { update } = applyRegionRevision({ kind: 'rich', live, savedSnapshot: snapshot, ...revision });
+      expect(regionHtml('rich', apply(live, update))).toBe(expected);
+    });
   });
 
   it('applies two republishes in a row, each against the snapshot the previous one returned', () => {

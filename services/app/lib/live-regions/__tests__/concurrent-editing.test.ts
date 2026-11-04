@@ -154,6 +154,12 @@ describe('text', () => {
     { name: 'a text region holds one line of plain text', region: 'Title', kind: 'text',
       run: (_room, A, B) => { A.select(A.blockStart(0, true)).type(' & more').key('Enter'); B.select(B.blockStart(0)).paste('<b>New</b> <script>x</script>'); },
       expected: 'NewTitle &amp; more' },
+    { name: 'a text region joins the lines of a multi-line plain-text paste with spaces', region: 'Hello', kind: 'text',
+      run: (_room, A) => { A.select(A.blockStart(0, true)).pasteText(' one\ntwo\r\nthree'); },
+      expected: 'Hello one two three' },
+    { name: 'a newline inserted into a paragraph\'s text becomes a space in the editor and the shared text alike', region: '<p>ab</p>',
+      run: (_room, A) => { A.view.dispatch(A.state.tr.insertText('x\ny', A.find('a', { after: true }))); },
+      expected: '<p>ax yb</p>' },
   ]);
 
   it('a 50,000-character paragraph: typing at both ends stays fast and converges', () => {
@@ -305,6 +311,9 @@ describe('republish and agent edits (three-way)', () => {
     A.select(A.find('[typed]', { after: true })).type(' [unsent]');
     room.republish((region) => region.replace(/<p[^>]*>Second[^<]*<\/p>/, ''));
     const html = room.invariants();
+    // The author deleted the block, so its line end goes; the reader's characters were never the author's to delete,
+    // so they stay where they were typed. The deleted block was the last one, so they read as a paragraph of their
+    // own (before another block they would start that block, as when a peer deletes the block: 'moreEnd' above).
     expect(bare(html)).toBe('<h2>Goals</h2><p>First paragraph about the plan.</p><p>[typed] [unsent]</p>');
   });
 
@@ -375,16 +384,26 @@ describe('republish and agent edits (three-way)', () => {
 });
 
 describe('ids', () => {
-  it('Enter in the middle: the first half keeps the id, the second gets a fresh one at compaction', () => {
+  it('Enter in the middle: the text after the cursor keeps the block\'s line end and ids, the text before is a new block with a fresh id at compaction', () => {
     const [room, A] = open('<p>Hello world</p>');
     const [id] = idsOf(room.html());
     A.select(A.find('Hello', { after: true })).key('Enter');
     const html = room.invariants();
-    expect(html).toBe(`<p data-af-id="${id}">Hello</p><p>world</p>`);
+    expect(html).toBe(`<p>Hello</p><p data-af-id="${id}">world</p>`);
     const page = room.compact();
     const [first, second] = idsOf(room.html());
-    expect([first, page.html.includes(`data-af-id="${second}">world`)]).toEqual([id, true]);
-    expect(second).not.toBe(id);
+    expect([second, page.html.includes(`data-af-id="${first}">Hello`)]).toEqual([id, true]);
+    expect(first).not.toBe(id);
+  });
+
+  it('Enter in the middle, then undo: every id is unchanged in the editor and on the server', () => {
+    const [room, A] = open('<h2>Title here</h2><p>next</p>');
+    const before = room.html();
+    A.select(A.find('Title', { after: true })).key('Enter');
+    room.invariants();
+    A.undo();
+    expect(room.invariants()).toBe(before);
+    expect(A.html()).toBe(before);
   });
 
   it('Enter at the start: an empty block goes before, the text keeps its id', () => {

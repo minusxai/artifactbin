@@ -52,3 +52,37 @@ export function diffHunks<T>(a: ArrayLike<T>, b: ArrayLike<T>, equal: (x: T, y: 
   }
   return hunks;
 }
+
+/**
+ * A monotone pairing of two sequences (indices only ever increase on both sides) maximising the summed `score`;
+ * `-Infinity` forbids a pair. Pairs are returned in order.
+ */
+export function alignPairs(m: number, n: number, score: (i: number, j: number) => number): [number, number][] {
+  const best = Array.from({ length: m + 1 }, () => new Float64Array(n + 1));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      const pair = score(i, j);
+      best[i]![j] = Math.max(best[i + 1]![j]!, best[i]![j + 1]!, pair === -Infinity ? -Infinity : pair + best[i + 1]![j + 1]!);
+    }
+  }
+  const pairs: [number, number][] = [];
+  for (let i = 0, j = 0; i < m && j < n;) {
+    const pair = score(i, j);
+    if (pair !== -Infinity && best[i]![j] === pair + best[i + 1]![j + 1]! && pair > 0) { pairs.push([i, j]); i++; j++; }
+    else if (best[i]![j] === best[i + 1]![j]) i++;
+    else j++;
+  }
+  return pairs;
+}
+
+/** How alike two texts are, word by word (Dice coefficient over lowercased words; two empty texts are alike). */
+export function similarity(a: string, b: string): number {
+  const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+  const left = words(a), right = words(b);
+  if (!left.length && !right.length) return a.trim() === b.trim() ? 1 : 0;
+  const counts = new Map<string, number>();
+  for (const word of left) counts.set(word, (counts.get(word) ?? 0) + 1);
+  let shared = 0;
+  for (const word of right) { const count = counts.get(word) ?? 0; if (count) { shared++; counts.set(word, count - 1); } }
+  return (2 * shared) / (left.length + right.length);
+}

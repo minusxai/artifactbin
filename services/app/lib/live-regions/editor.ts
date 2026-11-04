@@ -53,24 +53,59 @@ class RegionClipboardSerializer extends DOMSerializer {
   }
 }
 
-/** A split, paste or join can copy a block's ids; the later copy loses each repeated one. */
+/**
+ * A paste (or any copy) can repeat a block's id. The block that held the id before the change keeps it; every other
+ * copy loses it (the first in order, if the holder is gone).
+ */
 const dedupeKey = new PluginKey('live-region-ids');
 function idDedupe(): Plugin {
   return new Plugin({
     key: dedupeKey,
-    appendTransaction(transactions, _old, state) {
+    appendTransaction(transactions, old, state) {
       if (!transactions.some((tr) => tr.docChanged)) return null;
+      const holders = new Map<string, number>();
+      old.doc.forEach((block, offset) => {
+        let pos = offset;
+        for (const tr of transactions) pos = tr.mapping.map(pos, 1);
+        for (const name of ID_ATTRS) if (typeof block.attrs[name] === 'string') holders.set(block.attrs[name], pos);
+      });
+      const count = new Map<string, number>();
+      state.doc.forEach((block) => { for (const name of ID_ATTRS) if (typeof block.attrs[name] === 'string') count.set(block.attrs[name], (count.get(block.attrs[name]) ?? 0) + 1); });
+      const kept = new Set<string>();
+      state.doc.forEach((block, offset) => { for (const name of ID_ATTRS) { const id = block.attrs[name]; if (typeof id === 'string' && count.get(id)! > 1 && holders.get(id) === offset) kept.add(`${id}@${offset}`); } });
       const seen = new Set<string>();
       let tr: Transaction | null = null;
       state.doc.forEach((block, offset) => {
         let attrs: Record<string, unknown> | null = null;
         for (const name of ID_ATTRS) {
           const id = block.attrs[name];
-          if (typeof id !== 'string') continue;
-          if (seen.has(id)) (attrs ??= { ...block.attrs })[name] = null;
-          else seen.add(id);
+          if (typeof id !== 'string' || count.get(id)! < 2) continue;
+          const holderKept = [...kept].some((key) => key.startsWith(`${id}@`));
+          const keep = holderKept ? kept.has(`${id}@${offset}`) : !seen.has(id);
+          if (keep) seen.add(id); else (attrs ??= { ...block.attrs })[name] = null;
         }
         if (attrs) (tr ??= state.tr).setNodeMarkup(offset, undefined, attrs);
+      });
+      const changes = tr as Transaction | null;
+      return changes ? changes.setMeta('addToHistory', false) : null;
+    },
+  });
+}
+
+/**
+ * A paragraph's text holds no line break: its line end is the block boundary. A "\n" put into one (an insertText,
+ * a composition) becomes a space, so the editor shows exactly what the shared text holds.
+ */
+function lineBreaks(): Plugin {
+  return new Plugin({
+    appendTransaction(transactions, _old, state) {
+      if (!transactions.some((tr) => tr.docChanged)) return null;
+      let tr: Transaction | null = null;
+      state.doc.descendants((node, pos, parent) => {
+        if (!node.isText || parent?.type.spec.code) return node.isBlock;
+        const text = node.text!;
+        for (let at = 0; at < text.length; at++) if (text[at] === '\n' || text[at] === '\r') (tr ??= state.tr).insertText(' ', pos + at, pos + at + 1);
+        return false;
       });
       const changes = tr as Transaction | null;
       return changes ? changes.setMeta('addToHistory', false) : null;
@@ -107,9 +142,10 @@ export function regionCommands(kind: RegionKind): RegionCommands {
   const none: Command = () => false;
   const outdentAttrs = (node: PMNode) => (node.attrs.list ? (node.attrs.depth > 1 ? { depth: node.attrs.depth - 1 } : { list: null, depth: 0 }) : null);
   const outdent = rich ? bind((state) => withAttrs(state, outdentAttrs)) : none;
-  /** Enter: at a block's start an empty block goes before it (the text keeps its ids); elsewhere the block splits,
-   * the second part keeps the structure, a heading's tail becomes a paragraph, and the dedupe drops the copied ids.
-   * Enter in an empty list item or quote leaves it. */
+  /** Enter: at a block's start an empty block goes before it; at its end an empty block goes after it; in the middle
+   * the text after the cursor keeps the block's ids and the text before becomes a new block with the same structure.
+   * In every case the original line end, which holds the ids, stays where it was. Enter in an empty list item or
+   * quote leaves it. */
   const splitBlock: Command = rich ? (state, dispatch) => {
     const block = currentBlock(state);
     if (!block) return false;
@@ -126,7 +162,11 @@ export function regionCommands(kind: RegionKind): RegionCommands {
       tr.insert($at.before(1), schema.nodes.textblock!.create(empty));
     } else {
       const atEnd = $at.parentOffset === $at.parent.content.size;
-      tr.split($at.pos, 1, [{ type: schema.nodes.textblock!, attrs: atEnd ? empty : { ...$at.parent.attrs, level: atEnd ? 0 : $at.parent.attrs.level } }]);
+      const start = $at.before(1);
+      tr.split($at.pos, 1, [{ type: schema.nodes.textblock!, attrs: atEnd ? empty : $at.parent.attrs }]);
+      // In the middle, the text after the cursor keeps the block's ids: in the shared text it keeps the original line
+      // end, so the ids never move and an undo of the split has nothing else to restore.
+      if (!atEnd) tr.setNodeMarkup(start, undefined, { ...tr.doc.nodeAt(start)!.attrs, afId: null, itemId: null, listId: null, quoteId: null });
     }
     dispatch(tr.scrollIntoView());
     return true;
@@ -260,6 +300,7 @@ function editorPlugins(kind: RegionKind, text: Y.Text, terminated: boolean): Plu
   return [
     bindingPlugin(kind, text, terminated),
     idDedupe(),
+    lineBreaks(),
     markShortcuts(kind),
     markdownRules(kind),
     keymap({

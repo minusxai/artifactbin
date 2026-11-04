@@ -79,10 +79,14 @@ class Reader {
         if (isText(node)) { text += node.text; continue; }
         if (OPAQUE.has(node.tag)) { this.unsupported(`<${node.tag}>`); continue; }
         if (node.tag === 'br') { if (this.unsupported('<br>')) text += ' '; continue; }
-        if (this.unsupported(`<${node.tag}>`)) walk(node.children);
+        if (!this.unsupported(`<${node.tag}>`)) continue;
+        walk(node.children);
+        // A text region is one line: the lines of a pasted paragraph or list join with a space.
+        if (isBlockTag(node.tag)) text += ' ';
       }
     };
     walk(nodes);
+    if (this.preserveWhitespace) text = text.replace(/[\r\n]+/g, ' ');
     const [segment] = collapse([{ text, marks: [] }], this.preserveWhitespace);
     const line = this.schema.nodes.textblock!.create(null, segment ? this.schema.text(segment.text) : null);
     return this.schema.nodes.doc!.create(null, line);

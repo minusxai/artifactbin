@@ -5,7 +5,7 @@
  */
 import * as Y from 'yjs';
 import type { Node as PMNode } from 'prosemirror-model';
-import { diffHunks } from './diff';
+import { alignPairs, diffHunks, similarity } from './diff';
 import { readRegion, writeRegion } from './html';
 import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
 import { LiveRegionRefusal } from './refusal';
@@ -100,10 +100,24 @@ function rewriteLine(text: Y.Text, start: number, before: readonly Unit[], after
   kept(before.length - i);
 }
 
+const lineText = (line: readonly Unit[]) => line.map((unit) => unit.ch).join('');
+const lineId = (line: readonly Unit[]) => { const id = line.at(-1)?.attrs.afId; return typeof id === 'string' ? id : null; };
 /**
- * Rewrites a region's text to `target`: a line diff, and within each changed line a character diff and its
- * attributes. Only what changed is touched, so whatever else is in the text (other people's concurrent typing,
- * merged later) stays where it was typed; a deleted line takes only its own characters with it.
+ * Which old line a new line rewrites, within a group of changed lines: the same block id first; then the most alike
+ * by words; then, failing both, position. Lines with different ids never pair (one block deleted, another added).
+ */
+function lineScore(before: readonly Unit[], after: readonly Unit[]): number {
+  const a = lineId(before), b = lineId(after);
+  if (a && b) return a === b ? 1000 : -Infinity;
+  const alike = similarity(lineText(before), lineText(after));
+  return alike >= 0.3 ? 10 * alike : 0.01;
+}
+
+/**
+ * Rewrites a region's text to `target`: a line diff; inside each group of changed lines, lines paired by id, words,
+ * then position (lineScore); each pair rewritten word by word with its attributes, the rest deleted or inserted.
+ * Only what changed is touched, so other people's concurrent typing (merged later) stays in the block it was typed
+ * in; a deleted line takes only its own characters with it.
  */
 function rewrite(kind: RegionKind, text: Y.Text, target: PMNode): void {
   const base = terminate(kind, text);
@@ -114,11 +128,22 @@ function rewrite(kind: RegionKind, text: Y.Text, target: PMNode): void {
   for (const line of before) { starts.push(offset); offset += line.length; }
   starts.push(offset);
   const hunks = diffHunks(before.map(key), after.map(key));
+  type Op = { pair: [number, number] } | { remove: number } | { add: number; at: number };
   for (const hunk of [...hunks].reverse()) {
-    const paired = Math.min(hunk.aEnd - hunk.aStart, hunk.bEnd - hunk.bStart);
-    if (hunk.aEnd - hunk.aStart > paired) text.delete(starts[hunk.aStart + paired]!, starts[hunk.aEnd]! - starts[hunk.aStart + paired]!);
-    if (hunk.bEnd - hunk.bStart > paired) insertUnits(text, starts[hunk.aStart + paired]!, after.slice(hunk.bStart + paired, hunk.bEnd).flat());
-    for (let k = paired - 1; k >= 0; k--) rewriteLine(text, starts[hunk.aStart + k]!, before[hunk.aStart + k]!, after[hunk.bStart + k]!);
+    const pairs = alignPairs(hunk.aEnd - hunk.aStart, hunk.bEnd - hunk.bStart, (i, j) => lineScore(before[hunk.aStart + i]!, after[hunk.bStart + j]!));
+    const ops: Op[] = [];
+    let i = hunk.aStart, j = hunk.bStart;
+    for (const [pi, pj] of [...pairs.map(([a, b]) => [hunk.aStart + a, hunk.bStart + b] as const), [hunk.aEnd, hunk.bEnd] as const]) {
+      for (; i < pi; i++) ops.push({ remove: i });
+      for (; j < pj; j++) ops.push({ add: j, at: i });
+      if (pi < hunk.aEnd) { ops.push({ pair: [pi, pj] }); i++; j++; }
+    }
+    // Last first: every op touches only text at or after its own old line's start.
+    for (const op of ops.reverse()) {
+      if ('pair' in op) rewriteLine(text, starts[op.pair[0]]!, before[op.pair[0]]!, after[op.pair[1]]!);
+      else if ('remove' in op) text.delete(starts[op.remove]!, before[op.remove]!.length);
+      else insertUnits(text, starts[op.at]!, after[op.add]!);
+    }
   }
 }
 
@@ -166,12 +191,17 @@ function keepUnchanged(kind: RegionKind, base: PMNode, revision: PMNode): PMNode
     for (let k = 0; k + 1 < anchors.length; k++) {
       const [i, j] = anchors[k]!, [nextI, nextJ] = anchors[k + 1]!;
       if (k > 0) blocks[j] = baseBlocks[i]!;
-      for (let offset = 1; i + offset < nextI && j + offset < nextJ; offset++) {
-        const own = baseBlocks[i + offset]!, block = revisionBlocks[j + offset]!;
-        if (own.type !== block.type) continue;
+      // The blocks between two matches pair by words, then position; a pair carries the base block's ids.
+      const gapBase = baseBlocks.slice(i + 1, nextI), gapRevision = revisionBlocks.slice(j + 1, nextJ);
+      for (const [a, b] of alignPairs(gapBase.length, gapRevision.length, (x, y) => {
+        if (gapBase[x]!.type !== gapRevision[y]!.type) return -Infinity;
+        const alike = similarity(gapBase[x]!.textContent, gapRevision[y]!.textContent);
+        return alike >= 0.3 ? 10 * alike : 0.01;
+      })) {
+        const own = gapBase[a]!, block = gapRevision[b]!;
         const attrs: Record<string, unknown> = { ...block.attrs };
         for (const name of ID_ATTRS) if (name in attrs && name in own.attrs) attrs[name] = own.attrs[name];
-        blocks[j + offset] = block.type.create(attrs, block.content, block.marks);
+        blocks[j + 1 + b] = block.type.create(attrs, block.content, block.marks);
       }
     }
   }
@@ -209,6 +239,12 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   const live = liveDocument(input.live);
   let snapshot: Y.Snapshot;
   try { snapshot = Y.decodeSnapshot(input.savedSnapshot); } catch { throw new LiveRegionRefusal('snapshot_mismatch', ['undecodable']); }
+  if (!snapshot.sv.size) throw new LiveRegionRefusal('missing_snapshot');
+  // Every saved version holds the region's first insertion (the one made into an empty text): a snapshot that
+  // does not would reopen as an empty region, and the revision would be inserted a second time.
+  for (let item = regionText(live)._start; item; item = item.right) {
+    if (item.origin === null && item.rightOrigin === null && (snapshot.sv.get(item.id.client) ?? 0) <= item.id.clock) throw new LiveRegionRefusal('snapshot_mismatch', ['does not cover the initial state']);
+  }
   const known = Y.decodeStateVector(Y.encodeStateVector(live));
   const strangers = [...snapshot.sv].filter(([client, clock]) => (known.get(client) ?? 0) < clock);
   if (strangers.length) throw new LiveRegionRefusal('snapshot_mismatch', strangers.map(([client]) => String(client)));

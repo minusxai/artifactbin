@@ -21,7 +21,7 @@ import { Plugin, PluginKey, Selection, TextSelection, type Command, type EditorS
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import * as Y from 'yjs';
-import { insertUnits, keysOf, Linear, readText, type Attrs } from './lines';
+import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs } from './lines';
 import type { RegionKind } from './schema';
 
 interface BindingState { binding: Binding; pending: readonly Transaction[] }
@@ -139,6 +139,7 @@ class Binding {
     if (embeds.length) this.write(this.silent, () => { for (const at of embeds.reverse()) this.text.delete(at, 1); });
     const { doc: next, terminated } = readText(this.kind, this.text);
     this.terminated = terminated;
+    this.repair(next, terminated);
     const previous = view.state.doc;
     let first = 0;
     while (first < previous.childCount && first < next.childCount && previous.child(first).eq(next.child(first))) first++;
@@ -159,6 +160,33 @@ class Binding {
       else tr.setSelection(Selection.near(tr.doc.resolve(Math.min(tr.selection.head, tr.doc.content.size))));
     }
     view.dispatch(tr.setMeta(bindingKey, { remote: true }).setMeta('addToHistory', false));
+  }
+
+  /**
+   * Makes the shared text hold exactly what its document shows. Concurrent edits can leave attributes the document
+   * cannot: a mark on text another person turned into code, a block attribute that a format marker extended over
+   * text typed next to it, a list depth whose list was removed. Every editor that reads such a state writes the same
+   * normalization, untracked, so the replicas converge on text that matches their editors exactly.
+   */
+  private repair(doc: PMNode, terminated: boolean): void {
+    const wanted = documentUnits(this.kind, doc);
+    if (!terminated) wanted.pop();
+    const formats: [number, number, Attrs][] = [];
+    let offset = 0;
+    for (const op of this.text.toDelta() as { insert: string; attributes?: Attrs }[]) {
+      const have = op.attributes ?? {};
+      for (let i = 0; i < op.insert.length; i++, offset++) {
+        const want = wanted[offset];
+        if (!want) continue;
+        const change: Attrs = {};
+        for (const key of new Set([...Object.keys(have), ...Object.keys(want.attrs)])) if ((have[key] ?? null) !== (want.attrs[key] ?? null)) change[key] = (want.attrs[key] ?? null) as never;
+        if (!Object.keys(change).length) continue;
+        const last = formats.at(-1);
+        if (last && last[0] + last[1] === offset && JSON.stringify(last[2]) === JSON.stringify(change)) last[1]++;
+        else formats.push([offset, 1, change]);
+      }
+    }
+    if (formats.length) this.write(this.silent, () => { for (const [at, length, change] of formats) this.text.format(at, length, change); });
   }
 
   private write(origin: object, change: () => void): void {
