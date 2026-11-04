@@ -10,7 +10,7 @@
  * token is its "\n", and a code block's text is its lines' text with their inner "\n"s.
  */
 import type { Mark, Node as PMNode } from 'prosemirror-model';
-import * as Y from 'yjs';
+import type * as Y from 'yjs';
 import { ID_ATTRS, isNodeId, MAX_DEPTH, regionSchema, safeHref, type RegionKind } from './schema';
 
 export type Attrs = Record<string, string | number | boolean>;
