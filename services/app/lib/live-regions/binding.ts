@@ -96,11 +96,13 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   const at = place(old, next, base, start + prefix, inserted, deleted, clip);
   if (deleted) text.delete(at, deleted);
   if (inserted) insertUnits(text, at, next.units(at, at + inserted));
-  // Attributes: the range itself, and the "\n" of the line it ends in (a join or an open paste changes that
-  // block's attributes); characters past the range keep theirs.
+  // Attributes: the range itself, and every line end of the block it ends in (a join or an open paste changes that
+  // block's attributes, which a code block keeps on each of its lines and its ids on the last); characters past the
+  // range keep theirs. The next line end alone misses a join into a code block of several lines.
   const rangeEnd = Math.min(clip, Math.max(newTo, at + inserted));
-  const lineEnd = Math.min(clip, next.lineEnd(Math.max(start, rangeEnd - 1)));
-  const offsets = [...Array.from({ length: rangeEnd - start }, (_unused, i) => start + i), ...(lineEnd > rangeEnd ? [lineEnd - 1] : [])];
+  const blockEnd = Math.min(clip, next.blockEnd(Math.max(start, rangeEnd - 1)));
+  const lineEnds = next.units(rangeEnd, blockEnd).flatMap((unit, i) => (unit.ch === '\n' ? [rangeEnd + i] : []));
+  const offsets = [...Array.from({ length: rangeEnd - start }, (_unused, i) => start + i), ...lineEnds];
   const oldAt = (offset: number) => (offset < at ? offset - base : offset - base - inserted + deleted);
   const formats: [number, Attrs][] = [];
   for (const offset of offsets) {

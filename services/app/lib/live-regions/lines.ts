@@ -86,14 +86,11 @@ export class Linear {
     if (block.node.isLeaf) return block.pos + (offset > block.offset ? 1 : 0);
     return block.pos + 1 + Math.min(offset - block.offset, block.length - 1);
   }
-  /** Offset just past the "\n" of the line holding `offset`. */
-  lineEnd(offset: number): number {
+  /** Offset just past the closing "\n" of the block holding `offset` (a code block's last line, not its inner ones). */
+  blockEnd(offset: number): number {
     if (offset >= this.length) return this.length;
     const block = this.blockAtOffset(offset);
-    if (block.node.type.name !== 'code_block') return block.offset + block.length;
-    const text = block.node.textContent;
-    const inner = text.indexOf('\n', offset - block.offset);
-    return inner < 0 ? block.offset + block.length : block.offset + inner + 1;
+    return block.offset + block.length;
   }
   units(from: number, to: number): Unit[] {
     const out: Unit[] = [];
