@@ -262,6 +262,57 @@ const ARTIFACT_EDITS: Table = {
   indexes: [{ name: 'idx_artifact_edits_artifact_seq', columns: ['artifact_id', 'seq'] }],
 };
 
+/**
+ * Live co-editing of a page's editable regions (lib/region-sessions; contract: contracts region-sessions).
+ * One row per region someone has opened: the merged Yjs state through `state_seq` (kept with gc off, so snapshots of
+ * saved versions stay readable), the last logged update, and the page version it was last saved as.
+ */
+const REGION_STATES: Table = {
+  name: 'region_states',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'region_id', type: 'TEXT', notNull: true },
+    { name: 'kind', type: 'TEXT', notNull: true },
+    { name: 'state', type: 'BYTEA', notNull: true },
+    { name: 'state_seq', type: 'BIGINT', notNull: true, default: '0' },
+    { name: 'last_seq', type: 'BIGINT', notNull: true, default: '0' },
+    { name: 'saved_version', type: 'INTEGER', notNull: true },
+    { name: 'dirty_since', type: 'TIMESTAMPTZ' },
+    { name: 'last_update_at', type: 'TIMESTAMPTZ' },
+    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['artifact_id', 'region_id'],
+};
+
+/** The attributed edit log: every accepted, validated update to a region, in order. */
+const REGION_UPDATES: Table = {
+  name: 'region_updates',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'region_id', type: 'TEXT', notNull: true },
+    { name: 'seq', type: 'BIGINT', notNull: true },
+    { name: 'client_id', type: 'BIGINT', notNull: true },
+    { name: 'update', type: 'BYTEA', notNull: true },
+    { name: 'actor_user_id', type: 'TEXT' },
+    { name: 'actor_token_id', type: 'TEXT' },
+    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['artifact_id', 'region_id', 'seq'],
+};
+
+/** A Yjs snapshot of each region at each page version it was saved as: the base of a three-way revision. */
+const REGION_SNAPSHOTS: Table = {
+  name: 'region_snapshots',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'region_id', type: 'TEXT', notNull: true },
+    { name: 'version', type: 'INTEGER', notNull: true },
+    { name: 'snapshot', type: 'BYTEA', notNull: true },
+    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['artifact_id', 'region_id', 'version'],
+};
+
 /** Lifetime identity ledger: source ids are never reused within an artifact. */
 const ARTIFACT_SOURCE_IDS: Table = {
   name: 'artifact_source_ids',
@@ -992,7 +1043,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
