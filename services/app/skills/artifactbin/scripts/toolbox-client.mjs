@@ -106,14 +106,20 @@ const code=typeof refusal.error==='string'?refusal.error:refusal.error?.code??
      'http_'+response.status;
 throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,404].includes(
      response.status)?3:response.status===409?4:unsafe&&response.status>=500?5:1,refusal.hint??(
-     response.status===409?'A newer version exists. Run read.mjs ID --output fresh.html, reapply '+
-     'your edits there and publish it; do not resume this journal.':
+     response.status===409?conflictHint(refusal):
      unsafe?'Retain the journal; retry the exact supported intent after recovery.':
      'Inspect access and request inputs.'),refusal);
   }
  }
  return {server,root,request,grant,fetcher};
 }
+/** A version_conflict names what moved since the read (the server's `changed`) and the one step. */
+const CHANGED={content:'A newer version was published',details:'The title, description or '+
+     'metadata changed',sharing:'Sharing changed',policy:'The dataset policy changed'};
+const conflictHint=refusal=>refusal.error!=='version_conflict'?'The request conflicts with the '+
+     'current page; see the refusal details.':`${CHANGED[refusal.changed]??'The page changed'} `+
+     'since your read. Run read.mjs ID --output fresh.html, reapply your edits to that file and '+
+     'publish it; do not resume this journal.';
 /** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server
  * blip says so and suggests one retry. */
 const transient=error=>!(error instanceof ToolError)&&

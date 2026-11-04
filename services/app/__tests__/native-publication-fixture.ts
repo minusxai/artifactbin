@@ -4,5 +4,6 @@ import {artifactState} from '@/lib/artifacts';
 export function nativeSource(content:string):string{return /^\s*<!doctype html>/i.test(content)?content:`<!doctype html><html><head><title>Fixture</title></head><body>${content}</body></html>`;}
 export function nativePublicationBody(row:ArtifactRow,body:Record<string,unknown>,_whole?:boolean){
  const {html,source,...metadata}=body;
- return {...metadata,html:nativeSource(String(html??source??row.source??'')),expectedVersion:body.expectedVersion??row.version,expectedState:body.expectedState??artifactState(row)};
+ return {...metadata,html:nativeSource(String(html??source??row.source??'')),expectedVersion:body.expectedVersion??row.version,expectedState:body.expectedState??artifactState(row),
+  ...(['visibility','linkRole','access','shares'].some(key=>key in body)?{expectedSharingRevision:body.expectedSharingRevision??row.sharing_revision??0}:{})};
 }

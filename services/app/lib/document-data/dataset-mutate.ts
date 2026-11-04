@@ -108,6 +108,8 @@ export async function mutateDataset(
   sql: string,
   params: Record<string, Scalar> = {},
   guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};receipt?:MutationReceipt;expectedState?:string;
+    /** The policy revision the operation was prepared under: the observed state does not cover the policy (lib/artifacts state). */
+    expectedPolicyRevision?:number;
     /** Native dataset API: all statements and identity metadata commit in the existing pointer CAS. */
     statements?:readonly {sql:string;params:Record<string,Scalar>}[];
     /** Row identities: fixed, or derived from each attempt's head (a lost CAS re-reads it) and the table's stored rows. */
@@ -142,6 +144,9 @@ export async function mutateDataset(
     try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}
   }
 
+  // A prepared operation is refused when the dataset's content or the policy it was prepared under moved.
+  const prepareMoved=(row:ArtifactRow)=>!!guard.expectedState&&artifactState(row)!==guard.expectedState||
+    guard.expectedPolicyRevision!==undefined&&(row.policy_revision??0)!==guard.expectedPolicyRevision;
   for (let attempt = 0; ; attempt++) {
     // Re-read on every attempt: attempt 0 uses the row we were handed, and a
     // CAS miss means someone else's rows are now the base for ours.
@@ -151,7 +156,7 @@ export async function mutateDataset(
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
-    if(guard.expectedState&&artifactState(current)!==guard.expectedState)return {reason:'row_changed',detail:'The dataset changed since the operation was prepared. Read the current state before proposing a new mutation.'};
+    if(prepareMoved(current))return {reason:'row_changed',detail:'The dataset changed since the operation was prepared. Read the current state before proposing a new mutation.'};
     const decision=(current.policy_revision??0)===(dataset.policy_revision??0)?await datasetWriteAccess(current,actor,access):null;
     if (!decision?.allowed) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
     const catalog=catalogOf(current);
@@ -243,9 +248,9 @@ export async function mutateDataset(
      // decision is answered like a lost CAS: the next attempt re-reads the head and decides again.
      try{await assertWriteCommit(tx,current,actor,decision,access);}catch(error){if(error instanceof DatasetError)return undefined;throw error;}
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
-     if(guard.expectedState){
+     if(guard.expectedState||guard.expectedPolicyRevision!==undefined){
       const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
-      if(!locked||artifactState(locked)!==guard.expectedState)return undefined;
+      if(!locked||prepareMoved(locked))return undefined;
      }
      const committed=await commitDatasetWrite(tx,{current,actor,meta,
       policyRole:policy?.role??null,policyDeclared:(!!guard.nativePolicy||!!guard.directPolicy||!!guard.pagePolicy)&&!!policy,granted:true});

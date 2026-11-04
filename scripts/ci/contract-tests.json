@@ -7,5 +7,6 @@
   "services/app/lib/page-operations/__tests__/database-runner.test.ts",
   "services/app/lib/page-operations/__tests__/database-tunnel.test.ts",
   "services/app/lib/page-operations/__tests__/runner-output-ceiling.test.ts",
-  "services/app/lib/platform/__tests__/outbound-ips-route.test.ts"
+  "services/app/lib/platform/__tests__/outbound-ips-route.test.ts",
+  "services/app/lib/publish/__tests__/content-write-fence.test.ts"
 ]

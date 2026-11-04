@@ -21,7 +21,7 @@ export async function writeBrowserArtifact(id:string,change:Record<string,unknow
  }
 
  if(source!==undefined)return Response.json({error:'not_editable'},{status:400});
- return requests.patch({...fields,expectedState:head.state});
+ return requests.patch({...fields,expectedVersion:head.version,expectedState:head.state});
 }
 
 /** History keeps the same UX across format changes. Only document restores

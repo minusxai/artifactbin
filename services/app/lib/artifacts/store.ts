@@ -21,7 +21,7 @@ import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
-import { artifactState } from './state';
+import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
@@ -304,7 +304,7 @@ async function insertArtifact(
     input.destination?.type==='group'?input.destination.id:null,
   ],
   );
-  Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
+  Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[],created.rows[0].sharing_revision??0));
   await bindCurrentUserScopes(tx,created.rows[0]);
   if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
@@ -342,7 +342,9 @@ async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void
 /** The two actor columns a write stamps, in the order every statement binds them. */
 const actorStamp = (actor: AccessActor): [string | null, string | null] => [actor.userId, actor.tokenId || null];
 
-export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{shares:ShareEntry[];sharing_revision:number}>{
+/** Full-replace of the share list. A change moves the sharing revision to `base`+1 — the head this write observed — so
+ * one write moves it once however many access settings it changes. */
+export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[],base:number):Promise<{shares:ShareEntry[];sharing_revision:number}>{
  const normalized=[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
  const current=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
  if(JSON.stringify(current)!==JSON.stringify(normalized)){
@@ -350,7 +352,7 @@ export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Pr
   // email change. Recreating them would transfer access to a reused address.
   await tx.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND NOT (email=ANY($2::text[]))',[id,normalized.map(entry=>entry.email)]);
   for(const entry of normalized)await tx.query('INSERT INTO artifact_shares (artifact_id,email,role) VALUES ($1,$2,$3) ON CONFLICT (artifact_id,email) DO UPDATE SET role=EXCLUDED.role',[id,entry.email,entry.role]);
-  await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
+  await tx.query('UPDATE artifacts SET sharing_revision=$2 WHERE id=$1',[id,base+1]);
  }
  const row=(await tx.query<{sharing_revision:number}>('SELECT sharing_revision FROM artifacts WHERE id=$1',[id])).rows[0];
  return {shares:normalized,sharing_revision:row.sharing_revision};
@@ -397,6 +399,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
          SET format=$3, source=CASE WHEN $15::jsonb IS NULL THEN $4::text ELSE NULL END, document=$15::jsonb,
              meta=$5, title=$6, description=$7, visibility=COALESCE($9,visibility),
              ancestor_ids=COALESCE($10::text[],ancestor_ids), access=COALESCE($11,access), link_role=COALESCE($14,link_role),
+             sharing_revision=sharing_revision+CASE WHEN (COALESCE($9,visibility),COALESCE($11,access),COALESCE($14,link_role)) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END,
              ${headBumpSql('$8', '$12', '$13')}
          WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
         [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, content.source, content.meta)),
@@ -474,7 +477,6 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
 interface VersionNotArchived {
   notArchived: true;
   refusal?: Response;
-  conflictVersion?: number;
 }
 export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived): r is VersionNotArchived {
   return r !== null && 'notArchived' in r;
@@ -503,10 +505,9 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
   // unchanged — what changed is that it now says so instead of answering the
   // uniform 404 for a dataset the caller is looking straight at.
   if (initial.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
-  const condition = (row: ArtifactRow): Response | null => {
-    if (opts.expectedVersion !== undefined && row.version !== opts.expectedVersion) return json({error:'version_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
-    if (opts.expectedState !== undefined && artifactState(row) !== opts.expectedState) return json({error:'state_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
-    return null;
+  const condition = (row: ArtifactRow, observed: Pick<ReplaceOpts, 'expectedVersion' | 'expectedState'> = opts): Response | null => {
+    const changed = observedChange(row, observed);
+    return changed ? json(versionConflict(row, changed), 409) : null;
   };
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
   let target = (await artifactQuery<Pick<ArtifactRow, 'title' | 'description' | 'format' | 'source' | 'document' | 'meta'>>(db,'SELECT title,description,format,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
@@ -521,7 +522,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     const { current } = write;
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
-    if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
+    const moved = condition(current, {expectedVersion: initial.version, expectedState: artifactState(initial)}); if (moved) return {notArchived:true,refusal:moved};
 
     if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
@@ -542,12 +543,8 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
  * the head. Distinct from `null` (unknown/foreign) — routes answer 409, not
  * 404, and report the head version so the caller can read → merge → replay.
  */
-interface VersionConflict {
-  reason?: 'state_conflict' | 'doc_changed';
-  currentState?: string;
-  conflict: true;
-  currentVersion: number;
-}
+type VersionConflict = {conflict: true} & ReturnType<typeof versionConflict>;
+const conflictOf = (current: ArtifactRow, changed: ConflictChange): VersionConflict => ({conflict: true, ...versionConflict(current, changed)});
 export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Response): r is VersionConflict {
   return r !== null && 'conflict' in r;
 }
@@ -556,6 +553,8 @@ export interface ReplaceOpts {
   mutationReceipt?:MutationReceipt;
   mutationReply?:(row:ArtifactRow)=>Promise<MutationReply>;
   expectedPolicyRevision?:number;
+  /** The sharing revision a write of visibility, link role, access or shares observed. */
+  expectedSharingRevision?:number;
   shares?:ShareEntry[];
 
   expectedState?: string;
@@ -603,10 +602,9 @@ async function replaceScoped(
       return policyLocked('this dataset carries a write policy; only its owner may replace its content');
     }
     if(input.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),input.ancestor_ids);
-    if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
-    if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
-      return { conflict: true, currentVersion: current.version };
-    }
+    const changed = observedChange(current, opts);
+    if (changed) return conflictOf(current, changed);
+    if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
     if(input.format==='html'){
       if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
       // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
@@ -654,7 +652,7 @@ async function replaceScoped(
     const updated = await write.publish({
       ...input, source, meta: input.meta,
     });
-    if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares));
+    if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     await bindCurrentUserScopes(tx,updated);
     await logWholeDocumentWrite(tx, current, updated,true);
@@ -840,23 +838,25 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     if (!current) return null;
     if(current.format==='markup')return null;
     if(patch.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),patch.ancestor_ids);
-    if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
-    if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
-    if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
+    const changed = observedChange(current, opts);
+    if (changed) return conflictOf(current, changed);
+    if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return conflictOf(current,'policy');
+    if(opts.expectedSharingRevision!==undefined&&(current.sharing_revision??0)!==opts.expectedSharingRevision)return conflictOf(current,'sharing');
     const policy=patch.policy===undefined?undefined:validateDatasetPolicyForRow(current,patch.policy);
     if (patch.access && current.format !== 'dataset') return null;
     const meta = {...current.meta};
     for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
     if(opts.dryRun)return {...current,...patch,meta};
     const updated = (await artifactQuery<ArtifactRow>(tx,`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
-      visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11
+      visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11,
+      sharing_revision=sharing_revision+CASE WHEN ($6,$7,$9) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END
       WHERE id=$1 AND ${scope.where('$2')} RETURNING *,${openAnnotationsSql('artifacts.id')} AS open_annotations`, [id,scope.val,
       patch.title === undefined ? current.title : patch.title?.trim() ?? null,
       patch.description === undefined ? current.description : patch.description,
       JSON.stringify(meta),patch.visibility ?? current.visibility,patch.access ?? current.access,
       patch.ancestor_ids ?? current.ancestor_ids,patch.link_role ?? current.link_role,...actorStamp(actor),
     ])).rows[0];
-    if(patch.shares!==undefined)Object.assign(updated,await writeShares(tx,id,patch.shares));
+    if(patch.shares!==undefined)Object.assign(updated,await writeShares(tx,id,patch.shares,current.sharing_revision??0));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     if(policy!==undefined){
      const changed=await tx.query<{dataset_policy:DatasetPermissions|null;policy_revision:number}>(`WITH changed AS (
