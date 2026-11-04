@@ -25,6 +25,9 @@ const SERVER_BOOT_TESTS = [
   'scripts/__tests__/app-only-auth.test.mjs',
 ];
 
+/** Long property runs (thousands of random cases): heavy like the tests above, so `integration` alone runs them. */
+const PROPERTY_SOAK_TESTS = ['services/app/lib/live-regions/__tests__/convergence.soak.test.ts'];
+
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
 const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))];
 /**
@@ -128,6 +131,7 @@ export default defineConfig({
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...REAL_DATABASE_RESOLVER_TESTS,
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
+            ...PROPERTY_SOAK_TESTS,
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
@@ -153,6 +157,7 @@ export default defineConfig({
             // caps.db end to end: a resolver through the tunnel to a disposable TLS Postgres and MySQL (a `skipIf` on each image).
             ...REAL_DATABASE_RESOLVER_TESTS,
             ...SERVER_BOOT_TESTS,
+            ...PROPERTY_SOAK_TESTS,
           ],
           exclude: ['**/node_modules/**'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],

@@ -67,7 +67,9 @@
     "pg": "8.23.0",
     "prismjs": "1.30.0",
     "prosemirror-commands": "1.7.2",
+    "prosemirror-inputrules": "1.5.1",
     "prosemirror-keymap": "1.2.3",
+    "prosemirror-markdown": "1.13.9",
     "prosemirror-model": "1.25.11",
     "prosemirror-schema-list": "1.5.1",
     "prosemirror-state": "1.4.4",
@@ -83,6 +85,7 @@
     "vega-interpreter": "2.3.1",
     "vega-lite": "6.4.3",
     "vega-tooltip": "1.0.0",
+    "yjs": "13.6.33",
     "zod": "4.6.7"
   },
   "devDependencies": {
@@ -110,6 +113,7 @@
     "@types/nunjucks": "3.2.6",
     "@types/pg": "8.23.1",
     "@types/topojson-client": "3.1.5",
+    "fast-check": "4.10.2",
     "h3-js": "4.5.0",
     "highlight.js": "11.12.0",
     "jsdom": "30.0.1",
