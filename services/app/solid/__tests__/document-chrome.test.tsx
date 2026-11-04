@@ -38,6 +38,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
     if (!mockSelectionBridge) return actual.createFramedStory(...args);
     return {
       frame: args[0].framed.frame, nonce: () => 'guest-selection-nonce', setTopInset: () => {},
+      regionUi: { toolbar: () => null, slash: () => null, link: () => null, command: () => {}, closeSlash: () => {}, closeLink: () => {} },
       controller: () => ({ send: selectionSend, getViewportRect: () => undefined, subscribe: (receive: (data: unknown) => void) => {
         selectionListeners.push(receive);
         selectionReceive = (data) => { for (const listener of [...selectionListeners]) listener(data); };
@@ -131,19 +132,29 @@ const controls = async () => {
 };
 const menuPanel = () => waitFor(() => within(panelRoot()).getByRole('navigation', { name: 'Menu' }));
 
-it('places the doc agent handoff in trusted document navigation, outside the page bar', async () => {
+// Every trusted root's queries (the bar, its panels and dialogs each mount their own shadow root).
+const anyTrusted = (name: string) => [...document.querySelectorAll('[data-trusted-ui]')]
+  .map((host) => host.shadowRoot?.querySelector<HTMLElement>('[data-trusted-ui-root]'))
+  .flatMap((root) => root ? within(root).queryAllByRole('button', { name }) : []);
+
+it('hands a doc to an agent from its controls: a dialog with the agent paste for this page', async () => {
   mockRole = 'owner'; mockTemplate = 'doc';
   await mountReady();
-  expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
-  fireEvent.click(await trusted().findByRole('button', { name: 'Copy for agent' }));
-  await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('/a/doc12345 in place.')));
+  expect(screen.queryByRole('button', { name: 'Hand to an agent' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(await within(await controls()).findByRole('button', { name: 'Hand to an agent' }));
+  const copy = await waitFor(() => { const found = [...anyTrusted('Copy agent instructions'), ...screen.queryAllByRole('button', { name: 'Copy agent instructions' })]; expect(found.length).toBeGreaterThan(0); return found[0]!; });
+  fireEvent.click(copy);
+  await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('/a/doc12345')));
 });
 
-it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button for %s viewing %s', async (role, template) => {
+it.each([['owner', 'app'], ['commenter', 'doc']])('offers no agent handoff to %s viewing %s', async (role, template) => {
   mockRole = role; mockTemplate = template;
   await mountReady();
-  expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
-  expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  const panel = within(await controls());
+  expect(panel.queryByRole('button', { name: 'Hand to an agent' })).toBeNull();
+  expect(anyTrusted('Copy agent instructions')).toEqual([]);
 });
 
 it('adopts the served frame where the server drew it instead of rendering the document: its host is the viewport', async () => {

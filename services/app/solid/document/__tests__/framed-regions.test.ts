@@ -6,16 +6,18 @@
 import { createRoot, createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
-import { createFramedStory, type FramedStory, type RegionEditingLoader } from '../create-framed-story';
+import { createFramedStory, opensComment, type FramedStory, type RegionEditingLoader } from '../create-framed-story';
 
 const PAGES = 'https://6869.pages.test';
 const PAGE = '<html><body><article data-af-id="notes" data-af-editable="rich"><p data-af-id="n1">x</p></article><p data-af-id="out">y</p></body></html>';
 const cleanups: Array<() => void> = [];
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-function framedPage(enabled: () => boolean, load?: RegionEditingLoader, autoOpen?: boolean) {
+function framedPage(enabled: () => boolean, load?: RegionEditingLoader, autoOpen?: boolean, autoFocus?: boolean) {
   const frame = document.createElement('iframe');
   document.body.append(frame);
+  // The frame sits 100px in and 50px down the page.
+  frame.getBoundingClientRect = () => new DOMRect(100, 50, 600, 400);
   const posted: Array<{ key: string; payload: { kind: string } & Record<string, unknown> }> = [];
   vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(((data: { key: string; payload: { kind: string } }) => { posted.push(data as never); }) as never);
   const fetch = vi.fn(async (path: string) => path.endsWith('/open')
@@ -26,7 +28,7 @@ function framedPage(enabled: () => boolean, load?: RegionEditingLoader, autoOpen
   const loadHtml = vi.fn(async () => PAGE);
   let story!: FramedStory;
   createRoot((dispose) => {
-    story = createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, editId: () => 'e1', source: () => null, regions: { enabled, loadHtml, ...(load ? { load } : {}), ...(autoOpen ? { autoOpen } : {}) } });
+    story = createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, editId: () => 'e1', source: () => null, regions: { enabled, loadHtml, ...(load ? { load } : {}), ...(autoOpen ? { autoOpen } : {}), ...(autoFocus !== undefined ? { autoFocus } : {}) } });
     cleanups.push(dispose);
   });
   const say = (payload: Record<string, unknown>) => window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_FRAME_BRIDGE_MESSAGE, key: posted[0]!.key, payload }, origin: PAGES, source: frame.contentWindow }));
@@ -56,9 +58,9 @@ describe('region editing on the page', () => {
     const page = framedPage(() => true, undefined, true);
     const focus = vi.spyOn(page.frame, 'focus');
     page.say({ kind: 'ready', nonce: 'n1' });
-    await vi.waitFor(() => expect(page.regionKinds()).toEqual(['regions-enabled', 'region-session', 'region-command']));
+    await vi.waitFor(() => expect(page.regionKinds()).toEqual(['regions-enabled', 'region-command', 'region-session']));
     expect(page.fetch).toHaveBeenCalledWith('/api/artifacts/doc1/regions/notes/open', expect.objectContaining({ method: 'POST' }));
-    expect(page.posted.at(-1)!.payload).toEqual({ kind: 'region-command', regionId: 'notes', name: 'focus' });
+    expect(page.posted.at(-2)!.payload).toEqual({ kind: 'region-command', regionId: 'notes', name: 'focus' });
     expect(focus).toHaveBeenCalledOnce();
   });
 
@@ -69,6 +71,38 @@ describe('region editing on the page', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(page.regionKinds()).toEqual([]);
     expect(page.fetch).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it('the editing chrome follows the frame\'s editor: toolbar state, the slash menu at the caret on the page, the link dialog and commands', async () => {
+    const page = framedPage(() => true);
+    const ui = page.story.regionUi;
+    page.say({ kind: 'ready', nonce: 'n1' });
+    await vi.waitFor(() => expect(page.regionKinds()).toEqual(['regions-enabled']));
+    page.say({ kind: 'region-open', regionId: 'notes' });
+    await vi.waitFor(() => expect(page.regionKinds()).toEqual(['regions-enabled', 'region-session']));
+    expect(ui.toolbar()).toBeNull();
+    page.say({ kind: 'region-caret', regionId: 'notes', anchor: 'AA==', head: 'AA==', marks: ['em'], block: 'quote' });
+    expect(ui.toolbar()).toEqual({ regionId: 'notes', kind: 'rich', marks: ['em'], block: 'quote' });
+    page.say({ kind: 'region-slash', regionId: 'notes', x: 30, y: 40 });
+    expect(ui.slash()).toEqual({ regionId: 'notes', left: 130, top: 90 });
+    ui.closeSlash();
+    expect(ui.slash()).toBeNull();
+    page.say({ kind: 'region-link', regionId: 'notes', href: 'https://a.example/' });
+    expect(ui.link()).toEqual({ regionId: 'notes', href: 'https://a.example/' });
+    ui.command('heading', { level: 3 });
+    expect(page.posted.at(-1)!.payload).toEqual({ kind: 'region-command', regionId: 'notes', name: 'heading', args: { level: 3 } });
+  });
+
+  it('a doc opened at a comment opens its region but leaves the focus to the comment', async () => {
+    for (const search of ['?comment=c1', '?thread=t1', '?intent=comment', '?x=1&comment=c2']) expect(opensComment(search)).toBe(true);
+    for (const search of ['', '?intent=like', '?version=3']) expect(opensComment(search)).toBe(false);
+    const page = framedPage(() => true, undefined, true, false);
+    const focus = vi.spyOn(page.frame, 'focus');
+    page.say({ kind: 'ready', nonce: 'n1' });
+    await vi.waitFor(() => expect(page.regionKinds()).toEqual(['regions-enabled', 'region-session']));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(page.regionKinds()).toEqual(['regions-enabled', 'region-session']);
     expect(focus).not.toHaveBeenCalled();
   });
 
@@ -89,7 +123,7 @@ describe('region editing on the page', () => {
   it('losing edit access ends region editing', async () => {
     const [enabled, setEnabled] = createSignal(true);
     const dispose = vi.fn(), attached = vi.fn();
-    const load: RegionEditingLoader = async () => ({ startRegionEditing: () => ({ attached, dispose, membership: () => ({ inside: new Set(), known: new Set() }), save: async () => 1 }) });
+    const load: RegionEditingLoader = async () => ({ startRegionEditing: () => ({ attached, dispose, membership: () => ({ inside: new Set(), known: new Set() }), save: async () => 1, command: () => false }) });
     const page = framedPage(enabled, load);
     page.say({ kind: 'ready', nonce: 'n1' });
     await vi.waitFor(() => expect(attached).toHaveBeenCalledOnce());

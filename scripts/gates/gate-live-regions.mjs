@@ -5,6 +5,9 @@
  *
  *   1. both editors open the page, press into the region and type at once: each sees the other's text and caret;
  *      the viewer reads the saved text only and never opens a session (no region request, no editor module);
+ *      typing right after the press on a freshly loaded page (before the editor mounts), Enter and Backspace included,
+ *      arrives intact; the formatting toolbar shows for editors only, follows the caret and its Bold reaches the peer;
+ *      the `/` menu filters, inserts a heading with arrows and Enter (the `/` gone), and Escape leaves the `/`;
  *   2. latency: A types 20 marker characters, each timed from the key to the character in B's frame (p50/p95 logged,
  *      p95 > 1000 ms fails);
  *   3. IME: a composition driven through CDP (Input.imeSetComposition, then Input.insertText) in A's frame: B never
@@ -109,7 +112,8 @@ try {
     frames = { a, b, c };
     await Promise.all([a, b, c].map((frame) => frame.locator(REGION).waitFor()));
   });
-  const { a, b, c } = frames;
+  // B's frame is reloaded below (a fresh page, its editor not mounted yet).
+  let { a, b, c } = frames;
 
   await section('two editors type into the region at once', async () => {
     check(await until(() => a.locator(REGION).getAttribute('tabindex'), (value) => value === '0') === '0', 'the owner\'s frame is told the region is editable');
@@ -124,6 +128,74 @@ try {
     check(atB === atA, `the editor's region converges on the same text (${JSON.stringify(atB)})`);
     check(await until(() => b.locator('[data-af-region-caret]').count(), (n) => n > 0) > 0, 'the editor sees the owner\'s caret in the region');
     check(await until(() => a.locator('[data-af-region-caret]').count(), (n) => n > 0) > 0, 'the owner sees the editor\'s caret in the region');
+  });
+
+  await section('keys typed right after the press, before the editor mounts, all arrive', async () => {
+    await B.reload({ waitUntil: 'load' });
+    b = await documentFrame(B);
+    await b.locator(REGION).waitFor();
+    check(await until(() => b.locator(REGION).getAttribute('tabindex'), (value) => value === '0') === '0', 'the reloaded frame is told the region is editable');
+    // No wait for the editor: the keys go at once (the press lands at the end of the line, the right of its box).
+    const box = await b.locator('[data-af-id="p2"]').boundingBox();
+    await b.locator('[data-af-id="p2"]').click({ position: { x: box.width - 4, y: box.height / 2 } });
+    const mountedAtFirstKey = await b.locator(REGION).getAttribute('contenteditable');
+    await B.keyboard.type(' fastX');
+    await B.keyboard.press('Backspace');
+    await B.keyboard.type('Y');
+    await B.keyboard.press('Enter');
+    await B.keyboard.type('next-line');
+    check.note(`the editor was ${mountedAtFirstKey === 'true' ? 'already' : 'not yet'} mounted at the first key`);
+    const [atB, atA] = await both([b, a], 'fastYnext-line');
+    check(atB?.includes('bravo from the editor fastYnext-line') && !atB.includes('fastX'), `every key arrived, in order, Backspace and Enter included (${JSON.stringify(atB?.slice(-48))})`);
+    check(await b.locator(REGION).evaluate((root) => [...root.children].some((child) => child.textContent === 'next-line')), 'Enter made a new block');
+    check(atA === atB, 'the owner converges on the same text');
+    check(await b.locator('textarea[data-af="region-keys"]').count() === 0, 'nothing of the key buffer is left in the page');
+  });
+
+  await section('the formatting toolbar follows the caret and its commands reach the peer', async () => {
+    const toolbar = A.getByRole('toolbar', { name: 'Formatting' });
+    await caretAtEnd(a, A, '[data-af-id="p1"]');
+    await toolbar.waitFor({ timeout: 10_000 });
+    check(await toolbar.isVisible(), 'an editor with a region editor sees the toolbar');
+    check(await C.getByRole('toolbar', { name: 'Formatting' }).count() === 0, 'the viewer has no toolbar');
+    const bold = toolbar.getByRole('button', { name: 'Bold', exact: true });
+    check(await bold.getAttribute('aria-pressed') === 'false', 'Bold is not pressed in plain text');
+    // A command crosses to the frame in a message: the toolbar says when it took (the caret's stored mark), then keys go.
+    await bold.click();
+    check(await until(() => bold.getAttribute('aria-pressed'), (value) => value === 'true') === 'true', 'Bold shows pressed as soon as it is on, before anything is typed');
+    await A.keyboard.type(' toolbold');
+    await bold.click();
+    check(await until(() => bold.getAttribute('aria-pressed'), (value) => value === 'false') === 'false', 'Bold shows unpressed once it is off');
+    await A.keyboard.type(' plainafter');
+    await both([b], 'toolbold plainafter');
+    const strong = await marked(b, 'strong');
+    check(strong.some((text) => text.includes('toolbold')) && !strong.some((text) => text.includes('plainafter')), `the bold made with the toolbar reaches the peer, and only it (${JSON.stringify(strong)})`);
+  });
+
+  await section('the slash menu inserts a block, and Escape leaves the `/`', async () => {
+    await caretAtEnd(a, A, '[data-af-id="p1"]');
+    await A.keyboard.press('Enter');
+    await A.keyboard.type('/');
+    const filter = A.getByRole('combobox', { name: 'Filter blocks' });
+    await filter.waitFor({ timeout: 10_000 });
+    check(await filter.evaluate((node) => node.getRootNode().activeElement === node), 'the menu opens with its filter focused');
+    await A.keyboard.type('head');
+    const options = await A.getByRole('dialog', { name: 'Insert block' }).getByRole('option').allTextContents();
+    check(JSON.stringify(options) === JSON.stringify(['Heading 1', 'Heading 2', 'Heading 3']), `typing filters it (${JSON.stringify(options)})`);
+    await A.keyboard.press('ArrowDown');
+    await A.keyboard.press('Enter');
+    check(await until(() => filter.count(), (n) => n === 0) === 0, 'choosing closes the menu');
+    await A.keyboard.type('Slash heading');
+    const heading = await until(() => b.locator(`${REGION} h2`).allTextContents(), (texts) => texts?.includes('Slash heading'), 10_000);
+    check(heading?.includes('Slash heading'), `the chosen block is a heading at the peer, without the \`/\` (${JSON.stringify(heading)})`);
+    await A.keyboard.press('Enter');
+    await A.keyboard.type('/');
+    await filter.waitFor({ timeout: 10_000 });
+    await A.keyboard.press('Escape');
+    check(await until(() => filter.count(), (n) => n === 0) === 0, 'Escape closes the menu');
+    await A.keyboard.type('kept');
+    check((await both([a, b], '/kept'))[1]?.includes('/kept'), 'Escape left the `/`, and typing went on after it in the text');
+    for (let i = 0; i < '/kept'.length; i++) await A.keyboard.press('Backspace');
   });
 
   await section('the viewer reads saved text and never opens a session', async () => {

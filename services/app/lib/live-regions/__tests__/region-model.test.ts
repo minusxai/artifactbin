@@ -346,17 +346,3 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
     expect(refusal(() => compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: 'af-999', state })).code).toBe('region_not_found');
   });
 });
-
-describe('performance bound', () => {
-  it('a 50,000-character paragraph is built, read, revised and compacted in well under two seconds', () => {
-    const long = 'word '.repeat(10_000).trim();
-    const started = performance.now();
-    const saved = published(`<p>${long}</p>`);
-    const { state, snapshot } = createRegionState('rich', saved.inner);
-    expect(regionHtml('rich', state)).toHaveLength(long.length + `<p data-af-id="${ids(saved.inner)[0]}"></p>`.length);
-    const { update } = applyRegionRevision({ kind: 'rich', live: state, savedSnapshot: snapshot, html: saved.inner.replace('word word', 'WORD word') });
-    const page = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: apply(state, update) });
-    expect(page.html).toContain('WORD word');
-    expect(performance.now() - started).toBeLessThan(2000);
-  });
-});

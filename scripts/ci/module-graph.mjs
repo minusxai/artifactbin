@@ -168,8 +168,8 @@ const BUNDLED_LEAVES = {
   'lib/offline-dependencies': ['contracts'],
   'lib/html-presence': ['contract', 'model', 'preferences', 'reader-session'],
   // The page frame's lazily loaded region editor (lib/html-runtime/region-editor) enters through `browser`: the index
-  // carries the server's parse5 readers and compaction.
-  'lib/live-regions': ['browser'],
+  // carries the server's parse5 readers and compaction. The page's link dialog checks a URL through `href` alone.
+  'lib/live-regions': ['browser', 'href'],
   'lib/html-runtime': ['browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',

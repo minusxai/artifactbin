@@ -78,6 +78,8 @@ export function urlValuesOf(data: unknown): string | null {
   return /^\??[^#\s]*$/.test(search) ? search : null;
 }
 
+/** The longest link a region's editor reports at its caret (Mod-K). */
+const MAX_REGION_HREF = 2048;
 /** Short names the frame's editor reports (active marks, the caret's block type). */
 const regionName=(value:unknown):value is string=>typeof value==='string'&&/^[a-z][a-z0-9_-]{0,31}$/i.test(value);
 /** A region message from the frame as the page will take it (contracts RegionFrameMessage, rebuilt field by field), or null. */
@@ -96,10 +98,13 @@ export function regionFrameMessage(payload: unknown): RegionFrameMessage | null 
     case 'region-blur': return { kind: 'region-blur' };
     case 'region-slash':
       return isRegionId(raw.regionId) && Number.isFinite(raw.x) && Number.isFinite(raw.y) ? { kind: 'region-slash', regionId: raw.regionId, x: raw.x as number, y: raw.y as number } : null;
+    case 'region-link':
+      // Only shown in the page's link dialog, which checks any URL again before it is sent back.
+      return isRegionId(raw.regionId) && (raw.href === null || (typeof raw.href === 'string' && raw.href.length <= MAX_REGION_HREF)) ? { kind: 'region-link', regionId: raw.regionId, href: raw.href } : null;
     default: return null;
   }
 }
-const REGION_FRAME_KINDS = new Set(['region-open', 'region-update', 'region-caret', 'region-blur', 'region-slash']);
+const REGION_FRAME_KINDS = new Set(['region-open', 'region-update', 'region-caret', 'region-blur', 'region-slash', 'region-link']);
 
 /** The response headers a relayed answer keeps: what the controller reads. */
 const KEPT_HEADERS = ['content-type', 'retry-after'];

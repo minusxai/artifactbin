@@ -4,7 +4,7 @@ import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-read
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
-import type { RegionEditing, startRegionEditing } from './region-editing';
+import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 
 /** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
 export type RegionEditingLoader = () => Promise<{ startRegionEditing: typeof startRegionEditing }>;
@@ -145,8 +145,36 @@ interface FramedStoryOptions {
     onSaved?: (version: number) => void;
     /** A doc: its region opens for this editor as the page loads, with the focus (region-editing `autoOpen`). */
     autoOpen?: boolean;
+    /** With `autoOpen`: whether that first open takes the focus (not when the page opened to show a comment). */
+    autoFocus?: boolean;
     load?: RegionEditingLoader;
   };
+}
+
+/**
+ * The editing chrome's inputs (solid/document/RegionToolbar): this person's region editor and what it asked for. Geometry
+ * is the PAGE's viewport (the frame's box added). Always present; it stays empty for anyone without region editing.
+ */
+export interface RegionUi {
+  /** The toolbar's state while this person has a region editor, else null. */
+  toolbar: Accessor<RegionToolbarState | null>;
+  /** The slash menu: where the caret's line ends (page viewport), while it is open. */
+  slash: Accessor<{ regionId: string; left: number; top: number } | null>;
+  /** The link dialog asked for by Mod-K, with the link at the caret. */
+  link: Accessor<{ regionId: string; href: string | null } | null>;
+  /** A toolbar or menu command for the editor. */
+  command(name: string, args?: Record<string, unknown>): void;
+  closeSlash(): void;
+  closeLink(): void;
+}
+
+/**
+ * The page's address opens a comment (`?comment=`, `?thread=`, or the comment intent): the comment takes the focus, so a
+ * doc's auto-open still opens its region but leaves the focus alone.
+ */
+export function opensComment(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has('comment') || params.has('thread') || params.get('intent') === 'comment';
 }
 
 export interface FramedStory {
@@ -162,6 +190,7 @@ export interface FramedStory {
    * anchor names that version (lib/annotations/region-comment); otherwise the subject as it is.
    */
   beforeComment<T extends RegionCommentSubject>(subject: T): Promise<T>;
+  regionUi: RegionUi;
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
@@ -188,6 +217,17 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id }));
   start();
   let editing: RegionEditing | null = null;
+  const [toolbar, setToolbar] = createSignal<RegionToolbarState | null>(null, { equals: false });
+  const [slash, setSlash] = createSignal<{ regionId: string; left: number; top: number } | null>(null);
+  const [link, setLink] = createSignal<{ regionId: string; href: string | null } | null>(null);
+  const regionUi: RegionUi = {
+    toolbar, slash, link,
+    // The frame takes the focus first, so its editor can take it back from a menu or dialog on this page. Not when
+    // it has it (a toolbar press keeps it): focusing a focused frame would move its own focus off the editor.
+    command: (name, args) => { if (editing?.command(name, args) && document.activeElement !== frame) frame.focus({ preventScroll: true }); },
+    closeSlash: () => setSlash(null),
+    closeLink: () => setLink(null),
+  };
   const regions = options.regions;
   if (regions) {
     let loading = false;
@@ -204,7 +244,17 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
         loading = false;
         const bridge = current();
         if (stopped || !bridge || !regions.enabled() || editing) return;
-        editing = startRegionEditing({ id: options.id, bridge, loadHtml: regions.loadHtml, onSaved: regions.onSaved, autoOpen: regions.autoOpen, focusFrame: () => frame.focus({ preventScroll: true }) });
+        editing = startRegionEditing({
+          id: options.id, bridge, loadHtml: regions.loadHtml, onSaved: regions.onSaved,
+          autoOpen: regions.autoOpen, autoFocus: regions.autoFocus, focusFrame: () => frame.focus({ preventScroll: true }),
+          onToolbar: (state) => { setToolbar(state); if (!state) setLink(null); },
+          onSlash: (at) => {
+            if (!at) { setSlash(null); return; }
+            const box = current()?.getViewportRect();
+            setSlash(box ? { regionId: at.regionId, left: box.left + at.x, top: box.top + at.y } : null);
+          },
+          onLink: setLink,
+        });
         if (nonce()) editing.attached();
       }, () => { loading = false; });
     }));
@@ -220,5 +270,6 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     controller: current, nonce, frame,
     setTopInset: (px) => { inset = px; current()?.setTopInset(px); },
     beforeComment: (subject) => editing ? commentAfterRegionSave(subject, editing) : Promise.resolve(subject),
+    regionUi,
   };
 }

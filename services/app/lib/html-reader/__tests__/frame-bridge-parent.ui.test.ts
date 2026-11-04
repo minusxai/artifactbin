@@ -177,6 +177,11 @@ describe('createFrameBridgeParent', () => {
     t.say({ kind: 'region-update', regionId: 'r1', update: 'not bytes' });
     t.say({ kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: ['bold'], block: 'paragraph', extra: 'dropped' });
     t.say({ kind: 'region-blur' });
+    t.say({ kind: 'region-link', regionId: 'r1', href: 'https://a.example/' });
+    t.say({ kind: 'region-link', regionId: 'r1', href: null, extra: 'dropped' });
+    t.say({ kind: 'region-link', regionId: 'r1', href: 7 });
+    t.say({ kind: 'region-link', regionId: 'r1', href: `https://a.example/${'x'.repeat(2048)}` });
+    t.say({ kind: 'region-link', regionId: 'not an id!', href: null });
     t.say({ kind: 'region-open', regionId: 'r1' }, 'forged-key');
     stop();
     t.say({ kind: 'region-blur' });
@@ -185,6 +190,8 @@ describe('createFrameBridgeParent', () => {
       { kind: 'region-update', regionId: 'r1', update: new Uint8Array([9]) },
       { kind: 'region-caret', regionId: 'r1', anchor: 'AA==', head: 'AQ==', marks: ['bold'], block: 'paragraph' },
       { kind: 'region-blur' },
+      { kind: 'region-link', regionId: 'r1', href: 'https://a.example/' },
+      { kind: 'region-link', regionId: 'r1', href: null },
     ]);
     expect(events).toEqual([]);
   });

@@ -64,6 +64,8 @@ describe('region sessions contract', () => {
       { kind: 'region-caret', ...caret, marks: ['bold'], block: 'paragraph' },
       { kind: 'region-blur' },
       { kind: 'region-slash', regionId: 'af-6', x: 10, y: 20 },
+      { kind: 'region-link', regionId: 'af-6', href: 'https://example.com' },
+      { kind: 'region-link', regionId: 'af-6', href: null },
     ];
     for (const value of [open, request, ...replies, flush, refusal, ...frames, ...content, ...write, written, ...agentRefusals]) expect(JSON.parse(JSON.stringify(value))).toEqual(value);
     for (const message of [...toFrame, ...fromFrame]) expect(structuredClone(message)).toEqual(message);
