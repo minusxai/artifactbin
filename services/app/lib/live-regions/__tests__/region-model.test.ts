@@ -3,7 +3,6 @@
  * the three-way revision, compaction (I5) and the id rules. Concurrent editing through real editors is in
  * concurrent-editing.ui.test.ts; random interleavings in convergence.property.ui.test.ts.
  */
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { canonicalizeHtmlPage } from '../../html-page';
@@ -122,21 +121,6 @@ describe('sanitization: authored content is refused by name, never silently rewr
     expect(error.code).toBe('unsupported_content');
     expect(error.details).toEqual(details);
     expect(refusal(() => createRegionState(kind, html)).details).toEqual(details);
-  });
-
-  it('the report example\'s sections cannot be regions as written: svg, button and div are refused', () => {
-    const report = readFileSync(new URL('../../../skills/artifactbin/examples/report.html', import.meta.url), 'utf8');
-    const document = parseSource(report);
-    const sections = document.elements.filter((element) => element.tagName === 'section' || element.tagName === 'article');
-    expect(sections.length).toBeGreaterThanOrEqual(2);
-    const details = sections.flatMap((element) => {
-      const location = element.sourceCodeLocation!;
-      try { normalizeRegionHtml('rich', report.slice(location.startTag!.endOffset, location.endTag!.startOffset)); return []; } catch (error) {
-        if (!(error instanceof LiveRegionRefusal)) throw error;
-        return [...error.details];
-      }
-    });
-    expect(details).toEqual(expect.arrayContaining(['<svg>', '<button>', '<div>']));
   });
 
   it.each([

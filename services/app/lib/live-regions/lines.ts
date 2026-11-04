@@ -126,11 +126,9 @@ export class Linear {
   }
 }
 
-export const sameAttrs = (a: Attrs, b: Attrs, keys: readonly string[]) => keys.every((key) => (a[key] ?? null) === (b[key] ?? null));
-
 interface Line { runs: { text: string; attrs: Attrs }[]; attrs: Attrs; text: string }
 /** The region's lines from a Y.Text. An unterminated last line (concurrent deletions can leave one) is a plain line. */
-export function readLines(text: Y.Text): { lines: Line[]; terminated: boolean } {
+function readLines(text: Y.Text): { lines: Line[]; terminated: boolean } {
   const lines: Line[] = [];
   let current: Line = { runs: [], attrs: {}, text: '' };
   for (const op of text.toDelta() as { insert: unknown; attributes?: Attrs }[]) {
@@ -160,7 +158,7 @@ const sameStructure = (a: Attrs, b: Attrs) => JSON.stringify(structureOf(a)) ===
  * anything a peer wrote: unknown attributes are ignored, values coerced, unsafe links unlinked, and a rule line that
  * holds text is a text block (the text is never dropped). Each block's text has exactly its lines' code units.
  */
-export function linesToDoc(kind: RegionKind, lines: readonly Line[]): PMNode {
+function linesToDoc(kind: RegionKind, lines: readonly Line[]): PMNode {
   const schema = regionSchema(kind);
   const { nodes, marks } = schema;
   const inline = (line: Line) => line.runs.map((run) => {

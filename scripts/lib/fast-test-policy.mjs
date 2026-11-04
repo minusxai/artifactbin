@@ -20,6 +20,26 @@ export function partitionFastTests(full, enrolled) {
   return { fast: [...enrolled], full: [...full] };
 }
 
+/**
+ * Reviewed package capabilities: the editing stack lib/live-regions runs in its fast tests (Yjs and lib0, ProseMirror,
+ * prosemirror-markdown's markdown-it) and fast-check's property runner. Their timers are internal scheduling (Yjs's
+ * undo capture window, lib0's promise helpers, ProseMirror's view and input-rule debouncing, fast-check's optional
+ * run timeout) and their computed calls dispatch over their own rule, handler and method tables; none reaches a
+ * service. Each file admits exactly the capabilities listed, the ones the audit reported for it; everything else
+ * (fetch, workers, eval, Function, computed module loads) stays refused there too.
+ */
+const REVIEWED_PACKAGE_CAPABILITIES = [
+  [/(?:^|\/)node_modules\/yjs\/dist\/yjs\.mjs$/, ['setTimeout', 'computed']],
+  [/(?:^|\/)node_modules\/lib0\/promise\.js$/, ['setTimeout', 'setInterval']],
+  [/(?:^|\/)node_modules\/lib0\/(?:decoding|function|logging\.common|logging\.node|trait\/equality)\.js$/, ['computed']],
+  [/(?:^|\/)node_modules\/prosemirror-(?:model|state|commands|markdown)\/dist\/index\.js$/, ['computed']],
+  [/(?:^|\/)node_modules\/prosemirror-view\/dist\/index\.js$/, ['setTimeout', 'computed']],
+  [/(?:^|\/)node_modules\/prosemirror-inputrules\/dist\/index\.js$/, ['setTimeout']],
+  [/(?:^|\/)node_modules\/markdown-it\/lib\/(?:renderer|parser_core|parser_block|parser_inline|rules_block\/(?:table|blockquote|list|reference|lheading|paragraph))\.mjs$/, ['computed']],
+  [/(?:^|\/)node_modules\/fast-check\/lib\/fast-check\.js$/, ['setTimeout', 'computed']],
+];
+const reviewedCapability = (file, capability) => REVIEWED_PACKAGE_CAPABILITIES.some(([pattern, admitted]) => pattern.test(file) && admitted.includes(capability));
+
 /** Reject ambient service/process capabilities and unresolved runtime module loads. */
 export function auditFastSource(source, file) {
   const reasons = [];
@@ -59,7 +79,7 @@ export function auditFastSource(source, file) {
         && ts.isPropertyAccessExpression(expression)
         && expression.expression.kind === ts.SyntaxKind.ThisKeyword
         && name === 'Function';
-      if (forbidden.has(name) && !injectedPresenceClock && !injectedQueryRequest && !cssGrammarFunction) reasons.push(`${file}: ambient ${name}`);
+      if (forbidden.has(name) && !injectedPresenceClock && !injectedQueryRequest && !cssGrammarFunction && !reviewedCapability(normalizedFile, name)) reasons.push(`${file}: ambient ${name}`);
       if ((expression.kind === ts.SyntaxKind.ImportKeyword || name === 'require') && (!node.arguments?.[0] || !ts.isStringLiteral(node.arguments[0]))) reasons.push(`${file}: computed module load`);
       // graphql-js's default field resolver calls a field supplied by the caller.
       // Keep the exception to this exact reviewed dispatcher, not arbitrary package calls.
@@ -119,7 +139,7 @@ export function auditFastSource(source, file) {
         && ts.isIdentifier(expression.expression) && expression.expression.text === 'contributors'
         && node.arguments.length === 2
         && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === 'agg';
-      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch && !acornPluginDispatch && !zodCheckContributorDispatch) reasons.push(`${file}: computed callable capability`);
+      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch && !acornPluginDispatch && !zodCheckContributorDispatch && !reviewedCapability(normalizedFile, 'computed')) reasons.push(`${file}: computed callable capability`);
     }
     ts.forEachChild(node, visit);
   }

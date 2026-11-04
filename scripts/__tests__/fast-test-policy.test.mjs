@@ -28,6 +28,28 @@ describe('ambient capability audit', () => {
   });
 });
 
+describe('reviewed package capabilities (the live-regions editing stack and fast-check)', () => {
+  it('admits exactly the listed capability in the listed package file', () => {
+    expect(auditFastSource('setTimeout(flush, 500); handlers[name](state)', 'node_modules/yjs/dist/yjs.mjs')).toEqual([]);
+    expect(auditFastSource('setTimeout(resolve, 0); setInterval(check, 10)', 'node_modules/lib0/promise.js')).toEqual([]);
+    expect(auditFastSource('rules[i](state)', 'node_modules/markdown-it/lib/parser_inline.mjs')).toEqual([]);
+    expect(auditFastSource('setTimeout(stop, timeout); arbitraries[i](mrng)', 'node_modules/fast-check/lib/fast-check.js')).toEqual([]);
+  });
+  it('refuses a capability the file was not reviewed for, and every unlisted file', () => {
+    expect(auditFastSource('table[i](x)', 'node_modules/lib0/promise.js')).not.toEqual([]);
+    expect(auditFastSource('setTimeout(f, 1)', 'node_modules/prosemirror-model/dist/index.js')).not.toEqual([]);
+    expect(auditFastSource('setTimeout(f, 1)', 'node_modules/lib0/eventloop.js')).not.toEqual([]);
+    expect(auditFastSource('setTimeout(f, 1)', 'services/app/lib/live-regions/binding.ts')).not.toEqual([]);
+  });
+  it('keeps network, workers and eval refused in reviewed files', () => {
+    for (const file of ['node_modules/yjs/dist/yjs.mjs', 'node_modules/fast-check/lib/fast-check.js', 'node_modules/prosemirror-view/dist/index.js']) {
+      expect(auditFastSource('fetch(url)', file)).not.toEqual([]);
+      expect(auditFastSource('new Worker("w.js")', file)).not.toEqual([]);
+      expect(auditFastSource('eval(code)', file)).not.toEqual([]);
+    }
+  });
+});
+
 describe('full-suite ownership', () => {
   it('rejects a retained or new file dropped from every full project', () => {
     expect(() => assertFullTestCoverage(['retained.test.ts', 'new.test.mjs'], ['retained.test.ts'])).toThrow('new.test.mjs');

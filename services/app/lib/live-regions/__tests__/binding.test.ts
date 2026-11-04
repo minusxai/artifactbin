@@ -6,7 +6,7 @@
  */
 import { TextSelection } from 'prosemirror-state';
 import { afterEach, describe, expect, it } from 'vitest';
-import * as Y from 'yjs';
+import type * as Y from 'yjs';
 import { absolutePosition, regionText, relativePosition } from '..';
 import { bare, Room, type Client } from './harness';
 

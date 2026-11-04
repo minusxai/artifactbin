@@ -21,11 +21,11 @@ import { Plugin, PluginKey, Selection, TextSelection, type Command, type EditorS
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import * as Y from 'yjs';
-import { insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
+import { insertUnits, keysOf, Linear, readText, type Attrs } from './lines';
 import type { RegionKind } from './schema';
 
 interface BindingState { binding: Binding; pending: readonly Transaction[] }
-export const bindingKey = new PluginKey<BindingState>('live-region-binding');
+const bindingKey = new PluginKey<BindingState>('live-region-binding');
 
 /** One step's effect on the shared text, from the documents before and after it. */
 function writeStep(text: Y.Text, kind: RegionKind, step: { getMap(): { forEach(f: (a: number, b: number, c: number, d: number) => void): void } }, before: PMNode, after: PMNode): void {
