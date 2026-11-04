@@ -13,13 +13,15 @@
  *    REGION_IDLE_SAVE_MS is saved by the idle backstop. Both go through the store's save, which locks the page FOR
  *    UPDATE: a second process racing it finds nothing left to save.
  */
-import { artifactChannel, regionsChannel, type RegionStreamFrame } from '@artifactbin/contracts';
+import { artifactChannel, isCellKey, regionsChannel, type RegionStreamFrame } from '@artifactbin/contracts';
 import { editableRegions, isRegionId, type RegionKind } from '@/lib/live-regions';
 import { editablePage, liveRegionDoc, regionUpdatesAfter, type RegionRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db } from '@/lib/platform';
 import * as Y from 'yjs';
 import { base64, type RegionStore } from './sessions';
+import { openCellStream } from './cell-stream';
+import type { CellStore } from './cells';
 
 /** Timers and time, injectable so a test can drive the idle backstop. */
 export interface RegionClock {
@@ -52,19 +54,33 @@ function parseCursors(after: string | null): Map<string, number> | null {
   for (const entry of after.split(',')) {
     const at = entry.lastIndexOf(':');
     const regionId = entry.slice(0, at), seq = Number(entry.slice(at + 1));
-    if (at < 1 || !isRegionId(regionId) || !Number.isSafeInteger(seq) || seq < 0 || cursors.has(regionId)) return null;
+    if (at < 1 || !(isRegionId(regionId) || isCellKey(regionId)) || !Number.isSafeInteger(seq) || seq < 0 || cursors.has(regionId)) return null;
     cursors.set(regionId, seq);
   }
-  return cursors.size <= 64 ? cursors : null;
+  // A stream follows regions or cells, never both (a cell's reader need not edit the page).
+  const cells = [...cursors.keys()].filter(isCellKey).length;
+  return cursors.size <= 64 && (cells === 0 || cells === cursors.size) ? cursors : null;
 }
 
 interface Follow { seq: number; opening: boolean; kind?: RegionKind; createdAt?: string }
-interface PageWatch { streams: Set<{ actor: AccessActor }>; idle?: unknown; leave?: unknown }
+/** What a watched page saves on leave and on idle: its regions, or (`cells:<id>`) the cells its readers type in. */
+export interface WatchSaver {
+  save(actor: AccessActor, options?: { idleBefore?: string }): Promise<{ status: number }>;
+  /** Anything dirty and quiet since `idleBefore`? (default: ask the save) */
+  quiet?(idleBefore: string): Promise<boolean>;
+  /** Save as each member leaves (its cells may be ones nobody else may write), not only as the last. */
+  eachLeaves?: boolean;
+}
+interface PageWatch { streams: Set<{ actor: AccessActor }>; idle?: unknown; leave?: unknown; saver: WatchSaver; leaving?: Set<unknown> }
+export interface StreamMembership {
+  join(key: string, member: { actor: AccessActor }, saver: WatchSaver): void;
+  leave(key: string, member: { actor: AccessActor }): void;
+}
 
 const STATE_COLUMNS = 'region_id, kind, state_seq::int AS state_seq, last_seq::int AS last_seq, saved_version, created_at';
 const BATCH = 500;
 
-export function regionStreams(store: RegionStore, options: RegionStreamOptions) {
+export function regionStreams(store: RegionStore, options: RegionStreamOptions, cells?: CellStore) {
   const { clock } = options;
   const pages = new Map<string, PageWatch>();
   /** Background saves still running (a test awaits them through `settle`). */
@@ -75,33 +91,52 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions) 
   };
 
   /** The idle backstop: one check per page per process while any of its streams is open. */
+  /** A page's regions: dirty and quiet rows of the page itself, saved by any editor. */
+  const regionSaver = (artifactId: string): WatchSaver => ({
+    save: (actor, saveOptions) => store.flush(actor, artifactId, saveOptions),
+    async quiet(idleBefore) {
+      const db = await options.db();
+      return (await db.query('SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND last_update_at <= $2 LIMIT 1', [artifactId, idleBefore])).rows.length > 0;
+    },
+  });
+
   async function idleSave(artifactId: string): Promise<void> {
     const watch = pages.get(artifactId);
     if (!watch?.streams.size) return;
     const idleBefore = new Date(clock.now() - options.idleSaveMs).toISOString();
-    const db = await options.db();
-    const quiet = await db.query('SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND last_update_at <= $2 LIMIT 1', [artifactId, idleBefore]);
-    if (!quiet.rows.length) return;
-    for (const { actor } of [...watch.streams]) if ((await store.flush(actor, artifactId, { idleBefore })).status === 200) return;
+    if (watch.saver.quiet && !await watch.saver.quiet(idleBefore)) return;
+    for (const { actor } of [...watch.streams]) if ((await watch.saver.save(actor, { idleBefore })).status === 200 && !watch.saver.eachLeaves) return;
   }
 
-  function join(artifactId: string, member: { actor: AccessActor }): void {
+  function join(artifactId: string, member: { actor: AccessActor }, saver: WatchSaver = regionSaver(artifactId)): void {
     let watch = pages.get(artifactId);
-    if (!watch) pages.set(artifactId, watch = { streams: new Set() });
+    if (!watch) pages.set(artifactId, watch = { streams: new Set(), saver });
     if (watch.leave !== undefined) { clock.clearTimeout(watch.leave); watch.leave = undefined; }
     watch.streams.add(member);
     watch.idle ??= clock.setInterval(() => inBackground(() => idleSave(artifactId)), options.idleCheckMs);
   }
 
+  const sameActor = (a: AccessActor, b: AccessActor) => a.userId === b.userId && (a.tokenId || '') === (b.tokenId || '');
   function leave(artifactId: string, member: { actor: AccessActor }): void {
     const watch = pages.get(artifactId);
-    if (!watch?.streams.delete(member) || watch.streams.size) return;
+    if (!watch?.streams.delete(member)) return;
+    if (watch.streams.size) {
+      if (!watch.saver.eachLeaves) return;
+      // Cells: a member leaving saves what it may write, unless it comes back (or has another stream) within the grace.
+      const timer = clock.setTimeout(() => {
+        watch.leaving?.delete(timer);
+        if ([...watch.streams].some((other) => sameActor(other.actor, member.actor))) return;
+        inBackground(() => watch.saver.save(member.actor));
+      }, options.leaveGraceMs);
+      (watch.leaving ??= new Set()).add(timer);
+      return;
+    }
     clock.clearInterval(watch.idle);
     watch.idle = undefined;
     watch.leave = clock.setTimeout(() => {
       if (pages.get(artifactId) !== watch || watch.streams.size) return;
       pages.delete(artifactId);
-      inBackground(() => store.flush(member.actor, artifactId));
+      inBackground(() => watch.saver.save(member.actor));
     }, options.leaveGraceMs);
   }
 
@@ -109,6 +144,10 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions) 
     if (!ID_RE.test(artifactId)) return { status: 'not_found' };
     const cursors = parseCursors(after);
     if (!cursors) return { status: 'invalid' };
+    if (cursors.size && isCellKey(cursors.keys().next().value)) {
+      if (!cells) return { status: 'not_found' };
+      return openCellStream(cells, { ...options, join, leave }, actor, artifactId, cursors, signal);
+    }
     const db = await options.db();
     const initial = await editablePage(db, actor, artifactId);
     if (!initial || initial.format !== 'html') return { status: 'not_found' };
@@ -224,7 +263,7 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions) 
     async settle(): Promise<void> { while (background.size) await Promise.all([...background]); },
     /** Stops every timer (tests, shutdown). */
     dispose(): void {
-      for (const watch of pages.values()) { clock.clearInterval(watch.idle); clock.clearTimeout(watch.leave); }
+      for (const watch of pages.values()) { clock.clearInterval(watch.idle); clock.clearTimeout(watch.leave); for (const timer of watch.leaving ?? []) clock.clearTimeout(timer); }
       pages.clear();
     },
   };

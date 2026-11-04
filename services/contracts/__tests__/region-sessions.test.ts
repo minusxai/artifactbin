@@ -8,10 +8,22 @@ import {
   REGION_IDLE_SAVE_MS, REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES, regionsChannel,
   type RegionCaret, type RegionFlushReply, type RegionFrameMessage, type RegionKind, type RegionOpenReply,
   type RegionParentMessage, type RegionRefusalBody, type RegionRefusalCode, type RegionStreamFrame,
-  type RegionUpdateReply, type RegionUpdateRequest, DOC_REGION, type RegionContentReply, type RegionWriteRequest, type RegionWriteReply,
+  type RegionUpdateReply, type RegionUpdateRequest, DOC_REGION, cellKey, isCellKey, parseCellKey, CELL_READONLY, type CollabStatus, type RegionContentReply, type RegionWriteRequest, type RegionWriteReply,
 } from '../src/region-sessions';
 
 describe('region sessions contract', () => {
+  it('keys a dataset text cell by link name, row _id and field, outside the region id grammar', () => {
+    const key = cellKey({ dataset: 'tasks', rowId: 'r_Ab-9_x', column: 'description' });
+    expect(key).toBe('cell:tasks:r_Ab-9_x:description');
+    expect(isCellKey(key)).toBe(true);
+    expect(parseCellKey(key)).toEqual({ dataset: 'tasks', rowId: 'r_Ab-9_x', column: 'description' });
+    for (const bad of ['cell:tasks:x1:description', 'cell:9tasks:r_a:b', 'cell:tasks:r_a:', 'cell:tasks:r_a:b,c', 'tasks:r_a:b', 'af-6', 'cell:t:r_a:b:c'])
+      expect(isCellKey(bad), bad).toBe(false);
+    const statuses: CollabStatus[] = ['synced', 'pending', 'offline', 'readonly'];
+    expect(statuses).toHaveLength(4);
+    expect(CELL_READONLY).toBe('readonly');
+  });
+
   it('wakes a page through one lower-case NOTIFY channel', () => {
     expect(regionsChannel('AbC123')).toBe('regions_abc123');
   });
