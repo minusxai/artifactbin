@@ -225,7 +225,7 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Replace native HTML or retained data/media content at its existing artifact ID. Send expectedVersion and expectedState from the observed head; a sharing, visibility or policy change since that read does not refuse it. Changing visibility, linkRole, access or shares in the same write also needs the observed sharing_revision as expectedSharingRevision. Every accepted save retains the previous version; markup and document_update are retired publication inputs.',
+  description: 'Replace native HTML or retained data/media content at its existing artifact ID. Send expectedVersion and expectedState from the observed head; a sharing, visibility or policy change since that read does not refuse it. A write that also sets visibility, linkRole, access or shares may send the observed sharing_revision as expectedSharingRevision to be refused (changed: sharing) when sharing moved since the read; without it the settings apply. Every accepted save retains the previous version; markup and document_update are retired publication inputs.',
   input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), expectedSharingRevision: z.number().int().min(0).optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
@@ -386,13 +386,13 @@ const getVersionOp: Operation = {
 
 const updateMetadataOp: Operation = {
  name:'update_metadata', title:'Update metadata without a content version', http:{method:'PATCH',path:'/api/artifacts/{id}'},
- description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Changing visibility, linkRole, access or shares also needs the observed sharing_revision as expectedSharingRevision; a policy needs expectedPolicyRevision. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
+ description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Visibility, linkRole, access or shares may carry the observed sharing_revision as expectedSharingRevision (refused with changed: sharing when it moved; without it the settings apply); a policy needs expectedPolicyRevision. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
  input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
   title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
   visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
   shares:CONTENT_FIELDS.shares,expectedSharingRevision:z.number().int().min(0).optional(),policy:z.record(z.string(),z.unknown()).nullable().optional(),expectedPolicyRevision:z.number().int().min(0).optional()},
  annotations:{},example:{input:{id:'aB3xK9',title:'Updated title',expectedState:'a'.repeat(64)}},
- errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},{status:400,code:'sharing_revision_required',fix:'Read the current artifact and send its sharing_revision as expectedSharingRevision with visibility, linkRole, access or shares.'},VERSION_CONFLICT],
+ errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},VERSION_CONFLICT],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
 };
 

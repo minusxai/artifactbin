@@ -151,8 +151,8 @@ describe('the metadata PATCH from a body', () => {
     expect((await patch(owner, { expectedState: 'b'.repeat(64), title: 'x' }))[0]).toBe(409);
     expect(await patch(editor, { expectedState: state, title: 'Dry' }, true)).toEqual([200, { valid: true, dry_run: true, state, commit_checks: ['authorization', 'observed_state'] }]);
     expect((await head(row.id)).title).toBe('Doc');
-    expect((await patch(editor, { expectedState: state, linkRole: 'commenter' }))).toEqual([400, expect.objectContaining({ error: 'sharing_revision_required' })]);
-    const [status, wire] = await patch(editor, { expectedState: state, expectedSharingRevision: current.sharing_revision ?? 0, title: 'By editor', linkRole: 'commenter' });
+    expect((await patch(editor, { expectedState: state, expectedSharingRevision: (current.sharing_revision ?? 0) + 1, linkRole: 'commenter' }))).toEqual([409, expect.objectContaining({ error: 'version_conflict', changed: 'sharing' })]);
+    const [status, wire] = await patch(editor, { expectedState: state, title: 'By editor', linkRole: 'commenter' });
     expect([status, wire.title, wire.link_role]).toEqual([200, 'By editor', 'commenter']);
   });
 });

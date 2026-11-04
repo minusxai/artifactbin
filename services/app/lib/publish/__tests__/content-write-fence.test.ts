@@ -3,7 +3,7 @@
  * state it read, and is refused only when what it replaces moved: a newer version (`changed: 'content'`) or the
  * title, description or metadata without one (`changed: 'details'`). Sharing, visibility, link role and dataset
  * policy are not content: a change to them between the read and the publish never refuses it. Writes OF those
- * settings carry their own revision fences (expectedSharingRevision, expectedPolicyRevision).
+ * settings may name their own revisions (expectedSharingRevision, expectedPolicyRevision) and are refused when stale.
  */
 import {describe,expect,it} from 'vitest';
 import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
@@ -108,28 +108,28 @@ describe('a genuine conflict names what changed',()=>{
 });
 
 describe('writes of access settings keep their own fences',()=>{
- it('requires the observed sharing revision to change visibility, link role or shares, and refuses a stale one',async()=>{
+ it('refuses a settings change naming a stale sharing revision, and applies one naming none',async()=>{
   const me=await owner(),id=await publish(me.token,{html:page('One')}),seen=await head(me.token,id);
-  expect(await metadata(me.token,id,{visibility:'unlisted',expectedState:seen.state})).toMatchObject({status:400,body:{error:'sharing_revision_required'}});
   await updateSharingFor(me.actor,id,{shares:[{email:'mxmx_test_reader@example.test',role:'viewer'}]});
   expect(await metadata(me.token,id,{linkRole:'commenter',expectedState:seen.state,expectedSharingRevision:seen.sharing_revision})).toMatchObject({status:409,body:{error:'version_conflict',changed:'sharing'}});
   const fresh=await head(me.token,id);
   expect((await metadata(me.token,id,{linkRole:'commenter',expectedState:fresh.state,expectedSharingRevision:fresh.sharing_revision})).status).toBe(200);
   // A visibility change moves the sharing revision, so a second writer from the same read is refused.
   expect(await metadata(me.token,id,{visibility:'unlisted',expectedState:fresh.state,expectedSharingRevision:fresh.sharing_revision})).toMatchObject({status:409,body:{error:'version_conflict',changed:'sharing'}});
+  // Without the field an explicit settings change wins.
+  expect(await metadata(me.token,id,{visibility:'unlisted',expectedState:seen.state})).toMatchObject({status:200,body:{visibility:'unlisted'}});
   // A details write still fences on state alone: the sharing changes above did not move it.
   expect((await metadata(me.token,id,{title:'Still mine',expectedState:seen.state})).status).toBe(200);
  });
 
- it('fences a publish that also changes visibility on the sharing revision, and lets an unchanged value ride free',async()=>{
+ it('applies a publish that also changes visibility without a sharing revision, and refuses one naming a stale revision',async()=>{
   const me=await owner(),id=await publish(me.token,{html:page('One')}),seen=await head(me.token,id);
-  expect(await put(me.token,id,{html:page('Two'),visibility:'unlisted',...observed(seen)})).toMatchObject({status:400,body:{error:'sharing_revision_required'}});
-  expect((await put(me.token,id,{html:page('Two'),visibility:'private',...observed(seen)})).status).toBe(200);
+  expect(await put(me.token,id,{html:page('Two'),visibility:'unlisted',...observed(seen)})).toMatchObject({status:200,body:{visibility:'unlisted'}});
   const now=await head(me.token,id);
   await updateSharingFor(me.actor,id,{linkRole:'commenter'});
-  expect(await put(me.token,id,{html:page('Three'),visibility:'unlisted',expectedSharingRevision:now.sharing_revision,...observed(now)})).toMatchObject({status:409,body:{error:'version_conflict',changed:'sharing'}});
+  expect(await put(me.token,id,{html:page('Three'),visibility:'private',expectedSharingRevision:now.sharing_revision,...observed(now)})).toMatchObject({status:409,body:{error:'version_conflict',changed:'sharing'}});
   const fresh=await head(me.token,id);
-  expect(await put(me.token,id,{html:page('Three'),visibility:'unlisted',expectedSharingRevision:fresh.sharing_revision,...observed(fresh)})).toMatchObject({status:200,body:{visibility:'unlisted'}});
+  expect(await put(me.token,id,{html:page('Three'),visibility:'private',expectedSharingRevision:fresh.sharing_revision,...observed(fresh)})).toMatchObject({status:200,body:{visibility:'private'}});
  });
 
  it('refuses a policy write from a stale policy revision with changed: policy',async()=>{

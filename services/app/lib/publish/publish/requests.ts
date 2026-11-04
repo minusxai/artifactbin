@@ -218,7 +218,7 @@ export async function replaceArtifactWithBody(
   const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
-  const expectedSharingRevision=parseSharingRevision(sent,current,{visibility,link_role:link,access,shares:sent.shares!==undefined?shares:undefined});
+  const expectedSharingRevision=parseSharingRevision(sent);
   if(expectedSharingRevision instanceof Response)return expectedSharingRevision;
   /*
    * PLACEMENT IS RESOLVED HERE, AFTER the scope answered `current` above — a

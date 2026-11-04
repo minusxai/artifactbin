@@ -197,18 +197,15 @@ export function parseExpectedVersion(body: Record<string, unknown>, requireVersi
 }
 
 /**
- * Access settings sit outside the observed state (lib/artifacts state), so a write that changes visibility, link role
- * or dataset access, or replaces the share list, names the `sharing_revision` it read as expectedSharingRevision.
- * Values equal to the head's are no change and need none. Answers the revision to fence on, or a refusal.
+ * Access settings sit outside the observed state (lib/artifacts state). A write that sets visibility, link role,
+ * access or shares MAY name the `sharing_revision` it read as expectedSharingRevision, and is then refused when that
+ * moved; without it the requested settings apply. Ignored on a write that sets none of them.
  */
-export function parseSharingRevision(body: Record<string, unknown>, current: ArtifactRow, asked: {visibility?: Visibility; link_role?: ShareRole; access?: DatasetAccess; shares?: ShareEntry[]}): number | undefined | Response {
+export function parseSharingRevision(body: Record<string, unknown>): number | undefined | Response {
   const revision = body.expectedSharingRevision;
-  const touches = ['visibility', 'linkRole', 'access', 'shares'].some(key => body[key] !== undefined);
-  if (revision !== undefined && (!touches || !Number.isSafeInteger(revision) || Number(revision) < 0)) return json({error:'invalid_metadata',field:'expectedSharingRevision'},400);
-  const changes = asked.shares !== undefined || !!asked.visibility && asked.visibility !== current.visibility
-    || !!asked.link_role && asked.link_role !== (current.link_role ?? 'viewer') || !!asked.access && current.format === 'dataset' && asked.access !== current.access;
-  if (changes && revision === undefined) return json({error:'sharing_revision_required',hint:'Read the artifact and send its sharing_revision as expectedSharingRevision.'},400);
-  return revision as number | undefined;
+  if (revision === undefined || !['visibility', 'linkRole', 'access', 'shares'].some(key => body[key] !== undefined)) return undefined;
+  if (!Number.isSafeInteger(revision) || Number(revision) < 0) return json({error:'invalid_metadata',field:'expectedSharingRevision'},400);
+  return revision as number;
 }
 
 /**

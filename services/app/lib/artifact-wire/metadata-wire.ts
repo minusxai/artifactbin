@@ -35,7 +35,7 @@ export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Re
  const visibility=parseVisibilityValue(body.visibility,!!(current.user_id||current.group_id));if(visibility instanceof Response)return visibility;if(visibility)patch.visibility=visibility;
  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;if(link)patch.link_role=link;
  const access=parseAccessValue(body.access,current.format);if(access instanceof Response)return access;if(access)patch.access=access;
- const expectedSharingRevision=parseSharingRevision(body,current,patch);if(expectedSharingRevision instanceof Response)return expectedSharingRevision;
+ const expectedSharingRevision=parseSharingRevision(body);if(expectedSharingRevision instanceof Response)return expectedSharingRevision;
  const parent=parseParentField(body);if(parent instanceof Response)return parent;
  if(parent!==undefined){const placement=await resolveParent(writerFor(current),parent,{id,format:current.format});if(isParentRefusal(placement))return json(placement,400);patch.ancestor_ids=placement.ancestor_ids;}
  if(!Object.keys(patch).length)return json({error:'empty_metadata'},400);
