@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDatasetPolicy, compilePolicyPredicate } from '@artifactbin/utils/dataset-policy';
+import { parseDatasetPolicy, compilePolicyPredicate, datasetPatternMatch } from '@artifactbin/utils/dataset-policy';
 
 const policy = (permission: unknown, operation = 'insert') => ({
   version: 1,
@@ -103,6 +103,25 @@ describe('Hasura v2 write permission compatibility', () => {
     expect(out.sql).toContain('IS NULL');
     expect(Object.values(out.params)).toContain('u1');
     expect(out.sql).not.toContain('u1');
+  });
+  it('compiles the pattern operators to the engine matcher it is handed, and refuses them without one', () => {
+    const out = compilePolicyPredicate(
+      { _and: [{ body: { _like: 'a%' } }, { body: { _nilike: 'X-Hasura-User-Id' } }] },
+      ['body'],
+      { 'x-hasura-user-id': 'u1' },
+      'p',
+      { patternMatch: 'match_fn' },
+    );
+    expect(out.sql).toContain('match_fn("body", $p_0, 0)');
+    expect(out.sql).toContain('(NOT match_fn("body", $p_1, 1))');
+    expect(out.params).toEqual({ p_0: 'a%', p_1: 'u1' });
+    expect(() => compilePolicyPredicate({ body: { _like: 'a%' } }, ['body'], {})).toThrow(/pattern/);
+    expect(() => compilePolicyPredicate({ body: { _like: 3 } } as never, ['body'], {}, 'p', { patternMatch: 'f' })).toThrow(/text pattern/);
+    expect(datasetPatternMatch('École', 'éCOLE', true)).toBe(true);
+    expect(datasetPatternMatch('École', 'éCOLE', false)).toBe(false);
+    expect(datasetPatternMatch(null, '%', false)).toBeNull();
+    expect(datasetPatternMatch(3, '%', false)).toBeNull();
+    expect(datasetPatternMatch('50% off', '50\\%%', false)).toBe(true);
   });
   it('empty predicates are true; unknown columns and missing session variables fail closed', () => {
     expect(compilePolicyPredicate({}, [], {}).sql).toBe('TRUE');

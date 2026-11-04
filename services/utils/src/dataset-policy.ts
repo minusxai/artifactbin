@@ -12,6 +12,41 @@ const comparisons: Record<string, string> = {
   _lt: '<',
   _lte: '<=',
 };
+/** The pattern operators: [case-insensitive, negated]. */
+const PATTERNS: Record<string, readonly [boolean, boolean]> = {
+  _like: [false, false],
+  _nlike: [false, true],
+  _ilike: [true, false],
+  _nilike: [true, true],
+};
+const LITERAL = /[.*+?^${}()|[\]\\/]/g;
+const patternCache = new Map<string, RegExp>();
+/**
+ * THE ONE PATTERN MATCHER of a policy predicate (`_like`, `_ilike`; their negations are its NOT): a Postgres LIKE
+ * pattern (`%` any run, `_` one character, `\` escapes the next) matched against the whole text, `insensitive`
+ * folding case as Unicode does. Three-valued: null (SQL's unknown) when either side is null or not text. The role
+ * view (app lib/dataset-permissions) evaluates filters and the live cell check with it, and the write engine
+ * registers it as an SQL function for the filter and check it judges a write by, so all of them agree.
+ */
+export function datasetPatternMatch(value: unknown, pattern: unknown, insensitive: boolean): boolean | null {
+  if (typeof value !== 'string' || typeof pattern !== 'string') return null;
+  const key = `${insensitive ? 'i' : 's'}${pattern}`;
+  let re = patternCache.get(key);
+  if (!re) {
+    let out = '';
+    for (let i = 0; i < pattern.length; i++) {
+      const c = pattern[i]!;
+      if (c === '\\' && i + 1 < pattern.length) out += pattern[++i]!.replace(LITERAL, '\\$&');
+      else if (c === '%') out += '[\\s\\S]*';
+      else if (c === '_') out += '[\\s\\S]';
+      else out += c.replace(LITERAL, '\\$&');
+    }
+    re = new RegExp(`^${out}$`, insensitive ? 'iu' : 'u');
+    if (patternCache.size > 1_000) patternCache.clear();
+    patternCache.set(key, re);
+  }
+  return re.test(value);
+}
 function bad(path: string, reason: string): never {
   throw new Error(`${path}: ${reason}`);
 }
@@ -63,6 +98,8 @@ function predicate(value: unknown, path: string, depth = 0) {
         } else if (Object.hasOwn(comparisons, op)) {
           scalar(x, p);
           if (x === null) bad(p, 'null comparisons require _is_null');
+        } else if (Object.hasOwn(PATTERNS, op)) {
+          if (typeof x !== 'string') bad(`${p}.${op}`, 'expected a text pattern');
         } else bad(`${p}.${op}`, 'unsupported operator');
       }
     }
@@ -186,12 +223,17 @@ export function policyValue(
   }
   return value;
 }
-/** SQL NULL semantics are delegated to DuckDB, including NOT/AND/OR. */
+/**
+ * A policy predicate as one SQL condition for the write engine, values bound (`$<prefix>_<n>`). SQL's three-valued
+ * logic is the engine's, NOT/AND/OR included. The pattern operators call `options.patternMatch`, the SQL name the
+ * engine registered `datasetPatternMatch` under (value, pattern, 1 for case-insensitive); without one they refuse.
+ */
 export function compilePolicyPredicate(
   value: PolicyPredicate,
   columns: string[],
   session: Record<string, Scalar>,
   prefix = 'policy',
+  options: { patternMatch?: string } = {},
 ): { sql: string; params: Record<string, Scalar> } {
   predicate(value, 'predicate');
   const params: Record<string, Scalar> = {};
@@ -218,6 +260,12 @@ export function compilePolicyPredicate(
         v as Record<string, Scalar | Scalar[]>,
       ).map(([op, x]) => {
         if (op === '_is_null') return `${col} IS ${x ? '' : 'NOT '}NULL`;
+        const pattern = Object.hasOwn(PATTERNS, op) ? PATTERNS[op] : undefined;
+        if (pattern) {
+          if (!options.patternMatch) bad(`${field}.${op}`, 'pattern operators need the engine\'s matcher');
+          const call = `${options.patternMatch}(${col}, ${bind(x as Scalar)}, ${pattern[0] ? 1 : 0})`;
+          return pattern[1] ? `(NOT ${call})` : call;
+        }
         if (op === '_in' || op === '_nin') {
           const list = x as Scalar[];
           return list.length

@@ -136,6 +136,28 @@ it('rules hold: insert columns, presets from the session, check, the update and 
   expect((await stored(id)).map((r) => r.name)).toEqual(['ada', 'bo']);
 });
 
+it('pattern operators hold in an update rule: _like in the filter, _nlike and _ilike in the check', async () => {
+  const patterned = () => {
+    const p = POLICY();
+    p.tables[0]!.update_permissions = [{ role: 'viewer', permission: { columns: ['name', 'votes'], filter: { team: { _like: 're%' } } as never, check: { _and: [{ name: { _nlike: '%!%' } }, { name: { _ilike: '%A%' } }] } as never } }];
+    return p;
+  };
+  const { owner, viewer, id } = await staff(STAFF, patterned);
+  const ids = await idsByName(id, owner);
+  const rename = (rowId: string, name: string) => gql(id, viewer, 'mutation($id: ID!, $name: String!) { update_staff_by_pk(pk_columns: {_id: $id}, _set: {name: $name}) { name } }', { id: rowId, name });
+  // The red row passes the filter; a name with an `a` in any case and no `!` passes the check.
+  const renamed = await rename(ids.ada!, 'nina');
+  expect(renamed.body.errors).toBeUndefined();
+  expect(renamed.body.data).toEqual({ update_staff_by_pk: { name: 'nina' } });
+  const head = await version(id);
+  expect(code(await rename(ids.ada!, 'anna!'))).toBe('check_violation');
+  expect(code(await rename(ids.ada!, 'bob'))).toBe('check_violation');
+  expect(await version(id)).toBe(head);
+  // The blue row is outside the filter: nothing is updated.
+  expect((await rename(ids.bo!, 'Abe')).body.data).toEqual({ update_staff_by_pk: null });
+  expect((await stored(id)).map((r) => r.name)).toEqual(['nina', 'bo']);
+});
+
 it('anonymous writes only what its rule allows, with its preset, and sees only selectable returning', async () => {
   const { owner, id } = await staff();
   const added = await gql(id, null, 'mutation { insert_staff(objects: [{name: "guest"}]) { affected_rows returning { _id name } } }');

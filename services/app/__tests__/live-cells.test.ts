@@ -398,6 +398,24 @@ describe('text the dataset will not take', () => {
     expect((await stored())[0]!.description).toBe('Fix the login bug ok');
   });
 
+  it('a check with pattern operators decides as the engine will: an admitted text saves, a refused one is check_violation', async () => {
+    const head = (await getArtifactById(datasetId))!;
+    const policy = POLICY();
+    const viewerRule = policy.tables[0]!.update_permissions.find((entry) => entry.role === 'viewer')!;
+    (viewerRule.permission as Record<string, unknown>).check = { _and: [{ description: { _nlike: '%TODO%' } }, { description: { _ilike: 'fix%' } }] };
+    expect((await patchMetadata(ownerToken, datasetId, { policy, expectedPolicyRevision: head.policy_revision ?? 0 })).status).toBe(200);
+    const a = await join(viewer);
+    a.text.insert(a.text.length, ' today');
+    expect((await a.push()).status).toBe(200);
+    a.text.insert(a.text.length, ' TODO');
+    expect(await a.push()).toEqual({ status: 422, body: { error: 'check_violation' } });
+    const before = await datasetVersion();
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
+    expect(await datasetVersion()).toBe(before + 1);
+    expect((await stored())[0]!.description).toBe('Fix the login bug today');
+    expect((await (await getDb()).query("SELECT 1 FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%'", [datasetId])).rows).toHaveLength(1);
+  });
+
   it('a save the dataset refuses closes the cell for everyone (closed: rejected) and leaves nothing dirty', async () => {
     const a = await join(viewer);
     const watching = await stream(viewer, `${key(red)}:${a.reply.seq}`);

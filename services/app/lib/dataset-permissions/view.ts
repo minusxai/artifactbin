@@ -17,6 +17,7 @@
  * (`columns:"*"`, `filter:{}`, no limit) is the rows themselves, with nothing evaluated or copied.
  */
 import { DATASET_ROW_ID, type DatasetBoolExp, type DatasetSelectPermission, type Scalar } from '@artifactbin/contracts';
+import { datasetPatternMatch } from '@artifactbin/utils/dataset-policy';
 
 type Row = Record<string, unknown>;
 type Truth = boolean | null;
@@ -51,29 +52,6 @@ function compare(a: unknown, b: unknown): number | null {
   return null;
 }
 
-/** A Postgres LIKE pattern (`%`, `_`, `\` escapes) as an anchored regular expression. */
-const patterns = new Map<string, RegExp>();
-function like(value: unknown, pattern: unknown, insensitive: boolean): Truth {
-  if (value === null || value === undefined || pattern === null || pattern === undefined) return null;
-  if (typeof value !== 'string' || typeof pattern !== 'string') return null;
-  const key = `${insensitive ? 'i' : 's'}${pattern}`;
-  let re = patterns.get(key);
-  if (!re) {
-    let out = '';
-    for (let i = 0; i < pattern.length; i++) {
-      const c = pattern[i]!;
-      if (c === '\\' && i + 1 < pattern.length) out += pattern[++i]!.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-      else if (c === '%') out += '[\\s\\S]*';
-      else if (c === '_') out += '[\\s\\S]';
-      else out += c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-    }
-    re = new RegExp(`^${out}$`, insensitive ? 'iu' : 'u');
-    if (patterns.size > 1_000) patterns.clear();
-    patterns.set(key, re);
-  }
-  return re.test(value);
-}
-
 const not = (t: Truth): Truth => (t === null ? null : !t);
 function and(items: Truth[]): Truth { return items.includes(false) ? false : items.includes(null) ? null : true; }
 function or(items: Truth[]): Truth { return items.includes(true) ? true : items.includes(null) ? null : false; }
@@ -98,10 +76,11 @@ function comparison(value: unknown, ops: Record<string, unknown>, session: Datas
       case '_in': return Array.isArray(operand) && !operand.length ? false : inList(value, operand);
       case '_nin': return Array.isArray(operand) && !operand.length ? true : not(inList(value, operand));
       case '_is_null': return typeof operand === 'boolean' ? (value === null || value === undefined) === operand : null;
-      case '_like': return like(value, operand, false);
-      case '_nlike': return not(like(value, operand, false));
-      case '_ilike': return like(value, operand, true);
-      case '_nilike': return not(like(value, operand, true));
+      // The one matcher the write engine also judges a filter and a check with (utils dataset-policy).
+      case '_like': return datasetPatternMatch(value, operand, false);
+      case '_nlike': return not(datasetPatternMatch(value, operand, false));
+      case '_ilike': return datasetPatternMatch(value, operand, true);
+      case '_nilike': return not(datasetPatternMatch(value, operand, true));
       default: return null;
     }
   }));
