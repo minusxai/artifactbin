@@ -39,7 +39,7 @@ export interface DatasetCell {
 const sidecar = (dataset: ArtifactRow, tableId: string) => (dataset.meta as { graphqlRowIds?: Record<string, unknown> }).graphqlRowIds?.[tableId];
 
 /** The policy's collaborative columns of one table; none when no policy is stored or it does not read. */
-function collaborativeColumns(dataset: ArtifactRow, table: DatasetTable): readonly string[] {
+export function collaborativeColumns(dataset: Pick<ArtifactRow, 'dataset_policy'>, table: Pick<DatasetTable, 'schema' | 'name'>): readonly string[] {
   try {
     const { policy } = storedPolicy({ policy: dataset.dataset_policy, tables: [] });
     return policy.tables.find((t) => t.table.schema === table.schema && t.table.name === table.name)?.collaborative_columns ?? [];

@@ -4,7 +4,8 @@
  * page follows. Wakeups are pointers, as for regions: each dataset's regions channel (an update, a save, a merged-in
  * write) and artifact channel (any write, a sharing or policy change), and the page's artifact channel (a new head
  * may drop a link). Every wakeup decides again, for each cell: lost authority is `closed` `access`, a row the dataset
- * no longer holds `closed` `removed`, and a dataset that moved is reconciled into the cell before catching up.
+ * no longer holds `closed` `removed`, a cell whose save the dataset refused (its rows deleted, the dataset row still
+ * there) `closed` `rejected`, and a dataset that moved is reconciled into the cell before catching up.
  *
  * Saving on events (./stream's membership under `cells:<page id>`): each reader leaving saves the cells it may write
  * (after the grace), and the idle backstop saves a dataset's quiet dirty cells as any member allowed to.
@@ -73,7 +74,8 @@ export async function openCellStream(store: CellStore, options: RegionStreamOpti
       }
       if (!row || (follow.createdAt !== undefined && (row.created_at !== follow.createdAt || datasetId !== follow.datasetId))) {
         follows.delete(key);
-        await send({ type: 'closed', regionId: key, reason: 'removed' });
+        // The dataset still holds the row and the reader may write it: the cell's rows went because its save was refused.
+        await send({ type: 'closed', regionId: key, reason: follow.createdAt !== undefined ? 'rejected' : 'removed' });
         continue;
       }
       follow.datasetId = datasetId;

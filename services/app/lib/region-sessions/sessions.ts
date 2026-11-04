@@ -22,7 +22,7 @@ export type RegionAnswer<T> = { status: 200; body: T } | { status: 404; body?: R
 export const NOT_FOUND = { status: 404 } as const;
 const STATUS: Record<RegionRefusalCode, 404 | 409 | 413 | 422> = {
   region_not_found: 404, region_ambiguous: 409, out_of_order: 409, region_snapshot_missing: 409, too_large: 413,
-  unsupported_content: 422, foreign_client: 422, outside_region: 422,
+  unsupported_content: 422, foreign_client: 422, outside_region: 422, check_violation: 422,
 };
 export const refuse = (error: RegionRefusalCode, extra: Omit<RegionRefusalBody, 'error'> = {}): RegionAnswer<never> =>
   ({ status: STATUS[error], body: { error, ...extra } }) as RegionAnswer<never>;
@@ -79,7 +79,7 @@ export interface SessionCore {
   /** Assigns a fresh client id to `actor` and logs its first (empty) update; returns the open's reply fields. */
   issue(tx: Tx, artifactId: string, row: RegionRow, doc: Y.Doc, actor: AccessActor): Promise<{ clientId: number; seq: number; after: () => void }>;
   /** Holder check, validation, log and wakeup of one client update to a locked row. */
-  accept(tx: Tx, artifactId: string, row: RegionRow, request: { clientId: number; update: Uint8Array }, actor: AccessActor): Promise<{ answer: RegionAnswer<RegionUpdateReply>; after?: () => void }>;
+  accept(tx: Tx, artifactId: string, row: RegionRow, request: { clientId: number; update: Uint8Array }, actor: AccessActor, admit?: (doc: Y.Doc) => RegionRefusalCode | null): Promise<{ answer: RegionAnswer<RegionUpdateReply>; after?: () => void }>;
   /** Drop a document this process built (its row changed in a way the stamp cannot tell). */
   forget(artifactId: string, regionId: string): void;
 }
@@ -121,7 +121,7 @@ export function sessionCore(db: () => Promise<Db>, now: () => number): SessionCo
       await tx.query('UPDATE region_states SET last_seq = $3 WHERE artifact_id = $1 AND region_id = $2', [artifactId, regionId, seq]);
       return { clientId, seq, after: () => { keep(`${artifactId}/${regionId}`, stamp(row, seq), doc); holders.set(`${artifactId}/${regionId}/${row.created_at}/${clientId}`, actorKey(actor)); } };
     },
-    async accept(tx, artifactId, row, request, actor) {
+    async accept(tx, artifactId, row, request, actor, admit) {
       const regionId = row.region_id;
       const holderKey = `${artifactId}/${regionId}/${row.created_at}/${request.clientId}`;
       let holder = holders.get(holderKey);
@@ -137,6 +137,9 @@ export function sessionCore(db: () => Promise<Db>, now: () => number): SessionCo
       const doc = take(key, stamp(row)) ?? await liveRegionDoc(tx, artifactId, row);
       const check = validateRegionUpdate(row.kind, doc, request.update, request.clientId);
       if (check.duplicate) return { answer: { status: 200, body: { seq: row.last_seq, duplicate: true } }, after: () => keep(key, stamp(row), doc) };
+      // The scope's own rule on the merged result (a cell's `check`); the document held the update, so it is dropped.
+      const refused = admit?.(doc);
+      if (refused) return { answer: refuse(refused) };
       const seq = row.last_seq + 1;
       const at = new Date(now()).toISOString();
       await logRegionUpdate(tx, artifactId, regionId, seq, request.clientId, request.update, actor);

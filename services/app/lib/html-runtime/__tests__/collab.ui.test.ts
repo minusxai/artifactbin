@@ -10,7 +10,7 @@ import * as Y from 'yjs';
 import { cellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts';
 import { createCellState } from '../../live-regions/cells';
 import { createCellPort } from '../frame-cells';
-import { createCollabText, type CollabText } from '../collab-binding';
+import { createCollabText, mergeEarlyTyping, type CollabError, type CollabText } from '../collab-binding';
 
 const KEY = cellKey({ dataset: 'tasks', rowId: 'r_abc', column: 'description' });
 const CLIENT = 4242;
@@ -175,6 +175,111 @@ describe('binding an element', () => {
   });
 });
 
+describe('typing before the first session', () => {
+  const session = (h: ReturnType<typeof harness>, value: string) => {
+    const initial = createCellState(value);
+    Y.applyUpdate(h.server, initial.state);
+    h.say({ kind: 'region-session', regionId: KEY, regionKind: 'text', clientId: CLIENT, state: initial.state, seq: 1 });
+  };
+
+  it('keeps what was typed and applies it to the session text as one splice', () => {
+    const h = harness();
+    const text = createCollabText(h.cells.port, KEY);
+    texts.push(text);
+    const element = textarea('Fix the login bug');
+    text.bind(element);
+    type(element, 'Fix the login bug now');
+    expect(updatesOf(h.posted)).toEqual([]);
+    expect(element.value).toBe('Fix the login bug now');
+    session(h, 'Fix the login bug');
+    expect(element.value).toBe('Fix the login bug now');
+    const [sent] = updatesOf(h.posted);
+    expect(Y.decodeUpdate(sent!.update).structs.map((struct) => (struct as Y.Item).content.getContent().join(''))).toEqual([' now']);
+    Y.applyUpdate(h.server, sent!.update);
+    expect(h.server.getText('region').toString()).toBe('Fix the login bug now');
+    expect(text.status).toBe('pending');
+  });
+
+  it('merges it beside a change someone else made meanwhile: nothing lost, nothing doubled', () => {
+    const h = harness();
+    const text = createCollabText(h.cells.port, KEY);
+    texts.push(text);
+    const element = textarea('Fix the login bug');
+    text.bind(element);
+    type(element, 'Fix the login bug now');
+    // Someone else's unsaved typing is already in the session's text.
+    session(h, 'Urgent: Fix the login bug');
+    expect(element.value).toBe('Urgent: Fix the login bug now');
+    for (const message of updatesOf(h.posted)) Y.applyUpdate(h.server, message.update);
+    expect(h.server.getText('region').toString()).toBe('Urgent: Fix the login bug now');
+  });
+
+  it('when the reader may not write: the saved value comes back, read-only, and the typing is reported', () => {
+    const h = harness();
+    const text = createCollabText(h.cells.port, KEY);
+    texts.push(text);
+    const element = textarea('Fix the login bug');
+    text.bind(element);
+    const errors: CollabError[] = [];
+    text.on('error', (error) => errors.push(error));
+    type(element, 'Fix the login bug, mine');
+    h.say({ kind: 'region-closed', regionId: KEY, reason: 'readonly' });
+    expect(text.status).toBe('readonly');
+    expect(element.readOnly).toBe(true);
+    expect(element.value).toBe('Fix the login bug');
+    expect(errors).toEqual([{ reason: 'readonly', message: 'You can only read this here.', unsaved: 'Fix the login bug, mine' }]);
+    expect(text.error).toEqual(errors[0]);
+    // Nothing typed reaches the cell afterwards.
+    type(element, 'more');
+    expect(updatesOf(h.posted)).toEqual([]);
+  });
+
+  it('merges by splice position, keeping both sides of overlapping changes', () => {
+    expect(mergeEarlyTyping('abc', 'abc', 'xabc')).toBe('xabc');
+    expect(mergeEarlyTyping('abc', 'abcd', 'abc')).toBe('abcd');
+    expect(mergeEarlyTyping('hello world', 'hello brave world', 'hello world!')).toBe('hello brave world!');
+    expect(mergeEarlyTyping('hello world', 'hello brave world', 'Oh hello world')).toBe('Oh hello brave world');
+    // Both rewrote the same word: theirs stays, mine is inserted beside it (nothing removed of theirs).
+    expect(mergeEarlyTyping('one two three', 'one 2 three', 'one TWO three')).toBe('one 2TWO three');
+  });
+});
+
+describe('when editing ends', () => {
+  it('a refused text stays visible, read-only, and the error carries it', () => {
+    const { text, say } = open('Fix the login bug');
+    const element = textarea();
+    text.bind(element);
+    const errors: CollabError[] = [];
+    text.on('error', (error) => errors.push(error));
+    type(element, 'Fix the login bug!!');
+    say({ kind: 'region-closed', regionId: KEY, reason: 'check_violation' });
+    expect(text.status).toBe('readonly');
+    expect(element.readOnly).toBe(true);
+    expect(element.value).toBe('Fix the login bug!!');
+    expect(errors).toEqual([{ reason: 'check_violation', message: 'The dataset does not accept this text, so it was not saved.', unsaved: 'Fix the login bug!!' }]);
+  });
+
+  it('a save the dataset rejected reports the text even after every update was stored', () => {
+    const { text, say } = open('draft');
+    const element = textarea();
+    text.bind(element);
+    type(element, 'draft two');
+    say({ kind: 'region-ack', regionId: KEY, seq: 2, settled: 1 });
+    expect(text.status).toBe('synced');
+    say({ kind: 'region-closed', regionId: KEY, reason: 'rejected' });
+    expect(text.error).toMatchObject({ reason: 'rejected', unsaved: 'draft two' });
+    expect(element.value).toBe('draft two');
+  });
+
+  it('a deleted row is read-only with its reason, and nothing unsaved when everything was stored', () => {
+    const { text, say } = open('kept');
+    const element = textarea();
+    text.bind(element);
+    say({ kind: 'region-closed', regionId: KEY, reason: 'removed' });
+    expect(text.error).toEqual({ reason: 'removed', message: 'This row was deleted.' });
+  });
+});
+
 describe('who may write', () => {
   it('a refusal is readonly: elements become read-only and keep their value; destroy restores them', () => {
     const h = harness();
@@ -196,6 +301,7 @@ describe('who may write', () => {
     texts.push(text);
     await Promise.resolve();
     expect(text.status).toBe('readonly');
+    expect(text.error).toBeNull();
     expect(h.posted).toEqual([]);
   });
 

@@ -103,7 +103,9 @@ export type RegionRefusalCode =
   | 'out_of_order'
   | 'too_large'
   | 'region_not_found'
-  | 'region_snapshot_missing';
+  | 'region_snapshot_missing'
+  /** A cell update whose text the dataset's update rule `check` refuses (it would never save). */
+  | 'check_violation';
 
 export interface RegionRefusalBody {
   error: RegionRefusalCode;
@@ -122,7 +124,8 @@ export type RegionStreamFrame =
   | { type: 'updates'; regionId: string; from: number; to: number; updates: string[] }
   | { type: 'reset'; regionId: string; seq: number; state: string }
   | { type: 'saved'; version: number; regions: Record<string, number> }
-  | { type: 'closed'; regionId: string; reason: 'removed' | 'kind_changed' | 'access' };
+  /** `rejected` (cells): the dataset refused to save the cell's merged text; its unsaved typing was not kept. */
+  | { type: 'closed'; regionId: string; reason: 'removed' | 'kind_changed' | 'access' | 'rejected' };
 
 /** A collaborator's caret inside a region, as Yjs relative positions (base64, at most 256 bytes each). */
 export interface RegionCaret {
@@ -171,6 +174,8 @@ export type RegionFrameMessage =
  *   validated as a plain `text` region. Saves write the merged string through the dataset's mutate path (one dataset
  *   version), on events, as regions do. Another write to the dataset (GraphQL, SQL, an upload) is merged three-way into
  *   the live text from the value the cell last saw; a deleted row closes its cells (`closed`, `removed`).
+ * - An update whose text the rule's `check` refuses is `check_violation` (422); a save the dataset still refuses closes
+ *   the cell for everyone (`closed`, `rejected`) and drops its unsaved text, so a cell is never left silently dirty.
  * - A cell stream carries cells only (never regions); `POST …/regions/flush?scope=cells` saves the caller's cells.
  */
 export interface CellScope {

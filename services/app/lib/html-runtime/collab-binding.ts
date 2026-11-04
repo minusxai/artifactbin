@@ -7,25 +7,66 @@
  *  - IME: while an element composes, neither its value is read nor remote edits drawn into it; they wait, and at
  *    `compositionend` the composed text is applied first and the waiting edits after it.
  *  - Updates may arrive twice or out of order: Yjs ignores what it holds and keeps what it cannot place yet.
+ *  - Typing before the first session: the element keeps it; when the session's text arrives, the change from the value
+ *    the element started with (at `bind`) is applied to it as one splice (moved past, or beside, a change someone else
+ *    made meanwhile), so nothing is lost or doubled. If this reader may not write, the element shows the saved value
+ *    again, read-only, and `error` carries what was typed.
  *  - `status`: `synced` (everything typed here is stored), `pending` (some is not yet), `offline` (no connection to the
  *    page, the edits wait), `readonly` (this reader may not change the cell, or it closed: inputs are read-only).
+ *  - `error` (`{reason, message, unsaved?}`) says why editing ended: `readonly`, `access`, `removed`, `check_violation`
+ *    (the dataset's rule refuses this text), `rejected` (the dataset refused to save it). Text that was not saved stays
+ *    visible, read-only, and is in `unsaved`. Offline copies and pages outside the app are `readonly` with no error.
  */
 import * as Y from 'yjs';
 import type { CollabStatus } from '@artifactbin/contracts';
-import { cellText, spliceText } from '../live-regions/cells';
+import { cellText, spliceText, textSplice } from '../live-regions/cells';
 import type { CellLink, CellPeer, CellPort } from './frame-cells';
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 export interface CollabBinding { destroy(): void }
+/** Why editing a cell ended, and the text this page typed that was not saved (if any). */
+export interface CollabError { reason: string; message: string; unsaved?: string }
 export interface CollabText {
   readonly key: string;
   readonly value: string;
   readonly status: CollabStatus;
+  /** Why editing ended, once it has (null while editing or never started). */
+  readonly error: CollabError | null;
   /** Two-way: the element shows the cell and every edit in it is the cell's. */
   bind(element: Field): CollabBinding;
   on(event: 'change', listener: (value: string) => void): () => void;
   on(event: 'status', listener: (status: CollabStatus) => void): () => void;
+  on(event: 'error', listener: (error: CollabError) => void): () => void;
   destroy(): void;
+}
+
+const MESSAGES: Record<string, string> = {
+  readonly: 'You can only read this here.',
+  refused: 'You can only read this here.',
+  access: 'You can no longer change this.',
+  removed: 'This row was deleted.',
+  check_violation: 'The dataset does not accept this text, so it was not saved.',
+  rejected: 'The dataset refused to save this text, so it was not saved.',
+};
+/** Why a cell closed, said to a person. */
+const messageFor = (reason: string) => MESSAGES[reason] ?? 'Live editing stopped; this text was not saved.';
+/** Reasons whose unsaved text is reported even when every update was acknowledged (the server dropped it). */
+const DROPPED = new Set(['check_violation', 'rejected']);
+
+/**
+ * The text an element holds once a session's text `server` arrives: the element's own change from `base` (the value it
+ * started with) applied to `server`, past a change someone else made from the same base, or beside it when the two
+ * overlap (both kept: nothing lost, nothing doubled).
+ */
+export function mergeEarlyTyping(base: string, typed: string, server: string): string {
+  const mine = textSplice(base, typed);
+  if (!mine) return server;
+  const theirs = textSplice(base, server);
+  const apply = (index: number, remove: number) => server.slice(0, index) + mine.insert + server.slice(index + remove);
+  if (!theirs) return apply(mine.index, mine.remove);
+  if (theirs.index + theirs.remove <= mine.index) return apply(mine.index + theirs.insert.length - theirs.remove, mine.remove);
+  if (mine.index + mine.remove <= theirs.index) return apply(mine.index, mine.remove);
+  return apply(Math.min(mine.index, theirs.index), 0);
 }
 
 /** The origin of what came from the page (remote updates, a session's state): never sent back. */
@@ -40,9 +81,14 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
   /** Remote updates waiting for a composition to end. */
   let waiting: Uint8Array[] = [];
   let destroyed = false;
-  const fields = new Map<Field, { composing: boolean; readOnly: boolean; stop: () => void }>();
+  /** Per element: composing, its own read-only, the value it started with and whether it was typed in before a session. */
+  const fields = new Map<Field, { composing: boolean; readOnly: boolean; base: string; early: boolean; stop: () => void }>();
   const changeListeners = new Set<(value: string) => void>();
   const statusListeners = new Set<(status: CollabStatus) => void>();
+  const errorListeners = new Set<(error: CollabError) => void>();
+  let error: CollabError | null = null;
+  /** A session has arrived at least once (typing before it is buffered in the elements). */
+  let sessioned = false;
 
   const setStatus = (next: CollabStatus) => {
     if (next === status) return;
@@ -88,7 +134,9 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
   };
 
   const readField = (field: Field) => {
-    if (!doc || status === 'readonly') return;
+    if (status === 'readonly') return;
+    // Before the first session the element keeps what is typed; the session's text merges it in.
+    if (!doc) { if (!sessioned) fields.get(field)!.early = true; return; }
     spliceText(cellText(doc), field.value);
     draw();
     changed();
@@ -111,6 +159,15 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
     posted = 0; stored = 0;
     // What this frame typed that the previous session may not have stored is typed again into the new one.
     if (unsaved && typed !== null) spliceText(cellText(next), typed);
+    // The first session: what was typed before it is applied to its text as the elements' own change.
+    if (!sessioned) {
+      sessioned = true;
+      for (const [field, state] of fields) {
+        if (!state.early) continue;
+        state.early = false;
+        spliceText(cellText(next), mergeEarlyTyping(state.base, field.value, cellText(next).toString()));
+      }
+    }
     if (status !== 'pending') setStatus('synced');
     draw();
     changed();
@@ -128,11 +185,23 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
       stored = Math.max(stored, settled);
       if (stored >= posted && status === 'pending') setStatus('synced');
     },
-    closed() {
+    closed(reason) {
+      if (destroyed || status === 'readonly') return;
+      const shown = doc ? cellText(doc).toString() : null;
+      const unsaved = doc !== null && (stored < posted || DROPPED.has(reason));
       doc?.destroy();
       doc = null;
       waiting = [];
+      let typed: string | undefined;
+      if (shown === null) {
+        // Never editable here: anything typed meanwhile is put back to the saved value, and reported.
+        for (const [field, state] of fields) if (state.early) { typed ??= field.value; field.value = state.base; state.early = false; }
+      }
       setStatus('readonly');
+      // A page that cannot write cells at all (offline, outside the app) is simply read-only; anything else is said.
+      if (reason === 'readonly' && typed === undefined && !sessioned) return;
+      error = { reason, message: messageFor(reason), ...(typed !== undefined ? { unsaved: typed } : unsaved && shown !== null ? { unsaved: shown } : {}) };
+      for (const listener of [...errorListeners]) listener(error);
     },
     connected(on) {
       if (!on && status !== 'readonly') setStatus('offline');
@@ -144,9 +213,10 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
     key,
     get value() { return value; },
     get status() { return status; },
+    get error() { return error; },
     bind(field) {
       if (fields.has(field)) throw new Error('@afbin/collab: this element is already bound');
-      const state = { composing: false, readOnly: field.readOnly, stop: () => {} };
+      const state = { composing: false, readOnly: field.readOnly, base: field.value, early: false, stop: () => {} };
       const onInput = (event: Event) => { if (!state.composing && !(event as InputEvent).isComposing) readField(field); };
       const onStart = () => { state.composing = true; };
       const onEnd = () => {
@@ -168,8 +238,8 @@ export function createCollabText(port: CellPort, key: string, onDestroy: () => v
       draw();
       return { destroy() { if (fields.get(field) === state) { fields.delete(field); state.stop(); } } };
     },
-    on(event: 'change' | 'status', listener: ((value: string) => void) | ((status: CollabStatus) => void)) {
-      const set = (event === 'change' ? changeListeners : statusListeners) as Set<typeof listener>;
+    on(event: 'change' | 'status' | 'error', listener: ((value: string) => void) | ((status: CollabStatus) => void) | ((error: CollabError) => void)) {
+      const set = (event === 'change' ? changeListeners : event === 'status' ? statusListeners : errorListeners) as Set<typeof listener>;
       set.add(listener);
       return () => { set.delete(listener); };
     },

@@ -102,14 +102,17 @@ import {collab} from '@afbin/collab';
 const text=collab.text('tasks',row._id,'description'); // link name, row _id, field
 const binding=text.bind(textarea); // two-way, caret kept, IME-safe
 text.on('change',value=>…); text.status; // 'synced'|'pending'|'offline'|'readonly'
+text.on('error',({reason,message,unsaved})=>…); // why editing ended; text that was not saved
 binding.destroy(); text.destroy();
 ```
 
 The owner opts each text column in with the policy's table key `"collaborative_columns":["description"]`
 ([permissions](permissions.md)); other columns never open. Who may type is the update rule for that row
-and column; everyone else (and anyone signed out) gets `readonly` and should show the value they read.
-Typing is saved as one dataset version when someone leaves, on idle or after a quiet spell; a GraphQL
-write meanwhile is merged with the typing, and a deleted row's cell turns `readonly`.
+and column; everyone else (and anyone signed out, or a downloaded copy) gets `readonly`: set the field to
+the value you read before `bind`. Keys typed before the live session starts are kept and merged in.
+Typing is saved as one dataset version when someone leaves or after a quiet spell; a GraphQL write
+meanwhile is merged with the typing. A deleted row, or text the update rule's `check` refuses, ends
+editing: the field turns read-only and `error` says why (`removed`, `check_violation`, `rejected`).
 
 ## CSV import
 

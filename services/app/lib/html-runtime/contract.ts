@@ -46,6 +46,8 @@ export interface HtmlAssemblyInput {
   /** Shared offline chrome, with the same platform components and compiled stylesheet. */
   chrome?: string;
   portableEngine?: string;
+  /** `@afbin/collab`, embedded only in portable exports of a page that imports it (read-only there: no network). */
+  collab?: string;
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
   /** Embedded assets work without a network; connection is a separate explicit capability. */

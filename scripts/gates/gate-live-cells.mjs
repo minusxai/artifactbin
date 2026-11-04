@@ -13,12 +13,18 @@
  *   4. a GraphQL write of the cell (the owner's bearer, through the page) while B has unsaved typing: both open pages
  *      show the write merged with the typing, and the next save keeps both;
  *   5. both leave: the typing is saved as the cell's value through the dataset, and the signed-out reader, reloading,
- *      reads exactly it.
+ *      reads exactly it;
+ *   6. typing before the session arrives (a slowed open) is kept and merged in, not lost or doubled;
+ *   7. a downloaded copy opened from disk with no network loads the library and shows the field read-only.
  *
  *   node scripts/gates/gate-live-cells.mjs [base]
  */
 import { performance } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
+import { writeFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { connectAgent } from './lib/account-connection.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { documentFrame } from './lib/page-facts.mjs';
@@ -45,14 +51,15 @@ const POLICY = {
 const page = (datasetId) => `<!doctype html><html><head><title>Tracker</title>
 <link rel="af-dataset" data-af-name="tasks" href="ref:${datasetId}"></head>
 <body style="padding:40px;font:18px/1.5 sans-serif"><h1>Tracker</h1>
-<textarea id="description" rows="5" cols="70"></textarea><p>Status: <output id="status">loading</output></p>
+<textarea id="description" rows="5" cols="70">Offline default</textarea><p>Status: <output id="status">loading</output></p>
 <script type="module">
 import {client,gql} from '@afbin/apollo';
 import {collab} from '@afbin/collab';
-const {data}=await client.query({query:gql\`{ tasks { _id description } }\`});
-const row=data.tasks[0], field=document.getElementById('description'), status=document.getElementById('status');
-field.value=row.description??'';
-const text=collab.text('tasks',row._id,'description');
+// Offline (a downloaded copy) the read fails and the field keeps its default; the cell is read-only there.
+let row=null;try{row=(await client.query({query:gql\`{ tasks { _id description } }\`})).data.tasks[0];}catch{}
+const field=document.getElementById('description'), status=document.getElementById('status');
+if(row)field.value=row.description??'';
+const text=collab.text('tasks',row?._id??'r_offline','description');
 text.bind(field);
 const show=()=>{status.textContent=text.status;field.dataset.status=text.status;};
 text.on('status',show);show();
@@ -168,6 +175,52 @@ try {
     check(await until(() => valueOf(c2), (value) => value === shown, 15_000) === shown, 'the signed-out reader reads the saved value after a reload');
     check(traffic.get(C).length === 0, `the signed-out reader made no cell request (${traffic.get(C).map((entry) => entry.url).join(' ') || 'none'})`);
     void c;
+  });
+
+  await section('typing before the session arrives is kept and merged in', async () => {
+    const context = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+    const D = await context.newPage();
+    await loginViaEmail(D, BASE, sink, writerEmail);
+    // The cell's open is held back, so the first keys land before any session.
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    await D.route(/\/regions\/cell[^/]*\/open$/, async (route) => { await held; await route.continue(); });
+    await D.goto(`${BASE}/a/${pageId}`, { waitUntil: 'load' });
+    const d = await documentFrame(D);
+    await until(() => valueOf(d), (value) => !!value && value !== 'Offline default', 15_000);
+    const before = await valueOf(d);
+    await atEnd(d, D);
+    await D.keyboard.type(' early-D');
+    check(await statusOf(d) === 'offline', 'the field takes keys before its session (status offline)');
+    release();
+    check(await until(() => statusOf(d), (s) => s === 'synced', 15_000) === 'synced', 'the session arrives and the early keys are stored');
+    const saved = await until(stored, (value) => value?.endsWith(' early-D'), 20_000);
+    await D.close();
+    await until(stored, (value) => value === `${before} early-D`, 20_000);
+    check(await stored() === `${before} early-D`, `the early keys were kept once, at the end (${JSON.stringify(saved?.slice(-40))})`);
+    await context.close();
+  });
+
+  await section('a downloaded copy works offline: the library loads and the field is read-only', async () => {
+    const response = await fetch(`${BASE}/a/${pageId}/download`, { headers: { authorization: `Bearer ${token}` } });
+    check(response.ok, `the page downloads (${response.status})`);
+    const html = await response.text();
+    check(html.includes('data-af="collab"'), 'the download carries the cell library');
+    const file = path.join(os.tmpdir(), `live-cells-${stamp}.html`);
+    writeFileSync(file, html);
+    const context = await browser.newContext({ offline: true });
+    const O = await context.newPage();
+    const errors = [], remote = [];
+    O.on('pageerror', (error) => errors.push(error.message));
+    O.on('request', (request) => { if (!/^(?:file|blob|data):/.test(request.url())) remote.push(request.url()); });
+    await O.goto(pathToFileURL(file).href, { waitUntil: 'load' });
+    check(await until(() => O.locator(FIELD).getAttribute('data-status'), (s) => s === 'readonly', 15_000) === 'readonly', 'the offline copy says readonly');
+    check(await O.locator(FIELD).evaluate((node) => node.readOnly) === true, 'its field is not editable');
+    check(await O.locator(FIELD).inputValue() === 'Offline default', 'its field keeps the value the page gave it');
+    check(errors.length === 0, `no script error offline (${errors.join(' | ') || 'none'})`);
+    check(remote.length === 0, `no network request (${remote.join(' ') || 'none'})`);
+    await context.close();
+    rmSync(file, { force: true });
   });
 } finally {
   check.note(`gate time ${((performance.now() - started) / 1000).toFixed(1)} s`);

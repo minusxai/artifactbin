@@ -16,6 +16,7 @@ import { locateDatasetCell, writeDatasetCells } from '@/lib/dataset-graphql';
 import { getDb, runWithRequest } from '@/lib/platform';
 import { attachActor } from '@artifactbin/utils';
 import { POST as publishRoute } from '@/app/api/artifacts/route';
+import { GET as graphqlSchema } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';
 import { POST as flushRoute } from '@/app/api/artifacts/[id]/regions/flush/route';
@@ -372,5 +373,68 @@ describe('the dataset write a save makes', () => {
     expect((await stored()).map((row) => row.description)).toEqual(['Fix the login bug', 'Write the docs']);
     const allowed = await writeDatasetCells(actorOf(viewer), head, pageId, target, [{ rowId: red, source: 'description', value: 'red typed' }], async () => {});
     expect('written' in allowed && allowed.written.version).toBe(head.version + 1);
+  });
+});
+
+describe('text the dataset will not take', () => {
+  /** The policy with the viewer's update rule refusing one description ("Fix the login bug ok!!"). */
+  const withCheck = async () => {
+    const head = (await getArtifactById(datasetId))!;
+    const policy = POLICY();
+    const viewerRule = policy.tables[0]!.update_permissions.find((entry) => entry.role === 'viewer')!;
+    (viewerRule.permission as Record<string, unknown>).check = { description: { _neq: 'Fix the login bug ok!!' } };
+    const saved = await patchMetadata(ownerToken, datasetId, { policy, expectedPolicyRevision: head.policy_revision ?? 0 });
+    expect(saved.status, await saved.clone().text()).toBe(200);
+  };
+
+  it('an update the rule\'s check refuses is check_violation, and nothing of it is stored', async () => {
+    await withCheck();
+    const a = await join(viewer);
+    a.text.insert(a.text.length, ' ok');
+    expect((await a.push()).status).toBe(200);
+    a.text.insert(a.text.length, '!!');
+    const refused = await a.push();
+    expect(refused).toEqual({ status: 422, body: { error: 'check_violation' } });
+    // The owner (no rule applies) may type it; the viewer's next session starts from the stored text.
+    const b = await join(viewer);
+    expect(b.value()).toBe('Fix the login bug ok');
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
+    expect((await stored())[0]!.description).toBe('Fix the login bug ok');
+  });
+
+  it('a save the dataset refuses closes the cell for everyone (closed: rejected) and leaves nothing dirty', async () => {
+    const a = await join(viewer);
+    const watching = await stream(viewer, `${key(red)}:${a.reply.seq}`);
+    a.text.insert(a.text.length, ' ok!!');
+    expect((await a.push()).status).toBe(200);
+    // The owner adds the check after the typing: only the engine sees it at save.
+    await withCheck();
+    const before = await datasetVersion();
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 0 });
+    expect(await datasetVersion()).toBe(before);
+    const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'closed');
+    expect(frames.at(-1)).toEqual({ type: 'closed', regionId: key(red), reason: 'rejected' });
+    expect((await (await getDb()).query("SELECT 1 FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%'", [datasetId])).rows).toEqual([]);
+    expect((await stored())[0]!.description).toBe('Fix the login bug');
+    // A new session starts clean from the stored text.
+    expect((await join(viewer)).value()).toBe('Fix the login bug');
+  });
+});
+
+describe('the flag in the GraphQL schema', () => {
+  it('describes a collaborative field in the dataset\'s and the page\'s SDL, and no other', async () => {
+    const sdl = async (id: string) => {
+      const response = await graphqlSchema(request(`/api/artifacts/${id}/graphql`, { token: ownerToken }), { params: Promise.resolve({ id }) });
+      expect(response.status, await response.clone().text()).toBe(200);
+      return (await response.json()).sdl as string;
+    };
+    // As generated (one line) and as the page composition prints it (a block string): the description precedes the field.
+    const described = (field: string) => new RegExp(`Collaborative: typed live together with @afbin/collab \\(collaborative_columns\\)\\."+\\s*${field}: String`);
+    for (const text of [await sdl(datasetId), await sdl(pageId)]) {
+      expect(text).toMatch(described('description'));
+      expect(text).toMatch(described('notes'));
+      expect(text).not.toMatch(described('title'));
+      expect(text.match(/Collaborative: typed live together/g)).toHaveLength(2);
+    }
   });
 });

@@ -21,7 +21,7 @@ import * as Y from 'yjs';
 import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type HtmlDatasetLink, type HtmlPageLink, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts';
 import { applyCellRevision, cellValue, createCellState, snapshotValue } from '@/lib/live-regions';
 import { canReadArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, type ArtifactRow, type RegionRow } from '@/lib/artifacts';
-import { canUpdateCell, datasetWriteAccess } from '@/lib/dataset-permissions';
+import { canUpdateCell, cellCheckAdmits, datasetWriteAccess } from '@/lib/dataset-permissions';
 import { locateDatasetCell, writeDatasetCells, type DatasetCell } from '@/lib/dataset-graphql';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db, type Queryable } from '@/lib/platform';
@@ -47,6 +47,8 @@ export interface CellAccess {
   cell: DatasetCell;
   /** The row key (region_id) in the dataset. */
   storage: string;
+  /** Would the update rule's `check` admit the row with this text in the cell? */
+  admits(value: string): boolean;
 }
 export type CellRefusal = 'not_found' | 'access' | 'removed';
 
@@ -69,7 +71,7 @@ async function cellAccess(actor: AccessActor, page: ArtifactRow, dataset: Artifa
   if (cell === 'no_column' || !cell.collaborative) return 'not_found';
   const decision = await datasetWriteAccess(dataset, actor, { pageId: page.id });
   if (!canUpdateCell(decision, cell.table, cell.source, cell.row)) return 'access';
-  return { page, dataset, cell, storage: cellStorageId(rowId, cell.source) };
+  return { page, dataset, cell, storage: cellStorageId(rowId, cell.source), admits: (value) => cellCheckAdmits(decision, cell.table, cell.source, cell.row, value) };
 }
 
 /** A cell key through a page: the page's link of that name, live, to a dataset; then cellAccess. */
@@ -225,7 +227,15 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
         await notifyRegions(tx, datasetId, `saved:${written.version}`);
       });
       if ('written' in outcome) { saved++; if (writable.length === batch.length) return saved; continue; }
-      if (outcome.refused !== 'row_changed') { console.warn('[region-sessions] a cell save was refused:', outcome.detail); return saved; }
+      if (outcome.refused !== 'row_changed') {
+        // The dataset will not take this text: the cells close for everyone (`rejected`) rather than stay dirty forever.
+        console.warn('[region-sessions] a cell save was refused:', outcome.detail);
+        await core.transact<null>(async (tx) => {
+          for (const { access } of merged) { await reconcileGone(tx, datasetId, access.storage); core.forget(datasetId, access.storage); }
+          return { answer: NOT_FOUND };
+        });
+        return saved;
+      }
     }
     return saved;
   }
@@ -264,7 +274,8 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
       if (request.update.byteLength > REGION_UPDATE_MAX_BYTES) return refuse('too_large');
       return atHead<RegionUpdateReply>(actor, pageId, scope, async (tx, access, row) => {
         if (!row) return { answer: refuse('region_not_found') };
-        return core.accept(tx, access.dataset.id, row, request, actor);
+        // Text the rule's check refuses would never save: refused now, while its typist is there to be told.
+        return core.accept(tx, access.dataset.id, row, request, actor, (doc) => (access.admits(cellValue(doc)) ? null : 'check_violation'));
       });
     },
 

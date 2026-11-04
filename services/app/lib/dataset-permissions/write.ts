@@ -164,6 +164,20 @@ export async function assertWriteCommit(tx: Queryable, dataset: ArtifactRow, act
 }
 
 /**
+ * The update rule's `check` on a cell's new text: would the row, with `value` in `column`, still pass? Owner and editor
+ * always. Read as the role view reads a filter (TRUE only). The engine checks again when the cell is saved.
+ */
+export function cellCheckAdmits(decision: DatasetWriteDecision, table: DatasetTableName & { columns: readonly { name: string }[] }, column: string, row: Record<string, unknown>, value: string): boolean {
+  if (!decision.allowed) return false;
+  if (decision.admin) return true;
+  let policy: DatasetMutationPolicy | undefined;
+  try { policy = tableMutationPolicy(decision, table); } catch { return false; }
+  const check = policy?.table.update_permissions?.find((entry) => entry.role === decision.role)?.permission.check as DatasetBoolExp | null | undefined;
+  if (!check || !Object.keys(check).length) return true;
+  return keptRows([{ ...row, [column]: value }], table.columns.map((c) => c.name), { columns: '*', filter: check }, decision.session).length === 1;
+}
+
+/**
  * May this decision change one column of one row (a live text cell, lib/region-sessions)? Owner and editor always;
  * a rule role when its update entry names the column (and does not preset it) and its filter admits the row, read
  * with the decision's session as the role view reads a select filter (./view keptRows: TRUE only, fail closed). The

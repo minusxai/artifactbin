@@ -19,7 +19,7 @@ const COMPONENT=/^\/af\/components\/[a-z][a-z0-9-]*\.js$/;
 const MAX_BYTES=8_000_000;
 /** The runtime modules Save HTML embeds (lib/html-runtime save-local), by HtmlRuntimeAssets key. */
 const RUNTIME_MODULES={core:'/af/core.js',apollo:'/af/apollo.js',reader:'/af/reader.js',chrome:
-  '/af/chrome.js',portableEngine:'/af/portable.js',morph:'/af/morph.js'};
+  '/af/chrome.js',portableEngine:'/af/portable.js',morph:'/af/morph.js',collab:'/af/collab.js'};
 
 /** KEPT FOR EXISTING PAGES ONLY: the legacy core address saved pages still load. This file
  * ships raw, so it keeps this one copy of LEGACY_CORE_PATH in

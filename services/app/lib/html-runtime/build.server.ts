@@ -59,6 +59,8 @@ const portableEngine=engineBlock?blob(JSON.parse(engineBlock.textContent)):new U
 const chromeBlock=document.querySelector('[data-af="chrome"]');
 const chrome=chromeBlock?blob(JSON.parse(chromeBlock.textContent)):new URL(${JSON.stringify(chromePath)},document.currentScript.src||location.href).href;
 const live=config.appOrigin&&!config.offline&&window.parent!==window;
+const collabBlock=document.querySelector('[data-af="collab"]');
+const collab=collabBlock?blob(JSON.parse(collabBlock.textContent)):config.offline?null:new URL(${JSON.stringify(collabPath)},document.currentScript.src||location.href).href;
 // The source this document loaded, before its deferred and module scripts run: what a new version is compared against (./live-morph LOADED_SOURCE).
 // A framed page rebuilt from a new version (./live-morph rebuild) puts the reader back where the previous document left them.
 if(live)restoreReadingPlace(window,config.pageId);
@@ -68,7 +70,7 @@ const sharedBlock=config.offline?document.querySelector('[data-af="offline-modul
 const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
 if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
 const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/(?:libraries\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|af\\/components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,document.currentScript.src||location.href).href;
-const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(config.offline?{}:{'@afbin/collab':new URL(${JSON.stringify(collabPath)},document.currentScript.src||location.href).href}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
+const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
 if(config.offline&&window.parent===window){void import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin)).catch(()=>document.documentElement.setAttribute('data-af-connection','unavailable'));}
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
