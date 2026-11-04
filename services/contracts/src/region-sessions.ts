@@ -56,7 +56,47 @@ export interface RegionFlushReply {
   version: number;
 }
 
+/**
+ * AGENTS read and write a region's text over the bearer API (operations read_region, write_region, save_regions).
+ * A read is the region at the page's saved head, with that version: to include unsaved typing, save first
+ * (`POST /api/artifacts/:id/regions/flush`). A write is made from a version it read (`base_version`) and is merged
+ * three-way from that version's snapshot into the live state, so nobody's unsaved typing is lost; it is streamed to
+ * the editors and saved as a new version at once.
+ *
+ * `_doc` (outside the region id grammar, so never a declared id) names the page's only rich region: a doc's text.
+ */
+export const DOC_REGION = '_doc';
+export type RegionFormat = 'markdown' | 'html';
+
+/** `GET /api/artifacts/:id/regions/:regionId?format=markdown|html` (default markdown). Exactly one of markdown, html. */
+export interface RegionContentReply {
+  regionId: string;
+  kind: RegionKind;
+  /** The saved page version the content is from: send it back as `base_version`. */
+  version: number;
+  markdown?: string;
+  html?: string;
+}
+
+/** `PUT /api/artifacts/:id/regions/:regionId` (Idempotency-Key honoured). Exactly one of markdown, html. */
+export interface RegionWriteRequest {
+  markdown?: string;
+  html?: string;
+  base_version: number;
+}
+export interface RegionWriteReply {
+  regionId: string;
+  kind: RegionKind;
+  /** The new saved page version holding the write and everyone's typing (the head, when nothing changed). */
+  version: number;
+  /** The region as saved, merged. */
+  html: string;
+  /** The same, as Markdown, when the write was Markdown. */
+  markdown?: string;
+}
+
 export type RegionRefusalCode =
+  | 'region_ambiguous'
   | 'unsupported_content'
   | 'foreign_client'
   | 'outside_region'
@@ -69,6 +109,12 @@ export interface RegionRefusalBody {
   error: RegionRefusalCode;
   /** With `out_of_order`: the server's state vector, base64, so the client can resend what is missing. */
   stateVector?: string;
+  /** With `unsupported_content`: each thing the region's kind cannot hold, once (`<img>`, `several blocks in one <li>`). */
+  details?: string[];
+  /** With an agent's `region_snapshot_missing`: the page's saved head, to read again from. */
+  version?: number;
+  /** With `region_not_found` and `region_ambiguous` from an agent's door: the regions the saved page declares. */
+  regions?: { regionId: string; kind: RegionKind }[];
 }
 
 /** `GET /api/artifacts/:id/regions/stream?after=<regionId>:<seq>,...` — SSE `data:` frames, JSON. */

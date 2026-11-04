@@ -19,8 +19,9 @@
 export { regionSchema, safeHref, type RegionKind } from './schema';
 export { LiveRegionRefusal } from './refusal';
 export { applyRegionRevision, createRegionState, normalizeRegionHtml, regionHtml, regionText } from './state';
+export { regionMarkdown } from './markdown';
 export { compactRegion } from './compaction';
 export { validateRegionUpdate } from './validate';
-export { editableRegions, isRegionId } from './page-regions';
+export { editableRegions, isRegionId, type PageRegion } from './page-regions';
 export { editorState, regionCommands } from './editor';
 export { absolutePosition, relativePosition } from './binding';

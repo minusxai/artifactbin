@@ -34,8 +34,6 @@ const EXCEPTIONS = new Set([
   '/api/artifacts/{id}/regions/{regionId}/open', // a browser editor's Yjs session (client id and state bytes) for one region
   '/api/artifacts/{id}/regions/{regionId}/updates', // binary Yjs updates of an open browser session, under its server-assigned client id
   '/api/artifacts/{id}/regions/stream', // the editors' SSE relay of region updates; transport, like presence
-  // Saves live region edits as a version: the page's save-before-comment; an agent's update_artifact already merges them.
-  '/api/artifacts/{id}/regions/flush',
   '/api/artifacts/{id}/edits', // retired atomic JSX editing route; answers 404
   '/api/artifacts/{id}/runs', // asynchronous execution admission; authoring adapter pins the program, no document edit
   '/api/artifacts/{id}/schedules', // runner scheduling control plane, not a document operation

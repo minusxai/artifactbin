@@ -8,6 +8,8 @@
  *   update  validated (lib/live-regions validateRegionUpdate) before it is stored or relayed; a retry is a duplicate;
  *   flush   every region with unsaved edits saved as one new page version;
  *   stream  the editors' SSE stream of a page (stream.ts), which also drives the saves on leave and on idle.
+ *   agents  (agents.ts) read a region as Markdown or HTML at the saved head, and write it back from the version they
+ *           read: merged three-way into the live state, streamed to the editors and saved as a version at once.
  *
  * Only people with edit access to the page (the platform's editor scope) get anything; everyone else is the uniform
  * not-found. The database is the truth and two app processes serialize on its rows; wakeups cross processes through
@@ -19,6 +21,7 @@ import { regionStore, type RegionStore } from './sessions';
 import { regionStreams, type RegionClock, type RegionStreamAnswer, type RegionStreamOptions } from './stream';
 
 export type { RegionAnswer } from './sessions';
+export { agentRegions, type AgentRegions } from './agents';
 
 export interface RegionSessionDeps extends Pick<RegionStreamOptions, 'db' | 'subscribe' | 'keepaliveFrame'> {
   clock?: RegionClock;

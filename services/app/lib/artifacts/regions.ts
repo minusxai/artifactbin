@@ -91,13 +91,16 @@ export async function notifyRegions(tx: Queryable, artifactId: string, payload: 
 
 /**
  * The page as its editors see it for live editing: the head's id, version, format and (asked for) source, when the
- * actor may edit it (the platform's editor scope, trash gate included), optionally locked FOR SHARE.
+ * actor may edit it (the platform's editor scope, trash gate included), optionally locked: FOR SHARE (`true`: an
+ * update to a region), or FOR UPDATE (`'update'`: a write that then saves a version, so it never upgrades a share
+ * lock another writer also holds).
  */
 export interface EditablePage { id: string; version: number; format: string; source: string | null }
-export async function editablePage(q: Queryable, actor: AccessActor, id: string, options: { lock?: boolean; source?: boolean } = {}): Promise<EditablePage | null> {
+export async function editablePage(q: Queryable, actor: AccessActor, id: string, options: { lock?: boolean | 'update'; source?: boolean } = {}): Promise<EditablePage | null> {
   const scope = editorScope(actor);
+  const lock = options.lock === 'update' ? ' FOR UPDATE' : options.lock ? ' FOR SHARE' : '';
   return (await q.query<EditablePage>(
-    `SELECT id, version, format${options.source ? ', source' : ''} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}${options.lock ? ' FOR SHARE' : ''}`,
+    `SELECT id, version, format${options.source ? ', source' : ''} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}${lock}`,
     [id, scope.val],
   )).rows[0] ?? null;
 }

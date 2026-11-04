@@ -115,7 +115,8 @@ const commands = {
   policy: {sub: {
     get: {}, explain: {}, template: {'owner-column': flag()},
     set: {file: flag(), 'dry-run': flag('boolean'), 'expected-revision': flag()}
-  }}
+  }},
+  doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}}
 };
 export const COMMANDS = Object.freeze(commands);
 

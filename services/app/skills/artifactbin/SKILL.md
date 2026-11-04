@@ -18,16 +18,16 @@ Commands stage updates hourly. Reread SKILL.md and reload your harness when noti
 `--no-update` or `ARTIFACTBIN__NO_UPDATE=1` disables updates. Manual ZIP installs update by
 reinstalling.
 
-Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
+Skill map (`ls <folder>` lists all; each file's top comment says how to use it):
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs;
   repairs.csv
 - `resolvers/`: copyable resolvers: public-url, http-json, google-sheets, bigquery, supabase, neon
-- `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
-(`--help` each)
-- `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups
-(read only one)
+- `scripts/`: publish, check, read, doc, comment, groups, graphql, policy, export, auth, autofix,
+serve (`--help` each)
+- `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups,
+live-docs (read only one)
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
@@ -134,7 +134,10 @@ sharing and deliberate ownership moves.
   amount.dataset.afId='budget-row-'+tx.id+'-amount'`. Use a distinct prefix per list and role; never
   an array index, display text, sort order or random value; never reuse a saved or deleted ID; mount
   them under a container present in the saved HTML ([dynamic
-  elements](references/runtime.md#dynamic-elements-and-comments)).
+  elements](references/runtime.md#dynamic-elements-and-comments)). People may be typing in a doc's
+  text (a `data-af-editable` region): never republish to change it. Run `node scripts/doc.mjs read
+  ID --output doc.md`, edit doc.md in place, then `node scripts/doc.mjs write doc.md`: your edit
+  merges with their typing ([live docs](references/live-docs.md)).
 - **Answer comments.** `node scripts/comment.mjs list ID`. If a comment asks for a change, make the
   edit first, then `node scripts/comment.mjs reply ID --thread T --body-file reply.txt` (add
   `--resolve --expected-revision R` when done). Anchors are described at the top of
