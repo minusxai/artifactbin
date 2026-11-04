@@ -5,8 +5,8 @@ description: Resolver files for pages, caps.fetch with host-filled secrets, caps
 ## Read first: dataset or resolver?
 
 Shared rows (sign-ups, targets) live in a dataset. A page reads and writes it directly
-through the generated API under the dataset's [permissions](permissions.md); that needs no
-resolver. Add a resolver for what the page cannot do itself: check or derive values before a write,
+through the generated API under the dataset's [permissions](permissions.md); no resolver
+needed. Add a resolver for what the page cannot do itself: check or derive values before a write,
 or call an external API with a secret. A resolver is a TypeScript file published with the page and run
 on the server in a sandbox, one immutable version per change:
 
@@ -16,7 +16,7 @@ on the server in a sandbox, one immutable version per change:
 
 `node scripts/publish.mjs index.html` sends the file (HTTP: `resolverSources:{"budget":"<source>"}`);
 browsers never fetch it. A page from `read.mjs` has no `href`: add `href="./NAME.ts"` beside the
-file to change it, or leave the link as is to keep the published version. Removing the link unlinks
+file to change it, or leave the link to keep the published version. Removing the link unlinks
 it from new versions only.
 
 ## Contents
@@ -25,12 +25,12 @@ it from new versions only.
 
 ## The file
 
-Start from a library file below (`resolvers/resolver-*.ts`; each top comment says how to use it)
+Start from a library file below (`resolvers/resolver-*.ts`, usage in its top comment)
 or `examples/budget.ts`. Export `typeDefs`, a default object of root field resolvers, optionally
 `secrets` and a `test` field. Each resolver gets `(args, principal, caps)`: `principal` is
 `{tenant, subject, role}` (the page ID, the caller's account ID or null, their role), set by the
 platform; never authorize from a name typed into the page. `caps` holds exactly `fetch`, `query`,
-`sql` and `postgres`. No npm packages or Node built-ins.
+`sql` and `db`. No npm packages or Node built-ins.
 
 ```ts
 export const secrets = {API_KEY: 'api.example.com'};
@@ -39,16 +39,16 @@ export const typeDefs = `
   type Query { deals(stage: String): [Deal!]!  test: String! @auth(role: owner) }
   type Mutation { addNote(deal: String!, text: String!): Boolean! @auth(role: signed_in) }
 `;
+const list = caps => caps.fetch('https://api.example.com/v1/deals',
+  {headers: {Authorization: 'Bearer {{API_KEY}}'}});
 export default {
   async deals({stage}, _principal, caps) {
-    const res = await caps.fetch('https://api.example.com/v1/deals', {
-      headers: {Authorization: 'Bearer {{API_KEY}}'}});
+    const res = await list(caps);
     if (!res.ok) throw Error('API answered ' + res.status);
     return (await res.json()).filter(d => !stage || d.stage === stage);
   },
   async test(_args, _principal, caps) {
-    return 'API answered ' + (await caps.fetch('https://api.example.com/v1/deals', {
-      headers: {Authorization: 'Bearer {{API_KEY}}'}})).status;
+    return 'API answered ' + (await list(caps)).status;
   },
   async addNote({deal, text}, _principal, caps) {
     if (!text.trim() || text.length > 280) throw Error('Write a note of up to 280 characters');
@@ -62,7 +62,7 @@ export default {
 Per call: 15 s wall time, 32 requests, 4 MiB result, 64 MiB memory.
 
 A resolver's own `throw Error('...')` reaches every caller as `errors[0].message` (first line, 200
-characters, secrets redacted); a caps error you don't catch, a timeout or a crash reads `Backend
+characters, secrets redacted); an uncaught caps error, a timeout or a crash reads `Backend
 execution failed`, with the reason in `extensions.detail` for the owner only.
 
 ## caps.fetch and secrets
@@ -74,20 +74,19 @@ for every status. HTTPS on port 443 only; private, loopback and metadata address
 
 Secrets never appear in code, pages or replies. `export const secrets =
 {NAME: 'host'}` binds each name to the one host (or `*.example.com`) that may receive it. Write
-`{{NAME}}` in the URL, a header value or the body; the host fills it only in requests to that host and redacts the value from
+`{{NAME}}` in the URL, a header value or the body; the host fills it only in requests to that host and redacts it from
 responses. `auth: {type: 'google', secret: 'GOOGLE_SA', scopes: [...]}` signs in with a Google
 service-account JSON key and sends the token (Sheets, BigQuery).
 
 Never ask for a secret value in chat. After publishing, send the page owner to the page's
-settings → Resolvers tab: they set each value there and press Test connection, which
-runs `test: String! @auth(role: owner)` (no required arguments) as them and shows its text or the
-error. Forks and ownership changes copy names, never values. Editors cannot change code that
+settings → Resolvers tab to set each value and press Test connection, which
+runs `test: String! @auth(role: owner)` (no required arguments) as them and shows its text or error. Forks and ownership changes copy names, never values. Editors cannot change code that
 declares secrets; the personal owner republishes it.
 
 ## caps.query: datasets as the caller
 
 `await caps.query(graphql, variables)` runs the generated API over the datasets the page links,
-under their page names, as the calling reader: the same rules apply as if the page called it, so a
+under their page names, as the calling reader under the page's own rules, so a
 resolver can check and derive but never grant more. Mutations run only inside mutation resolvers.
 It returns `data`; refusals throw an Error with `code` (`permission_denied`,
 `validation_failed`...). For writes by readers, give the dataset rules for `viewer` and
@@ -98,8 +97,8 @@ It returns `data`; refusals throw an Error with `code` (`permission_denied`,
 
 `await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs, window functions,
 `date_trunc`...) over the linked datasets as the caller and returns `{columns, rows}`. Data changes only through `caps.query` mutations. A single-table dataset
-is the table `<link>`, a multi-table one `<link>.<table>`; each has `_id`. You read the rows and
-columns `caps.query` gives you; a dataset whose rule for you lacks `allow_aggregations` refuses the
+is the table `<link>`, a multi-table one `<link>.<table>`; each has `_id`. You see what `caps.query`
+would; a dataset whose rule for you lacks `allow_aggregations` refuses the
 call. Bind values as `$name`:
 
 ```ts
@@ -119,6 +118,7 @@ per query, 20 s total, 4 MiB out; one of the 32 requests.
 `db.query(sql, [params])` (`$1`; MySQL `?`) gives `{rows, columns, command, count}`; then `db.end()`.
 BIGINT and DECIMAL are strings. Your code never sees the password; **use a read-only database
 user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
+Databases that only accept listed IPs: get them from `GET /api/outbound-ips` and tell the owner to allow them (or add them yourself if you have access to their cloud).
 
 ## @auth roles
 
@@ -136,7 +136,7 @@ import {client,gql,onResolverChange} from '@afbin/apollo';
 const r=await client.query({query:gql`{pipeline{deals(stage:"Open"){name stage}}}`});
 if(r.errors?.length)throw Error(r.errors[0].message);
 await client.mutate({mutation:gql`mutation Save($items:[budget__BudgetInput!]!){budget{save(items:$items)}}`,variables:{items:[{category:"Food",amount:200}]}});
-onResolverChange(names=>{ /* a linked dataset or resolver changed: reload */ });
+onResolverChange(names=>{ /* a linked dataset or resolver changed */ });
 ```
 
 Show `errors`; never report them as saved.

@@ -9,11 +9,14 @@
  * A name bound to a database kind (RESOLVER_DATABASE_KINDS: `postgres`, `mysql`) is a database connection of that
  * kind: host, port (the kind's default to start), database, user and password, saved together (write-only, like a
  * secret value). The password stays in the runner's worker process and never reaches resolver code; the hint still
- * says to use a read-only database user, since resolver code runs whatever SQL that user may.
+ * says to use a read-only database user, since resolver code runs whatever SQL that user may. When the deployment
+ * names its outbound addresses (`GET /api/outbound-ips`), each connection row lists them to allow in the database's
+ * firewall, with a copy button; none configured (or the read fails), the line is absent.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import { isResolverDatabaseKind, type ResolverDatabaseKind } from '@artifactbin/contracts';
 import { Button } from '../ui/Button';
+import { CopyBlock } from '../ui/CopyBlock';
 import { Field, Input } from '../ui/Field';
 import { ListRow, Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
@@ -28,6 +31,14 @@ async function readResolvers(id: string): Promise<PageResolvers> {
   const response = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/resolvers`);
   if (!response.ok) throw new Error('unavailable');
   return response.json();
+}
+/** The deployment's outbound addresses; any failure reads as none, since the line is only a hint. */
+async function readOutboundIps(): Promise<string[]> {
+  try {
+    const response = await fetch('/api/outbound-ips');
+    const body = response.ok ? await response.json() as { ips?: unknown } : null;
+    return Array.isArray(body?.ips) ? body.ips.filter((ip): ip is string => typeof ip === 'string') : [];
+  } catch { return []; }
 }
 const refusal = (body: unknown, status: number): string => {
   const error = (body as { errors?: { message?: string; extensions?: { code?: string; detail?: string } }[] } | null)?.errors?.[0];
@@ -72,7 +83,7 @@ type ConnectionField = typeof CONNECTION_FIELDS[number][0];
 /** Each kind's label and default port; a kind added to RESOLVER_DATABASE_KINDS must be added here (a type error otherwise). */
 const DATABASE_KIND: Record<ResolverDatabaseKind, { label: string; port: string }> = { postgres: { label: 'Postgres', port: '5432' }, mysql: { label: 'MySQL', port: '3306' } };
 
-function ConnectionRow(props: { resolver: PageResolver; name: string; kind: ResolverDatabaseKind; set: boolean; onNames: (names: string[]) => void }): JSX.Element {
+function ConnectionRow(props: { resolver: PageResolver; name: string; kind: ResolverDatabaseKind; set: boolean; outboundIps: string[]; onNames: (names: string[]) => void }): JSX.Element {
   // A row's kind is its resolver version's, fixed for the row's life.
   const kind = DATABASE_KIND[props.kind];
   const [values, setValues] = createSignal<Record<ConnectionField, string>>({ host: '', port: kind.port, database: '', user: '', password: '' });
@@ -108,6 +119,12 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
       </div>
       <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
       <p class="m-0 font-sans text-xs text-muted">Use a read-only database user: resolver code can run any SQL that user is allowed. The password stays in the runner's worker process and never reaches resolver code. TLS with full certificate verification is required.</p>
+      <Show when={props.outboundIps.length}>
+        <div class="grid gap-1">
+          <p class="m-0 font-sans text-xs text-muted">Allow these IPs in your database firewall:</p>
+          <CopyBlock class="" text={props.outboundIps.join(', ')} label={`Copy the IPs to allow for ${props.name}`} />
+        </div>
+      </Show>
       <div class="flex gap-2">
         <Button type="submit" size="md" disabled={busy() || !complete()}>Save connection</Button>
         <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove connection</Button></Show>
@@ -116,7 +133,7 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
   </ListRow>;
 }
 
-function ResolverSection(props: { id: string; revision: string; resolver: PageResolver }): JSX.Element {
+function ResolverSection(props: { id: string; revision: string; resolver: PageResolver; outboundIps: string[] }): JSX.Element {
   const [set, setSet] = createSignal(props.resolver.set);
   const [testing, setTesting] = createSignal(false);
   const [outcome, setOutcome] = createSignal<TestOutcome | null>(null);
@@ -138,7 +155,7 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
         const onNames = (next: string[]) => { setSet(next); setOutcome(null); };
         const kind = props.resolver.secrets[name];
         return isResolverDatabaseKind(kind)
-          ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} onNames={onNames} />
+          ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} outboundIps={props.outboundIps} onNames={onNames} />
           : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
       }}
       </For></ul>
@@ -150,12 +167,13 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
 
 export default function ResolversPanel(props: { id: string }): JSX.Element {
   const [page] = createResource(() => props.id, readResolvers);
+  const [outboundIps] = createResource(readOutboundIps, { initialValue: [] });
   return <div class="grid gap-4">
     <p class="m-0 font-sans text-sm text-muted">Secret values are stored encrypted, sent only to their bound host, and never shown again.</p>
     <Show when={!page.loading} fallback={<StatusMessage kind="loading">Loading resolvers…</StatusMessage>}>
       <Show when={!page.error && page()} keyed fallback={<StatusMessage kind="error">Resolvers are unavailable. Refresh and try again.</StatusMessage>}>{(current) =>
         <Show when={current.resolvers.length} fallback={<StatusMessage kind="empty">This page has no resolvers.</StatusMessage>}>
-          <For each={current.resolvers}>{(resolver) => <ResolverSection id={props.id} revision={current.revision} resolver={resolver} />}</For>
+          <For each={current.resolvers}>{(resolver) => <ResolverSection id={props.id} revision={current.revision} resolver={resolver} outboundIps={outboundIps()} />}</For>
         </Show>}
       </Show>
     </Show>

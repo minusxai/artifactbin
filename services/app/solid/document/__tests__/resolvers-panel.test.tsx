@@ -143,3 +143,26 @@ it('shows each connection with its declared type and that type\'s default port, 
   await waitFor(() => expect(panel.getByText('Set')).toBeTruthy());
   expect(calls.find(call => call.method === 'PUT')).toEqual({ url: '/api/my/resolvers/b1/v1/secrets', method: 'PUT', body: { name: 'SHOP', connection: { host: 'db.example.com', port: 3306, database: 'shop', user: 'reader', password: VALUE } } });
 });
+
+it.each([[['184.169.146.94'], true], [[], false]] as const)('lists the deployment outbound IPs %j on each database connection only when there are any', async (ips, shown) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url === '/api/outbound-ips') return reply({ ips });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'shop', backendId: 'b1', version: 'v1', test: false, secrets: { API_KEY: 'api.example.com', SHOP: 'mysql', WAREHOUSE: 'postgres' }, set: [] }] });
+    return reply({ error: 'not_found' });
+  }));
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = within(await screen.findByRole('region', { name: 'Resolver shop' }));
+  if (!shown) {
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/outbound-ips')).toBe(true));
+    expect(panel.queryByText(/Allow these IPs/)).toBeNull();
+    expect(panel.queryByRole('button', { name: /Copy the IPs/ })).toBeNull();
+    return;
+  }
+  // One line per connection (MySQL and Postgres), none on the plain secret.
+  expect(await panel.findAllByText('Allow these IPs in your database firewall:')).toHaveLength(2);
+  expect(panel.getAllByText('184.169.146.94')).toHaveLength(2);
+  expect(panel.getByRole('button', { name: 'Copy the IPs to allow for SHOP' })).toBeTruthy();
+  expect(panel.getByRole('button', { name: 'Copy the IPs to allow for WAREHOUSE' })).toBeTruthy();
+  expect(panel.queryByRole('button', { name: 'Copy the IPs to allow for API_KEY' })).toBeNull();
+});

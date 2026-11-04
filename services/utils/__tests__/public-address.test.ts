@@ -4,7 +4,7 @@
  * are applied to every DNS answer before a socket opens.
  */
 import { describe, expect, it } from 'vitest';
-import { addressClass, hostNameSyntax, isAllowedAddress, parseIPv4, parseIPv6 } from '../src/public-address';
+import { addressClass, hostNameSyntax, isAllowedAddress, parseIPv4, parseIPv6, parseOutboundIps } from '../src/public-address';
 
 const CLASSES: Record<string, string[]> = {
   loopback: ['127.0.0.1', '127.255.255.254', '::1', '0:0:0:0:0:0:0:1', '::ffff:127.0.0.1', '::ffff:7f00:1', '0:0:0:0:0:ffff:7f00:0001', '64:ff9b::127.0.0.1', '64:ff9b::7f00:1'],
@@ -75,5 +75,21 @@ describe('hostNameSyntax', () => {
     for (const host of ['', 'postgres', 'db', '-a.example.com', 'a-.example.com', 'a..example.com', 'a_b.example.com', 'https://db.example.com', 'db.example.com:5432',
       'db.example.com/x', 'user@db.example.com', 'fe80::1%en0', '[::1', 'a'.repeat(64) + '.example.com', `${'a.'.repeat(127)}com`, ' db.example.com\n', 'db.example.123'])
       expect(hostNameSyntax(host), host).toBeNull();
+  });
+});
+
+describe('parseOutboundIps (APP__OUTBOUND_IPS)', () => {
+  it('is empty when unset or blank', () => {
+    expect(parseOutboundIps(undefined)).toEqual([]);
+    expect(parseOutboundIps('')).toEqual([]);
+    expect(parseOutboundIps(' , ')).toEqual([]);
+  });
+  it('reads a comma-separated list of IPv4 and IPv6 addresses, trimmed, lowercased and without duplicates', () => {
+    expect(parseOutboundIps('184.169.146.94')).toEqual(['184.169.146.94']);
+    expect(parseOutboundIps(' 184.169.146.94 , 2600:1F1C:ABC::1,184.169.146.94,')).toEqual(['184.169.146.94', '2600:1f1c:abc::1']);
+    expect(parseOutboundIps('::ffff:8.8.8.8')).toEqual(['::ffff:8.8.8.8']);
+  });
+  it.each(['example.com', '184.169.146', '256.1.1.1', '01.2.3.4', '[2600::1]', 'fe80::1%en0', '10.0.0.0/8', '1.2.3.4:5432', '1.2.3.4 5.6.7.8'])('refuses %s', (value) => {
+    expect(() => parseOutboundIps(`184.169.146.94,${value}`)).toThrow('APP__OUTBOUND_IPS');
   });
 });
