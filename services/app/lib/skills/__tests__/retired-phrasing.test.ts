@@ -19,6 +19,8 @@ const FILES = [
   path.join(APP, 'lib/html-runtime/browser-client.ts'),
   path.join(APP, 'lib/html-runtime/browser-reader.ts'),
 ];
+// The one place the old runtime name may stay: live pages call it (its top comment says when to delete it).
+const COMPAT = path.join(APP, 'lib/html-runtime/legacy-page-names.ts');
 const RETIRED: Array<[string, RegExp]> = [
   ['background watch branch', /run_in_background/],
   ['Verified: wording', /Verified:/],
@@ -37,6 +39,15 @@ it('keeps retired phrasing out of every script and API string it owns', () => {
     return RETIRED.filter(([, pattern]) => pattern.test(text)).map(([name]) => `${path.relative(APP, file)}: ${name}`);
   });
   expect(found).toEqual([]);
+});
+
+it('allows the old runtime name only in its isolated compatibility module', () => {
+  expect(FILES).not.toContain(COMPAT);
+  expect(readFileSync(COMPAT, 'utf8')).toMatch(/Delete when no live page uses it\.[\s\S]*export const onBackendChange = onResolverChange;/);
+  const runtimeDir = path.join(APP, 'lib/html-runtime');
+  const named = readdirSync(runtimeDir).filter(name => /\.ts$/.test(name)).map(name => path.join(runtimeDir, name))
+    .filter(file => /\bonBackendChange\b/.test(readFileSync(file, 'utf8')));
+  expect(named).toEqual([COMPAT]);
 });
 
 it('detects each retired phrasing it guards', () => {
