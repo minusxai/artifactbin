@@ -11,7 +11,8 @@
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 
-const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph)\.js$/;
+// regions (the live region editor) is served for completeness; Save HTML never embeds it (no session offline).
+const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions)\.js$/;
 const LIBRARY=/^\/libraries\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/;
 const COMPONENT=/^\/af\/components\/[a-z][a-z0-9-]*\.js$/;
 const MAX_BYTES=8_000_000;
