@@ -79,7 +79,7 @@ import {
   credentialRoot
 } from './toolbox-client.mjs';
 import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
-import {watchAgain} from './toolbox-watch-state.mjs';
+import {watchNext} from './toolbox-watch-state.mjs';
 import {commentText, threadRevision} from './toolbox-comment-write.mjs';
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an
 // uncertain result can be resumed.
@@ -192,6 +192,6 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   );
   const result = await resumeJournal(journal, client, 'comment');
   if (sub !== 'reply') return {thread: result.receipt, journal};
-  return {thread: result.receipt, journal, next: watchAgain(id)};
+  return {thread: result.receipt, journal, next: watchNext(id)};
 }
 await runTool('comment', import.meta.url, commentCommand);

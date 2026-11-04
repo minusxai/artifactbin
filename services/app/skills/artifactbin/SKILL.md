@@ -9,12 +9,12 @@ description: >-
 ## Read first
 
 Every task that publishes or edits page content ends, after all the requested work, with ONE
-response that holds your reply and runs `node scripts/comment.mjs watch ID --next`; its output says
-what to do next[% if not shipped %] (without the installed skill: the save response's
-`monitoring.instruction`)[% endif %]. Your reply is what the user asked for: if they prescribed its
-form (e.g. only the URL), send exactly that; otherwise send the Reply block your last clean check
-printed, as printed, or just the link when no check printed one. Group, sharing and ownership
-changes alone need no watch.
+response whose message text is your reply to the user and which runs `node scripts/comment.mjs watch
+ID --next`; its output says what to do next[% if not shipped %] (without the installed skill: the
+save response's `monitoring.instruction`)[% endif %]. Your reply is what the user asked for: if they
+prescribed its form (e.g. only the URL), send exactly that; otherwise send the Reply block your last
+clean check printed, as printed, or just the link when no check printed one. Group, sharing and
+ownership changes alone need no watch.
 
 Skill map (`ls <folder>` lists all; each file's top comment says how to use it):
 
