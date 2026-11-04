@@ -164,6 +164,8 @@ describe('the password stays out of everything a reader or the owner can see',()
   it('redacts it from a failed run\'s reason, owner detail and resolver-thrown message',async()=>{
    const rethrown=await failure('rethrown',name);
    expect(rethrown.code).toBe('backend_failed');expect(rethrown.detail).toContain('[redacted]');
+   // An uncaught capability refusal keeps its code in the owner's detail (Test connection reads it).
+   expect(rethrown.detail).toBe('database_error: '+message);
    const wrapped=await failure('wrapped',name);
    expect(wrapped.shown).toBe('wrapped '+message);
    for(const e of [rethrown,wrapped])expect(JSON.stringify({...e,message:(e as unknown as Error).message})).not.toContain(PASSWORD);
