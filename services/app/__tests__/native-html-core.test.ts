@@ -8,6 +8,7 @@ import {GET as legacyCore} from '@/app/af/v1/core.js/route';
 import {GET as flatApollo} from '@/app/af/apollo.js/route';
 import {GET as flatReader,HEAD as flatReaderHead} from '@/app/af/reader.js/route';
 import {GET as flatMorph} from '@/app/af/morph.js/route';
+import {GET as flatRegions} from '@/app/af/regions.js/route';
 import {GET as font,HEAD as fontHead} from '@/app/af/fonts/[name]/route';
 import {readFileSync} from 'node:fs';
 import { storyFontManifest as manifest } from '@/lib/html-systems';
@@ -29,15 +30,16 @@ it('permits only the exact public runtime path on a page runner origin',async()=
 
 it('serves the flat runtime modules at stable addresses, revalidated by ETag, each guarded against another build\'s core',async()=>{
  const assets=await buildHtmlAssets();
- expect(assets.apolloPath).toBe('/af/apollo.js');expect(assets.readerPath).toBe('/af/reader.js');expect(assets.morphPath).toBe('/af/morph.js');
+ expect(assets.apolloPath).toBe('/af/apollo.js');expect(assets.readerPath).toBe('/af/reader.js');expect(assets.morphPath).toBe('/af/morph.js');expect(assets.regionsPath).toBe('/af/regions.js');
  const build=/globalThis\[Symbol\.for\("afbin\.runtime-build"\)\]="([a-f0-9]{16})"/.exec(assets.core)?.[1];expect(build).toBeTruthy();
- for(const source of [assets.apollo,assets.reader,assets.chrome!,assets.portableEngine!,assets.morph!])expect(source.startsWith(`{const c=globalThis[Symbol.for("afbin.runtime-build")];if(c&&c!=="${build}")`)).toBe(true);
- for(const [route,source] of [[flatApollo,assets.apollo],[flatMorph,assets.morph!]] as const){const response=await route(new Request('https://app.example.test/af/x.js',{headers:{cookie:'ignored=test'}}));expect(response.status).toBe(200);expect(await response.text()).toBe(source);expect(response.headers.get('cache-control')).toBe('no-cache');expect(response.headers.get('set-cookie')).toBeNull();}
+ for(const source of [assets.apollo,assets.reader,assets.chrome!,assets.portableEngine!,assets.morph!,assets.regions!])expect(source.startsWith(`{const c=globalThis[Symbol.for("afbin.runtime-build")];if(c&&c!=="${build}")`)).toBe(true);
+ for(const [route,source] of [[flatApollo,assets.apollo],[flatMorph,assets.morph!],[flatRegions,assets.regions!]] as const){const response=await route(new Request('https://app.example.test/af/x.js',{headers:{cookie:'ignored=test'}}));expect(response.status).toBe(200);expect(await response.text()).toBe(source);expect(response.headers.get('cache-control')).toBe('no-cache');expect(response.headers.get('set-cookie')).toBeNull();}
  const read=await flatReader(new Request('https://app.example.test/af/reader.js'));const tag=read.headers.get('etag')!;expect(await read.text()).toBe(assets.reader);
  const head=await flatReaderHead(new Request('https://app.example.test/af/reader.js',{method:'HEAD'}));expect(await head.text()).toBe('');expect(head.headers.get('etag')).toBe(tag);
  expect((await flatReader(new Request('https://app.example.test/af/reader.js',{headers:{'if-none-match':tag}}))).status).toBe(304);
- const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));app.get('/af/reader.js',c=>flatReader(c.req.raw));
+ const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));app.get('/af/reader.js',c=>flatReader(c.req.raw));app.get('/af/regions.js',c=>flatRegions(c.req.raw));
  expect((await app.request(origin+'/af/reader.js')).status).toBe(200);expect((await app.request(origin+'/af/secret.js')).status).toBe(404);
+ expect((await app.request(origin+'/af/regions.js')).status).toBe(200);
 });
 
 it('serves registered platform fonts by plain name, immutable, and nothing else',async()=>{

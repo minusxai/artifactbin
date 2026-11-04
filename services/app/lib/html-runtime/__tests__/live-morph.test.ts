@@ -80,6 +80,45 @@ describe('native HTML live morph',()=>{
  });
 });
 
+describe('editable regions (data-af-editable)',()=>{
+ const REGION=(inner:string,attrs='')=>V1.replace('<p data-af-id="p2">Second.</p>',`<article data-af-id="r1" data-af-editable="rich"${attrs}>${inner}</article>`);
+ const SAVED='<p data-af-id="a1">Saved <strong>text</strong>.</p><ul data-af-id="l1"><li data-af-id="i1"><p data-af-id="a2">Item</p></li></ul>';
+ it('a reader frame (no editor) draws a saved region version in place: its text, links and new blocks are content, not controls',()=>{
+  const live=load(served(1,REGION(SAVED)));const region=document.querySelector('article')!;
+  const next=served(2,REGION('<p data-af-id="a1">Saved <a href="https://example.com/x">link</a> now.</p><ul data-af-id="l1"><li data-af-id="i1"><p data-af-id="a2">Item, edited</p></li><li data-af-id="i2"><p data-af-id="a3">Another</p></li></ul><blockquote data-af-id="q1"><p data-af-id="a4">Quoted</p></blockquote>'));
+  morphHtmlVersion(document,served(1,REGION(SAVED)),next,SCRIPTS);
+  expect(document.querySelector('article')).toBe(region);
+  expect(region.innerHTML).toBe('<p data-af-id="a1">Saved <a href="https://example.com/x">link</a> now.</p><ul data-af-id="l1"><li data-af-id="i1"><p data-af-id="a2">Item, edited</p></li><li data-af-id="i2"><p data-af-id="a3">Another</p></li></ul><blockquote data-af-id="q1"><p data-af-id="a4">Quoted</p></blockquote>');
+  expect(document.activeElement).toBe(live.input);
+ });
+ it('still refuses what a region cannot hold, an interactive region element, and interactive edits outside it',()=>{
+  load(served(1,REGION(SAVED)));
+  expect(()=>morphHtmlVersion(document,served(1,REGION(SAVED)),served(2,REGION(SAVED.replace('Item','Item <button data-af-id="go">Go</button>'))),SCRIPTS)).toThrow(/interactive/);
+  expect(()=>morphHtmlVersion(document,served(1,REGION(SAVED)),served(2,REGION(SAVED.replace('<p data-af-id="a1">','<p data-af-id="a1" onclick="go()">'))),SCRIPTS)).toThrow(/interactive/);
+  expect(()=>morphHtmlVersion(document,served(1,REGION(SAVED)),served(2,REGION(SAVED.replace('Saved','Saved <a href="/x" target="_top">x</a>'))),SCRIPTS)).toThrow(/interactive/);
+  const unknownKind=(inner:string)=>REGION(inner).replace('data-af-editable="rich"','data-af-editable="spreadsheet"');
+  load(served(1,unknownKind(SAVED)));
+  expect(()=>morphHtmlVersion(document,served(1,unknownKind(SAVED)),served(2,unknownKind(SAVED.replace('Item','Item, edited'))),SCRIPTS)).toThrow(/interactive/);
+  load(served(1,REGION(SAVED)));
+  expect(()=>morphHtmlVersion(document,served(1,REGION(SAVED)),served(2,REGION(SAVED.replace('Item','Item, edited')).replace('Name <input','Full name <input')),SCRIPTS)).toThrow(/interactive/);
+ });
+ it('while an editor holds the region, a version leaves its element to the editor (no refusal, no redraw) and draws the rest',()=>{
+  load(served(1,REGION(SAVED)));
+  const region=document.querySelector('article')!;
+  // What an editor shows: its own DOM on the region's element.
+  region.setAttribute('contenteditable','true');region.innerHTML='<p data-af-id="a1">Live, unsaved typing</p>';const editing=region.firstChild!;
+  const next=served(2,REGION('<p data-af-id="a1">Saved by flush</p><p data-af-id="a9">New</p>',' class="moved"').replace('First draft.','First draft, revised.'));
+  const applied=morphHtmlVersion(document,served(1,REGION(SAVED)),next,SCRIPTS,undefined,new Map([['r1',region]]));
+  expect(applied.revision).toBe('2');expect(applied.savedNodeIds).toContain('a9');
+  expect(document.querySelector('article')).toBe(region);expect(region.firstChild).toBe(editing);
+  expect(region.innerHTML).toBe('<p data-af-id="a1">Live, unsaved typing</p>');expect(region.hasAttribute('class')).toBe(false);
+  expect(document.querySelector('[data-af-id="p1"]')!.textContent).toBe('First draft, revised.');
+  expect(document.querySelector('[data-mx-edit-region]')).toBeNull();
+  // A region nobody edits is still drawn; an interactive edit outside the held region still refuses.
+  expect(()=>morphHtmlVersion(document,served(2,REGION(SAVED)),served(3,REGION(SAVED).replace('Name <input','Full name <input')),SCRIPTS,undefined,new Map([['r1',region]]))).toThrow(/interactive/);
+ });
+});
+
 describe('applyHtmlVersion (inside the frame)',()=>{
  it('fetches its own address without the ticket, draws the version and keeps it as the next baseline',async()=>{
   load(served(1,V1));

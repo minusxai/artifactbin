@@ -7,7 +7,7 @@ it('uses original frame RPC with explicit HTML anchors and never exposes credent
   const runtime = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
   document.body.innerHTML = '<p data-af-id="n1">Hello</p>';
-  const bridge = runtime.startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+  const bridge = runtime.startFrameBridge({ win: window, post: (event) => events.push(event as (typeof events)[number]), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
   bridges.push(bridge);
   bridge.receive({ kind: 'send', command: { type: 'mx:selection-actions', edit: false, annotate: true } });
   const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -29,7 +29,7 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
   const query = runtime.client.query({ query: runtime.gql`{ orders { total } }` });
   expect(events).toHaveLength(0);
-  const bridge = runtime.startFrameBridge({ win: actualWindow, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+  const bridge = runtime.startFrameBridge({ win: actualWindow, post: (event) => events.push(event as (typeof events)[number]), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
   bridges.push(bridge);
   await Promise.resolve();
   const fetch = events.find((event) => event.kind === 'fetch')!;
@@ -56,7 +56,7 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   expect(watched.at(-1)).toMatchObject({data:{orders:null},loading:false,errors:[{message:'Access unavailable'}]});
   bridge.dispose();
   const replacementEvents:Array<{kind:string;[key:string]:unknown}>=[];
-  const replacement=runtime.startFrameBridge({win:actualWindow,post:event=>replacementEvents.push(event),attach:{kind:'attach',id:'p1',editId:'3',source:null}});bridges.push(replacement);
+  const replacement=runtime.startFrameBridge({win:actualWindow,post:event=>replacementEvents.push(event as (typeof replacementEvents)[number]),attach:{kind:'attach',id:'p1',editId:'3',source:null}});bridges.push(replacement);
   await settle();
   expect(replacementEvents[0]?.kind).toBe('ready');
   const reconnected=replacementEvents.find(event=>event.kind==='fetch')!;expect(reconnected).toBeDefined();
@@ -90,7 +90,7 @@ it('uses original select controls for block picks, breadcrumbs and escape', asyn
   vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [] });
   const { startFrameBridge } = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
-  const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+  const bridge = startFrameBridge({ win: window, post: (event) => events.push(event as (typeof events)[number]), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
   bridges.push(bridge);
   document.body.innerHTML = '<main data-af-id="n1"><p data-af-id="n2">words</p></main>';
   bridge.receive({ kind: 'send', command: { type: 'mx:annotations', mode: 'on', pins: [], openId: null, hoverId: null, canComment: true, pick: 'select' } });
@@ -110,7 +110,7 @@ it('opens on HTTP runner and offline origins without the secure-context randomUU
   vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
   const { startFrameBridge } = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
-  const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '1', source: null } });
+  const bridge = startFrameBridge({ win: window, post: (event) => events.push(event as (typeof events)[number]), attach: { kind: 'attach', id: 'p1', editId: '1', source: null } });
   bridges.push(bridge);
   expect(events[0]?.nonce).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   bridge.dispose();
@@ -120,7 +120,7 @@ it('captures scoped dynamic IDs without hijacking ordinary clicks on annotated t
  const {startFrameBridge}=await import('../browser-client');
  document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Finish review</li></ul><ul data-af-id="other"><li data-af-id="task:123">Other task</li></ul>';
  const events:Array<{kind:string;[key:string]:unknown}>=[];
- const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',editId:'1',source:null}});
+ const bridge=startFrameBridge({win:window,post:event=>events.push(event as (typeof events)[number]),attach:{kind:'attach',id:'p1',editId:'1',source:null}});
   bridges.push(bridge);
  bridge.receive({kind:'send',command:{type:'mx:selection-actions',edit:false,annotate:true}});
  document.querySelector('li')!.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));
@@ -142,7 +142,7 @@ it('batches authored DOM changes, ignores its own overlay and detaches observati
  vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{frames.set(++next,callback);return next;});
  vi.spyOn(window,'cancelAnimationFrame').mockImplementation(id=>{frames.delete(id);});
  const {startFrameBridge}=await import('../browser-client');const events:Array<{kind:string;[key:string]:unknown}>=[];
- const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',editId:'1',source:null}});
+ const bridge=startFrameBridge({win:window,post:event=>events.push(event as (typeof events)[number]),attach:{kind:'attach',id:'p1',editId:'1',source:null}});
   bridges.push(bridge);
  bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'c1',path:'task:123',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:''}}],openId:null,hoverId:null}});
  await Promise.resolve();expect(frames.size).toBe(0);
@@ -178,7 +178,7 @@ it('keeps area drags separate from native text selection and restores normal sel
   const paragraph = document.querySelector('p')!;
   vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, width: 200, height: 100, top: 0, left: 0, right: 200, bottom: 100, toJSON() {} });
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
-  const bridge = startFrameBridge({ win: window, post: event => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+  const bridge = startFrameBridge({ win: window, post: event => events.push(event as (typeof events)[number]), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
   bridges.push(bridge);
   bridge.receive({ kind: 'send', command: { type: 'mx:annotations', canComment: true, pick: 'area' } });
   const selectText = () => { const range = document.createRange(); range.selectNodeContents(paragraph); window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range); document.dispatchEvent(new Event('selectionchange')); };
@@ -209,7 +209,7 @@ it('initializes local defaults on first author import after the blocking reader 
 it('uploads through the credential-free author port and rejects late or portable writes',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
  const runtime=await import('../browser-client');const events:Array<any>=[];
- const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',editId:'1',source:null,uploadContext:{state:'signed-in',scope:'owner'}}});bridges.push(bridge);
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event as (typeof events)[number]),attach:{kind:'attach',id:'p1',editId:'1',source:null,uploadContext:{state:'signed-in',scope:'owner'}}});bridges.push(bridge);
  const file=new File(['hello'],'sample.txt',{type:'text/plain'});const first=runtime.uploadFile(file,{dataset:'attachments'});
  for(let i=0;i<8;i++)await Promise.resolve();
  const sent=events.find(event=>event.kind==='upload-file');expect(sent).toMatchObject({datasetId:'Dataset123',filename:'sample.txt'});expect(sent).not.toHaveProperty('credentials');
@@ -222,7 +222,7 @@ it('the public initializer uses trusted context, cancels an old subject and keep
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
  await import('../../html-components/file-upload');
  const runtime=await import('../browser-client');const events:any[]=[];
- const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'Page123',editId:'2',source:null,uploadContext:{state:'signed-out',scope:'guest'}}});bridges.push(bridge);
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event as (typeof events)[number]),attach:{kind:'attach',id:'Page123',editId:'2',source:null,uploadContext:{state:'signed-out',scope:'guest'}}});bridges.push(bridge);
  const control=document.createElement('af-file-upload') as import('../../html-components/file-upload').AfFileUpload;control.datasetName='attachments';document.body.append(control);
  const binding=runtime.bindFileUpload(control,{helperText:'Choose a receipt.'});
  expect(control.querySelector('input')?.disabled).toBe(true);expect(control.textContent).toContain('Sign in to upload files.');
@@ -239,7 +239,7 @@ it('the public initializer uses trusted context, cancels an old subject and keep
 it('a direct upload started before a session change cannot send bytes under the replacement account',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
  const runtime=await import('../browser-client'),events:any[]=[];
- const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'Page123',editId:'2',source:null,uploadContext:{state:'signed-in',scope:'first-account'}}});bridges.push(bridge);
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event as (typeof events)[number]),attach:{kind:'attach',id:'Page123',editId:'2',source:null,uploadContext:{state:'signed-in',scope:'first-account'}}});bridges.push(bridge);
  let bytes!:(value:ArrayBuffer)=>void;const file=new File(['hello'],'sample.txt',{type:'text/plain'});
  vi.spyOn(file,'arrayBuffer').mockImplementation(()=>new Promise(resolve=>{bytes=resolve;}));
  const pending=runtime.uploadFile(file,{dataset:'attachments'});const rejected=expect(pending).rejects.toThrow(/session changed/);
