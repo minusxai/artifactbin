@@ -55,7 +55,8 @@ try {
     id = owned[0].id;
     check(page.url().includes(id), `the page opened the new doc (${new URL(page.url()).pathname})`);
     const created = await head();
-    check(created.template === 'doc', `the new artifact is a doc (template ${created.template})`);
+    // The read wire carries no template for a page: the doc's mark shows as its page opening the region (below).
+    check(/<article data-af-editable="rich"[^>]*><h1[^>]*><\/h1><p[^>]*><\/p><\/article>/.test(created.html), 'the new page is the doc template: one rich region with an empty title');
     check(created.version === 1 && created.visibility === 'private', `it is private at version 1 (${created.visibility} v${created.version})`);
   });
 
@@ -82,7 +83,6 @@ try {
     check(saved?.version > before.version, `the save made a version (v${before.version} → v${saved?.version})`);
     check(/<h1[^>]*>Launch plan<\/h1>/.test(saved?.html ?? ''), 'the saved page holds the typed title as its heading');
     check(saved?.title === 'Launch plan' && /<title[^>]*>Launch plan<\/title>/.test(saved?.html ?? ''), `the doc is named by its heading (${saved?.title})`);
-    check(saved?.template === 'doc', 'it is still a doc after the save');
   });
 } finally {
   check.note(`gate time ${((performance.now() - started) / 1000).toFixed(1)} s`);
