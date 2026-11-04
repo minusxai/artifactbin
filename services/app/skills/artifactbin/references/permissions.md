@@ -45,7 +45,9 @@ A CSV or JSON dataset is one table, `public.rows`. Rules name source columns (as
 `policy.mjs get` shows each column's GraphQL field. `select`: `columns` (`"*"` or a list), `filter`,
 `limit` (at most 1000), `allow_aggregations`. `insert`: `columns`, `check`, `set`. `update`:
 `columns`, `filter`, `check`, `set`. `delete`: `filter`. Filters use the query `where` grammar.
-Hidden columns cannot be read, filtered, sorted or aggregated. `backend_only:true` limits an entry
+Hidden columns cannot be read, filtered, sorted or aggregated. A table's `collaborative_columns` (text
+columns) are typed in live together with `@afbin/collab`
+([datasets](datasets.md#type-together-afbincollab)). `backend_only:true` limits an entry
 to the owner's trusted page programs, not page GraphQL or resolvers. `configuration` (the GraphQL
 names) is server-owned: omit it or send it unchanged.
 

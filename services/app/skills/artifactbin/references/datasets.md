@@ -28,7 +28,7 @@ default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version 
 
 ## Contents
 
-[Names](#names-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
+[Names](#names-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
 
 ## Names: discover before querying
 
@@ -91,6 +91,25 @@ until [permissions](permissions.md) allow more; a page link never grants writes.
 changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Use these rather
 than polling. The installed `examples/csv-dashboard.html` reads every page and charts it;
 `examples/shared-app.html` writes through a resolver ([resolvers](resolvers.md)).
+
+## Type together (`@afbin/collab`)
+
+Bind a text cell to an `<input>` or `<textarea>`: everyone allowed to change it types in it live
+(Google Docs style, no typing lost); reads, exports and history still see a plain string.
+
+```js
+import {collab} from '@afbin/collab';
+const text=collab.text('tasks',row._id,'description'); // link name, row _id, field
+const binding=text.bind(textarea); // two-way, caret kept, IME-safe
+text.on('change',value=>…); text.status; // 'synced'|'pending'|'offline'|'readonly'
+binding.destroy(); text.destroy();
+```
+
+The owner opts each text column in with the policy's table key `"collaborative_columns":["description"]`
+([permissions](permissions.md)); other columns never open. Who may type is the update rule for that row
+and column; everyone else (and anyone signed out) gets `readonly` and should show the value they read.
+Typing is saved as one dataset version when someone leaves, on idle or after a quiet spell; a GraphQL
+write meanwhile is merged with the typing, and a deleted row's cell turns `readonly`.
 
 ## CSV import
 
