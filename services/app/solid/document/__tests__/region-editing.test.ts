@@ -8,6 +8,7 @@ import * as Y from 'yjs';
 import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts';
 import { createRegionClient, encodeBase64, type RegionClient, type RegionClientEvents, type RegionSession } from '@/lib/artifact-backend/region-http';
 import { commentAfterRegionSave } from '@/lib/annotations/region-comment';
+import { openRegionDoc } from '@/lib/live-regions/cells';
 import { regionMembership, startRegionEditing } from '../region-editing';
 
 const PAGE = `<!doctype html><html data-af-id="h"><head data-af-id="hd"></head><body data-af-id="b">
@@ -196,7 +197,7 @@ describe('startRegionEditing', () => {
 
   it('saves before a comment inside a region: pending edits, then the save, then the comment, anchored to the saved version', async () => {
     const order: string[] = [];
-    const doc = new Y.Doc();
+    const doc = openRegionDoc(undefined, { gc: true });
     let seq = 0;
     const fetch = async (path: string, init: RequestInit): Promise<Response> => {
       order.push(path.split('/').slice(-1)[0]!);
@@ -211,7 +212,7 @@ describe('startRegionEditing', () => {
     await settle();
     frame.say({ kind: 'region-open', regionId: 'notes' });
     await vi.waitFor(() => expect(frame.sent.at(-1)?.kind).toBe('region-session'));
-    const local = new Y.Doc();
+    const local = openRegionDoc(undefined, { gc: true });
     local.clientID = 7;
     const before = Y.encodeStateVector(local);
     local.getText('region').insert(0, 'unsaved words');

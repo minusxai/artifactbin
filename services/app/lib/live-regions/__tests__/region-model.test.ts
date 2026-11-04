@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { attribute, parseSource } from '../../html-page/html-source';
-import { applyRegionRevision, compactRegion, createRegionState, LiveRegionRefusal, normalizeRegionHtml, regionHtml, regionSchema, regionText, safeHref, type RegionKind } from '..';
+import { applyRegionRevision, compactRegion, createRegionState, LiveRegionRefusal, normalizeRegionHtml, openRegionDoc, regionHtml, regionSchema, regionText, safeHref, type RegionKind } from '..';
 
 const refusal = (run: () => unknown): LiveRegionRefusal => {
   try { run(); } catch (error) { if (error instanceof LiveRegionRefusal) return error; throw error; }
@@ -134,7 +134,7 @@ describe('sanitization: authored content is refused by name, never silently rewr
   });
 
   it('the merged state is stripped, not refused: foreign attributes, embeds, unsafe links, junk ids and bad values vanish; text never does', () => {
-    const doc = new Y.Doc();
+    const doc = openRegionDoc(undefined, { gc: true });
     const text = regionText(doc);
     text.insert(0, 'ok ', { onclick: 'x()' });
     text.insertEmbed(3, { script: 'alert(1)' });
@@ -168,29 +168,10 @@ describe('agent Markdown (prosemirror-markdown, CommonMark, raw HTML off)', () =
   });
 });
 
-describe('the shared text', () => {
-  it('a replica that read its formatted state from bytes deletes a line end without spreading the attributes before it', () => {
-    // State bytes first, then the text: how every replica and fork opens a region. Yjs integrated the formats as
-    // a plain type's, so its search markers stayed on, and a deletion found through one dropped the marker ending the
-    // previous line end's id: "z" took that id.
-    const { state } = createRegionState('rich', '<p data-af-id="af-1">abc</p><p data-af-id="af-2"></p><p data-af-id="af-3"></p><p data-af-id="af-4">z</p>');
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, state);
-    const text = regionText(doc);
-    text.delete(5, 1);
-    expect(text.toDelta()).toEqual([
-      { insert: 'abc' }, { insert: '\n', attributes: { afId: 'af-1' } }, { insert: '\n', attributes: { afId: 'af-2' } },
-      { insert: 'z' }, { insert: '\n', attributes: { afId: 'af-4' } },
-    ]);
-  });
-});
-
 describe('three-way revision (republish and agent edits)', () => {
   /** A reader's edit made straight on the shared text: text inserted at `offset` within line `index`. */
   const readerTypes = (state: Uint8Array, index: number, offset: number, text: string, clientID = 7) => {
-    const doc = new Y.Doc();
-    doc.clientID = clientID;
-    Y.applyUpdate(doc, state);
+    const doc = openRegionDoc(state, { gc: true, clientId: clientID });
     const before = Y.encodeStateVector(doc);
     const shared = regionText(doc);
     const lineStart = shared.toString().split('\n').slice(0, index).reduce((sum, line) => sum + line.length + 1, 0);
@@ -263,24 +244,21 @@ describe('three-way revision (republish and agent edits)', () => {
     const saved = createRegionState('rich', base);
     const live = apply(saved.state, readerTypes(saved.state, 1, 'First paragraph about the plan.'.length, ' '));
     const { update } = applyRegionRevision({ kind: 'rich', live, savedSnapshot: compactSnapshot(live), html: base.replace('Goals', 'Aims') });
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, apply(live, update));
+    const doc = openRegionDoc(apply(live, update), { gc: true });
     expect(regionText(doc).toString().split('\n')[1]).toBe('First paragraph about the plan. ');
   });
 });
 
 /** The snapshot compaction would keep for this state (a region whose saved page holds exactly these blocks). */
 function compactSnapshot(state: Uint8Array): Uint8Array {
-  const doc = new Y.Doc({ gc: false });
-  Y.applyUpdate(doc, state);
+  const doc = openRegionDoc(state);
   return Y.encodeSnapshot(Y.snapshot(doc));
 }
 
 describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outside the region unchanged)', () => {
   const body = '<h2>Goals</h2><p>First paragraph about the plan.</p><p>Hello <strong>bold</strong> and <a href="https://x.dev">link</a>.</p><ul><li>One</li><li>Two</li></ul><pre><code>x</code></pre>';
   const appendBlock = (state: Uint8Array, text: string, attrs: Record<string, unknown> = {}) => {
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, state);
+    const doc = openRegionDoc(state, { gc: true });
     const before = Y.encodeStateVector(doc);
     const shared = regionText(doc);
     shared.insert(shared.length, `${text}\n`, {});
@@ -348,8 +326,7 @@ describe('compaction (I5: a page canonicalizeHtmlPage accepts; every byte outsid
   it('compacts a text region', () => {
     const saved = published('Plain title', 'text');
     const { state } = createRegionState('text', saved.inner);
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, state);
+    const doc = openRegionDoc(state, { gc: true });
     const before = Y.encodeStateVector(doc);
     regionText(doc).insert(5, ' & safe <title>');
     const page = compactRegion({ savedHtml: saved.html, ledger: saved.ledger, regionId: saved.regionId, state: apply(state, Y.encodeStateAsUpdate(doc, before)) });

@@ -4,13 +4,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { applyCellRevision, cellText, cellValue, createCellState, snapshotValue, spliceText, textSplice } from '../cells';
+import { applyCellRevision, cellText, openRegionDoc, cellValue, createCellState, snapshotValue, spliceText, textSplice } from '../cells';
 import { validateRegionUpdate } from '../validate';
 
 const replica = (state: Uint8Array, clientID: number) => {
-  const doc = new Y.Doc({ gc: false });
-  doc.clientID = clientID;
-  Y.applyUpdate(doc, state);
+  const doc = openRegionDoc(state, { clientId: clientID });
   return doc;
 };
 const edit = (doc: Y.Doc, work: (text: Y.Text) => void) => {
@@ -67,7 +65,7 @@ describe('a three-way revision from the value the cell last saw', () => {
     const decoded = Y.decodeUpdate(revision.update);
     expect(decoded.structs).toEqual([]);
     expect(() => applyCellRevision({ live: state, savedSnapshot: null, value: 'x' })).toThrow();
-    const stranger = new Y.Doc({ gc: false });
+    const stranger = openRegionDoc();
     stranger.clientID = 999;
     cellText(stranger).insert(0, 'other');
     expect(() => applyCellRevision({ live: Y.encodeStateAsUpdate(live), savedSnapshot: Y.encodeSnapshot(Y.snapshot(stranger)), value: 'x' })).toThrow();

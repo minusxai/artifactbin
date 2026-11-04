@@ -11,7 +11,7 @@
 import { randomInt } from 'node:crypto';
 import * as Y from 'yjs';
 import { REGION_UPDATE_MAX_BYTES, type RegionFlushReply, type RegionOpenReply, type RegionRefusalBody, type RegionRefusalCode, type RegionUpdateReply } from '@artifactbin/contracts';
-import { createRegionState, editableRegions, isRegionId, LiveRegionRefusal, validateRegionUpdate, type PageRegion } from '@/lib/live-regions';
+import { createRegionState, editableRegions, isRegionId, LiveRegionRefusal, openRegionDoc, validateRegionUpdate, type PageRegion } from '@/lib/live-regions';
 import { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveLiveRegionsInTx, type RegionRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db, type Queryable } from '@/lib/platform';
@@ -33,7 +33,7 @@ function refusalOf(error: unknown): RegionAnswer<never> {
 }
 
 export const base64 = (bytes: Uint8Array): string => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
-const EMPTY_UPDATE = Y.encodeStateAsUpdate(new Y.Doc());
+const EMPTY_UPDATE = Y.encodeStateAsUpdate(openRegionDoc());
 /** The log is folded into the stored state at saves and at least this often. */
 const FOLD_EVERY = 100;
 const CACHED_DOCS = 64;

@@ -25,10 +25,8 @@ import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/con
 import { keysOf } from './lines';
 import { LiveRegionRefusal } from './refusal';
 import { isNodeId, MAX_DEPTH, safeHref, type RegionKind } from './schema';
-import { liveDocument, regionText } from './state';
+import { openRegionDoc, REGION_ROOT, regionText } from './region-doc';
 
-/** The one root a region's state holds (state.ts regionText). */
-const ROOT = 'region';
 const CHAR_KEYS = new Set(keysOf('x'));
 const BLOCK_KEYS = new Set(keysOf('\n'));
 
@@ -72,7 +70,7 @@ export function validateRegionUpdate(kind: RegionKind, state: Uint8Array | Y.Doc
   if (update.byteLength > REGION_UPDATE_MAX_BYTES) throw new LiveRegionRefusal('too_large', [`${update.byteLength} bytes`]);
   let decoded: { structs: (Y.Item | Y.GC | Y.Skip)[]; ds: DeleteSet };
   try { decoded = Y.decodeUpdate(update) as typeof decoded; } catch { throw unsupported('undecodable update'); }
-  const doc = state instanceof Y.Doc ? state : liveDocument(state);
+  const doc = state instanceof Y.Doc ? state : openRegionDoc(state);
   const known = Y.decodeStateVector(Y.encodeStateVector(doc));
   const outOfOrder = (detail: string) => new LiveRegionRefusal('out_of_order', [detail], Y.encodeStateVector(doc));
   const ownBefore = known.get(clientId) ?? 0;
@@ -91,7 +89,7 @@ export function validateRegionUpdate(kind: RegionKind, state: Uint8Array | Y.Doc
     if (struct instanceof Y.GC) continue;
     const item = struct as Y.Item;
     const parent = item.parent as unknown;
-    if (item.parentSub !== null || (parent !== null && parent !== ROOT)) throw new LiveRegionRefusal('outside_region', [item.parentSub ?? (typeof parent === 'string' ? parent : 'a nested type')]);
+    if (item.parentSub !== null || (parent !== null && parent !== REGION_ROOT)) throw new LiveRegionRefusal('outside_region', [item.parentSub ?? (typeof parent === 'string' ? parent : 'a nested type')]);
     const { content } = item;
     if (content instanceof Y.ContentFormat) formats.push(item);
     else if (!(content instanceof Y.ContentString) && !(content instanceof Y.ContentDeleted)) throw unsupported(content.constructor.name);

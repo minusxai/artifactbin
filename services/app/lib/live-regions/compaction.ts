@@ -10,7 +10,8 @@ import { readRegion, writeRegion } from './html';
 import { LiveRegionRefusal } from './refusal';
 import { ID_ATTRS, isRegionKind, regionSchema, type RegionKind } from './schema';
 import { htmlSource } from './source-html';
-import { encodeSnapshot, liveDocument, readDocument, writeIds } from './state';
+import { openRegionDoc } from './region-doc';
+import { encodeSnapshot, readDocument, writeIds } from './state';
 
 interface RegionLocation { kind: RegionKind; start: number; end: number; inner: string; ids: ReadonlySet<string> }
 
@@ -71,8 +72,8 @@ interface RegionCompaction {
 
 export function compactRegion(input: RegionCompactionInput): RegionCompaction {
   const region = locateRegion(input.savedHtml, input.regionId);
-  const doc = liveDocument(input.state);
-  const merged = keepSavedIds(region.kind, readDocument(region.kind, liveDocument(input.state)), region.ids);
+  const doc = openRegionDoc(input.state);
+  const merged = keepSavedIds(region.kind, readDocument(region.kind, openRegionDoc(input.state)), region.ids);
   const spliced = applyEdits(input.savedHtml, [{ start: region.start, end: region.end, text: writeRegion(region.kind, merged) }]);
   const page = canonicalizeHtmlPage(spliced, { previousHtml: input.savedHtml, ledger: input.ledger });
   const saved = readRegion(region.kind, htmlSource(locateRegion(page.html, input.regionId).inner), 'strip');

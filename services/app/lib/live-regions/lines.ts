@@ -17,29 +17,6 @@ export type Attrs = Record<string, string | number | boolean>;
 /** One UTF-16 code unit of the region with its attributes (both Y.Text and ProseMirror count code units). */
 export interface Unit { ch: string; attrs: Attrs }
 
-/**
- * The shared text a region is bound through. Yjs (13.6) switches a text's search markers off when a format item is
- * integrated into it, because its marker search does not track attributes. A text whose formatted content arrived
- * in an update before the text was first read (every replica's and fork's: state bytes first, then the text) was
- * integrated as a plain type and keeps them on. A deletion found through a marker then starts with no attributes, and
- * its cleanup removes the marker that ends the attribute run before it, so that run's attributes spread over the text
- * after the deletion (a line end's ids onto the next line's characters). The first read switches them off, as
- * integration would have; formats integrated later switch them off themselves.
- */
-const formattingChecked = new WeakSet<Y.Text>();
-export const regionText = (doc: Y.Doc): Y.Text => {
-  const text = doc.getText('region');
-  if (formattingChecked.has(text)) return text;
-  formattingChecked.add(text);
-  for (let item = text._start; item; item = item.right) {
-    if (item.content instanceof Y.ContentFormat) {
-      Object.assign(text as unknown as { _searchMarker: unknown; _hasFormatting: boolean }, { _searchMarker: null, _hasFormatting: true });
-      break;
-    }
-  }
-  return text;
-};
-
 const CHAR_KEYS = ['bold', 'italic', 'code', 'link'] as const;
 const BLOCK_KEYS = ['level', 'list', 'depth', 'quote', 'codeBlock', 'codeContinues', 'rule', ...ID_ATTRS] as const;
 /** The attribute keys a unit of this character owns: block keys on a "\n", marks on anything else. */

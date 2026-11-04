@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { createUser } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { editableRegions, regionHtml, regionText } from '@/lib/live-regions';
+import { editableRegions, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { runWithRequest } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
 import { attachActor } from '@artifactbin/utils';
@@ -56,9 +56,7 @@ async function join(person: Person, regionId = rich) {
   const response = await call(req, () => openRoute(req, { params: Promise.resolve({ id: pageId, regionId }) }));
   expect(response.status).toBe(200);
   const reply = await response.json() as { clientId: number; seq: number; state: string };
-  const doc = new Y.Doc({ gc: false });
-  doc.clientID = reply.clientId;
-  Y.applyUpdate(doc, Buffer.from(reply.state, 'base64'), 'server');
+  const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
   const pending: Uint8Array[] = [];
   doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== 'server') pending.push(update); });
   return {

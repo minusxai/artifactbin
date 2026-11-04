@@ -10,7 +10,7 @@ import { TextSelection } from 'prosemirror-state';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { installEditorGeometry } from '../../../test/setup/editor-geometry';
-import { createRegionState, regionHtml, regionText } from '../../live-regions';
+import { createRegionState, openRegionDoc, regionHtml, regionText } from '../../live-regions';
 import { startFrameRegions, type FrameRegions } from '../frame-regions';
 import { applyHtmlVersion, LOADED_SOURCE } from '../live-morph';
 import { REGION_BATCH_MS, type RegionEditor } from '../region-editor';
@@ -66,8 +66,7 @@ function open({ live = LIVE, loads = { count: 0 } } = {}): Harness {
     },
   });
   const { state } = createRegionState('rich', live);
-  const server = new Y.Doc({ gc: false });
-  Y.applyUpdate(server, state);
+  const server = openRegionDoc(state);
   harness = {
     regions, posted, editors, server, root,
     receive: (message) => { expect(regions.receive(message)).toBe(true); },
@@ -87,9 +86,7 @@ async function session(h: Harness) {
 }
 /** A collaborator's change, as the server would relay it. */
 function peerEdit(h: Harness, change: (text: Y.Text) => void, clientID = 99): Uint8Array {
-  const peer = new Y.Doc({ gc: false });
-  peer.clientID = clientID;
-  Y.applyUpdate(peer, Y.encodeStateAsUpdate(h.server));
+  const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { clientId: clientID });
   const before = Y.encodeStateVector(peer);
   change(regionText(peer));
   const update = Y.encodeStateAsUpdate(peer, before);
@@ -167,8 +164,7 @@ describe('a region session in the page frame', () => {
     Y.applyUpdate(h.server, sent[0]!.update);
     expect(serverHtml(h)).toBe('<p data-af-id="a1">&gt;Live text!!</p><p data-af-id="a2">Second</p>');
     // A second Y.Doc started from the same bytes converges on the same text.
-    const other = new Y.Doc();
-    Y.applyUpdate(other, Y.encodeStateAsUpdate(h.server));
+    const other = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true });
     expect(regionText(other).toString()).toBe(regionText(h.server).toString());
   });
 
@@ -288,8 +284,7 @@ describe('a region session in the page frame', () => {
     expect(last).toMatchObject({ regionId: 'r1', marks: [], block: 'paragraph' });
     expect(atob(last.head).length).toBeLessThanOrEqual(256);
     // The position is the shared text's: a peer resolves it to the same character.
-    const peer = new Y.Doc();
-    Y.applyUpdate(peer, Y.encodeStateAsUpdate(h.server));
+    const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true });
     const resolved = Y.createAbsolutePositionFromRelativePosition(Y.decodeRelativePosition(Uint8Array.from(atob(last.head), (ch) => ch.charCodeAt(0))), peer);
     expect(resolved?.index).toBe('Live'.length);
     editor.view.dom.dispatchEvent(new FocusEvent('blur'));
@@ -300,8 +295,7 @@ describe('a region session in the page frame', () => {
     const h = open();
     const editor = await session(h);
     editor.view.coordsAtPos = (pos: number) => ({ left: pos * 10, right: pos * 10, top: 20, bottom: 36 });
-    const peer = new Y.Doc();
-    Y.applyUpdate(peer, Y.encodeStateAsUpdate(h.server));
+    const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true });
     const at = (index: number) => btoa(String.fromCharCode(...Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(regionText(peer), index))));
     h.receive({ kind: 'region-paint', carets: [
       { regionId: 'r1', anchor: at(4), head: at(4), id: 'u2', label: 'Ana' },

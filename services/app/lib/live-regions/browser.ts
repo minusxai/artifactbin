@@ -4,6 +4,6 @@
  * nor compaction, so the page frame's lazily loaded editor (lib/html-runtime/region-editor, `@afbin/regions`) stays
  * small. Server code uses the index.
  */
-export { regionText } from './lines';
+export { openRegionDoc, regionText } from './region-doc';
 export { editorState, regionCommands } from './editor';
 export { absolutePosition, relativePosition } from './binding';

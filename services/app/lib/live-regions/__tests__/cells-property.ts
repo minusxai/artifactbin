@@ -11,7 +11,7 @@
 import fc from 'fast-check';
 import * as Y from 'yjs';
 import { expect } from 'vitest';
-import { applyCellRevision, cellText, cellValue, createCellState, snapshotValue, spliceText } from '../cells';
+import { applyCellRevision, cellText, openRegionDoc, cellValue, createCellState, snapshotValue, spliceText } from '../cells';
 import { validateRegionUpdate } from '../validate';
 
 type Op =
@@ -50,14 +50,11 @@ interface Person { doc: Y.Doc; outbox: Uint8Array[]; inbox: Uint8Array[]; input:
 
 function runScenario({ clients: count, initial, ops }: Scenario): { typed: number } {
   const created = createCellState(initial);
-  const server = new Y.Doc({ gc: false });
-  Y.applyUpdate(server, created.state);
+  const server = openRegionDoc(created.state);
   /** The dataset: the stored value, and the snapshot of the value the cell last saw. */
   let stored = initial, snapshot = created.snapshot;
   const people: Person[] = Array.from({ length: count }, (_unused, index) => {
-    const doc = new Y.Doc();
-    doc.clientID = 1000 + index;
-    Y.applyUpdate(doc, created.state, 'server');
+    const doc = openRegionDoc(created.state, { gc: true, clientId: 1000 + index });
     const person: Person = { doc, outbox: [], inbox: [], input: initial };
     doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== 'server') person.outbox.push(update); });
     return person;
