@@ -81,5 +81,6 @@
   "services/app/lib/live-regions/__tests__/concurrent-editing.test.ts",
   "services/app/lib/live-regions/__tests__/convergence.property.test.ts",
   "services/app/lib/annotations/__tests__/region-comment.test.ts",
-  "services/app/lib/html-runtime/__tests__/frame-door.test.ts"
+  "services/app/lib/html-runtime/__tests__/frame-door.test.ts",
+  "services/app/lib/live-regions/__tests__/validate.test.ts"
 ]
