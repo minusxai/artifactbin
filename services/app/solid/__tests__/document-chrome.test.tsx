@@ -38,6 +38,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
     if (!mockSelectionBridge) return actual.createFramedStory(...args);
     return {
       frame: args[0].framed.frame, nonce: () => 'guest-selection-nonce', setTopInset: () => {},
+      regionUi: { toolbar: () => null, slash: () => null, link: () => null, command: () => {}, closeSlash: () => {}, closeLink: () => {} },
       controller: () => ({ send: selectionSend, getViewportRect: () => undefined, subscribe: (receive: (data: unknown) => void) => {
         selectionListeners.push(receive);
         selectionReceive = (data) => { for (const listener of [...selectionListeners]) listener(data); };
