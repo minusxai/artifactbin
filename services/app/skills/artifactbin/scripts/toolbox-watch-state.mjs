@@ -91,6 +91,10 @@ export const WATCH_TIMEOUT='Give your shell tool a timeout of at least 300000 ms
 /** The step after publishing page content (publish.mjs) or a clean check (check.mjs). */
 export const watchNext=id=>'Next: when the whole request is done, send your reply and, in the '+
  `same response, run node scripts/comment.mjs watch ${id} --next. ${WATCH_TIMEOUT}`;
+/** The step after a clean check's Reply block: that block is the reply, word for word. */
+export const replyNext=id=>'Next: when the whole request is done, send the Reply block above as your reply, '+
+ 'word for word (unless the user prescribed the reply), and, in the same response, run '+
+ `node scripts/comment.mjs watch ${id} --next. ${WATCH_TIMEOUT}`;
 /** The step after answering a comment (comment.mjs reply). */
 export const watchAgain=id=>`Next: run node scripts/comment.mjs watch ${id} --next again. `+
  WATCH_TIMEOUT;
