@@ -1,4 +1,4 @@
-import type {UploadContext} from '@artifactbin/contracts';
+import type {RegionFrameMessage, RegionParentMessage, UploadContext} from '@artifactbin/contracts';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value
@@ -144,7 +144,9 @@ export type FrameBridgeParentPayload =
   /** The answer to a relayed app request (`fetch`): status, the headers the controller reads, the body as text. */
   | { kind: 'fetch-result'; call: number; status: number; headers: Record<string, string>; body: string }
   | { kind: 'fetch-result'; call: number; error: string }
-  | { kind: 'detach' };
+  | { kind: 'detach' }
+  /** Live co-editing of the page's editable regions (contracts region-sessions): bytes only, never a credential. */
+  | RegionParentMessage;
 
 /** Frame → page. `hello` is the one unkeyed payload: the door is open and the page may attach. */
 export type FrameBridgeFramePayload =
@@ -163,7 +165,11 @@ export type FrameBridgeFramePayload =
   | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
   /** The document scrolled: geometry the page placed over it moves. */
   | { kind: 'scroll'; scrollX: number; scrollY: number }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string }
+  /** Live co-editing of the page's editable regions (contracts region-sessions). */
+  | Flat<RegionFrameMessage>;
+/** Each member of a union as a plain object type (an interface member has no implicit index signature). */
+type Flat<T> = T extends unknown ? { [K in keyof T]: T[K] } : never;
 
 /** A bridge envelope at all (any key): the door swallows these so no other listener sees one. */
 export function isFrameBridgeEnvelope(data: unknown): data is { type: typeof STORY_FRAME_BRIDGE_MESSAGE; key?: unknown; payload: { kind: string } } {

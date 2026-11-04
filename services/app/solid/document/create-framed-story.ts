@@ -3,6 +3,12 @@ import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
+import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
+import type { RegionEditing, startRegionEditing } from './region-editing';
+
+/** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
+export type RegionEditingLoader = () => Promise<{ startRegionEditing: typeof startRegionEditing }>;
+const loadRegionEditing: RegionEditingLoader = () => import('./region-editing');
 
 // The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
 import { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
@@ -128,7 +134,17 @@ interface FramedStoryOptions {
   source: () => string | null;
   /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
   htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
-
+  /**
+   * Live editing of the page's editable regions, for a reader who may edit this page (never a viewer or commenter):
+   * once the frame's controller runs, the saved page names its regions and the frame is told them (region-editing).
+   */
+  regions?: {
+    enabled: Accessor<boolean>;
+    /** The saved head's HTML, as an editor reads it (ArtifactBackend.load). */
+    loadHtml: () => Promise<string | null>;
+    onSaved?: (version: number) => void;
+    load?: RegionEditingLoader;
+  };
 }
 
 export interface FramedStory {
@@ -139,7 +155,11 @@ export interface FramedStory {
   frame: HTMLIFrameElement;
   /** How far the page's bars reach over the frame's top edge: the document reserves it without moving (bridge `inset`). */
   setTopInset(px: number): void;
-
+  /**
+   * A new comment's subject, ready to send: inside an editable region, unsaved region text is saved first and the
+   * anchor names that version (lib/annotations/region-comment); otherwise the subject as it is.
+   */
+  beforeComment<T extends RegionCommentSubject>(subject: T): Promise<T>;
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
@@ -165,6 +185,29 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   // A frame whose session ran out (or that a redirect took off its origin) gets a fresh ticket (keepFrameSession).
   onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id }));
   start();
+  let editing: RegionEditing | null = null;
+  const regions = options.regions;
+  if (regions) {
+    let loading = false;
+    let stopped = false;
+    const stopEditing = () => { editing?.dispose(); editing = null; };
+    // A controller that runs (again) under an editor: region editing starts once, and each new document is told its regions.
+    createEffect(on([nonce, regions.enabled], ([signed, enabled]) => {
+      if (!enabled) { stopEditing(); return; }
+      if (!signed) return;
+      if (editing) { editing.attached(); return; }
+      if (loading) return;
+      loading = true;
+      void (regions.load ?? loadRegionEditing)().then(({ startRegionEditing }) => {
+        loading = false;
+        const bridge = current();
+        if (stopped || !bridge || !regions.enabled() || editing) return;
+        editing = startRegionEditing({ id: options.id, bridge, loadHtml: regions.loadHtml, onSaved: regions.onSaved });
+        if (nonce()) editing.attached();
+      }, () => { loading = false; });
+    }));
+    onCleanup(() => { stopped = true; stopEditing(); });
+  }
   onCleanup(() => {
     const bridge = current();
     setCurrent(null);
@@ -174,6 +217,6 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   return {
     controller: current, nonce, frame,
     setTopInset: (px) => { inset = px; current()?.setTopInset(px); },
-
+    beforeComment: (subject) => editing ? commentAfterRegionSave(subject, editing) : Promise.resolve(subject),
   };
 }

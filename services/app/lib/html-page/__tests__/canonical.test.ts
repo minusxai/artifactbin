@@ -52,3 +52,43 @@ it('inserts source-minimal double-quoted attributes and round-trips entities', (
  expect(result).toBe(`<p data-value="a&amp;b&quot;c<d>e'f &amp;quot;">unchanged &amp; text</p>`);
  expect(attribute(parseSource(result).elements.find(element => element.tagName === 'p')!, 'data-value')).toBe(value);
 });
+
+describe('inline elements inside editable regions carry no identity',()=>{
+ const ids=(html:string)=>parseSource(html).elements.filter(element=>attribute(element,'data-af-id')!==null).map(element=>element.tagName);
+ const body=(html:string)=>canonicalizeHtmlPage(`<!doctype html><html><head></head><body>${html}</body></html>`).html;
+ it('gives no id to a, strong, b, em, i or code in a rich region, and still identifies its blocks',()=>{
+  const html=body('<section data-af-editable="rich"><p>Hi <a href="https://x.dev">l</a> <strong>s</strong> <b>b</b> <em>e</em> <i>i</i> <code>c</code></p><ul><li>item <em>x</em></li></ul></section>');
+  expect(ids(html)).toEqual(['html','head','script','body','section','p','ul','li']);
+  expect(html).toContain('<strong>s</strong> <b>b</b> <em>e</em> <i>i</i> <code>c</code>');
+ });
+ it('gives no id to inline elements in a text region',()=>{
+  expect(ids(body('<h1 data-af-editable="text">Plain <em>word</em></h1>'))).toEqual(['html','head','script','body','h1']);
+ });
+ it('gives no id to code inside pre in a region, while pre keeps one',()=>{
+  const html=body('<div data-af-editable="rich"><pre><code>let x = 1;</code></pre></div>');
+  expect(ids(html)).toEqual(['html','head','script','body','div','pre']);
+  expect(html).toMatch(/<pre data-af-id="[^"]+"><code>let x = 1;<\/code><\/pre>/);
+ });
+ it('strips inline ids already in the source of a region, keeping every other byte',()=>{
+  const source='<!doctype html><html><head></head><body><div data-af-editable="rich" data-af-id="r"><p data-af-id="p">A <strong data-af-id="s1">bold</strong> <a  data-af-id="l1" href="https://x.dev">link</a> <pre data-af-id="pre"><code data-af-id="c1">x</code></pre></p></div></body></html>';
+  const page=canonicalizeHtmlPage(source);
+  expect(page.html).toContain('<p data-af-id="p">A <strong>bold</strong> <a href="https://x.dev">link</a>');
+  expect(page.html).toContain('<code>x</code>');
+  for(const id of ['s1','l1','c1'])expect(page.nodeIds).not.toContain(id);
+  for(const id of ['r','p','pre'])expect(page.nodeIds).toContain(id);
+  // A repeat save is stable.
+  const again=canonicalizeHtmlPage(page.html,{previousHtml:page.html,ledger:page.ledger});
+  expect(again.html).toBe(page.html);
+  expect(new Set(again.nodeIds)).toEqual(new Set(page.nodeIds));
+ });
+ it('leaves inline ids outside regions, and under a non-region data-af-editable value, unchanged',()=>{
+  const outside=body('<p>Out <strong>bold</strong> <code>c</code></p><div data-af-editable="other"><em>e</em></div>');
+  expect(ids(outside)).toEqual(['html','head','script','body','p','strong','code','div','em']);
+  const kept=canonicalizeHtmlPage('<!doctype html><html><head></head><body><p><strong data-af-id="keep">x</strong></p></body></html>');
+  expect(kept.nodeIds).toContain('keep');
+ });
+ it('uses the nearest data-af-editable ancestor',()=>{
+  const html=body('<div data-af-editable="other"><div data-af-editable="rich"><p><em>in</em></p></div></div><div data-af-editable="rich"><div data-af-editable="other"><p><em>out</em></p></div></div>');
+  expect(ids(html)).toEqual(['html','head','script','body','div','div','p','div','div','p','em']);
+ });
+});

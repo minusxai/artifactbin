@@ -224,6 +224,39 @@ describe('the annotation composer', () => {
     expect(JSON.parse(String(creates()[0]?.init?.body)).view_state).toEqual(viewState);
   });
 
+  it('waits for beforeComment (an editor saving region text) and sends the anchor it answers', async () => {
+    const order: string[] = [];
+    const anchor = { kind: 'html-node' as const, v: 1 as const, revision: '4', nodeId: 'node-1', quote: 'unsaved words' };
+    let release!: () => void;
+    const beforeComment = vi.fn(async (subject: StoryEditSelection) => {
+      order.push('save');
+      await new Promise<void>((resolve) => { release = resolve; });
+      return { ...subject, anchor: { ...subject.anchor!, revision: '9' } };
+    });
+    layer({ railOpen: true, initialSelection: TEXT({ anchor, quote: 'unsaved words' }), beforeComment });
+    await flush();
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'about these words');
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    expect(order).toEqual(['save']);
+    expect(creates()).toHaveLength(0);
+    release();
+    await flush();
+    expect(creates()).toHaveLength(1);
+    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ anchor: { ...anchor, revision: '9' }, body: 'about these words' });
+  });
+
+  it('a failed beforeComment keeps the draft and sends nothing', async () => {
+    layer({ railOpen: true, initialSelection: TEXT(), beforeComment: async () => { throw new Error('Your latest edits could not be saved. Try again.'); } });
+    await flush();
+    replaceComment(await screen.findByLabelText('Annotation comment'), 'kept');
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    expect(creates()).toHaveLength(0);
+    expect(await screen.findByText('Your latest edits could not be saved. Try again.')).toBeTruthy();
+    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('kept');
+  });
+
   it('forwards the selection quote and its anchor-relative range in the create POST', async () => {
     const range = { v: 1 as const, parts: [{ rel: '0', start: 8, end: 12, text: 'grew' }, { rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] };
     layer({ railOpen: true, initialSelection: TEXT({ quote: 'grew 40% in Q3,', range }) });

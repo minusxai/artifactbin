@@ -58,6 +58,17 @@ describe('the backoff', () => {
 });
 
 describe('a live stream', () => {
+  it('asks a url function again at every reopen, so a door whose position is its own query resumes from it', () => {
+    let position = 1;
+    const stream = openLiveStream({ url: () => `/api/artifacts/x/regions/stream?after=r1:${position}`, onMessage: () => { position++; }, random: () => 0 });
+    expect(latest().url).toBe('/api/artifacts/x/regions/stream?after=r1:1');
+    latest().emit('message', 'update');
+    latest().onerror?.(new Event('error'));
+    vi.advanceTimersByTime(500);
+    expect(latest().url).toBe('/api/artifacts/x/regions/stream?after=r1:2');
+    stream.close();
+  });
+
   it('delivers messages and named events, then resumes from the last event id after an error', () => {
     const messages: string[] = [], named: string[] = [], errors = vi.fn(), reconnects = vi.fn();
     const stream = openLiveStream({ url: '/a/x/events?v=1#frag', onMessage: m => messages.push(m), events: { comment: d => named.push(d) }, onError: errors, onReconnect: reconnects, random: () => 0 });

@@ -48,8 +48,9 @@ export interface LiveStreamHost {
   document?: { visibilityState?: string; addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void };
 }
 
-interface LiveStreamOptions {
-  url: string;
+export interface LiveStreamOptions {
+  /** The door; a function is asked again at every (re)open, for a door whose position is its own query (lib/artifact-backend/region-http). */
+  url: string | (() => string);
   /** The default (unnamed) `message` frame's data. */
   onMessage?: (data: string) => void;
   /** Named frames, by event name. */
@@ -64,7 +65,7 @@ interface LiveStreamOptions {
   random?: () => number;
 }
 
-interface LiveStream {
+export interface LiveStream {
   close(): void;
 }
 
@@ -135,7 +136,8 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
     clearTimeout(retry);
     retry = undefined;
     source?.close();
-    const current = new EventSourceCtor(cursor ? resumeUrl(options.url, cursor) : options.url);
+    const url = typeof options.url === 'function' ? options.url() : options.url;
+    const current = new EventSourceCtor(cursor ? resumeUrl(url, cursor) : url);
     source = current;
     // `lastEvent` is NOT reset here: a reopen that hangs while connecting has heard nothing, and a
     // page coming back online must treat it as stale rather than as a live stream.

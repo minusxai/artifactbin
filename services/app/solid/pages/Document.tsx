@@ -269,6 +269,8 @@ export function DocumentPage(): JSX.Element {
           readOnly: !!page.archived,
           uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
         }) : undefined,
+        // Live editing of the page's editable regions: editors of the head only (a viewer or commenter never opens one).
+        regions: backend ? { enabled: editable, loadHtml: async () => (await backend.load())?.html ?? null } : undefined,
       });
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
@@ -363,7 +365,7 @@ export function DocumentPage(): JSX.Element {
         }} />
     </Show>
     <Show when={ready() && id && discussionActive() && comments().canReadComments}>
-      <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
+      <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} beforeComment={(subject) => story ? story.beforeComment(subject) : Promise.resolve(subject)} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={comments().canReadComments} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
