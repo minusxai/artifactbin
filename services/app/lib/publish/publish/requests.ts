@@ -3,10 +3,10 @@ import {preparePublicationBundle} from './bundle';
 import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
-import {htmlAssetLinks, htmlBackendNames, htmlPageDeclarations} from '@/lib/html-page';
+import {htmlAssetLinks, htmlBackendNames, htmlGraphqlSources, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
-import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
-import {authorizeDatasetBinding,DatasetBindingUnsupportedError,pageDatasetRoots} from '@/lib/dataset-graphql';
+import {compilePageBackend,composePageSchema,pageDocumentProblems} from '@/lib/page-operations';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError,pageDatasetCheckSources,pageDatasetRoots} from '@/lib/dataset-graphql';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
@@ -85,6 +85,26 @@ async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):P
   return prepared;
  }
  catch(error){return json({error:'invalid_backend',details:[thrownMessage(error,'Invalid backend')]},400);}
+}
+
+const PAGE_GRAPHQL_HINT='A resolver\'s caps.query and the page\'s own queries run on the page\'s GraphQL, where a linked dataset is named by its data-af-name, not by its own API name (graphql.mjs schema DATASET_ID). Use the names given (graphql.mjs schema PAGE_ID lists them all) and publish again.';
+/**
+ * A save carrying resolver sources: the GraphQL documents its resolvers pass to caps.query, and the page's own static
+ * gql documents, against the page's names (lib/page-operations `pageDocumentProblems`, over each linked dataset's
+ * role-independent schema). A field the page lacks refuses the save before anything is written, naming the fix:
+ * every such call would otherwise fail at run time with a detail only the owner sees. Nothing checkable is no refusal.
+ */
+async function pageGraphqlRefusal(actor:AccessActor,html:unknown,datasets:readonly HtmlDatasetLink[]|undefined,backends:readonly PreparedHtmlBackend[]|undefined):Promise<Response|null>{
+ if(typeof html!=='string'||!backends?.length)return null;
+ let schema:Awaited<ReturnType<typeof pageDatasetCheckSources>>;
+ try{schema=await pageDatasetCheckSources(actor,datasets??[]);}catch{return null;}
+ const {resolverFiles,scripts}=htmlGraphqlSources(html),prepared=new Set(backends.map(backend=>backend.name));
+ const problems=await pageDocumentProblems({
+  datasetSdl:schema?.sdl??null,datasets:schema?.sources??[],
+  backends:backends.map(({name,typeDefs})=>({name,typeDefs})),unchecked:htmlBackendNames(html).filter(name=>!prepared.has(name)),
+  resolvers:backends.map(backend=>({label:`resolver ${resolverFiles[backend.name]??backend.name+'.ts'}`,source:backend.source})),scripts,
+ });
+ return problems.length?json({error:'invalid_page_graphql',details:problems,hint:PAGE_GRAPHQL_HINT},400):null;
 }
 
 /**
@@ -249,6 +269,7 @@ export async function replaceArtifactWithBody(
   const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
+  const graphqlRefusal=await pageGraphqlRefusal(owner,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
@@ -386,6 +407,7 @@ async function createArtifactFromBodyPrepared(
   const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
+  const graphqlRefusal=await pageGraphqlRefusal(publicationActor,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup,receiptOwner)});

@@ -181,6 +181,21 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  return {backends,datasets};
 }
 export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
+/**
+ * What publish checks the page's GraphQL documents in (lib/page-operations `pageDocumentProblems`): each resolver
+ * link's file name by its data-af-name, and every inline script's code (a script with src has none here).
+ */
+export function htmlGraphqlSources(html:string):{resolverFiles:Record<string,string>;scripts:string[]}{
+ const resolverFiles:Record<string,string>={},scripts:string[]=[];
+ for(const element of allElements(html).all){
+  if(element.tagName==='link'&&(attribute(element,'rel')??'').split(/\s+/).includes('af-resolver')){
+   const name=attribute(element,'data-af-name'),file=(attribute(element,'href')??'').split(/[?#]/,1)[0]!.split('/').at(-1);
+   if(name&&file)resolverFiles[name]=file;
+  }
+  if(element.tagName==='script'&&attribute(element,'src')===null)scripts.push(element.childNodes.map(node=>'value' in node?String(node.value):'').join(''));
+ }
+ return {resolverFiles,scripts};
+}
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{
  const document=parseSource(html);let title:string|null=null,description:string|null=null;
