@@ -575,6 +575,72 @@ it('fails a published page that links a dataset but never reads it, and passes o
   expect(passed.smokePassed).toBe(true);expect(passed.unreadDatasets).toBeUndefined();expect(passed.reply?.permissions).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('lists what an unset resolver secret blocked as Not tested and names every other failed field with its owner detail',async()=>{
+ const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const {checkDigest,toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'check-secret-')),steps=path.join(root,'steps.mjs'),guest=path.join(root,'guest.mjs');
+ await writeFile(steps,"await step('Forecast shows',async()=>{});");await writeFile(guest,"await step('Guest sees alerts',async()=>{});");
+ const failed='Backend execution failed',base={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Pipeline',overflow:{viewport:1,content:1,fits:true},steps:{ran:true,passed:false},verified:['board loads']};
+ const unset={field:'weather.forecast',message:failed,code:'backend_failed',detail:'secret_unavailable: WEATHER_KEY',pageErrorsBefore:0,consoleErrorsBefore:0};
+ const notOnPage={field:'pipeline.addNote',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',pageErrorsBefore:0,consoleErrorsBefore:1};
+ // What the page logged after the refusal came from it.
+ const blocked={...base,consoleErrors:[failed+' {"code":"backend_failed"}'],error:'Timeout 6000ms exceeded (step call #2 page.getByText("Sunny"))',failedStep:'Forecast shows',graphqlErrors:[unset]};
+ const quiet={...base,steps:{ran:true,passed:true}};
+ let results:Record<string,any>={},set:string[]=[];const asked:string[]=[],replays:any[]=[];
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));asked.push(url.pathname);
+  if(url.pathname==='/a/PAGE12/raw')return new Response('<main>Pipeline</main>');
+  if(url.pathname==='/api/my/artifacts/PAGE12/resolvers')return Response.json({revision:'3',resolvers:[{name:'weather',backendId:'BACK12',version:'v1',test:false,secrets:{WEATHER_KEY:'api.weather.test'},set}]});
+  if(url.pathname==='/api/artifacts/PAGE12/graphql'){replays.push(JSON.parse(String(init.body)));return Response.json({data:null,errors:[{message:failed,path:['weather','alerts'],extensions:{code:'backend_failed',detail:'HTTP 401: Upstream refused'}}]});}
+  const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!,found=results[(body.viewer??'self')+w]??quiet;
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{...found,viewport:{width:Number(w),height:Number(h)}}});};
+ const env={ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root};
+ const check=(values:Record<string,unknown>)=>checkCommand({values:{steps,...values},positionals:['PAGE12']},{env,fetcher});
+ const why="(needs secret WEATHER_KEY, which the owner sets in the page's Resolvers settings)";
+ try{
+  // Unset: the blocked step is Not tested, the errors it caused are gone, and the pass ends on the Reply block.
+  results={self1280:blocked,self390:blocked};
+  const passed=await check({});
+  expect(passed.smokePassed).toBe(true);expect(passed.needsSecrets).toEqual([{step:'Forecast shows',fields:['weather.forecast'],secrets:['WEATHER_KEY']}]);
+  expect(passed.checks[0]).toMatchObject({consoleErrors:[],needsSecret:{step:'Forecast shows',secrets:['WEATHER_KEY']}});
+  expect(passed.checks[0].error).toBeUndefined();expect(passed.graphqlFailures).toBeUndefined();
+  const proved=checkDigest({ok:true,code:'completed',...passed});
+  expect(proved).toContain(`  Not tested: "Forecast shows" ${why}`);
+  expect(proved).toContain(`\nNot tested: "Forecast shows" ${why}, anything not listed in Tested:, visual appearance\n`);
+  expect(proved).toMatch(/1280x800: no errors.*steps stopped at "Forecast shows": needs secret WEATHER_KEY/);
+  // The same refusal for a secret the owner did set is a failure that names the field and the detail.
+  set=['WEATHER_KEY'];
+  const stillSet=await check({}).catch((e:any)=>e);
+  expect(stillSet).toMatchObject({code:'check_failed',details:{smokePassed:false}});
+  const named=checkDigest(toolFailure('check',stillSet));
+  expect(named).toContain('  resolver weather.forecast failed: secret_unavailable: WEATHER_KEY (owner detail)');
+  expect(named).not.toContain('Not tested');expect(named).not.toContain('Reply block');
+  // Another failed field in the same viewport keeps it failing, and so does an error logged before
+  // the refusal; the step is still Not tested there.
+  set=[];results={self1280:{...blocked,consoleErrors:['favicon missing',failed],graphqlErrors:[{...unset,consoleErrorsBefore:1}]},
+   self390:{...blocked,consoleErrors:['favicon missing',failed],graphqlErrors:[unset,notOnPage]}};
+  const mixed=await check({}).catch((e:any)=>e);
+  expect(mixed.details.smokePassed).toBe(false);
+  const both=checkDigest(toolFailure('check',mixed));
+  expect(both).toContain('  resolver pipeline.addNote failed: validation_failed: field insert_deal_notes_one is not on this page (owner detail)');
+  expect(both).toContain(`  Not tested: "Forecast shows" ${why}`);expect(both).not.toContain('Reply block');
+  expect(both).toMatch(/1280x800: consoleErrors 1: favicon missing; .*steps stopped at "Forecast shows"/);
+  expect(both).toMatch(/390x844: consoleErrors 2: favicon missing; .*task error: Timeout/);
+  // A guest gets no detail: a read is asked again as the owner, a write never is.
+  results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',graphqlErrors:[
+   {field:'weather.alerts',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{query:'query{weather{alerts}}',revision:'3'}},
+   {field:'pipeline.addNote',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0}]}};
+  const asGuest=await check({'guest-steps':guest}).catch((e:any)=>e);
+  expect(replays).toEqual([{query:'query{weather{alerts}}',revision:'3'}]);
+  const told=checkDigest(toolFailure('check',asGuest));
+  expect(told).toContain('  resolver weather.alerts failed for the guest (backend_failed); as owner the detail is: HTTP 401: Upstream refused');
+  expect(told).toContain('  resolver pipeline.addNote failed for the guest (backend_failed); not a read-only query, so it was not run again as owner');
+  expect(told).not.toContain('query{');expect(told).not.toContain('Bearer');
+  // No failed GraphQL call: no resolver read at all.
+  expect(asked.filter(p=>p.endsWith('/resolvers'))).toHaveLength(3);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('repeats a status read through a transient network failure but never resubmits a lost script',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');

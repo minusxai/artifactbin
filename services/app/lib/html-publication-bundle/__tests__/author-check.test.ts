@@ -127,6 +127,30 @@ it('collects errors, separates only known telemetry, and catches overflow withou
  expect(summarizeCheck([evidence])).toMatchObject({smokePassed:false,unverified:expect.arrayContaining(['visual appearance','task behavior'])});
 });
 
+it('captures each failed GraphQL field with its owner detail, and keeps a detail-less read for an owner re-run',async()=>{
+ const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const listeners:Record<string,Function>={};
+ const respond=(url:string,body:unknown,sent:unknown)=>listeners.response!({url:()=>url,status:()=>200,json:async()=>body,request:()=>({postDataJSON:()=>sent})});
+ const graphql='https://example.test/api/artifacts/PAGE12/graphql',failed='Backend execution failed';
+ const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},
+  goto:async()=>{
+   listeners.console!({type:()=>'error',text:()=>'before any call'});
+   respond(graphql,{data:null,errors:[{message:failed,path:['pipeline','addNote'],extensions:{code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page'}}]},{query:'mutation{pipeline{addNote}}',operation:'mutation',revision:'3'});
+   respond(graphql,{data:null,errors:[{message:failed,path:['weather','forecast'],extensions:{code:'backend_failed'}}]},{query:'query Q{weather{forecast}}',variables:{city:'Pune'},operationName:'Q',revision:'3'});
+   // A detail-less write is never kept for a re-run; a success and other JSON are not failures.
+   respond(graphql,{data:null,errors:[{message:failed,path:['pipeline','move'],extensions:{code:'backend_failed'}}]},{query:'mutation{pipeline{move}}',revision:'3'});
+   respond(graphql,{data:{ok:true}},{query:'{ok}',revision:'3'});
+   respond('https://example.test/data.json',{errors:[{message:'not GraphQL'}]},null);
+   listeners.console!({type:()=>'error',text:()=>failed});},
+  locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})})};
+ const evidence=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
+ expect(evidence.graphqlErrors).toEqual([
+  {field:'pipeline.addNote',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',pageErrorsBefore:0,consoleErrorsBefore:1},
+  {field:'weather.forecast',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:1,replay:{query:'query Q{weather{forecast}}',variables:{city:'Pune'},operationName:'Q',revision:'3'}},
+  {field:'pipeline.move',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:1}]);
+ expect(evidence.consoleErrors).toEqual(['before any call',failed]);
+});
+
 it('counts the page\'s dataset reads (GraphQL and dataset cells) on load and in its steps, not other requests',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};

@@ -32,7 +32,9 @@ export function checkDigest(envelope,file){
     `${clip(item.id,60)} x${item.count}`).join(', ')}${
     check.ids.duplicates>check.ids.items.length?
      `; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
-  const task=check.error?'task error: '+clip(check.error,1000):
+  const blocked=check.needsSecret,task=check.error?'task error: '+clip(check.error,1000):
+   blocked&&'step' in blocked?`steps stopped ${blocked.step==null?'outside a step':'at '+
+    JSON.stringify(blocked.step)}: needs secret ${blocked.secrets.join(', ')}`:
    check.inspectionError?'inspection error: '+clip(check.inspectionError,200):
    check.task==null?(check.steps?.passed?'steps passed':'no task'):'task '+clip(check.task,2000);
   const overflow=check.overflow?check.overflow.fits?'fits':
@@ -73,6 +75,9 @@ export function checkDigest(envelope,file){
  for(const {name} of envelope.unreadDatasets??[])lines.push(`  page links dataset ${clip(name,60)
   } but never reads it on load or in your steps: compute its numbers from every row in page `+
   'script with client (start from examples/csv-dashboard.html)');
+ // Each failed GraphQL field with what the server told the owner; an unset secret is Not tested.
+ for(const failure of (envelope.graphqlFailures??[]).slice(0,5))lines.push('  '+failed(failure));
+ for(const item of envelope.needsSecrets??[])lines.push('  Not tested: '+untested(item));
  // What the step labels proved, per viewport: the Tested: line of the Reply block.
  const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
  const tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
@@ -96,12 +101,22 @@ export function checkDigest(envelope,file){
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';
 }
+/** One failed GraphQL field: the owner detail, or for a guest the code and what the owner gets. */
+const failed=({field,message,code,detail,guest,ownerDetail,ownerPasses,notReplayed})=>`${
+ code?.startsWith('backend_')?'resolver':'GraphQL'} ${field} failed${detail?`: ${detail} (owner `+
+ 'detail)':guest?` for the guest (${code??message}); ${ownerDetail?'as owner the detail is: '+
+ ownerDetail:ownerPasses?'as owner it succeeds':notReplayed?'not a read-only query, so it was '+
+ 'not run again as owner':'no owner detail'}`:`: ${message}${code?` (${code})`:''}`}`;
+/** What an unset resolver secret kept the check from testing, and who sets it. */
+const untested=({step,fields,secrets})=>`${step===undefined?'resolver '+fields.join(', '):step===
+ null?'the steps':JSON.stringify(step)} (needs secret ${secrets.join(', ')}, which the owner `+
+ "sets in the page's Resolvers settings)";
 /** A clean pass whose steps proved no labelled behaviour still proves each viewport loads. */
 const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.viewer+' ':''}${
  c.viewport.width}x${c.viewport.height}: the page loads without errors`).join(' | ');
 /** ONE block holding everything a reply states, copied as printed: the link, Built with,
  * Tested/Not tested, the slide images and who can do what; then the watch line. */
-function replyBlock({reply,slideLinks,checks},tested){
+function replyBlock({reply,slideLinks,checks,needsSecrets},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
  return ['Reply block (send it as printed, up to the Next: line, unless the user prescribed the'+
   ' reply):',reply.link,
@@ -109,7 +124,8 @@ function replyBlock({reply,slideLinks,checks},tested){
    'or merge them):',...reply.permissions.flatMap(({name,id,lines})=>
    [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),
   ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+(tested||loads(checks)),
-  'Not tested: anything not listed in Tested:, visual appearance'+(guest?
+  'Not tested: '+[...(needsSecrets??[]).map(untested),'anything not listed in Tested:'].join(', ')+
+   ', visual appearance'+(guest?
    ', and sharing between two signed-in users (the guest is signed out)':''),
   ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),replyNext(reply.id)];
 }

@@ -23,4 +23,10 @@ export interface AuthorCheckResult {
  slideLinks?:string[];
  /** Linked datasets the page never read on any viewport, load or steps (a failed check). */
  unreadDatasets?:ReadonlyArray<{id:string;name:string}>;
+ /** Failed GraphQL fields (toolbox-check-resolvers.mjs): the owner-only detail, or for a guest its code and
+  * what the same read-only query gives the owner. Never a secret, token, query or variables. */
+ graphqlFailures?:ReadonlyArray<{field:string;message:string;code?:string;detail?:string;guest?:true;ownerDetail?:string;ownerPasses?:true;notReplayed?:true}>;
+ /** What only an unset resolver secret blocked (Not tested, not failed): the unfinished step (null outside a
+  * step; absent when no step failed), the refused fields and the secrets the owner sets in Resolvers settings. */
+ needsSecrets?:ReadonlyArray<{step?:string|null;fields:string[];secrets:string[]}>;
 }

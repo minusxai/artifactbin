@@ -32,7 +32,10 @@ Output: one summary line per viewport: errors, overflow, contrast (text under 2:
   failure) lists script-created data-af-ids that differ between two loads; checked on the first
   viewport, only when the page has any. A clean pass of a published page ends with the Reply
   block (the link, Built with, Tested: and Not tested: from your step labels, slide images,
-  who can do what in each linked dataset) and the Next: watch line.
+  who can do what in each linked dataset) and the Next: watch line. A failed resolver or GraphQL
+  field is named with the owner-only detail (a guest's read is asked again as you). What failed
+  only because a resolver secret has no value yet is listed as Not tested (the owner sets it in
+  the page's Resolvers settings), not failed, so run check before the secret is set.
 Gotchas: each steps file gets 8 s per viewport, and a call without its own timeout 2.5 s: wait
   for data first (also after page.reload()) with an explicit timeout, as the starters' steps do
   (6000 for data, 5000 for a save, 2000 for a click), and avoid networkidle.
