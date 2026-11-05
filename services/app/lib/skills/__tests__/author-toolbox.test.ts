@@ -627,6 +627,11 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   expect(both).toContain(`  Not tested: "Forecast shows" ${why}`);expect(both).not.toContain('Reply block');
   expect(both).toMatch(/1280x800: consoleErrors 1: favicon missing; .*steps stopped at "Forecast shows"/);
   expect(both).toMatch(/390x844: consoleErrors 2: favicon missing; .*task error: Timeout/);
+  // A field that failed for the owner fails the check even when every step passed.
+  results={self1280:{...quiet,graphqlErrors:[notOnPage]},self390:quiet};
+  const unnoticed=await check({}).catch((e:any)=>e);
+  expect(unnoticed).toMatchObject({code:'check_failed',details:{smokePassed:false}});
+  expect(checkDigest(toolFailure('check',unnoticed))).not.toContain('Reply block');
   // A guest gets no detail: a read is asked again as the owner, a write never is.
   results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',graphqlErrors:[
    {field:'weather.alerts',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{query:'query{weather{alerts}}',revision:'3'}},

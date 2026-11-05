@@ -150,6 +150,8 @@ export async function checkCommand({values, positionals}, options = {}) {
     const checks = [...result.checks, ...extra];
     const found = await explainGraphql(client, id, checks, viewer === 'guest');
     result = Object.assign(summarizeCheck(checks), found);
+    // A field that failed for the owner is a fault even unnoticed; a guest's is a refusal.
+    if (found.graphqlFailures?.some(failure => !failure.guest)) result.smokePassed = false;
     // A linked dataset the page never reads means its numbers are hand-typed: not a pass.
     const unread = unreadDatasets(html, result.checks);
     if (unread.length) Object.assign(result, {smokePassed: false, unreadDatasets: unread});
