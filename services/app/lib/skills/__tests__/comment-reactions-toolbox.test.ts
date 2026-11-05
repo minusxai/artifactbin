@@ -66,7 +66,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   // One after=now baseline, then long polls from each checkpoint; the own event is logged but not printed.
   expect(calls).toEqual([{after:'start',wait:'0'},{after:'c1',wait:'30'},{after:'c2',wait:'30'}]);
   expect(printed.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['e_theirs']);
-  expect(printed.at(-1)).toMatch(/^next: answer each comment above now; a requested change to the page is part of your task .*--body TEXT\); only then run node scripts\/comment\.mjs watch PAGE12 --next again\. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout\(1\)\.$/);
+  expect(printed.at(-1)).toBe('next: answer each comment above now; a requested change to the page is part of your task: edit the page as it asks and publish, even after a "change nothing else" or "only the URL" request; then node scripts/comment.mjs reply PAGE12 --thread <annotation_id> --body TEXT. Do not end your turn before that reply; it prints how to watch again.');
   const records=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(records.filter(r=>r.kind==='event').map(r=>r.event.event_id)).toEqual(['e_mine','e_theirs']);
   expect(records.at(-1)).toMatchObject({kind:'checkpoint',cursor:'c3'});
@@ -308,7 +308,7 @@ it('releases the lock when a watch is interrupted or fails',async()=>{
   expect(await readdir(root)).toEqual(['feed.ndjson']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-const ANSWER=(threads:string)=>`answer the comment(s) printed above first (${threads}): edit and publish if asked, then node scripts/comment.mjs reply PAGE12 --thread THREAD --body TEXT; then run watch --next again`;
+const ANSWER=(threads:string)=>`answer the comment(s) printed above first (${threads}): edit the page as it asks and publish, even after a "change nothing else" or "only the URL" request; then node scripts/comment.mjs reply PAGE12 --thread THREAD --body TEXT; then run watch --next again`;
 it('watch --next refuses to wait while a printed comment has no reply, and the reply clears it',async()=>{
  const {rm}=await import('node:fs/promises');
  const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'T1',author:{kind:'human',you:false},body:'Make it blue'};
@@ -447,7 +447,7 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
  try{
   const replied=await commentCommand({sub:'reply',values:{thread:'T1',body:'Done: shorter intro.',resolve:true},positionals:['PAGE12']},options);
   expect(sent.at(-1)).toEqual({method:'POST',path:'/api/artifacts/PAGE12/annotations/T1',body:{reply:'Done: shorter intro.',resolve:true,expected_revision:7}});
-  expect(replied.next).toBe('Next: when the whole request is done, write your reply to the user as message text and, in that same response, run node scripts/comment.mjs watch PAGE12 --next. Give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
+  expect(replied.next).toBe('Next: when the request is done, send your reply (the URL as asked) as text and, in that same response, run node scripts/comment.mjs watch PAGE12 --next. Claude Code: start it with the Bash tool\'s run_in_background and end your turn; you are woken when it prints. Any other harness: run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
   for(const sub of ['resolve','reopen'] as const){await commentCommand({sub,values:{thread:'T1'},positionals:['PAGE12']},options);expect(sent.at(-1).body).toEqual({[sub]:true,expected_revision:7});}
   // An edit of a reply finds the thread that holds it.
   await commentCommand({sub:'edit',values:{comment:'R1',body:'Fixed typo'},positionals:['PAGE12']},options);
@@ -460,10 +460,11 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
   await expect(commentCommand({sub:'reply',values:{thread:'T1',body:'a','body-file':'b.txt'},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'invalid_invocation'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('documents one blocking watch mode with the shell timeout rule, and the takeover instead of a refusal',async()=>{
+it('documents the watch mode once, by harness, as every printed watch line states it, and the takeover instead of a refusal',async()=>{
  const {DESCRIPTION}=await import('../../../skills/artifactbin/scripts/comment.mjs');
- expect(DESCRIPTION).toContain('run it as a normal blocking (foreground) command. Give your shell tool a timeout of\n  at least 300000 ms; never wrap the command in timeout(1).');
+ const {WATCH_MODE}=await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
+ expect(DESCRIPTION.replace(/\n\s+/g,' ')).toContain(WATCH_MODE);
  expect(DESCRIPTION).toContain('second --next on the same page takes over from the running one');
  expect(DESCRIPTION).toContain('How to treat reactions: a 👍 on your proposal means approval to proceed');
- for(const retired of ['another watch is already running','run_in_background','<<'])expect(DESCRIPTION).not.toContain(retired);
+ for(const retired of ['another watch is already running','<<'])expect(DESCRIPTION).not.toContain(retired);
 });

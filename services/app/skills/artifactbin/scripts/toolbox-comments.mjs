@@ -5,7 +5,7 @@
  * the log state and lock live in toolbox-watch-state.mjs.
  */
 import {open} from 'node:fs/promises';
-import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads,WATCH_TIMEOUT}
+import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads}
   from './toolbox-watch-state.mjs';
 /** How to read a reaction: comment.mjs help and the watch line after a printed reaction say it. */
 export const REACTIONS='A 👍 on your proposal means approval to proceed; any other reaction is '+
@@ -113,10 +113,9 @@ const fresh=next&&handle&&(!window||now()-window.active>=quietMs);if(fresh){wind
  const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set();let gate=awaiting.size>0,
   unanswered=null;
  let failures=0,events=0,timedOut=false,stopped=false,reacted=false;
- // A first --next call replays the page's history once instead of starting at "now", so a comment
- // posted while the agent was still publishing is not lost: it prints each thread whose latest
- // comment is someone else's (the unanswered ones) and is still open, then waits as usual.
- // Resolving is not a feed event, so which threads are open comes from the annotation list.
+ // A first --next replays the page's history once, so a comment posted while the agent was still
+ // publishing is not lost: it prints each open thread whose latest comment is someone else's, then
+ // waits (resolving is not a feed event, so which threads are open comes from the annotations).
  let replay=next&&!cursor;const latest=new Map(),held=[];
  const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
  try{
@@ -186,7 +185,8 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
  // Interrupted or taken over: what this call held back is printed by the next one.
  if(signal?.aborted)return {events:0,timedOut:false,stopped:false};
  const quiet=quietMs>=60000?`${Math.round(quietMs/60000)} minutes`:`${Math.round(quietMs/1000)} s`;
- const answer=`edit and publish if asked, then node scripts/comment.mjs reply ${id} --thread`;
+ const answer=`edit the page as it asks and publish, even after a "change nothing else" or `+
+  `"only the URL" request; then node scripts/comment.mjs reply ${id} --thread`;
  if(unanswered)await print(`answer the comment(s) printed above first (${unanswered.join(', ')}):`+
   ` ${answer} THREAD --body TEXT; then run watch --next again`);
  else if(stopped)await print(`no new comments for ${quiet}: stop watching and end your turn; if`+
@@ -194,7 +194,7 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
  else if(timedOut)await print('no new comments yet: run the same watch --next command again');
  // Agents re-watched before replying and missed the person's wait: print the order here.
  else if(next&&events>0)await print('next: answer each comment above now; a requested change to'+
-  ` the page is part of your task (${answer} <annotation_id> --body TEXT); only then run node `+
-  `scripts/comment.mjs watch ${id} --next again. ${WATCH_TIMEOUT}`+(reacted?' '+REACTIONS:''));
+  ` the page is part of your task: ${answer} <annotation_id> --body TEXT. Do not end your turn `+
+  'before that reply; it prints how to watch again.'+(reacted?' '+REACTIONS:''));
  return {events,timedOut,stopped,...(unanswered?{unanswered}:{})};
 }
