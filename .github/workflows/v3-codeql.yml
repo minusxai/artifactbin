@@ -14,9 +14,13 @@ on:
 permissions:
   contents: read
 
+# Each merged revision is a deployment candidate and needs its own scan. A shared push group cancelled the scan of a
+# green revision whenever the next merge landed (so production waited for the newest merge's whole chain, or for a fix
+# when that merge was red), and held the new scan pending 30-40 s until the old one stopped. A push scan shares a group
+# only with its own revision; scheduled and manual scans keep queueing per ref.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: ${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.sha) || format('{0}-{1}-{2}', github.workflow, github.ref, github.event_name) }}
+  cancel-in-progress: false
 
 jobs:
   analyze:

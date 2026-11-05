@@ -148,11 +148,14 @@ describe('code scanning runs after merge, not on every pull request', () => {
   });
 });
 
-describe('CodeQL avoids redundant post-merge work without narrowing analysis',()=>{
- it('cancels superseded push scans while retaining scheduled/manual scans',()=>{
+describe('CodeQL scans every merged revision without narrowing analysis',()=>{
+ // Every merged revision is a deployment candidate that needs its own scan: cancelling a superseded push scan left
+ // ci-green 6e581b2eb, 08f6b19d9, 55b153ff0 and fb1c96116 unadmittable, and the replacing run sat pending 30-40 s
+ // until the old one stopped (runs 41959629389, 41963771255). A push scan is grouped by its exact revision only.
+ it('never cancels or queues one revision\'s push scan behind another revision\'s',()=>{
   const scan=workflow('v3-codeql.yml');
-  expect(scan.concurrency.group).toContain('github.event_name');
-  expect(scan.concurrency['cancel-in-progress']).toBe("${{ github.event_name == 'push' }}");
+  expect(scan.concurrency['cancel-in-progress']).toBe(false);
+  expect(scan.concurrency.group).toBe("${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.sha) || format('{0}-{1}-{2}', github.workflow, github.ref, github.event_name) }}");
  });
  it('uploads the same complete findings while omitting optional push database archives',()=>{
   const steps=workflow('v3-codeql.yml').jobs.analyze.steps;
