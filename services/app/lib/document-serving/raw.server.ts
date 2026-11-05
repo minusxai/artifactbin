@@ -17,7 +17,7 @@
  */
 import {designSystemChoice} from '@/lib/html-systems';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime';
-import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, currentPage, getArtifactById, getArtifactHeaderById, liveRevision, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { recordView } from '@/lib/analytics';
 import { verifyExportKey } from '@/lib/export';
@@ -136,14 +136,19 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   const byExportKey = verifyExportKey(header.id, key ?? undefined);
   const admits = async (row: ArtifactHeader) => holdsCreatingToken(row, actor) || (await canReadArtifact(row, actor)) || byExportKey;
   if (!(await admits(header))) return notFound();
+  /*
+   * THE CURRENT PAGE (lib/artifacts current-page): the head is served with its regions' unsaved live text composed in,
+   * so its bytes depend on the live revision as well as the row: it is in the validator and the render cache's key.
+   */
+  const live = header.format === 'html' ? await liveRevision(header.id) : 0;
 
   const base = pages?.site.app ?? baseUrl(request);
   // Declarations belong to each immutable version; current viewer grants remain dynamic.
   const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}),{domainReads:!!domain});
   let policy=await policyFor(header);
   const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
-  const validator = async (row: ArtifactHeader) => etagOf({
-    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at,
+  const validator = async (row: ArtifactHeader, at = live) => etagOf({
+    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, live: at,
     // Source is immutable within a published version; bindings are header metadata.
     links: row.meta.htmlLinks ?? [], designSystem: designSystemChoice(row.meta), runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
   });
@@ -156,7 +161,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   const frameKey = async (row: ArtifactHeader) => renderKey({
     kind: 'frame', base, self: pages?.self ?? null, app: pages?.site.app ?? null, search: new URL(request.url).search,
     id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, title: row.title, description: row.description, meta: row.meta,
-    policy, runtime: await nativeHtmlRuntimeIdentity(),
+    live, policy, runtime: await nativeHtmlRuntimeIdentity(),
   });
   // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
   const counted = () => { if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void recordView(header.id, { userId: actor.userId }); };
@@ -181,16 +186,18 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     case 'html': {
       const at = domain ? null : await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: byExportKey });
       if (at === 'not_found') return notFound();
-      const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
+      // The head is its current page (live text composed in); an archived version is served as it was saved.
+      const page = at ? null : await currentPage(artifact);
+      const row = { ...servedRow(artifact, at), ...(page ? { source: page.row.source, title: page.row.title } : {}), version: at?.version ?? artifact.version };
       if(at)policy=await policyFor(row);
-      const etag = revalidated && !at ? await validator(artifact) : null;
+      const etag = revalidated && !at ? await validator(artifact, page?.live) : null;
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(`W/${held}`);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
-      // Retained only when the row rendered is the one the key was read from (it may have moved since).
-      const retained = shared && !at && sameRevision(header, artifact) ? await frameKey(header) : null;
+      // Retained only when the row rendered is the one the key was read from (it, or its live text, may have moved since).
+      const retained = shared && !at && sameRevision(header, artifact) && page?.live === live ? await frameKey(header) : null;
       // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
-      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}), ...(domain ? { domainReads: true } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
+      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(page ? { live: page.live, unsavedIds: page.unsavedIds } : {}), ...(pages ? { appOrigin: pages.site.app } : {}), ...(domain ? { domainReads: true } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
       counted();
       const html = await nativeHtmlPresentation(rendered.html,row,domain);
       if (!retained) return new Response(html, { headers: responseHeaders(etag) });

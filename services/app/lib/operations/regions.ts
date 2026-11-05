@@ -1,7 +1,7 @@
 /**
  * Agents on a page's live regions (lib/region-sessions agents.ts; contract region-sessions): read a region's text as
- * Markdown or HTML, write it back from the version read while people type in it, and save everyone's unsaved
- * typing as a version. `_doc` names a doc's one rich region.
+ * Markdown or HTML (with people's unsaved typing), write it back from the version read while people type in it, and
+ * save everyone's unsaved typing as a version on purpose. `_doc` names a doc's one rich region.
  */
 import { z } from 'zod';
 import { DOC_REGION, type RegionFormat } from '@artifactbin/contracts';
@@ -25,7 +25,7 @@ const readRegionOp: Operation = {
   name: 'read_region',
   title: 'Read a live region',
   http: { method: 'GET', path: '/api/artifacts/{id}/regions/{regionId}' },
-  description: `Read one editable region (data-af-editable) of a saved page as Markdown (default) or HTML, with the saved version it is from; ${DOC_REGION} is a doc's text. Pass that version as base_version to write_region. People's unsaved typing is not in it: call save_regions first to include it.`,
+  description: `Read one editable region (data-af-editable) of a page as Markdown (default) or HTML, with the saved version it is from; ${DOC_REGION} is a doc's text. It holds people's unsaved typing: with edit access the read first saves that typing as a version (the version it answers), so pass that version as base_version to write_region and nothing anyone typed is applied twice.`,
   input: { id: z.string(), regionId: region, format: z.enum(TEXT_FORMATS as [RegionFormat, ...RegionFormat[]]).optional() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', regionId: DOC_REGION } },
@@ -66,7 +66,7 @@ const saveRegionsOp: Operation = {
   name: 'save_regions',
   title: 'Save live regions',
   http: { method: 'POST', path: '/api/artifacts/{id}/regions/flush' },
-  description: 'Save everyone\'s unsaved typing in a page\'s live regions as one new version (edit access), and answer the version that holds it: call it before read_region or get_artifact to read what people have typed so far. Nothing unsaved answers the current version.',
+  description: 'Save everyone\'s unsaved typing in a page\'s live regions as one new version (edit access), and answer the version that holds it: a checkpoint in history (reads already include unsaved typing). Nothing unsaved answers the current version.',
   input: { id: z.string() },
   annotations: {},
   example: { input: { id: 'aB3xK9' } },

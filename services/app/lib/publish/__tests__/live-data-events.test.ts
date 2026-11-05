@@ -14,10 +14,11 @@ import { POST } from '@/app/api/artifacts/route';
 import {
   liveSubscriptionSnapshot,
 } from '../realtime/live';
-import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
+import { artifactChannel, annotationsChannel, regionsChannel } from '@artifactbin/contracts';
 import { presenceChannel } from '@/lib/html-presence';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
-const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
+/** An HTML page's stream also follows its live text (lib/publish/realtime live-pings): one regions channel per page. */
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1, [regionsChannel(id)]: 1 });
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const linked = (id: string) =>

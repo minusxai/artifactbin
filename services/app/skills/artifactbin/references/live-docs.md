@@ -40,8 +40,9 @@ has no empty paragraph: blank paragraphs are dropped. `--html` reads and writes 
 HTML in the same subset instead (`p`, `h1`-`h6`, `ul`/`ol`/`li`, `blockquote`, `pre>code`, `hr`,
 `strong`, `em`, `code`, `a href`).
 
-Reading includes only saved text; `read` saves everyone's unsaved typing first (people with edit
-access only; readers read the saved page). Comments anchor to saved versions as usual.
+Reading includes everyone's unsaved typing, as the open page shows it. With edit access, `read`
+(and `GET /api/artifacts/ID`) first saves that typing as a version, so the version you write from
+holds exactly what you read; readers read it live. Comments anchor to saved versions as usual.
 
 ## HTTP contract
 

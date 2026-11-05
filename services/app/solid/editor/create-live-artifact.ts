@@ -52,8 +52,12 @@ interface LiveArtifactOptions {
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
   onPresence?: (frame:PresenceFrame)=>void;
   onData?: (event: ArtifactDataEvent) => void;
-  /** Native HTML follows each newer publication itself (in place, or by reloading its server bootstrap); it never fetches a JSX frame. */
-  onPublication?: (version: number, editId?: string, title?: string | null) => void;
+  /**
+   * Native HTML follows each newer publication itself (in place, or by reloading its server bootstrap); it never fetches a
+   * JSX frame. Live text within a version (`live`, its regions' unsaved typing moved) is followed the same way, in
+   * (version, live) order.
+   */
+  onPublication?: (version: number, editId?: string, title?: string | null, live?: number) => void;
   /** The ANNOTATIONS on this readable document changed. */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
@@ -93,6 +97,12 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
          * fetch must not mark it seen, or the page sits one version behind until the next write.
          */
         let seenVersion = initialVersion;
+        /**
+         * With `onPublication`: the live revision seen within `seenVersion`. The page's own is not known here (its frame
+         * holds it), so the first ping of a page with live text is announced; the frame draws nothing for it
+         * (lib/html-runtime/live-morph: already drawn).
+         */
+        let seenLive = 0;
         let alive = true;
         let annotationsRequest: AbortController | undefined;
         /** The newest head announced and not yet fetched; a ping arriving mid-fetch replaces it. */
@@ -154,9 +164,11 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               if (!Number.isInteger(ping.version)) return;
               if (ping.version < seenVersion) return;
               if (options.onPublication) {
-                if (ping.version <= seenVersion) return;
+                const live = Number.isSafeInteger(ping.live) ? ping.live! : 0;
+                if (ping.version === seenVersion && live <= seenLive) return;
                 seenVersion = ping.version;
-                options.onPublication(ping.version, ping.editId, ping.title);
+                seenLive = live;
+                options.onPublication(ping.version, ping.editId, ping.title, live);
                 return;
               }
               placeOwn(ping.editId, (own) => {

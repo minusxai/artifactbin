@@ -25,7 +25,7 @@ import { artifactState, observedChange, versionConflict, type ConflictChange } f
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
-import { closeLiveRegions, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
+import { closeLiveRegions, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
 import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
@@ -433,13 +433,6 @@ async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 're
 
 type ArtifactWrite = NonNullable<Awaited<ReturnType<typeof lockArtifactWrite>>>;
 
-/** The page's identity ledger as a write extends it: every id it ever reserved, and its next id. */
-async function pageLedger(tx: Queryable, current: ArtifactRow): Promise<HtmlIdentityLedger> {
-  const reserved = (await tx.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id])).rows.map((row) => row.source_id);
-  const old = current.meta.htmlIdentity as HtmlIdentityLedger | undefined;
-  return { allocatedIds: reserved, nextNodeId: old?.nextNodeId ?? 1 };
-}
-
 /** What saving a page's live regions came to: the head that holds their text, each region's sequence in it, and whether it is new. */
 export interface RegionSave { published: boolean; version: number; regions: Record<string, number> }
 
@@ -475,6 +468,18 @@ async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: Artif
 export async function saveLiveRegionsInTx(tx: Queryable, actor: AccessActor, id: string, options: { due?: SaveDue } = {}): Promise<RegionSave | null> {
   const write = await lockArtifactWrite(tx, actor, id);
   return write && saveRegionsLocked(tx, actor, write, options);
+}
+
+/**
+ * A CHECKPOINT BEFORE AN AGENT'S READ (operations get_artifact, read_region): when the page has unsaved live text and
+ * the actor may edit it, that text is saved as a version first, so what the agent reads is a saved version and the
+ * write it makes from it merges three-way from that version's snapshot (./regions): never re-applying, so never
+ * duplicating, people's unsaved typing. True when a version was made; readers (who cannot write) save nothing.
+ */
+export async function checkpointLiveRegions(actor: AccessActor, id: string): Promise<boolean> {
+  const db = await getDb();
+  if (!(await db.query("SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND region_id NOT LIKE 'cell:%' LIMIT 1", [id])).rows.length) return false;
+  return (await db.transaction((tx) => saveLiveRegionsInTx(tx, actor, id)))?.published ?? false;
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -616,6 +621,11 @@ export interface ReplaceOpts {
   expectedState?: string;
   /** When set, the replace applies only if it still names the head version. */
   expectedVersion?: number;
+  /**
+   * An HTML write made from the page WITH its live text (./current-page `live`): applied only while that is still the
+   * page's live revision (else `content` conflicts), and its regions merge from the live state rather than the saved one.
+   */
+  expectedLive?: number;
 }
 
 /**
@@ -685,6 +695,9 @@ async function replaceArtifactInTx(
   if(input.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),input.ancestor_ids);
   const changed = observedChange(current, opts);
   if (changed) return conflictOf(current, changed);
+  // The row is held FOR UPDATE, so no region update commits between this check and the merge below.
+  const fromLive = opts.expectedLive !== undefined && current.format === 'html' && input.format === 'html';
+  if (fromLive && (await liveRevisionOf(tx, id)).live !== opts.expectedLive) return conflictOf(current, 'content');
   if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
   // A page leaving HTML takes its live regions with it: their unsaved typing is saved as its own version first.
   const leavingHtml = current.format === 'html' && input.format !== 'html';
@@ -702,7 +715,7 @@ async function replaceArtifactInTx(
     try{page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});}
     catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
     // Live regions: the written page with editors' unsaved typing merged in, three-way from the head (./regions).
-    const merged=current.format==='html'?await planRegionMerge(tx,current,page):null;
+    const merged=current.format==='html'?await planRegionMerge(tx,current,page,{from:fromLive?'live':'saved'}):null;
     if(merged instanceof Response)return merged;
     regions=merged;
     const html=merged?.html??page.html;

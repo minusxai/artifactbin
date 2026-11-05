@@ -18,13 +18,15 @@ export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';
 export { artifactState, observedChange, versionConflict } from './state';
+/** The page every read serves: the saved source with its regions' unsaved live text composed in, and its live revision. */
+export { currentPage, liveRevision, readPageRow, type PageRead } from './current-page';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; the after-commit emitter; and the deployment's two seams. */
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
 export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
 /** Live regions as page storage (lib/region-sessions): the editable head, the region rows and the save as a version. */
-export { saveLiveRegionsInTx } from './store';
+export { checkpointLiveRegions, saveLiveRegionsInTx } from './store';
 export { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, regionUpdatesAfter } from './regions';
 export { saveIsDue } from './regions';
 export type { RegionRow, SaveDue } from './regions';

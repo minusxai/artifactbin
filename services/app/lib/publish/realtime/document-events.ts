@@ -16,13 +16,27 @@ import {createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame}
 import { getDb, ID_RE } from '@/lib/platform';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/analytics';
-import { canReadArtifact, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/html-reader/contract';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from './live';
 import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from './dataset-marks';
+import { livePings } from './live-pings';
+
+/** What a live ping names: the head and its live revision, and the current page's title. */
+interface LiveHead { editId: string; version: number; live: number; title: string | null }
+/** The process's live text followers (./live-pings): one subscription and one throttled read per page, shared by its readers. */
+const pageLive = livePings<LiveHead | null>({
+  subscribe: (channel, handler, onLost) => subscribeChannel(channel, handler, onLost),
+  async load(id) {
+    const row = await getArtifactById(id);
+    if (!row || row.format !== 'html') return null;
+    const page = await currentPage(row);
+    return { editId: row.edit_id, version: row.version, live: page.live, title: page.row.title ?? null };
+  },
+});
 
 /**
  * What opening the stream came to: the uniform not-found (a missing, malformed or unreadable document), no
@@ -80,6 +94,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
   const writer = writable.getWriter();
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
+  let liveUnsub: (() => void) | undefined;
   let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
   // The document frame always opens the stream: a room's immediate first roster waits for it (latest wins meanwhile).
   let presenceWriting=false,documentSent=false,latestPresence:PresenceFrame|null=null;
@@ -153,6 +168,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
     clearInterval(keepalive);
     presenceRoom?.dispose();latestPresence=null;
     if (unsubscribe) await unsubscribe().catch(() => {});
+    liveUnsub?.();
     if (annotationsUnsub) await annotationsUnsub().catch(() => {});
     for (const drop of datasetUnsubs.values()) await drop().catch(() => {});
     datasetUnsubs.clear();
@@ -226,6 +242,8 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
 
   // Last stylesheet sent on THIS connection, so repeats can be skipped.
   let lastVersionSent = -1;
+  /** The live revision last announced within `lastVersionSent` (an HTML page's live text, ./live-pings). */
+  let lastLiveSent = -1;
   let frameQueue = Promise.resolve();
 
   /*
@@ -235,12 +253,17 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
    * would have to understand, which is what lets a proxy blind to content
    * hold it.
    */
-  const frameFor = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>): Promise<ArtifactVersionPing> => ({
-    editId: row.edit_id,
-    version: row.version,
-    by: await authorHandle(row),
-    title: row.title ?? null,
-  });
+  const frameFor = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>): Promise<ArtifactVersionPing> => {
+    // An HTML page is announced as its current page (lib/artifacts current-page): its live revision and its title.
+    const page = row.format === 'html' ? await currentPage(row) : null;
+    return {
+      editId: row.edit_id,
+      version: row.version,
+      ...(page ? { live: page.live } : {}),
+      by: await authorHandle(row),
+      title: (page?.row ?? row).title ?? null,
+    };
+  };
 
   let presenceRevision:string|undefined,replacingPresence=false;
   const followPresence=async(row:NonNullable<Awaited<ReturnType<typeof getArtifactById>>>)=>{
@@ -263,7 +286,10 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
       if (closed || row.version < lastVersionSent) return;
       const frame = await frameFor(row);
       if (closed || frame.version < lastVersionSent) return;
+      // A new version starts its live revisions afresh (a version that closed regions may sum to less than before).
+      const sameVersion = frame.version === lastVersionSent;
       lastVersionSent = frame.version;
+      lastLiveSent = Math.max(sameVersion ? lastLiveSent : -1, frame.live ?? 0);
       // Follow this version's data dependencies BEFORE announcing it: a
       // document that starts reading a dataset must be subscribed by the time
       // its reader can see the query, or a write landing in between reaches
@@ -279,6 +305,24 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
       // An edit shifts anchors; annotator connections' pins must follow the document
       // frame that moved them. Plain reader connections are no-ops.
       void pushAnnotations();
+    }).catch(() => { /* client gone */ });
+  };
+
+  /*
+   * LIVE TEXT (./live-pings): the page's regions changed with no new version. Within the version this connection has
+   * announced, a higher live revision is pinged exactly as a version is (the reader's frame re-fetches the current
+   * page); a new version is the document channel's to announce, with its presence and data follows. Access is asked
+   * again first, from the access columns alone.
+   */
+  const pushLive = (head: () => Promise<LiveHead | null>) => {
+    frameQueue = frameQueue.then(async () => {
+      if (closed) return;
+      const access = await getArtifactAccessById(id);
+      if (!access || !(await canReadArtifact(access, actor))) return void close();
+      const current = await head();
+      if (closed || !current || current.version !== lastVersionSent || current.live <= lastLiveSent) return;
+      lastLiveSent = current.live;
+      await send({ editId: current.editId, version: current.version, live: current.live, by: null, title: current.title });
     }).catch(() => { /* client gone */ });
   };
 
@@ -305,6 +349,15 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
     await followDatasets(initial);
+    if (initial.format === 'html') {
+      try {
+        liveUnsub = await pageLive.follow(artifactId, { tick: pushLive, lost: listenerLost });
+        if (closed) liveUnsub();
+      } catch (error) {
+        // At capacity: the document still streams its versions; live text then arrives with the next one.
+        if (!(error instanceof TooManyLiveChannels)) throw error;
+      }
+    }
     {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
@@ -317,6 +370,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
   } catch (error) {
     // At capacity: say so plainly instead of holding a stream that will never
     // deliver. The page still renders and reloads fine without live updates.
+    liveUnsub?.();
     if (!(error instanceof TooManyLiveChannels)) throw error;
     clearInterval(keepalive);
     await writer.close().catch(() => {});
