@@ -4,7 +4,8 @@
  * the frame's editor (@afbin/regions). Three signed-in accounts: the owner (A), an editor share (B), a viewer share (C).
  *
  *   1. both editors open the page, press into the region and type at once: each sees the other's text and caret;
- *      the viewer reads the saved text only and never opens a session (no region request, no editor module);
+ *      the viewer reads the editors' live text with no save and never opens a session (no region request, no editor
+ *      module);
  *      typing right after the press on a freshly loaded page (before the editor mounts), Enter and Backspace included,
  *      arrives intact; the formatting toolbar shows for editors only, follows the caret and its Bold reaches the peer;
  *      the `/` menu filters, inserts a heading with arrows and Enter (the `/` gone), and Escape leaves the `/`;
@@ -16,10 +17,14 @@
  *      of exactly that markup) leaves only region HTML on both sides, and after the save;
  *   5. reconnect: B goes offline while both type, comes back, and nothing typed is lost;
  *   6. an owner whole-page PUT at the current expectedVersion while B has unsaved typing keeps both;
- *   6b. an agent's Markdown write of the region (bearer, `PUT /regions/_doc` from the version it read) while B has
- *      unsaved typing: one new version holding both, merged into both open pages live, without a reload;
+ *   6b. an agent's Markdown write of the region (bearer, `PUT /regions/_doc` from the version it read: its read saved
+ *      B's typing first) while B types on: one new version holding all of it, merged into both open pages live, without
+ *      a reload;
  *   7. a comment B anchors inside the region after typing saves first and anchors to that version;
- *   8. the last editor leaving saves a version, which the viewer's open page then shows.
+ *   8. the last editor leaving saves a version (the viewer's open page already showed its text, live).
+ *
+ * The owner's bearer read (`head`) of a page with unsaved typing saves it first (an agent's checkpoint); the viewer's
+ * (`viewerHead`) reads the live text without saving anything, so it is what tells a saved version from live text.
  *
  *   node scripts/gates/gate-live-regions.mjs [base]
  */
@@ -98,11 +103,18 @@ const api = async (path, init = {}) => {
   return response.json();
 };
 const head = () => api('');
+let viewerToken = '';
+const viewerHead = async () => {
+  const response = await fetch(`${BASE}/api/artifacts/${id}`, { headers: { authorization: `Bearer ${viewerToken}` } });
+  if (!response.ok) throw new Error(`viewer GET → ${response.status} ${await response.text()}`);
+  return response.json();
+};
 
 try {
   await section('setup: an owner, an editor share and a viewer share on one page', async () => {
     await Promise.all([loginViaEmail(A, BASE, sink, ownerEmail), loginViaEmail(B, BASE, sink, editorEmail), loginViaEmail(C, BASE, sink, viewerEmail)]);
     ({ token } = await connectAgent(BASE, { email: ownerEmail }));
+    ({ token: viewerToken } = await connectAgent(BASE, { email: viewerEmail }));
     ({ id } = await publishAs(A, { title: 'Live regions', html: SOURCE, visibility: 'private' }));
     const shared = await A.evaluate(async ({ id, shares }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares }) })).status,
       { id, shares: [{ email: editorEmail, role: 'editor' }, { email: viewerEmail, role: 'viewer' }] });
@@ -198,15 +210,16 @@ try {
     for (let i = 0; i < '/kept'.length; i++) await A.keyboard.press('Backspace');
   });
 
-  await section('the viewer reads saved text and never opens a session', async () => {
-    await sleep(500);
-    const text = await textOf(c);
-    check(text === 'Owner line.Editor line.', `the viewer reads the saved region only (${JSON.stringify(text)})`);
+  await section('the viewer reads the live text with no save, and never opens a session', async () => {
+    const text = await until(() => textOf(c), (value) => !!value?.includes('alpha from the owner') && value.includes('Slash heading') && value.includes('fastYnext-line'), 15_000);
+    check(!!text?.includes('alpha from the owner') && text.includes('bravo from the editor') && text.includes('Slash heading'), `the viewer's open page follows the editors' typing (${JSON.stringify(text?.slice(0, 80))}…)`);
+    const read = await viewerHead();
+    check(read.version === 1 && read.html.includes('alpha from the owner'), `no version was made: the viewer reads the live text at version ${read.version}`);
     await c.locator('[data-af-id="p1"]').click();
     await C.keyboard.type('viewer keys');
     await sleep(500);
     check(await c.locator(REGION).getAttribute('contenteditable') === null && await c.locator(REGION).getAttribute('tabindex') === null, 'a viewer\'s press mounts no editor');
-    check(await textOf(c) === 'Owner line.Editor line.', 'a viewer\'s keys change nothing');
+    check(await textOf(c) === text, 'a viewer\'s keys change nothing');
   });
 
   await section('latency: 20 characters from A\'s key to B\'s frame', async () => {
@@ -322,10 +335,12 @@ try {
     // A reload would drop these: the open pages must take the agent's text as they are.
     await Promise.all([a, b].map((frame) => frame.evaluate(() => { window.__gateAgentMarker = 'kept'; })));
     const read = await api('/regions/_doc?format=markdown');
-    check(read.regionId === 'notes' && !read.markdown.includes('typing-before-agent'), `the agent reads the saved region as Markdown, without B's unsaved typing (v${read.version})`);
+    check(read.regionId === 'notes' && read.markdown.includes('typing-before-agent'), `the agent reads B's unsaved typing, saved first as the version it reads (v${read.version})`);
+    await B.keyboard.type(' typing-after-read');
+    await both([a], 'typing-after-read');
     const written = await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-agent-write-${stamp}` }, body: JSON.stringify({ markdown: `${read.markdown}\n\nAgent line from **Markdown**.`, base_version: read.version }) });
     check(written.version === read.version + 1, `the agent's write is saved as one new version (v${read.version} → v${written.version})`);
-    check(written.html.includes('Agent line from <strong>Markdown</strong>.') && written.html.includes('typing-before-agent'), 'the version the agent saved holds its line and B\'s typing');
+    check(written.html.includes('Agent line from <strong>Markdown</strong>.') && written.html.split('typing-before-agent').length === 2 && written.html.includes('typing-after-read'), 'the version the agent saved holds its line and all of B\'s typing, none of it twice');
     const [atA, atB] = await both([a, b], 'Agent line from Markdown.', 'typing-before-agent');
     check(atA === atB && atB?.includes('Agent line from Markdown.') && atB?.includes('typing-before-agent'), 'both open editors show the agent\'s line and keep B\'s typing');
     check((await marked(b, 'strong')).includes('Markdown'), 'the agent\'s Markdown bold arrives as bold');
@@ -337,8 +352,8 @@ try {
     await caretAtEnd(b, B, '[data-af-id="p2"]');
     await B.keyboard.type(' commentword');
     await both([a], 'commentword');
-    const before = await head();
-    check(!before.html.includes('commentword'), 'the typed word is not saved yet');
+    const before = await until(viewerHead, (row) => !!row?.html.includes('commentword'));
+    check(!!before?.html.includes('commentword'), `the typed word is live, unsaved, at version ${before?.version}`);
     // A real double-click on the word, as a person selects it.
     const word = await b.locator(REGION).evaluate((root) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -360,13 +375,13 @@ try {
     await B.getByLabel('Annotation composer', { exact: true }).waitFor({ state: 'hidden', timeout: 15_000 });
     const listed = await api('/annotations');
     const mine = (listed.annotations ?? []).find((item) => JSON.stringify(item).includes('About the word just typed'));
-    const after = await head();
+    const after = await viewerHead();
     check(!!mine, 'the comment was stored');
     check(after.version > before.version && after.html.includes('commentword'), `commenting saved the region first (v${before.version} → v${after.version})`);
     check(mine?.anchor?.revision === String(after.version) && mine?.anchor?.quote === 'commentword', `the anchor names the saved version and the typed quote (${JSON.stringify(mine?.anchor && { revision: mine.anchor.revision, quote: mine.anchor.quote, nodeId: mine.anchor.nodeId })})`);
   });
 
-  await section('saved versions reach the viewer; the last editor leaving saves one', async () => {
+  await section('the viewer follows every change; the last editor leaving saves a version', async () => {
     check((await until(() => textOf(c), (text) => text?.includes('commentword'), 15_000))?.includes('commentword'), 'the viewer\'s open page shows the version the comment saved');
     // Presence starts again on the new revision; A's caret has not moved since, and still shows.
     check(await until(() => b.locator('[data-af-region-caret]').count(), (n) => n > 0, 5000) > 0, 'after the save, the editor still sees the owner\'s unmoved caret');
@@ -375,15 +390,14 @@ try {
     await caretAtEnd(b, B, '[data-af-id="p2"]');
     await B.keyboard.type(' leaving-B');
     await both([a, b], 'leaving-A', 'leaving-B');
-    const before = await head();
-    check(!before.html.includes('leaving-A') && !before.html.includes('leaving-B'), 'the last typing is unsaved while both are on the page');
+    const before = await viewerHead();
+    check((await until(() => textOf(c), (text) => text?.includes('leaving-B'), 15_000))?.includes('leaving-B'), 'the viewer\'s open page shows the last typing live, before any save');
     await Promise.all([A.close({ runBeforeUnload: true }), B.close({ runBeforeUnload: true })]);
-    const after = await until(head, (row) => row?.html.includes('leaving-A') && row.html.includes('leaving-B'), 20_000);
+    const after = await until(viewerHead, (row) => row?.version > before.version && row.html.includes('leaving-A') && row.html.includes('leaving-B'), 20_000);
     check(after?.version > before.version, `the last editor leaving saved a version (v${before.version} → v${after?.version})`);
     const saved = savedRegion(after?.html ?? '');
     check(foreign(savedShape(saved), SAVED_ATTRS).length === 0, `the saved region is region HTML only (${foreign(savedShape(saved), SAVED_ATTRS).join(' ') || 'clean'})`);
     check(['Word item', 'Docs item', 'online-A', 'offline-B', 'ime:仮名', 'Owner PUT line.', 'Agent line from'].every((part) => saved.includes(part)), 'every leg\'s text is in the saved version');
-    check((await until(() => textOf(c), (text) => text?.includes('leaving-B'), 15_000))?.includes('leaving-B'), 'the viewer\'s open page shows the leave save');
     check(traffic.get(C).length === 0, `the viewer made no region request (${traffic.get(C).map((entry) => entry.url).join(' ') || 'none'})`);
     check(await c.locator(REGION).getAttribute('contenteditable') === null, 'the viewer never had an editor');
   });

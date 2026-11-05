@@ -209,7 +209,7 @@ export function DocumentPage(): JSX.Element {
     // original server shell and its ticketed frame together, while viewer state stays in browser storage.
     // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
     onPublication: page.surface.format === 'html' ? (version, editId, title, live) => (title !== undefined && setPublishedTitle({ title, version }), import('../document/follow-html-version')).then(({ followPublication }) => followPublication({
-      version, editId, live, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,
+      version, editId, live, drawn: htmlHead().version, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,
     }), reload) : undefined,
     onAnnotations: setLiveAnnotations,
     onPresence: readerPresence.receive,

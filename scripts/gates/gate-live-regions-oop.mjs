@@ -142,10 +142,10 @@ try {
   });
 
   await section('the last editor leaving saves the committed text', async () => {
-    // A pause saves within seconds (contracts REGION_IDLE_SAVE_MS), so the committed text may already be saved here; the
-    // leave saves whatever is not. (Over plain http a cross-site frame's own cookie is not sent, so a saved version
-    // reloads this page rather than being drawn into the frame: what survives a save under an editor is checked on the
-    // same-site gates and on https deployments.)
+    // The committed text is live, not saved (a version is cut after two quiet minutes, contracts REGION_IDLE_SAVE_MS);
+    // the leave saves it. (Over plain http a cross-site frame's own cookie is not sent, so live text cannot be drawn into
+    // the frame, and is skipped there, while a saved version reloads this page: what survives a save under an editor is
+    // checked on the same-site gates and on https deployments.)
     const before = await head();
     await Promise.all([A.close({ runBeforeUnload: true }), B.close({ runBeforeUnload: true })]);
     const after = await until(head, (row) => row?.html.includes('ime:仮名'), 20_000);

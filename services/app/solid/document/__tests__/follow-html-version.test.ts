@@ -72,4 +72,14 @@ describe('followPublication',()=>{
   expect(controller.send.mock.calls.map(call=>[call[0].version,call[0].live])).toEqual([[9,4],[9,8]]);
   expect(reload).not.toHaveBeenCalled();
  });
+ it('never reloads for live text the frame could not draw within the version it shows; a new version still reloads',async()=>{
+  const reload=vi.fn(),show=vi.fn();
+  const refusing=frame(()=>({type:HTML_VERSION_REFUSED,reason:'the new version answered 404'}));
+  await followPublication({version:20,live:3,drawn:20,editId:'e',frame:refusing,show,reload});
+  await followPublication({version:20,live:5,drawn:20,editId:'e',frame:refusing,show,reload});
+  expect(reload).not.toHaveBeenCalled();
+  expect(refusing.sent).toHaveLength(2);
+  void followPublication({version:21,live:0,drawn:20,editId:'f',frame:refusing,show,reload});
+  await vi.waitFor(()=>expect(reload).toHaveBeenCalledOnce());
+ });
 });
