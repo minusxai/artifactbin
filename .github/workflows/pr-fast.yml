@@ -7,7 +7,7 @@ name: pr fast
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
 # (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json) and the contract tests
-# (scripts/ci/contract-tests.json) on four runners at once, each restoring main's install cache. The guard tests read
+# (scripts/ci/contract-tests.json) on five runners at once, each restoring main's install cache. The guard tests read
 # the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
 # the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
 # server's native acceptance) through the real handlers, which the audit refuses too. Each guards a contract whose
@@ -43,7 +43,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [ types, lint, tests, guards ]
+        part: [ types, lint, tests, guards, guards-2 ]
+        # The guard and contract tests were one 35-59s Vitest step, ~100s of worker CPU on the runner's 4 vCPUs (the
+        # contracts boot a database and real resolver runners per file). Two jobs split them by measured time
+        # (vitest.guard.config.ts's timed sequencer), each file once.
+        include:
+          - part: guards
+            shard: 1/2
+          - part: guards-2
+            shard: 2/2
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -126,8 +134,8 @@ jobs:
           exit "$rc"
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
-      - if: matrix.part == 'guards'
-        run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts
+      - if: matrix.shard
+        run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:

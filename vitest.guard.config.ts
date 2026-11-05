@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 import { suiteEnv } from './scripts/lib/suite-env.mjs';
+import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 
 const enrolled = (list: string) => JSON.parse(readFileSync(new URL(`./scripts/ci/${list}`, import.meta.url), 'utf8')) as string[];
 
@@ -11,12 +12,16 @@ const enrolled = (list: string) => JSON.parse(readFileSync(new URL(`./scripts/ci
 //  - pr-contracts (scripts/ci/contract-tests.json): route-level contracts another repository runs against its
 //    production composition after merge (minusxai/artifactbin-server's native acceptance). They need the real
 //    handlers, a database and the resolver runner, so they take the full suite's environment and setup file.
+// pr fast runs this config as two `--shard` jobs (`guards`, `guards-2`): on a 4-vCPU runner the whole list was ~100s
+// of worker CPU, a 35-59s step on its own. The full suite's timed sequencer packs both projects' files by their
+// measured CI time (scripts/ci/test-timings.json) onto the shards, longest first, so each file runs exactly once.
 export default defineConfig({
   root: import.meta.dirname,
   resolve: { alias: { '@': new URL('./services/app', import.meta.url).pathname } },
   test: {
     globals: true,
     environment: 'node',
+    sequence: { sequencer: TimedSequencer },
     projects: [
       {
         extends: true,
