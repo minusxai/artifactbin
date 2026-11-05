@@ -1,5 +1,5 @@
 import {isTimestamp} from './timestamp';
-export {normalizeTimestamp,isTimestamp} from './timestamp';
+export {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from './timestamp';
 /** Column inference for rows by value — pure and safe for browser bundles. */
 import type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
 

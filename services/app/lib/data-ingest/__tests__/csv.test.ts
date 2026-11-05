@@ -169,6 +169,8 @@ describe('coerceRows — a DECLARED type wins over the sniffer', () => {
 
   it('honours a declared date, and a declared type on a column of blanks', () => {
     expect(coerceRows(['d'], [['2026-01-02']], col('d', 'date'))[0].d).toBe('2026-01-02');
+    // A timestamp under a declared date is its UTC calendar day, never a silent null.
+    expect(coerceRows(['d'], [['2026-11-05T01:39:09+05:30'], ['2026-11-05 01:39'], ['tomorrow']], col('d', 'date')).map(r => r.d)).toEqual(['2026-11-04', '2026-11-05', null]);
     expect(coerceRows(['x'], [['']], col('x', 'number'))[0].x).toBeNull();
   });
 

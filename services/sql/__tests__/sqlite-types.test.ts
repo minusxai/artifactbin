@@ -6,7 +6,7 @@
  * and schema names that merely look reserved.
  */
 import { describe, expect, it } from 'vitest';
-import { isQueryFailure, type DatasetColumn, type Row } from '@artifactbin/contracts';
+import { isQueryFailure, type DatasetColumn, type DatasetMutationPolicy, type Row } from '@artifactbin/contracts';
 import { loadSqlite } from '@artifactbin/sql/core';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 
@@ -32,8 +32,8 @@ describe('on load', () => {
     expect(errorOf(await read([{ d: '2026-01-01' }, { d: '2026-02-30' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 2\) is not a date/);
   });
   it('reads a timestamp stored in a date column as the calendar day it names, as the previous engine read it', async () => {
-    expect(await read([{ d: '2031-04-07T18:20:00Z' }, { d: '2031-04-07 23:45' }, { d: '2031-04-08' }], [{ name: 'd', type: 'date' }])).toEqual({
-      rows: [{ d: '2031-04-07' }, { d: '2031-04-07' }, { d: '2031-04-08' }],
+    expect(await read([{ d: '2031-04-07T18:20:00Z' }, { d: '2031-04-07 23:45' }, { d: '2031-04-08' }, { d: '2031-04-07 (approx)' }], [{ name: 'd', type: 'date' }])).toEqual({
+      rows: [{ d: '2031-04-07' }, { d: '2031-04-07' }, { d: '2031-04-08' }, { d: '2031-04-07' }],
       columns: [{ name: 'd', type: 'date' }],
     });
     expect(errorOf(await read([{ d: '2026-02-30T06:00:00Z' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 1\) is not a date/);
@@ -59,15 +59,37 @@ describe('on write', () => {
   const table = { name: 't', columns, rows: [{ id: 1, due: '2026-09-30', at: '2026-09-30T10:00:00.000Z', done: false }] };
   it.each([
     ["update t set due = '2026-13-01'", /due must be a date/],
-    ["update t set due = '2026-09-30 10:00'", /due must be a date/],
-    ["update t set at = datetime('now')", /at must be a UTC timestamp/],
+    ["update t set due = 'tomorrow'", /due must be a date/],
+    ["update t set due = '2026-02-30T06:00:00Z'", /due must be a date/],
+    ['update t set due = 20260930', /due must be a date/],
+    ["update t set at = 'noon'", /at must be a UTC timestamp/],
     ['update t set done = 5', /done must be true or false/],
   ])('keeps each type whatever the statement writes: %s', async (statement, error) => {
     expect(errorOf(await sql.mutate({ table, sql: statement, params: {} }))).toMatch(error);
   });
+  it.each([
+    ["update t set due = '2026-11-05T01:39:09.123Z'", {}, { due: '2026-11-05' }],
+    ["update t set due = '2026-11-05 01:39:09'", {}, { due: '2026-11-05' }],
+    ['update t set due = $d', { d: '2026-11-05T01:39:09+05:30' }, { due: '2026-11-04' }],
+    ["update t set at = '2026-09-30'", {}, { at: '2026-09-30T00:00:00.000Z' }],
+    ['update t set at = $a', { a: '2026-09-30 12:00:00+02:00' }, { at: '2026-09-30T10:00:00.000Z' }],
+  ])('stores a timestamp written to a date column as its UTC calendar day, and a date or offset written to a timestamp as a UTC instant: %s', async (statement, params, stored) => {
+    expect(await sql.mutate({ table, sql: statement, params })).toMatchObject({ affected: 1, rows: [{ id: 1, ...stored }] });
+  });
+  it('normalizes inserted rows and literals the engine computes, before the policy check sees them', async () => {
+    const result = await sql.mutate({ table, sql: "insert into t (id, due, at) values (2, $d, datetime('2026-09-30 10:00:00'))", params: { d: '2026-11-05T01:39:09.123Z' } });
+    expect(result).toMatchObject({ affected: 1, rows: [{ id: 1, due: '2026-09-30' }, { id: 2, due: '2026-11-05', at: '2026-09-30T10:00:00.000Z' }] });
+    const checked = (day: string): DatasetMutationPolicy => ({ role: 'viewer', session: { 'x-hasura-role': 'viewer' }, operations: ['insert'], table: {
+      table: { schema: 'public', name: 't' }, insert_permissions: [{ role: 'viewer', permission: { columns: '*', check: { due: { _eq: day } } } }] } });
+    const insert = (day: string) => sql.mutate({ table, sql: 'insert into t (id, due) values (2, $d)', params: { d: '2026-11-05T01:39:09.123Z' }, policy: checked(day) });
+    expect(await insert('2026-11-05')).toMatchObject({ affected: 1 });
+    expect(errorOf(await insert('2026-11-05T01:39:09.123Z'))).toMatch(/failed its check/);
+  });
   it('normalizes a bound timestamp and refuses one it cannot read, naming the parameter', async () => {
     expect(await sql.mutate({ table, sql: 'update t set at = $at, done = $done', params: { at: '2026-09-30T12:00:00+02:00', done: true }, paramTypes: { at: 'timestamp', done: 'boolean' } }))
       .toMatchObject({ affected: 1, rows: [{ id: 1, due: '2026-09-30', at: '2026-09-30T10:00:00.000Z', done: true }] });
+    expect(await sql.mutate({ table, sql: 'update t set due = $due', params: { due: '2026-11-05T23:30:00-02:00' }, paramTypes: { due: 'date' } }))
+      .toMatchObject({ affected: 1, rows: [{ id: 1, due: '2026-11-06' }] });
     expect(errorOf(await sql.mutate({ table, sql: 'update t set at = $at', params: { at: 'noon' }, paramTypes: { at: 'timestamp' } }))).toMatch(/\$at/);
   });
 });

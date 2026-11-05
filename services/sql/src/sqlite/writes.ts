@@ -127,7 +127,7 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
     if (names.some((n) => /^(rowid|oid|_rowid_)$/i.test(n))) throw new Error(`a column named ${names.find((n) => /^(rowid|oid|_rowid_)$/i.test(n))} cannot be written by a <Mutation>`);
     continuation = extensions.setupMutation?.(db, { input, dryRun: false });
     const effect = new Effect(db, target, columns.length);
-    db.createTable(spec, (i) => `${effect.unset}(${i})`);
+    db.createTable(spec, (i) => `${effect.unset}(${i})`, true);
     db.insertRows(spec, input.table.rows);
     for (const read of input.reads ?? []) db.load(read);
     effect.install();
@@ -157,6 +157,8 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
     if (p && input.policyPreview) return { rows: input.table.rows, columns, affected: 0, analysis };
 
     const ids = JSON.stringify(op === 'insert' ? effect.inserted : effect.updated);
+    // What the target's CHECKs accepted (a timestamp in a date column…), stored canonically before presets and the check.
+    if (op !== 'delete') db.normalize(spec, ids);
     const writtenRows = 'rowid IN (SELECT value FROM json_each($__policy_ids))';
     const presets = p && permission && 'set' in permission && permission.set ? Object.entries(permission.set) : [];
     if (presets.length) {
@@ -230,7 +232,7 @@ export function dryRunMutations(sqlite3: Sqlite3, input: DryRunMutationsInput, e
       extensions.setupMutation?.(db, { dryRun: true });
       const table = m.tableName ?? `ref_${m.target}`;
       const target = input.tables[table];
-      if (target) db.createTable({ schema: 'main', table, columns: target.columns });
+      if (target) db.createTable({ schema: 'main', table, columns: target.columns }, undefined, true);
       statement = db.prepare(m.sql, 'write', { schema: 'main', table });
       statement.bind(params, { ...input.paramTypes, ...m.paramTypes } as Record<string, ColumnType>).run(DEFAULT_CAPS.timeoutMs);
     } catch (e) {

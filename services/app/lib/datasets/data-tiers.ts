@@ -1,4 +1,4 @@
-import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
+import {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * The data file tiers: dataset (one flat table), viz (an
  * inert recipe template — minusx VizRecipeContent verbatim), image (data-url).
@@ -27,15 +27,13 @@ import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation';
 import { inferColumns, type ColumnType, type DatasetColumn } from '@/lib/dataflow';
 
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;
-
 function valueMatches(v: unknown, t: ColumnType): boolean {
   if (v === null || v === undefined) return true; // nulls pass any column type
   switch (t) {
     case 'number': return typeof v === 'number' && Number.isFinite(v);
     case 'boolean': return typeof v === 'boolean';
     case 'timestamp': return isTimestamp(v);
-    case 'date': return typeof v === 'string' && DATE_RE.test(v);
+    case 'date': return isDate(v);
     case 'user':
     case 'string': return typeof v === 'string';
   }
@@ -95,8 +93,8 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
     columns = inferColumns(flat);
   }
 
-  for (const row of flat) for (const column of columns) if(column.type==='timestamp' && row[column.name]!=null) {
-    try { row[column.name]=normalizeTimestamp(row[column.name],column.name); }
+  for (const row of flat) for (const column of columns) if((column.type==='timestamp' || column.type==='date') && row[column.name]!=null) {
+    try { row[column.name]=column.type==='date' ? normalizeDate(row[column.name],column.name) : normalizeTimestamp(row[column.name],column.name); }
     catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Invalid timestamp']},400);}
   }
   // The rows go to the object store; the row keeps a reference. See

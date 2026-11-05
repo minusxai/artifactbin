@@ -44,9 +44,9 @@ const POLICY = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' 
 ] }] };
 
 /** A page linking `staff` (v3 rule: viewers see red rows, other accounts 2 rows, anonymous nothing) and a resolver. */
-async function fixture() {
+async function fixture(rows: unknown[] = STAFF) {
   const owner = await person('owner'), viewer = await person('viewer'), other = await person('other');
-  const staff = await publish(owner, { dataset: STAFF, title: 'Staff' });
+  const staff = await publish(owner, { dataset: rows, title: 'Staff' });
   const unlinked = await publish(owner, { dataset: [{ secret: 'x' }], title: 'Hidden' });
   const db = await getDb();
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [staff, viewer.userId, viewer.email]);
@@ -112,6 +112,16 @@ it('refuses mutations in query resolvers; in mutation resolvers they write as th
   const rows = await loadDatasetRows((await getArtifactById(f.staff))!);
   expect(rows.map((r) => r.name)).toEqual(['ada', 'bo', 'cy', 'dee', 'eve']);
   expect(rows.find((r) => r.name === 'eve')).toMatchObject({ team: f.pageId, salary: 0 });
+});
+
+it('a mutation resolver writing a timestamp into a date column stores its UTC calendar day; a non-date is refused by name', async () => {
+  const f = await fixture(STAFF.map((r) => ({ ...r, created: '2026-11-04' })));
+  const owner = { subject: f.owner.userId, role: 'owner' };
+  await inProcess(f, owner, 'mutation { insert_staff_one(object: {name: "dee", created: "2026-11-05T01:39:09.123Z"}) { _id } }', 'mutation');
+  await inProcess(f, owner, 'mutation { update_staff(where: {name: {_eq: "ada"}}, _set: {created: "2026-11-05T23:30:00-02:00"}) { affected_rows } }', 'mutation');
+  await expect(inProcess(f, owner, 'mutation { insert_staff_one(object: {name: "eve", created: "tomorrow"}) { _id } }', 'mutation')).rejects.toThrow(/created must be a date/);
+  const rows = await loadDatasetRows((await getArtifactById(f.staff))!);
+  expect(rows.map((r) => [r.name, r.created])).toEqual([['ada', '2026-11-06'], ['bo', '2026-11-04'], ['cy', '2026-11-04'], ['dee', '2026-11-05']]);
 });
 
 it('refuses a run that does not attest its caller, and bounds the document', async () => {
