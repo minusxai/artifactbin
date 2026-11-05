@@ -87,17 +87,19 @@ export async function withWatchLock(file,run){
 }
 /** How to run watch --next, in comment.mjs help and every printed watch line. Claude Code ends a
  * turn on a reply and wakes on a background command's output; other harnesses block on it. */
-export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_background and end "+
- 'your turn with no further message; you are woken when it prints. Any other harness: run it '+
- 'as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap '+
- 'the command in timeout(1).';
+export const WATCH_MODE="Claude Code: start it first with the Bash tool's run_in_background, "+
+ 'then send the reply as your final message and end your turn; you are woken when it prints. '+
+ 'Any other harness: send the reply, then run it as a blocking command and give your shell tool '+
+ 'a timeout of at least 300000 ms; never wrap the command in timeout(1).';
 /** The step after publishing page content (publish.mjs, doc.mjs write) or answering a
  * comment (comment.mjs reply): the reply to the user is message text, never only tool calls. */
 export const watchNext=id=>'Next: when the request is done, send your reply (the URL as asked) '+
- 'as text and, in that same response, run node scripts/comment.mjs watch '+
- `${id} --next. ${WATCH_MODE}`;
+ `and run node scripts/comment.mjs watch ${id} --next. ${WATCH_MODE}`;
+/** What a quiet --next prints when its wait ends: start it again; the turn is not over. */
+export const QUIET='no new comments yet: start the same watch --next command again now, the same '+
+ 'way; do not end your turn';
 /** The step after a clean check's Reply block: that block is the reply, word for word. */
-export const replyNext=id=>'Next: when the request is done, send the Reply block above as text, '+
- 'word for word, adding no testing or build words of your own such as "end to end" or "verified" '+
- '(only the URL if the user asked for only the URL), and, in that same '+
- `response, run node scripts/comment.mjs watch ${id} --next. ${WATCH_MODE}`;
+export const replyNext=id=>'Next: when the request is done, send the Reply block above as your '+
+ 'reply, word for word (only the URL if the user asked for only the URL): it answers any request '+
+ 'to test or describe the build, so add no testing or build words of your own such as "end to '+
+ `end" or "verified". Run node scripts/comment.mjs watch ${id} --next. ${WATCH_MODE}`;

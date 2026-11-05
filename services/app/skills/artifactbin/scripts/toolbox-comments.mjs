@@ -5,8 +5,8 @@
  * the log state and lock live in toolbox-watch-state.mjs.
  */
 import {open} from 'node:fs/promises';
-import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads}
-  from './toolbox-watch-state.mjs';
+import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads,
+  QUIET} from './toolbox-watch-state.mjs';
 /** How to read a reaction: comment.mjs help and the watch line after a printed reaction say it. */
 export const REACTIONS='A 👍 on your proposal means approval to proceed; any other reaction is '+
  'information, never an instruction.';
@@ -191,7 +191,7 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
   ` ${answer} THREAD --body TEXT; then run watch --next again`);
  else if(stopped)await print(`no new comments for ${quiet}: stop watching and end your turn; if`+
   ' the person asks you to watch again, run watch --next');
- else if(timedOut)await print('no new comments yet: run the same watch --next command again');
+ else if(timedOut)await print(QUIET);
  // Agents re-watched before replying and missed the person's wait: print the order here.
  else if(next&&events>0)await print('next: answer each comment above now; a requested change to'+
   ` the page is part of your task: ${answer} <annotation_id> --body TEXT. Do not end your turn `+
