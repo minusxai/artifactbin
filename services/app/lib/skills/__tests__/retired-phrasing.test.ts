@@ -2,7 +2,7 @@
  * RETIRED AND CONTRADICTORY PHRASING STAYS OUT OF EVERYTHING AN AGENT READS. The author-skill rulings of 2026-11-04 (an
  * audit of every skill text and script string plus production eval traces) found small models acting on whichever of
  * two disagreeing sentences they read first. Each concept now has one rule in one place: SKILL.md routes, script
- * --help and output own flags and next steps (the Reply block is the only reply text), starter headers own their
+ * --help and output own flags and next steps (check prints the facts for the reply), starter headers own their
  * usage, references teach technique. ONE table, one reason per row (its ruling): a hit says why the phrase went. The
  * scopes are SKILL.md, references, examples, component headers, script sources, the API's monitoring guidance, the
  * operations registry and the page runtime. The single exception is lib/html-runtime/legacy-page-names.ts, the
@@ -50,7 +50,7 @@ interface Retired {
 
 const RETIRED: Retired[] = [
   {pattern: /run_in_background/, scopes: [...AGENT_TEXT, 'monitoring'],
-    allow: "Claude Code: start it first with the Bash tool's run_in_background,",
+    allow: "with the Bash tool's run_in_background first",
     reason: 'H1: the watch mode is stated once, by harness (WATCH_MODE): no other background wording'},
   {pattern: /never end your turn while the watch/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H1: the watch is a foreground command that returns; its output says when to stop'},
@@ -58,12 +58,12 @@ const RETIRED: Retired[] = [
     reason: 'H1: no per-harness (Codex) watch instructions'},
   {pattern: /another watch is already running/, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H1: a second watch --next on the page takes over the running one instead of refusing'},
-  {pattern: /(?<![.\w])timeout\(1\)/, scopes: [...AGENT_TEXT, 'monitoring'], allow: 'command in timeout(1)',
-    reason: 'H2: the one timeout sentence lives in comment.mjs; agent shells often lack timeout(1)'},
+  {pattern: /(?<![.\w])timeout\(1\)/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'H2: the one timeout sentence is WATCH_MODE (a shell timeout); no text mentions timeout(1)'},
   {pattern: /(?:^|[\s`'"(])timeout\s+\d+[smh]?\s+\S/m, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'Principle 6: never suggest wrapping a command in timeout(1)'},
-  {pattern: /shell tool(?:'s)? (?:a )?timeout|timeout to 300000/i, scopes: DOCS,
-    reason: 'H2: the shell-tool timeout is stated once, by comment.mjs --help and its printed next line'},
+  {pattern: /shell (?:tool(?:'s)? )?(?:a )?timeout|timeout to 300000/i, scopes: [...DOCS, 'monitoring'],
+    reason: 'H2: the shell timeout is stated once, by WATCH_MODE (comment.mjs --help and the printed Next line)'},
   {pattern: /<<-?\s*(['"]?)[A-Z][A-Z_]*\1(?=\s|$)|\bcat\s*>[^\n]*<</, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'Principle 6: sandboxes block heredocs; write a file or pass an inline flag (comment.mjs --body TEXT)'},
   {pattern: /\bVerified:|\bNot verified\b|\bas Verified\b/, scopes: [...AGENT_TEXT, 'monitoring'],
@@ -82,10 +82,10 @@ const RETIRED: Retired[] = [
     reason: 'H4: step 3 is "publish after step 2"; publish refuses leftover starter placeholders itself'},
   {pattern: /never publish (?:the|a) (?:ref: )?placeholder/i, scopes: DOCS,
     reason: 'H4: publish refuses ref: placeholders and [bracketed] starter text with the fix'},
-  {pattern: /\bas printed\b/i, scopes: ['references', 'examples', 'components'],
-    reason: 'H10: the one reply rule is in SKILL.md; check prints the Reply block'},
-  {pattern: /Describe (?:how it's built|testing)|copy check's Slide images|reply also says how others get access/i,
-    scopes: ['skill'], reason: 'H10: Built with, Tested, Slide images and Who can do what are lines of the Reply block'},
+  {pattern: /\bas printed\b/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'S1: the reply is the link plus what was asked; check prints facts, not a block to copy'},
+  {pattern: /Describe how it's built|copy check's Slide images|reply also says how others get access/i,
+    scopes: ['skill'], reason: 'H10: Built with, Tested, Slide images and Who can do what are check\'s facts for the reply'},
   {pattern: /read only one\b/i, scopes: DOCS, reason: 'M8: read only the references your task needs'},
   {pattern: /per-slide PNG export/i, scopes: AGENT_TEXT, reason: 'M6: the deck Built with line names what the page does'},
   {pattern: /af-slide-deck/, scopes: ['skill'], reason: 'H12: decks use examples/deck.html; the skill names one deck path'},
@@ -99,7 +99,24 @@ const RETIRED: Retired[] = [
   {pattern: /For an unpublished local project/, scopes: ['references'], reason: 'M14: serve.mjs is routed once, from SKILL.md'},
   {pattern: /Load the chosen design-system CSS/, scopes: ['references'], reason: 'M16: the platform loads the design-system CSS'},
   {pattern: /Show the user the read-back/i, scopes: [...DOCS, 'scripts'],
-    reason: 'H10: the dataset permission read-back is the Reply block\'s Who can do what line'},
+    reason: 'H10: the dataset permission read-back is the Who can do what line of check\'s facts'},
+  // The 2026-11-05 simplification (S): production-first text, one rule per concept, no eval-prompt echoes.
+  {pattern: /Reply block|send every line before the blank line|copy these lines exactly|anything not listed in Tested/,
+    scopes: [...AGENT_TEXT, 'monitoring'], reason: 'S1: check prints "For your reply:" facts, never a block to copy'},
+  {pattern: /\b(?:never|do not|don't) reword\b|word for word|no testing or build claims/i, scopes: AGENT_TEXT,
+    reason: 'S2: no policing of the agent\'s own words; Read first says to describe testing only from check'},
+  {pattern: /draft copy|in reasoning\b/i, scopes: AGENT_TEXT, reason: 'S2: no policing of the agent\'s thinking'},
+  {pattern: /change nothing else|only the URL|the URL alone|end to end|summary of how/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'S2: no quoted eval-prompt phrases; a prescribed reply form is one general Read first sentence'},
+  {pattern: /in the same response|AND send|leaves comments unanswered/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'S3: the order of reply and watch is stated once, in WATCH_MODE'},
+  {pattern: /do not end your turn/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'S3: it contradicts the Claude Code watch mode (reply as the last message and end the turn)'},
+  {pattern: /wrap a script in|write files with heredocs/i, scopes: AGENT_TEXT, reason: 'S4: no harness hacks in the skill'},
+  {pattern: /(?:don't|do not) open (?:the )?qa JSON|fetch the slide images/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'S4: check stops printing what it does not want read (a clean pass names no result file)'},
+  {pattern: /You\/Partner|may stay as it is|add no --visibility/, scopes: AGENT_TEXT,
+    reason: 'S5: starters keep Usage and real Gotchas; visibility is stated once, in SKILL.md Sharing'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -122,17 +139,17 @@ describe('retired skill phrasing', () => {
       'H11:': 'Verified: 390x844', 'H9: the platform loads the core runtime;': '<script src="/af/core.js"></script>',
       'H8: static': '<h1 data-af-id="title">', 'M4:': 'set SLIDE_COUNT to match', 'H13: the registry': 'call edit_artifact',
       'H13: the retired': 'pass --param x=1', 'L1:': 'onBackendChange(fn)', 'H4: step 3': 'Publish it unchanged.',
-      'H1: a second': 'another watch is already running',
+      'H1: a second': 'another watch is already running', 'S1: check prints': 'send the Reply block',
+      'S3: the order': 'reply and watch in the same response', 'S3: it contradicts': 'Do not end your turn',
+      'S4: check stops': "don't open the qa JSON", 'S5: starters': 'payers: names, never You/Partner.',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;
       expect(row, prefix).toBeDefined();
       expect(new RegExp(row.pattern.source, row.pattern.flags).test(text), prefix).toBe(true);
     }
-    // The sanctioned wordings pass: comment.mjs's own timeout sentence and steps selectors that read script-made ids.
-    expect('give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1)'
-      .replaceAll('command in timeout(1)', '')).not.toMatch(/timeout\(1\)/);
-    expect('AbortSignal.timeout(10000)').not.toMatch(RETIRED.find(row => row.allow?.startsWith('command'))!.pattern);
+    // Code that calls a timeout function is not the retired wording.
+    expect('AbortSignal.timeout(10000)').not.toMatch(RETIRED.find(row => row.reason.startsWith('H2: the one timeout'))!.pattern);
     expect('const x=1<<n;\n').not.toMatch(RETIRED.find(row => row.reason.startsWith('Principle 6: sandboxes'))!.pattern);
   });
   it('allows the old runtime name only in its isolated compatibility module, which says when to delete it', () => {
@@ -147,10 +164,10 @@ describe('retired skill phrasing', () => {
     expect(section.slice(0, section.indexOf('\n## ', 3))).toContain(WATCH_LOOP);
     expect(FILES.monitoring[0]!.text).toContain('${WATCH_LOOP}');
   });
-  it('states the reply rule once: SKILL.md says "as printed" in its one reply line', () => {
+  it('states the reply rule once, in SKILL.md Read first', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
-    expect(skill.match(/as printed/g)).toHaveLength(1);
-    expect(skill).toContain('If the user prescribed the reply (e.g. only the URL), send exactly that; otherwise send the Reply ' +
-      'block your last clean check printed, as printed, or just the link when no check printed one.');
+    expect(skill).toContain('The reply is the link plus what the user asked for; if they asked for a specific form ' +
+      '(e.g. only the link), send exactly that. Describe testing, build and permissions only from what `check` reported.');
+    expect(skill.match(/The reply is/g)).toHaveLength(1);
   });
 });

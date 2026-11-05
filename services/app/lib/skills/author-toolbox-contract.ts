@@ -18,7 +18,7 @@ export interface CommentCheckpoint {kind:'comment-checkpoint';schema:1;server:st
 /** Check diagnostics stay at the top level on success and refusal. */
 export interface AuthorCheckResult {
  smokePassed:boolean; checks:ReadonlyArray<Record<string,unknown>>; unverified:ReadonlyArray<string>; note:string;
- /** A passing hosted check's Reply block facts (toolbox-check-reply.mjs replyFacts). */
+ /** A passing hosted check's reply facts (toolbox-check-reply.mjs replyFacts). */
  reply?:{id:string;link:string;builtWith?:string;permissions:ReadonlyArray<{id:string;name:string;lines:string[]}>};
  slideLinks?:string[];
  /** Linked datasets the page never read on any viewport, load or steps (a failed check). */

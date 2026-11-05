@@ -11,5 +11,5 @@ export function monitoringGuidance(base:string,id:string,format:string):Record<s
  const origin=base.replace(/\/$/,''),url=`${origin}/a/${id}`;
  return {monitoring:{artifact_url:url,guide:`${origin}/llms/html-operations#watch-for-comments`,
   http:`${origin}/api/artifacts/${id}/annotations/changes?after=now&wait=60`,
-  instruction:`After publishing page content, reply and start the monitor in the same response; do not ask first. The monitor is one blocking request at a time to the http URL (it waits up to 60 s), run in the foreground: handle what it returns, then request again from its next_cursor. Handle existing comments and continue the task: ${WATCH_LOOP}, and end your turn; a later watch starts a new ${QUIET_MINUTES} minutes. Follow the guide for replies and checkpoints.`}};
+  instruction:`After publishing page content, send your reply, then start the monitor; do not ask first. The monitor is one blocking request at a time to the http URL (it waits up to 60 s): handle what it returns, then request again from its next_cursor. Handle existing comments first, then: ${WATCH_LOOP}, and end your turn; a later watch starts a new ${QUIET_MINUTES} minutes. The guide covers replies and checkpoints.`}};
 }

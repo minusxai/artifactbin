@@ -15,8 +15,8 @@ Examples:
 Gotchas: a rerun is safe: an existing file is kept (and listed as kept), never overwritten, and
   the datasets recorded in transactions.csv.af.json and targets.csv.af.json are reused, so
   nothing is created twice. The steps, guest, cleanup and policy files need no reading or editing;
-  neither does budget.ts. Publish defaults to unlisted; add no --visibility unless asked. A --data
-  CSV with other column names: map APP.columns to its fields (graphql.mjs schema ID lists them).
+  neither does budget.ts. A --data CSV with other column names: map APP.columns to its fields
+  (graphql.mjs schema ID lists them).
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
   rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
   Results never contain credentials.`;

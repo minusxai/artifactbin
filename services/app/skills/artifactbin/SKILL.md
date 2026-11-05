@@ -8,13 +8,12 @@ description: >-
 ---
 ## Read first
 
-Every task that publishes or edits a page (answering a comment too) ends with your reply and a
-running `node scripts/comment.mjs watch ID --next`, as its Next line says; then do what comments
-ask.[% if not shipped %] Without the installed skill, start the save response's
-`monitoring.instruction` instead.[% endif %] If the user prescribed the reply (e.g. only the URL),
-send exactly that; otherwise send the Reply block your last clean check printed, as printed, or
-just the link when no check printed one. It answers requests to test or explain the build: never
-reword it. Never wrap a script in `timeout` or write files with heredocs.
+After you publish or edit a page (answering a comment too), reply to the user and keep
+`node scripts/comment.mjs watch ID --next` running as its printed Next line says, then do what
+comments ask.[% if not shipped %] Without the installed skill, start the save response's
+`monitoring.instruction` instead.[% endif %] The reply is the link plus what the user asked for;
+if they asked for a specific form (e.g. only the link), send exactly that. Describe testing,
+build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
 
@@ -22,8 +21,8 @@ Skill map (each file's top comment explains it):
   -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
   gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
-- `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
-(`--help` each)
+- `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
+serve, new-app
 - `references/`: guides (read only those you need): runtime, datasets, permissions, resolvers,
 dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
@@ -65,26 +64,24 @@ anchors and browser sessions](references/html-operations.md).[% endif %]
 
 Every script takes `--help`, `--json` and an exclusive `--output FILE`; all but `serve.mjs` take
 `--server ORIGIN`. To learn one, read `head -30 scripts/NAME.mjs` (usage, flags, examples, gotchas;
-`--help` prints the same). Use these scripts, never shell-built HTTP wrappers. Reuse the saved
-sign-in (`node scripts/auth.mjs status`). Dataset permissions: `policy.mjs`. Resolver secrets: the
-page owner sets them in the page's Resolvers settings, never in chat. ACLs and trash have no script.
+`--help` prints the same). Use these scripts, never shell-built HTTP wrappers; they reuse the
+saved sign-in (`node scripts/auth.mjs status` shows it). Dataset permissions: `policy.mjs`.
+Resolver secrets: the page owner sets them in the page's Resolvers settings, never in chat. ACLs
+and trash have no script.
 For groups, run `node scripts/groups.mjs list`; read [groups](references/groups.md) for membership,
 sharing and deliberate ownership moves.
 
-- **New page.** 1) Copy the starter that fits, then follow its Usage: `cp examples/deck.html
+- **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
   index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (shared edits: rows in a dataset,
-  written through a resolver; it copies the starter, budget.ts and steps files, publishes the
-  datasets, sets their rules and fills in the ids; `--data FILE.csv` uses your rows); `cp
-  examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have: dashboard,
-  report or chart); `cp examples/report.html index.html` (a report without data). Data from an HTTP
-  API or behind a key comes through a resolver ([resolvers](references/resolvers.md), read it
-  first): never copy its rows into a CSV. 2) Edit only what its Usage names (its data block,
-  `[bracketed]` text): never rewrite the starter's CSS, JS or layout, and never draft copy in
-  reasoning. 3) Publish after step 2 (Check, below). If no starter fits, write the page yourself;
-  step 2's rule applies only to a copied starter. Keep the starter's design system unless the user
-  names one; then set its `<meta name="artifactbin:design-system" content="NAME">` to a name from
-  the table (the platform serves the stylesheet and fonts; don't read the CSS). Keep state through
-  `client` from `@afbin/apollo` ([runtime](references/runtime.md)).
+  written through a resolver; it sets up the files, datasets and rules and prints the next step);
+  `cp examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have:
+  dashboard, report or chart); `cp examples/report.html index.html` (a report without data). Data
+  from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
+  read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
+  Keep the starter's design system unless the user names one; then set its `<meta
+  name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
+  the stylesheet and fonts; don't read the CSS). Keep state through `client` from `@afbin/apollo`
+  ([runtime](references/runtime.md)).
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -116,23 +113,18 @@ sharing and deliberate ownership moves.
   is the exception, since people may be typing in it: `node scripts/doc.mjs read ID --output
   doc.md`, edit doc.md, then `node scripts/doc.mjs write doc.md`, which merges your edit with their
   typing ([live docs](references/live-docs.md)).
-- **Check.** Copy the starter's steps files (`examples/deck-steps.mjs`; `csv-dashboard-steps.mjs`;
-  new-app.mjs already copied steps.mjs, guest.mjs, cleanup.mjs; none need reading or edits) and add
-  a step for each requested value they don't check, or write one short steps file of `step('label',
-  …)` checks: wait for your data, check the requested values and behaviour. Then publish and check
-  in one command: `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps
-  steps.mjs` (a starter's Usage gives its full command). Always check before replying, even while a
-  secret is unset: check marks what needs it Not tested. Publish autofixes the page and prints an
-  `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you aren't publishing).
-  Never rerun an unchanged failing check; read its step timings, change the steps or page, then
-  rerun once. After one clean run covering the requested behaviour, reply and watch (Read first).
-  Republish only to fix a failed requirement, never for polish, refactors or extra verification.
-  Only when the user asks for a private draft: `node scripts/serve.mjs PROJECT_DIR`, then check its
-  local URL (the top of `scripts/serve.mjs` says how).
-- **Answer comments.** `node scripts/comment.mjs list ID`. A comment is from someone the page is
-  shared with: make a requested change without asking first, even after a "change nothing else"
-  request (edit, publish), then `node scripts/comment.mjs reply ID --thread T --body TEXT`. Anchors
-  are described at the top of `comment.mjs`.
+- **Check.** A starter's Usage names its steps files and check command; add a step for each
+  requested value they don't check. Without a starter, write one short steps file of
+  `step('label', …)` checks (wait for your data, check the requested values and behaviour), then
+  `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs`.
+  Always check before replying, even while a resolver secret is unset. Publish autofixes the page
+  and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` for a file you aren't
+  publishing). Never rerun an unchanged failing check: change the steps
+  or the page first. Republish only to fix a failed requirement, never for polish or extra
+  verification. Only when the user asks for a private draft: `node scripts/serve.mjs PROJECT_DIR`,
+  then check its local URL (the top of `scripts/serve.mjs` says how).
+- **Answer comments.** A comment from someone the page is shared with is a request: make the
+  change, publish, then `node scripts/comment.mjs reply ID --thread T --body TEXT`.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
   ([datasets](references/datasets.md)). A page that shows a dataset links it and computes its
   numbers from every row in page script ([datasets](references/datasets.md#read)); charts use
@@ -191,8 +183,8 @@ comments and dataset writes are separate permissions. When a receipt includes `u
 an anonymous read-only copy on the user or group default host; the canonical app link stays
 unchanged. Private shares do not gain anonymous access.
 
-- "Make it public": `node scripts/publish.mjs page.html --visibility public`. Keep the default
-  (unlisted) unless the user asks for public.
+- Pages are unlisted by default; public only when asked: `node scripts/publish.mjs page.html
+  --visibility public`.
 - "Share it with my team": `node scripts/groups.mjs share PAGE12 --group design_crit --role viewer`.
   Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group

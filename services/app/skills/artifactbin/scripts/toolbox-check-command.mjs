@@ -155,7 +155,7 @@ export async function checkCommand({values, positionals}, options = {}) {
     // A linked dataset the page never reads means its numbers are hand-typed: not a pass.
     const unread = unreadDatasets(html, result.checks);
     if (unread.length) Object.assign(result, {smokePassed: false, unreadDatasets: unread});
-    // A clean pass ends on the Reply block: what it states beyond the run comes from the page.
+    // A clean pass ends on the reply facts; those beyond the run come from the page.
     if (result.smokePassed) result.reply = await replyFacts(client, server, id, html);
     // A deck's slide image links for the reply.
     const count = result.checks.find(check => check?.slides?.count)?.slides.count;

@@ -85,9 +85,9 @@ describe('installed native author examples',()=>{
    expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first.baseline).toBe(first.source+'.af.json');
    // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
    expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
-   // A page publish ends on the next step: reply and start the comment watch in one response.
-   const timeout="Claude Code: start it first with the Bash tool's run_in_background, then send the reply as your final message and end your turn; you are woken when it prints. Any other harness: send the reply, then run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).";
-   const next=`Next: when the request is done, run node scripts/comment.mjs watch ${first.id} --next AND send your reply (the URL alone if that is all the user asked for); a reply without the watch leaves comments unanswered. ${timeout}`;
+   // A page publish ends on the next step: reply to the user and run the comment watch.
+   const timeout="Claude Code: start it with the Bash tool's run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.";
+   const next=`Next: when the request is done, reply to the user and run node scripts/comment.mjs watch ${first.id} --next. ${timeout}`;
    expect(first.next).toBe(next);
    const canonical=await readFile(first.source,'utf8'),baseline=JSON.parse(await readFile(first.baseline,'utf8'));expect(canonical).toContain('href="./theme.css"');expect(baseline.dependencyReceipts).toHaveLength(1);
    const nodeId=/data-af-id="([^"]+)"[^>]*>One/.exec(canonical)?.[1];expect(nodeId).toBeTruthy();
@@ -95,7 +95,7 @@ describe('installed native author examples',()=>{
    const comment=await commentCommand({sub:'add',values:{server,anchor,'body-file':bodyFile},positionals:[first.id]},options);
    const comments=await commentCommand({sub:'list',values:{server,status:'all'},positionals:[first.id]},options);expect(comments.annotations).toHaveLength(1);
    const thread=comments.annotations[0];await writeFile(bodyFile,'Checked the source');
-   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(`Next: when the request is done, run node scripts/comment.mjs watch ${first.id} --next AND send your reply (the URL alone if that is all the user asked for); a reply without the watch leaves comments unanswered. ${timeout}`);expect(comment.next).toBeUndefined();
+   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(`Next: when the request is done, reply to the user and run node scripts/comment.mjs watch ${first.id} --next. ${timeout}`);expect(comment.next).toBeUndefined();
    expect((await commentCommand({sub:'reply',values:{server,resume:replied.journal},positionals:[]},options)).thread.revision).toBe(replied.thread.revision);
    expect(comment.journal).toBeTruthy();
    await writeFile(first.source,canonical.replace('>One<','>Two<'));await writeFile(path.join(project,'theme.css'),'body{color:blue}');

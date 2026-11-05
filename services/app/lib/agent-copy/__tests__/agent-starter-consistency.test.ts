@@ -222,9 +222,9 @@ describe('shared instructions after missing credentials and before publishing cl
  * ONE WATCH MODE FOR EVERY HARNESS (H1): a blocking request, handled, then repeated, never a background job. The
  * monitor instruction and the served guide's watch section carry the same loop sentence (WATCH_LOOP) word for word.
  */
-it('teaches the monitor as one blocking request at a time, started in the reply response after publishing content', () => {
+it('teaches the monitor as one blocking request at a time, started after the reply that follows publishing content', () => {
  const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}}).monitoring;
- expect(instruction).toContain('After publishing page content, reply and start the monitor in the same response');
+ expect(instruction).toContain('After publishing page content, send your reply, then start the monitor');
  expect(instruction).toContain('do not ask first');
  expect(instruction).toContain('one blocking request at a time');
  expect(instruction).toContain('existing comments');
@@ -272,18 +272,18 @@ it('keeps sign-in conditional across root guides and discovery', () => {
 
 
 /**
- * THE WATCH CONTRACT AGENTS READ (eval traces): agents that never opened the skill skipped the watch, agents that
- * took a person's comment for a stranger's asked before acting, and a prescribed reply form ("only the URL") read as
- * "no watch". The skill's description and its watch rule say each of these in words the rendered guide keeps.
+ * THE WATCH CONTRACT AGENTS READ: after a publish the agent replies and watches, a comment from someone the page is
+ * shared with is a request, and a reply form the user asked for is kept exactly. The skill's description and its
+ * Read first say each of these in words the rendered guide keeps.
  */
 it('says in the skill description and the watch rule that the agent watches, acts on comments and keeps a prescribed reply exact', () => {
  const skill = skillTree().get('artifactbin/SKILL.md')!;
  expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'ends with your reply and a running `node scripts/comment.mjs watch ID --next`, as its Next line says; then do what comments ask. Without the installed skill, start the save response\'s `monitoring.instruction` instead.',
-  'If the user prescribed the reply (e.g. only the URL), send exactly that; otherwise send the Reply block your last clean check printed, as printed, or just the link when no check printed one. It answers requests to test or explain the build: never reword it.',
-  'A comment is from someone the page is shared with: make a requested change without asking first, even after a "change nothing else" request',
+  'After you publish or edit a page (answering a comment too), reply to the user and keep `node scripts/comment.mjs watch ID --next` running as its printed Next line says, then do what comments ask. Without the installed skill, start the save response\'s `monitoring.instruction` instead.',
+  'The reply is the link plus what the user asked for; if they asked for a specific form (e.g. only the link), send exactly that. Describe testing, build and permissions only from what `check` reported.',
+  'A comment from someone the page is shared with is a request: make the change, publish, then `node scripts/comment.mjs reply ID --thread T --body TEXT`.',
  ]) expect(text).toContain(line);
  // One watch mode for every harness: how to run it and when to stop belong to comment.mjs (rulings H1, H2).
  expect(text).not.toMatch(/run_in_background|write_stdin|timeout to 300000|until the user stops you/);

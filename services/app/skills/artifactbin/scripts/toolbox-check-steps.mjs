@@ -11,7 +11,7 @@ export async function runSteps(page, hosted, task, ready, evidence) {
   // Whether the steps ran and passed; a failure's message is in error (a bare true here once read
   // as "passed").
   evidence.steps = {ran: true, passed: false};
-  // step(label, fn) runs fn and records label as verified (the Reply block's Tested: line).
+  // step(label, fn) runs fn and records label as verified (the reply facts' Tested: line).
   const verified = (evidence.verified = []);
   // Each step's elapsed ms, kept on evidence and named in a failure, so a slow step shows itself.
   const timings = (evidence.stepTimings = []),
