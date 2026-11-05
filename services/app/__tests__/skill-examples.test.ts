@@ -86,7 +86,7 @@ describe('installed native author examples',()=>{
    // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
    expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
    // A page publish ends on the next step: reply and start the comment watch in one response.
-   const timeout="Claude Code: start it with the Bash tool's run_in_background and end your turn; you are woken when it prints. Any other harness: run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).";
+   const timeout="Claude Code: start it with the Bash tool's run_in_background and end your turn with no further message; you are woken when it prints. Any other harness: run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).";
    const next=`Next: when the request is done, send your reply (the URL as asked) as text and, in that same response, run node scripts/comment.mjs watch ${first.id} --next. ${timeout}`;
    expect(first.next).toBe(next);
    const canonical=await readFile(first.source,'utf8'),baseline=JSON.parse(await readFile(first.baseline,'utf8'));expect(canonical).toContain('href="./theme.css"');expect(baseline.dependencyReceipts).toHaveLength(1);

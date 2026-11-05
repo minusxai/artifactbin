@@ -74,8 +74,10 @@ sharing and deliberate ownership moves.
 - **New page.** 1) Copy the starter that fits, then follow its Usage: `cp examples/deck.html
   index.html` (decks); `cp examples/shared-app.html index.html && cp examples/budget.ts .` (shared
   edits: rows in a dataset, written through a resolver); `cp examples/csv-dashboard.html index.html`
-  (any page that shows a CSV or dataset: dashboard, report or chart); `cp examples/report.html
-  index.html` (a report without data). 2) Edit only what its Usage names (its data block,
+  (a page that shows a CSV or dataset you have: dashboard, report or chart); `cp
+  examples/report.html index.html` (a report without data). Data from an HTTP API or behind a key
+  comes through a resolver ([resolvers](references/resolvers.md), read it first): never copy its
+  rows into a CSV. 2) Edit only what its Usage names (its data block,
   `[bracketed]` text): never rewrite the starter's CSS, JS or layout, and never draft copy in
   reasoning. 3) Publish after step 2 (Check, below). If no starter fits, write the page yourself;
   step 2's rule applies only to a copied starter. Keep the starter's design system unless the user

@@ -88,8 +88,9 @@ export async function withWatchLock(file,run){
 /** How to run watch --next, in comment.mjs help and every printed watch line. Claude Code ends a
  * turn on a reply and wakes on a background command's output; other harnesses block on it. */
 export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_background and end "+
- 'your turn; you are woken when it prints. Any other harness: run it as a blocking command and '+
- 'give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).';
+ 'your turn with no further message; you are woken when it prints. Any other harness: run it '+
+ 'as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap '+
+ 'the command in timeout(1).';
 /** The step after publishing page content (publish.mjs, doc.mjs write) or answering a
  * comment (comment.mjs reply): the reply to the user is message text, never only tool calls. */
 export const watchNext=id=>'Next: when the request is done, send your reply (the URL as asked) '+
