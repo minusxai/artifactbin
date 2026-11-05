@@ -1,6 +1,6 @@
 /**
  * Example: check.mjs cleanup steps for examples/shared-app.html: clears the test target.
- * Usage: cp examples/shared-app-cleanup.mjs cleanup.mjs (no edits needed); pass it as
+ * Usage: node scripts/new-app.mjs copies it as cleanup.mjs (no edits needed); pass it as
  *   --cleanup-steps.
  * Gotchas: an empty target field clears the saved target, so the APP.defaultTargets show again.
  */

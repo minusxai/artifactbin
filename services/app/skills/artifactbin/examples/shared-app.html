@@ -9,15 +9,15 @@
 <link rel="af-resolver" data-af-name="budget" href="./budget.ts">
 <script type="module" id="app-config">
 // KPIs, category targets, a month trend, payers, drill-down, dark mode, a shared target editor.
-// Usage: copy it as index.html with budget.ts and shared-app-steps, -guest and -cleanup .mjs (as
-//   steps, guest, cleanup.mjs). 1) Run gen-transactions.mjs once into transactions.csv; write
-//   targets.csv as "category,amount" plus one APP.defaultTargets row (a dataset needs a row).
-//   2) Publish both (--type dataset) and put their IDs after ref:. 3) Give targets its rules:
-//   follow examples/shared-app-policy.mjs (dry run, read-back, set). 4) Edit only APP, <title>
-//   (defaultTargets: plausible monthly amounts) and budget.ts's names; then node
-//   scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
-//   --guest-steps guest.mjs --cleanup-steps cleanup.mjs. Gotchas: every link needs its own
-//   data-af-name. The comment at the top may stay as it is.
+// Usage: 1) node scripts/new-app.mjs --title "Household budget" sets it all up in one call: it
+//   copies this page as index.html with budget.ts, steps.mjs, guest.mjs and cleanup.mjs,
+//   publishes sample transactions (--data FILE.csv publishes yours) and the targets, sets their
+//   rules and fills in the ref: ids and the title. The steps, guest, cleanup and policy files need
+//   no reading or editing; nor does budget.ts. 2) Edit only APP: its [bracketed] text and
+//   defaultTargets (plausible monthly amounts). 3) node scripts/publish.mjs index.html && node
+//   scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps
+//   cleanup.mjs --output qa-1.json. Publish defaults to unlisted; add no --visibility unless asked.
+//   Gotchas: every link needs its own data-af-name. The comment at the top may stay as it is.
 // Built with: one HTML page; @afbin/apollo local state for this browser's dark mode; shared
 //   targets in a dataset, written through a budget.ts resolver that checks each value and runs
 //   as the signed-in reader; a published CSV dataset read live through its generated API.

@@ -1,7 +1,7 @@
 /**
  * Example: check.mjs steps for examples/shared-app.html (a function body that receives page).
- * Usage: cp examples/shared-app-steps.mjs steps.mjs (and the -guest and -cleanup files); no
- *   edits needed: they test the first category the page lists; node scripts/check.mjs index.html
+ * Usage: node scripts/new-app.mjs copies it as steps.mjs (and the -guest and -cleanup files);
+ *   no edits needed: they test the first category the page lists; node scripts/check.mjs index.html
  *   --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs
  * Gotchas: the wide viewport saves TEST and re-reads it after a reload (the guest reads it next;
  *   cleanup.mjs clears it, even on failure); the narrow one checks charts, the drill-down and dark

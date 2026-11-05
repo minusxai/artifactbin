@@ -1,11 +1,11 @@
 /**
  * Example: resolver for examples/shared-app.html (linked as data-af-name="budget"): validated
  *   shared monthly targets, stored as rows of the page's "targets" dataset (category, amount).
- * Next: rename the fields to your data; keep caps.query, the checks and @auth. This header may
- *   stay as it is.
+ * Next: no edits needed: node scripts/new-app.mjs copies it and makes the targets dataset
+ *   (category, amount) these fields name. This header may stay as it is.
  * Usage: publish it with the page (node scripts/publish.mjs index.html). caps.query runs as the
  *   caller, so the targets dataset's rules must let viewer and signed_in add, change and delete
- *   rows (examples/shared-app-policy.mjs writes them).
+ *   rows (new-app.mjs sets them, from examples/shared-app-policy.mjs).
  * Gotchas: there is no upsert: read the row, then update it by _id or insert one. Plain reads need
  *   no resolver (the page reads targets directly); use one for checks, derived values or external
  *   data. Sign-in state needs none either: the page reads the built-in {viewer{signedIn}};

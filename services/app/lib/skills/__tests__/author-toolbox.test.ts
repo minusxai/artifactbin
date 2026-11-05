@@ -360,9 +360,16 @@ it('quotes every user-facing command in Core flows with flags and verbs its scri
  const skill=renderSkill(skillTree().get('artifactbin/SKILL.md')!,{base:'https://example.test'});
  const flows=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
  expect(flows.length).toBeGreaterThan(500);
- // Every command (the autofix helper included) appears in the flows, each as a real invocation.
- const calls=[...flows.matchAll(/node scripts\/(\w+)\.mjs([^`&]*)[`&]/g)];
- for(const name of Object.keys(COMMANDS))expect(calls.some(call=>call[1]===name),name).toBe(true);
+ // Every command (the autofix helper included) appears in the flows, each as a real invocation;
+ // a starter's own command (registry `starter`) is quoted by that starter's Usage instead.
+ const calls=[...flows.matchAll(/node scripts\/([\w-]+)\.mjs([^`&]*)[`&]/g)];
+ const {readFileSync}=await import('node:fs');
+ for(const name of Object.keys(COMMANDS)){
+  if(calls.some(call=>call[1]===name))continue;
+  expect(COMMANDS[name].starter,name).toBeTruthy();
+  const usage=/\/\/ Usage:[\s\S]*?\/\/ Built with:/.exec(readFileSync(new URL(`../../../skills/artifactbin/${COMMANDS[name].starter}`,import.meta.url),'utf8'))?.[0]??'';
+  expect(usage,name).toContain(`node scripts/${name}.mjs --title`);
+ }
  for(const [,name,rest] of calls){
   expect(COMMANDS[name!],name).toBeDefined();
   const description=descriptionOf(name!);

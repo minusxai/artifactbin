@@ -1,7 +1,8 @@
 /**
  * Example: check.mjs guest steps for examples/shared-app.html: a second, signed-out session reads
  *   the target the signed-in steps saved, cannot save, and keeps its own light mode.
- * Usage: cp examples/shared-app-guest.mjs guest.mjs (no edits needed; TEST equals steps.mjs's).
+ * Usage: node scripts/new-app.mjs copies it as guest.mjs (no edits needed; TEST equals the steps
+ *   file's).
  * Gotchas: it proves read access for another session, not sharing between two signed-in users.
  */
 const TEST='457';
