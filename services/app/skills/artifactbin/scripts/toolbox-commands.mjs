@@ -20,7 +20,7 @@ function flag(type = 'string', multiple = false) {
 }
 
 // Per command: positional verb(s) in `sub` (flags per subcommand) or plain `flags`;
-// `listed:false` keeps a command out of the table.
+// `listed:false` keeps a command out of the table; `starter` names the starter that routes it.
 const commands = {
   auth: {sub: {
     login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {},
@@ -117,7 +117,11 @@ const commands = {
     get: {}, explain: {}, template: {'owner-column': flag()},
     set: {file: flag(), 'dry-run': flag('boolean'), 'expected-revision': flag()}
   }},
-  doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}}
+  doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}},
+  'new-app': {
+    starter: 'examples/shared-app.html',
+    flags: {title: flag(), data: flag(), dir: flag()}
+  }
 };
 export const COMMANDS = Object.freeze(commands);
 

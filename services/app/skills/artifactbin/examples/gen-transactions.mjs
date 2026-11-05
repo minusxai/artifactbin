@@ -1,9 +1,10 @@
 /**
  * Example: seeded sample-data generator for examples/shared-app.html: about 300 transactions over
  *   12 months (date, merchant, category, amount, payer) for a dataset labelled as sample.
- * Usage: cp examples/gen-transactions.mjs gen.mjs; change only names: PAYERS, and the category and
- *   merchant names in CATEGORIES (then use the same category names in APP's defaultTargets); run
- *   once: node gen.mjs > transactions.csv; publish it with --type dataset.
+ * Usage: node scripts/new-app.mjs runs it for you. Other names: cp examples/gen-transactions.mjs
+ *   gen.mjs; change only names: PAYERS, and the category and merchant names in CATEGORIES (then
+ *   use the same category names in APP's defaultTargets); run once: node gen.mjs > rows.csv; then
+ *   node scripts/new-app.mjs --title "App name" --data rows.csv.
  * Gotchas: keep the amounts, visits and seed as they are. A merchant listed alone is a monthly
  *   bill (once a month); monthly totals vary.
  */
