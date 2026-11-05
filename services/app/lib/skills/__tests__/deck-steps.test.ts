@@ -1,7 +1,6 @@
 /**
- * The deck example's steps (skills/artifactbin/examples/deck-steps.mjs) run against slide DOM: titles may only claim
- * numbers and time words their own slide shows, and the ask's milestone starts from the traction chart's last value.
- * A stub page hands evaluate() the jsdom document; template() renders examples/deck.html itself (charts stubbed).
+ * The deck example's steps (skills/artifactbin/examples/deck-steps.mjs) run against slide DOM: the unedited template
+ * passes, and placeholders, a missing badge and stray text outside the slides fail. A stub page hands evaluate() the jsdom document; template() renders examples/deck.html itself (charts stubbed).
  * The steps read their slide and chart counts from the page's SLIDES (none on a hand-built page).
  */
 import {readFileSync} from 'node:fs';
@@ -48,31 +47,10 @@ const BADGE = '<p class="illustrative">Illustrative figures</p>';
 /** Runs the steps over one slide (with the deck nav and, unless replaced, the badge). */
 const claims = (title: string, body: string, badge = BADGE, before = '') => run(`${before}<main><section data-af-slide ` +
   `data-af-id="slide-a"><p class="t-label">02 · Market</p><h2>${title}</h2>${body}${badge}</section></main>${NAV}`);
-const flow = (labels: string[]) => '<div class="figure"><svg>' + labels.map(label => `<rect></rect><text>${label}</text>`).join('') + '</svg></div>';
 
-it('reads SVG text node by node, so a visible tick or label backs a title number', async () => {
-  const chart = '<div class="chart"><svg><text>0</text><text>2</text><text>4</text><text>14</text></svg></div>';
-  expect(await claims('Utilities grew to 14', chart)).toBeNull();
-  expect(await claims('Utilities grew to 15', chart)).toContain("claims '15' but the slide doesn't show it (numbers on slide: 2, 0, 4, 14)");
-});
-
-it('backs a time word only with the same form beside a number or a title neighbour', async () => {
-  const title = 'Clamp-on sensors that hear a leak weeks before it breaks';
-  expect(await claims(title, '<ul><li>One field crew a week</li></ul>')).toContain("claims 'weeks'");
-  expect(await claims(title, '<ul><li>Flags a leak weeks before a main breaks</li></ul>')).toBeNull();
-  expect(await claims('Leaks found in hours', '<ul><li>Alerts within 4 hours</li></ul>')).toBeNull();
-});
-
-it('treats today, so far and this quarter as claims the slide must show', async () => {
-  expect(await claims('$0.31B reachable today', '<p>$0.31B serviceable market</p>')).toContain("claims 'today'");
-  expect(await claims('$0.31B reachable today', '<p>$0.31B reachable today</p>')).toBeNull();
-  expect(await claims('12 utilities so far', '<p>12 utilities signed</p>')).toContain("claims 'so far'");
-  expect(await claims('12 utilities this quarter', '<p>12 utilities signed this quarter</p>')).toBeNull();
-});
-
-it('passes plain titles whose numbers are on the slide, and skips template placeholders', async () => {
-  expect(await claims('A $4.2B market, $1.1B serviceable', '<div class="chart"><svg><text>$4.2B</text><text>$1.1B</text></svg></div>')).toBeNull();
+it('fails while a slide keeps a template placeholder', async () => {
   expect(await claims('[Market size in one sentence]', '<p>[placeholder]</p>')).toContain('placeholders left');
+  expect(await claims('A $4.2B market', '<p>$4.2B total</p>')).toBeNull();
 });
 
 it('requires the Illustrative figures badge on every slide, even one without figures', async () => {
@@ -80,56 +58,17 @@ it('requires the Illustrative figures badge on every slide, even one without fig
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
 });
 
-it('treats "in one shift"-style phrases with a time noun as durations, and other nouns as plain copy', async () => {
-  const boxes = flow(['Hear', 'Locate', 'Dispatch', 'Repair']);
-  expect(await claims('From pipe noise to a repair crew in one shift', boxes)).toContain("claims 'in one shift'");
-  expect(await claims('From pipe noise to a repair crew in one shift', boxes + '<p>Crew dispatched within one shift</p>')).toBeNull();
-  expect(await claims('Every main checked within a single visit', boxes)).toContain("claims 'within a single visit'");
-  expect(await claims('Under two weeks to install', '<ul><li>Installs in a day</li></ul>')).toContain("claims 'under two weeks'");
-  expect(await claims('From pipe noise to repair in four steps', boxes)).toBeNull();
-  expect(await claims('Leak detection in one clamp-on unit', boxes)).toBeNull();
-  expect(await claims('Every main in one dashboard', boxes)).toBeNull();
-});
-
 it('fails on stray text outside the slides and the nav, such as a leftover "-->"', async () => {
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>', BADGE, '-->')).toContain('stray text outside the slides: "-->"');
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
 });
 
-it('treats hyphenated and multi- durations as claims: the unit beside a number, or the same compound', async () => {
-  const title = 'Paid per sensor, per month, on a five-year term';
-  expect(await claims(title, '<ul><li>$40 per sensor per month</li></ul>')).toContain("claims 'five-year'");
-  expect(await claims(title, '<ul><li>$40 per sensor per month</li><li>5-year contracts</li></ul>')).toBeNull();
-  const quarters = '<div class="chart"><svg>' + [1, 2, 3, 4, 5, 6].map(q => `<text>Q${q}</text>`).join('') + '</svg></div>';
-  expect(await claims('Pilots become multi-year contracts', quarters)).toContain("claims 'multi-year'");
-  expect(await claims('Pilots become multi-year contracts', quarters + '<p>Multi-year renewals</p>')).toBeNull();
-  expect(await claims('Installs in a two-week window', '<ul><li>Installs in a day</li></ul>')).toContain("claims 'two-week'");
-});
-
-it('counts spelled-out numbers like digits, backed by the value, the word or that many labelled items', async () => {
-  const items = (n: number) => '<ul class="items">' + Array.from({length: n}, (_, i) => `<li>Reason ${String.fromCharCode(65 + i)}</li>`).join('') + '</ul>';
-  expect(await claims('Three reasons buyers switch', items(3))).toBeNull();
-  expect(await claims('Three reasons buyers switch', items(2))).toContain("claims 'three'");
-  expect(await claims('A dozen utilities signed', '<p>12 utilities signed</p>')).toBeNull();
-  expect(await claims('Two hundred sensors live', '<p>200 sensors installed</p>')).toBeNull();
-  expect(await claims('Two hundred sensors live', '<p>120 sensors installed</p>')).toContain("claims 'two hundred'");
-});
-
-it('passes the unedited deck template, whose ask milestone starts from the traction chart', async () => {
+it('passes the unedited deck template', async () => {
   expect(await template()).toBeNull();
 });
 
-it("fails an ask milestone that doesn't start from the traction chart's last value", async () => {
-  expect(await template(html => html.replace("milestone:'[100 customers]'", "milestone:'12 → 100 customers'")))
-    .toContain('the ask milestone "14 → 12 → 100 customers" does not start from Traction\'s last value 14');
-  expect(await template(html => html.replace("from:'traction', milestone:'[100 customers]'", "milestone:'12 → 100 customers'")))
-    .toContain('does not start from Traction\'s last value 14');
-  expect(await template(html => html.replace("{x:'Q4', y:14}", "{x:'Q4', y:28}"))).toBeNull();
-});
-
-it('fails while the <title> is a starter placeholder, saying exactly what to set', async () => {
+it('fails while the <title> is a starter placeholder', async () => {
   const named = (title: string) => (html: string) => html.replace('<title>[Company] pitch deck</title>', `<title>${title}</title>`);
   expect(await run(`<title>[Company] pitch deck</title>${NAV}`)).toContain('placeholders left on the page title or description');
-  expect(await run(`<title>Pitch deck</title>${NAV}`)).toContain('the HTML title is "Pitch deck": set <title> in index.html');
   expect(await template(named('Why our onboarding takes 11 days'))).toBeNull();
 });

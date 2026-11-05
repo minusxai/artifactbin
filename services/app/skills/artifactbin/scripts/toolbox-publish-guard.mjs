@@ -1,7 +1,7 @@
 /**
- * Internal: what publish settles about a page before sending it: an empty page is refused, starter
- * placeholders left in it are named by line, and `--artifact ID` without a usable companion takes
- * that page's current head as its baseline.
+ * Internal: what publish settles about a page before sending it: an empty page is refused,
+ * placeholders left from the starter it was copied from are named by line, and `--artifact ID`
+ * without a usable companion takes that page's current head as its baseline.
  * Used by: toolbox-publish.mjs, author-toolbox tests.
  */
 import {readFileSync, readdirSync} from 'node:fs';
@@ -26,19 +26,33 @@ export function refuseEmpty(source, file) {
 }
 
 let starters;
-/** The bracketed placeholder texts of the shipped starters (examples/*.html), e.g. "[Company]". */
-export function starterTexts(directory) {
+/** Each shipped starter (examples/*.html): its header line ("Example: …", which starters say to
+ * keep) and its bracketed placeholder texts, e.g. "[Company]". */
+export function starterIndex(directory) {
   if (!directory && starters) return starters;
-  const found = new Set(), from = directory ?? new URL('../examples/', import.meta.url);
+  const found = [], from = directory ?? new URL('../examples/', import.meta.url);
   try {
-    for (const name of readdirSync(from).filter(name => name.endsWith('.html')))
-      for (const [text, inner] of readFileSync(new URL(name, from), 'utf8')
+    for (const name of readdirSync(from).filter(name => name.endsWith('.html'))) {
+      const html = readFileSync(new URL(name, from), 'utf8'), texts = new Set();
+      for (const [text, inner] of html
         .matchAll(/(?<![\w)\].$])\[([^[\]\n'"`=(){};<>]{2,120})\]/g))
         if (/[A-Za-z]{2}/.test(inner) && (/^[A-Z][^.]*$/.test(inner) || /[\s@]/.test(inner)))
-          found.add(text);
+          texts.add(text);
+      found.push({header: /<!--\s*(Example:[^\n.]*)/.exec(html)?.[1] ?? null, texts});
+    }
   } catch {}
   if (!directory) starters = found;
   return found;
+}
+/** Every starter's bracketed placeholder texts. */
+export const starterTexts = directory =>
+  new Set(starterIndex(directory).flatMap(starter => [...starter.texts]));
+/** The placeholders to look for in a page: all of the starter whose header line it still carries;
+ * otherwise only multi-word ones ("[Market size in one sentence]"), never a page's "[Draft]". */
+export function pagePlaceholders(source, index = starterIndex()) {
+  const copied = index.filter(starter => starter.header && source.includes(starter.header));
+  return new Set(copied.length ? copied.flatMap(starter => [...starter.texts]) :
+    index.flatMap(starter => [...starter.texts].filter(text => /\s/.test(text))));
 }
 
 const at = (source, offset) => {
@@ -46,8 +60,8 @@ const at = (source, offset) => {
   return {line: before.split('\n').length, column: offset - before.lastIndexOf('\n')};
 };
 /** Starter placeholders still in the page, as autofix problems: a ref: link with no real ID, and
- * any starter's bracketed text. */
-export function placeholderProblems(source, texts = starterTexts()) {
+ * bracketed text from the starter it was copied from. */
+export function placeholderProblems(source, texts = pagePlaceholders(source)) {
   const problems = [];
   // A ref: in a tag the page renders; one in a comment (a starter's own usage line) is not a link.
   const code = source.replace(/<!--[\s\S]*?-->|^[ \t]*\/\/.*$/gm, m => ' '.repeat(m.length));

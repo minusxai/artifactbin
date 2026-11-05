@@ -4,13 +4,13 @@ Copies examples/shared-app.html as index.html, with budget.ts, steps.mjs, guest.
   cleanup.mjs (its steps files), into the project; writes transactions.csv (generated sample rows
   or your --data CSV) and targets.csv; publishes both as datasets; gives targets the starter's
   rules (everyone reads; viewer and signed_in write); fills the ref: ids and title into index.html.
-Usage: node scripts/new-app.mjs --title "Household budget" [--data FILE.csv] [--dir DIR]
-Flags: --title NAME the app's name, for <title> and APP.title (a bare title argument works too);
+Usage: node scripts/new-app.mjs --title NAME [--data FILE.csv] [--dir DIR]
+Flags: --title NAME the app's name, for <title> (a bare title argument works too);
   --data FILE.csv your own rows (date, merchant, category, amount, payer) instead of sample rows;
   --dir DIR the project directory (default: the current one; created when missing).
   Common: --server ORIGIN, --json, --output FILE, --help.
 Examples:
-  node scripts/new-app.mjs --title "Household budget"
+  node scripts/new-app.mjs --title "Trip budget"
   node scripts/new-app.mjs --title "Our spending" --data ~/Downloads/spending.csv
 Gotchas: a rerun is safe: an existing file is kept (and listed as kept), never overwritten, and
   the datasets recorded in transactions.csv.af.json and targets.csv.af.json are reused, so
@@ -39,8 +39,8 @@ const FILES = [['shared-app.html', 'index.html'], ['budget.ts', 'budget.ts'],
   ['shared-app-cleanup.mjs', 'cleanup.mjs']];
 const ROLES = ['date', 'merchant', 'category', 'amount', 'payer'];
 const CHECK = 'node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps ' +
-  'steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs --output qa-1.json';
-const USAGE = 'node scripts/new-app.mjs --title "App name"';
+  'steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
+const USAGE = 'node scripts/new-app.mjs --title NAME';
 
 const rowsOf = csv => csv.trim().split(/\r?\n/).length - 1;
 const resolve = (base, file) => path.resolve(base, String(file).replace(/^~(?=$|[\\/])/,
@@ -102,8 +102,7 @@ function fill(html, starter, {title, ids, data}) {
   let out = html.replaceAll('ref:DATASET_ID', 'ref:' + ids.transactions)
     .replaceAll('ref:TARGETS_ID', 'ref:' + ids.targets);
   if (placeholder) out = out.replaceAll(`<title>${placeholder}</title>`,
-    `<title>${htmlText(title)}</title>`).replaceAll(`title: '${placeholder}'`,
-    'title: ' + JSON.stringify(title).replace(/</g, '\\u003c'));
+    `<title>${htmlText(title)}</title>`);
   return data ? out.replace(/ · sample data'/, "'") : out;
 }
 

@@ -5,10 +5,10 @@ description: Resolver files for pages, caps.fetch with host-filled secrets, caps
 ## Read first: dataset or resolver?
 
 Shared rows (sign-ups, targets) live in a dataset. A page reads and writes it directly
-through the generated API under the dataset's [permissions](permissions.md); no resolver
-needed. Add a resolver for what the page cannot do itself: check or derive values before a write,
-or call an external API with a secret. A resolver is a TypeScript file published with the page and run
-on the server in a sandbox, one immutable version per change:
+through the generated API under the dataset's [permissions](permissions.md). Add a resolver for
+what the page cannot do itself: check or derive values before a write (as the shared-app
+starter's `budget.ts` does), or reach an external API or database with a secret. A resolver is a
+TypeScript file published with the page and run on the server in a sandbox:
 
 ```html
 <link rel="af-resolver" data-af-name="budget" href="./budget.ts">
@@ -119,7 +119,7 @@ per query, 20 s total, 4 MiB out; one of the 32 requests.
 BIGINT and DECIMAL are strings. Your code never sees the password; **use a read-only database
 user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
 RDS, Cloud SQL and Supabase need `ca` (the provider's CA bundle, PEM) in the connection (Resolvers → Advanced).
-IP allowlists: the owner allows `GET /api/outbound-ips` (or you do, with access to their cloud).
+IP allowlists: allow the addresses `GET /api/outbound-ips` lists.
 
 ## @auth roles
 

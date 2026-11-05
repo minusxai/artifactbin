@@ -33,7 +33,7 @@ function cssHeader(slug){
  * ${spec.name}: ${note(spec.tagline)}
 ${wrap(`${note(spec.jobs)}. Mood: ${note(spec.mood)}. Opens ${spec.color_mode}. Generated from design-systems/specs/${slug}.json.`)}
  *
-${wrap(`Use: name it once in <head>: <meta name="artifactbin:design-system" content="${slug}">. The platform serves this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing. This file is for reading: it shows the exact values the page gets.`)}
+${wrap(`Use: name it once in <head>: <meta name="artifactbin:design-system" content="${slug}">. The platform serves this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.`)}
  *
 ${wrap('Shared contract: every system defines these, so build your CSS on them with var(--name):')}
 ${wrap(shared.join(' '),'  ')}

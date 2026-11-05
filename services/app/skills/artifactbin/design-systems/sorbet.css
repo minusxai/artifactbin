@@ -4,8 +4,8 @@
  * design-systems/specs/sorbet.json.
  *
  * Use: name it once in <head>: <meta name="artifactbin:design-system" content="sorbet">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
- * This file is for reading: it shows the exact values the page gets.
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
+ * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary

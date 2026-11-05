@@ -53,7 +53,7 @@ if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_
  const sidecar=await optionalFile(file+'.af.json'),target=values.artifact?resolveTarget(
   values.artifact,server).id:null;
  // The companion is the baseline; --artifact ID replaces that page over its current head when
- // the companion is missing, broken or belongs to another page (H7).
+ // the companion is missing, broken or belongs to another page.
  if(!values.create&&sidecar)try{baseline=type==='html'?(await loadPair(file,server)).baseline:
   dataBaseline(sidecar,file,server);}catch(error){if(!target||!/baseline/.test(error.code))
   throw error;}

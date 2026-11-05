@@ -92,10 +92,6 @@ URL `click` links work; JavaScript callbacks are ignored. Default schemes are HT
 
 Only referenced registered modules enter a downloaded page. The example renders offline without a CDN. Remote images, fonts or application data still require their own admitted resources; the platform serves design-system fonts; prefer portable text labels. Library cost is paid only by pages that import it.
 
-Previously downloaded self-contained files keep their embedded code.
-
-Mermaid.js `initialize`, `run`, `render(id, source)` and `bindFunctions` are not Pele APIs. Update owned direct-library scripts to `mount(container, source)` or `render(source, options)`; do not simply change an import URL. Unsupported HTML labels, callbacks, plugins and special math/icon rendering need an explicit alternative, not a silent conversion.
-
 ## API reference
 
 - [Pele API](https://pele.run/api), [theming](https://pele.run/theming), [compatibility](https://pele.run/compatibility), [security](https://pele.run/security)

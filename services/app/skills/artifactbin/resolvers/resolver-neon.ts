@@ -1,5 +1,5 @@
 /**
- * Example resolver: a Postgres query on Neon over its HTTP SQL endpoint (no raw TCP needed).
+ * Example resolver: a Postgres query on Neon over its HTTP SQL endpoint.
  * Secrets: NEON_PASSWORD = the database role's password, set by the page owner in the page's
  *   Resolvers panel. Use a read-only role.
  * Usage: cp resolvers/resolver-neon.ts orders.ts; link it with
@@ -7,8 +7,8 @@
  *   to the Resolvers panel to set NEON_PASSWORD and press Test connection.
  * Next: set HOST, ROLE and DATABASE from the connection string (postgresql://ROLE:…@HOST/DATABASE)
  *   and SQL; rename Order's fields to the query's columns.
- * Gotchas: pass reader input as $1, $2 params, never by string concatenation. A Postgres host
- *   without an HTTP SQL endpoint is out of reach (no raw TCP): import its rows as a dataset.
+ * Gotchas: pass reader input as $1, $2 params, never by string concatenation. Any other Postgres
+ *   or MySQL host: caps.db (references/resolvers.md).
  */
 const HOST = 'ep-example-123456.us-east-2.aws.neon.tech';
 const ROLE = 'reader';

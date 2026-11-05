@@ -63,7 +63,7 @@ Use an empty `quote` for the whole node. A comment on a script-created node also
 
 Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` via the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply`, `resolve:true`, or both; a plain reply needs no `expected_revision`, resolve needs the last one (stale + reply: reply kept, `status_conflict:true`). One `{reply:"Fixed in version 2",resolve:true,expected_revision:REVISION}` request atomically replies then resolves. Quote the version checked. To edit your comment, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`.
 
-Reactions: `PUT /api/artifacts/ID/annotations/COMMENT_ID/reactions`; the top of `scripts/comment.mjs` describes them.
+Reactions: `PUT /api/artifacts/ID/annotations/COMMENT_ID/reactions`; `node scripts/comment.mjs --help` describes them.
 
 ## Watch for comments
 

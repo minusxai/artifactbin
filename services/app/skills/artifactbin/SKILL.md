@@ -8,13 +8,13 @@ description: >-
 ---
 ## Read first
 
-After you publish or edit a page (answering a comment too), reply to the user and keep
-`node scripts/comment.mjs watch ID --next` running as its printed Next line says, then do what
-comments ask.[% if not shipped %] Without the installed skill, start the save response's
-`monitoring.instruction` instead.[% endif %] The reply is the link plus what the user asked for;
-if they asked for a specific form (e.g. only the link), send exactly that; the watch still
-runs, since it is not part of the reply. Describe testing, build and permissions only from what
-`check` reported.
+[% if shipped %]After you publish or edit a page (answering a comment too), reply to the user and
+keep `node scripts/comment.mjs watch ID --next` running as its printed Next line says, then do
+what comments ask.[% else %]After you publish or edit a page (answering a comment too), reply to
+the user and start the save response's `monitoring.instruction` (with the installed skill: `node
+scripts/comment.mjs watch ID --next`, as its printed Next line says), then do what comments
+ask.[% endif %] The reply is the link plus what the user asked for, in the form they asked for.
+Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
 
@@ -26,7 +26,8 @@ Skill map (each file's top comment explains it):
 serve, new-app
 - `references/`: guides (read only those you need): runtime, datasets, permissions, resolvers,
 dataviz, diagrams, maps, groups
-- `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
+- `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
+  serves (only its header, the shared tokens, is worth reading)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
 Import `@afbin/apollo` and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`,
@@ -35,7 +36,7 @@ reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.langua
 framework compilation, injected state globals or account credentials belong in a page.
 
 Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and
-refreshes (read the top of it). Missing credentials do not mean a new account. If sign-in is
+refreshes (`--help`). Missing credentials do not mean a new account. If sign-in is
 required, reuse an email already provided; otherwise ask for it, request the emailed code and wait.
 Never invent an identity, and never search files, bundles, mailboxes or git config for credentials,
 codes or accounts: only the user supplies them.
@@ -63,25 +64,24 @@ one.[% if not shipped %] The scripts and examples below ship in the installed sk
 resources); without it, use the HTTP API: [authentication](references/http-auth.md) and [comment
 anchors and browser sessions](references/html-operations.md).[% endif %]
 
-Every script takes `--help`, `--json` and an exclusive `--output FILE`; all but `serve.mjs` take
-`--server ORIGIN`. To learn one, read `head -30 scripts/NAME.mjs` (usage, flags, examples, gotchas;
-`--help` prints the same). Use these scripts, never shell-built HTTP wrappers; they reuse the
-saved sign-in (`node scripts/auth.mjs status` shows it). Dataset permissions: `policy.mjs`.
-Resolver secrets: the page owner sets them in the page's Resolvers settings, never in chat. ACLs
-and trash have no script.
-For groups, run `node scripts/groups.mjs list`; read [groups](references/groups.md) for membership,
-sharing and deliberate ownership moves.
+Every script takes `--help` (usage, flags, examples, gotchas), `--json` and an exclusive `--output
+FILE`; all but `serve.mjs` take `--server ORIGIN`. Use these scripts, never shell-built HTTP
+wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it). Dataset
+permissions: `policy.mjs`. Resolver secrets: the page owner sets them in the page's Resolvers
+settings, never in chat. ACLs and trash have no script. Groups: `node scripts/groups.mjs list`
+([groups](references/groups.md)).
 
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
-  index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (shared edits: rows in a dataset,
-  written through a resolver; it sets up the files, datasets and rules and prints the next step);
+  index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (shared edits: everyone's
+  changes are dataset rows, which its resolver checks before writing; it sets up the files,
+  datasets and rules and prints the next step);
   `cp examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have:
   dashboard, report or chart); `cp examples/report.html index.html` (a report without data). Data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
   name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
-  the stylesheet and fonts; don't read the CSS). Keep state through `client` from `@afbin/apollo`
+  its stylesheet and fonts). Keep state through `client` from `@afbin/apollo`
   ([runtime](references/runtime.md)).
   | Name | Mood | Fits |
   |---|---|---|
@@ -106,7 +106,7 @@ sharing and deliberate ownership moves.
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
 - **Change an existing page.** A request to turn the page into a deck, dashboard, report or app is
-  a rebuild: copy that starter (New page, steps 1-2), then publish it over the page with `node
+  a rebuild: copy that starter as under New page, then publish it over the page with `node
   scripts/publish.mjs index.html --artifact ID` instead of the starter's plain publish. Any other
   change (wording, numbers, a section) is an edit: `node scripts/read.mjs ID --output page.html`,
   edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same
@@ -120,19 +120,17 @@ sharing and deliberate ownership moves.
   `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs`.
   Always check before replying, even while a resolver secret is unset. Publish autofixes the page
   and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` for a file you aren't
-  publishing). Never rerun an unchanged failing check: change the steps
-  or the page first. Republish only to fix a failed requirement, never for polish or extra
-  verification. Only when the user asks for a private draft: `node scripts/serve.mjs PROJECT_DIR`,
-  then check its local URL (the top of `scripts/serve.mjs` says how).
+  publishing). Never rerun an unchanged check that failed a step or the page:
+  change the steps or the page first. Only when the user asks for a private draft: `node
+  scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node scripts/serve.mjs --help`).
 - **Answer comments.** A comment from someone the page is shared with is a request: make the
   change without asking first, publish, then `node scripts/comment.mjs reply ID --thread T --body
   TEXT`.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
   ([datasets](references/datasets.md)). A page that shows a dataset links it (`<link
-  rel="af-dataset">`) and computes its numbers from its rows in page script, as
-  `examples/csv-dashboard.html` does; numbers typed into the HTML go stale
-  ([datasets](references/datasets.md#read)); charts use
-  Vega-Lite ([dataviz](references/dataviz.md)). For sample data copy
+  rel="af-dataset">`) and computes its numbers from its rows in page script
+  ([datasets](references/datasets.md#read)); charts use Vega-Lite
+  ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
   [permissions](references/permissions.md) (read it before modeling identity or writes). Checks,
@@ -183,9 +181,8 @@ For charts, maps and diagrams, use the direct library APIs rather than a custom 
 
 A link never carries your login: whoever opens it signs in as themselves. Group, sharing and
 ownership changes alone need no comment watch. Visibility only controls who can read; editing,
-comments and dataset writes are separate permissions. When a receipt includes `user_page_url`, it is
-an anonymous read-only copy on the user or group default host; the canonical app link stays
-unchanged. Private shares do not gain anonymous access.
+comments and dataset writes are separate permissions. A receipt's `user_page_url` is an anonymous
+read-only copy ([groups](references/groups.md#public-view-receipts)).
 
 - Pages are unlisted by default (anyone with the link can open them); make one public or private
   only when asked (`node scripts/publish.mjs page.html --visibility public`). A private page opens
@@ -197,8 +194,9 @@ unchanged. Private shares do not gain anonymous access.
 - Group administration needs the user's consent in this conversation
   ([groups](references/groups.md)).
 - "Let readers submit something": a readable page grants no writes; give the dataset rules for
-  viewer and signed_in with `policy.mjs` ([permissions](references/permissions.md)), and a resolver
-  mutation with `@auth` when writes need checks ([resolvers](references/resolvers.md)).
+  viewer and signed_in with `policy.mjs` ([permissions](references/permissions.md)). The page then
+  writes rows directly; add a resolver mutation with `@auth` only when writes need checks
+  ([resolvers](references/resolvers.md)).
 
 ## Preserve the document
 
@@ -210,16 +208,10 @@ Page scripts execute on the page's runner origin, separately from account creden
 
 ## Installed resources
 
-[Download the author skill]([[ base ]]/skills/artifactbin.zip). Use the three-line managed
-installation recipe in https://artifactbin.dev/install.sh: it keeps an immutable
-release behind `~/.agents/skills/artifactbin`, with harness symlinks to that shared path.
-Reload skills after installing or updating. Manually extracted copies still work, but must be
-reinstalled with the managed layout to enable updates. Do not save your own pages inside a release.
-The public release manifest is `[[ base ]]/skills/artifactbin/latest.json`.
-
-Commands stage updates hourly. Reread SKILL.md and reload your harness when notified.
-`node scripts/update.mjs` updates now; `--rollback` restores the prior release offline.
-`--no-update` or `ARTIFACTBIN__NO_UPDATE=1` disables updates. Manual ZIP installs update by
-reinstalling.
-
-Scripts are helpers inside this skill, not global commands.
+[% if shipped %]Commands stage updates hourly; when notified, reread SKILL.md and reload your
+harness (`node scripts/update.mjs --help`). Scripts are helpers inside this skill, not global
+commands; keep your own pages outside it.
+[% else %][Download the author skill]([[ base ]]/skills/artifactbin.zip) and install it with the
+managed recipe in https://artifactbin.dev/install.sh, which enables updates; reload skills after
+installing.
+[% endif %]

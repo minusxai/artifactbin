@@ -21,7 +21,7 @@ import {checkDigest} from './toolbox-check-digest.mjs';export {checkDigest};
 export {createJournal,journalIntent,resumeJournal} from './toolbox-journal.mjs';
 /** Sign-in as SKILL.md words it: a given email, else ask; then wait for the code. */
 const LOGIN='node scripts/auth.mjs login --email ADDRESS',SIGN_IN='Use an email the user already '+
-  'gave (otherwise ask for it), then wait for the emailed code. Never search for credentials.';
+  'gave (otherwise ask for it), then wait for the emailed code.';
 export function resolveTarget(value,selected){
  let id=value,server=selected;
 if(/^https?:/i.test(value??'')){const url=new URL(value);if(url.username||url.password||url.search||

@@ -10,8 +10,7 @@ Examples:
   node scripts/export.mjs ID --format png --slide 2 --output slide-2.png
 Gotchas: the HTML copy carries credential-free provenance (origin, page ID, saved revision) and
   opens offline; it does not overwrite or publish anything, and merely opening or editing it
-  changes nothing on the server. For deck QA the check's slide summary is enough; do not export
-  every slide to test layout.
+  changes nothing on the server.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 

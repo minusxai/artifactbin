@@ -3,13 +3,13 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="almanac">
-<title>[Household budget]</title><!-- must match APP.title, the app name -->
+<title>[App name]</title><!-- the app's name: the heading, the tab and link previews -->
 <link rel="af-dataset" data-af-name="transactions" href="ref:DATASET_ID">
 <link rel="af-dataset" data-af-name="targets" href="ref:TARGETS_ID">
 <link rel="af-resolver" data-af-name="budget" href="./budget.ts">
 <script type="module" id="app-config">
 // KPIs, category targets, a month trend, payers, drill-down, dark mode, a shared target editor.
-// Usage: node scripts/new-app.mjs --title "Household budget" sets this page up as index.html
+// Usage: node scripts/new-app.mjs --title "NAME" sets this page up as index.html
 //   with its files, datasets and rules, and prints the next step: edit only APP, then publish
 //   and check (node scripts/new-app.mjs --help).
 // Gotchas: every link needs its own data-af-name.
@@ -20,7 +20,7 @@
 window.APP = {
   dataset: 'transactions', targets: 'targets', resolver: 'budget', currency: 'USD',
   columns: {date:'date', category:'category', amount:'amount', payer:'payer', merchant:'merchant'},
-  title: '[Household budget]', kicker: '[Our money] · sample data',
+  kicker: '[Our money] · sample data',
   summary: '[What we planned against what we spent, month by month.]',
   labels: {list:'Spend vs target', trend:'Spent vs budget', payer:'Who paid what'},
   // Monthly budget per category until a shared target is saved; clearing one reverts to it.
@@ -80,7 +80,7 @@ const targetsQuery=q(`{${T}{category amount} viewer{signedIn}}`);
 const setTarget=q(`mutation S($c:String!,$a:Float!){${B}{setTarget(category:$c,amount:$a){`+
   'amount}}}'),clear=q(`mutation C($c:String!){${B}{clearTarget(category:$c)}}`);
 let rows=[],targets={},signedIn=false,state={dark:null,month:'',category:''},views={};
-document.title=APP.title;for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,
+for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,
   summary:APP.summary,'list-title':APP.labels.list,'trend-title':APP.labels.trend,
   'payer-title':APP.labels.payer}))$('#'+id).textContent=text;
 // Rows come in pages of up to 1000 (the API's cap); a short page is the last one.
@@ -183,7 +183,7 @@ new MutationObserver(()=>{if(rows.length)void drawCharts(inMonth());})
 // A shared change, or signing in or out, refreshes the numbers and Save but leaves #status alone.
 onResolverChange(names=>{if(names.includes(T)||names.includes(B))void loadTargets().then(render);});
 try{await Promise.all([loadRows(),loadTargets()]);render();
-  status.textContent=`Loaded ${rows.length} sample transactions across ${months().length} months.`;
+  status.textContent=`Loaded ${rows.length} transactions across ${months().length} months.`;
 }catch(error){status.textContent=error.message||'Could not load the data.';}
 </script>
 </body></html>

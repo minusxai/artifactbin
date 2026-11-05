@@ -4,7 +4,7 @@
  * Usage: node scripts/new-app.mjs runs it for you. Other names: cp examples/gen-transactions.mjs
  *   gen.mjs; change only names: PAYERS, and the category and merchant names in CATEGORIES (then
  *   use the same category names in APP's defaultTargets); run once: node gen.mjs > rows.csv; then
- *   node scripts/new-app.mjs --title "App name" --data rows.csv.
+ *   node scripts/new-app.mjs --title NAME --data rows.csv.
  * Gotchas: keep the amounts, visits and seed as they are. A merchant listed alone is a monthly
  *   bill (once a month); monthly totals vary.
  */
@@ -30,6 +30,5 @@ for(let m=0;m<12;m++){
   }
 }
 console.log(rows.join('\n'));
-// The exact row count (the CSV's header line is not a transaction), on stderr beside the redirect.
 console.error(`wrote ${rows.length-1} transactions (12 months, ${rows[1].slice(0,7)}..`+
-  `${rows.at(-1).slice(0,7)}); use this count, not wc -l`);
+  `${rows.at(-1).slice(0,7)})`);

@@ -56,12 +56,12 @@ it('sets up the shared app in one call: files, two datasets, the rules and the f
   const put=p.calls[3]!.body;expect(put.expectedPolicyRevision).toBe(1);
   expect(put.policy.tables[0].select_permissions.map((r:any)=>r.role)).toEqual(['viewer','signed_in','anonymous']);
   expect(put.policy.tables[0].insert_permissions.map((r:any)=>r.role)).toEqual(['viewer','signed_in']);
-  // The page links both ids, carries the title twice and no ref: placeholder or bracketed title.
+  // The page links both ids, carries the title and no ref: placeholder or bracketed title.
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
   expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('href="ref:DATA0002"');
-  expect(html).toContain('<title>Household budget</title>');expect(html).toContain('title: "Household budget"');
-  expect(html).not.toMatch(/ref:(?:DATASET|TARGETS)_ID|\[Household budget\]/);
-  expect(result.next).toBe('Next: in index.html edit only APP: its [bracketed] text and defaultTargets (plausible monthly amounts); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs --output qa-1.json');
+  expect(html).toContain('<title>Household budget</title>');
+  expect(html).not.toMatch(/ref:(?:DATASET|TARGETS)_ID|\[App name\]/);
+  expect(result.next).toBe('Next: in index.html edit only APP: its [bracketed] text and defaultTargets (plausible monthly amounts); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs');
   expect(result.note).toContain('DATA0001');
  }finally{await p.done();}
 });
@@ -103,7 +103,7 @@ it('takes your CSV by relative or absolute path and refuses one that differs fro
 it('keeps a file that already exists and says so, and asks for a title with the one command',async()=>{
  const p=await project();
  try{
-  await expect(p.run({dir:'app'})).rejects.toMatchObject({code:'missing_title',exit:2,recovery:'Run node scripts/new-app.mjs --title "App name"'});
+  await expect(p.run({dir:'app'})).rejects.toMatchObject({code:'missing_title',exit:2,recovery:'Run node scripts/new-app.mjs --title NAME'});
   expect(p.calls).toEqual([]);
   await writeFile(path.join(p.dir,'steps.mjs'),'// mine\n');
   const result=await p.run({dir:'app',title:'Budget'});
