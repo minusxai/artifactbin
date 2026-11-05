@@ -77,7 +77,7 @@ await client.mutate({mutation:gql`mutation {increment(by:1)}`});
 
 An HTML link declares one unique `data-af-name` (never `viewer`). The page version binds it to an immutable resolver version or authorized dataset. Query with `client.query`: a dataset's generated fields are top-level (`{targets{category amount}}`), a resolver's stay under its name (`{budget{total}}`). The browser never fetches a resolver’s source.
 
-Every page answers `{viewer{signedIn id name}}`, no link needed: `id` is the account ID (`principal.subject`, `X-Hasura-User-Id`), `name` the display name; signed out, `{signedIn:false,id:null,name:null}`. Sign-in/out refreshes it (`onResolverChange` names include `viewer`). Give guests read-only controls; `@auth` and dataset rules still decide.
+Every page answers `{viewer{signedIn id name canEdit}}`, no link needed: `id` is the account ID (`principal.subject`, `X-Hasura-User-Id`), `name` the display name, `canEdit` whether they may edit this page; signed out, `{signedIn:false,id:null,name:null,canEdit:false}`. Sign-in/out refreshes it (`onResolverChange` names include `viewer`). Give guests read-only controls; `@auth` and dataset rules still decide.
 
 Remote queries wait up to 3 s for the hosted parent to attach, else return offline errors without sending. Do not depend on platform-internal bridge functions.
 

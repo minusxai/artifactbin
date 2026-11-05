@@ -54,6 +54,7 @@ async function gql(world: World, door: Door, token: string, query: string): Prom
 
 const ONE = '{ staff(order_by: {name: asc}, limit: 3) { name team } }';
 const TWO = '{ staff(order_by: {name: asc}, limit: 3) { name team } staff_aggregate { aggregate { count } } }';
+const CAN = '{ staff_can { insert } staff(order_by: {name: asc}, limit: 3) { name team _can { update delete } } }';
 
 /**
  * The statements one warm list request may issue, per door and caller. Observed on this fixture before one
@@ -95,6 +96,16 @@ describe('the statement budget', () => {
       const one = await cost(door, who, ONE), two = await cost(door, who, TWO);
       console.info('[budget] dataset graphql %s door, %s: 1 root=%d statements, 2 roots=%d', door, who, one.count, two.count);
       expect(two.count, two.sql.join('\n')).toBe(one.count);
+    });
+
+    // What this viewer may change (`_can`, `<root>_can`) is decided from the authorization the read already made and
+    // in the same engine statement as the rows: asking costs no statement.
+    it.each(['owner', 'viewer'] as const)('costs the %s the same statements when it asks what it may change', async (who) => {
+      const plain = await cost(door, who, ONE), asked = await cost(door, who, CAN);
+      console.info('[budget] dataset graphql %s door, %s: list=%d statements, list with _can=%d', door, who, plain.count, asked.count);
+      expect(asked.count, asked.sql.join('\n')).toBe(plain.count);
+      const may = who === 'owner';
+      expect(asked.reply.data).toEqual({ staff_can: { insert: may }, staff: (plain.reply.data!.staff as object[]).map((row) => ({ ...row, _can: { update: may, delete: may } })) });
     });
 
     // Object keys are content hashes, so a key's row count never changes: a warm request never loads rows to count

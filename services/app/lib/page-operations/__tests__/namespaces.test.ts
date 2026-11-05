@@ -187,7 +187,18 @@ describe('built-in viewer query',()=>{
  it('answers a signed-in name as null when no lookup is wired, and is not a mutation root',async()=>{
   expect((await run({subject:'usr_1',role:'signed_in'})).data).toEqual({viewer:{signedIn:true,id:'usr_1',name:null}});
   expect((await run({subject:'usr_1',role:'owner'},undefined,'mutation { viewer { signedIn } }')).errors?.length).toBe(1);
-  expect(composePageSchema([]).sdl).toMatch(/type Viewer \{\s+signedIn: Boolean!\s+id: ID\s+name: String\s+\}/);
+  expect(composePageSchema([]).sdl).toMatch(/type Viewer \{\s+signedIn: Boolean!\s+id: ID\s+name: String\s+"[^"]+"\s+canEdit: Boolean!\s+\}/);
+ });
+ it('answers canEdit from the page edit port, asked only when selected, for every caller; false without a port',async()=>{
+  const asked:string[]=[];
+  const exec=(caller:{subject:string|null;role:DatasetRole},answer:boolean|undefined,request:string)=>executePageOperation({schema:composePageSchema([]),request:{query:request},caller:{pageId:'page1',...caller},signal,invoke:async()=>{throw Error('no resolver runs');},...(answer===undefined?{}:{canEdit:async()=>{asked.push(caller.role);return answer;}})});
+  expect((await exec({subject:'usr_1',role:'editor'},true,'{ viewer { canEdit } }')).data).toEqual({viewer:{canEdit:true}});
+  expect((await exec({subject:'usr_2',role:'signed_in'},false,'{ viewer { canEdit } }')).data).toEqual({viewer:{canEdit:false}});
+  expect((await exec({subject:null,role:'anonymous'},false,'{ viewer { signedIn canEdit } }')).data).toEqual({viewer:{signedIn:false,canEdit:false}});
+  expect((await exec({subject:'usr_1',role:'owner'},undefined,'{ viewer { canEdit } }')).data).toEqual({viewer:{canEdit:false}});
+  expect(asked).toEqual(['editor','signed_in','anonymous']);
+  expect((await exec({subject:'usr_1',role:'owner'},true,'{ viewer { id } }')).data).toEqual({viewer:{id:'usr_1'}});
+  expect(asked).toHaveLength(3);
  });
  it('refuses a link named viewer or a dataset generating the viewer root or Viewer type, so nothing can shadow it',()=>{
   expect(()=>composePageSchema([{name:'viewer',fileId:'backend1',version:'v1',typeDefs:'type Query { signedIn: Boolean }'}])).toThrow(/viewer.*reserved/);

@@ -26,7 +26,7 @@ export const DATASET_GRAPHQL_WRITE_LIMITS = {
 } as const;
 
 /** Field names the generated API owns: a column never takes one (plus anything starting `__`). */
-export const DATASET_GRAPHQL_RESERVED_FIELDS = ['_id', '_and', '_or', '_not', 'true', 'false', 'null'] as const;
+export const DATASET_GRAPHQL_RESERVED_FIELDS = ['_id', '_can', '_and', '_or', '_not', 'true', 'false', 'null'] as const;
 
 /** `extensions.code` on every error the generated API answers. */
 export type DatasetGraphqlErrorCode =

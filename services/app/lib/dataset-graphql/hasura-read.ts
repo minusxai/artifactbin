@@ -17,6 +17,7 @@ import { patternSql } from '@artifactbin/utils/dataset-policy';
 import { ID_COLUMN, quote } from './model';
 import { operatorsFor, orderable, summable, type HasuraColumn, type HasuraTableModel } from './hasura-schema';
 import type { DatasetStatement } from './types';
+import { canSelect, type CanAsked } from './can';
 
 /** A refusal the caller can fix: answered as `validation_failed`, its message free of row data. */
 export class HasuraReadError extends Error {
@@ -148,11 +149,12 @@ export interface HasuraRowsPlan { statement: DatasetStatement; window: { limit: 
 
 /**
  * A list field (or `_by_pk`, or an aggregate's `nodes`): `_id` and every visible column, under their GraphQL
- * names. The window is `limit` (default 100) cut to 1000 and the select rule's limit, from `offset`.
+ * names, and the `_can` fields `asked` decides in the same read (./can). The window is `limit` (default 100) cut
+ * to 1000 and the select rule's limit, from `offset`.
  */
-export function compileRows(t: HasuraTableModel, args: HasuraReadArgs): HasuraRowsPlan {
+export function compileRows(t: HasuraTableModel, args: HasuraReadArgs, asked: CanAsked = null): HasuraRowsPlan {
   const params: Record<string, unknown> = {};
-  const select = [`${quote(ID_COLUMN)} AS ${quote('_id')}`, ...t.columns.map((c) => `${quote(c.source)} AS ${quote(c.field)}`)];
+  const select = [`${quote(ID_COLUMN)} AS ${quote('_id')}`, ...t.columns.map((c) => `${quote(c.source)} AS ${quote(c.field)}`), ...canSelect(t, asked, params)];
   const order = [...compileOrder(t, args.order_by), `${quote(ID_COLUMN)} ASC`];
   const sql = `SELECT ${select.join(', ')} FROM ${from(t)}${filtered(t, args, params)} ORDER BY ${order.join(', ')}`;
   const limit = Math.min(nonNegative(args.limit, 'limit') ?? DATASET_GRAPHQL_READ_LIMITS.defaultLimit, DATASET_GRAPHQL_READ_LIMITS.maxLimit, t.limit ?? Number.POSITIVE_INFINITY);

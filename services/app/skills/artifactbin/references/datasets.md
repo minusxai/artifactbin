@@ -54,6 +54,8 @@ if(errors?.length)throw Error(errors[0].message);
 - `orders(where,order_by,limit,offset)`: `limit` defaults to 100, at most 1000; `_id` is always the
   last sort key, so `offset` paging is stable. Read pages until one is shorter than `limit`.
 - `orders_by_pk(_id:ID!)` returns null when the row is missing or hidden from you.
+- `orders_can{insert}` and a row's `_can{update delete}` say what you may change
+  ([permissions](permissions.md#what-this-viewer-may-change)): show only those controls.
 - `orders_aggregate{aggregate{count(columns,distinct) sum avg min max} nodes}` takes the same
   arguments; it exists only when your rule allows aggregations. For GROUP BY, joins or window
   functions, read the rows with SQL in a resolver ([`caps.sql`](resolvers.md#capssql-read-only-sql)).

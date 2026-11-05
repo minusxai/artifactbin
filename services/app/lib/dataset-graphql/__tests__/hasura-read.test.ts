@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HasuraTableModel } from '../hasura-schema';
 import { compileAggregate, compileRows, compileWhere, HasuraReadError } from '../hasura-read';
+import { withCan } from '../can';
 
 const T: HasuraTableModel = {
   root: 'orders', table: { schema: 'public', name: 'rows' }, aggregations: true,
@@ -108,5 +109,60 @@ describe('aggregates', () => {
 
   it('refuses a hidden or unknown count column', () => {
     expect(() => compileAggregate(T, {}, { kind: 'count', columns: ['salary'] })).toThrow(HasuraReadError);
+  });
+});
+
+/**
+ * WHAT THE VIEWER MAY CHANGE, decided in the row read: each asked `_can` field whose rule has a filter adds ONE
+ * boolean expression to the same statement, compiled by the write engine's compiler (utils compilePolicyPredicate)
+ * over the role view's columns and `_id`, its values bound under their own names. Nothing is added unless asked, a
+ * constant answer adds nothing, and a filter that cannot hold over the role view (a hidden column, a session value
+ * the caller lacks) answers false without SQL.
+ */
+describe('_can in the row read', () => {
+  const MINE = { filter: { Region: { _eq: 'X-Hasura-User-Id' } }, session: { 'x-hasura-user-id': 'u1' } };
+  const OWNED: HasuraTableModel = { ...T, can: { insert: true, update: MINE, delete: { filter: { _id: { _eq: 'r_1' } }, session: {} } } };
+  const BOTH = { update: true, delete: true } as const;
+
+  it('adds nothing unless asked: the statement is exactly the one without capabilities', () => {
+    const args = { where: { amount: { _gt: 1 } }, order_by: { region: 'asc' }, limit: 5 };
+    expect(compileRows(OWNED, args)).toEqual(compileRows(T, args));
+    expect(compileRows(OWNED, args, null)).toEqual(compileRows(T, args));
+    expect(compileRows(OWNED, args, { update: false, delete: false })).toEqual(compileRows(T, args));
+  });
+
+  it('one expression per asked rule field, in the same statement, values bound apart from the where', () => {
+    const plan = compileRows(OWNED, { where: { amount: { _gt: 1 } } }, BOTH);
+    expect(plan.statement).toEqual({
+      sql: 'SELECT "__af_graphql_row_id" AS "_id", "Region" AS "region", "amount" AS "amount", "paid" AS "paid", CASE WHEN (("Region" = $can_update_0)) THEN 1 ELSE 0 END AS "_can_update", CASE WHEN (("__af_graphql_row_id" = $can_delete_0)) THEN 1 ELSE 0 END AS "_can_delete" FROM "public"."rows" WHERE (("amount" > $w0)) ORDER BY "__af_graphql_row_id" ASC',
+      params: { can_update_0: 'u1', can_delete_0: 'r_1', w0: 1 },
+    });
+    expect(compileRows(OWNED, {}, { update: false, delete: true }).statement.sql).not.toContain('_can_update');
+  });
+
+  it('a constant answer adds no SQL: owner and editor (true), no usable rule (false)', () => {
+    expect(compileRows({ ...T, can: { insert: true, update: true, delete: true } }, {}, BOTH)).toEqual(compileRows(T, {}));
+    expect(compileRows({ ...T, can: { insert: false, update: false, delete: false } }, {}, BOTH)).toEqual(compileRows(T, {}));
+    expect(compileRows(T, {}, BOTH)).toEqual(compileRows(T, {}));
+  });
+
+  it('fails closed without SQL: a filter on a hidden column, or a session value the caller lacks', () => {
+    const hidden: HasuraTableModel = { ...T, columns: [T.columns[1]!], can: { insert: false, update: MINE, delete: false } };
+    expect(compileRows(hidden, {}, BOTH).statement.sql).not.toContain('CASE');
+    const signedOut: HasuraTableModel = { ...T, can: { insert: false, update: { ...MINE, session: { 'x-hasura-role': 'anonymous' } }, delete: false } };
+    expect(compileRows(signedOut, {}, BOTH).statement.sql).not.toContain('CASE');
+    expect(withCan(hidden, BOTH, [{ _id: 'r_1', amount: 1 }])).toEqual([{ _id: 'r_1', amount: 1, _can: { update: false, delete: false } }]);
+  });
+
+  it('answers each row from its expression: 1 is true, 0 and NULL false; the raw columns never leave', () => {
+    expect(withCan(OWNED, BOTH, [
+      { _id: 'r_1', region: 'u1', _can_update: 1, _can_delete: 1 },
+      { _id: 'r_2', region: 'u2', _can_update: 0, _can_delete: null },
+    ])).toEqual([
+      { _id: 'r_1', region: 'u1', _can: { update: true, delete: true } },
+      { _id: 'r_2', region: 'u2', _can: { update: false, delete: false } },
+    ]);
+    const rows = [{ _id: 'r_1' }];
+    expect(withCan(OWNED, null, rows)).toBe(rows);
   });
 });

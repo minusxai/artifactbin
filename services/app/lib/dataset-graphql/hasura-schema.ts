@@ -9,8 +9,14 @@
  * (`_inc` its numeric ones), which may include columns the role cannot select. `returning`, `insert_<root>_one`
  * and the `_by_pk` roots need the select rule, as in Hasura; `where` names `_id` and the selectable columns only.
  * A role that writes but selects nothing gets Hasura's `no_queries_available` query root.
+ *
+ * WHAT THE VIEWER MAY CHANGE (`can`): every selectable table answers `<root>_can { insert }` and each of its rows
+ * `_can { update delete }`, advisory answers a page draws its controls by (writes are judged as ever). The fields
+ * exist for every role, so a document asking them validates for every reader; a role without the rule reads false.
+ * `_can` cannot meet a column (a column field starts with a letter) and `<root>_can`/`<root>_row_can` are generated
+ * names (lib/datasets/graphql-names), so a root never meets another's.
  */
-import { DATASET_COLUMN_OPERATORS, DATASET_ID_OPERATORS, type DatasetColumnOperator, type DatasetTableName } from '@artifactbin/contracts';
+import { DATASET_COLUMN_OPERATORS, DATASET_ID_OPERATORS, type DatasetBoolExp, type DatasetColumnOperator, type DatasetTableName, type Scalar } from '@artifactbin/contracts';
 
 export type HasuraScalar = 'String' | 'Float' | 'Boolean';
 export interface HasuraColumn {
@@ -36,7 +42,17 @@ export interface HasuraTableModel {
   /** May the role select this table (default true)? Without it `columns` is empty and only `write` applies. */
   select?: boolean;
   write?: HasuraWriteModel;
+  /** What `_can` and `<root>_can` answer for this caller; absent, every answer is false. */
+  can?: HasuraCan;
 }
+/**
+ * Whether a row-addressed rule (update, delete) admits a row: for every row (owner, editor, an empty filter), for
+ * none (no usable rule), or as the rule's filter decides for that row under the caller's session.
+ */
+export type HasuraRowCan = boolean | { filter: DatasetBoolExp; session: Readonly<Record<string, Scalar>> };
+export interface HasuraCan { insert: boolean; update: HasuraRowCan; delete: HasuraRowCan }
+/** The row field `_can` (its type `<root>_row_can`) and the query root `<root>_can`. */
+export const CAN_FIELD = '_can';
 /** The columns each of the role's write rules lets it name; an absent key is a rule the role does not have. */
 export interface HasuraWriteModel {
   /** Columns an insert may name: the rule's columns less its presets. */
@@ -81,10 +97,18 @@ export const orderable = (c: HasuraColumn) => c.type === 'Float' || c.type === '
 const list = (items: string[]) => items.join(' ');
 const fieldsOf = (columns: readonly HasuraColumn[]) => list(columns.map((c) => `${c.field}: ${c.type}`));
 
+const ROW_CAN_DESCRIPTION = 'May this viewer change or delete this row (its rule exists and its filter holds)? Advisory: writes are still judged.';
+const CAN_DESCRIPTION = 'May this viewer add rows? Advisory: writes are still judged.';
+
 function tableTypes(t: HasuraTableModel): string[] {
   const r = t.root, w = writes(t);
   const out: string[] = [];
-  if (selects(t)) out.push(`type ${r} { ${list(['_id: ID!', ...t.columns.map((c) => `${c.collaborative ? `${JSON.stringify(COLLABORATIVE_DESCRIPTION)} ` : ''}${c.field}: ${c.type}`)])} }`);
+  if (t.columns.some((c) => c.field === CAN_FIELD || c.field === '_id')) throw new Error(`graphql_field_collision: a column of ${r} is named like a generated field`);
+  if (selects(t)) out.push(
+    `type ${r} { ${list(['_id: ID!', ...t.columns.map((c) => `${c.collaborative ? `${JSON.stringify(COLLABORATIVE_DESCRIPTION)} ` : ''}${c.field}: ${c.type}`), `${JSON.stringify(ROW_CAN_DESCRIPTION)} ${CAN_FIELD}: ${r}_row_can!`])} }`,
+    `type ${r}_row_can { update: Boolean! delete: Boolean! }`,
+    `type ${r}_can { insert: Boolean! }`,
+  );
   if (selects(t) || w.set || w.delete) out.push(`input ${r}_bool_exp { ${list([`_and: [${r}_bool_exp!]`, `_or: [${r}_bool_exp!]`, `_not: ${r}_bool_exp`, '_id: ID_comparison_exp', ...t.columns.map((c) => `${c.field}: ${c.type}_comparison_exp`)])} }`);
   if (selects(t)) out.push(`input ${r}_order_by { ${list(['_id: order_by', ...t.columns.map((c) => `${c.field}: order_by`)])} }`);
   out.push(...writeTypes(t));
@@ -130,6 +154,7 @@ function rootFields(t: HasuraTableModel): string[] {
     `  ${r}${args}: [${r}!]!`,
     `  ${r}_by_pk(_id: ID!): ${r}`,
     ...(t.aggregations ? [`  ${r}_aggregate${args}: ${r}_aggregate!`] : []),
+    `  ${JSON.stringify(CAN_DESCRIPTION)} ${r}_can: ${r}_can!`,
   ];
 }
 
