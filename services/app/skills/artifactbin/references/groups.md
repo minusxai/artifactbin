@@ -4,9 +4,7 @@ description: Group membership, email invitations, page sharing and explicit owne
 ---
 ## Read first
 
-Use `node scripts/groups.mjs --help`. Reuse the selected origin's saved sign-in; every command
-accepts `--server ORIGIN`, `--json` and exclusive `--output FILE`. Never overwrite an existing
-output file. Group reads accept an ID, handle or @handle. Resolve once with
+Use `node scripts/groups.mjs` (`--help`). Group reads accept an ID, handle or @handle. Resolve once with
 `GET /api/groups/GROUP`, then use the returned `group.id` for writes. Members resolve only
 within that group, never through global account search. A group link is navigation only.
 

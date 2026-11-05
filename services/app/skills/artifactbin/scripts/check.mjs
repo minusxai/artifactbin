@@ -7,7 +7,8 @@ Usage: node scripts/check.mjs ID|URL|FILE.html [--steps FILE] [--viewport WxH]..
          origins are blocked)
 A hosted check (ID, URL or FILE.html) runs in a server browser session: never install Playwright
   or Chromium; only a local serve.mjs preview needs --playwright-module. A busy or refusing
-  server browser is waited for and retried by the check itself (bounded); its result is final.
+  server browser is waited for and retried by the check itself (bounded); a browser_busy after
+  that never ran your steps: rerun the same check once your other checks finish.
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; a page with
   [data-af-slide] gets 1200x630 and 1280x800); --steps FILE an async function body receiving page
   and step (or a module whose export default takes page or {page}); wrap each check in await
@@ -41,7 +42,7 @@ Gotchas: each steps file gets 8 s per viewport, and a call without its own timeo
   (6000 for data, 5000 for a save, 2000 for a click), and avoid networkidle.
   Script-made nodes carry data-af-id, not id: select and click them with [data-af-id="…"]
   (accessible names include CSS ::before/::after text, so use a regex name with getByRole). Vega
-  bars and lines are <path>, not <rect>. Skip a no-steps smoke run. page is scoped to the page's
+  bars and lines are <path>, not <rect>. page is scoped to the page's
   own document frame (page.mainFrame() reaches the reader chrome); page.keyboard needs no click.
   innerText applies CSS text-transform and keeps newlines: collapse whitespace and match
   case-insensitively. Viewports run concurrently in fresh sessions: a step that writes runs

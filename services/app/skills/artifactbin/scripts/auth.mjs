@@ -16,17 +16,11 @@ Examples:
   node scripts/auth.mjs login --challenge HANDLE --code-file code.txt
 Gotchas: status refreshes the saved grant, so authenticated:false means log in again.
   Challenges expire after 30 minutes and are bound to the origin. Credentials live in the
-  private origin store (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh
-  are in the selected origin's /llms/http-auth guide. logout ends the saved grant on the server,
-  then removes it locally; unconfirmed revocation fails with serverRevoked:false and keeps the
-  saved grant for retry. --local only removes the saved grant and leaves the server grant active.
-  An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
-  Every other script reuses this grant and refreshes an expired access token itself (the refresh
-  token is single-use and serialized across processes, so never refresh by hand or copy the
-  store). Network errors, 429 and server errors keep the grant: retry later. Missing credentials
-  or invalid_grant, invalid_client or revoked_token mean log in again.
-  The store is a private directory (0700) and file (0600) per origin; never log tokens or put them
-  in URLs or pages.
+  private origin store (ARTIFACTBIN_HOME or ~/.artifactbin); every other script reuses and
+  refreshes them itself, so never refresh by hand or copy the store. logout ends the saved grant
+  on the server, then removes it locally; unconfirmed revocation fails with serverRevoked:false
+  and keeps the saved grant for retry. --local only removes the saved grant and leaves the server
+  grant active. An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 

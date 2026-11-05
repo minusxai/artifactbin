@@ -4,7 +4,7 @@
  * two disagreeing sentences they read first. Each concept now has one rule in one place: SKILL.md routes, script
  * --help and output own flags and next steps (check prints the facts for the reply), starter headers own their
  * usage, references teach technique. ONE table, one reason per row (its ruling): a hit says why the phrase went. The
- * scopes are SKILL.md, references, examples, component headers, script sources, the API's monitoring guidance, the
+ * scopes are SKILL.md, references, examples, component and design-system CSS headers, script sources, the API's monitoring guidance, the
  * operations registry and the page runtime. The single exception is lib/html-runtime/legacy-page-names.ts, the
  * isolated alias live pages still call. It reads files by path, so it runs in the `pr fast` guard tier
  * (scripts/ci/guard-tests.json).
@@ -15,7 +15,8 @@ import {WATCH_LOOP} from '@/lib/artifact-wire';
 
 const SKILL = new URL('../../../skills/artifactbin/', import.meta.url);
 const LIB = new URL('../../', import.meta.url);
-type Scope = 'skill' | 'references' | 'examples' | 'components' | 'scripts' | 'monitoring' | 'registry' | 'runtime';
+type Scope = 'skill' | 'references' | 'examples' | 'components' | 'scripts' | 'monitoring' | 'registry' | 'runtime' |
+  'designSystems';
 const read = (url: URL) => readFileSync(url, 'utf8');
 const dir = (name: string, pattern: RegExp) => readdirSync(new URL(name, SKILL)).filter(file => pattern.test(file)).sort()
   .map(file => ({path: `skills/artifactbin/${name}${file}`, text: read(new URL(name + file, SKILL))}));
@@ -31,6 +32,7 @@ const FILES: Record<Scope, Array<{path: string; text: string}>> = {
   scripts: dir('scripts/', /\.mjs$/),
   monitoring: [{path: 'lib/artifact-wire/monitoring-guidance.ts', text: read(new URL('artifact-wire/monitoring-guidance.ts', LIB))}],
   registry: [{path: 'lib/operations/registry.ts', text: read(new URL('operations/registry.ts', LIB))}],
+  designSystems: dir('design-systems/', /\.css$/).map(file => ({...file, text: file.text.slice(0, file.text.indexOf('*/') + 2)})),
   runtime: runtime.filter(file => file !== COMPAT)
     .map(file => ({path: `lib/html-runtime/${file}`, text: read(new URL('html-runtime/' + file, LIB))})),
 };
@@ -117,6 +119,26 @@ const RETIRED: Retired[] = [
     reason: 'S4: check stops printing what it does not want read (a clean pass names no result file)'},
   {pattern: /You\/Partner|may stay as it is|add no --visibility/, scopes: AGENT_TEXT,
     reason: 'S5: starters keep Usage and real Gotchas; visibility is stated once, in SKILL.md Sharing'},
+  // The 2026-11-05 production focus (P): no eval-shaped checks, cost steering or legacy notes in what agents read.
+  {pattern: /states only what its slide shows|ask shares (?:add up|sum)|starts from the traction chart|title claims '/,
+    scopes: [...AGENT_TEXT], reason: 'P1: deck steps check what the template does; it computes shares and the milestone'},
+  {pattern: /not wc -l|use this count/, scopes: AGENT_TEXT, reason: 'P1: the generator prints its count; no coaching'},
+  {pattern: /separate from the reply|link-only|e\.g\. only the link|watch still runs/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'P2: the reply is one plain Read first sentence; the watch order is WATCH_MODE'},
+  {pattern: /owner steps that expect a refusal/, scopes: AGENT_TEXT,
+    reason: 'P2: permissions.md states only that owners and editors always have full access'},
+  {pattern: /Republish only|never for polish|no-steps smoke|export every slide|every slide to test/i, scopes: AGENT_TEXT,
+    reason: 'P3: no cost steering; check and export help say what they do'},
+  {pattern: /Original Chart defaults|old compact default|Previously downloaded|Mermaid\.js `initialize`|KEPT FOR EXISTING/,
+    scopes: AGENT_TEXT, reason: 'P4: no legacy or migration notes in agent text (no backward-compat prose)'},
+  {pattern: /no connected databases|no raw TCP|out of reach/, scopes: AGENT_TEXT,
+    reason: 'P5: resolvers reach Postgres and MySQL with caps.db (references/resolvers.md)'},
+  {pattern: /head -30 scripts|read the top of it|New page, steps|served; skip|don't read the CSS|This file is for reading/,
+    scopes: [...AGENT_TEXT, 'designSystems'], reason: 'P6: scripts are learned with --help; design-system CSS needs no reading'},
+  {pattern: /Household budget|qa-1\.json|older starter title|\^(?:Pitch deck|Shared dashboard)\$/, scopes: AGENT_TEXT,
+    reason: 'P1: starters carry neutral placeholders and no one-prompt constants'},
+  {pattern: /\((?:rulings? )?[HMSL]\d{1,2}(?:, [HMSL]\d{1,2})*\)/, scopes: AGENT_TEXT,
+    reason: 'P6: internal ruling tags stay out of agent-readable text'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -142,6 +164,11 @@ describe('retired skill phrasing', () => {
       'H1: a second': 'another watch is already running', 'S1: check prints': 'send the Reply block',
       'S3: the order': 'reply and watch in the same response', 'S3: it contradicts': 'Do not end your turn',
       'S4: check stops': "don't open the qa JSON", 'S5: starters': 'payers: names, never You/Partner.',
+      'P1: deck steps': 'every title states only what its slide shows', 'P1: the generator': 'use this count, not wc -l',
+      'P2: the reply': '(separate from the reply, even a link-only one)', 'P2: permissions.md': 'write no owner steps that expect a refusal',
+      'P3:': 'Republish only to fix a failed requirement', 'P4:': 'Original Chart defaults: transparent',
+      'P5:': 'there are no connected databases', 'P6: scripts': 'read `head -30 scripts/NAME.mjs`',
+      'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;
@@ -166,8 +193,8 @@ describe('retired skill phrasing', () => {
   });
   it('states the reply rule once, in SKILL.md Read first', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
-    expect(skill).toContain('The reply is the link plus what the user asked for; if they asked for a specific form ' +
-      '(e.g. only the link), send exactly that; the watch still runs, since it is not part of the reply. Describe testing, build and permissions only from what `check` reported.');
+    expect(skill).toContain('The reply is the link plus what the user asked for, in the form they asked for. ' +
+      'Describe testing, build and permissions only from what `check` reported.');
     expect(skill.match(/The reply is/g)).toHaveLength(1);
   });
 });

@@ -7,7 +7,7 @@ description: Dataset permissions in Hasura's format, the fixed roles, templates 
 Every dataset has one permission document in Hasura's metadata format (version 3). It decides who
 can see, add, change and delete rows, through every door: page GraphQL, a resolver's `caps.query`
 and `caps.sql`, direct `graphql.mjs DATASET_ID`, downloads and SQL. Read it, change it and save it
-only with `node scripts/policy.mjs` (`head -30` it). Only the dataset's owner and editors can.
+only with `node scripts/policy.mjs` (`--help`). Only the dataset's owner and editors can.
 
 ## Roles
 
@@ -81,9 +81,8 @@ For something else (everyone signed in edits every row, hidden columns), edit th
    permissions or the dataset: get again, reapply, set.
 5. `node scripts/policy.mjs explain DATASET_ID` prints the read-back again later.
 
-The owner and editors always have full access, so no rule (own rows, say) can be tested signed in
-as the owner: test `anonymous` with check's `--guest-steps` (signed out) and `signed_in` with a
-second account, and write no owner steps that expect a refusal.
+The owner and editors always have full access, so a rule is tested as another role: `anonymous`
+with check's `--guest-steps` (signed out), `signed_in` with a second account.
 
 Read the warnings too: anonymous can write; a rule uses `X-Hasura-Page-Id` (direct calls are
 denied); an update without `check` lets rows leave the filter; a private dataset never applies

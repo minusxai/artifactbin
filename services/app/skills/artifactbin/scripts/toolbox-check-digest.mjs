@@ -77,8 +77,8 @@ export function checkDigest(envelope,file){
  }
  // A linked dataset no viewport read: the page shows typed-in numbers, not the rows.
  for(const {name} of envelope.unreadDatasets??[])lines.push(`  page links dataset ${clip(name,60)
-  } but never reads it on load or in your steps: compute its numbers from every row in page `+
-  'script with client (start from examples/csv-dashboard.html)');
+  } but never reads it on load or in your steps: compute its numbers from its rows in page `+
+  'script (references/datasets.md#read)');
  // Each failed GraphQL field with what the server told the owner; an unset secret is Not tested.
  for(const failure of (envelope.graphqlFailures??[]).slice(0,5))lines.push('  '+failed(failure));
  if(!(clean&&envelope.reply))for(const item of envelope.needsSecrets??[])lines.push(

@@ -48,11 +48,11 @@ Declare nominal categories, ordinal order, quantitative magnitudes and temporal 
 
 Missing is not zero. Null observations can create line gaps; absent rows cannot. Vega-Lite filtering connects valid points; choose break-path modes deliberately. Vega line marks support `defined`. Distinguish empty, loading and error states.
 
-Aggregate once at the stated grain. Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. The old compact default `.3~s` is useful for large numbers; offer exact values too.
+Aggregate once at the stated grain. Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. `.3~s` compacts large numbers; offer exact values too.
 
 Choose explicit timestamp offsets and reporting timezone before grouping. Vega-Lite time units default to local time; UTC units use the `utc` prefix. UTC scales govern positioning, not arbitrary timezone conversion. Precompute reporting-zone buckets when needed; preserve date-only calendar semantics.
 
-Original Chart defaults: transparent surface, `.3~s` numbers, 11px axis labels, 12px normal-weight axis titles, dashed `[3,3]` grids, top legend, line width 2 with filled size-25 points and bar end-radius 2. Apply these explicitly through Vega-Lite `config`; native Vega uses parser config/mark encodings. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
+Set chart styling explicitly through Vega-Lite `config`; native Vega uses parser config/mark encodings. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
 
 Chart token resolution and legend wrapping are **not automatic**. Resolve font/colors from the chart's design-system scope; pass concrete sRGB colors, since CSS-variable/OKLCH strings can fail in expressions. Observe the host’s theme scope (`data-af-dark`, `data-af-design-system`, class/style changes on ancestors); rebuild configuration when resolved tokens change, and disconnect the observer on teardown. Check text, grids, ramps and explicit colors in both modes.
 
@@ -66,7 +66,7 @@ Tooltips list fields by `title`: name each for readers, never raw columns (`{"fi
 
 ## Data and lifetime
 
-Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read shared facts with `client.query` under linked `data-af-name`. Discover dataset IDs; collect all pages at one revision or use supported server aggregates. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `watchQuery` can render linked dataset data directly and refreshes it on invalidation; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
+Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read rows as [datasets](datasets.md#read) says, under the link's `data-af-name`. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `watchQuery` can render linked dataset data directly and refreshes it on invalidation; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
 
 Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, unsubscribe client listeners and remove listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
 

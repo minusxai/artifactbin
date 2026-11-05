@@ -15,9 +15,8 @@ with a durable `Idempotency-Key` and an origin-bound bearer, never from page HTM
 
 These are sample figures. A dataset needs at least one data row. New datasets are readable by
 anyone who can open them; only the owner and editors change rows. To let readers add or edit rows,
-set rules: [permissions](permissions.md). A dataset is stored CSV/JSON rows; there are no connected
-databases. Reach your own Postgres from a resolver with `caps.fetch` ([resolvers](resolvers.md):
-`resolver-neon.ts`, `resolver-supabase.ts`).
+set rules: [permissions](permissions.md). To read your own Postgres or MySQL database, use a
+resolver ([`caps.db`](resolvers.md#capsdb-your-own-database)).
 
 ```html
 <link rel="af-dataset" data-af-name="orders" href="ref:DATASET_ID">
@@ -61,7 +60,8 @@ if(errors?.length)throw Error(errors[0].message);
 - `where`: `_and _or _not`; per column `_eq _neq _gt _gte _lt _lte _in _nin _is_null`, plus
   `_like _ilike _nlike _nilike` on strings. `order_by`: `asc desc` and their `_nulls_first`/`_last`.
 
-Totals and charts come from every row: read all pages first, or use `orders_aggregate`.
+Every number a page shows comes from the rows, read in page script: typed-in numbers go stale.
+Totals and charts need every row: read all pages first, or use `orders_aggregate`.
 
 ## Write
 
