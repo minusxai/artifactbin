@@ -48,7 +48,7 @@ it('read saves typing first, then writes the Markdown and its baseline; write se
   await writeFile(file, '# Plan\n\nShip Friday.\n');
   seen = [];
   const written = await run('write', [file]);
-  expect(written).toMatchObject({id: 'PAGE12', regionId: 'body', version: 5, next: expect.stringContaining('run node scripts/comment.mjs watch PAGE12 --next AND send your reply')});
+  expect(written).toMatchObject({id: 'PAGE12', regionId: 'body', version: 5, next: expect.stringContaining('reply to the user and run node scripts/comment.mjs watch PAGE12 --next.')});
   expect(seen).toHaveLength(1);
   expect(seen[0]).toMatchObject({method: 'PUT', path: '/api/artifacts/PAGE12/regions/body', body: {markdown: '# Plan\n\nShip Friday.\n', base_version: 4}, key: expect.stringMatching(/^[A-Za-z0-9_-]{16,128}$/)});
   expect(await readFile(file, 'utf8')).toBe('# Plan\n\nShip Friday.\n\nTyped by Ada.\n');

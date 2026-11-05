@@ -16,16 +16,14 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   --request FILE (exclusive saved journal) and --resume FILE (replay it exactly; nothing else may
   change). list --status defaults to open; --limit 1-100 (default 20); watch --wait SECONDS
   (default 240). Common: --server, --json, --help.
-Watch --next: Claude Code: start it first with the Bash tool's run_in_background, then send the
-  reply as your final message and end your turn; you are woken when it prints. Any other harness:
-  send the reply, then run it as a blocking command and give your shell tool a timeout of at least
-  300000 ms; never wrap the command in timeout(1). It prints the next comments from someone else
-  (one JSON line each; a first call also prints threads still waiting for your answer) and exits 0:
-  handle what it printed, then start it again the same way. After 4 minutes it prints "no new
-  comments yet: start the same watch --next command again now, the same way; do not end your
-  turn".
-  After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for 15
-  minutes: stop watching and end your turn": then end your turn; a later --next starts a new 15
+Watch --next: Claude Code: start it with the Bash tool's run_in_background first, then send your
+  reply as your last message and end your turn; you are woken when it prints. Other harnesses:
+  send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.
+  It prints the next comments from someone else (one JSON line each; a first call also prints
+  threads still waiting for your answer) and exits 0: handle what it printed, then start it again
+  the same way. After 4 minutes it prints "no new comments yet: run the same watch --next command
+  again". After 15 minutes with no comment, reply or publish from anyone it prints "no new
+  comments for 15 minutes: stop watching and end your turn"; a later --next starts a new 15
   minutes. A second --next on the same page takes over from the running one, which stops. It
   resumes from watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or
   ~/.artifactbin), or from the --output LOG --append / --cursor you pass.

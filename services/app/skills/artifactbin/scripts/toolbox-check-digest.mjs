@@ -1,6 +1,6 @@
 /**
  * Internal: the short text digest check.mjs always prints (--output also saves the full JSON),
- * ending on a clean pass with the Reply block and the watch line.
+ * ending on a clean pass with the facts for the reply and the watch line.
  * Used by: toolbox-client.mjs (runTool; re-exported as checkDigest), author-toolbox.test.ts.
  */
 import {replyNext} from './toolbox-watch-state.mjs';
@@ -21,8 +21,12 @@ export function checkDigest(envelope,file){
    `  ${autofix.file??'page'}:${problem.line}:${problem.column} ${problem.message}`);
   if(autofix.problems.length>5)lines.push(`  … and ${autofix.problems.length-5} more`);
  }
+ // A clean pass needs nothing from the saved JSON, so only a failure names the file.
+ const clean=envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&
+  check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&
+  !check.slides?.overlapping&&!check.idStability?.unstable);
  lines.push(`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':
-  'failed'}${file?`; full result ${file}`:''}`);
+  'failed'}${file&&!clean?`; full result ${file}`:''}`);
  for(const check of envelope.checks??[]){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[
@@ -77,8 +81,9 @@ export function checkDigest(envelope,file){
   'script with client (start from examples/csv-dashboard.html)');
  // Each failed GraphQL field with what the server told the owner; an unset secret is Not tested.
  for(const failure of (envelope.graphqlFailures??[]).slice(0,5))lines.push('  '+failed(failure));
- for(const item of envelope.needsSecrets??[])lines.push('  Not tested: '+untested(item));
- // What the step labels proved, per viewport: the Tested: line of the Reply block.
+ if(!(clean&&envelope.reply))for(const item of envelope.needsSecrets??[])lines.push(
+  '  Not tested: '+untested(item));
+ // What the step labels proved, per viewport: the Tested: line of the reply facts.
  const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
  const tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
   c.verified.join('; ')}`).join(' | ');
@@ -86,19 +91,13 @@ export function checkDigest(envelope,file){
   '  unverified: '+envelope.unverified.join(', '));
  const shots=(envelope.checks??[]).map(check=>check?.screenshot?.path).filter(Boolean);
  if(shots.length)lines.push('  screenshots: '+shots.join(', '));
- // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass
- // means where they read it.
- const clean=envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&
-  check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&
-  !check.slides?.overlapping&&!check.idStability?.unstable);
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
   '  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
- else if(clean&&!envelope.reply)lines.push('  clean pass on the local preview: no Reply block;'+
-  ' a check of the published page prints it.');
- else if(clean)lines.push("  clean pass: nothing left to fix; don't open the qa JSON"+(
-  envelope.slideLinks?.length?' or fetch the slide images':'')+'.',...replyBlock(envelope,tested));
+ else if(clean&&!envelope.reply)lines.push('  clean pass on the local preview; a check of the'+
+  ' published page prints the facts for your reply.');
+ else if(clean)lines.push('  clean pass: nothing left to fix.',...replyFacts(envelope,tested));
  else if((envelope.checks??[]).length)lines.push(
-  "  fix the named slides/elements from this output; don't open qa JSON.");
+  '  fix what is named above, then run the check again.');
  return lines.join('\n')+'\n';
 }
 /** One failed GraphQL field: the owner detail, or for a guest the code and what the owner gets. */
@@ -114,18 +113,17 @@ const untested=({step,fields,secrets})=>`${step===undefined?'resolver '+fields.j
 /** A clean pass whose steps proved no labelled behaviour still proves each viewport loads. */
 const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.viewer+' ':''}${
  c.viewport.width}x${c.viewport.height}: the page loads without errors`).join(' | ');
-/** ONE block holding everything a reply states, copied as printed: the link, Built with,
- * Tested/Not tested, the slide images and who can do what; then the watch line. */
-function replyBlock({reply,slideLinks,checks,needsSecrets},tested){
+/** The facts a reply states, from the run and the page: the link, Built with, Tested, Not tested,
+ * who can do what (the server's permission read-back, verbatim) and the slide images; then the
+ * Next line. */
+function replyFacts({reply,slideLinks,checks,needsSecrets},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
- return ['Reply block (send every line before the blank line, as printed, unless the user'+
-  ' prescribed the reply):','Published, and the check below passed: '+reply.link,
-  ...(reply.permissions.length?['Who can do what (copy these lines exactly; do not reword, bold '+
-   'or merge them):',...reply.permissions.flatMap(({name,id,lines})=>
-   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),
+ const untried=[...(needsSecrets??[]).map(untested),'visual appearance',...(guest?
+  ['sharing between two signed-in users (the guest is signed out)']:[])];
+ return ['For your reply:','Link: '+reply.link,
   ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+(tested||loads(checks)),
-  'Not tested: '+[...(needsSecrets??[]).map(untested),'anything not listed in Tested:'].join(', ')+
-   ', visual appearance'+(guest?
-   ', and sharing between two signed-in users (the guest is signed out)':''),
+  'Not tested: '+untried.join('; '),
+  ...(reply.permissions.length?['Who can do what:',...reply.permissions.flatMap(({name,id,lines})=>
+   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),
   ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),'',replyNext(reply.id)];
 }

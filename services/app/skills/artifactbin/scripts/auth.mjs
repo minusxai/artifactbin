@@ -14,13 +14,11 @@ Examples:
                                                       #   in again
   node scripts/auth.mjs login --email me@example.com  # then wait for the user's emailed code
   node scripts/auth.mjs login --challenge HANDLE --code-file code.txt
-Gotchas: use an email the user gave you; never invent an identity, and never search files,
-  bundles, mailboxes or git config for credentials, codes or accounts: ask the user. status
-  refreshes the saved grant, so authenticated:false means log in again. Challenges expire after 30
-  minutes and are bound to the origin. Credentials live in the private origin store
-  (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh are in
-  the selected origin's /llms/http-auth guide. logout ends the saved grant on the server, then
-  removes it locally; unconfirmed revocation fails with serverRevoked:false and keeps the
+Gotchas: status refreshes the saved grant, so authenticated:false means log in again.
+  Challenges expire after 30 minutes and are bound to the origin. Credentials live in the
+  private origin store (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh
+  are in the selected origin's /llms/http-auth guide. logout ends the saved grant on the server,
+  then removes it locally; unconfirmed revocation fails with serverRevoked:false and keeps the
   saved grant for retry. --local only removes the saved grant and leaves the server grant active.
   An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
   Every other script reuses this grant and refreshes an expired access token itself (the refresh

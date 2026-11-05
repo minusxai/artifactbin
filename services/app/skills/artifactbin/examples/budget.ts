@@ -2,7 +2,7 @@
  * Example: resolver for examples/shared-app.html (linked as data-af-name="budget"): validated
  *   shared monthly targets, stored as rows of the page's "targets" dataset (category, amount).
  * Next: no edits needed: node scripts/new-app.mjs copies it and makes the targets dataset
- *   (category, amount) these fields name. This header may stay as it is.
+ *   (category, amount) these fields name.
  * Usage: publish it with the page (node scripts/publish.mjs index.html). caps.query runs as the
  *   caller, so the targets dataset's rules must let viewer and signed_in add, change and delete
  *   rows (new-app.mjs sets them, from examples/shared-app-policy.mjs).

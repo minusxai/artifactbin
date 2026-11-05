@@ -1,6 +1,6 @@
 /**
  * Internal: what check.mjs reads from the page itself: its source first (deck viewports, a warm
- * dataset cache), then for a clean pass the facts its Reply block states beyond the run: the page
+ * dataset cache), then for a clean pass the reply facts it states beyond the run: the page
  * link, the starter's "Built with:" comment and who can do what in each linked dataset (the
  * server's permission read-back, verbatim).
  * Used by: toolbox-check-command.mjs, toolbox-check-digest.mjs, author-toolbox tests.
@@ -54,7 +54,7 @@ export async function pageSource(client, id) {
   return html;
 }
 
-/** The facts of a clean pass's Reply block: link, Built with, and the permission read-back of
+/** The reply facts of a clean pass: link, Built with, and the permission read-back of
  * every linked dataset that has a stored policy (one you cannot read is left out). */
 export async function replyFacts(client, server, id, html) {
   const permissions = (await Promise.all(datasetLinks(html).map(async link => {

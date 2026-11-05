@@ -185,16 +185,15 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
  // Interrupted or taken over: what this call held back is printed by the next one.
  if(signal?.aborted)return {events:0,timedOut:false,stopped:false};
  const quiet=quietMs>=60000?`${Math.round(quietMs/60000)} minutes`:`${Math.round(quietMs/1000)} s`;
- const answer=`edit the page as it asks and publish, even after a "change nothing else" or `+
-  `"only the URL" request; then node scripts/comment.mjs reply ${id} --thread`;
+ const answer=`do what it asks (publish a requested change first), then node scripts/comment.mjs `+
+  `reply ${id} --thread`;
  if(unanswered)await print(`answer the comment(s) printed above first (${unanswered.join(', ')}):`+
   ` ${answer} THREAD --body TEXT; then run watch --next again`);
  else if(stopped)await print(`no new comments for ${quiet}: stop watching and end your turn; if`+
   ' the person asks you to watch again, run watch --next');
  else if(timedOut)await print(QUIET);
  // Agents re-watched before replying and missed the person's wait: print the order here.
- else if(next&&events>0)await print('next: answer each comment above now; a requested change to'+
-  ` the page is part of your task: ${answer} <annotation_id> --body TEXT. Do not end your turn `+
-  'before that reply; it prints how to watch again.'+(reacted?' '+REACTIONS:''));
+ else if(next&&events>0)await print(`next: answer each comment above: ${answer} <annotation_id> `+
+  '--body TEXT; the reply prints how to watch again.'+(reacted?' '+REACTIONS:''));
  return {events,timedOut,stopped,...(unanswered?{unanswered}:{})};
 }

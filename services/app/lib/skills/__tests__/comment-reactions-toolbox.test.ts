@@ -66,7 +66,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   // One after=now baseline, then long polls from each checkpoint; the own event is logged but not printed.
   expect(calls).toEqual([{after:'start',wait:'0'},{after:'c1',wait:'30'},{after:'c2',wait:'30'}]);
   expect(printed.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['e_theirs']);
-  expect(printed.at(-1)).toBe('next: answer each comment above now; a requested change to the page is part of your task: edit the page as it asks and publish, even after a "change nothing else" or "only the URL" request; then node scripts/comment.mjs reply PAGE12 --thread <annotation_id> --body TEXT. Do not end your turn before that reply; it prints how to watch again.');
+  expect(printed.at(-1)).toBe('next: answer each comment above: do what it asks (publish a requested change first), then node scripts/comment.mjs reply PAGE12 --thread <annotation_id> --body TEXT; the reply prints how to watch again.');
   const records=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(records.filter(r=>r.kind==='event').map(r=>r.event.event_id)).toEqual(['e_mine','e_theirs']);
   expect(records.at(-1)).toMatchObject({kind:'checkpoint',cursor:'c3'});
@@ -82,7 +82,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},{...options,fetcher:clocked,now:()=>clock});
   expect(calls.slice(before).map(c=>c.wait)).toEqual(['30','30','30','30','30','30','30','25']);
   expect(calls[before]!.after).toBe('c4');
-  expect(printed).toEqual(['no new comments yet: start the same watch --next command again now, the same way; do not end your turn']);
+  expect(printed).toEqual(['no new comments yet: run the same watch --next command again']);
   expect((await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line)).at(-1)).toMatchObject({kind:'checkpoint',cursor:'c'+n});
   expect(calls.filter(c=>c.after==='start'||c.after==='now')).toHaveLength(1);
   expect(maxInflight).toBe(1);
@@ -121,7 +121,7 @@ it('a first watch --next prints threads still waiting on an answer, from before 
  expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
  expect(afters).toEqual(['start','p1']);
  expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
- expect(delivered.at(-1)).toMatch(/^next: answer each comment above now/);
+ expect(delivered.at(-1)).toMatch(/^next: answer each comment above:/);
 });
 
 it('a first watch --next falls back to "now" on a server without history replay',async()=>{
@@ -148,7 +148,7 @@ async function quietHarness(feed:(n:number)=>any[]){
  const watch=async()=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
  return {root,server,state,watch};
 }
-const YET='no new comments yet: start the same watch --next command again now, the same way; do not end your turn';
+const YET='no new comments yet: run the same watch --next command again';
 const STOP='no new comments for 15 minutes: stop watching and end your turn; if the person asks you to watch again, run watch --next';
 it('watch --next stops itself after 15 quiet minutes, closes its window and opens a new one on the next call',async()=>{
  const {rm,readFile}=await import('node:fs/promises');
@@ -254,7 +254,7 @@ it('a second watch --next on the same log takes over: the first stops without pr
   await polling;
   const printed:any[]=[];
   expect(await watchComments(second,'PAGE12',{next:true,output,append:true,wait:'6'},{deliver:async(v:any)=>{printed.push(v);},now:()=>clock})).toMatchObject({timedOut:true});
-  expect(secondRequests.length).toBeGreaterThan(0);expect(printed).toEqual(['no new comments yet: start the same watch --next command again now, the same way; do not end your turn']);
+  expect(secondRequests.length).toBeGreaterThan(0);expect(printed).toEqual(['no new comments yet: run the same watch --next command again']);
   // The replaced watch's in-flight poll returns a comment: it prints only that it was replaced, and logs nothing.
   release();expect(await running).toEqual({events:0,timedOut:false,stopped:false,replaced:true});
   expect(firstPrinted).toEqual([REPLACED]);
@@ -308,7 +308,7 @@ it('releases the lock when a watch is interrupted or fails',async()=>{
   expect(await readdir(root)).toEqual(['feed.ndjson']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-const ANSWER=(threads:string)=>`answer the comment(s) printed above first (${threads}): edit the page as it asks and publish, even after a "change nothing else" or "only the URL" request; then node scripts/comment.mjs reply PAGE12 --thread THREAD --body TEXT; then run watch --next again`;
+const ANSWER=(threads:string)=>`answer the comment(s) printed above first (${threads}): do what it asks (publish a requested change first), then node scripts/comment.mjs reply PAGE12 --thread THREAD --body TEXT; then run watch --next again`;
 it('watch --next refuses to wait while a printed comment has no reply, and the reply clears it',async()=>{
  const {rm}=await import('node:fs/promises');
  const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'T1',author:{kind:'human',you:false},body:'Make it blue'};
@@ -317,7 +317,7 @@ it('watch --next refuses to wait while a printed comment has no reply, and the r
  const script=new Map<number,any[]>([[2,[theirs]],[4,[mine]]]);
  const {root,state,watch}=await quietHarness(n=>script.get(n)??[]);
  try{
-  expect(await watch()).toEqual(['e1',expect.stringMatching(/^next: answer each comment above now/)]);
+  expect(await watch()).toEqual(['e1',expect.stringMatching(/^next: answer each comment above:/)]);
   // Watching again before replying: one feed request without waiting, then the order to answer.
   const clock=state.clock,requests=state.n;
   expect(await watch()).toEqual([ANSWER('T1')]);
@@ -447,7 +447,7 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
  try{
   const replied=await commentCommand({sub:'reply',values:{thread:'T1',body:'Done: shorter intro.',resolve:true},positionals:['PAGE12']},options);
   expect(sent.at(-1)).toEqual({method:'POST',path:'/api/artifacts/PAGE12/annotations/T1',body:{reply:'Done: shorter intro.',resolve:true,expected_revision:7}});
-  expect(replied.next).toBe('Next: when the request is done, run node scripts/comment.mjs watch PAGE12 --next AND send your reply (the URL alone if that is all the user asked for); a reply without the watch leaves comments unanswered. Claude Code: start it first with the Bash tool\'s run_in_background, then send the reply as your final message and end your turn; you are woken when it prints. Any other harness: send the reply, then run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
+  expect(replied.next).toBe('Next: when the request is done, reply to the user and run node scripts/comment.mjs watch PAGE12 --next. Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.');
   for(const sub of ['resolve','reopen'] as const){await commentCommand({sub,values:{thread:'T1'},positionals:['PAGE12']},options);expect(sent.at(-1).body).toEqual({[sub]:true,expected_revision:7});}
   // An edit of a reply finds the thread that holds it.
   await commentCommand({sub:'edit',values:{comment:'R1',body:'Fixed typo'},positionals:['PAGE12']},options);

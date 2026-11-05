@@ -9,20 +9,14 @@
 <link rel="af-resolver" data-af-name="budget" href="./budget.ts">
 <script type="module" id="app-config">
 // KPIs, category targets, a month trend, payers, drill-down, dark mode, a shared target editor.
-// Usage: 1) node scripts/new-app.mjs --title "Household budget" sets it all up in one call: it
-//   copies this page as index.html with budget.ts, steps.mjs, guest.mjs and cleanup.mjs,
-//   publishes sample transactions (--data FILE.csv publishes yours) and the targets, sets their
-//   rules and fills in the ref: ids and the title. The steps, guest, cleanup and policy files need
-//   no reading or editing; nor does budget.ts. 2) Edit only APP: its [bracketed] text and
-//   defaultTargets (plausible monthly amounts). 3) node scripts/publish.mjs index.html && node
-//   scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps
-//   cleanup.mjs --output qa-1.json. Publish defaults to unlisted; add no --visibility unless asked.
-//   Gotchas: every link needs its own data-af-name. The comment at the top may stay as it is.
+// Usage: node scripts/new-app.mjs --title "Household budget" sets this page up as index.html
+//   with its files, datasets and rules, and prints the next step: edit only APP, then publish
+//   and check (node scripts/new-app.mjs --help).
+// Gotchas: every link needs its own data-af-name.
 // Built with: one HTML page; @afbin/apollo local state for this browser's dark mode; shared
 //   targets in a dataset, written through a budget.ts resolver that checks each value and runs
 //   as the signed-in reader; a published CSV dataset read live through its generated API.
-// The only part to edit. columns maps roles to field names (graphql.mjs schema ID lists them);
-// payers: names, never You/Partner.
+// The only part to edit. columns maps roles to field names (graphql.mjs schema ID lists them).
 window.APP = {
   dataset: 'transactions', targets: 'targets', resolver: 'budget', currency: 'USD',
   columns: {date:'date', category:'category', amount:'amount', payer:'payer', merchant:'merchant'},

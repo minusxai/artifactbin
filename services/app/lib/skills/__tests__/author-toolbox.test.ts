@@ -145,34 +145,35 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const viewport={width:390,height:844},clean={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[]};
  const passed=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:12,belowAA:0,unreadable:0,low:[]},steps:true,task:{total:42},screenshot:{path:'/tmp/390x844.png'}}],unverified:['visual appearance']},'qa.json');
- expect(passed).toMatch(/full result qa\.json/);
+ // A clean pass needs nothing from the saved JSON: only a failure names the file.
+ expect(passed).not.toContain('full result');
  expect(passed).toMatch(/390x844: no errors; fits; contrast ok; task \{"total":42\}/);
  expect(passed).toMatch(/unverified: visual appearance/);
  // The digest names the screenshots it saved (M7).
  expect(passed).toContain('  screenshots: /tmp/390x844.png');
- // A clean pass of a published page ends with the Reply block and the watch line; this envelope has no reply facts (a local preview).
- expect(passed).toContain('clean pass on the local preview: no Reply block; a check of the published page prints it.');
- expect(passed).not.toMatch(/until the user stops|Verified:|Reply block \(/);
+ // A clean pass of a published page ends with the reply facts and the watch line; this envelope has none (a local preview).
+ expect(passed).toContain('clean pass on the local preview; a check of the published page prints the facts for your reply.');
+ expect(passed).not.toMatch(/until the user stops|Verified:|For your reply:/);
  const failed=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,pageErrors:['boom'],overflow:{viewport:390,content:512,fits:false},contrast:{checked:9,belowAA:2,unreadable:1,low:[{text:'Stop the loss',ratio:1.01,need:3}]},error:'Expected 7 labels'},{error:'session closed'}]},'qa.json');
- expect(failed).toContain('check check_failed: smoke failed');
+ expect(failed).toContain('check check_failed: smoke failed; full result qa.json');
  expect(failed).toMatch(/pageErrors 1: boom; overflow 512>390; contrast 2 below AA \(1 under 2:1; 1\.01:1 "Stop the loss".*\); task error: Expected 7 labels/);
  expect(failed).toContain('  session closed');
- // A guest run is labelled; a clean deck pass lists its slide images and says not to fetch them.
+ // A guest run is labelled; a clean deck pass lists its slide images.
  const reply={id:'X',link:'https://h/a/X',builtWith:'one HTML page; Vega-Lite charts',permissions:[{id:'DATA12',name:'targets',lines:['Table public.targets','- Owner, editors: see and change everything.']}]};
  const guestDeck=checkDigest({ok:true,code:'completed',smokePassed:true,reply,slideLinks:['https://h/a/X/export?format=png&slide=1'],checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}}]},'qa.json');
- expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("  clean pass: nothing left to fix; don't open the qa JSON or fetch the slide images.\nReply block (send every line before the blank line, as printed, unless the user prescribed the reply):\nPublished, and the check below passed: https://h/a/X\n");expect(guestDeck).toContain('\nSlide images:\nhttps://h/a/X/export?format=png&slide=1\n');expect(guestDeck).not.toMatch(/curl/);
- // A passing run lists exactly the step labels it proved, per viewport, and what it did not, inside ONE Reply block (H10/H11).
+ expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("  clean pass: nothing left to fix.\nFor your reply:\nLink: https://h/a/X\n");expect(guestDeck).toContain('\nSlide images:\nhttps://h/a/X/export?format=png&slide=1\n');expect(guestDeck).not.toMatch(/curl|qa JSON/);
+ // A passing run lists exactly the step labels it proved, per viewport, and what it did not, in one facts section (H10/H11).
  const proved=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
  expect(proved).not.toContain('Verified');
- expect(proved.slice(proved.indexOf('Reply block'))).toBe(['Reply block (send every line before the blank line, as printed, unless the user prescribed the reply):','Published, and the check below passed: https://h/a/X','Who can do what (copy these lines exactly; do not reword, bold or merge them):','Table public.targets','- Owner, editors: see and change everything.','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: anything not listed in Tested:, visual appearance, and sharing between two signed-in users (the guest is signed out)','','Next: when the request is done, run node scripts/comment.mjs watch X --next AND send the Reply block above as your reply, word for word; a reply without the watch leaves comments unanswered. The block answers any request to test or describe the build, so add no testing or build claims of your own. Claude Code: start it first with the Bash tool\'s run_in_background, then send the reply as your final message and end your turn; you are woken when it prints. Any other harness: send the reply, then run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).',''].join('\n'));
+ expect(proved.slice(proved.indexOf('For your reply:'))).toBe(['For your reply:','Link: https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: visual appearance; sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','','Next: when the request is done, reply to the user (use the facts above for testing, build and permissions) and run node scripts/comment.mjs watch X --next. Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.',''].join('\n'));
  // Steps that proved no labelled behaviour still leave a true Tested: line, never an empty one.
  const bare=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true}}]},'qa.json');
  expect(bare).toContain('\nTested: 390x844: the page loads without errors\n');expect(bare).not.toMatch(/Tested: \n/);
  // Several linked datasets each name themselves before their read-back lines.
  const two=checkDigest({ok:true,smokePassed:true,reply:{...reply,permissions:[...reply.permissions,{id:'DATA34',name:'rows',lines:['Table public.rows']}]},checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,verified:['a']}]});
- expect(two).toContain('Who can do what (copy these lines exactly; do not reword, bold or merge them):\ntargets (ref:DATA12):\nTable public.targets\n- Owner, editors: see and change everything.\nrows (ref:DATA34):\nTable public.rows\nBuilt with:');expect(two).toContain('check completed: smoke passed\n');
+ expect(two).toContain('Who can do what:\ntargets (ref:DATA12):\nTable public.targets\n- Owner, editors: see and change everything.\nrows (ref:DATA34):\nTable public.rows\n\nNext:');expect(two).toContain('check completed: smoke passed\n');
  // A failed or flawed run points at the summary itself, as a pass does.
- expect(failed).toContain("fix the named slides/elements from this output; don't open qa JSON.");expect(passed).not.toContain('fix the named');
+ expect(failed).toContain('fix what is named above, then run the check again.');expect(passed).not.toContain('fix what is named');
  // An overflow names the element that sticks out.
  const wide=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,overflow:{viewport:390,content:416,fits:false,culprits:[{element:'div.table-wrap',right:416}]}}]},'qa.json');
  expect(wide).toMatch(/overflow 416>390\b.*div\.table-wrap/);
@@ -568,7 +569,7 @@ it('fails a published page that links a dataset but never reads it, and passes o
   expect(error.details.reply).toBeUndefined();
   const digest=checkDigest(toolFailure('check',error));
   expect(digest).toContain('page links dataset sales but never reads it on load or in your steps: compute its numbers from every row in page script with client (start from examples/csv-dashboard.html)');
-  expect(digest).not.toContain('Reply block');expect(digest).not.toContain('clean pass');
+  expect(digest).not.toContain('For your reply:');expect(digest).not.toContain('clean pass');
   // One viewport reading it (say a step clicked a lazy tab there) is enough.
   reads={'390':2};
   const passed=await checkCommand({values:{},positionals:['PAGE12']},{env,fetcher});
@@ -599,15 +600,15 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
  const check=(values:Record<string,unknown>)=>checkCommand({values:{steps,...values},positionals:['PAGE12']},{env,fetcher});
  const why="(needs secret WEATHER_KEY, which the owner sets in the page's Resolvers settings)";
  try{
-  // Unset: the blocked step is Not tested, the errors it caused are gone, and the pass ends on the Reply block.
+  // Unset: the blocked step is Not tested, the errors it caused are gone, and the pass ends on the reply facts.
   results={self1280:blocked,self390:blocked};
   const passed=await check({});
   expect(passed.smokePassed).toBe(true);expect(passed.needsSecrets).toEqual([{step:'Forecast shows',fields:['weather.forecast'],secrets:['WEATHER_KEY']}]);
   expect(passed.checks[0]).toMatchObject({consoleErrors:[],needsSecret:{step:'Forecast shows',secrets:['WEATHER_KEY']}});
   expect(passed.checks[0].error).toBeUndefined();expect(passed.graphqlFailures).toBeUndefined();
   const proved=checkDigest({ok:true,code:'completed',...passed});
-  expect(proved).toContain(`  Not tested: "Forecast shows" ${why}`);
-  expect(proved).toContain(`\nNot tested: "Forecast shows" ${why}, anything not listed in Tested:, visual appearance\n`);
+  expect(proved).not.toContain(`  Not tested: "Forecast shows"`);
+  expect(proved).toContain(`\nNot tested: "Forecast shows" ${why}; visual appearance\n`);
   expect(proved).toMatch(/1280x800: no errors.*steps stopped at "Forecast shows": needs secret WEATHER_KEY/);
   // The same refusal for a secret the owner did set is a failure that names the field and the detail.
   set=['WEATHER_KEY'];
@@ -615,7 +616,7 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   expect(stillSet).toMatchObject({code:'check_failed',details:{smokePassed:false}});
   const named=checkDigest(toolFailure('check',stillSet));
   expect(named).toContain('  resolver weather.forecast failed: secret_unavailable: WEATHER_KEY (owner detail)');
-  expect(named).not.toContain('Not tested');expect(named).not.toContain('Reply block');
+  expect(named).not.toContain('Not tested');expect(named).not.toContain('For your reply:');
   // Another failed field in the same viewport keeps it failing, and so does an error logged before
   // the refusal; the step is still Not tested there.
   set=[];results={self1280:{...blocked,consoleErrors:['favicon missing',failed],graphqlErrors:[{...unset,consoleErrorsBefore:1}]},
@@ -624,14 +625,14 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   expect(mixed.details.smokePassed).toBe(false);
   const both=checkDigest(toolFailure('check',mixed));
   expect(both).toContain('  resolver pipeline.addNote failed: validation_failed: field insert_deal_notes_one is not on this page (owner detail)');
-  expect(both).toContain(`  Not tested: "Forecast shows" ${why}`);expect(both).not.toContain('Reply block');
+  expect(both).toContain(`  Not tested: "Forecast shows" ${why}`);expect(both).not.toContain('For your reply:');
   expect(both).toMatch(/1280x800: consoleErrors 1: favicon missing; .*steps stopped at "Forecast shows"/);
   expect(both).toMatch(/390x844: consoleErrors 2: favicon missing; .*task error: Timeout/);
   // A field that failed for the owner fails the check even when every step passed.
   results={self1280:{...quiet,graphqlErrors:[notOnPage]},self390:quiet};
   const unnoticed=await check({}).catch((e:any)=>e);
   expect(unnoticed).toMatchObject({code:'check_failed',details:{smokePassed:false}});
-  expect(checkDigest(toolFailure('check',unnoticed))).not.toContain('Reply block');
+  expect(checkDigest(toolFailure('check',unnoticed))).not.toContain('For your reply:');
   // A guest gets no detail: a read is asked again as the owner, a write never is.
   results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',graphqlErrors:[
    {field:'weather.alerts',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{query:'query{weather{alerts}}',revision:'3'}},
@@ -693,7 +694,7 @@ it('publish refuses an empty page and starter placeholders by line, and drops ha
   const done=await publishCommand({values:{},positionals:[file]},options);
   expect(sent.at(-1).method).toBe('POST');expect(sent.at(-1).body.html).not.toContain('data-af-id="hero"');
   expect(done.autofix.routine).toContain('dropped 2 hand-written data-af-id (the platform assigns them)');
-  expect(done.next).toBe('Next: when the request is done, run node scripts/comment.mjs watch NEW123 --next AND send your reply (the URL alone if that is all the user asked for); a reply without the watch leaves comments unanswered. Claude Code: start it first with the Bash tool\'s run_in_background, then send the reply as your final message and end your turn; you are woken when it prints. Any other harness: send the reply, then run it as a blocking command and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).');
+  expect(done.next).toBe('Next: when the request is done, reply to the user and run node scripts/comment.mjs watch NEW123 --next. Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.');
   expect(JSON.parse(await readFile(file+'.af.json','utf8')).id).toBe('NEW123');
  }finally{await rm(home,{recursive:true,force:true});}
 });
