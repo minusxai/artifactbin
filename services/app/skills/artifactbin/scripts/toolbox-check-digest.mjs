@@ -118,8 +118,8 @@ const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.vie
  * Tested/Not tested, the slide images and who can do what; then the watch line. */
 function replyBlock({reply,slideLinks,checks,needsSecrets},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
- return ['Reply block (send it as printed, up to the Next: line, unless the user prescribed the'+
-  ' reply):',reply.link,
+ return ['Reply block (send every line before the blank line, as printed, unless the user'+
+  ' prescribed the reply):','Published, and the check below passed: '+reply.link,
   ...(reply.permissions.length?['Who can do what (copy these lines exactly; do not reword, bold '+
    'or merge them):',...reply.permissions.flatMap(({name,id,lines})=>
    [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),
@@ -127,5 +127,5 @@ function replyBlock({reply,slideLinks,checks,needsSecrets},tested){
   'Not tested: '+[...(needsSecrets??[]).map(untested),'anything not listed in Tested:'].join(', ')+
    ', visual appearance'+(guest?
    ', and sharing between two signed-in users (the guest is signed out)':''),
-  ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),replyNext(reply.id)];
+  ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),'',replyNext(reply.id)];
 }
