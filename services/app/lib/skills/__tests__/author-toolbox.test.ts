@@ -695,6 +695,11 @@ it('publish refuses an empty page and starter placeholders by line, and drops ha
   expect(placeholderProblems(deck).map((p:any)=>p.snippet)).not.toContain('[DATASET]');
   expect(placeholderProblems(deck).filter((p:any)=>p.snippet.startsWith('href'))).toEqual([]);
   expect(placeholderProblems('<script>\n// add <link href="ref:ID">\n</script><!-- <link href="ref:ID"> --><p>x</p>',new Set())).toEqual([]);
+  // A CSV with a header and no rows is an empty table: its columns are declared, so the server accepts it.
+  const {emptyTable}=await import('../../../skills/artifactbin/scripts/toolbox-publish-guard.mjs');
+  expect(emptyTable('.csv','deal_id,"note, text",created_by\n')).toEqual({columns:[{name:'deal_id',type:'string'},{name:'note, text',type:'string'},{name:'created_by',type:'string'}]});
+  expect(emptyTable('.csv','a,b\n1,2\n')).toEqual({});
+  expect(emptyTable('.json','[]')).toEqual({});
   // Only the starter a page was copied from (its kept header line) is matched in full: an unedited deck is refused on
   // its one-word placeholders, while a real page's own "[Draft]" or "[Company]" passes.
   expect(placeholderProblems(deck).map((p:any)=>p.snippet)).toEqual(expect.arrayContaining(['[Company]','[Product]']));
