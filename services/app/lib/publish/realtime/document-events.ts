@@ -286,8 +286,10 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
       if (closed || row.version < lastVersionSent) return;
       const frame = await frameFor(row);
       if (closed || frame.version < lastVersionSent) return;
+      // A new version starts its live revisions afresh (a version that closed regions may sum to less than before).
+      const sameVersion = frame.version === lastVersionSent;
       lastVersionSent = frame.version;
-      lastLiveSent = Math.max(lastVersionSent === frame.version ? lastLiveSent : -1, frame.live ?? 0);
+      lastLiveSent = Math.max(sameVersion ? lastLiveSent : -1, frame.live ?? 0);
       // Follow this version's data dependencies BEFORE announcing it: a
       // document that starts reading a dataset must be subscribed by the time
       // its reader can see the query, or a write landing in between reaches

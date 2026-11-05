@@ -10,7 +10,7 @@
  *  - `unsavedIds`: the ids the composition gave blocks typed since the last save. They are provisional (the next save
  *    may give them to other blocks), so they are never offered as comment anchors (lib/html-runtime assembly).
  *  - Composing is Yjs to HTML for the dirty regions only, at most FOLD_EVERY logged updates per region past its folded
- *    state (lib/region-sessions), and cached per page by its version, edit and each dirty region's sequence: readers
+ *    state (lib/region-sessions), and cached per page by its version, edit, title and each dirty region's sequence: readers
  *    following typing share one composition per live revision.
  */
 import { getDb, type Queryable } from '../platform';
@@ -37,7 +37,8 @@ const MAX_ENTRIES = 64;
 const MAX_CHARS = 16_000_000;
 const cache = new Map<string, Composed>();
 let held = 0;
-const keyOf = (row: PageRow, revision: LiveRevision) => `${row.id}\u0000${row.version}\u0000${row.edit_id}\u0000${revision.dirty.map((region) => `${region.regionId}@${region.seq}`).join(',')}`;
+/** A rename (metadata, no new version) changes whether the name follows the heading: the title is in the key. */
+const keyOf = (row: PageRow, revision: LiveRevision) => `${row.id}\u0000${row.version}\u0000${row.edit_id}\u0000${row.title ?? ''}\u0000${revision.dirty.map((region) => `${region.regionId}@${region.seq}`).join(',')}`;
 function remember(key: string, value: Composed): void {
   const previous = cache.get(key);
   if (previous) { held -= previous.source.length; cache.delete(key); }

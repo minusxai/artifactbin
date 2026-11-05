@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { createArtifact, currentPage, getArtifactById } from '@/lib/artifacts';
+import { artifactState, createArtifact, currentPage, getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { runWithRequest } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
@@ -16,7 +16,7 @@ import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { GET as apiGet } from '@/app/api/artifacts/[id]/route';
+import { GET as apiGet, PATCH as apiPatch, PUT as apiPut } from '@/app/api/artifacts/[id]/route';
 import { GET as myGet, PUT as myPut } from '@/app/api/my/artifacts/[id]/route';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { sseStream } from './sse';
@@ -116,6 +116,20 @@ describe('the current page', () => {
     expect(next.row.source).toContain('two three');
     expect(next.live).toBeGreaterThan(first.live);
   });
+  it('stops naming a renamed doc by its live heading at once (a rename is no new version)', async () => {
+    const typist = await join(owner);
+    typist.text.insert(0, 'Heading name', {});
+    await typist.push();
+    expect(await regionSessions().flush(identityForUser(owner.id, null), pageId)).toEqual({ status: 200, body: { version: 2 } });
+    // Named by its saved heading, it follows the heading as typed live.
+    typist.text.insert('Heading name'.length, ' v2', {});
+    await typist.push();
+    expect((await currentPage(await saved())).row.title).toBe('Heading name v2');
+    const state = artifactState(await saved());
+    const rename = request(`/api/artifacts/${pageId}`, { method: 'PATCH', token: ownerToken, json: { title: 'Board memo', expectedState: state } });
+    expect((await runWithRequest(rename, () => apiPatch(rename, params(pageId)))).status).toBe(200);
+    expect((await currentPage(await saved())).row.title).toBe('Board memo');
+  });
 });
 
 describe('every read path serves it', () => {
@@ -184,6 +198,24 @@ describe('every read path serves it', () => {
       expect(burst.length).toBeLessThanOrEqual(Math.ceil(within / 300) + 1);
       expect(burst.at(-1)!.data.live as number).toBe((await currentPage(await saved())).live);
       expect((await saved()).version).toBe(1);
+      // A new version starts its live revisions afresh: a whole-page write closing the region sums to less than the
+      // live text before it, and the live text typed after it still reaches the reader.
+      const before = burst.at(-1)!.data.live as number;
+      const owned = request(`/api/artifacts/${pageId}`, { token: ownerToken });
+      const head = await (await runWithRequest(owned, () => apiGet(owned, params(pageId)))).json() as { html: string; version: number; state: string };
+      const put = request(`/api/artifacts/${pageId}`, { method: 'PUT', token: ownerToken, json: { html: head.html.replace(/<article[\s\S]*<\/article>/, '<article data-af-editable="rich" data-af-id="fresh"><p>New region.</p></article>'), expectedVersion: head.version, expectedState: head.state } });
+      expect((await runWithRequest(put, () => apiPut(put, params(pageId)))).status).toBe(200);
+      let version: Record<string, unknown> | undefined;
+      for (let read = 0; read < 4 && version?.version !== 3; read++) version = (await frames.named('message', 1))[0]?.data;
+      expect(version).toMatchObject({ version: 3, live: 0 });
+      regionId = 'fresh';
+      const next = await join(editor);
+      next.text.insert(0, 'After ', {});
+      await next.push();
+      const [after] = await frames.named('message', 1);
+      expect(after!.data).toMatchObject({ version: 3 });
+      expect(after!.data.live as number).toBeGreaterThan(0);
+      expect(after!.data.live as number).toBeLessThan(before);
     } finally { frames.close(); }
   });
 });

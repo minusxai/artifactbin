@@ -255,13 +255,13 @@ const getArtifactOp: Operation = {
   name: 'get_artifact',
   title: 'Read an artifact',
   http: { method: 'GET', path: '/api/artifacts/{id}' },
-  description: 'Read native HTML source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. Annotations are returned separately from source; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are inert; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
+  description: 'Read native HTML source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. A page with editable regions reads as it is now, with people\'s unsaved typing; with edit access that typing is first saved as a version, so a write from what you read never applies it twice. Annotations are returned separately from source; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are inert; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
   input: { id: z.string() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },
   errors: [NOT_FOUND],
   async run(ctx, input) {
-    const snapshot = await readArtifactSnapshot(ctx.actor,String(input.id),ctx.base);
+    const snapshot = await readArtifactSnapshot(ctx.actor,String(input.id),ctx.base,{dryRun:ctx.request.headers.get('X-Artifactbin-Dry-Run')==='1'});
     return snapshot ? reply(snapshot) : reply({error:'not_found'},404);
   },
 };
