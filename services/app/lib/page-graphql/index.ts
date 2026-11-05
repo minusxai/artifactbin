@@ -3,7 +3,7 @@ import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
-import { getArtifactById, getArtifactHeaderById, accessMoved, readableArtifactHeader } from '@/lib/artifacts';
+import { getArtifactById, getArtifactHeaderById, accessMoved, editablePage, readableArtifactHeader } from '@/lib/artifacts';
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,createResolverSql,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
@@ -39,7 +39,10 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
  const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
  // The built-in viewer's name is the reader's own person card (never another person's, never an email).
  const viewerName=async(subject:string)=>(await people(await getDb(),[subject]))[subject]?.name??null;
- return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>linked.length?datasets():undefined,viewerName,invoke:async call=>{
+ return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>linked.length?datasets():undefined,viewerName,
+  // The live-region editor's own check (lib/region-sessions opens a region only on an `editablePage`).
+  canEdit:async(reader,id)=>!!await editablePage(await getDb(),reader,id),
+  invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   // Dataset roots never reach invoke: page operations run them through `datasets`.
   if(link?.kind!=='backend')throw Error('namespace_not_linked');

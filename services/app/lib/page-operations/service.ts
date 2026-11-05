@@ -12,6 +12,8 @@ export interface PageOperationPorts {
  datasets?(actor:AccessActor,page:HtmlPageVersion,signal?:AbortSignal):Promise<PageDatasetPort|undefined>;
  /** The built-in viewer's display name for a signed-in subject (contracts `PAGE_VIEWER_ROOT`), read only when selected. */
  viewerName?(subject:string):Promise<string|null>;
+ /** May this caller edit the page: the live-region editor's check (lib/artifacts `editablePage`), read only when `viewer { canEdit }` is selected. */
+ canEdit?(actor:AccessActor,pageId:string):Promise<boolean>;
 }
 export function createPageOperations(ports:PageOperationPorts):PageOperations<AccessActor>{
  return {
@@ -23,7 +25,7 @@ export function createPageOperations(ports:PageOperationPorts):PageOperations<Ac
   if(!role)throw Error('forbidden');
   const schema=composePageSchema(await ports.sources(actor,page,signal));
   const datasets=await ports.datasets?.(actor,page,signal);
-  return executePageOperation({schema,request,caller:{pageId:page.pageId,subject:actor.userId,role},signal,invoke:ports.invoke,...(datasets?{datasets}:{}),...(ports.viewerName?{viewerName:ports.viewerName}:{})});
+  return executePageOperation({schema,request,caller:{pageId:page.pageId,subject:actor.userId,role},signal,invoke:ports.invoke,...(datasets?{datasets}:{}),...(ports.viewerName?{viewerName:ports.viewerName}:{}),...(ports.canEdit?{canEdit:()=>ports.canEdit!(actor,page.pageId)}:{})});
  }
  };
 }

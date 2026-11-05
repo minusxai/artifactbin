@@ -3,7 +3,7 @@
  * bool_exp, order_by, select_column, aggregate fields); `_aggregate` exists only with allow_aggregations;
  * `_id: ID!` is the row identity. The SDL is valid GraphQL; without write rules it has a query root only.
  */
-import { buildSchema } from 'graphql';
+import { buildSchema, type GraphQLObjectType } from 'graphql';
 import { describe, expect, it } from 'vitest';
 import { hasuraSdl, type HasuraColumn, type HasuraTableModel } from '../hasura-schema';
 
@@ -16,6 +16,8 @@ const ORDERS: HasuraTableModel = {
   ],
 };
 const VIEWER: HasuraTableModel = { ...ORDERS, aggregations: false, columns: [ORDERS.columns[0]!] };
+/** Every selectable row type's `_can` (what this viewer may change), for every role alike. */
+const CAN = '"May this viewer change or delete this row (its rule exists and its filter holds)? Advisory: writes are still judged." _can: orders_row_can!';
 
 describe('the read SDL', () => {
   it('owner: every column, the aggregate root, Hasura-shaped inputs', () => {
@@ -24,7 +26,9 @@ input ID_comparison_exp { _eq: ID _neq: ID _in: [ID!] _nin: [ID!] }
 input String_comparison_exp { _eq: String _neq: String _gt: String _gte: String _lt: String _lte: String _in: [String!] _nin: [String!] _is_null: Boolean _like: String _nlike: String _ilike: String _nilike: String }
 input Float_comparison_exp { _eq: Float _neq: Float _gt: Float _gte: Float _lt: Float _lte: Float _in: [Float!] _nin: [Float!] _is_null: Boolean }
 input Boolean_comparison_exp { _eq: Boolean _neq: Boolean _gt: Boolean _gte: Boolean _lt: Boolean _lte: Boolean _in: [Boolean!] _nin: [Boolean!] _is_null: Boolean }
-type orders { _id: ID! region: String amount: Float paid: Boolean }
+type orders { _id: ID! region: String amount: Float paid: Boolean ${CAN} }
+type orders_row_can { update: Boolean! delete: Boolean! }
+type orders_can { insert: Boolean! }
 input orders_bool_exp { _and: [orders_bool_exp!] _or: [orders_bool_exp!] _not: orders_bool_exp _id: ID_comparison_exp region: String_comparison_exp amount: Float_comparison_exp paid: Boolean_comparison_exp }
 input orders_order_by { _id: order_by region: order_by amount: order_by paid: order_by }
 enum orders_select_column { region amount paid }
@@ -38,6 +42,7 @@ type Query {
   orders(where: orders_bool_exp, order_by: [orders_order_by!], limit: Int, offset: Int): [orders!]!
   orders_by_pk(_id: ID!): orders
   orders_aggregate(where: orders_bool_exp, order_by: [orders_order_by!], limit: Int, offset: Int): orders_aggregate!
+  "May this viewer add rows? Advisory: writes are still judged." orders_can: orders_can!
 }
 `);
     const schema = buildSchema(hasuraSdl([ORDERS]));
@@ -48,7 +53,7 @@ type Query {
   it('viewer: hidden columns are absent everywhere and no aggregate without allow_aggregations', () => {
     const sdl = hasuraSdl([VIEWER]);
     expect(sdl).not.toMatch(/\bamount\b|\bpaid\b|_aggregate|_sum_fields/);
-    expect(sdl).toContain('type orders { _id: ID! region: String }');
+    expect(sdl).toContain(`type orders { _id: ID! region: String ${CAN} }`);
     expect(sdl).toContain('input orders_bool_exp { _and: [orders_bool_exp!] _or: [orders_bool_exp!] _not: orders_bool_exp _id: ID_comparison_exp region: String_comparison_exp }');
     expect(sdl).toContain('orders_by_pk(_id: ID!): orders');
     buildSchema(sdl);
@@ -56,7 +61,7 @@ type Query {
 
   it('a role that sees no columns still gets row identity; aggregate types without eligible columns are left out', () => {
     const sdl = hasuraSdl([{ ...ORDERS, columns: [] }]);
-    expect(sdl).toContain('type orders { _id: ID! }');
+    expect(sdl).toContain(`type orders { _id: ID! ${CAN} }`);
     expect(sdl).not.toMatch(/orders_select_column|orders_sum_fields|orders_min_fields/);
     expect(sdl).toContain('type orders_aggregate_fields { count: Int! }');
     buildSchema(sdl);
@@ -102,7 +107,7 @@ type orders_mutation_response { affected_rows: Int! returning: [orders!]! }`);
     expect(sdl).toContain('input orders_set_input { amount: Float }');
     expect(sdl).toContain('input orders_inc_input { amount: Float }');
     // The row type, where and returning still show only what the select rule shows.
-    expect(sdl).toContain('type orders { _id: ID! region: String }');
+    expect(sdl).toContain(`type orders { _id: ID! region: String ${CAN} }`);
     expect(sdl).toContain('type orders_mutation_response { affected_rows: Int! returning: [orders!]! }');
     expect(sdl).not.toMatch(/delete_orders|paid/);
     expect(Object.keys(buildSchema(sdl).getMutationType()!.getFields())).toEqual(['insert_orders', 'insert_orders_one', 'update_orders', 'update_orders_by_pk']);
@@ -110,7 +115,7 @@ type orders_mutation_response { affected_rows: Int! returning: [orders!]! }`);
 
   it('a role that writes but selects nothing: affected_rows only, no _one/_by_pk, where on _id alone', () => {
     const sdl = hasuraSdl([{ ...ORDERS, select: false, columns: [], aggregations: false, write: { insert: [region], delete: true } }]);
-    expect(sdl).not.toMatch(/type orders \{|returning|_one|_by_pk|_order_by|_aggregate/);
+    expect(sdl).not.toMatch(/type orders \{|returning|_one|_by_pk|_order_by|_aggregate|_can/);
     expect(sdl).toContain('type orders_mutation_response { affected_rows: Int! }');
     expect(sdl).toContain('input orders_bool_exp { _and: [orders_bool_exp!] _or: [orders_bool_exp!] _not: orders_bool_exp _id: ID_comparison_exp }');
     expect(sdl).toContain('type Query {\n  no_queries_available: String!\n}');
@@ -123,5 +128,28 @@ type orders_mutation_response { affected_rows: Int! returning: [orders!]! }`);
     expect(sdl).not.toMatch(/insert_orders|orders_insert_input|orders_inc_input|_inc:/);
     expect(sdl).toContain('update_orders(where: orders_bool_exp!, _set: orders_set_input): orders_mutation_response');
     buildSchema(sdl);
+  });
+});
+
+/**
+ * WHAT THE VIEWER MAY CHANGE: `_can` on every selectable row type and `<root>_can` on the query root exist for every
+ * role (a document asking them validates for every reader; a role without the rule reads false). A column can never
+ * be named `_can`: the schema refuses to build rather than shadow it.
+ */
+describe('the capability fields', () => {
+  it('are the same for a role with every rule and a role with none', () => {
+    const owner = buildSchema(hasuraSdl([{ ...ORDERS, write: { insert: ORDERS.columns, update: ORDERS.columns, delete: true }, can: { insert: true, update: true, delete: true } }]));
+    const reader = buildSchema(hasuraSdl([VIEWER]));
+    for (const schema of [owner, reader]) {
+      expect(String(schema.getQueryType()!.getFields().orders_can!.type)).toBe('orders_can!');
+      expect(String((schema.getType('orders') as GraphQLObjectType).getFields()._can!.type)).toBe('orders_row_can!');
+      expect(Object.keys((schema.getType('orders_row_can') as GraphQLObjectType).getFields())).toEqual(['update', 'delete']);
+      expect(Object.keys((schema.getType('orders_can') as GraphQLObjectType).getFields())).toEqual(['insert']);
+    }
+  });
+
+  it('refuses a column whose field would shadow _can or _id', () => {
+    expect(() => hasuraSdl([{ ...ORDERS, columns: [{ field: '_can', source: '_can', type: 'String' }] }])).toThrow(/graphql_field_collision/);
+    expect(() => hasuraSdl([{ ...ORDERS, columns: [{ field: '_id', source: 'id', type: 'String' }] }])).toThrow(/graphql_field_collision/);
   });
 });

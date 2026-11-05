@@ -66,5 +66,9 @@ it('previews every local link on the generated API: flat roots, where/aggregate,
  expect(exported.rows).toEqual([{region:'west',amount:13,paid:true},{region:'west',amount:null,paid:false},{region:'north',amount:1,paid:null},{region:'south',amount:null,paid:true}]);
  expect(new Set(exported.rowIds).size).toBe(4);
  expect((await preview.execute({query:'{ notes { text } }'},signal)).data).toEqual({notes:[{text:'hi'}]});
+ // The previewing owner may change everything: the capability answers are true, the page's included.
+ expect((await preview.execute({query:'{ viewer { canEdit } notes_can { insert } notes { _can { update delete } } }'},signal)).data).toEqual({viewer:{canEdit:true},notes_can:{insert:true},notes:[{_can:{update:true,delete:true}}]});
+ const added=await preview.execute({query:'mutation { insert_notes_one(object: {text: "yo"}) { text _can { delete } } }'},signal);
+ expect(added.data).toEqual({insert_notes_one:{text:'yo',_can:{delete:true}}});
  }finally{await rm(root,{recursive:true,force:true});}
 });

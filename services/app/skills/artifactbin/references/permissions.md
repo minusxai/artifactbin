@@ -63,13 +63,22 @@ anonymous has no user ID; direct calls have no page ID. Use them in `filter`, `c
   the owner and editors change rows.
 - `own-rows --owner-column created_by`: everyone reads; viewer and signed_in add rows (the column is
   set to them) and change or delete only rows they added; anonymous never writes. The page shows
-  edit controls where `row.created_by===viewer.id` from the built-in `{viewer{signedIn id}}`. The
-  CSV needs the owner column. Rows the owner adds are not stamped, so a check's cleanup deletes its
+  edit controls where `_can` says so ([below](#what-this-viewer-may-change)). The CSV needs the owner
+  column. Rows the owner adds are not stamped, so a check's cleanup deletes its
   test rows with `graphql.mjs`, not through the page.
 - `editors-only`: only the owner and editors read or write; everyone else gets not found.
 
 For something else (everyone signed in edits every row, hidden columns), edit the template's
 `policy` in p.json. `examples/shared-app-policy.mjs` writes a shared-edit table.
+
+## What this viewer may change
+
+Ask, never re-derive a rule in page script: `{tasks_can{insert} tasks{_id _can{update delete}}}`.
+`tasks_can.insert`: the viewer's role has an insert rule. A row's `_can.update`/`_can.delete`: the
+role has that rule and its `filter` holds for this row (`check` is not tried). Owner and editors:
+true; no rule, `backend_only` or a filter on a column the role cannot read: false. `_can` works on
+lists, `_by_pk`, `nodes` and `returning`. Draw add, edit and delete controls from it; writes are
+still judged. `{viewer{canEdit}}` says whether they may edit the page itself.
 
 ## Change permissions: dry run, read-back, set
 

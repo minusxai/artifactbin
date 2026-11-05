@@ -69,7 +69,7 @@ const BACKEND_DIRECTIVE =
 const DATASET_DIRECTIVE =
   "directive @dataset(link: String!, file: String!, version: String!, table: String!, field: String!) on FIELD_DEFINITION\n";
 /** The built-in viewer (contracts `PAGE_VIEWER_ROOT`): mounted on every page's Query, answered from the caller alone. */
-const VIEWER_SDL = `type ${PAGE_VIEWER_TYPE} {\n  signedIn: Boolean!\n  id: ID\n  name: String\n}\n`;
+const VIEWER_SDL = `type ${PAGE_VIEWER_TYPE} {\n  signedIn: Boolean!\n  id: ID\n  name: String\n  "May this viewer edit this page (its text regions)? Owner and shared editors only. Advisory: edits are still judged."\n  canEdit: Boolean!\n}\n`;
 const BUILT_IN_VIEWER = "the built-in viewer query";
 const authRole = (value: unknown): DatasetRole | null =>
   typeof value === 'string' && (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
@@ -615,13 +615,15 @@ export async function executePageOperation(
 /**
  * The built-in viewer, from the caller alone: signed in when `@auth(signedIn: true)` admits an account. Then `id` is
  * the subject a resolver sees and `name` its display name, read through the port only when selected; anyone else
- * reads nulls. Nothing else about the reader is here.
+ * reads nulls. `canEdit` is the page edit check the live-region editor uses (the `canEdit` port), read only when
+ * selected; false without one. Nothing else about the reader is here.
  */
-function viewerValue({ caller, viewerName }: ExecuteOptions): Record<string, unknown> {
+function viewerValue({ caller, viewerName, canEdit }: ExecuteOptions): Record<string, unknown> {
   const subject = caller.subject;
+  const editable = async () => (await canEdit?.()) === true;
   if (subject === null || resolverFieldRefusal(caller.role, { signedIn: true }) !== null)
-    return { signedIn: false, id: null, name: null };
-  return { signedIn: true, id: subject, name: async () => (await viewerName?.(subject)) ?? null };
+    return { signedIn: false, id: null, name: null, canEdit: editable };
+  return { signedIn: true, id: subject, name: async () => (await viewerName?.(subject)) ?? null, canEdit: editable };
 }
 
 /** The operation's top-level fields, through inline fragments and fragment spreads. */

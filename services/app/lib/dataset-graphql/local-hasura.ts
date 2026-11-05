@@ -8,7 +8,8 @@
 import { createHash } from 'node:crypto';
 import { buildSchema, execute, getOperationAST, parse, validate, type DocumentNode, type GraphQLResolveInfo } from 'graphql';
 import { DATASET_GRAPHQL_WRITE_LIMITS, type DatasetColumn, type DatasetGraphqlError, type DatasetGraphqlErrorCode, type DatasetGraphqlReply, type DatasetGraphqlRequest, type PageNamespaceSource } from '@artifactbin/contracts';
-import { hasuraSdl, type HasuraColumn, type HasuraScalar, type HasuraTableModel } from './hasura-schema';
+import { CAN_FIELD, hasuraSdl, type HasuraColumn, type HasuraScalar, type HasuraTableModel } from './hasura-schema';
+import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraNames } from './hasura-names';
 import { compileAggregate, compileRows, HasuraReadError, type HasuraAggregate, type HasuraReadArgs } from './hasura-read';
 import { compileMutation, HasuraWriteError, mutationRoots, type HasuraMutationKind } from './hasura-write';
@@ -58,6 +59,8 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
       table: { schema: declared.schema, name: declared.name },
       columns, aggregations: true,
       write: { insert: columns, update: columns, delete: true },
+      // The owner previews: every control applies.
+      can: { insert: columns.length > 0, update: columns.length > 0, delete: true },
     };
     const target = `${quote(declared.schema)}.${quote(declared.name)}`;
     db.exec(`CREATE TABLE ${target} (${[`${quote(ID_COLUMN)} TEXT PRIMARY KEY`, ...columns.map((c) => `${quote(c.source)} ${sqlType(c.type)}`)].join(', ')})`);
@@ -78,10 +81,10 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
     ['_id', row[keyed === 'field' ? '_id' : ID_COLUMN]],
     ...model.columns.map((c) => { const v = row[keyed === 'field' ? c.field : c.source] ?? null; return [c.field, c.type === 'Boolean' && v !== null ? !!v : v]; }),
   ]);
-  const rows = (model: HasuraTableModel, args: HasuraReadArgs) => {
-    const plan = compileRows(model, args);
+  const rows = (model: HasuraTableModel, args: HasuraReadArgs, info?: GraphQLResolveInfo) => {
+    const asked = askedCan(info), plan = compileRows(model, args, asked);
     if (plan.window.limit === 0) return [];
-    return db.prepare(`${plan.statement.sql} LIMIT $af_limit OFFSET $af_offset`).all(bindable({ ...plan.statement.params, af_limit: plan.window.limit, af_offset: plan.window.offset })).map((r) => shaped(model, r, 'field'));
+    return withCan(model, asked, db.prepare(`${plan.statement.sql} LIMIT $af_limit OFFSET $af_offset`).all(bindable({ ...plan.statement.params, af_limit: plan.window.limit, af_offset: plan.window.offset })).map((r) => shaped(model, r, 'field')));
   };
   const aggregate = (model: HasuraTableModel, args: HasuraReadArgs, what: HasuraAggregate) => {
     const statement = compileAggregate(model, args, what);
@@ -91,8 +94,9 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
   function queryRoots(): Record<string, unknown> {
     const root: Record<string, unknown> = {};
     for (const { model } of tables) {
-      root[model.root] = async (args: HasuraReadArgs) => rows(model, args);
-      root[`${model.root}_by_pk`] = async ({ _id }: { _id: string }) => rows(model, { where: { _id: { _eq: _id } }, limit: 1 })[0] ?? null;
+      root[model.root] = async (args: HasuraReadArgs, _: unknown, info?: GraphQLResolveInfo) => rows(model, args, info);
+      root[`${model.root}_by_pk`] = async ({ _id }: { _id: string }, _: unknown, info?: GraphQLResolveInfo) => rows(model, { where: { _id: { _eq: _id } }, limit: 1 }, info)[0] ?? null;
+      root[`${model.root}_can`] = async () => tableCan(model);
       root[`${model.root}_aggregate`] = async (args: HasuraReadArgs) => ({
         aggregate: {
           count: async ({ columns, distinct }: { columns?: string[]; distinct?: boolean | null }) => Number(aggregate(model, args, { kind: 'count', ...(columns ? { columns } : {}), ...(distinct ? { distinct } : {}) })?.value ?? 0),
@@ -101,7 +105,7 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
           max: async () => aggregate(model, args, { kind: 'max' }),
           min: async () => aggregate(model, args, { kind: 'min' }),
         },
-        nodes: async () => rows(model, args),
+        nodes: async (_: unknown, __: unknown, info?: GraphQLResolveInfo) => rows(model, args, info),
       });
     }
     return root;
@@ -128,7 +132,7 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
       for (const [i, call] of recorded.entries()) {
         const { model, kind } = writes.get(call.field)!;
         const statement = compileMutation(model, kind, call.args, (j) => `r_${hash([name, key, i, j])}`);
-        const written = statement ? db.prepare(`${statement.sql} RETURNING *`).all(bindable(statement.params)).map((r) => shaped(model, r, 'source')) : [];
+        const written = statement ? db.prepare(`${statement.sql} RETURNING *`).all(bindable(statement.params)).map((r) => ({ ...shaped(model, r, 'source'), [CAN_FIELD]: rowCan(model, r, () => false) })) : [];
         changed += written.length;
         if (changed > DATASET_GRAPHQL_WRITE_LIMITS.rows) throw new HasuraWriteError('too_many_rows', `a mutation changes at most ${DATASET_GRAPHQL_WRITE_LIMITS.rows} rows; nothing was written`);
         results.set(call.key, isMany(kind) ? { affected_rows: written.length, returning: written } : written[0] ?? null);
@@ -150,7 +154,7 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
   return {
     source: { name, fileId: `local_${name}`, version: 'live', typeDefs: sdl, kind: 'dataset-hasura' },
     queryRoots,
-    owns: (field) => writes.has(field) || tables.some(({ model: m }) => field === m.root || field === `${m.root}_by_pk` || field === `${m.root}_aggregate`),
+    owns: (field) => writes.has(field) || tables.some(({ model: m }) => field === m.root || field === `${m.root}_by_pk` || field === `${m.root}_aggregate` || field === `${m.root}_can`),
     mutate,
     revision: () => revision,
     export: () => ({

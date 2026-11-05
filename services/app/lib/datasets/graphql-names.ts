@@ -60,7 +60,8 @@ const SHARED_TYPES = ['Query', 'Mutation', 'Subscription', 'String', 'Float', 'I
 /** Every field and type name a root generates, today's reads and the planned mutations and extensions. */
 export function hasuraGeneratedNames(root: string): string[] {
   const types = ['bool_exp', 'order_by', 'select_column', 'aggregate', 'aggregate_fields', 'sum_fields', 'avg_fields', 'min_fields', 'max_fields', 'insert_input', 'set_input', 'inc_input', 'pk_columns_input', 'mutation_response', 'groups', 'group_keys', 'meta', 'people', 'by_pk'];
-  return [root, ...types.map((t) => `${root}_${t}`), ...['insert', 'update', 'delete'].map((verb) => `${verb}_${root}`), `insert_${root}_one`, `update_${root}_by_pk`, `delete_${root}_by_pk`];
+  // `<root>_can` (query root and type) and `<root>_row_can` (a row's `_can`): what the viewer may change.
+  return [root, ...types.map((t) => `${root}_${t}`), ...['insert', 'update', 'delete'].map((verb) => `${verb}_${root}`), `insert_${root}_one`, `update_${root}_by_pk`, `delete_${root}_by_pk`, `${root}_can`, `${root}_row_can`];
 }
 
 /** The longest root name a dataset may be given at creation. */

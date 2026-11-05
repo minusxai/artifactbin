@@ -18,6 +18,10 @@
  * exactly the first reply and writes nothing; generated `_id`s derive from it, so a re-run inserts the same rows.
  * `returning` and the `_one`/`_by_pk` row are the written rows as the role's select rule shows them.
  *
+ * What the caller may change (`<root>_can`, a row's `_can`; ./can) comes from the same write decision the mutation
+ * root is generated from: a rule's filter is decided in the statement that reads the rows, or in memory for the rows
+ * a mutation returns. The answers are advisory; writes are judged as above.
+ *
  * Errors carry `extensions.code` and never row data.
  */
 import { createHash, randomUUID } from 'node:crypto';
@@ -25,6 +29,7 @@ import { buildSchema, getOperationAST, GraphQLError, parse, validate, execute, t
 import {
   DATASET_GRAPHQL_READ_LIMITS,
   DATASET_GRAPHQL_WRITE_LIMITS,
+  type DatasetBoolExp,
   type DatasetColumn,
   type DatasetGraphqlError,
   type DatasetGraphqlErrorCode,
@@ -36,12 +41,13 @@ import {
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, memoAccessFacts, type AccessFacts } from '@/lib/artifact-access';
 import { completeMutationReceipt, durableMutation, getArtifactById, getArtifactHeaderById, type ArtifactRow } from '@/lib/artifacts';
-import { datasetWriteAccess, tableMutationPolicy } from '@/lib/dataset-permissions';
+import { datasetWriteAccess, filterAdmits, tableMutationPolicy } from '@/lib/dataset-permissions';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
 import type { DatasetTable } from '@/lib/datasets';
 import { ID_COLUMN, rowIdsForObject, tableIdentity } from './model';
 import { retainedDatasetGraphqlPort } from './retained';
-import { hasuraSdl, type HasuraColumn, type HasuraScalar, type HasuraTableModel, type HasuraWriteModel } from './hasura-schema';
+import { CAN_FIELD, hasuraSdl, type HasuraCan, type HasuraColumn, type HasuraRowCan, type HasuraScalar, type HasuraTableModel, type HasuraWriteModel } from './hasura-schema';
+import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraGeneratedNames, hasuraNames, storedConfiguration, type HasuraTableNames } from './hasura-names';
 import { datasetBindingCatalog, DatasetBindingUnsupportedError, resolveDatasetBinding } from './authority';
 import { compileAggregate, compileRows, HasuraReadError, type HasuraAggregate, type HasuraReadArgs } from './hasura-read';
@@ -71,20 +77,38 @@ interface Loaded {
 }
 type WriteDecision = Awaited<ReturnType<typeof datasetWriteAccess>>;
 
-/** The role's write rules for one table, as the columns each lets it name (presets excluded). */
-function writeModel(decision: WriteDecision, table: DatasetTable, names: HasuraTableNames): HasuraWriteModel | undefined {
-  if (!decision.allowed) return undefined;
+const NOTHING: HasuraCan = { insert: false, update: false, delete: false };
+
+/**
+ * The role's write rules for one table, as the columns each lets it name (presets excluded), and what they let it
+ * change (`can`): an insert root it has, an update root or delete rule it has with that rule's filter (true for every
+ * row when the filter is empty, the owner's and editors'). A rule the role may not use here (`backend_only`) is absent.
+ */
+function writeRules(decision: WriteDecision, table: DatasetTable, names: HasuraTableNames): { write?: HasuraWriteModel; can: HasuraCan } {
+  if (!decision.allowed) return { can: NOTHING };
   const column = (c: DatasetColumn): HasuraColumn => ({ field: names.columns[c.name] ?? (() => { throw notFound(); })(), source: c.name, type: scalarOf(c.type) });
-  if (decision.admin) { const all = table.columns.map(column); return { insert: all, update: all, delete: true }; }
+  if (decision.admin) {
+    const all = table.columns.map(column);
+    return { write: { insert: all, update: all, delete: true }, can: { insert: all.length > 0, update: all.length > 0, delete: true } };
+  }
   let policy: ReturnType<typeof tableMutationPolicy>;
-  try { policy = tableMutationPolicy(decision, table); } catch { return undefined; }
-  if (!policy) return undefined;
+  try { policy = tableMutationPolicy(decision, table); } catch { return { can: NOTHING }; }
+  if (!policy) return { can: NOTHING };
   const { table: rules, role, operations } = policy;
   const rule = <P>(op: 'insert' | 'update' | 'delete', entries: Array<{ role: string; permission: P }> | undefined) => (operations.includes(op) ? entries?.find((e) => e.role === role)?.permission : undefined);
   const named = (p: { columns?: '*' | string[]; set?: Record<string, unknown> }) =>
     table.columns.filter((c) => (p.columns === undefined || p.columns === '*' || p.columns.includes(c.name)) && !Object.hasOwn(p.set ?? {}, c.name)).map(column);
   const insert = rule('insert', rules.insert_permissions), update = rule('update', rules.update_permissions), del = rule('delete', rules.delete_permissions);
-  return { ...(insert ? { insert: named(insert) } : {}), ...(update ? { update: named(update) } : {}), ...(del ? { delete: true } : {}) };
+  const write: HasuraWriteModel = { ...(insert ? { insert: named(insert) } : {}), ...(update ? { update: named(update) } : {}), ...(del ? { delete: true } : {}) };
+  const rows = (filter: DatasetBoolExp | undefined): HasuraRowCan => (!filter || !Object.keys(filter).length ? true : { filter, session: decision.session });
+  return {
+    write,
+    can: {
+      insert: !!write.insert?.length,
+      update: update && write.update?.length ? rows(update.filter as DatasetBoolExp | undefined) : false,
+      delete: del ? rows(del.filter as DatasetBoolExp | undefined) : false,
+    },
+  };
 }
 
 const columnsOf = (table: DatasetTable, names: HasuraTableNames, collaborative: readonly string[] = []): HasuraColumn[] =>
@@ -136,7 +160,7 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
   const tables = declared.tables.flatMap((table, i): LoadedTable[] => {
     const tableId = tableIdentity(table), names = snapshot?.names?.[tableId] ?? derived[i]!;
     const visible = snapshot?.catalog.tables.find((t) => tableIdentity(t) === tableId);
-    const write = writeModel(decision, table, names);
+    const { write, can } = writeRules(decision, table, names);
     if (!visible && !write) return [];
     const model: HasuraTableModel = {
       root: names.root,
@@ -146,6 +170,7 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
       aggregations: !!visible && (snapshot?.aggregatable?.[tableId] ?? false),
       ...(visible ? {} : { select: false }),
       ...(write ? { write } : {}),
+      can,
     };
     return [{ model, tableId, declared: table }];
   });
@@ -194,12 +219,14 @@ function rootValue(actor: AccessActor, loaded: Loaded, signal: AbortSignal, budg
   root.no_queries_available ??= () => 'There are no queries available to the current role.';
   for (const { model, tableId } of loaded.tables) {
     if (model.select === false) continue;
-    const rows = async (args: HasuraReadArgs) => {
-      const plan = compileRows(model, args);
-      return plan.window.limit === 0 ? [] : run(tableId, plan.statement, plan.window);
+    // `info` says which `_can` fields the rows are asked for (./can): decided in the same statement as the rows.
+    const rows = async (args: HasuraReadArgs, info?: GraphQLResolveInfo) => {
+      const asked = askedCan(info), plan = compileRows(model, args, asked);
+      return plan.window.limit === 0 ? [] : withCan(model, asked, await run(tableId, plan.statement, plan.window));
     };
-    root[model.root] = (args: HasuraReadArgs) => rows(args);
-    root[`${model.root}_by_pk`] = async ({ _id }: { _id: string }) => (await rows({ where: { _id: { _eq: _id } }, limit: 1 }))[0] ?? null;
+    root[model.root] = (args: HasuraReadArgs, _: unknown, info?: GraphQLResolveInfo) => rows(args, info);
+    root[`${model.root}_by_pk`] = async ({ _id }: { _id: string }, _: unknown, info?: GraphQLResolveInfo) => (await rows({ where: { _id: { _eq: _id } }, limit: 1 }, info))[0] ?? null;
+    root[`${model.root}_can`] = () => tableCan(model);
     if (!model.aggregations) continue;
     root[`${model.root}_aggregate`] = (args: HasuraReadArgs) => {
       const memo = new Map<string, Promise<Record<string, unknown> | null>>();
@@ -216,7 +243,7 @@ function rootValue(actor: AccessActor, loaded: Loaded, signal: AbortSignal, budg
           max: () => one({ kind: 'max' }),
           min: () => one({ kind: 'min' }),
         },
-        nodes: () => rows(args),
+        nodes: (_: unknown, __: unknown, info?: GraphQLResolveInfo) => rows(args, info),
       };
     };
   }
@@ -451,6 +478,7 @@ export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlD
       roots[m.root] = { table: m.root, field: 'select' };
       roots[`${m.root}_by_pk`] = { table: m.root, field: 'select_by_pk' };
       if (m.aggregations) roots[`${m.root}_aggregate`] = { table: m.root, field: 'select_aggregate' };
+      roots[`${m.root}_can`] = { table: m.root, field: 'select_can' };
     }
     for (const [field, { model, kind }] of mutationRoots(models)) roots[field] = { table: model.root, field: kind };
     return { name: link.name, fileId: link.datasetId, version: link.mode === 'pinned' ? link.revision : 'live', typeDefs: hasuraSdl(models), roots };
@@ -510,7 +538,7 @@ function returned(loaded: Loaded, table: LoadedTable, kind: HasuraMutationKind, 
   const byId = new Map(visible.map((r) => [r[ID_COLUMN], r]));
   return step.written.flatMap((id) => {
     const row = byId.get(id);
-    return row ? [Object.fromEntries([['_id', id], ...table.model.columns.map((c) => [c.field, row[c.source] ?? null])])] : [];
+    return row ? [Object.fromEntries([['_id', id], ...table.model.columns.map((c) => [c.field, row[c.source] ?? null]), [CAN_FIELD, rowCan(table.model, row, filterAdmits)]])] : [];
   });
 }
 

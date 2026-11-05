@@ -69,4 +69,10 @@ describe('root names', () => {
     expect(hasuraRootNames(t('order_by', 'String', 'Query', 'Float_comparison_exp'), {})).toEqual(['order_by_2', 'String_2', 'Query_2', 'Float_comparison_exp_2']);
     expect(hasuraRootNames(t('a', 'b'), { configuration: () => ({ custom_name: 'same' }) })).toEqual(['same', 'same_2']);
   });
+
+  it('never meets another root\'s capability names (`<root>_can`, `<root>_row_can`), and no column is named _can', () => {
+    const t = (...names: string[]) => names.map((name) => ({ schema: 'public', name }));
+    expect(hasuraRootNames(t('tasks', 'tasks_can', 'tasks_row_can'), {})).toEqual(['tasks', 'tasks_can_2', 'tasks_row_can_2']);
+    expect(hasuraColumnNames(['_can', 'can'])).toEqual({ _can: 'can_2', can: 'can' });
+  });
 });
