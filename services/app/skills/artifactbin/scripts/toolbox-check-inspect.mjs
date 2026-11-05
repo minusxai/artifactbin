@@ -10,9 +10,10 @@ import {runSteps} from './toolbox-check-steps.mjs';
 import {layout, overflow, ids} from './toolbox-check-probes.mjs';
 import {contrast} from './toolbox-check-contrast.mjs';
 import {slides} from './toolbox-check-slides.mjs';
+import {graphql} from './toolbox-check-graphql.mjs';
 
 /** The self-contained parts inspectPage calls; the hosted script defines each from its source. */
-export const PARTS = {ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides};
+export const PARTS = {ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides, graphql};
 
 /** Runs in either the server session or a fresh local browser context. No credentials. */
 // One page, one viewport: load it, optionally compare IDs across a reload, run the steps, then
@@ -22,7 +23,9 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     consoleErrors = [],
     failedRequests = [],
     httpErrors = [],
-    telemetry = [];
+    telemetry = [],
+    graphqlErrors = [],
+    graphqlReads = [];
   const classify = value => {
     try {
       const url = new URL(value);
@@ -89,6 +92,9 @@ export async function inspectPage(page, options, task, parts = PARTS) {
       const item = {url: response.url(), status: response.status()};
       record(classify(item.url) ? telemetry : httpErrors, item);
     }
+    // A failed GraphQL field, with the owner-only detail and the page and console errors before it.
+    const before = {pageErrorsBefore: pageErrors.length, consoleErrorsBefore: consoleErrors.length};
+    parts.graphql(response, before, graphqlErrors, graphqlReads);
   });
   page.setDefaultTimeout(options.timeoutMs ?? 4000);
   const evidence = {
@@ -128,6 +134,11 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   } catch (error) {
     evidence.inspectionError = String(error.message);
   }
+  // The GraphQL bodies still being read, for at most a second.
+  let wait;
+  const late = new Promise(resolve => (wait = setTimeout(resolve, 1000)));
+  await Promise.race([Promise.allSettled(graphqlReads), late]);
+  clearTimeout(wait);
   if (options.capture)
     try {
       evidence.screenshot = {
@@ -148,6 +159,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     failedRequests: [...failedRequests],
     httpErrors: [...httpErrors],
     telemetry: [...telemetry],
-    datasetReads
+    datasetReads,
+    ...(graphqlErrors.length ? {graphqlErrors: [...graphqlErrors]} : {})
   };
 }

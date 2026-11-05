@@ -19,6 +19,7 @@ import {
 import {checkTarget, loadChromium, stepsBody, summarizeCheck} from './toolbox-check-script.mjs';
 import {checkHosted} from './toolbox-check-hosted.mjs';
 import {checkLocal} from './toolbox-check-local.mjs';
+import {explainGraphql} from './toolbox-check-resolvers.mjs';
 import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts, unreadDatasets}
   from './toolbox-check-reply.mjs';
 
@@ -144,7 +145,13 @@ export async function checkCommand({values, positionals}, options = {}) {
           ]))
         );
     }
-    if (extra.length) result = summarizeCheck([...result.checks, ...extra]);
+    // Failed GraphQL fields get the owner detail; what only an unset resolver secret blocked is
+    // Not tested, not failed.
+    const checks = [...result.checks, ...extra];
+    const found = await explainGraphql(client, id, checks, viewer === 'guest');
+    result = Object.assign(summarizeCheck(checks), found);
+    // A field that failed for the owner is a fault even unnoticed; a guest's is a refusal.
+    if (found.graphqlFailures?.some(failure => !failure.guest)) result.smokePassed = false;
     // A linked dataset the page never reads means its numbers are hand-typed: not a pass.
     const unread = unreadDatasets(html, result.checks);
     if (unread.length) Object.assign(result, {smokePassed: false, unreadDatasets: unread});
