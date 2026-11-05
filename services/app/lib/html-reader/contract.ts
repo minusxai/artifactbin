@@ -200,12 +200,14 @@ export interface ArtifactDataEvent {
   version: number;
 }
 
-/** What the stream sends on a version: the head's identity, nothing else. */
+/** What the stream sends on a version: the head's identity and name, nothing else. */
 export interface ArtifactVersionPing {
   editId: string;
   version: number;
   /** The handle of the account that made this version, or null. */
   by: string | null;
+  /** The row's title at this version (a doc is named by its heading as it is saved): the page's header follows it. */
+  title: string | null;
 }
 
 /** Native version metadata; page bytes are read through the HTML door. */

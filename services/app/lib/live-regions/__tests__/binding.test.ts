@@ -47,6 +47,16 @@ describe('local steps become the smallest edits', () => {
     expect(bare(room.invariants())).toBe('<h2>Title</h2><h2>here</h2><p></p>');
   });
 
+  it("Enter at the end of a new doc's title moves into its empty body; anywhere else it still splits", () => {
+    const [room, A] = open('<h1>Title</h1><p></p>');
+    const moved = writes(A, () => A.select(A.find('Title', { after: true })).key('Enter').type('Body'));
+    expect(moved.filter((op) => 'insert' in (op as object)).map((op) => (op as { insert: string }).insert).join('')).toBe('Body');
+    expect(bare(room.invariants())).toBe('<h1>Title</h1><p>Body</p>');
+    const [other, B] = open('<h1>Title</h1><p>Body</p>');
+    B.select(B.find('Title', { after: true })).key('Enter');
+    expect(bare(other.invariants())).toBe('<h1>Title</h1><p></p><p>Body</p>');
+  });
+
   it('Backspace-join deletes the "\\n" and gives the joined line the first block\'s attributes', () => {
     const [room, A] = open('<h2>Title</h2><p>body</p>');
     const ops = writes(A, () => A.select(A.blockStart(1)).key('Backspace'));

@@ -239,6 +239,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
     editId: row.edit_id,
     version: row.version,
     by: await authorHandle(row),
+    title: row.title ?? null,
   });
 
   let presenceRevision:string|undefined,replacingPresence=false;

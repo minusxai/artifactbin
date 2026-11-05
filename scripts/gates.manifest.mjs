@@ -84,9 +84,9 @@ export const GATE_SPECS = Object.freeze([
   // 35s in `node scripts/gate-container.mjs --cpus 4 live-cells live-regions new-doc` (two leave saves are waited
   // for: the early-typing and the leave legs); CI weight pending its first run.
   { name: 'live-cells', needsMail: true, seconds: 35, timeoutMs: 90_000 },
-  // One owner: Create → Document, then type at once with no press (the doc's region opens and takes the caret on load).
-  // CI weight pending its first run.
-  { name: 'new-doc', needsMail: true, seconds: 10, timeoutMs: 60_000 },
+  // One owner: Create → Document, then type at once with no press (the doc's region opens and takes the caret on load);
+  // with no save pressed a signed-out reader sees the text and follows new typing. Two pause saves are waited for.
+  { name: 'new-doc', needsMail: true, seconds: 20, timeoutMs: 90_000 },
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
   { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },

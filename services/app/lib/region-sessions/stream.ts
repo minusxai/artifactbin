@@ -10,12 +10,12 @@
  *    went (removed, or its kind changed) or, for every region, when the editor lost edit access (the stream ends).
  *  - Saving on events: when the last editor stream of a page in this process closes (after a short grace, so a
  *    reconnect is not a leave) its unsaved edits are saved; while streams are open, a region dirty and quiet for
- *    REGION_IDLE_SAVE_MS is saved by the idle backstop. Both go through the store's save, which locks the page FOR
+ *    REGION_IDLE_SAVE_MS, or dirty for REGION_MAX_UNSAVED_MS however busy, is saved by the idle backstop. Both go through the store's save, which locks the page FOR
  *    UPDATE: a second process racing it finds nothing left to save.
  */
 import { artifactChannel, isCellKey, regionsChannel, type RegionStreamFrame } from '@artifactbin/contracts';
 import { editableRegions, isRegionId, type RegionKind } from '@/lib/live-regions';
-import { editablePage, liveRegionDoc, regionUpdatesAfter, type RegionRow } from '@/lib/artifacts';
+import { editablePage, liveRegionDoc, regionUpdatesAfter, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db } from '@/lib/platform';
 import * as Y from 'yjs';
@@ -41,6 +41,7 @@ export interface RegionStreamOptions {
   clock: RegionClock;
   keepaliveMs: number;
   idleSaveMs: number;
+  maxUnsavedMs: number;
   idleCheckMs: number;
   leaveGraceMs: number;
 }
@@ -65,9 +66,9 @@ function parseCursors(after: string | null): Map<string, number> | null {
 interface Follow { seq: number; opening: boolean; kind?: RegionKind; createdAt?: string }
 /** What a watched page saves on leave and on idle: its regions, or (`cells:<id>`) the cells its readers type in. */
 export interface WatchSaver {
-  save(actor: AccessActor, options?: { idleBefore?: string }): Promise<{ status: number }>;
-  /** Anything dirty and quiet since `idleBefore`? (default: ask the save) */
-  quiet?(idleBefore: string): Promise<boolean>;
+  save(actor: AccessActor, options?: { due?: SaveDue }): Promise<{ status: number }>;
+  /** Anything due (lib/artifacts saveIsDue)? (default: ask the save) */
+  isDue?(due: SaveDue): Promise<boolean>;
   /** Save as each member leaves (its cells may be ones nobody else may write), not only as the last. */
   eachLeaves?: boolean;
 }
@@ -94,18 +95,18 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions, 
   /** A page's regions: dirty and quiet rows of the page itself, saved by any editor. */
   const regionSaver = (artifactId: string): WatchSaver => ({
     save: (actor, saveOptions) => store.flush(actor, artifactId, saveOptions),
-    async quiet(idleBefore) {
+    async isDue(due) {
       const db = await options.db();
-      return (await db.query('SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND last_update_at <= $2 LIMIT 1', [artifactId, idleBefore])).rows.length > 0;
+      return (await db.query('SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND (last_update_at <= $2 OR dirty_since <= $3) LIMIT 1', [artifactId, due.quietBefore, due.dirtyBefore])).rows.length > 0;
     },
   });
 
   async function idleSave(artifactId: string): Promise<void> {
     const watch = pages.get(artifactId);
     if (!watch?.streams.size) return;
-    const idleBefore = new Date(clock.now() - options.idleSaveMs).toISOString();
-    if (watch.saver.quiet && !await watch.saver.quiet(idleBefore)) return;
-    for (const { actor } of [...watch.streams]) if ((await watch.saver.save(actor, { idleBefore })).status === 200 && !watch.saver.eachLeaves) return;
+    const due: SaveDue = { quietBefore: new Date(clock.now() - options.idleSaveMs).toISOString(), dirtyBefore: new Date(clock.now() - options.maxUnsavedMs).toISOString() };
+    if (watch.saver.isDue && !await watch.saver.isDue(due)) return;
+    for (const { actor } of [...watch.streams]) if ((await watch.saver.save(actor, { due })).status === 200 && !watch.saver.eachLeaves) return;
   }
 
   function join(artifactId: string, member: { actor: AccessActor }, saver: WatchSaver = regionSaver(artifactId)): void {

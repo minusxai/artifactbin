@@ -20,7 +20,7 @@
 import * as Y from 'yjs';
 import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type HtmlDatasetLink, type HtmlPageLink, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts';
 import { applyCellRevision, cellValue, createCellState, snapshotValue } from '@/lib/live-regions';
-import { canReadArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, type ArtifactRow, type RegionRow } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import { canUpdateCell, cellCheckAdmits, datasetWriteAccess } from '@/lib/dataset-permissions';
 import { locateDatasetCell, writeDatasetCells, type DatasetCell } from '@/lib/dataset-graphql';
 import type { AccessActor } from '@/lib/accounts';
@@ -135,10 +135,10 @@ export interface CellStore {
   open(actor: AccessActor, pageId: string, key: string): Promise<RegionAnswer<RegionOpenReply>>;
   update(actor: AccessActor, pageId: string, key: string, request: { clientId: number; update: Uint8Array }): Promise<RegionAnswer<RegionUpdateReply>>;
   /**
-   * Saves the dirty cells `actor` may write, of every dataset the page links live (or, with `idleBefore`, only when
-   * one of a dataset's dirty cells has been quiet since then). Answers how many dataset versions it made.
+   * Saves the dirty cells `actor` may write, of every dataset the page links live (or, with `due`, only when
+   * one of a dataset's dirty cells is due, lib/artifacts saveIsDue). Answers how many dataset versions it made.
    */
-  flush(actor: AccessActor, pageId: string, options?: { idleBefore?: string }): Promise<RegionAnswer<{ saved: number }>>;
+  flush(actor: AccessActor, pageId: string, options?: { due?: SaveDue }): Promise<RegionAnswer<{ saved: number }>>;
   /** Brings one cell's rows to its dataset's head (a stream wakeup): reconciled, or closed when its row is gone. */
   reconcile(access: CellAccess): Promise<void>;
 }
@@ -174,16 +174,16 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
    * as soon as the write in flight completes, not at the next save event. Passes run only after a write completed or a
    * race was lost, never on a timer, and at most SAVE_PASSES of them; what the actor may not write never starts one.
    */
-  async function saveDataset(actor: AccessActor, page: ArtifactRow, datasetId: string, idleBefore?: string): Promise<number> {
+  async function saveDataset(actor: AccessActor, page: ArtifactRow, datasetId: string, due?: SaveDue): Promise<number> {
     const base = await db();
     let saved = 0;
     for (let pass = 0; pass < SAVE_PASSES; pass++) {
-      const dirty = (await base.query<{ region_id: string; last_update_at: string | null }>(
-        "SELECT region_id, last_update_at FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND dirty_since IS NOT NULL ORDER BY region_id", [datasetId],
+      const dirty = (await base.query<{ region_id: string; dirty_since: string | null; last_update_at: string | null }>(
+        "SELECT region_id, dirty_since, last_update_at FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND dirty_since IS NOT NULL ORDER BY region_id", [datasetId],
       )).rows;
       if (!dirty.length) return saved;
-      // Only the save's start asks whether anything is quiet: a pass after it is that same save.
-      if (pass === 0 && idleBefore !== undefined && !dirty.some((row) => row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(idleBefore))) return 0;
+      // Only the save's start asks whether anything is due: a pass after it is that same save.
+      if (pass === 0 && due && !dirty.some((row) => saveIsDue(row, due))) return 0;
       const dataset = await getArtifactById(datasetId);
       if (!dataset) return saved;
       const writable: CellAccess[] = [];
@@ -294,7 +294,7 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
       const page = await cellPage(actor, pageId);
       if (!page) return NOT_FOUND;
       let saved = 0;
-      for (const datasetId of new Set(liveDatasetLinks(page).map((link) => link.datasetId))) saved += await saveDataset(actor, page, datasetId, options.idleBefore);
+      for (const datasetId of new Set(liveDatasetLinks(page).map((link) => link.datasetId))) saved += await saveDataset(actor, page, datasetId, options.due);
       return { status: 200, body: { saved } };
     },
 
