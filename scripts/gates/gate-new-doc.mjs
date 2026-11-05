@@ -34,6 +34,11 @@ const browser = await launchChromium();
 const sink = await startMailSink();
 const page = await (await browser.newContext({ viewport: { width: 1100, height: 800 } })).newPage();
 let id = '', token = '';
+/** The page's own save, asked until the saved head satisfies `want` (or the budget runs out). */
+const saveUntil = (want) => until(async () => {
+  await page.evaluate(async (id) => fetch(`/api/artifacts/${id}/regions/flush`, { method: 'POST', credentials: 'same-origin' }), id);
+  return head();
+}, want, 20_000);
 const head = async () => {
   const response = await fetch(`${BASE}/api/artifacts/${id}`, { headers: { authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`GET ${id} → ${response.status}`);
@@ -82,9 +87,9 @@ try {
     const shared = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PATCH', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ visibility: 'unlisted', expectedState: (await head()).state }) });
     check(shared.ok, `the doc is shared as unlisted (${shared.status})`);
     const typedAt = Date.now();
-    // The pause save is long while a saved version still rebuilds an editor's cross-site frame: the page's save stands in.
-    await page.evaluate(async (id) => fetch(`/api/artifacts/${id}/regions/flush`, { method: 'POST', credentials: 'same-origin' }), id);
-    const saved = await until(head, (row) => row?.html.includes('First line of the body.') && row.title === 'Launch plan', 20_000);
+    // The pause save is long while a saved version still rebuilds an editor's cross-site frame: the page's save stands
+    // in, asked again until the typed text has reached the server (the editor sends what it gathered every 50 ms).
+    const saved = await saveUntil((row) => row?.html.includes('First line of the body.') && row.title === 'Launch plan');
     check(!!saved?.html.includes('First line of the body.'), `the paused text is saved without a press (v${saved?.version}, ${((Date.now() - typedAt) / 1000).toFixed(1)} s)`);
     check(/<h1[^>]*>Launch plan<\/h1>/.test(saved?.html ?? ''), 'the saved page holds the typed title as its heading');
     check(saved?.title === 'Launch plan' && /<title[^>]*>Launch plan<\/title>/.test(saved?.html ?? ''), `the doc is named by its heading (${saved?.title})`);
@@ -97,7 +102,7 @@ try {
     check(!!read?.includes('First line of the body.') && read.includes('Launch plan'), 'a signed-out reader opening the doc sees what was typed');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Typed while they read.', { delay: 20 });
-    await page.evaluate(async (id) => fetch(`/api/artifacts/${id}/regions/flush`, { method: 'POST', credentials: 'same-origin' }), id);
+    await saveUntil((row) => row?.html.includes('Typed while they read.'));
     const followed = await until(() => readerFrame.locator('article').textContent(), (text) => text?.includes('Typed while they read.'), 20_000);
     check(!!followed?.includes('Typed while they read.'), 'the open reader follows new typing after the pause, with no reload');
   });
