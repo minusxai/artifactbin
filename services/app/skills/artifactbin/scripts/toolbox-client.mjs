@@ -178,12 +178,12 @@ if(parsed.values.output&&!parsed.values.append&&name!=='read'){const destination
   if(result===undefined)return;
   const envelope={ok:true,code:'completed',...result};
   const data=JSON.stringify(envelope,null,parsed.values.json?0:2)+'\n';
-  if(name==='check')await checkOutput(envelope,data,parsed.values);
+  // Notes on stderr, also with --json/--output; check's digest ends on its Next line: note first.
+  const say=note=>{if(typeof note==='string')process.stderr.write(note+'\n');};
+  if(name==='check'){say(result.note);await checkOutput(envelope,data,parsed.values);}
   else if(parsed.values.output&&!result.outputOwned)await exclusive(parsed.values.output,data);
   else process.stdout.write(data);
-  // Notes last on stderr, with --json and --output too: ids publish added, then the next step.
-  for(const note of [result.rewritten,result.note,result.next])if(typeof note==='string')
-   process.stderr.write(note+'\n');
+  for(const note of [result.rewritten,name==='check'?0:result.note,result.next])say(note);
  }catch(error){
   const envelope=toolFailure(name,error);
 if(name==='check'&&parsed)await checkOutput(envelope,JSON.stringify(envelope,null,2)+'\n',

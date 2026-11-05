@@ -9,11 +9,12 @@ description: >-
 ## Read first
 
 [% if shipped %]After you publish or edit a page (answering a comment too), reply to the user and
-keep `node scripts/comment.mjs watch ID --next` running as its printed Next line says, then do
-what comments ask.[% else %]After you publish or edit a page (answering a comment too), reply to
-the user and start the save response's `monitoring.instruction` (with the installed skill: `node
-scripts/comment.mjs watch ID --next`, as its printed Next line says), then do what comments
-ask.[% endif %] The reply is the link plus what the user asked for, in the form they asked for.
+run `node scripts/comment.mjs watch ID --next` as its printed Next line says (a separate step,
+even when the reply is only the link); then do what comments ask.[% else %]After you publish
+or edit a page (answering a comment too), reply to the user and start the save response's
+`monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`,
+as its printed Next line says), then do what comments ask.[% endif %] The reply is the link plus
+what the user asked for, in the form they asked for.
 Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
