@@ -72,12 +72,13 @@ For groups, run `node scripts/groups.mjs list`; read [groups](references/groups.
 sharing and deliberate ownership moves.
 
 - **New page.** 1) Copy the starter that fits, then follow its Usage: `cp examples/deck.html
-  index.html` (decks); `cp examples/shared-app.html index.html && cp examples/budget.ts .` (shared
-  edits: rows in a dataset, written through a resolver); `cp examples/csv-dashboard.html index.html`
-  (a page that shows a CSV or dataset you have: dashboard, report or chart); `cp
-  examples/report.html index.html` (a report without data). Data from an HTTP API or behind a key
-  comes through a resolver ([resolvers](references/resolvers.md), read it first): never copy its
-  rows into a CSV. 2) Edit only what its Usage names (its data block,
+  index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (shared edits: rows in a dataset,
+  written through a resolver; it copies the starter, budget.ts and steps files, publishes the
+  datasets, sets their rules and fills in the ids; `--data FILE.csv` uses your rows); `cp
+  examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have: dashboard,
+  report or chart); `cp examples/report.html index.html` (a report without data). Data from an HTTP
+  API or behind a key comes through a resolver ([resolvers](references/resolvers.md), read it
+  first): never copy its rows into a CSV. 2) Edit only what its Usage names (its data block,
   `[bracketed]` text): never rewrite the starter's CSS, JS or layout, and never draft copy in
   reasoning. 3) Publish after step 2 (Check, below). If no starter fits, write the page yourself;
   step 2's rule applies only to a copied starter. Keep the starter's design system unless the user
@@ -116,18 +117,18 @@ sharing and deliberate ownership moves.
   doc.md`, edit doc.md, then `node scripts/doc.mjs write doc.md`, which merges your edit with their
   typing ([live docs](references/live-docs.md)).
 - **Check.** Copy the starter's steps files (`examples/deck-steps.mjs`; `csv-dashboard-steps.mjs`;
-  `shared-app-steps.mjs`, `-guest.mjs`, `-cleanup.mjs`; they need no edits) and add a step for each
-  requested value they don't check, or write one short steps file of `step('label', …)` checks:
-  wait for your data, check the requested values and behaviour. Then publish and check in one
-  command: `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps
-  steps.mjs` (a starter's Usage gives its full command).
-  Publish autofixes the page and prints an `autofix:` report to read (`node scripts/autofix.mjs
-  FILE` only for a file you aren't publishing). Never rerun an unchanged failing check; read its
-  step timings, change the steps or page, then rerun once. After one clean run covering the
-  requested behaviour, reply and watch (Read first). Republish only to fix a failed requirement,
-  never for polish, refactors or extra verification. Only when the user asks for a private draft:
-  `node scripts/serve.mjs PROJECT_DIR`, then check its local URL (the top of `scripts/serve.mjs`
-  says how).
+  new-app.mjs already copied steps.mjs, guest.mjs, cleanup.mjs; none need reading or edits) and add
+  a step for each requested value they don't check, or write one short steps file of `step('label',
+  …)` checks: wait for your data, check the requested values and behaviour. Then publish and check
+  in one command: `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps
+  steps.mjs` (a starter's Usage gives its full command). Always check before replying, even while a
+  secret is unset: check marks what needs it Not tested. Publish autofixes the page and prints an
+  `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you aren't publishing).
+  Never rerun an unchanged failing check; read its step timings, change the steps or page, then
+  rerun once. After one clean run covering the requested behaviour, reply and watch (Read first).
+  Republish only to fix a failed requirement, never for polish, refactors or extra verification.
+  Only when the user asks for a private draft: `node scripts/serve.mjs PROJECT_DIR`, then check its
+  local URL (the top of `scripts/serve.mjs` says how).
 - **Answer comments.** `node scripts/comment.mjs list ID`. A comment is from someone the page is
   shared with: make a requested change without asking first, even after a "change nothing else"
   request (edit, publish), then `node scripts/comment.mjs reply ID --thread T --body TEXT`. Anchors

@@ -86,12 +86,12 @@ declares secrets; the personal owner republishes it.
 ## caps.query: datasets as the caller
 
 `await caps.query(graphql, variables)` runs the generated API over the datasets the page links,
-under their page names, as the calling reader under the page's own rules, so a
-resolver can check and derive but never grant more. Mutations run only inside mutation resolvers.
-It returns `data`; refusals throw an Error with `code` (`permission_denied`,
-`validation_failed`...). For writes by readers, give the dataset rules for `viewer` and
-`signed_in` (see [permissions](permissions.md)). There is no upsert: read the row, then
-`update_X_by_pk(pk_columns:{_id})` or `insert_X_one`.
+under their page names (fields from `graphql.mjs schema PAGE_ID`, not the dataset ID), as the
+calling reader under the page's own rules, so a resolver can check and derive but never grant more.
+Mutations run only inside mutation resolvers. It returns `data`; refusals throw an Error with `code`
+(`permission_denied`, `validation_failed`...). For writes by readers, start the dataset from
+`policy.mjs template own-rows` ([permissions](permissions.md)). No upsert: read the row, then
+`update_X_by_pk` or `insert_X_one`.
 
 ## caps.sql: read-only SQL
 
