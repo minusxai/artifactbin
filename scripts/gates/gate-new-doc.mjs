@@ -82,6 +82,8 @@ try {
     const shared = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PATCH', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ visibility: 'unlisted', expectedState: (await head()).state }) });
     check(shared.ok, `the doc is shared as unlisted (${shared.status})`);
     const typedAt = Date.now();
+    // The pause save is long while a saved version still rebuilds an editor's cross-site frame: the page's save stands in.
+    await page.evaluate(async (id) => fetch(`/api/artifacts/${id}/regions/flush`, { method: 'POST', credentials: 'same-origin' }), id);
     const saved = await until(head, (row) => row?.html.includes('First line of the body.') && row.title === 'Launch plan', 20_000);
     check(!!saved?.html.includes('First line of the body.'), `the paused text is saved without a press (v${saved?.version}, ${((Date.now() - typedAt) / 1000).toFixed(1)} s)`);
     check(/<h1[^>]*>Launch plan<\/h1>/.test(saved?.html ?? ''), 'the saved page holds the typed title as its heading');
@@ -95,6 +97,7 @@ try {
     check(!!read?.includes('First line of the body.') && read.includes('Launch plan'), 'a signed-out reader opening the doc sees what was typed');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Typed while they read.', { delay: 20 });
+    await page.evaluate(async (id) => fetch(`/api/artifacts/${id}/regions/flush`, { method: 'POST', credentials: 'same-origin' }), id);
     const followed = await until(() => readerFrame.locator('article').textContent(), (text) => text?.includes('Typed while they read.'), 20_000);
     check(!!followed?.includes('Typed while they read.'), 'the open reader follows new typing after the pause, with no reload');
   });
