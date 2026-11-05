@@ -109,6 +109,8 @@ export interface AnnotationLayerProps {
   pickOnOpen?: boolean;
   /** Where the rail starts: under the document's bar, plus the editor toolbar when one is up. */
   topOffset?: number;
+  /** App chrome laid over the document's top beside the rail (a live region's formatting toolbar): the pick's hint sits under it. */
+  documentTopInset?: number;
   /** What the rail leaves free on the right. */
   rightInset?: number;
   /**
@@ -966,7 +968,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       <Show when={pick()}>
         <div role="status" data-capture-chrome aria-label={pick() === 'area' ? 'Screenshot tool active' : 'Select tool active'}
           class={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-2xs text-muted shadow-xl`}
-          style={{ left: `${frameRect().left + frameRect().width / 2}px`, top: `${Math.max(topOffset(), frameRect().top, phoneRail() ? APP_BAR_H : 0) + VIEW_COMMENT_INSET}px`, transform: 'translateX(-50%)' }}>
+          style={{ left: `${frameRect().left + frameRect().width / 2}px`, top: `${Math.max(topOffset(), frameRect().top, phoneRail() ? APP_BAR_H : 0) + (props.documentTopInset ?? 0) + VIEW_COMMENT_INSET}px`, transform: 'translateX(-50%)' }}>
           <SquareDashedMousePointer size={12} strokeWidth={1.8} class="shrink-0 text-accent" />
           <span class="whitespace-nowrap">{pick() === 'area' ? (capture.busy() ? 'Choose this tab in the sharing dialog' : 'drag an area to screenshot') : 'click a block or highlight text to comment'}</span>
           <Button type="button" variant="ghost" size="sm" icon aria-label="Cancel picking" onClick={endPick}>

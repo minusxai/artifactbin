@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  REGION_IDLE_SAVE_MS, REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES, regionsChannel,
+  REGION_IDLE_SAVE_MS, REGION_MAX_UNSAVED_MS, REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES, regionsChannel,
   type RegionCaret, type RegionFlushReply, type RegionFrameMessage, type RegionKind, type RegionOpenReply,
   type RegionParentMessage, type RegionRefusalBody, type RegionRefusalCode, type RegionStreamFrame,
   type RegionUpdateReply, type RegionUpdateRequest, DOC_REGION, cellKey, isCellKey, parseCellKey, CELL_READONLY, type CollabStatus, type RegionContentReply, type RegionWriteRequest, type RegionWriteReply,
@@ -31,8 +31,10 @@ describe('region sessions contract', () => {
   it('pins the limits both ends enforce', () => {
     expect(REGION_UPDATE_MAX_BYTES).toBe(256 * 1024);
     expect(REGION_TEXT_MAX_UNITS).toBe(1_000_000);
-    // Versions are saved on events; the idle save is a slow backstop, never a short timer.
-    expect(REGION_IDLE_SAVE_MS).toBeGreaterThanOrEqual(60_000);
+    // Readers, the doc's title and agents see a pause's text within seconds, and unbroken typing within a bound.
+    expect(REGION_IDLE_SAVE_MS).toBeLessThanOrEqual(5_000);
+    expect(REGION_MAX_UNSAVED_MS).toBeGreaterThan(REGION_IDLE_SAVE_MS);
+    expect(REGION_MAX_UNSAVED_MS).toBeLessThanOrEqual(30_000);
   });
 
   it('carries every wire shape as JSON or structured-clone data', () => {

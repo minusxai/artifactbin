@@ -12,7 +12,7 @@ import { randomInt } from 'node:crypto';
 import * as Y from 'yjs';
 import { REGION_UPDATE_MAX_BYTES, type RegionFlushReply, type RegionOpenReply, type RegionRefusalBody, type RegionRefusalCode, type RegionUpdateReply } from '@artifactbin/contracts';
 import { createRegionState, editableRegions, isRegionId, LiveRegionRefusal, openRegionDoc, validateRegionUpdate, type PageRegion } from '@/lib/live-regions';
-import { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveLiveRegionsInTx, type RegionRow } from '@/lib/artifacts';
+import { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveLiveRegionsInTx, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db, type Queryable } from '@/lib/platform';
 
@@ -63,7 +63,7 @@ export async function regionRow(tx: Queryable, artifactId: string, savedVersion:
 export interface RegionStore {
   open(actor: AccessActor, artifactId: string, regionId: string): Promise<RegionAnswer<RegionOpenReply>>;
   update(actor: AccessActor, artifactId: string, regionId: string, request: { clientId: number; update: Uint8Array }): Promise<RegionAnswer<RegionUpdateReply>>;
-  flush(actor: AccessActor, artifactId: string, options?: { idleBefore?: string }): Promise<RegionAnswer<RegionFlushReply>>;
+  flush(actor: AccessActor, artifactId: string, options?: { due?: SaveDue }): Promise<RegionAnswer<RegionFlushReply>>;
 }
 
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];

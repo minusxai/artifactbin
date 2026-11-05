@@ -154,6 +154,8 @@ export function DocumentPage(): JSX.Element {
    * The HTML version this page and its frame show: the served one, then each version the frame drew in place
    * (followHtmlVersion). The frame's relayed queries, presence and selection classify against it.
    */
+  /** The title the newest announced version carries (an HTML page's stream pings name it, create-live-artifact). */
+  const [publishedTitle, setPublishedTitle] = createSignal<{ title: string | null; version: number } | null>(null);
   const [htmlHead, setHtmlHead] = createSignal({ version: page?.surface?.version ?? 0, editId: page?.surface?.editId ?? '' });
   /** The drawn version's tree, fetched again once the frame holds one (set when the frame is adopted). */
   const reload = () => replaceDocument(window.location.href);
@@ -204,7 +206,7 @@ export function DocumentPage(): JSX.Element {
     // place, and this page moves its trusted revision with it; only a version the frame could not read reloads the
     // original server shell and its ticketed frame together, while viewer state stays in browser storage.
     // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
-    onPublication: page.surface.format === 'html' ? (version, editId) => import('../document/follow-html-version').then(({ followPublication }) => followPublication({
+    onPublication: page.surface.format === 'html' ? (version, editId, title) => (title !== undefined && setPublishedTitle({ title, version }), import('../document/follow-html-version')).then(({ followPublication }) => followPublication({
       version, editId, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,
     }), reload) : undefined,
     onAnnotations: setLiveAnnotations,
@@ -325,8 +327,11 @@ export function DocumentPage(): JSX.Element {
   };
   const [renamed, setRenamed] = createSignal<{ title: string; version: number } | null>(null);
   const shownTitle = () => {
-    const local = renamed();
-    return local && currentVersion() <= local.version ? rowTitle({ title: local.title, heading: live()?.heading ?? page?.surface?.heading }) : rowTitle(live() ?? page?.surface ?? {});
+    const local = renamed(), published = publishedTitle();
+    const heading = live()?.heading ?? page?.surface?.heading;
+    if (local && currentVersion() <= local.version && (!published || published.version <= local.version)) return rowTitle({ title: local.title, heading });
+    // An HTML page's stream names each new version (a doc renames itself from its heading as it saves).
+    return published ? rowTitle({ title: published.title, heading }) : rowTitle(live() ?? page?.surface ?? {});
   };
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<Suspense fallback={<main role="status" aria-busy="true">Loading page…</main>}><NotFoundPage /></Suspense>}>
     <DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
@@ -376,7 +381,7 @@ export function DocumentPage(): JSX.Element {
       <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} beforeComment={(subject) => story ? story.beforeComment(subject) : Promise.resolve(subject)} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={comments().canReadComments} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
-        pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
+        pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} documentTopInset={regionUi()?.toolbar() ? REGION_TOOLBAR_H : 0} /></Suspense>
     </Show>
     <Show when={sharingOpen() && id}>
       <Suspense fallback={<PendingReaderDialog title="Share artifact" onClose={() => setSharingOpen(false)} />}><DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}

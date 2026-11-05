@@ -16,7 +16,7 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
   const backend = fakeBackend({}, { live, liveFrame });
   return {
     backend, unsubscribe,
-    ping: (p: { version: number; editId: string; by?: string | null }) => handlers!.onPing({ by: null, ...p }),
+    ping: (p: { version: number; editId: string; by?: string | null; title?: string | null }) => handlers!.onPing({ by: null, title: null, ...p }),
     wake: () => handlers!.onWake?.(),
     data: () => handlers!.onData?.({datasets:['garden']} as never),
     dataFrame: (frame: { datasets: string[]; version: number; revisions?: Record<string, string> }) => handlers!.onData?.(frame),
@@ -251,7 +251,7 @@ it('refreshes native publication once without fetching a JSX frame or replaying 
  expect(reload).not.toHaveBeenCalled();
  expect(invalidate).toHaveBeenCalledOnce();
  ping({version:2,editId:'saved'}); ping({version:2,editId:'saved'}); ping({version:1,editId:'initial'});
- expect(reload).toHaveBeenCalledExactlyOnceWith(2,'saved');
+ expect(reload).toHaveBeenCalledExactlyOnceWith(2,'saved',null);
  expect(liveFrame).not.toHaveBeenCalled();
 });
 
@@ -259,8 +259,9 @@ it('delivers each newer native publication once, in version order, for the page 
  const {backend,ping}=liveBackend(vi.fn(async()=>frame(2)));
  const follow=vi.fn();
  renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:follow}));
- ping({version:2,editId:'two'}); ping({version:4,editId:'four'}); ping({version:3,editId:'three'}); ping({version:4,editId:'four'});
- expect(follow.mock.calls).toEqual([[2,'two'],[4,'four']]);
+ ping({version:2,editId:'two'}); ping({version:4,editId:'four',title:'Launch plan'}); ping({version:3,editId:'three'}); ping({version:4,editId:'four'});
+ // Each carries the version's title: the page's header follows a doc that names itself from its heading.
+ expect(follow.mock.calls).toEqual([[2,'two',null],[4,'four','Launch plan']]);
 });
 
 it('never refreshes the native archived view when a publication arrives', () => {

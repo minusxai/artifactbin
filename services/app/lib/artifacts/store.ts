@@ -25,7 +25,7 @@ import { artifactState, observedChange, versionConflict, type ConflictChange } f
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
-import { closeLiveRegions, planRegionMerge, planRegionSave, type RegionPlan } from './regions';
+import { closeLiveRegions, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
 import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
@@ -447,9 +447,9 @@ export interface RegionSave { published: boolean; version: number; regions: Reco
  * SAVING LIVE REGIONS, through the write this transaction holds (the artifacts row FOR UPDATE): every region with
  * unsaved edits is compacted into the saved source (./regions planRegionSave) and published as ONE new version by the
  * normal path (archive, head bump, edit log and its NOTIFY, source ids). An unchanged page publishes nothing. With
- * `idleBefore` (the idle backstop) it saves only when some region has had no update since then.
+ * `due` (the idle backstop) it saves only when some region is due (./regions saveIsDue).
  */
-async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: ArtifactWrite, options: { idleBefore?: string } = {}): Promise<RegionSave> {
+async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: ArtifactWrite, options: { due?: SaveDue } = {}): Promise<RegionSave> {
   const { current } = write;
   const unchanged = (regions: Record<string, number> = {}): RegionSave => ({ published: false, version: current.version, regions });
   if (current.format !== 'html') return unchanged();
@@ -472,7 +472,7 @@ async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: Artif
  * Saves a page's live regions as one new version inside the caller's transaction (lib/region-sessions: a flush, the
  * last editor leaving, the idle backstop). Null when the actor may not edit the page (the uniform not-found).
  */
-export async function saveLiveRegionsInTx(tx: Queryable, actor: AccessActor, id: string, options: { idleBefore?: string } = {}): Promise<RegionSave | null> {
+export async function saveLiveRegionsInTx(tx: Queryable, actor: AccessActor, id: string, options: { due?: SaveDue } = {}): Promise<RegionSave | null> {
   const write = await lockArtifactWrite(tx, actor, id);
   return write && saveRegionsLocked(tx, actor, write, options);
 }

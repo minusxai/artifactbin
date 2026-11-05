@@ -145,13 +145,19 @@ export function regionCommands(kind: RegionKind): RegionCommands {
   /** Enter: at a block's start an empty block goes before it; at its end an empty block goes after it; in the middle
    * the text after the cursor keeps the block's ids and the text before becomes a new block with the same structure.
    * In every case the original line end, which holds the ids, stays where it was. Enter in an empty list item or
-   * quote leaves it. */
+   * quote leaves it. Enter at the end of a doc's title, over the empty body the doc starts with (lib/workspace
+   * artifact-starters: a heading and one empty paragraph), moves into that body instead of leaving it behind empty. */
   const splitBlock: Command = rich ? (state, dispatch) => {
     const block = currentBlock(state);
     if (!block) return false;
     const { node, pos } = block;
     if (!node.content.size && (node.attrs.list || node.attrs.quote)) {
       dispatch?.(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...(node.attrs.list ? outdentAttrs(node) : { quote: false }) }));
+      return true;
+    }
+    const body = state.doc.childCount === 2 && pos === 0 && node.attrs.level > 0 ? state.doc.child(1) : null;
+    if (body && state.selection.empty && state.selection.$head.parentOffset === node.content.size && body.type === schema.nodes.textblock && !body.content.size && body.attrs.level === 0 && !body.attrs.list && !body.attrs.quote) {
+      dispatch?.(state.tr.setSelection(TextSelection.create(state.doc, node.nodeSize + 1)).scrollIntoView());
       return true;
     }
     if (!dispatch) return true;

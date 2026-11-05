@@ -53,7 +53,7 @@ interface LiveArtifactOptions {
   onPresence?: (frame:PresenceFrame)=>void;
   onData?: (event: ArtifactDataEvent) => void;
   /** Native HTML follows each newer publication itself (in place, or by reloading its server bootstrap); it never fetches a JSX frame. */
-  onPublication?: (version: number, editId?: string) => void;
+  onPublication?: (version: number, editId?: string, title?: string | null) => void;
   /** The ANNOTATIONS on this readable document changed. */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
@@ -156,7 +156,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               if (options.onPublication) {
                 if (ping.version <= seenVersion) return;
                 seenVersion = ping.version;
-                options.onPublication(ping.version, ping.editId);
+                options.onPublication(ping.version, ping.editId, ping.title);
                 return;
               }
               placeOwn(ping.editId, (own) => {

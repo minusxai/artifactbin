@@ -18,8 +18,13 @@ export interface PresencePublisherPorts {
 export async function publishPresence(actor:PresenceAuthor,row:{version:number},input:unknown,ports:PresencePublisherPorts):Promise<{id:string}|null>{
  const raw=input&&typeof input==='object'?input as Record<string,unknown>:null;
  const revision=String(row.version);
- if(!raw||typeof raw.session!=='string'||!/^[a-f0-9-]{36}$/.test(raw.session)||raw.revision!==revision)return null;
+ if(!raw||typeof raw.session!=='string'||!/^[a-f0-9-]{36}$/.test(raw.session)||typeof raw.revision!=='string')return null;
+ // A page still showing an older version (it draws the new one in place, solid/document follow-html-version) is not
+ // wrong, only behind: its report is dropped, and it reports again on the version it draws. A future revision is.
+ const behind=/^[1-9][0-9]*$/.test(raw.revision)&&Number(raw.revision)<row.version;
+ if(raw.revision!==revision&&!behind)return null;
  const id=createHash('sha256').update(`${actor.userId??actor.tokenId??'guest'}:${raw.session}`).digest('hex');
+ if(behind)return {id};
  if(raw.visible===false){await ports.notify(encodePresenceMessage({id,gone:true}));return {id};}
  const entry:PresenceViewer={id,label:await ports.label(actor.userId)??PRESENCE_GUEST_LABEL,revision,seen:ports.now(),...presenceGeometry(raw)};
  await ports.notify(encodePresenceMessage(entry));

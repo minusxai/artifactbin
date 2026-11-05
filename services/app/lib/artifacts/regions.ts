@@ -176,15 +176,25 @@ async function deleteRegionRows(tx: Queryable, artifactId: string, regionIds?: r
 }
 
 /**
+ * WHEN THE BACKSTOP SAVES (lib/region-sessions stream): a dirty row is due once it has been quiet since `quietBefore`
+ * (no update after it) or dirty since `dirtyBefore` (typing that never pauses still reaches readers).
+ */
+export interface SaveDue { quietBefore: string; dirtyBefore: string }
+export function saveIsDue(row: { dirty_since: string | null; last_update_at: string | null }, due: SaveDue): boolean {
+  if (row.dirty_since === null) return false;
+  return (row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(due.quietBefore)) || Date.parse(row.dirty_since) <= Date.parse(due.dirtyBefore);
+}
+
+/**
  * SAVING: the plan for the version that holds every region's unsaved edits, or null when no region has any (or, with
- * `idleBefore`, when none has been idle since then: the backstop saves only then, and then saves every dirty region).
+ * `due`, when none is due: the backstop saves only then, and then saves every dirty region).
  * The caller holds the artifacts row FOR UPDATE.
  */
-export async function planRegionSave(tx: Queryable, current: ArtifactRow, ledger: HtmlIdentityLedger, options: { idleBefore?: string } = {}): Promise<RegionPlan | null> {
+export async function planRegionSave(tx: Queryable, current: ArtifactRow, ledger: HtmlIdentityLedger, options: { due?: SaveDue } = {}): Promise<RegionPlan | null> {
   const rows = await lockedRegionRows(tx, current.id);
   const dirty = rows.filter((row) => row.dirty_since !== null);
   if (!dirty.length) return null;
-  if (options.idleBefore !== undefined && !dirty.some((row) => row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(options.idleBefore!))) return null;
+  if (options.due && !dirty.some((row) => saveIsDue(row, options.due!))) return null;
   const declared = new Set(editableRegions(current.source ?? '').filter((region) => rows.some((row) => row.region_id === region.id && row.kind === region.kind)).map((region) => region.id));
   const outcomes: RegionOutcome[] = [];
   for (const row of dirty) {

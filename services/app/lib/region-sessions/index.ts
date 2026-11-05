@@ -17,7 +17,7 @@
  * not-found. The database is the truth and two app processes serialize on its rows; wakeups cross processes through
  * NOTIFY. Composition (the shared LISTEN registry and the heartbeat frame) is the caller's: the routes pass them in.
  */
-import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts';
+import { REGION_IDLE_SAVE_MS, REGION_MAX_UNSAVED_MS } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { regionStore, sessionCore, type RegionStore } from './sessions';
 import { cellStore, type CellStore } from './cells';
@@ -30,7 +30,9 @@ export interface RegionSessionDeps extends Pick<RegionStreamOptions, 'db' | 'sub
   clock?: RegionClock;
   keepaliveMs?: number;
   idleSaveMs?: number;
-  /** How often open streams look for a quiet dirty region (default a quarter of the idle time). */
+  /** Longest a region stays dirty under continuous typing before the backstop saves it (REGION_MAX_UNSAVED_MS). */
+  maxUnsavedMs?: number;
+  /** How often open streams look for a quiet dirty region (default every second). */
   idleCheckMs?: number;
   /** How long a page with no editor stream left waits before saving (a reconnect within it is not a leave). */
   leaveGraceMs?: number;
@@ -62,7 +64,7 @@ export function createRegionSessions(deps: RegionSessionDeps): RegionSessions {
   const cells = cellStore(deps.db, core);
   const streams = regionStreams(store, {
     db: deps.db, subscribe: deps.subscribe, keepaliveFrame: deps.keepaliveFrame, clock,
-    keepaliveMs: deps.keepaliveMs ?? 15_000, idleSaveMs, idleCheckMs: deps.idleCheckMs ?? idleSaveMs / 4, leaveGraceMs: deps.leaveGraceMs ?? 5_000,
+    keepaliveMs: deps.keepaliveMs ?? 15_000, idleSaveMs, maxUnsavedMs: deps.maxUnsavedMs ?? REGION_MAX_UNSAVED_MS, idleCheckMs: deps.idleCheckMs ?? 1_000, leaveGraceMs: deps.leaveGraceMs ?? 5_000,
   }, cells);
   return { ...store, cells, stream: streams.open, settle: streams.settle, dispose: streams.dispose };
 }

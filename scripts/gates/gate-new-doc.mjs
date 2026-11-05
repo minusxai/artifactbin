@@ -2,8 +2,9 @@
  * Gate: NEW DOC — "New" makes a doc and the person types into it at once, Google Docs style, in a real browser against
  * the real server: the workspace's Create menu → Document (lib/workspace artifactStarter) → the doc's page, where the
  * page opens its one rich region with no press (solid/document/region-editing `autoOpen`) and the caret is in the title
- * (the frame's `focus` region command); keys typed straight away land in the title and the body, a save keeps them, and
- * the doc is named by its first heading (lib/artifacts doc-title).
+ * (the frame's `focus` region command); keys typed straight away land in the title and the body, and with no save
+ * pressed the paused text is saved, the doc is named by its first heading (lib/artifacts doc-title) in its header too,
+ * and a signed-out reader of the shared doc sees the text and follows new typing.
  *
  *   node scripts/gates/gate-new-doc.mjs [base]
  */
@@ -75,14 +76,27 @@ try {
     check(!!body?.includes('First line of the body.'), 'Enter then typing continues in the body');
   });
 
-  await section('a save keeps the text and names the doc by its heading', async () => {
-    const before = await head();
-    const flushed = await page.evaluate(async (id) => (await fetch(`/api/artifacts/${id}/regions/flush`, { method: 'POST', credentials: 'same-origin' })).status, id);
-    check(flushed === 200, `the page's save answered ${flushed}`);
-    const saved = await until(head, (row) => row?.version > before.version && row.html.includes('First line of the body.'), 15_000);
-    check(saved?.version > before.version, `the save made a version (v${before.version} → v${saved?.version})`);
+  await section('with no save pressed, a signed-out reader sees the text and the doc is named by its heading', async () => {
+    // The person's own test: they type, then look from another browser. Nothing here asks for a save; the server's
+    // backstop saves a paused region within seconds (contracts REGION_IDLE_SAVE_MS) and readers follow the version.
+    const shared = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PATCH', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ visibility: 'unlisted', expectedState: (await head()).state }) });
+    check(shared.ok, `the doc is shared as unlisted (${shared.status})`);
+    const typedAt = Date.now();
+    const saved = await until(head, (row) => row?.html.includes('First line of the body.') && row.title === 'Launch plan', 20_000);
+    check(!!saved?.html.includes('First line of the body.'), `the paused text is saved without a press (v${saved?.version}, ${((Date.now() - typedAt) / 1000).toFixed(1)} s)`);
     check(/<h1[^>]*>Launch plan<\/h1>/.test(saved?.html ?? ''), 'the saved page holds the typed title as its heading');
     check(saved?.title === 'Launch plan' && /<title[^>]*>Launch plan<\/title>/.test(saved?.html ?? ''), `the doc is named by its heading (${saved?.title})`);
+    const chrome = await until(() => page.getByText('Launch plan', { exact: true }).first().isVisible(), (visible) => visible === true, 10_000);
+    check(chrome === true, "the editor's own header shows the new name");
+    const reader = await (await browser.newContext({ viewport: { width: 1100, height: 800 } })).newPage();
+    await reader.goto(page.url(), { waitUntil: 'load' });
+    const readerFrame = await documentFrame(reader);
+    const read = await until(() => readerFrame.locator('article').textContent(), (text) => text?.includes('First line of the body.'), 15_000);
+    check(!!read?.includes('First line of the body.') && read.includes('Launch plan'), 'a signed-out reader opening the doc sees what was typed');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Typed while they read.', { delay: 20 });
+    const followed = await until(() => readerFrame.locator('article').textContent(), (text) => text?.includes('Typed while they read.'), 20_000);
+    check(!!followed?.includes('Typed while they read.'), 'the open reader follows new typing after the pause, with no reload');
   });
 } finally {
   check.note(`gate time ${((performance.now() - started) / 1000).toFixed(1)} s`);

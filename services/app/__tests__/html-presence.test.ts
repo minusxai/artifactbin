@@ -49,10 +49,13 @@ it('rebinds presence to a published source revision without closing document upd
   await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
   expect((await stream.named('message'))[0]?.data.version).toBe(2);
   await stream.named('presence');
+  // A page that still shows the version before (it is drawing the new one) is answered, and nothing is broadcast.
+  expect((await publish('presMixed',{session,revision:'1',cursor:{nodeId:'stale',x:.4,y:.5},visible:true})).status).toBe(200);
   expect((await publish('presMixed',{session,revision:'2',cursor:{nodeId:'p',x:.4,y:.5},visible:true})).status).toBe(200);
   const deadline=Date.now()+2000;let present=false;
   while(Date.now()<deadline&&!present)present=JSON.stringify(await stream.named('presence',1,deadline-Date.now())).includes('"nodeId":"p"');
   expect(present).toBe(true);
+  expect(JSON.stringify(await stream.named('presence',1,300))).not.toContain('"nodeId":"stale"');
   await db.query("UPDATE artifacts SET visibility='private' WHERE id='presMixed'");
   await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
   expect(await stream.named('message',1,200)).toEqual([]);
