@@ -32,7 +32,7 @@ export default function DocumentSettings(props: DocumentSettingsProps): JSX.Elem
     if (!base || busy()) return;
     setBusy(true); setError('');
     try {
-      const response = await writeBrowserArtifact(props.id, { source }, base.edit_id);
+      const response = await writeBrowserArtifact(props.id, { source }, base.edit_id, base.live);
       if (!response.ok) throw new Error('Could not save settings. Refresh and try again.');
       const next = await backend.load();
       if (!next) throw new Error('Settings were saved. Refresh to load the current version.');

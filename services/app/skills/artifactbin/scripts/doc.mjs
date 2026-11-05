@@ -62,8 +62,8 @@ function explained(error) {
 }
 
 async function readRegion(client, id, region, format) {
-  // Unsaved typing is saved first, so the text read holds everything typed so far. Readers may
-  // not save (404): they read the saved page.
+  // Unsaved typing is saved first, so the version read holds everything typed so far (the server's
+  // read does this too). Readers may not save (404): they read the page with its live text.
   try {
     await client.request(`/api/artifacts/${id}/regions/flush`,
       {method: 'POST', safeToRepeat: true});

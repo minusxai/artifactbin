@@ -120,6 +120,27 @@ describe('editable regions (data-af-editable)',()=>{
 });
 
 describe('applyHtmlVersion (inside the frame)',()=>{
+ it('follows live text within a version: the served page must be at least as live as announced; provisional ids are drawn, not offered',async()=>{
+  const regionPage=(body:string)=>V1.replace('<p data-af-id="p2">Second.</p>',`<article data-af-id="r1" data-af-editable="rich">${body}</article>`);
+  load(served(1,regionPage('<p data-af-id="a1">Hello</p>')));
+  // The current page at version 1, live 5: a typed block with a provisional id (not one of the saved node ids).
+  const live=(n:number,body:string,revision=1)=>served(revision,regionPage(body)).replace('"scriptFingerprint"',`"live":${n},"scriptFingerprint"`).replace('"af-9",','');
+  const next=live(5,'<p data-af-id="a1">Hello there</p><p data-af-id="af-9">Typed live.</p>');
+  const fetchFn=vi.fn(async(url:string)=>url.endsWith('.js')?new Response(''):new Response(next));
+  const applied=await applyHtmlVersion(window,{revision:'1'},1,fetchFn as unknown as typeof fetch,undefined,5);
+  expect(applied).toMatchObject({revision:'1',live:5});expect(applied.rebuild).toBeUndefined();
+  expect(document.querySelector('article')!.textContent).toBe('Hello thereTyped live.');
+  expect(applied.savedNodeIds).toContain('a1');expect(applied.savedNodeIds).not.toContain('af-9');
+  // Older live text than announced is not the current page (the parent reloads); a newer version always is.
+  const older=async()=>new Response(live(3,'<p data-af-id="a1">Hello</p>'));
+  await expect(applyHtmlVersion(window,{revision:'1',live:2},1,older as unknown as typeof fetch,undefined,4)).rejects.toThrow(/older than its announced live text/);
+  // Live text the document already holds is not fetched again (a page's first ping names the live text it was served).
+  const none=vi.fn(async()=>new Response('unused'));
+  await expect(applyHtmlVersion(window,{revision:'1',live:5,savedNodeIds:['a1']},1,none as unknown as typeof fetch,undefined,5)).resolves.toEqual({revision:'1',live:5,savedNodeIds:['a1']});
+  expect(none).not.toHaveBeenCalled();
+  const newer=vi.fn(async(url:string)=>url.endsWith('.js')?new Response(''):new Response(live(0,'<p data-af-id="a1">Saved.</p>',2)));
+  await expect(applyHtmlVersion(window,{revision:'1',live:5},1,newer as unknown as typeof fetch,undefined,9)).resolves.toMatchObject({revision:'2',live:0});
+ });
  it('fetches its own address without the ticket, draws the version and keeps it as the next baseline',async()=>{
   load(served(1,V1));
   const next=served(2,V1.replace('Second.','Second, edited.'));

@@ -156,5 +156,6 @@ it('native source publication streams only a head ping, not HTML or compiler nod
   expect(response.headers.get('Cache-Control')).toContain('no-store');
   const [ping] = await readNamed(response.body!, 'message');
   expect(ping?.event).toBe('message');
-  expect(ping?.data).toEqual({ editId: doc.edit_id, version: 1, by: null, title: doc.title ?? null });
+  // An HTML page's ping carries its live revision too (lib/artifacts current-page): 0 with no region rows.
+  expect(ping?.data).toEqual({ editId: doc.edit_id, version: 1, live: 0, by: null, title: doc.title ?? null });
 });

@@ -10,8 +10,9 @@
  *    went (removed, or its kind changed) or, for every region, when the editor lost edit access (the stream ends).
  *  - Saving on events: when the last editor stream of a page in this process closes (after a short grace, so a
  *    reconnect is not a leave) its unsaved edits are saved; while streams are open, a region dirty and quiet for
- *    REGION_IDLE_SAVE_MS, or dirty for REGION_MAX_UNSAVED_MS however busy, is saved by the idle backstop. Both go through the store's save, which locks the page FOR
- *    UPDATE: a second process racing it finds nothing left to save.
+ *    REGION_IDLE_SAVE_MS is saved by the idle backstop (typing that never pauses is never cut: readers follow the live
+ *    text itself, lib/artifacts current-page). Both go through the store's save, which locks the page FOR UPDATE: a
+ *    second process racing it finds nothing left to save.
  */
 import { artifactChannel, isCellKey, regionsChannel, type RegionStreamFrame } from '@artifactbin/contracts';
 import { editableRegions, isRegionId, type RegionKind } from '@/lib/live-regions';
@@ -41,7 +42,6 @@ export interface RegionStreamOptions {
   clock: RegionClock;
   keepaliveMs: number;
   idleSaveMs: number;
-  maxUnsavedMs: number;
   idleCheckMs: number;
   leaveGraceMs: number;
 }
@@ -97,14 +97,14 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions, 
     save: (actor, saveOptions) => store.flush(actor, artifactId, saveOptions),
     async isDue(due) {
       const db = await options.db();
-      return (await db.query('SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND (last_update_at <= $2 OR dirty_since <= $3) LIMIT 1', [artifactId, due.quietBefore, due.dirtyBefore])).rows.length > 0;
+      return (await db.query('SELECT 1 FROM region_states WHERE artifact_id = $1 AND dirty_since IS NOT NULL AND last_update_at <= $2 LIMIT 1', [artifactId, due.quietBefore])).rows.length > 0;
     },
   });
 
   async function idleSave(artifactId: string): Promise<void> {
     const watch = pages.get(artifactId);
     if (!watch?.streams.size) return;
-    const due: SaveDue = { quietBefore: new Date(clock.now() - options.idleSaveMs).toISOString(), dirtyBefore: new Date(clock.now() - options.maxUnsavedMs).toISOString() };
+    const due: SaveDue = { quietBefore: new Date(clock.now() - options.idleSaveMs).toISOString() };
     if (watch.saver.isDue && !await watch.saver.isDue(due)) return;
     for (const { actor } of [...watch.streams]) if ((await watch.saver.save(actor, { due })).status === 200 && !watch.saver.eachLeaves) return;
   }

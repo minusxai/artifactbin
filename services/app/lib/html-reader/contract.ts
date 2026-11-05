@@ -200,13 +200,19 @@ export interface ArtifactDataEvent {
   version: number;
 }
 
-/** What the stream sends on a version: the head's identity and name, nothing else. */
+/**
+ * What the stream sends on a version, and on live text: the head's identity and name, nothing else. A LIVE ping is the
+ * same version with a higher `live` (its regions' unsaved typing moved; lib/artifacts current-page): readers follow it
+ * exactly as a version, fetching the current page. Sent at most every LIVE_PING_MS per page.
+ */
 export interface ArtifactVersionPing {
   editId: string;
   version: number;
-  /** The handle of the account that made this version, or null. */
+  /** The page's live revision within `version` (an HTML page); (version, live) orders every ping. */
+  live?: number;
+  /** The handle of the account that made this version, or null (null for live text, which has no single author). */
   by: string | null;
-  /** The row's title at this version (a doc is named by its heading as it is saved): the page's header follows it. */
+  /** The current page's title (a doc is named by its heading, live): the page's header follows it. */
   title: string | null;
 }
 

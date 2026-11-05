@@ -30,6 +30,8 @@ export interface ArtifactHead {
   html?: string;
   theme: string | null;
   version: number;
+  /** An HTML page's live revision: `html` and `title` hold its regions' unsaved live text at it (lib/artifacts current-page). */
+  live?: number;
   /** Head pointer of the edit protocol — every edit this session sends carries it. */
   edit_id: string;
   template?: string | null;

@@ -32,10 +32,11 @@ const create = async (token: string, body: Record<string, unknown>) => {
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };
-import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
+import { artifactChannel, annotationsChannel, regionsChannel } from '@artifactbin/contracts';
 import { presenceChannel } from '@/lib/html-presence';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
-const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
+/** An HTML page's stream also follows its live text (lib/publish/realtime live-pings): one regions channel per page. */
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1, [regionsChannel(id)]: 1 });
 
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) => `<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;

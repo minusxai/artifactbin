@@ -37,7 +37,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   }
   const savedNodeIds: string[] = [];
   const collect = (node: DefaultTreeAdapterMap['node']) => {
-    if ('attrs' in node) { const id = node.attrs.find(attr=>attr.name==='data-af-id')?.value; if(id) savedNodeIds.push(id); }
+    if ('attrs' in node) { const id = node.attrs.find(attr=>attr.name==='data-af-id')?.value; if(id && !input.unsavedNodeIds?.has(id)) savedNodeIds.push(id); }
     if ('childNodes' in node) for(const child of node.childNodes) collect(child);
   };
   collect(document);

@@ -5,7 +5,8 @@
  * this module sits above it, reads the annotation store, and passes the count
  * down, so artifacts never reaches the annotation store or the remote agents.
  */
-import { MembershipError, type MutationReceipt, type ArtifactRow, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
+import { MembershipError, type MutationReceipt, type ArtifactRow, checkpointLiveRegions, currentPage, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
+import { canEdit } from '@artifactbin/contracts';
 import { artifactToWire } from '@/lib/artifact-wire';
 import type { AccessActor } from '@/lib/accounts';
 import { datasetReadAccess, viewDatasetWire } from '@/lib/dataset-permissions';
@@ -19,11 +20,16 @@ import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor,
  * an agent already makes before editing carries the owner's feedback, so no
  * second call and no second concept exist on the read side.
  */
-export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string, viewerId?:string|null) {
+export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string, viewerId?:string|null, view: 'current' | 'saved' = 'current') {
   if (row.format !== 'html') return artifactToWire(row, base, 0);
-  // The count and the threads are independent reads.
-  const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row,undefined,viewerId)]);
-  return { ...await artifactToWire(row, base, open), annotations };
+  // The count, the threads and the current page are independent reads.
+  const [open, annotations, page] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row,undefined,viewerId), view === 'current' ? currentPage(row) : null]);
+  /*
+   * THE CURRENT PAGE (lib/artifacts current-page): the html and title with the regions' unsaved live text composed in,
+   * and `live`, the live revision they are at. `state` stays the saved head's: a whole-page write made from this html
+   * sends `expectedLive` too, and merges its regions from the live state it read (lib/artifacts store).
+   */
+  return { ...await artifactToWire(row, base, open), ...(page ? { html: page.row.source, title: page.row.title, live: page.live } : {}), annotations };
 }
 
 /** Any artifact read above lib/artifacts: the wire row with its open-thread count. */
@@ -36,10 +42,14 @@ const openAnnotationsFor = (row: ArtifactRow): Promise<number> =>
   row.format === 'html' ? countOpenAnnotations(row.id) : Promise.resolve(0);
 
 /** One artifact as the bearer read door answers it: the head this reader may see, its open threads, and their capabilities. */
-export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string) {
+export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string, options: { dryRun?: boolean } = {}) {
+  // An agent that may edit the page reads a saved version: its unsaved live text is saved first (a checkpoint), so a
+  // write made from what it read never applies people's typing twice. Readers read the current page as it is. A dry
+  // run ("would this work?") leaves no trace: it reads the saved head.
+  if (!options.dryRun) await checkpointLiveRegions(actor, id);
   const head = await snapshotHeadFor(actor, id);
   if (!head) return null;
-  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId);
+  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId, canEdit(head.role) ? 'saved' : 'current');
   const narrowed = snapshotForReader(wire, head.row, head.role);
   // A dataset answers with the reader's role view: the rows, columns and counts their select rule shows.
   if (head.row.format !== 'dataset') return narrowed;

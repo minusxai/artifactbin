@@ -16,7 +16,7 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
   const backend = fakeBackend({}, { live, liveFrame });
   return {
     backend, unsubscribe,
-    ping: (p: { version: number; editId: string; by?: string | null; title?: string | null }) => handlers!.onPing({ by: null, title: null, ...p }),
+    ping: (p: { version: number; editId: string; live?: number; by?: string | null; title?: string | null }) => handlers!.onPing({ by: null, title: null, ...p }),
     wake: () => handlers!.onWake?.(),
     data: () => handlers!.onData?.({datasets:['garden']} as never),
     dataFrame: (frame: { datasets: string[]; version: number; revisions?: Record<string, string> }) => handlers!.onData?.(frame),
@@ -251,7 +251,7 @@ it('refreshes native publication once without fetching a JSX frame or replaying 
  expect(reload).not.toHaveBeenCalled();
  expect(invalidate).toHaveBeenCalledOnce();
  ping({version:2,editId:'saved'}); ping({version:2,editId:'saved'}); ping({version:1,editId:'initial'});
- expect(reload).toHaveBeenCalledExactlyOnceWith(2,'saved',null);
+ expect(reload).toHaveBeenCalledExactlyOnceWith(2,'saved',null,0);
  expect(liveFrame).not.toHaveBeenCalled();
 });
 
@@ -261,7 +261,18 @@ it('delivers each newer native publication once, in version order, for the page 
  renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:follow}));
  ping({version:2,editId:'two'}); ping({version:4,editId:'four',title:'Launch plan'}); ping({version:3,editId:'three'}); ping({version:4,editId:'four'});
  // Each carries the version's title: the page's header follows a doc that names itself from its heading.
- expect(follow.mock.calls).toEqual([[2,'two',null],[4,'four','Launch plan']]);
+ expect(follow.mock.calls).toEqual([[2,'two',null,0],[4,'four','Launch plan',0]]);
+});
+
+it('delivers live text within a version (a higher live revision) as a publication, in (version, live) order', () => {
+ const {backend,ping}=liveBackend(vi.fn(async()=>frame(2)));
+ const follow=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:follow}));
+ // An older or equal live revision than the last announced is not news; a higher one is, and a new version resets it.
+ ping({version:1,editId:'initial',live:0}); ping({version:1,editId:'initial',live:3}); ping({version:1,editId:'initial',live:2});
+ ping({version:1,editId:'initial',live:5,title:'Typed live'}); ping({version:1,editId:'initial',live:4});
+ ping({version:2,editId:'two',live:1}); ping({version:2,editId:'two',live:6});
+ expect(follow.mock.calls).toEqual([[1,'initial',null,3],[1,'initial','Typed live',5],[2,'two',null,1],[2,'two',null,6]]);
 });
 
 it('never refreshes the native archived view when a publication arrives', () => {

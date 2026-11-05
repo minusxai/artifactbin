@@ -13,7 +13,7 @@ describe('followHtmlVersion',()=>{
  it('morphs: the frame draws the version, the page refreshes its trusted revision and does not reload',async()=>{
   const reload=vi.fn(),refresh=vi.fn(async()=>true),controller=frame(command=>({type:HTML_VERSION_APPLIED,revision:String(command.version)}));
   await expect(followHtmlVersion({version:7,frame:controller,refresh,reload})).resolves.toBe('morphed');
-  expect(controller.sent).toEqual([{type:HTML_VERSION_MESSAGE,version:7}]);expect(refresh).toHaveBeenCalledWith(7,'7');expect(reload).not.toHaveBeenCalled();
+  expect(controller.sent).toEqual([{type:HTML_VERSION_MESSAGE,version:7,live:0}]);expect(refresh).toHaveBeenCalledWith(7,'7');expect(reload).not.toHaveBeenCalled();
  });
  it('follows a frame that rebuilds its own document (scripts changed, edit not inert): the trusted revision moves, the page does not reload',async()=>{
   const reload=vi.fn(),refresh=vi.fn(async()=>true),controller=frame(command=>({type:HTML_VERSION_REBUILT,revision:String(command.version)}));
@@ -56,5 +56,30 @@ describe('followPublication',()=>{
   await vi.waitFor(()=>expect(answers).toHaveLength(2));answers[1]!();await Promise.all([six,seven]);
   expect(controller.send.mock.calls.map(call=>call[0].version)).toEqual([5,7]);
   expect(show.mock.calls).toEqual([[{version:5,editId:'five'}],[{version:7,editId:'seven'}]]);expect(reload).not.toHaveBeenCalled();
+ });
+ it('follows live text within a version in (version, live) order, skipping live text overtaken while it waited',async()=>{
+  const show=vi.fn(),reload=vi.fn(),answers:Array<()=>void>=[];
+  const listeners=new Set<(event:unknown)=>void>();
+  const controller={subscribe:(listener:(event:unknown)=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},
+   send:vi.fn((command:{version:number;live:number})=>{answers.push(()=>listeners.forEach(listener=>listener({type:HTML_VERSION_APPLIED,revision:String(command.version)})));})};
+  const first=followPublication({version:9,live:4,editId:'nine',frame:controller,show,reload});
+  await vi.waitFor(()=>expect(answers).toHaveLength(1));
+  const older=followPublication({version:9,live:3,editId:'nine',frame:controller,show,reload});
+  const middle=followPublication({version:9,live:6,editId:'nine',frame:controller,show,reload});
+  const last=followPublication({version:9,live:8,editId:'nine',frame:controller,show,reload});
+  answers[0]!();await first;
+  await vi.waitFor(()=>expect(answers).toHaveLength(2));answers[1]!();await Promise.all([older,middle,last]);
+  expect(controller.send.mock.calls.map(call=>[call[0].version,call[0].live])).toEqual([[9,4],[9,8]]);
+  expect(reload).not.toHaveBeenCalled();
+ });
+ it('never reloads for live text the frame could not draw within the version it shows; a new version still reloads',async()=>{
+  const reload=vi.fn(),show=vi.fn();
+  const refusing=frame(()=>({type:HTML_VERSION_REFUSED,reason:'the new version answered 404'}));
+  await followPublication({version:20,live:3,drawn:20,editId:'e',frame:refusing,show,reload});
+  await followPublication({version:20,live:5,drawn:20,editId:'e',frame:refusing,show,reload});
+  expect(reload).not.toHaveBeenCalled();
+  expect(refusing.sent).toHaveLength(2);
+  void followPublication({version:21,live:0,drawn:20,editId:'f',frame:refusing,show,reload});
+  await vi.waitFor(()=>expect(reload).toHaveBeenCalledOnce());
  });
 });

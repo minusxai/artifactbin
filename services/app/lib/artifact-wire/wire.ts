@@ -193,7 +193,10 @@ export function parseExpectedVersion(body: Record<string, unknown>, requireVersi
   if (state !== undefined && (typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state))) return json({error:'invalid_expected_state'},400);
   if (requireVersion && v === undefined) return json({error:'version_required',hint:'Read the artifact and send its version as expectedVersion.'},400);
   if (state === undefined) return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
-  return {...(v !== undefined ? {expectedVersion:v as number} : {}),expectedState:state as string};
+  // The live revision a page was read at (its `live`), when the write was made from its live text.
+  const live = body.expectedLive;
+  if (live !== undefined && !(typeof live === 'number' && Number.isSafeInteger(live) && live >= 0)) return json({error:'invalid_expected_live'},400);
+  return {...(v !== undefined ? {expectedVersion:v as number} : {}),expectedState:state as string,...(live !== undefined ? {expectedLive:live as number} : {})};
 }
 
 /**

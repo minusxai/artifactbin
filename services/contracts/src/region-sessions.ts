@@ -4,10 +4,11 @@
  * inside the page frame (@afbin/regions). The merge core is lib/live-regions.
  *
  * Decisions this contract encodes (plan: https://app.artifactbin.dev/a/vYfqsF):
- * - Only people with edit access to the page edit regions. Readers see region text at saved versions.
- * - Versions are created on EVENTS, never on a short timer: an author or agent write, a flush (before a comment,
- *   when the last editor leaves, on request) or a slow idle save. The live state between versions is durable in
- *   the region tables, so a version is a reader-visible checkpoint, and the page version rarely moves under people.
+ * - Only people with edit access to the page edit regions. Everyone who may read the page reads its live text: the
+ *   live state IS the document (the app's current page), followed live, with no save.
+ * - Versions are checkpoints in history, created on EVENTS, never on a short timer: an author or agent write, a flush
+ *   (before a comment, when the last editor leaves, on request) or the idle save after two quiet minutes. The live
+ *   state between versions is durable in the region tables, so the page version rarely moves under people.
  * - Every incoming update is validated on the server against the region's schema before it is stored or relayed.
  * - Binary Yjs payloads travel base64 over HTTP/SSE and as Uint8Array over postMessage.
  */
@@ -22,12 +23,10 @@ export const REGION_UPDATE_MAX_BYTES = 262_144;
 /** Largest merged region text, in UTF-16 code units. */
 export const REGION_TEXT_MAX_UNITS = 1_000_000;
 /**
- * A region with unsaved edits and no new update for this long is saved as a version: readers, the page's title and
- * agents see what editors typed within seconds of a pause, as in a shared doc.
+ * A region with unsaved edits and no new update for this long is saved as a version: a checkpoint in history. Nobody
+ * waits for it (readers, the title and agents follow the live text itself), so typing that never pauses is never cut.
  */
-export const REGION_IDLE_SAVE_MS = 3_000;
-/** A region kept dirty this long by typing that never pauses is saved anyway. */
-export const REGION_MAX_UNSAVED_MS = 15_000;
+export const REGION_IDLE_SAVE_MS = 120_000;
 
 /** `POST /api/artifacts/:id/regions/:regionId/open` */
 export interface RegionOpenReply {

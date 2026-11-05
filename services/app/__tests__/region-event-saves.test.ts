@@ -1,12 +1,12 @@
 /**
  * Versions are saved on EVENTS (contract region-sessions): when the last editor stream of a page closes (after a
  * grace a reconnect fits in), and by the idle backstop, which the open streams drive: a region dirty and quiet for
- * REGION_IDLE_SAVE_MS is saved, one that is still being typed in is not, until it has been dirty for
- * REGION_MAX_UNSAVED_MS. Driven with a fake clock.
+ * REGION_IDLE_SAVE_MS is saved, one that is still being typed in is not, however long the typing goes on (readers
+ * follow the live text itself: versions are history). Driven with a fake clock.
  */
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { REGION_IDLE_SAVE_MS, REGION_MAX_UNSAVED_MS } from '@artifactbin/contracts';
+import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
@@ -107,7 +107,7 @@ it('the idle backstop saves a region dirty and quiet for REGION_IDLE_SAVE_MS, an
   expect(await version()).toBe(1);
   await type('second ');
   // The backstop's own condition, under the page lock: a save asked for as idle finds this region typed in just now.
-  const due = { quietBefore: new Date(now - REGION_IDLE_SAVE_MS).toISOString(), dirtyBefore: new Date(now - REGION_MAX_UNSAVED_MS).toISOString() };
+  const due = { quietBefore: new Date(now - REGION_IDLE_SAVE_MS).toISOString() };
   expect(await sessions.flush(owner, pageId, { due })).toEqual({ status: 200, body: { version: 1 } });
   now += REGION_IDLE_SAVE_MS / 2;
   fireIdleChecks(); await sessions.settle();
@@ -123,20 +123,19 @@ it('the idle backstop saves a region dirty and quiet for REGION_IDLE_SAVE_MS, an
   expect(await version()).toBe(2);
 });
 
-it('typing that never pauses is saved once it has been unsaved for REGION_MAX_UNSAVED_MS', async () => {
+it('typing that never pauses is never cut into versions, however long it goes on; its first pause is', async () => {
   sessions = instance(60_000);
   await watch();
-  const step = REGION_IDLE_SAVE_MS / 2;
-  let typed = 0;
-  for (; typed * step < REGION_MAX_UNSAVED_MS - step; typed++) {
+  // A keystroke burst every 20 s for half an hour: never quiet for REGION_IDLE_SAVE_MS.
+  const step = 20_000;
+  for (let typed = 0; typed * step < 30 * 60_000; typed++) {
     await type(`w${typed} `);
     now += step;
     fireIdleChecks(); await sessions.settle();
   }
   expect(await version()).toBe(1);
-  await type('last ');
-  now += step;
+  now += REGION_IDLE_SAVE_MS;
   fireIdleChecks(); await sessions.settle();
   expect(await version()).toBe(2);
-  expect((await getArtifactById(pageId))!.source).toContain('last w');
+  expect((await getArtifactById(pageId))!.source).toContain('w89 w88');
 });

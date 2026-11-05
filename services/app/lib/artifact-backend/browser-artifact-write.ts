@@ -3,16 +3,20 @@
  * its existing conditional protocol. */
 import {artifactRequests} from './http';
 import type {ArtifactBackend} from './types';
-/** Listings, folders and the social preview: an online write whose caller reads the Response itself. */
-export async function writeBrowserArtifact(id:string,change:Record<string,unknown>,editId?:string):Promise<Response>{
+/**
+ * Listings, folders and the social preview: an online write whose caller reads the Response itself. A source made from
+ * an HTML page's current page (its live text composed in, `live` its live revision) names that revision, so its regions
+ * merge from the live text it holds rather than applying it twice (lib/artifacts store `expectedLive`).
+ */
+export async function writeBrowserArtifact(id:string,change:Record<string,unknown>,editId?:string,live?:number):Promise<Response>{
  const requests=artifactRequests(id);
  const observed=await requests.head();if(!observed.ok)return observed;
- const head=await observed.json() as {format?:string;state?:string;version:number;edit_id:string;markup?:string;html?:string;title?:string|null;description?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;sharing_revision?:number;ancestor_ids?:string[]};
+ const head=await observed.json() as {format?:string;state?:string;version:number;edit_id:string;live?:number;markup?:string;html?:string;title?:string|null;description?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;sharing_revision?:number;ancestor_ids?:string[]};
  if(typeof head.state!=='string'||!Number.isSafeInteger(head.version))return Response.json({error:'invalid_response',details:[{message:'Refresh the artifact before saving.'}]},{status:502});
  const {source,annotationOps:_annotationOps,...fields}=change;
  if(head.format==='html'&&typeof source==='string'){
-  if(head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.html},{status:409});
-  const response=await requests.htmlUpdate({...fields,html:source,expectedVersion:head.version,expectedState:head.state});
+  if(head.edit_id!==editId||live!==undefined&&head.live!==live)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,live:head.live,source:head.html},{status:409});
+  const response=await requests.htmlUpdate({...fields,html:source,expectedVersion:head.version,expectedState:head.state,...(live!==undefined?{expectedLive:live}:{})});
   if(response.status!==409)return response;
   // A race after the head read is a conflict, never an automatic replacement retry.
   const latest=await requests.head();if(!latest.ok)return response;

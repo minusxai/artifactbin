@@ -1,6 +1,6 @@
 import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
-import { type ArtifactRow, canReadArtifact, getArtifactById, UnservableDocument } from '@/lib/artifacts';
+import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
@@ -281,7 +281,7 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 };
 
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
-interface Admitted { row: ArtifactRow; canonicalPath?: string }
+interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision'] }
 /** The document page's reader header (docs/phase2-architecture.md §6): which renderer answered. */
 const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { ['x-mx-reader']: reader.mode } : {});
 
@@ -454,7 +454,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const segments = url.pathname.split('/').filter(Boolean);
     // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
     const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), pages: pagesSite }));
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row, ...(admitted.revision ? { admittedRevision: admitted.revision } : {}) } : {}), pages: pagesSite }));
       return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit' || (segments[0] === 'a' && segments.length === 3 && segments[2] === 'app')) segments.pop();
@@ -498,11 +498,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
     if (!found) return { status: 200 };
-    const row = await getArtifactById(found.id);
-    if (!row) return { status: 404 };
+    // The row and its live revision in one statement (lib/artifacts readPageRow), for the page's answer below.
+    const read = await readPageRow(found.id);
+    if (!read) return { status: 404 };
+    const { row, revision } = read;
     // A key skips canonical healing, but only a valid key admits the page.
     const key = url.searchParams.get('key');
-    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
+    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row, revision } };
     const actor = await sessionActor(request).catch(() => null);
     // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
     const facts = actor ? requestAccessFacts(request, actor) : undefined;
@@ -510,10 +512,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
     // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
-    if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
+    if (url.searchParams.has('key')) return { status: 200, admitted: { row, revision } };
     const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
     const canonical = canonicalPath + (editingDataset ? '/edit' : '');
-    return { status: 200, admitted: { row, canonicalPath }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
+    return { status: 200, admitted: { row, canonicalPath, revision }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
   // Static: content-addressed trees are immutable, version-addressed libraries a day; everything else is served plainly.
