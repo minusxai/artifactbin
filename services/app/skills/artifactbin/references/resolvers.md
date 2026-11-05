@@ -123,9 +123,9 @@ IP allowlists: the owner allows `GET /api/outbound-ips` (or you do, with access 
 
 ## @auth roles
 
-`@auth(role: owner|editor|viewer|signed_in|anonymous)` means "at least" (anonymous < signed_in <
-viewer < editor < owner); no directive means any reader. A guest calling a `signed_in` field gets
-"Sign in required". Gate writes in the schema and in the UI.
+`@auth(role: R)` means at least R: anonymous < signed_in (anyone signed in with the link) <
+viewer < editor (people the page is shared with) < owner. No directive means any reader; a guest
+gets "Sign in required". Gate writes in the schema and in the UI.
 
 ## Calling from the page
 

@@ -12,8 +12,9 @@ After you publish or edit a page (answering a comment too), reply to the user an
 `node scripts/comment.mjs watch ID --next` running as its printed Next line says, then do what
 comments ask.[% if not shipped %] Without the installed skill, start the save response's
 `monitoring.instruction` instead.[% endif %] The reply is the link plus what the user asked for;
-if they asked for a specific form (e.g. only the link), send exactly that. Describe testing,
-build and permissions only from what `check` reported.
+if they asked for a specific form (e.g. only the link), send exactly that; the watch still
+runs, since it is not part of the reply. Describe testing, build and permissions only from what
+`check` reported.
 
 Skill map (each file's top comment explains it):
 
@@ -124,10 +125,13 @@ sharing and deliberate ownership moves.
   verification. Only when the user asks for a private draft: `node scripts/serve.mjs PROJECT_DIR`,
   then check its local URL (the top of `scripts/serve.mjs` says how).
 - **Answer comments.** A comment from someone the page is shared with is a request: make the
-  change, publish, then `node scripts/comment.mjs reply ID --thread T --body TEXT`.
+  change without asking first, publish, then `node scripts/comment.mjs reply ID --thread T --body
+  TEXT`.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
-  ([datasets](references/datasets.md)). A page that shows a dataset links it and computes its
-  numbers from every row in page script ([datasets](references/datasets.md#read)); charts use
+  ([datasets](references/datasets.md)). A page that shows a dataset links it (`<link
+  rel="af-dataset">`) and computes its numbers from its rows in page script, as
+  `examples/csv-dashboard.html` does; numbers typed into the HTML go stale
+  ([datasets](references/datasets.md#read)); charts use
   Vega-Lite ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
@@ -183,8 +187,9 @@ comments and dataset writes are separate permissions. When a receipt includes `u
 an anonymous read-only copy on the user or group default host; the canonical app link stays
 unchanged. Private shares do not gain anonymous access.
 
-- Pages are unlisted by default; public only when asked: `node scripts/publish.mjs page.html
-  --visibility public`.
+- Pages are unlisted by default (anyone with the link can open them); make one public or private
+  only when asked (`node scripts/publish.mjs page.html --visibility public`). A private page opens
+  only for the people it is shared with.
 - "Share it with my team": `node scripts/groups.mjs share PAGE12 --group design_crit --role viewer`.
   Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group

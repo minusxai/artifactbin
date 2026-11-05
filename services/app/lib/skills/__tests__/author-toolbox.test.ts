@@ -165,7 +165,7 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A passing run lists exactly the step labels it proved, per viewport, and what it did not, in one facts section (H10/H11).
  const proved=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
  expect(proved).not.toContain('Verified');
- expect(proved.slice(proved.indexOf('For your reply:'))).toBe(['For your reply:','Link: https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: visual appearance; sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','','Next: when the request is done, reply to the user (use the facts above for testing, build and permissions) and run node scripts/comment.mjs watch X --next. Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.',''].join('\n'));
+ expect(proved.slice(proved.indexOf('For your reply:'))).toBe(['For your reply:','Link: https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: visual appearance; sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','','Next: when the request is done, reply to the user (use the facts above for testing, build and permissions) and run node scripts/comment.mjs watch X --next (separate from the reply, even a link-only one). Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.',''].join('\n'));
  // Steps that proved no labelled behaviour still leave a true Tested: line, never an empty one.
  const bare=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true}}]},'qa.json');
  expect(bare).toContain('\nTested: 390x844: the page loads without errors\n');expect(bare).not.toMatch(/Tested: \n/);
@@ -689,12 +689,18 @@ it('publish refuses an empty page and starter placeholders by line, and drops ha
   expect(refused.details.autofix.report).toContain('ref:DATASET_ID is a starter placeholder: publish that data first');
   expect(refused.details.autofix.report).toContain('starter placeholder [Household budget] is still in the page');
   expect(sent).toEqual([]);
+  // A starter's own code and comments are not placeholders: an index expression, a ref: in a comment.
+  const {placeholderProblems}=await import('../../../skills/artifactbin/scripts/toolbox-publish-guard.mjs');
+  const deck=await readFile(new URL('../../../skills/artifactbin/examples/deck.html',import.meta.url),'utf8');
+  expect(placeholderProblems(deck).map((p:any)=>p.snippet)).not.toContain('[DATASET]');
+  expect(placeholderProblems(deck).filter((p:any)=>p.snippet.startsWith('href'))).toEqual([]);
+  expect(placeholderProblems('<script>\n// add <link href="ref:ID">\n</script><!-- <link href="ref:ID"> --><p>x</p>',new Set())).toEqual([]);
   // A new page with hand-written and repeated data-af-ids publishes; none of them is sent.
   await writeFile(file,'<!doctype html>\n<h1 data-af-id="hero">Hi</h1><p data-af-id="hero">Lede</p>');
   const done=await publishCommand({values:{},positionals:[file]},options);
   expect(sent.at(-1).method).toBe('POST');expect(sent.at(-1).body.html).not.toContain('data-af-id="hero"');
   expect(done.autofix.routine).toContain('dropped 2 hand-written data-af-id (the platform assigns them)');
-  expect(done.next).toBe('Next: when the request is done, reply to the user and run node scripts/comment.mjs watch NEW123 --next. Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.');
+  expect(done.next).toBe('Next: when the request is done, reply to the user and run node scripts/comment.mjs watch NEW123 --next (separate from the reply, even a link-only one). Claude Code: start it with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.');
   expect(JSON.parse(await readFile(file+'.af.json','utf8')).id).toBe('NEW123');
  }finally{await rm(home,{recursive:true,force:true});}
 });

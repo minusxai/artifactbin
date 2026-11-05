@@ -167,7 +167,7 @@ describe('retired skill phrasing', () => {
   it('states the reply rule once, in SKILL.md Read first', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
     expect(skill).toContain('The reply is the link plus what the user asked for; if they asked for a specific form ' +
-      '(e.g. only the link), send exactly that. Describe testing, build and permissions only from what `check` reported.');
+      '(e.g. only the link), send exactly that; the watch still runs, since it is not part of the reply. Describe testing, build and permissions only from what `check` reported.');
     expect(skill.match(/The reply is/g)).toHaveLength(1);
   });
 });

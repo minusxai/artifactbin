@@ -33,7 +33,7 @@ export function starterTexts(directory) {
   try {
     for (const name of readdirSync(from).filter(name => name.endsWith('.html')))
       for (const [text, inner] of readFileSync(new URL(name, from), 'utf8')
-        .matchAll(/\[([^[\]\n'"`=(){};<>]{2,120})\]/g))
+        .matchAll(/(?<![\w)\].$])\[([^[\]\n'"`=(){};<>]{2,120})\]/g))
         if (/[A-Za-z]{2}/.test(inner) && (/^[A-Z][^.]*$/.test(inner) || /[\s@]/.test(inner)))
           found.add(text);
   } catch {}
@@ -49,7 +49,9 @@ const at = (source, offset) => {
  * any starter's bracketed text. */
 export function placeholderProblems(source, texts = starterTexts()) {
   const problems = [];
-  for (const match of source.matchAll(/\b(?:href|src)\s*=\s*["']ref:([^"']*)["']/gi))
+  // A ref: in a tag the page renders; one in a comment (a starter's own usage line) is not a link.
+  const code = source.replace(/<!--[\s\S]*?-->|^[ \t]*\/\/.*$/gm, m => ' '.repeat(m.length));
+  for (const match of code.matchAll(/\b(?:href|src)\s*=\s*["']ref:([^"']*)["']/gi))
     if (!/^[A-Za-z0-9]{6,12}$/.test(match[1]))
       problems.push({rule: 'starter-placeholder', ...at(source, match.index), snippet: match[0],
         message: `ref:${match[1]} is a starter placeholder: publish that data first ` +

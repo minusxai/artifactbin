@@ -93,7 +93,8 @@ export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_backg
  'Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at '+
  'least 300000 ms.';
 const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and run `+
- `node scripts/comment.mjs watch ${id} --next. `+WATCH_MODE;
+ `node scripts/comment.mjs watch ${id} --next (separate from the reply, even a link-only one). `+
+ WATCH_MODE;
 /** The step after publishing page content (publish.mjs, doc.mjs write) or answering a comment
  * (comment.mjs reply). */
 export const watchNext=id=>next(id);
