@@ -8,15 +8,15 @@ description: >-
 ---
 ## Read first
 
-Every task that publishes or edits page content ends, after all the requested work, with ONE
-response whose message text is your reply to the user and which runs `node scripts/comment.mjs watch
-ID --next`; its output says what to do next[% if not shipped %] (without the installed skill: the
-save response's `monitoring.instruction`)[% endif %]. Your reply is what the user asked for: if they
-prescribed its form (e.g. only the URL), send exactly that; otherwise send the Reply block your last
-clean check printed, as printed, or just the link when no check printed one. Group, sharing and
-ownership changes alone need no watch.
+Every task that publishes or edits a page (answering a comment too) ends with ONE response holding
+your reply as text and, in that same response, a call to `node scripts/comment.mjs watch ID --next`;
+then do what comments ask. A reply sent alone ends your turn unwatched.[% if not shipped %] Without
+the installed skill, start the save response's `monitoring.instruction` instead.[% endif %] If the
+user prescribed the reply (e.g. only the URL), send exactly that; otherwise send the Reply block
+your last clean check printed, as printed, or just the link when no check printed one. Never
+describe the build or testing in your own words.
 
-Skill map (`ls <folder>` lists all; each file's top comment says how to use it):
+Skill map (each file's top comment says how to use it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
@@ -182,10 +182,11 @@ For charts, maps and diagrams, use the direct library APIs rather than a custom 
 
 ## Sharing and access
 
-A link never carries your login: whoever opens it signs in as themselves. Visibility only controls
-who can read; editing, comments and dataset writes are separate permissions.
-When a receipt includes `user_page_url`, it is an anonymous read-only copy on the user or group
-default host; the canonical app link stays unchanged. Private shares do not gain anonymous access.
+A link never carries your login: whoever opens it signs in as themselves. Group, sharing and
+ownership changes alone need no comment watch. Visibility only controls who can read; editing,
+comments and dataset writes are separate permissions. When a receipt includes `user_page_url`, it is
+an anonymous read-only copy on the user or group default host; the canonical app link stays
+unchanged. Private shares do not gain anonymous access.
 
 - "Make it public": `node scripts/publish.mjs page.html --visibility public`. Keep the default
   (unlisted) unless the user asks for public.

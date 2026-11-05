@@ -50,7 +50,8 @@ interface Retired {
 
 const RETIRED: Retired[] = [
   {pattern: /run_in_background/, scopes: [...AGENT_TEXT, 'monitoring'],
-    reason: 'H1: one blocking watch mode for every harness; no Claude Code background branch'},
+    allow: "Claude Code: start it with the Bash tool's run_in_background and end",
+    reason: 'H1: the watch mode is stated once, by harness (WATCH_MODE): no other background wording'},
   {pattern: /never end your turn while the watch/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H1: the watch is a foreground command that returns; its output says when to stop'},
   {pattern: /write_stdin|exec_command/, scopes: [...AGENT_TEXT, 'monitoring'],
@@ -116,7 +117,7 @@ describe('retired skill phrasing', () => {
   });
   it('fires on each phrase it guards, so a row cannot silently match nothing', () => {
     const samples: Record<string, string> = {
-      'H1: one blocking': "start it with the Bash tool's `run_in_background`", 'H2: the one timeout': 'wrap it in timeout(1)',
+      'H1: the watch mode': 'start the watch with run_in_background', 'H2: the one timeout': 'wrap it in timeout(1)',
       'Principle 6: never': 'timeout 300 node scripts/comment.mjs watch ID', 'Principle 6: sandboxes': "cat > reply.txt <<'EOF'",
       'H11:': 'Verified: 390x844', 'H9: the platform loads the core runtime;': '<script src="/af/core.js"></script>',
       'H8: static': '<h1 data-af-id="title">', 'M4:': 'set SLIDE_COUNT to match', 'H13: the registry': 'call edit_artifact',
@@ -149,7 +150,7 @@ describe('retired skill phrasing', () => {
   it('states the reply rule once: SKILL.md says "as printed" in its one reply line', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
     expect(skill.match(/as printed/g)).toHaveLength(1);
-    expect(skill).toContain('Your reply is what the user asked for: if they prescribed its form (e.g. only the URL), send exactly ' +
-      'that; otherwise send the Reply block your last clean check printed, as printed, or just the link when no check printed one.');
+    expect(skill).toContain('If the user prescribed the reply (e.g. only the URL), send exactly that; otherwise send the Reply ' +
+      'block your last clean check printed, as printed, or just the link when no check printed one.');
   });
 });

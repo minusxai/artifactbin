@@ -101,10 +101,11 @@ function replyBlock({reply,slideLinks,checks},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
  return ['Reply block (send it as printed, up to the Next: line, unless the user prescribed the'+
   ' reply):',reply.link,
+  ...(reply.permissions.length?['Who can do what (copy these lines exactly; do not reword, bold '+
+   'or merge them):',...reply.permissions.flatMap(({name,id,lines})=>
+   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),
   ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+(tested||loads(checks)),
   'Not tested: anything not listed in Tested:, visual appearance'+(guest?
    ', and sharing between two signed-in users (the guest is signed out)':''),
-  ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),
-  ...(reply.permissions.length?['Who can do what:',...reply.permissions.flatMap(({name,id,lines})=>
-   [...(many?[`${name} (ref:${id}):`]:[]),...lines])]:[]),replyNext(reply.id)];
+  ...(slideLinks?.length?['Slide images:',...slideLinks]:[]),replyNext(reply.id)];
 }
