@@ -540,6 +540,34 @@ it('checks a deck at deck viewports without --viewport and attaches the reply fa
   expect(sizes).toEqual(['390x844']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('fails a published page that links a dataset but never reads it, and passes one read in any viewport',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const {checkDigest,toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'check-unread-'));
+ const html='<link rel="af-dataset" data-af-name="sales" href="ref:DATA12"><main>Total $1,240</main>';
+ let reads:Record<string,number>={};
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));
+  if(url.pathname==='/a/PAGE12/raw')return new Response(html);
+  if(url.pathname==='/api/artifacts/DATA12/policy')return Response.json({source:'v3',readBack:'Table public.sales'});
+  if(url.pathname==='/api/artifacts/DATA12')return Response.json({id:'DATA12'});
+  const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!;
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:Number(w),height:Number(h)},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Total $1,240',overflow:{viewport:1,content:1,fits:true},steps:{ran:true,passed:true},verified:['total shows'],datasetReads:reads[w!]??0}});};
+ const env={ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root};
+ try{
+  const error=await checkCommand({values:{},positionals:['PAGE12']},{env,fetcher}).catch((e:any)=>e);
+  expect(error).toMatchObject({code:'check_failed',details:{smokePassed:false,unreadDatasets:[{id:'DATA12',name:'sales'}]}});
+  expect(error.details.reply).toBeUndefined();
+  const digest=checkDigest(toolFailure('check',error));
+  expect(digest).toContain('page links dataset sales but never reads it on load or in your steps: compute its numbers from every row in page script with client (start from examples/csv-dashboard.html)');
+  expect(digest).not.toContain('Reply block');expect(digest).not.toContain('clean pass');
+  // One viewport reading it (say a step clicked a lazy tab there) is enough.
+  reads={'390':2};
+  const passed=await checkCommand({values:{},positionals:['PAGE12']},{env,fetcher});
+  expect(passed.smokePassed).toBe(true);expect(passed.unreadDatasets).toBeUndefined();expect(passed.reply?.permissions).toHaveLength(1);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('repeats a status read through a transient network failure but never resubmits a lost script',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');

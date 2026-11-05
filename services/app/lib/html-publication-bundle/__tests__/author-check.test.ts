@@ -127,6 +127,20 @@ it('collects errors, separates only known telemetry, and catches overflow withou
  expect(summarizeCheck([evidence])).toMatchObject({smokePassed:false,unverified:expect.arrayContaining(['visual appearance','task behavior'])});
 });
 
+it('counts the page\'s dataset reads (GraphQL and dataset cells) on load and in its steps, not other requests',async()=>{
+ const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const listeners:Record<string,Function>={};
+ const send=(url:string)=>listeners.request!({url:()=>url,isNavigationRequest:()=>false,frame:()=>null});
+ const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},
+  goto:async()=>{send('https://example.test/api/artifacts/PAGE12/graphql');send('https://example.test/data.json');send('https://example.test/api/my/artifacts/PAGE12/annotations');send('https://example.test/api/artifacts/PAGE12/regions/intro/open');},
+  locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})})};
+ const loaded=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
+ expect(loaded.datasetReads).toBe(1);
+ // A read a step triggers (a lazy load after a click) counts, and so does a live dataset cell.
+ const stepped=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}},async()=>{send('https://doc.example.test/api/artifacts/PAGE12/graphql');send('https://example.test/api/artifacts/PAGE12/regions/cell%3ADATA12%3Ar1%3Aname/open');});
+ expect(stepped.datasetReads).toBe(3);
+});
+
 it('loads named ESM and CommonJS Playwright exports and distinguishes invalid modules',async()=>{
  const {loadChromium}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const root=await mkdtemp(join(tmpdir(),'author-browser-module-'));

@@ -19,7 +19,7 @@ import {
 import {checkTarget, loadChromium, stepsBody, summarizeCheck} from './toolbox-check-script.mjs';
 import {checkHosted} from './toolbox-check-hosted.mjs';
 import {checkLocal} from './toolbox-check-local.mjs';
-import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts}
+import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts, unreadDatasets}
   from './toolbox-check-reply.mjs';
 
 // CLI entry: choose local preview or hosted page, run the viewports, save screenshots, then fail if
@@ -145,6 +145,9 @@ export async function checkCommand({values, positionals}, options = {}) {
         );
     }
     if (extra.length) result = summarizeCheck([...result.checks, ...extra]);
+    // A linked dataset the page never reads means its numbers are hand-typed: not a pass.
+    const unread = unreadDatasets(html, result.checks);
+    if (unread.length) Object.assign(result, {smokePassed: false, unreadDatasets: unread});
     // A clean pass ends on the Reply block: what it states beyond the run comes from the page.
     if (result.smokePassed) result.reply = await replyFacts(client, server, id, html);
     // A deck's slide image links for the reply.
