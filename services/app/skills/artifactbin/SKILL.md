@@ -187,8 +187,9 @@ comments and dataset writes are separate permissions. When a receipt includes `u
 an anonymous read-only copy on the user or group default host; the canonical app link stays
 unchanged. Private shares do not gain anonymous access.
 
-- Pages are unlisted by default; public only when asked: `node scripts/publish.mjs page.html
-  --visibility public`.
+- Pages are unlisted by default (anyone with the link can open them); make one public or private
+  only when asked (`node scripts/publish.mjs page.html --visibility public`). A private page opens
+  only for the people it is shared with.
 - "Share it with my team": `node scripts/groups.mjs share PAGE12 --group design_crit --role viewer`.
   Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group
