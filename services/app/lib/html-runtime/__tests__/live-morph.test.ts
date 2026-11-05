@@ -138,10 +138,10 @@ describe('applyHtmlVersion (inside the frame)',()=>{
   expect(sessionStorage.length).toBe(0);
  });
  it('asks for a rebuild, keeping the reader\'s place, when the scripts changed, the edit is not inert, or the morph throws',async()=>{
-  for(const [next,broken] of [
-   [served(2,V1.replace('Plan','Plans'),{fingerprint:'fp-2'}),false],
-   [served(2,V1.replace('Name <input','Full name <input')),false],
-   [served(2,V1.replace('</h1>','</h1><p data-af-id="n">New</p>')),true],
+  for(const [next,broken,reason] of [
+   [served(2,V1.replace('Plan','Plans'),{fingerprint:'fp-2'}),false,'the new version runs different scripts'],
+   [served(2,V1.replace('Name <input','Full name <input')),false,'an interactive element changed'],
+   [served(2,V1.replace('</h1>','</h1><p data-af-id="n">New</p>')),true,'DOM refused'],
   ] as const){
    const html=served(1,V1);load(html);sessionStorage.clear();
    history.replaceState(null,'','/?_pt=ticket&%24tab=2#af-state=abc');
@@ -149,7 +149,9 @@ describe('applyHtmlVersion (inside the frame)',()=>{
    const fetchFn=vi.fn(async(url:string)=>url.endsWith('.js')?new Response(''):new Response(next));
    const applied=await applyHtmlVersion(window,{revision:'1',pageId:'page-1'},2,fetchFn as unknown as typeof fetch);
    // Its own address, without the spent ticket or a state fragment that would replace the viewer's own state.
-   expect(applied).toEqual({revision:'2',savedNodeIds:[],rebuild:new URL('/?%24tab=2',location.href).href});
+   expect(applied).toMatchObject({revision:'2',savedNodeIds:[],rebuild:new URL('/?%24tab=2',location.href).href});
+   // Why, for the parent to report (solid/document/follow-html-version).
+   expect(applied.reason).toContain(reason);
    expect(JSON.parse(sessionStorage.getItem('afbin:reading-place:page-1')!)).toMatchObject({focus:'i'});
    // The running document is not the new version's baseline: the rebuilt one loads its own.
    expect((window as unknown as Record<symbol,unknown>)[LOADED_SOURCE]).toBe(html);

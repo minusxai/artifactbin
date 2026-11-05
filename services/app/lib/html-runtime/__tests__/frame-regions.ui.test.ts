@@ -52,7 +52,7 @@ function page(region = SAVED) {
   return document.querySelector('article')!;
 }
 
-function open({ live = LIVE, loads = { count: 0 } } = {}): Harness {
+function open({ live = LIVE, loads = { count: 0 }, pageId = undefined as string | undefined } = {}): Harness {
   const root = page();
   const posted: Harness['posted'] = [];
   const editors: RegionEditor[] = [];
@@ -64,6 +64,7 @@ function open({ live = LIVE, loads = { count: 0 } } = {}): Harness {
       const module = await import('../region-editor');
       return { mountRegionEditor: (options) => { const editor = module.mountRegionEditor(options); editors.push(editor); return editor; } };
     },
+    pageId,
   });
   const { state } = createRegionState('rich', live);
   const server = openRegionDoc(state);
@@ -587,5 +588,40 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     expect(blocks(h.root)[0]).toMatch(/^p\[quote\]:/);
     keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
     expect(blocks(h.root)[0]).toMatch(/^p:/);
+  });
+});
+
+describe('a rebuild under an editor (a version not drawn in place)', () => {
+  it('keeps the caret: the next document opens the region again, the caret where it was, and keys typed meanwhile land there', async () => {
+    const before = open({ pageId: 'pg1' });
+    const editor = await session(before);
+    const { view } = editor;
+    let at = -1;
+    view.state.doc.descendants((node, pos) => { if (at < 0 && node.isText && node.text!.includes('Live text')) at = pos + 'Live te'.length; });
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)));
+    view.focus();
+    before.regions.keepForRebuild();
+    before.regions.dispose();
+    harness = null;
+    // The rebuilt document: no press, no parent focus command.
+    const after = open({ pageId: 'pg1' });
+    after.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    expect(after.posted).toContainEqual({ kind: 'region-open', regionId: 'r1' });
+    const keys = document.querySelector<HTMLTextAreaElement>('textarea[data-af="region-keys"]')!;
+    expect(document.activeElement).toBe(keys);
+    keys.value = 'Z';
+    keys.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    // The same server: its state holds the shared text the kept positions point into.
+    after.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(before.server), seq: 3 });
+    await settle();
+    const reopened = after.editors[0]!;
+    expect(reopened.view.hasFocus()).toBe(true);
+    expect(reopened.view.state.doc.textContent).toContain('Live teZxt');
+    // Kept once: a later document of this page starts with no caret.
+    after.regions.dispose();
+    harness = null;
+    const later = open({ pageId: 'pg1' });
+    later.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
+    expect(later.posted).not.toContainEqual({ kind: 'region-open', regionId: 'r1' });
   });
 });

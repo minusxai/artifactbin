@@ -27,7 +27,7 @@ import { applyUpdate, mergeUpdates } from 'yjs';
 import type { RegionFrameMessage, RegionKind } from '@artifactbin/contracts';
 import { editorState, openRegionDoc, regionCommands, regionText } from '../live-regions/browser';
 import { safeHref } from '../live-regions/href';
-import { captureRegionCaret, createRegionCaretPainter, type RegionCaretPaint } from '../html-bridge/region-carets';
+import { captureRegionCaret, createRegionCaretPainter, decodePosition, encodePosition, type RegionCaretPaint } from '../html-bridge/region-carets';
 import { installRegionEditorStyles } from './region-editor-styles';
 
 /** How long local changes gather before they are posted as one update. */
@@ -56,6 +56,11 @@ export interface RegionEditorOptions {
   at?: { x: number; y: number } | null;
   /** With `at`: place the caret there but leave the focus where it is (the person moved on while the editor loaded). */
   focus?: false;
+  /**
+   * The caret this region's editor had in the document this one replaced (a version that could not be drawn in place
+   * rebuilt the frame, frame-regions): put back where it was, as shared-text positions, with the focus.
+   */
+  caret?: { anchor: string; head: string };
 }
 
 /**
@@ -81,6 +86,8 @@ export interface RegionEditor {
   owns(node: Node): boolean;
   /** Sends what is gathered now (unless a composition is open). */
   flush(): void;
+  /** The caret as shared-text positions, while this editor has the focus; else null. */
+  caret(): { anchor: string; head: string } | null;
   destroy(): void;
 }
 
@@ -319,6 +326,11 @@ export function mountRegionEditor(options: RegionEditorOptions): RegionEditor {
     if (place) view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(place.pos))));
     if (options.focus !== false) view.focus();
   }
+  if (options.caret) {
+    const anchor = decodePosition(view.state, options.caret.anchor), head = decodePosition(view.state, options.caret.head);
+    if (anchor !== null && head !== null) try { view.dispatch(view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(anchor), view.state.doc.resolve(head)))); } catch { /* the text moved on */ }
+    view.focus();
+  }
 
   return {
     view,
@@ -358,6 +370,11 @@ export function mountRegionEditor(options: RegionEditorOptions): RegionEditor {
     paint(carets) { painter?.paint(carets); },
     owns: (node) => !!painter?.owns(node),
     flush,
+    caret() {
+      if (destroyed || !view.hasFocus()) return null;
+      const { anchor, head } = view.state.selection;
+      return { anchor: encodePosition(view.state, anchor), head: encodePosition(view.state, head) };
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;

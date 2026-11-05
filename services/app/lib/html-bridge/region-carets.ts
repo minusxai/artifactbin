@@ -31,7 +31,7 @@ export function encodePosition(state: EditorState, pos: number): string {
   return toBase64(encodeRelativePosition(relativePosition(state, pos)));
 }
 /** A contract position back in this editor's document, or null (undecodable, or not in this region's text). */
-function decodePosition(state: EditorState, position: string): number | null {
+export function decodePosition(state: EditorState, position: string): number | null {
   const bytes = fromBase64(position);
   if (!bytes) return null;
   try { return absolutePosition(state, decodeRelativePosition(bytes)); } catch { return null; }
