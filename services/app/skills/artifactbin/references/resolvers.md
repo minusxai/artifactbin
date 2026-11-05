@@ -25,12 +25,12 @@ it from new versions only.
 
 ## The file
 
-Start from a library file below (`resolvers/resolver-*.ts`, usage in its top comment)
-or `examples/budget.ts`. Export `typeDefs`, a default object of root field resolvers, any
-`secrets` and always a `test` field (Test connection, below). Each resolver gets `(args, principal, caps)`: `principal` is
-`{tenant, subject, role}` (the page ID, the caller's account ID or null, their role), set by the
-platform; never authorize from a name typed into the page. `caps` holds exactly `fetch`, `query`,
-`sql` and `db`. No npm packages or Node built-ins.
+Start from `resolvers/resolver-*.ts` (usage atop each) or `examples/budget.ts`. Export `typeDefs`, a
+default object of root field resolvers, any `secrets` and always a `test` field (Test connection,
+below). Each resolver gets `(args, principal, caps)`: `principal` is `{tenant, subject, role}` (the
+page ID, the caller's account ID or null, their role), set by the platform; never authorize from a
+name typed into the page. `caps` holds exactly `fetch`, `query`, `sql` and `db`. No npm packages or
+Node built-ins.
 
 ```ts
 export const secrets = {API_KEY: 'api.example.com'};
@@ -78,10 +78,10 @@ Secrets never appear in code, pages or replies. `export const secrets =
 responses. `auth: {type: 'google', secret: 'GOOGLE_SA', scopes: [...]}` signs in with a Google
 service-account JSON key and sends the token (Sheets, BigQuery).
 
-Never ask for a secret value in chat. After publishing, send the page owner to the page's
-settings → Resolvers tab to set each value and press Test connection, which
-runs `test: String! @auth(role: owner)` (no required arguments) as them and shows its text or error. Forks and ownership changes copy names, never values. Editors cannot change code that
-declares secrets; the personal owner republishes it.
+Never ask for a secret value in chat: send the page owner to the page's settings → Resolvers tab to
+set each value and press Test connection, which runs `test: String! @auth(role: owner)` (no required
+arguments) as them and shows its text or error. Forks and ownership changes copy names, never
+values. Editors cannot change code that declares secrets; the personal owner republishes it.
 
 ## caps.query: datasets as the caller
 

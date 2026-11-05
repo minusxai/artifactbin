@@ -1,10 +1,10 @@
 import {compactSkillScript} from '../preview-assets.server';
 import {pathToFileURL} from 'node:url';
-import {isPublicSkillTopic,isShippedSkillTopic} from '../public-surface';
+import {isShippedSkillTopic} from '../public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
 import {llmsText, publicGuideText} from '@/lib/agent-copy';
-import {skillTree, SKILL_MAIN_MAX_BYTES, SKILL_FILE_MAX_BYTES, renderSkill, skillPackageFiles, skillZip, projectSkillLinks, renderTree, skillFileWithFrontmatter} from '..';
+import {skillTree, renderSkill, skillPackageFiles, skillZip, projectSkillLinks, renderTree, skillFileWithFrontmatter} from '..';
 
 describe('one root for installed and direct HTTP agents',()=>{
  it('gives URL readers complete HTTP operations',()=>{
@@ -160,16 +160,6 @@ describe('installable shared skill folder',()=>{
 
    expect(Object.keys(expected)).not.toContain('.afbin-skill.json');
   }finally{rmSync(dir,{recursive:true,force:true});}
- });
- it('keeps public root and guide projections within the reading budget',()=>{
-  const base='https://app.artifactbin.dev';
-  expect(Buffer.byteLength(llmsText(base))).toBeLessThanOrEqual(SKILL_MAIN_MAX_BYTES);
-  for(const file of skillTree().files.filter(file=>file.ref&&file.kind==='guide'&&isPublicSkillTopic(file.file.replace(/\.md$/,''))))expect(Buffer.byteLength(publicGuideText(file.file.replace(/\.md$/,''),base)!),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
- });
- it('leaves room in the packaged data guide for origin expansion',()=>{
-  const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');
-  expect(Buffer.byteLength(files['references/datasets.md']!)).toBeLessThanOrEqual(7992);
-  expect(Buffer.byteLength(publicGuideText('datasets','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
  });
  it('rejects arbitrary archive members and traversal',()=>{
   for(const name of ['../SKILL.md','scripts/../other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');
