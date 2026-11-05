@@ -21,4 +21,6 @@ export interface AuthorCheckResult {
  /** A passing hosted check's Reply block facts (toolbox-check-reply.mjs replyFacts). */
  reply?:{id:string;link:string;builtWith?:string;permissions:ReadonlyArray<{id:string;name:string;lines:string[]}>};
  slideLinks?:string[];
+ /** Linked datasets the page never read on any viewport, load or steps (a failed check). */
+ unreadDatasets?:ReadonlyArray<{id:string;name:string}>;
 }

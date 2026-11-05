@@ -34,6 +34,13 @@ export function datasetLinks(html) {
   });
 }
 
+/** The linked datasets the page never read: every viewport measured its reads (load and steps)
+ * and none saw one. Unmeasured or unknown (no source) never fails. */
+export function unreadDatasets(html, checks) {
+  const measured = (checks ?? []).filter(c => c?.viewport && typeof c.datasetReads === 'number');
+  return measured.length && measured.every(c => c.datasetReads === 0) ? datasetLinks(html) : [];
+}
+
 /** The page source (null after 5 s or on failure); the linked datasets are read too within the
  * same 5 s, so the first hosted run does not meet a cold start. Never fails the check. */
 export async function pageSource(client, id) {

@@ -49,9 +49,17 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   // aborts are not page failures.
   let navigation = 0;
   const started = new WeakMap();
+  // The page's dataset reads, on load and in its steps: its GraphQL (client, resolvers,
+  // subscriptions) and its live dataset cells. check fails a linked dataset that none read.
+  let datasetReads = 0;
+  const read =
+    /^\/api\/(?:artifacts|local-connection)\/[^/]+\/(?:graphql$|regions\/cell(?::|%3A))/i;
   page.on('request', request => {
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) navigation++;
     started.set(request, navigation);
+    try {
+      if (read.test(new URL(request.url()).pathname)) datasetReads++;
+    } catch {}
   });
   // The reader's own comment fetch is cancelled whenever a step reloads or navigates; it is reader
   // chrome, not the page.
@@ -139,6 +147,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     consoleErrors: [...consoleErrors],
     failedRequests: [...failedRequests],
     httpErrors: [...httpErrors],
-    telemetry: [...telemetry]
+    telemetry: [...telemetry],
+    datasetReads
   };
 }

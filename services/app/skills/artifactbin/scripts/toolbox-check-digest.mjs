@@ -69,6 +69,10 @@ export function checkDigest(envelope,file){
    'text or random values.');
   else if(stability?.skipped)lines.push('  warning: '+clip(stability.skipped,160));
  }
+ // A linked dataset no viewport read: the page shows typed-in numbers, not the rows.
+ for(const {name} of envelope.unreadDatasets??[])lines.push(`  page links dataset ${clip(name,60)
+  } but never reads it on load or in your steps: compute its numbers from every row in page `+
+  'script with client (start from examples/csv-dashboard.html)');
  // What the step labels proved, per viewport: the Tested: line of the Reply block.
  const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
  const tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
