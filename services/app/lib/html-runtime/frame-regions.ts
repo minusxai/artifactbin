@@ -31,6 +31,8 @@ export interface FrameRegionsOptions {
   post: (message: RegionFrameMessage | { kind: 'error'; message: string }) => void;
   /** Fetches the editor module (`@afbin/regions` in a page; the module itself in tests). */
   load: () => Promise<RegionEditorModule>;
+  /** The page's id: the caret kept across a rebuild (`keepForRebuild`) is this page's alone. */
+  pageId?: string;
 }
 export interface FrameRegions {
   /** Takes a parent payload; true when it was a region message. */
@@ -39,7 +41,28 @@ export interface FrameRegions {
   editing(): ReadonlyMap<string, Element>;
   /** The editors' caret overlays, which page observers ignore. */
   ownsOverlay(node: Node): boolean;
+  /**
+   * This document is about to be replaced by a rebuild (a version not drawn in place, live-morph): the focused editor's
+   * caret is kept, briefly, for the next document, which opens that region again with the caret and the focus there.
+   */
+  keepForRebuild(): void;
   dispose(): void;
+}
+
+/** How long a kept caret waits for the rebuilt document (a rebuild is one navigation of this frame). */
+const KEPT_CARET_MS = 15_000;
+interface KeptCaret { regionId: string; anchor: string; head: string; at: number }
+const keptKey = (pageId: string) => `afbin:region-caret:${pageId}`;
+function takeKeptCaret(win: Window, pageId: string | undefined, now: number): KeptCaret | null {
+  if (!pageId) return null;
+  try {
+    const raw = win.sessionStorage.getItem(keptKey(pageId));
+    if (raw === null) return null;
+    win.sessionStorage.removeItem(keptKey(pageId));
+    const kept = JSON.parse(raw) as Partial<KeptCaret>;
+    const fresh = typeof kept.at === 'number' && now >= kept.at && now - kept.at <= KEPT_CARET_MS;
+    return fresh && typeof kept.regionId === 'string' && typeof kept.anchor === 'string' && typeof kept.head === 'string' ? kept as KeptCaret : null;
+  } catch { return null; }
 }
 
 const REGION_KINDS: readonly string[] = ['rich', 'text'];
@@ -72,8 +95,10 @@ interface Session {
   shown: Node[];
 }
 
-export function startFrameRegions({ win, post, load }: FrameRegionsOptions): FrameRegions {
+export function startFrameRegions({ win, post, load, pageId }: FrameRegionsOptions): FrameRegions {
   const doc = win.document;
+  /** The caret the document this one replaced kept for it (a rebuild), until its region's editor mounts. */
+  let kept = takeKeptCaret(win, pageId, Date.now());
   let enabled = new Set<string>();
   /** Regions asked for (`region-open`) and not yet answered or closed, with where the person pressed. */
   const asked = new Map<string, { x: number; y: number } | null>();
@@ -198,7 +223,9 @@ export function startFrameRegions({ win, post, load }: FrameRegionsOptions): Fra
     // goes first: the editor's focus must not be sent back to it.
     const focus = !keys || doc.activeElement === keys.input;
     release(id);
-    session.editor = editors.mountRegionEditor({ win, root: session.root, regionId: id, kind: start.regionKind, clientId: start.clientId, state: start.state, post, at: asked.has(id) ? asked.get(id) ?? null : undefined, ...(focus ? {} : { focus: false as const }) });
+    const carried = kept?.regionId === id ? { anchor: kept.anchor, head: kept.head } : undefined;
+    if (carried) kept = null;
+    session.editor = editors.mountRegionEditor({ win, root: session.root, regionId: id, kind: start.regionKind, clientId: start.clientId, state: start.state, post, at: asked.has(id) ? asked.get(id) ?? null : undefined, ...(focus ? {} : { focus: false as const }), ...(carried && focus ? { caret: carried } : {}) });
     asked.delete(id);
     session.editor.paint(carets);
     for (const message of session.queue.splice(0)) deliver(session.editor, message);
@@ -238,6 +265,8 @@ export function startFrameRegions({ win, post, load }: FrameRegionsOptions): Fra
         enabled = new Set((Array.isArray(message.regionIds) ? message.regionIds : []).filter((id) => typeof id === 'string' && ID.test(id) && regionRoot(id)));
         for (const root of focusable) if (!enabled.has(root.getAttribute('data-af-id') ?? '')) { root.removeAttribute('tabindex'); focusable.delete(root); }
         for (const id of enabled) { const root = regionRoot(id)!; if (!root.hasAttribute('tabindex')) { root.setAttribute('tabindex', '0'); focusable.add(root); } }
+        // Rebuilt under an editor: its region opens again as if pressed, keys typed meanwhile held for it.
+        if (kept && enabled.has(kept.regionId)) ask(kept.regionId, null);
         return;
       }
       case 'region-session': open(message); return;
@@ -274,6 +303,15 @@ export function startFrameRegions({ win, post, load }: FrameRegionsOptions): Fra
       const roots = new Map<string, Element>();
       for (const [id, session] of sessions) if (session.editor) roots.set(id, session.root);
       return roots;
+    },
+    keepForRebuild() {
+      if (!pageId) return;
+      for (const [regionId, session] of sessions) {
+        const caret = session.editor?.caret();
+        if (!caret) continue;
+        try { win.sessionStorage.setItem(keptKey(pageId), JSON.stringify({ regionId, ...caret, at: Date.now() } satisfies KeptCaret)); } catch { /* the rebuild still happens */ }
+        return;
+      }
     },
     ownsOverlay(node) {
       for (const session of sessions.values()) if (session.editor?.owns(node)) return true;

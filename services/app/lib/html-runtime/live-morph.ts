@@ -188,6 +188,8 @@ export interface VersionApplied {
  revision:string;savedNodeIds:string[];
  /** Set when the version could not be drawn in place: the frame navigates here (its own clean address) to rebuild from it. */
  rebuild?:string;
+ /** With `rebuild`: why it could not be drawn in place (the parent reports it). */
+ reason?:string;
 }
 /**
  * Fetch the newest served version the way this frame got its document (its own address, its own session) and draw it in
@@ -207,10 +209,10 @@ export async function applyHtmlVersion(win:Window,config:{revision:string;savedN
  if(!Number.isInteger(revision)||revision<version)throw refuse('the served version is not the published one');
  let applied:VersionApplied;
  try{const scripts=await pageScripts(win.document,fetchFn);applied=morphHtmlVersion(win.document,loaded,next,scripts,config.savedNodeIds,editing?.());}
- catch{
+ catch(cause){
   // Different scripts, an edit that is not inert, or a morph the DOM refused half way: a fresh document is always right.
   captureReadingPlace(win,config.pageId??'');
-  return {revision:String(revision),savedNodeIds:[],rebuild:address.href};
+  return {revision:String(revision),savedNodeIds:[],rebuild:address.href,reason:String(cause instanceof Error?cause.message:cause).slice(0,300)};
  }
  holder[LOADED_SOURCE]=next;
  return applied;

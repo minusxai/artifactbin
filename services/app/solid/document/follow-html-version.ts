@@ -35,6 +35,8 @@ export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<Outc
    if(data?.type!==HTML_VERSION_APPLIED&&data?.type!==HTML_VERSION_REBUILT)return;
    stop();
    const revision=String(data.revision??''),drawn:Outcome=data.type===HTML_VERSION_REBUILT?'rebuilt':'morphed';
+   // A rebuild costs the reader's live state (an editor's frame reopens it): say why, so it can be found and fixed.
+   if(drawn==='rebuilt'&&typeof (data as {reason?:unknown}).reason==='string')console.warn(`[artifactbin] version ${version} rebuilt the page: ${(data as {reason:string}).reason}`);
    void options.refresh(version,revision).then(ok=>finish(ok?drawn:'reloaded'),()=>finish('reloaded'));
   });
   const timer=setTimeout(()=>finish('reloaded'),options.timeoutMs??HTML_VERSION_TIMEOUT_MS);
