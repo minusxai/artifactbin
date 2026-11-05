@@ -50,7 +50,7 @@ interface Retired {
 
 const RETIRED: Retired[] = [
   {pattern: /run_in_background/, scopes: [...AGENT_TEXT, 'monitoring'],
-    allow: "Claude Code: start it with the Bash tool's run_in_background and end",
+    allow: "Claude Code: start it first with the Bash tool's run_in_background,",
     reason: 'H1: the watch mode is stated once, by harness (WATCH_MODE): no other background wording'},
   {pattern: /never end your turn while the watch/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H1: the watch is a foreground command that returns; its output says when to stop'},

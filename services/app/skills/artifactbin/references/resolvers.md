@@ -26,8 +26,8 @@ it from new versions only.
 ## The file
 
 Start from a library file below (`resolvers/resolver-*.ts`, usage in its top comment)
-or `examples/budget.ts`. Export `typeDefs`, a default object of root field resolvers, optionally
-`secrets` and a `test` field. Each resolver gets `(args, principal, caps)`: `principal` is
+or `examples/budget.ts`. Export `typeDefs`, a default object of root field resolvers, any
+`secrets` and always a `test` field (Test connection, below). Each resolver gets `(args, principal, caps)`: `principal` is
 `{tenant, subject, role}` (the page ID, the caller's account ID or null, their role), set by the
 platform; never authorize from a name typed into the page. `caps` holds exactly `fetch`, `query`,
 `sql` and `db`. No npm packages or Node built-ins.

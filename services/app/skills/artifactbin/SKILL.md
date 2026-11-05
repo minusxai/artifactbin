@@ -8,15 +8,15 @@ description: >-
 ---
 ## Read first
 
-Every task that publishes or edits a page (answering a comment too) ends with ONE response holding
-your reply as text and, in that same response, a call to `node scripts/comment.mjs watch ID --next`;
-then do what comments ask. A reply sent alone ends your turn unwatched.[% if not shipped %] Without
-the installed skill, start the save response's `monitoring.instruction` instead.[% endif %] If the
-user prescribed the reply (e.g. only the URL), send exactly that; otherwise send the Reply block
-your last clean check printed, as printed, or just the link when no check printed one. Never
-describe the build or testing in your own words.
+Every task that publishes or edits a page (answering a comment too) ends with your reply and a
+running `node scripts/comment.mjs watch ID --next`, as its Next line says; then do what comments
+ask.[% if not shipped %] Without the installed skill, start the save response's
+`monitoring.instruction` instead.[% endif %] If the user prescribed the reply (e.g. only the URL),
+send exactly that; otherwise send the Reply block your last clean check printed, as printed, or
+just the link when no check printed one. It answers requests to test or explain the build: never
+reword it. Never wrap a script in `timeout` or write files with heredocs.
 
-Skill map (each file's top comment says how to use it):
+Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
@@ -24,8 +24,8 @@ Skill map (each file's top comment says how to use it):
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
 (`--help` each)
-- `references/`: guides: runtime, datasets, permissions, resolvers, dataviz, diagrams, maps, groups
-(read only those your task needs)
+- `references/`: guides (read only those you need): runtime, datasets, permissions, resolvers,
+dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.

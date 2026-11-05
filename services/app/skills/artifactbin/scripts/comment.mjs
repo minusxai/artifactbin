@@ -1,7 +1,7 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Comment threads: list, add, reply, edit, react, resolve, reopen, watch.
 Watch is the comment feed: every comment, reply, edit and reaction, from people and agents alike.
-Usage: node scripts/comment.mjs watch ID --next [--wait SECONDS]
+Usage: node scripts/comment.mjs watch ID --next
        node scripts/comment.mjs reply ID --thread T --body TEXT [--resolve]
        node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
        node scripts/comment.mjs add ID --anchor ANCHOR.json --body TEXT
@@ -14,15 +14,16 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   --expected-revision R (resolve, reopen, edit, reply --resolve) the thread revision you read;
   omitted, the command reads the thread's current revision itself. Write commands also take
   --request FILE (exclusive saved journal) and --resume FILE (replay it exactly; nothing else may
-  change). list --status defaults to open; --limit 1-100 (default 20).
-  Common: --server, --json, --help.
-Watch --next: Claude Code: start it with the Bash tool's run_in_background and end your turn with
-  no further message; you are woken when it prints. Any other harness: run it as a blocking command
-  and give your shell tool a timeout of at least 300000 ms; never wrap the command in timeout(1).
-  It prints the next comments from someone else (one JSON line each; a first call also prints
-  threads still waiting for your answer) and exits 0: handle what it printed, then start it again
-  the same way. After --wait seconds (default 240) it prints "no new comments yet: run the same
-  watch --next command again".
+  change). list --status defaults to open; --limit 1-100 (default 20); watch --wait SECONDS
+  (default 240). Common: --server, --json, --help.
+Watch --next: Claude Code: start it first with the Bash tool's run_in_background, then send the
+  reply as your final message and end your turn; you are woken when it prints. Any other harness:
+  send the reply, then run it as a blocking command and give your shell tool a timeout of at least
+  300000 ms; never wrap the command in timeout(1). It prints the next comments from someone else
+  (one JSON line each; a first call also prints threads still waiting for your answer) and exits 0:
+  handle what it printed, then start it again the same way. After 4 minutes it prints "no new
+  comments yet: start the same watch --next command again now, the same way; do not end your
+  turn".
   After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for 15
   minutes: stop watching and end your turn": then end your turn; a later --next starts a new 15
   minutes. A second --next on the same page takes over from the running one, which stops. It
