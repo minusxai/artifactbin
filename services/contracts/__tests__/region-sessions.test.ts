@@ -32,8 +32,9 @@ describe('region sessions contract', () => {
     expect(REGION_UPDATE_MAX_BYTES).toBe(256 * 1024);
     expect(REGION_TEXT_MAX_UNITS).toBe(1_000_000);
     // Readers, the doc's title and agents see a pause's text within seconds, and unbroken typing within a bound.
-    expect(REGION_IDLE_SAVE_MS).toBeGreaterThanOrEqual(60_000);
+    expect(REGION_IDLE_SAVE_MS).toBeLessThanOrEqual(5_000);
     expect(REGION_MAX_UNSAVED_MS).toBeGreaterThan(REGION_IDLE_SAVE_MS);
+    expect(REGION_MAX_UNSAVED_MS).toBeLessThanOrEqual(30_000);
   });
 
   it('carries every wire shape as JSON or structured-clone data', () => {
