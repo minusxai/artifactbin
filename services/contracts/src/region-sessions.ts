@@ -22,12 +22,12 @@ export const REGION_UPDATE_MAX_BYTES = 262_144;
 /** Largest merged region text, in UTF-16 code units. */
 export const REGION_TEXT_MAX_UNITS = 1_000_000;
 /**
- * A region with unsaved edits and no new update for this long is saved as a version. Long until a saved version is drawn
- * into an open editor's frame without rebuilding it (a frame on another site rebuilds, and its editor does not reopen).
+ * A region with unsaved edits and no new update for this long is saved as a version: readers, the page's title and
+ * agents see what editors typed within seconds of a pause, as in a shared doc.
  */
-export const REGION_IDLE_SAVE_MS = 120_000;
+export const REGION_IDLE_SAVE_MS = 3_000;
 /** A region kept dirty this long by typing that never pauses is saved anyway. */
-export const REGION_MAX_UNSAVED_MS = 600_000;
+export const REGION_MAX_UNSAVED_MS = 15_000;
 
 /** `POST /api/artifacts/:id/regions/:regionId/open` */
 export interface RegionOpenReply {

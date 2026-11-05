@@ -142,11 +142,14 @@ try {
   });
 
   await section('the last editor leaving saves the committed text', async () => {
+    // A pause saves within seconds (contracts REGION_IDLE_SAVE_MS), so the committed text may already be saved here; the
+    // leave saves whatever is not. (Over plain http a cross-site frame's own cookie is not sent, so a saved version
+    // reloads this page rather than being drawn into the frame: what survives a save under an editor is checked on the
+    // same-site gates and on https deployments.)
     const before = await head();
-    check(!before.html.includes('仮名'), 'the committed text is unsaved while both are on the page');
     await Promise.all([A.close({ runBeforeUnload: true }), B.close({ runBeforeUnload: true })]);
     const after = await until(head, (row) => row?.html.includes('ime:仮名'), 20_000);
-    check(after?.version > before.version && after.html.includes('alpha') && after.html.includes('bravo'), `the leave saved a version with every typed part (v${before.version} → v${after?.version})`);
+    check(after?.version >= before.version && after.html.includes('alpha') && after.html.includes('bravo') && after.html.includes('ime:仮名'), `every typed part is saved (v${before.version} → v${after?.version})`);
   });
 } finally {
   check.note(`gate time ${((performance.now() - started) / 1000).toFixed(1)} s`);
