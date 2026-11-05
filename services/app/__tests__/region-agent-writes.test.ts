@@ -1,6 +1,7 @@
 /**
  * Agents on live regions through their HTTP doors (operations read_region, write_region, save_regions; contract
- * region-sessions RegionContentReply/RegionWriteReply): reading a region as Markdown or HTML at the saved head, a
+ * region-sessions RegionContentReply/RegionWriteReply): reading a region as Markdown or HTML as the page reads now (an
+ * editor's read saves unsaved typing first, so its version is an exact base), a
  * write merged with an editor's unsaved typing and streamed to them before the save, the `_doc` alias, idempotent
  * retries, and every refusal (access, stale base, unsupported content, a malformed write).
  */
@@ -135,14 +136,37 @@ describe('reading a region', () => {
     expect(await read({ token: agent }, '_doc', '', 'zzzzzzzz')).toEqual({ status: 404, body: { error: 'not_found' } });
   });
 
-  it('does not include unsaved typing until save_regions saves it as a version', async () => {
+  it('includes unsaved typing: a reader reads it live with no version made; an editor\'s read saves it first', async () => {
     const b = await join(editor);
     b.text.insert(0, 'Typed ', {});
     expect(await b.push()).toBe(200);
-    expect((await read({ token: agent })).body).toMatchObject({ version: 1, markdown: expect.not.stringContaining('Typed') });
+    // A reader (who cannot write) reads the page as it is now, at the saved version.
+    expect((await read({ token: viewerToken })).body).toMatchObject({ version: 1, markdown: expect.stringMatching(/^Typed Hello world/) });
+    expect(await head()).toBe(1);
     expect(await flush({ token: viewerToken })).toEqual({ status: 404, body: { error: 'not_found' } });
-    expect(await flush({ token: agent })).toEqual({ status: 200, body: { version: 2 } });
+    // An editor reads a saved version holding it (a checkpoint), so a write from that version merges from what it read.
     expect((await read({ token: agent })).body).toMatchObject({ version: 2, markdown: expect.stringMatching(/^Typed Hello world/) });
+    expect(await head()).toBe(2);
+    // Nothing unsaved: reading again makes no version.
+    expect((await read({ token: agent })).body).toMatchObject({ version: 2 });
+    expect(await flush({ token: agent })).toEqual({ status: 200, body: { version: 2 } });
+    expect(await head()).toBe(2);
+  });
+
+  it('read then write while people type: nothing anyone typed is lost or applied twice', async () => {
+    const b = await join(editor);
+    const typed = async (at: number, text: string) => { b.text.insert(at, text, {}); expect(await b.push()).toBe(200); };
+    await typed(0, 'Before the read. ');
+    const { body: before } = await read({ token: agent });
+    expect(before.markdown).toMatch(/^Before the read\. Hello world/);
+    // People type on after the agent's read; the agent edits the text it read.
+    await typed(b.text.toString().indexOf('Second paragraph'), 'After the read: ');
+    const markdown = String(before.markdown).replace('Hello world', 'Hello agent world');
+    const written = await write({ token: agent }, { markdown, base_version: before.version });
+    expect(written.status).toBe(200);
+    const text = String(written.body.markdown);
+    expect(text).toBe('Before the read. Hello agent world\n\n## Plan\n\nAfter the read: Second paragraph');
+    expect(text.match(/Before the read\./g)).toHaveLength(1);
   });
 
   it('names the regions there are when the path names none, or `_doc` is ambiguous', async () => {

@@ -5,11 +5,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  REGION_IDLE_SAVE_MS, REGION_MAX_UNSAVED_MS, REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES, regionsChannel,
+  REGION_IDLE_SAVE_MS, REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES, regionsChannel,
   type RegionCaret, type RegionFlushReply, type RegionFrameMessage, type RegionKind, type RegionOpenReply,
   type RegionParentMessage, type RegionRefusalBody, type RegionRefusalCode, type RegionStreamFrame,
   type RegionUpdateReply, type RegionUpdateRequest, DOC_REGION, cellKey, isCellKey, parseCellKey, CELL_READONLY, type CollabStatus, type RegionContentReply, type RegionWriteRequest, type RegionWriteReply,
 } from '../src/region-sessions';
+import * as contract from '../src/region-sessions';
 
 describe('region sessions contract', () => {
   it('keys a dataset text cell by link name, row _id and field, outside the region id grammar', () => {
@@ -31,10 +32,10 @@ describe('region sessions contract', () => {
   it('pins the limits both ends enforce', () => {
     expect(REGION_UPDATE_MAX_BYTES).toBe(256 * 1024);
     expect(REGION_TEXT_MAX_UNITS).toBe(1_000_000);
-    // Readers, the doc's title and agents see a pause's text within seconds, and unbroken typing within a bound.
-    expect(REGION_IDLE_SAVE_MS).toBeLessThanOrEqual(5_000);
-    expect(REGION_MAX_UNSAVED_MS).toBeGreaterThan(REGION_IDLE_SAVE_MS);
-    expect(REGION_MAX_UNSAVED_MS).toBeLessThanOrEqual(30_000);
+    // Versions are history: a pause becomes a checkpoint after two quiet minutes, and nothing cuts unbroken typing
+    // (readers, the doc's title and agents follow the live text itself, not versions).
+    expect(REGION_IDLE_SAVE_MS).toBe(120_000);
+    expect(Object.keys(contract)).not.toContain('REGION_MAX_UNSAVED_MS');
   });
 
   it('carries every wire shape as JSON or structured-clone data', () => {

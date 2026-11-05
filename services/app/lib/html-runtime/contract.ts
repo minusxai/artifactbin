@@ -4,7 +4,13 @@ export interface HtmlRuntimeConfig {
   /** Server-verified imported source; preserve its annotation invalidation lifecycle. */
   annotationObservation?: 'imported-source-v1';
   pageId: string;
+  /** The saved version this page is (annotations anchor to it, presence and reads classify against it). */
   revision: string;
+  /**
+   * The page's live revision within `revision` (lib/artifacts current-page): served pages hold their regions' unsaved
+   * live text, and (revision, live) orders them, so the frame follows live text exactly as it follows versions.
+   */
+  live?: number;
   /** Source-owned identities, supplied by assembly before author code runs. */
   savedNodeIds?: readonly string[];
   backends: readonly string[];
@@ -39,6 +45,8 @@ export interface HtmlAssemblyInput {
   designSystem?: string | null;
   /** Fresh per-render, page-local admission for generated platform core/importmap only. */
   platformScriptNonce?: string;
+  /** Ids in `html` the live composition gave blocks typed since the last save (lib/artifacts current-page): provisional, so left out of savedNodeIds (a comment never anchors to one). */
+  unsavedNodeIds?: ReadonlySet<string>;
   /** Author module carried only by portable exports; hosted pages fetch its immutable asset on import. */
   apollo?: string;
   /** Reader module embedded only in self-contained portable exports. */

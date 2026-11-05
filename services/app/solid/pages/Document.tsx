@@ -57,6 +57,8 @@ interface DocumentAnswer {
   surface?: {
     group_id?:string|null;
     id: string; title: string | null; format: string; version: number; editId?: string;
+    /** The live revision the page was served at within `version` (lib/artifacts current-page). */
+    live?: number;
     openAnnotations?: number; accountSession?: boolean; anonSession?: boolean;
     runtime?: FramedRuntime;
     refs?: Array<{ id: string; kind: string; title?: string | null }>;
@@ -192,7 +194,7 @@ export function DocumentPage(): JSX.Element {
   // The framed document hears its own stream (lib/islands/live on its origin) and draws its own new versions: this
   // one keeps the page's own state — the title, the comments and the membership — current.
   const live = backend && page?.surface ? createLiveArtifact({
-    backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version,
+    backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version, initialLive: page.surface.live ?? 0,
     get enabled() { return ready() && !archivedNow() && typeof EventSource === 'function'; },
     onData: (event) => {
       if (event.datasets.includes('_members')) {
@@ -206,8 +208,8 @@ export function DocumentPage(): JSX.Element {
     // place, and this page moves its trusted revision with it; only a version the frame could not read reloads the
     // original server shell and its ticketed frame together, while viewer state stays in browser storage.
     // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
-    onPublication: page.surface.format === 'html' ? (version, editId, title) => (title !== undefined && setPublishedTitle({ title, version }), import('../document/follow-html-version')).then(({ followPublication }) => followPublication({
-      version, editId, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,
+    onPublication: page.surface.format === 'html' ? (version, editId, title, live) => (title !== undefined && setPublishedTitle({ title, version }), import('../document/follow-html-version')).then(({ followPublication }) => followPublication({
+      version, editId, live, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,
     }), reload) : undefined,
     onAnnotations: setLiveAnnotations,
     onPresence: readerPresence.receive,

@@ -20,7 +20,7 @@ import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-pe
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { archivedVersionFor, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { archivedVersionFor, currentPage, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
 import { holdsCreatingToken, effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
@@ -251,8 +251,10 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
-  // The shell reads only this version's metadata.
-  const row = servedRow(artifact, at);
+  // The shell reads only this version's metadata; the head's is its current page (lib/artifacts current-page): the
+  // title a doc's live heading names, and the live revision the reader's stream orders what follows by.
+  const page = nativeHtml && !at ? await currentPage(artifact) : null;
+  const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
   const membershipAvailable = false;
   const pwaEnabled = artifactPwaEnabled(row);
   const framedDocument = nativeHtml;
@@ -354,6 +356,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
     version: nativeHtml ? at?.version ?? artifact.version : artifact.version,
+    ...(page ? { live: page.live } : {}),
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.

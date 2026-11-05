@@ -6,6 +6,8 @@ const HTML_VERSION_TIMEOUT_MS=3000;
 interface VersionFrame {send(command:unknown):void;subscribe(listener:(event:unknown)=>void):()=>void}
 export interface FollowHtmlVersionOptions {
  version:number;
+ /** The live revision announced within `version` (its regions' unsaved text moved, lib/artifacts current-page); 0 when none. */
+ live?:number;
  /** The frame's controller (the bridge), or null when none is attached: then the page reloads. */
  frame:VersionFrame|null;
  /** The light refetch of this page's trusted state (revision, presence, nodes) for the drawn version; false on mismatch. */
@@ -40,25 +42,28 @@ export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<Outc
    void options.refresh(version,revision).then(ok=>finish(ok?drawn:'reloaded'),()=>finish('reloaded'));
   });
   const timer=setTimeout(()=>finish('reloaded'),options.timeoutMs??HTML_VERSION_TIMEOUT_MS);
-  try{frame.send({type:HTML_VERSION_MESSAGE,version});}catch{finish('reloaded');}
+  try{frame.send({type:HTML_VERSION_MESSAGE,version,live:options.live??0});}catch{finish('reloaded');}
  });
 }
 
 /**
  * The document page's publication handler (solid/pages/Document, loaded only when a version arrives so the app shell stays
- * within its size budget). Versions are followed one at a time; a page that reloads follows nothing after it.
+ * within its size budget). Versions, and live text within one (`live`), are followed one at a time in (version, live)
+ * order; a page that reloads follows nothing after it.
  */
-let following:Promise<void>=Promise.resolve(),newest=0;
+let following:Promise<void>=Promise.resolve(),newest={version:0,live:0};
+const after=(a:{version:number;live:number},b:{version:number;live:number})=>a.version>b.version||a.version===b.version&&a.live>b.live;
 export function followPublication(options:{
- version:number;editId?:string;
+ version:number;editId?:string;live?:number;
  frame:VersionFrame|null;
  /** The drawn version's tree when the frame holds one (undefined when it holds none, null when it could not be read). */
  show:(head:{version:number;editId:string})=>void;
  reload:()=>void;
 }):Promise<void>{
- // One version at a time; a version overtaken while it waited is skipped (the newer one draws the head anyway).
- newest=Math.max(newest,options.version);
- return following=following.then(()=>options.version<newest?undefined:followHtmlVersion({version:options.version,frame:options.frame,reload:options.reload,
+ // One at a time; one overtaken while it waited is skipped (the newer one draws the current page anyway).
+ const mine={version:options.version,live:options.live??0};
+ if(after(mine,newest))newest=mine;
+ return following=following.then(()=>after(newest,mine)?undefined:followHtmlVersion({version:options.version,live:mine.live,frame:options.frame,reload:options.reload,
   // The frame draws the newest version it is served: this one, or one published since (then announced next).
   refresh:async(drawn,revision)=>{
    const shown=Number(revision);

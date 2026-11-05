@@ -38,7 +38,7 @@ const refuse=(why:string)=>new VersionRefused(why);
 /** Where the core keeps the HTML this document loaded (lib/html-runtime/build.server, captured at readyState interactive). */
 export const LOADED_SOURCE=Symbol.for(LOADED_SOURCE_KEY);
 
-interface Runtime {revision?:string;savedNodeIds?:string[];scriptFingerprint?:string;appearance?:{designSystem?:string}}
+interface Runtime {revision?:string;live?:number;savedNodeIds?:string[];scriptFingerprint?:string;appearance?:{designSystem?:string}}
 const runtimeOf=(doc:Document):Runtime=>{try{return JSON.parse(doc.querySelector('script[data-af="runtime"]')?.textContent??'{}') as Runtime;}catch{return {};}};
 const ID='data-af-id';
 const INTERACTIVE=new Set(['button','input','select','textarea','form','a','details','summary','option','optgroup','datalist','dialog','label','output','iframe','object','embed','video','audio','canvas']);
@@ -186,6 +186,8 @@ export async function pageScripts(doc:Document,fetchFn:typeof fetch):Promise<str
 
 export interface VersionApplied {
  revision:string;savedNodeIds:string[];
+ /** The drawn page's live revision within `revision` (lib/artifacts current-page), 0 when it holds none. */
+ live?:number;
  /** Set when the version could not be drawn in place: the frame navigates here (its own clean address) to rebuild from it. */
  rebuild?:string;
  /** With `rebuild`: why it could not be drawn in place (the parent reports it). */
@@ -195,8 +197,11 @@ export interface VersionApplied {
  * Fetch the newest served version the way this frame got its document (its own address, its own session) and draw it in
  * place, or, when that is refused or fails, keep the reader's place and say where to rebuild from. Rejects (VersionRefused
  * or any error) only when no valid new version was read: then the parent reloads.
+ *
+ * `live`: the page's live revision announced with `version` (its regions' unsaved text changed, no new version). The
+ * served page is the current page, so it must be at least (version, live): a newer version, or this one at least as live.
  */
-export async function applyHtmlVersion(win:Window,config:{revision:string;savedNodeIds?:readonly string[];pageId?:string},version:number,fetchFn:typeof fetch=win.fetch.bind(win),editing?:()=>ReadonlyMap<string,Element>):Promise<VersionApplied>{
+export async function applyHtmlVersion(win:Window,config:{revision:string;live?:number;savedNodeIds?:readonly string[];pageId?:string},version:number,fetchFn:typeof fetch=win.fetch.bind(win),editing?:()=>ReadonlyMap<string,Element>,live=0):Promise<VersionApplied>{
  const holder=win as unknown as Record<symbol,unknown>,loaded=holder[LOADED_SOURCE];
  if(typeof loaded!=='string')throw refuse('this document kept no copy of its source');
  // Without the ticket (spent) or the fragment (an `#af-state=` link would replace the viewer's own state on a rebuild).
@@ -205,15 +210,17 @@ export async function applyHtmlVersion(win:Window,config:{revision:string;savedN
  const response=await fetchFn(address.href,{credentials:'same-origin',cache:'no-store',headers:{[LIVE_VERSION_HEADER]:'1'}});
  if(!response.ok)throw refuse(`the new version answered ${response.status}`);
  const next=await response.text();
- const revision=Number(runtimeOf(new DOMParser().parseFromString(next,'text/html')).revision);
+ const served=runtimeOf(new DOMParser().parseFromString(next,'text/html'));
+ const revision=Number(served.revision),servedLive=Number(served.live??0);
  if(!Number.isInteger(revision)||revision<version)throw refuse('the served version is not the published one');
+ if(revision===version&&!(servedLive>=live))throw refuse('the served page is older than its announced live text');
  let applied:VersionApplied;
  try{const scripts=await pageScripts(win.document,fetchFn);applied=morphHtmlVersion(win.document,loaded,next,scripts,config.savedNodeIds,editing?.());}
  catch(cause){
   // Different scripts, an edit that is not inert, or a morph the DOM refused half way: a fresh document is always right.
   captureReadingPlace(win,config.pageId??'');
-  return {revision:String(revision),savedNodeIds:[],rebuild:address.href,reason:String(cause instanceof Error?cause.message:cause).slice(0,300)};
+  return {revision:String(revision),live:servedLive,savedNodeIds:[],rebuild:address.href,reason:String(cause instanceof Error?cause.message:cause).slice(0,300)};
  }
  holder[LOADED_SOURCE]=next;
- return applied;
+ return {...applied,live:servedLive};
 }

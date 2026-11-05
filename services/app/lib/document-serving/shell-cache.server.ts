@@ -6,11 +6,12 @@
  *
  * Admission runs on EVERY request, before the cache is consulted: the row's identity columns, read now, and the
  * anonymous read decision on them. A row that has gone private or been deleted is never answered from memory;
- * its version, edit and metadata digest are in the key, so a new version is a miss, never the old body.
+ * its version, edit, metadata digest and live revision are in the key, so a new version or new live text is a miss, never
+ * the old body.
  */
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import {readableArtifactIdentity} from '@/lib/artifacts';
+import {liveRevision, readableArtifactIdentity} from '@/lib/artifacts';
 import {baseUrl, parseCookie} from '@/lib/http';
 import {runWithRequest} from '@/lib/platform';
 import {THEME_KEY} from '@/lib/html-reader/contract';
@@ -50,6 +51,8 @@ export async function cachedShell({request, id, encoding, build}: ShellRequest, 
     kind: 'shell', origin: baseUrl(request), path: url.pathname, theme: parseCookie(request.headers.get('cookie'), THEME_KEY) ?? null,
     encoding, build, id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, meta: row.meta_digest,
     title: row.title, description: row.description, visibility: row.visibility,
+    // A page's live text (lib/artifacts current-page) names and draws it too: its live revision is in the key.
+    live: await liveRevision(row.id),
   });
   const hit = renderCache.get(key);
   if (hit) return respond(hit);

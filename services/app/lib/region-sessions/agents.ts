@@ -2,8 +2,11 @@
  * AGENTS ON LIVE REGIONS (contract: region-sessions RegionContentReply, RegionWriteRequest, RegionWriteReply): an
  * agent reads a region's text as Markdown or HTML and writes it back while people type in it.
  *
- *   read   the region at the page's saved head, with that version (anyone who may read the page: it is the saved
- *          page they already read). Unsaved typing is not in it; saving first (flush) puts it there.
+ *   read   the region as the page reads now (anyone who may read the page reads what it shows them). For someone who
+ *          may edit it (who may write back), unsaved typing is first saved as a version (a checkpoint, lib/artifacts
+ *          checkpointLiveRegions), and the region is read at that saved head: its version is then a base that holds
+ *          exactly the text read, so the write's three-way merge never applies others' unsaved typing a second time.
+ *          A reader, who cannot write, reads the current page (lib/artifacts current-page) at the saved version.
  *   write  made from a version the agent read (`baseVersion`): merged three-way from that version's snapshot into
  *          the live state (lib/live-regions applyRegionRevision), so people's unsaved typing survives; logged as
  *          the agent's update and woken to the editors' streams, then saved as one new version with everyone's
@@ -13,9 +16,9 @@
  * first (so the save never upgrades a lock), then the region row.
  */
 import * as Y from 'yjs';
-import { DOC_REGION, REGION_TEXT_MAX_UNITS, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts';
+import { canEdit, DOC_REGION, REGION_TEXT_MAX_UNITS, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts';
 import { applyRegionRevision, editableRegions, isRegionId, LiveRegionRefusal, regionMarkdown, regionText, type PageRegion } from '@/lib/live-regions';
-import { completeMutationReceipt, editablePage, liveRegionDoc, logRegionUpdate, notifyRegions, readableArtifact, saveLiveRegionsInTx, type MutationReceipt } from '@/lib/artifacts';
+import { checkpointLiveRegions, completeMutationReceipt, currentPage, editablePage, liveRegionDoc, logRegionUpdate, notifyRegions, readableArtifact, saveLiveRegionsInTx, type MutationReceipt } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db } from '@/lib/platform';
 import { NOT_FOUND, refuse, regionRow, regionStore, type RegionAnswer } from './sessions';
@@ -58,9 +61,12 @@ export function agentRegions(db: () => Promise<Db>, now: () => number): AgentReg
     save: (actor, artifactId) => store.flush(actor, artifactId),
     async read(actor, artifactId, regionId, format) {
       if (!pathOk(artifactId, regionId)) return NOT_FOUND;
+      // A checkpoint first when this actor may edit (it saves nothing for a reader); then the page as it reads now.
+      await checkpointLiveRegions(actor, artifactId);
       const readable = await readableArtifact(actor, artifactId);
       if (!readable || readable.row.format !== 'html') return NOT_FOUND;
-      const region = target(editableRegions(readable.row.source ?? ''), regionId);
+      const page = canEdit(readable.role) ? readable.row : (await currentPage(readable.row)).row;
+      const region = target(editableRegions(page.source ?? ''), regionId);
       if (!isRegion(region)) return region;
       const content = format === 'html' ? { html: region.inner } : { markdown: regionMarkdown(region.kind, region.inner) };
       return { status: 200, body: { regionId: region.id, kind: region.kind, version: readable.row.version, ...content } };

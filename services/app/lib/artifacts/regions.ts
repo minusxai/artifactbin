@@ -177,12 +177,64 @@ async function deleteRegionRows(tx: Queryable, artifactId: string, regionIds?: r
 
 /**
  * WHEN THE BACKSTOP SAVES (lib/region-sessions stream): a dirty row is due once it has been quiet since `quietBefore`
- * (no update after it) or dirty since `dirtyBefore` (typing that never pauses still reaches readers).
+ * (no update after it). Typing that never pauses is never cut into versions: readers follow the live state itself
+ * (./current-page), so a version is a checkpoint in history, not the way text reaches anyone.
  */
-export interface SaveDue { quietBefore: string; dirtyBefore: string }
+export interface SaveDue { quietBefore: string }
 export function saveIsDue(row: { dirty_since: string | null; last_update_at: string | null }, due: SaveDue): boolean {
-  if (row.dirty_since === null) return false;
-  return (row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(due.quietBefore)) || Date.parse(row.dirty_since) <= Date.parse(due.dirtyBefore);
+  return row.dirty_since !== null && row.last_update_at !== null && Date.parse(row.last_update_at) <= Date.parse(due.quietBefore);
+}
+
+/** The page's identity ledger as a write extends it: every id it ever reserved, and its next id. */
+export async function pageLedger(q: Queryable, current: Pick<ArtifactRow, 'id' | 'meta'>): Promise<HtmlIdentityLedger> {
+  const reserved = (await q.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id])).rows.map((row) => row.source_id);
+  const old = current.meta.htmlIdentity as HtmlIdentityLedger | undefined;
+  return { allocatedIds: reserved, nextNodeId: old?.nextNodeId ?? 1 };
+}
+
+/** The regions the head declares with the kind their row holds (a row the head no longer declares is closed at the next save). */
+function declaredRegions(source: string | null, rows: readonly Pick<RegionRow, 'region_id' | 'kind'>[]): Set<string> {
+  return new Set(editableRegions(source ?? '').filter((region) => rows.some((row) => row.region_id === region.id && row.kind === region.kind)).map((region) => region.id));
+}
+
+/** Each dirty, declared row with its live document: what a save compacts into the source. */
+async function dirtyOutcomes(q: Queryable, artifactId: string, rows: RegionRow[], declared: ReadonlySet<string>): Promise<RegionOutcome[]> {
+  const outcomes: RegionOutcome[] = [];
+  for (const row of rows) {
+    if (row.dirty_since === null || !declared.has(row.region_id)) continue;
+    outcomes.push({ row, doc: await liveRegionDoc(q, artifactId, row), updates: [], snapshot: new Uint8Array() });
+  }
+  return outcomes;
+}
+
+/**
+ * THE PAGE WITH ITS LIVE TEXT (./current-page): the saved source with every dirty region's live text composed in by the
+ * same pure compaction a save runs (nothing is written or locked), or null when no region has unsaved edits.
+ * `ledger.allocatedIds` then also holds the ids the composition gave new blocks: provisional, as the next save may
+ * give them to other blocks.
+ */
+export interface LiveComposition { html: string; ledger: HtmlIdentityLedger; base: HtmlIdentityLedger; revision: LiveRevision }
+export async function composeLiveRegions(q: Queryable, current: Pick<ArtifactRow, 'id' | 'meta' | 'source'>): Promise<LiveComposition | null> {
+  const rows = (await q.query<RegionRow>(`SELECT ${ROW_COLUMNS} FROM region_states WHERE artifact_id = $1 AND region_id NOT LIKE 'cell:%' ORDER BY region_id`, [current.id])).rows;
+  const outcomes = await dirtyOutcomes(q, current.id, rows, declaredRegions(current.source, rows));
+  if (!outcomes.length) return null;
+  const base = await pageLedger(q, current);
+  return { ...compactAll(outcomes, current.source ?? '', base), base, revision: revisionOf(rows.map((row) => ({ ...row, dirty: row.dirty_since !== null }))) };
+}
+
+/**
+ * A page's LIVE REVISION: the sum of its regions' sequences. Within one version it only grows (every accepted update,
+ * open and save advances a region's sequence; rows go only with a new version), so (version, live) orders every state
+ * a reader can be served. `dirty` names each region with unsaved edits and its sequence: what the composed page holds.
+ */
+export interface LiveRevision { live: number; dirty: { regionId: string; seq: number }[] }
+const revisionOf = (rows: readonly { region_id: string; last_seq: number; dirty: boolean }[]): LiveRevision =>
+  ({ live: rows.reduce((sum, row) => sum + row.last_seq, 0), dirty: rows.filter((row) => row.dirty).map((row) => ({ regionId: row.region_id, seq: row.last_seq })) });
+export async function liveRevisionOf(q: Queryable, artifactId: string): Promise<LiveRevision> {
+  return revisionOf((await q.query<{ region_id: string; last_seq: number; dirty: boolean }>(
+    "SELECT region_id, last_seq::int AS last_seq, dirty_since IS NOT NULL AS dirty FROM region_states WHERE artifact_id = $1 AND region_id NOT LIKE 'cell:%' ORDER BY region_id",
+    [artifactId],
+  )).rows);
 }
 
 /**
@@ -195,12 +247,8 @@ export async function planRegionSave(tx: Queryable, current: ArtifactRow, ledger
   const dirty = rows.filter((row) => row.dirty_since !== null);
   if (!dirty.length) return null;
   if (options.due && !dirty.some((row) => saveIsDue(row, options.due!))) return null;
-  const declared = new Set(editableRegions(current.source ?? '').filter((region) => rows.some((row) => row.region_id === region.id && row.kind === region.kind)).map((region) => region.id));
-  const outcomes: RegionOutcome[] = [];
-  for (const row of dirty) {
-    if (!declared.has(row.region_id)) continue;
-    outcomes.push({ row, doc: await liveRegionDoc(tx, current.id, row), updates: [], snapshot: new Uint8Array() });
-  }
+  const declared = declaredRegions(current.source, rows);
+  const outcomes = await dirtyOutcomes(tx, current.id, rows, declared);
   const closed = rows.filter((row) => !declared.has(row.region_id)).map((row) => row.region_id);
   const page = compactAll(outcomes, current.source ?? '', ledger);
   const clean = rows.filter((row) => row.dirty_since === null && declared.has(row.region_id));
@@ -212,8 +260,12 @@ export async function planRegionSave(tx: Queryable, current: ArtifactRow, ledger
  * so the stored text holds both the write's changes and editors' unsaved typing. Refusals are the route's answers:
  * 409 `region_snapshot_missing` (no snapshot of the head to merge from), 422 `unsupported_content` (the write puts
  * something in a live region its kind cannot hold).
+ *
+ * `from: 'live'`: the writer read the page WITH its live text (./current-page, at the live revision the caller has
+ * checked is still current), so each region merges from its live state, not the head's snapshot: merging from the
+ * snapshot would apply the live edits the writer read a second time.
  */
-export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page: { html: string; ledger: HtmlIdentityLedger }): Promise<RegionPlan | Response> {
+export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page: { html: string; ledger: HtmlIdentityLedger }, options: { from?: 'saved' | 'live' } = {}): Promise<RegionPlan | Response> {
   const rows = await lockedRegionRows(tx, current.id);
   if (!rows.length) return { ...page, commit: async () => ({}) };
   const declared = new Map(editableRegions(page.html).map((region) => [region.id, region]));
@@ -222,9 +274,10 @@ export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page:
   for (const row of rows) {
     const region = declared.get(row.region_id);
     if (!region || region.kind !== row.kind) { closed.push(row.region_id); continue; }
-    const saved = (await tx.query<{ snapshot: Uint8Array }>('SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = $3', [current.id, row.region_id, current.version])).rows[0];
-    if (!saved) return json({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
     const doc = await liveRegionDoc(tx, current.id, row);
+    const saved = options.from === 'live' ? { snapshot: Y.encodeSnapshot(Y.snapshot(doc)) }
+      : (await tx.query<{ snapshot: Uint8Array }>('SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = $3', [current.id, row.region_id, current.version])).rows[0];
+    if (!saved) return json({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
     let revision: { update: Uint8Array };
     try { revision = applyRegionRevision({ kind: row.kind, live: Y.encodeStateAsUpdate(doc), savedSnapshot: saved.snapshot, html: region.inner }); }
     catch (error) {
