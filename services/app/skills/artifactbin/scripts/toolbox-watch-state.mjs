@@ -92,8 +92,10 @@ export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_backg
  'then send your reply as your last message and end your turn; you are woken when it prints. '+
  'Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at '+
  'least 300000 ms.';
-const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and keep `+
- `node scripts/comment.mjs watch ${id} --next running: ${WATCH_MODE}`;
+/** The reply, then the watch as its own last line, a literal command: it is a separate step. */
+const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts}, and run `+
+ 'the comment watch as a separate step, even when the reply is only the link. '+WATCH_MODE+
+ `\n  node scripts/comment.mjs watch ${id} --next`;
 /** The step after publishing page content (publish.mjs, doc.mjs write) or answering a comment
  * (comment.mjs reply). */
 export const watchNext=id=>next(id);
