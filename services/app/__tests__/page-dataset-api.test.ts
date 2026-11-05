@@ -74,13 +74,13 @@ it('stores a new link as name, dataset and mode and mounts its roots flat, per r
   expect(owner).toContain('insert_staff_one(object: staff_insert_input!): staff @dataset');
   expect(owner).not.toContain('staff: staff__Query');
   // The viewer share: no salary anywhere, no aggregate, no writes (no rule).
-  expect(viewer).toMatch(/type staff \{\s+_id: ID!\s+name: String\s+team: String\s+page: String\s+by: String\s+\}/);
+  expect(viewer).toMatch(/type staff \{\s+_id: ID!\s+name: String\s+team: String\s+page: String\s+by: String\s+"[^"]+"\s+_can: staff_row_can!\s+\}/);
   expect(viewer).not.toContain('staff_aggregate');
   expect(viewer).not.toContain('type Mutation');
   // Another account through the page is signed_in: its insert input names only the rule's columns, less presets.
   expect(other).toMatch(/input staff_insert_input \{\s+name: String\s+team: String\s+\}/);
   expect(other).toContain('staff_aggregate');
-  expect(anonymous).toMatch(/type staff \{\s+_id: ID!\s+name: String\s+\}/);
+  expect(anonymous).toMatch(/type staff \{\s+_id: ID!\s+name: String\s+"[^"]+"\s+_can: staff_row_can!\s+\}/);
   expect(anonymous).not.toContain('type Mutation');
 });
 

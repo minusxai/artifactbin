@@ -53,11 +53,11 @@ it('GET answers the caller\'s own schema and role: hidden columns and ungranted 
   const owned = await (await schema(id, owner)).json();
   expect(owned.role).toBe('owner');
   expect(owned.revision).toBe('1');
-  expect(owned.sdl).toContain('type staff { _id: ID! name: String team: String salary: Float }');
+  expect(owned.sdl).toMatch(/type staff \{ _id: ID! name: String team: String salary: Float "[^"]+" _can: staff_row_can! \}/);
   expect(owned.sdl).toContain('staff_aggregate(');
   const viewed = await (await schema(id, viewer)).json();
   expect(viewed.role).toBe('viewer');
-  expect(viewed.sdl).toContain('type staff { _id: ID! name: String team: String }');
+  expect(viewed.sdl).toMatch(/type staff \{ _id: ID! name: String team: String "[^"]+" _can: staff_row_can! \}/);
   expect(viewed.sdl).not.toMatch(/salary|_aggregate/);
   const linked = await (await schema(id, other)).json();
   expect(linked.role).toBe('signed_in');
