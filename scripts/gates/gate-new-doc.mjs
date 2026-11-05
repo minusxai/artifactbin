@@ -86,8 +86,8 @@ try {
     check(!!saved?.html.includes('First line of the body.'), `the paused text is saved without a press (v${saved?.version}, ${((Date.now() - typedAt) / 1000).toFixed(1)} s)`);
     check(/<h1[^>]*>Launch plan<\/h1>/.test(saved?.html ?? ''), 'the saved page holds the typed title as its heading');
     check(saved?.title === 'Launch plan' && /<title[^>]*>Launch plan<\/title>/.test(saved?.html ?? ''), `the doc is named by its heading (${saved?.title})`);
-    const chrome = await until(() => page.getByText('Launch plan', { exact: true }).first().isVisible(), (visible) => visible === true, 10_000);
-    check(chrome === true, "the editor's own header shows the new name");
+    const chrome = await until(() => page.getByRole('navigation', { name: 'Current page' }).innerText(), (text) => !!text?.includes('Launch plan'), 10_000);
+    check(!!chrome?.includes('Launch plan'), `the editor's own header shows the new name (${JSON.stringify(chrome?.split('\n').at(-1))})`);
     const reader = await (await browser.newContext({ viewport: { width: 1100, height: 800 } })).newPage();
     await reader.goto(page.url(), { waitUntil: 'load' });
     const readerFrame = await documentFrame(reader);
