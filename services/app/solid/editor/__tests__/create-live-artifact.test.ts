@@ -267,12 +267,12 @@ it('delivers each newer native publication once, in version order, for the page 
 it('delivers live text within a version (a higher live revision) as a publication, in (version, live) order', () => {
  const {backend,ping}=liveBackend(vi.fn(async()=>frame(2)));
  const follow=vi.fn();
- renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,initialLive:3,onPublication:follow}));
- // The page was served at live 3: an older or equal live revision is not news; a higher one is, and a new version resets it.
- ping({version:1,editId:'initial',live:2}); ping({version:1,editId:'initial',live:3});
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:follow}));
+ // An older or equal live revision than the last announced is not news; a higher one is, and a new version resets it.
+ ping({version:1,editId:'initial',live:0}); ping({version:1,editId:'initial',live:3}); ping({version:1,editId:'initial',live:2});
  ping({version:1,editId:'initial',live:5,title:'Typed live'}); ping({version:1,editId:'initial',live:4});
  ping({version:2,editId:'two',live:1}); ping({version:2,editId:'two',live:6});
- expect(follow.mock.calls).toEqual([[1,'initial','Typed live',5],[2,'two',null,1],[2,'two',null,6]]);
+ expect(follow.mock.calls).toEqual([[1,'initial',null,3],[1,'initial','Typed live',5],[2,'two',null,1],[2,'two',null,6]]);
 });
 
 it('never refreshes the native archived view when a publication arrives', () => {

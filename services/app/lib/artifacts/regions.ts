@@ -228,8 +228,8 @@ export async function composeLiveRegions(q: Queryable, current: Pick<ArtifactRow
  * a reader can be served. `dirty` names each region with unsaved edits and its sequence: what the composed page holds.
  */
 export interface LiveRevision { live: number; dirty: { regionId: string; seq: number }[] }
-const revisionOf = (rows: readonly { region_id: string; last_seq: number; dirty: boolean }[]): LiveRevision =>
-  ({ live: rows.reduce((sum, row) => sum + row.last_seq, 0), dirty: rows.filter((row) => row.dirty).map((row) => ({ regionId: row.region_id, seq: row.last_seq })) });
+export const revisionOf = (rows: readonly { region_id: string; last_seq: number; dirty: boolean }[]): LiveRevision =>
+  ({ live: rows.reduce((sum, row) => sum + Number(row.last_seq), 0), dirty: rows.filter((row) => row.dirty).map((row) => ({ regionId: row.region_id, seq: row.last_seq })) });
 export async function liveRevisionOf(q: Queryable, artifactId: string): Promise<LiveRevision> {
   return revisionOf((await q.query<{ region_id: string; last_seq: number; dirty: boolean }>(
     "SELECT region_id, last_seq::int AS last_seq, dirty_since IS NOT NULL AS dirty FROM region_states WHERE artifact_id = $1 AND region_id NOT LIKE 'cell:%' ORDER BY region_id",

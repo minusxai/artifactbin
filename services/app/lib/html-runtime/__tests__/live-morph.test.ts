@@ -133,7 +133,11 @@ describe('applyHtmlVersion (inside the frame)',()=>{
   expect(applied.savedNodeIds).toContain('a1');expect(applied.savedNodeIds).not.toContain('af-9');
   // Older live text than announced is not the current page (the parent reloads); a newer version always is.
   const older=async()=>new Response(live(3,'<p data-af-id="a1">Hello</p>'));
-  await expect(applyHtmlVersion(window,{revision:'1',live:5},1,older as unknown as typeof fetch,undefined,4)).rejects.toThrow(/older than its announced live text/);
+  await expect(applyHtmlVersion(window,{revision:'1',live:2},1,older as unknown as typeof fetch,undefined,4)).rejects.toThrow(/older than its announced live text/);
+  // Live text the document already holds is not fetched again (a page's first ping names the live text it was served).
+  const none=vi.fn(async()=>new Response('unused'));
+  await expect(applyHtmlVersion(window,{revision:'1',live:5,savedNodeIds:['a1']},1,none as unknown as typeof fetch,undefined,5)).resolves.toEqual({revision:'1',live:5,savedNodeIds:['a1']});
+  expect(none).not.toHaveBeenCalled();
   const newer=vi.fn(async(url:string)=>url.endsWith('.js')?new Response(''):new Response(live(0,'<p data-af-id="a1">Saved.</p>',2)));
   await expect(applyHtmlVersion(window,{revision:'1',live:5},1,newer as unknown as typeof fetch,undefined,9)).resolves.toMatchObject({revision:'2',live:0});
  });

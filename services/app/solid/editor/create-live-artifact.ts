@@ -35,8 +35,6 @@ interface LiveArtifactOptions {
   id: string;
   initialEditId: string;
   initialVersion: number;
-  /** The live revision the page was served at within `initialVersion` (lib/artifacts current-page), 0 when none. */
-  initialLive?: number;
   enabled?: boolean;
   /**
    * "This frame is the echo of a write I made" — the editor's own accepted
@@ -99,8 +97,12 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
          * fetch must not mark it seen, or the page sits one version behind until the next write.
          */
         let seenVersion = initialVersion;
-        /** With `onPublication`: the live revision seen within `seenVersion`. */
-        let seenLive = options.initialLive ?? 0;
+        /**
+         * With `onPublication`: the live revision seen within `seenVersion`. The page's own is not known here (its frame
+         * holds it), so the first ping of a page with live text is announced; the frame draws nothing for it
+         * (lib/html-runtime/live-morph: already drawn).
+         */
+        let seenLive = 0;
         let alive = true;
         let annotationsRequest: AbortController | undefined;
         /** The newest head announced and not yet fetched; a ping arriving mid-fetch replaces it. */

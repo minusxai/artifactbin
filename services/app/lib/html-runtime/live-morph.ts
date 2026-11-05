@@ -204,6 +204,8 @@ export interface VersionApplied {
 export async function applyHtmlVersion(win:Window,config:{revision:string;live?:number;savedNodeIds?:readonly string[];pageId?:string},version:number,fetchFn:typeof fetch=win.fetch.bind(win),editing?:()=>ReadonlyMap<string,Element>,live=0):Promise<VersionApplied>{
  const holder=win as unknown as Record<symbol,unknown>,loaded=holder[LOADED_SOURCE];
  if(typeof loaded!=='string')throw refuse('this document kept no copy of its source');
+ // Live text this document already holds (it was served at, or has drawn, this version at least this live): nothing to fetch.
+ if(live>0&&Number(config.revision)===version&&(config.live??0)>=live)return {revision:config.revision,live:config.live??0,savedNodeIds:[...(config.savedNodeIds??[])]};
  // Without the ticket (spent) or the fragment (an `#af-state=` link would replace the viewer's own state on a rebuild).
  const address=new URL(win.location.href);address.searchParams.delete(PAGES_TICKET);address.hash='';
  // Marked so the read is not counted as another view of the page (app/a/[id]/raw).

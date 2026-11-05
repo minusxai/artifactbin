@@ -14,8 +14,9 @@
  *    following typing share one composition per live revision.
  */
 import { getDb, type Queryable } from '../platform';
-import type { ArtifactRow } from '@/lib/artifact-access';
-import { composeLiveRegions, liveRevisionOf, type LiveRevision } from './regions';
+import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifact-access';
+import { composeLiveRegions, liveRevisionOf, revisionOf, type LiveRevision } from './regions';
+import { artifactQuery } from './document';
 import { docTitleAfterSave } from './doc-title';
 
 export type PageRow = Pick<ArtifactRow, 'id' | 'format' | 'version' | 'edit_id' | 'source' | 'title' | 'meta'>;
@@ -56,16 +57,37 @@ function recall(key: string): Composed | undefined {
   return hit;
 }
 
+/** The region rows' sequences, as one column of the row's own read (no statement of its own). */
+const LIVE_REGIONS_SQL = `(SELECT COALESCE(json_agg(json_build_object('region_id', r.region_id, 'last_seq', r.last_seq, 'dirty', r.dirty_since IS NOT NULL) ORDER BY r.region_id), '[]'::json)
+  FROM region_states r WHERE r.artifact_id = artifacts.id AND r.region_id NOT LIKE 'cell:%')`;
+
+/**
+ * A PAGE VIEW'S ONE ROW READ: the live artifact row (as getArtifactById reads it) with its live revision in the same
+ * statement, for `currentPage(row, { revision })`, so serving the current page costs a view no statement of its own.
+ */
+export interface PageRead { row: ArtifactRow; revision: LiveRevision }
+export async function readPageRow(id: string): Promise<PageRead | null> {
+  const found = (await artifactQuery<ArtifactRow & { af_live_regions: unknown }>(await getDb(),
+    `SELECT artifacts.*, ${LIVE_REGIONS_SQL} AS af_live_regions FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0];
+  if (!found) return null;
+  const { af_live_regions: regions, ...row } = found;
+  const parsed = (typeof regions === 'string' ? JSON.parse(regions) : regions) as { region_id: string; last_seq: number; dirty: boolean }[] | null;
+  return { row: row as ArtifactRow, revision: revisionOf(parsed ?? []) };
+}
+
 /** The live revision alone (a header read: the render cache's and the validator's key), without composing. */
 export async function liveRevision(id: string, q?: Queryable): Promise<number> {
   return (await liveRevisionOf(q ?? await getDb(), id)).live;
 }
 
-/** The current page of a row read at its head (never an archived version: those are history, served as stored). */
-export async function currentPage<R extends PageRow>(row: R, q?: Queryable): Promise<CurrentPage<R>> {
+/**
+ * The current page of a row read at its head (never an archived version: those are history, served as stored).
+ * `revision`: the live revision read with the row (readPageRow), so it is not read again.
+ */
+export async function currentPage<R extends PageRow>(row: R, options: { q?: Queryable; revision?: LiveRevision } = {}): Promise<CurrentPage<R>> {
   if (row.format !== 'html') return { row, live: 0, composed: false, unsavedIds: NONE };
-  const db = q ?? await getDb();
-  const revision = await liveRevisionOf(db, row.id);
+  const db = options.q ?? await getDb();
+  const revision = options.revision ?? await liveRevisionOf(db, row.id);
   if (!revision.dirty.length) return { row, live: revision.live, composed: false, unsavedIds: NONE };
   let key = keyOf(row, revision);
   let hit = recall(key), live = revision.live;

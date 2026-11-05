@@ -20,7 +20,7 @@ import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-pe
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { archivedVersionFor, currentPage, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { archivedVersionFor, currentPage, readPageRow, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow, type PageRead } from '@/lib/artifacts';
 import { holdsCreatingToken, effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
@@ -62,6 +62,8 @@ interface ArtifactPageOptions {
    * fetch and one access check per view.
    */
   admitted?: ArtifactRow;
+  /** With `admitted`: the live revision read with it (lib/artifacts readPageRow), so the view reads it no second time. */
+  admittedRevision?: PageRead['revision'];
   /**
    * The app page (the HTML door): it frames the document on its own origin, after handing the reader
    * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL, on its own origin. The JSON door
@@ -155,7 +157,10 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (!admitted && !exporting && !holdsCreatingToken(header, actor) && !(await canReadArtifact(header, actor, facts))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
-  const artifact = admitted ?? await getArtifactById(id);
+  // The row and its live revision in one statement (lib/artifacts readPageRow): the current page costs no read of its own.
+  const read = admitted ? null : await readPageRow(id);
+  const artifact = admitted ?? read?.row;
+  const revision = admitted ? options.admittedRevision : read?.revision;
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
   if (!admitted && accessMoved(header, artifact) && !exporting && !holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor, facts))) return notFound();
@@ -252,8 +257,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
   // The shell reads only this version's metadata; the head's is its current page (lib/artifacts current-page): the
-  // title a doc's live heading names, and the live revision the reader's stream orders what follows by.
-  const page = nativeHtml && !at ? await currentPage(artifact) : null;
+  // title a doc's live heading names. (Its live revision is the frame's own: lib/html-runtime/live-morph.)
+  const page = nativeHtml && !at ? await currentPage(artifact, revision ? { revision } : {}) : null;
   const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
   const membershipAvailable = false;
   const pwaEnabled = artifactPwaEnabled(row);
@@ -356,7 +361,6 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
     version: nativeHtml ? at?.version ?? artifact.version : artifact.version,
-    ...(page ? { live: page.live } : {}),
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.
