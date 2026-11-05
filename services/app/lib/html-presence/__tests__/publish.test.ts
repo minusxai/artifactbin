@@ -12,11 +12,13 @@ it('publishes a platform-labelled, revision-bound entry under a non-reversible p
  const guest=await publishPresence({userId:null,tokenId:null},{version:7},{session,revision:'7'},ports(sent));
  expect(guest).not.toEqual(result);expect(decodePresenceMessage(sent[1]!,'7')).toMatchObject({label:'Guest'});
 });
-it('announces a departure for an invisible reader and refuses a stale revision or malformed session',async()=>{
+it('announces a departure for an invisible reader, drops a report from a version behind, and refuses a future revision or malformed session',async()=>{
  const sent:string[]=[];
  const result=await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'7',visible:false},ports(sent));
  expect(decodePresenceMessage(sent[0]!,'7')).toEqual({id:(result as {id:string}).id,gone:true});
- expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'6'},ports(sent))).toBeNull();
+ // A page still drawing the version before is answered (it reports again on the new one) and nothing is broadcast.
+ expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'6',visible:true},ports(sent))).toEqual({id:(result as {id:string}).id});
+ expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'8'},ports(sent))).toBeNull();
  expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session:'short',revision:'7'},ports(sent))).toBeNull();
  expect(await publishPresence({userId:'u1',tokenId:null},{version:7},null,ports(sent))).toBeNull();
  expect(sent).toHaveLength(1);

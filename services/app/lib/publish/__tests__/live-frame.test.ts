@@ -156,5 +156,5 @@ it('native source publication streams only a head ping, not HTML or compiler nod
   expect(response.headers.get('Cache-Control')).toContain('no-store');
   const [ping] = await readNamed(response.body!, 'message');
   expect(ping?.event).toBe('message');
-  expect(ping?.data).toEqual({ editId: doc.edit_id, version: 1, by: null });
+  expect(ping?.data).toEqual({ editId: doc.edit_id, version: 1, by: null, title: doc.title ?? null });
 });
