@@ -21,7 +21,7 @@
  * through.
  */
 import { MUTATION_ONLY_FUNCTIONS, type ColumnRead, type ColumnType, type DatasetColumn, type OutputColumn, type Row, type Scalar, type StatementAnalysis, type StatementKind, type TableWrite } from '@artifactbin/contracts';
-import { inferColumns, normalizeTimestamp } from '@artifactbin/utils/shape';
+import { inferColumns, normalizeDate, normalizeTimestamp } from '@artifactbin/utils/shape';
 import { calendarDate, LIBRARY_NAMES, registerLibrary } from './functions';
 import type { Sqlite3 } from './wasm';
 
@@ -67,26 +67,36 @@ const CORE_FUNCTIONS: ReadonlySet<string> = new Set([
   'unlikely', 'upper', 'zeroblob',
 ]);
 
-/** Why each CHECK exists, as the message a failing write shows. */
-function check(column: DatasetColumn): string {
+/**
+ * Why each CHECK exists, as the message a failing write shows. A loaded table keeps each value canonical. A
+ * mutation's target (`accept`) takes what its column's type can read — a timestamp in a date column, a date or
+ * an offset in a timestamp column — through the engine's own deterministic readers, and `normalize` then
+ * stores each written value in its canonical form before presets and the policy check see it.
+ */
+function check(column: DatasetColumn, accept?: Accepting): string {
   const c = quote(column.name);
+  const reader = accept && (column.type === 'date' || column.type === 'timestamp') ? accept[column.type] : null;
   const rule = column.type === 'boolean' ? [`${c} IN (0, 1)`, 'true or false']
-    : column.type === 'date' ? [`date(${c}) IS ${c}`, 'a date (YYYY-MM-DD)']
-      : column.type === 'timestamp' ? [`strftime('%Y-%m-%dT%H:%M:%fZ', ${c}) IS ${c}`, 'a UTC timestamp (YYYY-MM-DDTHH:MM:SS.sssZ)']
+    : column.type === 'date' ? [reader ? `${c} IS NULL OR ${reader}(${c}) IS NOT NULL` : `date(${c}) IS ${c}`, reader ? 'a date (YYYY-MM-DD, or an ISO timestamp, stored as its UTC day)' : 'a date (YYYY-MM-DD)']
+      : column.type === 'timestamp' ? [reader ? `${c} IS NULL OR ${reader}(${c}) IS NOT NULL` : `strftime('%Y-%m-%dT%H:%M:%fZ', ${c}) IS ${c}`, reader ? 'a UTC timestamp (ISO 8601: a date, a time in UTC or with an offset)' : 'a UTC timestamp (YYYY-MM-DDTHH:MM:SS.sssZ)']
         : null;
   return rule ? ` CONSTRAINT ${quote(`${column.name} must be ${rule[1]}`)} CHECK (${rule[0]})` : '';
 }
+/** The engine's readers a mutation target's CHECKs call: each answers the canonical value, or NULL. */
+interface Accepting { date: string; timestamp: string }
+const canonical = (normalize: (value: unknown) => string) => (value: string | number | null): string | null => {
+  try { return value === null ? null : normalize(value); } catch { return null; }
+};
 
 /**
  * A JS value as SQLite stores it for a column or parameter of this type.
- * Dates must already be calendar days; timestamps normalize to UTC ISO (the
- * same rule the dataset door applies); booleans become 1/0.
+ * Dates keep their UTC calendar day, timestamps normalize to UTC ISO (the
+ * same rules the dataset door applies); booleans become 1/0.
  */
 export function sqlValue(type: ColumnType | undefined, value: unknown, field: string): string | number | null {
   if (value === null || value === undefined) return null;
   if (type === 'date') {
-    if (typeof value !== 'string' || calendarDate(value) === null) throw new Error(`${field} is not a date the dataset can hold (expected YYYY-MM-DD)`);
-    return value;
+    try { return normalizeDate(value, field); } catch { throw new Error(`${field} is not a date the dataset can hold (expected YYYY-MM-DD or an ISO timestamp)`); }
   }
   if (type === 'timestamp') return normalizeTimestamp(value, field);
   if (typeof value === 'boolean') return value ? 1 : 0;
@@ -97,9 +107,9 @@ export function sqlValue(type: ColumnType | undefined, value: unknown, field: st
 }
 
 /**
- * A stored cell as its column's type reads it. Datasets typed before this
- * engine hold timestamps in date columns, which the previous engine read as the
- * calendar day they name; a parameter is bound as given (sqlValue).
+ * A stored cell as its column's type reads it on load. Datasets uploaded before writes normalized hold any text
+ * after a date's `T` or space in a date column, which the previous engine read as the calendar day it names; a
+ * write or a parameter goes through sqlValue alone.
  */
 const storedCell = (type: ColumnType | undefined, value: unknown): unknown =>
   type === 'date' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}[T ]/.test(value) ? value.slice(0, 10) : value;
@@ -221,9 +231,9 @@ export class SqliteDatabase {
   }
 
   /** Register an engine-owned function under an unguessable name; returns the name. */
-  internalFunction(fn: (...args: Array<string | number | null>) => string | number | null, arity: number): string {
+  internalFunction(fn: (...args: Array<string | number | null>) => string | number | null, arity: number, deterministic = false): string {
     const name = this.internalName();
-    this.#db.createFunction({ name, arity, xFunc: (_ctx: number, ...args: Array<string | number | null>) => fn(...args) } as never);
+    this.#db.createFunction({ name, arity, deterministic, innocuous: deterministic, xFunc: (_ctx: number, ...args: Array<string | number | null>) => fn(...args) } as never);
     return name;
   }
   /**
@@ -252,11 +262,16 @@ export class SqliteDatabase {
     this.#schemas.push(schema);
   }
 
-  /** Create a STRICT table for a relation. `defaults` supplies a DEFAULT expression per column (the engine's own). */
-  createTable(spec: Relation, defaults?: (index: number) => string): void {
+  /**
+   * Create a STRICT table for a relation. `defaults` supplies a DEFAULT expression per column (the engine's own).
+   * `accepting`: a mutation's target, whose date and timestamp columns take what their type can read; the
+   * writer then calls `normalize` on the rows the statement wrote.
+   */
+  createTable(spec: Relation, defaults?: (index: number) => string, accepting = false): void {
     const columns = spec.columns.length ? spec.columns : [{ name: '_empty', type: 'string' as const }];
     if (spec.schema !== 'main') this.attach(spec.schema);
-    const ddl = columns.map((c, i) => `${quote(c.name)} ${STORAGE[c.type]}${defaults ? ` DEFAULT (${defaults(i)})` : ''}${check(c)}`).join(', ');
+    const accept = accepting ? this.#accepting() : undefined;
+    const ddl = columns.map((c, i) => `${quote(c.name)} ${STORAGE[c.type]}${defaults ? ` DEFAULT (${defaults(i)})` : ''}${check(c, accept)}`).join(', ');
     this.exec(`CREATE TABLE ${quote(spec.schema)}.${quote(spec.table)} (${ddl}) STRICT`);
     this.#register(spec.schema, spec.table, spec.columns);
   }
@@ -273,6 +288,21 @@ export class SqliteDatabase {
     try {
       this.exec(`INSERT INTO ${quote(spec.schema)}.${quote(spec.table)} (${names}) SELECT ${spec.columns.map((_, i) => `value ->> ${i}`).join(', ')} FROM json_each(?) ORDER BY key`, [data]);
     } catch (e) { throw new Error(clean(e)); }
+  }
+
+  /** Store the written rows' date and timestamp values (rowids, as JSON) in canonical form on an `accepting` table. */
+  normalize(spec: Relation, rowids: string): void {
+    const accept = this.#accepting();
+    const sets = spec.columns.flatMap((c) => (c.type === 'date' || c.type === 'timestamp' ? [`${quote(c.name)} = ${accept[c.type]}(${quote(c.name)})`] : []));
+    if (sets.length) this.exec(`UPDATE ${quote(spec.schema)}.${quote(spec.table)} SET ${sets.join(', ')} WHERE rowid IN (SELECT value FROM json_each(?))`, [rowids]);
+  }
+
+  #accept: Accepting | null = null;
+  #accepting(): Accepting {
+    return this.#accept ??= {
+      date: this.internalFunction(canonical((v) => normalizeDate(v)), 1, true),
+      timestamp: this.internalFunction(canonical((v) => normalizeTimestamp(typeof v === 'string' ? v : null)), 1, true),
+    };
   }
 
   load(data: TableData): void {

@@ -26,3 +26,18 @@ export function normalizeTimestamp(value: unknown, field = 'timestamp'): string 
 export function isTimestamp(value: unknown): boolean {
   try { normalizeTimestamp(value); return true; } catch { return false; }
 }
+
+/**
+ * Calendar-day contract for date columns, accepted widely and stored canonically: a `YYYY-MM-DD` day as
+ * given, or an ISO timestamp (an offset converts to UTC first) as its UTC day, i.e. `toISOString().slice(0, 10)`.
+ */
+export function normalizeDate(value: unknown, field = 'date'): string {
+  let day: string | null = null;
+  if (typeof value === 'string') try { day = normalizeTimestamp(value).slice(0,10); } catch { /* refused below */ }
+  if (day === null || !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error(`${field}: invalid date; use YYYY-MM-DD or an ISO timestamp (its UTC calendar day is stored)`);
+  return day;
+}
+
+export function isDate(value: unknown): boolean {
+  try { normalizeDate(value); return true; } catch { return false; }
+}

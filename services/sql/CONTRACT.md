@@ -93,7 +93,9 @@ caps rule as the server pool. It is the only engine: the app and the offline fil
 - **Tables** load by `{schema, table, columns, rows}`: `main` for document tables and query results, an attached
   in-memory schema per import (`bookings.rows`). Columns are STRICT (`string`/`date`/`timestamp`/`user` TEXT,
   `number` REAL, `boolean` INTEGER), with CHECKs that keep a date `YYYY-MM-DD` and a timestamp UTC ISO with `Z` on
-  every write. Values are validated on load and on bind (`@artifactbin/utils/shape` normalizes timestamps).
+  every write. Values are validated on load and on bind (`@artifactbin/utils/shape` `normalizeDate`/`normalizeTimestamp`).
+  A write accepts widely and stores canonically: a timestamp written to a date column (bound or literal) is stored as
+  its UTC calendar day, a date or offset written to a timestamp column as the UTC instant; a non-date is refused.
   STRICT refuses non-SQLite type names ("unknown datatype" for `user`), so a column's `ColumnType` lives in the
   engine's registry, and an output column is typed from it only when SQLite reports a direct origin — `user`
   survives a direct projection (renamed, through a CTE or join) and never a function. An expression's type is what

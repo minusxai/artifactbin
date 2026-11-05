@@ -1,4 +1,4 @@
-import {isIsoDate,isTimestamp} from '@artifactbin/utils/shape';
+import {isDate,isIsoDate,isTimestamp,normalizeDate} from '@artifactbin/utils/shape';
 /**
  * CSV cells are all strings. Deciding their types is ingest's job, because
  * `inferColumns` reads the types the caller already chose — correct for JSON,
@@ -74,7 +74,8 @@ function convert(value: string, type: ColumnType, quotedEmpty: boolean): unknown
     // Vega's temporal encoding parses. Converting to Date would only be
     // re-serialised on the way to the database.
     case 'timestamp': return v;
-    case 'date': return isIsoDate(v) ? v : null;
+    // A timestamp under a declared date keeps its UTC calendar day, as every dataset write does.
+    case 'date': return isDate(v) ? normalizeDate(v) : null;
     default: return value;
   }
 }

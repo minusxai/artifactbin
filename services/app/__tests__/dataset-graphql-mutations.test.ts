@@ -113,6 +113,29 @@ it('insert, update and delete answer as Hasura: returning, affected_rows, _one a
   expect(before).toBeGreaterThan(3);
 });
 
+it('a date column stores the UTC calendar day of a timestamp written to it, a timestamp column a date as midnight UTC; a non-date is refused by name', async () => {
+  const { owner, id } = await staff([{ name: 'ada', team: 'red', created: '2026-11-01', seen: '2026-11-04T08:00:00.000Z' }]);
+  const one = await gql(id, owner, 'mutation($o: staff_insert_input!) { insert_staff_one(object: $o) { name created seen } }', { o: { name: 'cy', created: '2026-11-05T01:39:09.123Z', seen: '2026-11-05' } });
+  expect(one.body.errors).toBeUndefined();
+  expect(one.body.data!.insert_staff_one).toEqual({ name: 'cy', created: '2026-11-05', seen: '2026-11-05T00:00:00.000Z' });
+  const set = await gql(id, owner, 'mutation { update_staff(where: {name: {_eq: "ada"}}, _set: {created: "2026-11-05T01:39:09+05:30", seen: "2026-11-05 01:39:09"}) { returning { created seen } } }');
+  expect(set.body.data!.update_staff.returning).toEqual([{ created: '2026-11-04', seen: '2026-11-05T01:39:09.000Z' }]);
+  const head = await version(id);
+  const refused = await gql(id, owner, 'mutation { insert_staff_one(object: {name: "dee", created: "tomorrow"}) { _id } }');
+  expect(refused.body.errors?.[0]?.message).toMatch(/created must be a date/);
+  expect(await version(id)).toBe(head);
+  expect(await stored(id)).toMatchObject([{ name: 'ada', created: '2026-11-04', seen: '2026-11-05T01:39:09.000Z' }, { name: 'cy', created: '2026-11-05', seen: '2026-11-05T00:00:00.000Z' }]);
+});
+
+it('a dataset published with a declared date column stores a timestamp value as its UTC calendar day; a non-date is refused', async () => {
+  const owner = await person('dates');
+  const publish = (created: string) => createArtifactFromBody({ dataset: [{ created }], columns: [{ name: 'created', type: 'date' }], title: 'Dates' }, owner.actor as AccessActor & { tokenId: string }, 'http://localhost:3000');
+  const created = await publish('2026-11-05T01:39:09+05:30');
+  expect(created.status, await created.clone().text()).toBe(201);
+  expect(await stored((await created.json()).id)).toEqual([{ created: '2026-11-04' }]);
+  expect((await publish('tomorrow')).status).toBe(400);
+});
+
 it('rules hold: insert columns, presets from the session, check, the update and delete filter, masked returning', async () => {
   const { owner, viewer, id } = await staff();
   const added = await gql(id, viewer, 'mutation { insert_staff_one(object: {name: "vic", team: "red"}) { _id name owner } }');
