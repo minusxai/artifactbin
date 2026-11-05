@@ -12,7 +12,7 @@ export {finishPublication};
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,
   hash,platform,journalIntent,createJournal,resumeJournal,within,resolveTarget} from
   './toolbox-client.mjs';
-import {refuseEmpty,placeholderProblems,headBaseline,dataBaseline} from
+import {refuseEmpty,placeholderProblems,headBaseline,dataBaseline,emptyTable} from
   './toolbox-publish-guard.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
 import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
@@ -122,7 +122,7 @@ let dataset=source;if(extension==='.json'){try{dataset=JSON.parse(source);}catch
     throw new ToolError('invalid_dataset','Dataset JSON is malformed.',2);}if(!Array.isArray(
     dataset)||dataset.some(row=>!row||typeof row!=='object'||Array.isArray(
     row)))throw new ToolError('invalid_dataset','JSON dataset must be an array of row objects.',2);}
-  body={dataset};
+  body={dataset,...emptyTable(extension,dataset)};
 }else body={file:{filename:baseline?.filename??path.basename(file),contentType:
    baseline?.contentType??media[extension]??'application/octet-stream',base64:bytes.toString(
    'base64')}};

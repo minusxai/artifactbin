@@ -106,3 +106,12 @@ export function dataBaseline(sidecar, file, server) {
     'replaces.', 2, pairRecovery(name, ok ? saved.id : 'ID'));
   return saved;
 }
+
+/** A CSV with a header and no rows is an empty table: its columns are declared, as text. */
+export function emptyTable(extension,source){
+ const lines=extension==='.csv'?String(source).split(/\r?\n/).filter(line=>line.trim()):[];
+ if(lines.length!==1)return {};
+ const names=[...lines[0].matchAll(/(?:^|,)\s*(?:"((?:[^"]|"")*)"|([^,]*))/g)]
+  .map(m=>(m[1]??m[2]??'').replace(/""/g,'"').trim()).filter(Boolean);
+ return names.length?{columns:names.map(name=>({name,type:'string'}))}:{};
+}

@@ -189,9 +189,9 @@ if(parsed.values.output&&!parsed.values.append&&name!=='read'){const destination
 if(name==='check'&&parsed)await checkOutput(envelope,JSON.stringify(envelope,null,2)+'\n',
     parsed.values,false).catch(()=>process.stderr.write('Could not save check output.\n'));
 if(parsed?.values.json)process.stdout.write(JSON.stringify(envelope)+'\n');
-    else process.stderr.write(envelope.code+': '+envelope.message+' '+envelope.recovery+'\n');
-    process.exitCode=toolExit(error);
- }
+    else process.stderr.write([envelope.code+':',envelope.message,envelope.recovery,...[envelope
+     .details].flat().filter(d=>typeof d==='string')].join(' ')+'\n');process.exitCode=
+     toolExit(error);}
 }
 /** check's output: the digest always (stderr when --json puts the JSON on stdout), the JSON in
  * --output FILE when given. */
