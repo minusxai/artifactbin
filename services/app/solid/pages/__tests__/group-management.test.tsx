@@ -2,7 +2,9 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GroupManagement } from '../Group';
+import { MemoryRouter, Route } from '@solidjs/router';
+import { SessionProvider } from '../../lib/session';
+import { GroupManagement, GroupSettingsPage } from '../Group';
 const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'editor' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'editor' as const}],linked_groups:[],invitations:[]};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it('viewer can search people and open profiles without management controls',()=>{
@@ -30,4 +32,16 @@ it('finds a server search result outside the initially loaded people',async()=>{
  expect(await screen.findByRole('link',{name:'Zoe'})).toHaveAttribute('href','/@zoe');
  expect(screen.getByRole('button',{name:'Role for Zoe'})).toHaveTextContent('Viewer');
  expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members?query=Zoe',expect.objectContaining({credentials:'same-origin'}));
+});
+
+it('loads group settings without requesting the artifact shelf',async()=>{
+ const fetcher=vi.fn(async(url:string)=>Response.json(url.includes('/session')?{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true}:detail));vi.stubGlobal('fetch',fetcher);
+ render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><GroupSettingsPage identity="team"/></SessionProvider>}/></MemoryRouter>);
+ expect(await screen.findByRole('heading',{name:'Group settings'})).toBeInTheDocument();
+ expect(screen.getByRole('link',{name:'Back to Team'})).toHaveAttribute('href','/@team');
+ expect(screen.getByRole('searchbox',{name:'Search people'})).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Invite person'})).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Link group'})).toBeInTheDocument();
+ expect(fetcher.mock.calls.filter(([url])=>!url.includes('/session'))).toHaveLength(1);
+ expect(fetcher).toHaveBeenCalledWith('/api/groups/team',expect.anything());
 });

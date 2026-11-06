@@ -3,12 +3,15 @@ import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupMember, GroupRole } from '@artifactbin/contracts';
 import type { AccountWorkspaceCore } from '@/lib/workspace';
 import { buildGroupSetupInstructions } from '@/lib/skills/setup-instructions';
+import { usePageBreadcrumbs } from '../lib/page-breadcrumbs';
 import { copyText } from '../lib/copy-text';
 import { apiRequest } from '../lib/api';
 import { usePageData } from '../lib/use-page-data';
 import Shelf from '../components/Shelf';
 import WorkspaceShell from '../components/WorkspaceShell';
 import Users from 'lucide-solid/icons/users';
+import Settings from 'lucide-solid/icons/settings';
+import { Tooltip } from '../ui/Tooltip';
 import { DefaultDestinationControl, type DefaultDestinationState } from '../components/DefaultDestinationControl';
 import { Button } from '../ui/Button';
 import { Input, SearchField } from '../ui/Field';
@@ -40,19 +43,35 @@ export function GroupUnavailable(props:{retry:()=>void}): JSX.Element {
  * tells the caller the homepage may now resolve elsewhere.
  */
 export function GroupWorkspace(props: { detail: GroupDetail; shelf: AccountWorkspaceCore | null; shelfFailed: boolean; retryShelf: () => void; refresh: () => void; defaults?: DefaultDestinationState; onDefaultSaved?: () => void }): JSX.Element {
- const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
- const copy=async()=>{try{if(await copyText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:props.detail.group.handle})))setCopied(true);else setError('Could not copy instructions.');}catch{setError('Could not copy instructions.');}};
  const value=()=>props.detail;
+ usePageBreadcrumbs(()=>[{label:`@${value().group.handle}`}]);
  return <WorkspaceShell onCreated={props.refresh} groupId={value().group.id} canCreate={value().group.role==='editor'}><div class="workspace-page groups-page">
  <a href="/groups" class="font-sans text-sm font-medium text-muted hover:text-accent">Groups</a>
- <PageHeader class="mb-9 mt-5" title={value().group.name} leading={<span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span>} badge={<Badge>{value().group.role==='editor'?'Editor':'Viewer'}</Badge>}
+ <PageHeader class="mb-9 mt-5" title={value().group.name} leading={<span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span>} actions={<><DefaultDestinationControl compact group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><Tooltip content="Manage people, invitations and linked groups."><Button size="sm" variant="secondary" icon aria-label="Group settings" href={`/groups/${encodeURIComponent(value().group.handle)}/settings`}><Settings size={16} aria-hidden="true"/></Button></Tooltip></>} badge={<Badge>{value().group.role==='editor'?'Editor':'Viewer'}</Badge>}
   description={<><p class="break-all"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-chip underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3">{value().group.description}</p></Show></>}>
-  <Panel class="flex flex-wrap items-start justify-between gap-5"><DefaultDestinationControl group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><Button variant="secondary" type="button" onClick={()=>void copy()}>{copied()?'Instructions copied':'Copy agent setup'}</Button></Panel>
  </PageHeader>
- <Show when={error()}><StatusMessage kind="error" class="my-3">{error()}</StatusMessage></Show>
  <section aria-label="Group artifacts" class="workspace-library"><SectionHeading class="mb-5">Files and folders</SectionHeading><Show when={props.shelf} fallback={<Show when={props.shelfFailed} fallback={<StatusMessage kind="loading">Loading artifacts…</StatusMessage>}><StatusMessage kind="error" action={<Button variant="link" type="button" onClick={props.retryShelf}>Retry artifacts</Button>}>Could not load group artifacts.</StatusMessage></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='editor'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
- <GroupManagement detail={value()} refresh={props.refresh}/>
  </div></WorkspaceShell>;
+}
+
+/** Group administration has its own address; it never loads the artifact shelf. */
+export function GroupSettingsPage(props:{identity:string}):JSX.Element {
+ const detail=usePageData<GroupDetail>(()=>`/api/groups/${encodeURIComponent(props.identity)}`);
+ return <main class={HOME_WORKSPACE_COLUMN}><Show when={detail.data()} fallback={<div class="p-8"><Show when={detail.error()} fallback={<WorkspaceSkeleton/>}><GroupUnavailable retry={()=>void detail.refresh(true)}/></Show></div>}>
+ {value=><WorkspaceShell groupId={value().group.id} canCreate={false}><GroupSettings detail={value()} refresh={()=>void detail.refresh(true)}/></WorkspaceShell>}
+ </Show></main>;
+}
+
+function GroupSettings(props:{detail:GroupDetail;refresh:()=>void}):JSX.Element {
+ usePageBreadcrumbs(()=>[{label:`@${props.detail.group.handle}`,href:`/@${props.detail.group.handle}`},{label:'Group settings'}]);
+ const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
+ const copy=async()=>{try{if(await copyText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:props.detail.group.handle})))setCopied(true);else setError('Could not copy instructions.');}catch{setError('Could not copy instructions.');}};
+ return <div class="workspace-page groups-page">
+ <a href={`/@${encodeURIComponent(props.detail.group.handle)}`} class="font-sans text-sm font-medium text-muted hover:text-accent">Back to {props.detail.group.name}</a>
+ <PageHeader class="mt-5" title="Group settings" description={props.detail.group.name} actions={<Button size="sm" variant="secondary" type="button" onClick={()=>void copy()}>{copied()?'Instructions copied':'Copy agent setup'}</Button>}/>
+ <Show when={error()}><StatusMessage kind="error" class="my-3">{error()}</StatusMessage></Show>
+ <GroupManagement detail={props.detail} refresh={props.refresh}/>
+ </div>;
 }
 
 const ROLE_OPTIONS=[{value:'editor',label:'Editor'},{value:'viewer',label:'Viewer'}];

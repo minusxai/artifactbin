@@ -10,3 +10,11 @@ it('answers /dev/ui only in development', () => {
   for (const path of ['/', '/trash', '/programs/x/edit', '/datasets/new']) expect(DEV_SPA_PATHS.test(path)).toBe(true);
   for (const path of ['/dev', '/dev/ui/x', '/dev/uix']) expect(DEV_SPA_PATHS.test(path)).toBe(false);
 });
+
+it('serves the group directory and settings on direct navigation', () => {
+ for (const path of ['/groups', '/groups/design_team/settings']) {
+  expect(SPA_PATHS.test(path)).toBe(true);
+  expect(DEV_SPA_PATHS.test(path)).toBe(true);
+ }
+ for (const path of ['/groups//settings', '/groups/design_team/settings/extra']) expect(SPA_PATHS.test(path)).toBe(false);
+});

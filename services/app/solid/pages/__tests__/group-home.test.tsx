@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DefaultDestinationControl } from '../../components/DefaultDestinationControl';
+import { PageChrome } from '../../components/PageChrome';
+import { PageBreadcrumbProvider } from '../../lib/page-breadcrumbs';
 import { HomePage } from '../Home';
 import { CompanySetup } from '../CompanySetup';
 import { SessionProvider } from '../../lib/session';
@@ -216,4 +218,55 @@ it('sets the deployment server before a company default group is confirmed',asyn
  expect(command).toContain('GET /api/me/preferences');
  expect(command).not.toContain('GET /api/groups/');
  expect(screen.getByText(/owner must sign in and confirm/i)).toBeInTheDocument();
+});
+
+it('keeps people and linked groups in a dedicated settings page',async()=>{
+ stub();open();
+ expect(await screen.findByRole('link',{name:'Group settings'})).toHaveAttribute('href','/groups/team/settings');
+ expect(screen.queryByRole('searchbox',{name:'Search people'})).toBeNull();
+ expect(screen.queryByRole('heading',{name:'Linked groups'})).toBeNull();
+});
+
+it('places one compact default toggle beside the group name',async()=>{
+ stub();open();
+ const heading=await screen.findByRole('heading',{name:'Team'});
+ const toggle=await screen.findByRole('button',{name:'Remove default'});
+ expect(heading.parentElement?.parentElement?.parentElement).toContainElement(toggle);
+ expect(toggle).toHaveAttribute('aria-pressed','true');
+ expect(screen.queryByText('Your homepage and new artifacts start here. Remove the default to use Personal.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Copy agent setup'})).toBeNull();
+});
+
+it('explains group settings and the compact default toggle on focus',async()=>{
+ stub();open();
+ const settings=await screen.findByRole('link',{name:'Group settings'});
+ expect(settings.textContent).toBe('');
+ fireEvent.focus(settings);
+ expect(await screen.findByRole('tooltip')).toHaveTextContent('Manage people, invitations and linked groups.');
+ fireEvent.blur(settings);
+ fireEvent.focus(screen.getByRole('button',{name:'Remove default'}));
+ expect(await screen.findByRole('tooltip')).toHaveTextContent('Your homepage and new artifacts start here. Click to use Personal instead.');
+});
+
+it.each([false,true])('keeps the Personal default control inside its header and beside the sidebar (populated: %s)',async(populated)=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):url.includes('part=insights')?Response.json({...insights,stats:{assets:populated?1:0}}):bootstrapOf(personalDestination)));
+ const history=createMemoryHistory();history.set({value:'/?personal=1',replace:true});
+ render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
+ const toggle=await screen.findByRole('button',{name:'Set Personal as default'});
+ expect(toggle.closest('header')).not.toBeNull();
+ expect(toggle.closest('.workspace-shell')).toContainElement(screen.getByRole('navigation',{name:'Workspace'}));
+ fireEvent.focus(toggle);
+ expect(await screen.findByRole('tooltip')).toHaveTextContent('Make Personal your homepage and the default for new artifacts.');
+});
+
+it('names the default group in the top bar and clears it on Personal navigation',async()=>{
+ stub();const history=createMemoryHistory();
+ render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><PageBreadcrumbProvider><PageChrome star={false}/><HomePage/></PageBreadcrumbProvider></SessionProvider>}/></MemoryRouter>);
+ await screen.findByRole('heading',{name:'Team'});
+ const navigation=screen.getByRole('navigation',{name:'Current page'});
+ await waitFor(()=>expect(navigation).toHaveTextContent('@team'));
+ history.set({value:'/?personal=1',replace:false});
+ await screen.findByRole('button',{name:'Set Personal as default'});
+ await waitFor(()=>expect(navigation).toHaveTextContent('Personal'));
+ expect(navigation).not.toHaveTextContent('@team');
 });
