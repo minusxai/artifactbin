@@ -185,11 +185,11 @@ ownership changes alone need no comment watch. Visibility only controls who can 
 comments and dataset writes are separate permissions. A receipt's `user_page_url` is an anonymous
 read-only copy ([groups](references/groups.md#public-view-receipts)).
 
-- Pages are unlisted by default (anyone with the link can open them); make one public or private
-  only when asked (`node scripts/publish.mjs page.html --visibility public`). A private page opens
-  only for the people it is shared with.
-- "Share it with my team": `node scripts/groups.mjs share PAGE12 --group design_crit --role viewer`.
-  Ownership and owner host stay unchanged; use commenter for comments.
+- Pages are unlisted by default: anyone with the link can open them, so "my team can view" needs
+  nothing more. Use `--visibility public` or `--visibility private` only when the user says
+  "public" or "private"; a private page opens only for the people it is shared with.
+- "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
+  design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group
   design_crit --yes`. `publish.mjs page.html --group design_crit` creates new group-owned work.
 - Group administration needs the user's consent in this conversation
