@@ -51,6 +51,17 @@ const navigateTo = href => '<!doctype html><html data-mx-session-redirect><scrip
 // as a plain child (BROWSER__SANDBOX=none) has no such flag, and Chromium keeps the
 // event loop alive forever — a dev server stopped with the browser open left orphaned
 // browsers on the machine. The control pipe closing IS the parent going away.
+// AUTHOR CODE NEVER ENDS THE SESSION. Node's default turns an unhandled rejection (a promise a script
+// started and never awaited) or a throw from a script's timer into process exit, and the parent then
+// reports only "session lost". Each is the running script's failure, named by its message; one
+// arriving between scripts is only logged. A disconnected browser still exits (below).
+let running = null;
+const absorb = code => reason => {
+  const message = String(reason?.message ?? reason).slice(0, 500);
+  if (running) running.push({code, message}); else process.stderr.write(code + ': ' + message + '\n');
+};
+process.on('unhandledRejection', absorb('UNHANDLED_REJECTION'));
+process.on('uncaughtException', absorb('UNCAUGHT_EXCEPTION'));
 readline.createInterface({input:process.stdin}).on('close', () => process.exit(0)).on('line', async line => {
   const message = JSON.parse(line);
   if (message.type === 'fetched') {
@@ -105,13 +116,24 @@ readline.createInterface({input:process.stdin}).on('close', () => process.exit(0
     attachments.push({mime:png?'image/png':'image/jpeg',base64:buffer.toString('base64')});
     return {attachment:attachments.length-1};
   }});
+  const unhandled = (running = []);
+  // A rejection is reported only after the microtasks drain: settle one macrotask before answering.
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const failure = (code, message) => {
+    const also = unhandled.map(item => item.code.toLowerCase().replace('_', ' ') + ': ' + item.message);
+    return {code, message: [message, ...also].filter(Boolean).join('; also ').slice(0, 1000)};
+  };
   try {
     const fn = Object.getPrototypeOf(async function(){}).constructor('context','pages','output','"use strict";\n'+message.code);
     const value = await fn(context,Object.freeze(Object.fromEntries(pages)),output);
     const result = JSON.parse(JSON.stringify(value === undefined ? null : value));
-    send({type:'result',value:{result,pages:pageList(),attachments}});
+    await settle(); running = null;
+    const first = unhandled.shift();
+    if (first) send({type:'result',value:{pages:pageList(),attachments,error:failure(first.code, first.message)}});
+    else send({type:'result',value:{result,pages:pageList(),attachments}});
   } catch (error) {
-    send({type:'result',value:{pages:pageList(),attachments,error:{code:String(error.code || 'SCRIPT_ERROR'),message:String(error.message).slice(0,1000)}}});
+    await settle(); running = null;
+    send({type:'result',value:{pages:pageList(),attachments,error:failure(String(error.code || 'SCRIPT_ERROR'),String(error?.message ?? error))}});
   }
 });
 send({type:'hello'});

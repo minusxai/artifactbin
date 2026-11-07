@@ -102,7 +102,8 @@ export function createBrowserSessions(factory: SessionWorkerFactory, capacity: S
           session = { owner, requestScope:input.requestScope, viewer, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };
           sessions.set(input.session_id, session);
           const created = session;
-          void worker.then(value => value.onClose?.(() => { if (created.status === 'idle') void close(created, 'lost'); }), () => {});
+          // A macrotask later, so a running script's own rejection (the worker's reason) is recorded first.
+          void worker.then(value => value.onClose?.(() => { setImmediate(() => { if (created.status === 'idle') void close(created, 'lost'); }); }), () => {});
         }
       }
       if (!session || session.owner !== owner) return empty(input.session_id, 'SESSION_NOT_FOUND', 'Session is unavailable to this credential');

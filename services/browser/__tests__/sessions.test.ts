@@ -201,3 +201,18 @@ it('rejects malformed scopes without allocating workers and preserves same-scope
   expect(factory).toHaveBeenCalledTimes(1);
  }finally{await sessions.close();}
 });
+
+it('names why a worker died on the running execution instead of a generic session-ended message', async () => {
+  const listeners: Array<() => void> = [];
+  let die!: (message: string) => void;
+  // The process worker's order on exit: the running script rejects with its stderr, then close listeners fire.
+  const run = () => new Promise<never>((_, reject) => { die = message => { reject(new Error(message)); for (const listener of listeners) listener(); }; });
+  const sessions = createBrowserSessions(async () => ({ run, close: async () => {}, onClose: listener => { listeners.push(listener); } }));
+  const actor = { credential: 'bearer' as const, tokenId: 'owner' };
+  try {
+    await sessions.request({ actor, op: 'script', session_id: 'dies', execution_id: 'first', create: true, code: 'crash()' });
+    await vi.waitFor(() => expect(die).toBeTypeOf('function'));
+    die('Error: out of memory');
+    await vi.waitFor(async () => expect(await sessions.request({ actor, op: 'status', session_id: 'dies', execution_id: 'first' })).toMatchObject({ status: 'lost', error: { code: 'SESSION_LOST', message: 'Error: out of memory' } }));
+  } finally { await sessions.close(); }
+});

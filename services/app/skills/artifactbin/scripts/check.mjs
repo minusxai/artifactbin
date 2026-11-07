@@ -11,9 +11,10 @@ A hosted check (ID, URL or FILE.html) runs in a server browser session: never in
   that never ran your steps: rerun the same check once your other checks finish.
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; a page with
   [data-af-slide] gets 1200x630 and 1280x800); --steps FILE an async function body receiving page
-  and step (or a module whose export default takes page or {page}); wrap each check in await
-  step('what it shows', async()=>{...}) and throw on failure; --guest-steps FILE then runs a
-  second, signed-out session on the first viewport (it can read what --steps saved);
+  and step (or a module whose export default takes page or {page}, or is an array of step
+  calls, run in order); wrap each check in await step('what it shows', async()=>{...}) and throw
+  on failure; --guest-steps FILE then runs a second, signed-out session on the first viewport
+  (it can read what --steps saved);
   --cleanup-steps FILE then runs signed in, always, even after a failure, to undo test writes;
   --viewer self (default) or guest (hosted only; the page is signed in as you unless guest);
   --playwright-module FILE (local only: your installed Playwright entrypoint). Common: --server

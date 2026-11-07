@@ -56,3 +56,49 @@ it('launches with the development switches the parent derives and refuses any ot
   const messages=await initialization(undefined,[arg]);expect(messages.some(message=>message.type==='launch'),arg).toBe(false);expect(messages.at(-1)).toMatchObject({type:'fatal',error:'Invalid session browser arguments'});
  }
 });
+// Author script code runs in the worker process: an error it leaves unhandled — a rejected promise nobody
+// awaits, or a throw from a timer — is that script's failure, never the session's death.
+async function runs(codes:string[]){
+ const root=await mkdtemp(join(tmpdir(),'afbin-worker-run-'));
+ try{
+  await mkdir(join(root,'node_modules/playwright'),{recursive:true});
+  await writeFile(join(root,'node_modules/playwright/package.json'),JSON.stringify({name:'playwright',type:'module',exports:'./index.js'}));
+  await writeFile(join(root,'node_modules/playwright/index.js'),`export const chromium={launch:async()=>({on(){},newContext:async()=>({setDefaultTimeout(){},setDefaultNavigationTimeout(){},route:async()=>{},on(){}})})};`);
+  await writeFile(join(root,'worker.mjs'),SESSION_WORKER_SOURCE);
+  const child=spawn(process.execPath,[join(root,'worker.mjs')],{stdio:['pipe','pipe','pipe'],env:sessionSandboxPlan(root,root,process.execPath).env});
+  let stderr='';child.stderr.on('data',chunk=>{stderr+=chunk;});
+  const results:Array<Record<string,unknown>>=[];
+  try{
+   await new Promise<void>((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('Worker runs timed out: '+stderr)),4000);
+    child.once('exit',code=>{clearTimeout(timer);reject(new Error(`Worker exited (${code}) after ${results.length} results: ${stderr}`));});
+    const next=()=>{if(results.length===codes.length){clearTimeout(timer);resolve();}else child.stdin.write(JSON.stringify({type:'run',code:codes[results.length]})+'\n');};
+    let buffered='';child.stdout.setEncoding('utf8');child.stdout.on('data',chunk=>{
+     buffered+=chunk;
+     for(;;){const end=buffered.indexOf('\n');if(end<0)break;const line=buffered.slice(0,end);buffered=buffered.slice(end+1);
+      const message=JSON.parse(line);
+      if(message.type==='hello')child.stdin.write(JSON.stringify({type:'init',baseURL:'http://127.0.0.1:3030'})+'\n');
+      if(message.type==='ready')next();
+      if(message.type==='result'){results.push(message.value);next();}
+     }
+    });
+   });
+  }finally{if(child.exitCode===null){child.kill('SIGKILL');await new Promise<void>(resolve=>child.once('exit',()=>resolve()));}}
+  return results;
+ }finally{await rm(root,{recursive:true,force:true});}
+}
+it('reports an unhandled rejection or uncaught throw as the script\'s failure and keeps the session usable',async()=>{
+ const results=await runs([
+  "Promise.reject(new Error('steps file: page is undefined'));await new Promise(resolve=>setTimeout(resolve,20));return 1",
+  "return 2",
+  "setTimeout(()=>{throw new Error('thrown from a timer')});await new Promise(resolve=>setTimeout(resolve,20));return 3",
+  "const failed=Promise.reject(new Error('left behind'));throw new Error('the script failed')",
+  "return 5",
+ ]);
+ expect(results[0]).toMatchObject({error:{code:'UNHANDLED_REJECTION',message:expect.stringContaining('steps file: page is undefined')}});
+ expect(results[0]).not.toHaveProperty('result');
+ expect(results[1]).toMatchObject({result:2});
+ expect(results[2]).toMatchObject({error:{code:'UNCAUGHT_EXCEPTION',message:expect.stringContaining('thrown from a timer')}});
+ expect(results[3]).toMatchObject({error:{code:'SCRIPT_ERROR',message:expect.stringMatching(/the script failed.*left behind/)}});
+ expect(results[4]).toMatchObject({result:5});
+});
