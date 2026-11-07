@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createSignal, Show, type JSX } from 'solid-js';
+import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -29,6 +29,11 @@ const rounded = (crop: SocialPreviewCrop): SocialPreviewCrop => ({
 
 const CAMERA_PADDING = 1.08;
 const RESIZE_OUTWARD_SENSITIVITY = 3;
+/** Wheel line/page units in CSS pixels, a pinch's (ctrl+wheel) zoom per pixel, and the idle wait before sharpening. */
+const WHEEL_LINE = 16;
+const WHEEL_PAGE = 800;
+const PINCH_ZOOM = 0.004;
+const WHEEL_SETTLE_MS = 250;
 
 const clampCrop = (crop: SocialPreviewCrop, sourceHeight: number): SocialPreviewCrop => {
   const width = Math.min(SOCIAL_PREVIEW_WIDTH, Math.max(SOCIAL_PREVIEW_MIN_CROP_WIDTH, crop.width));
@@ -77,6 +82,8 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
   let frame!: HTMLDivElement;
   let uploadInput!: HTMLInputElement;
   let interaction: Interaction | null = null;
+  let wheelSettle: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(wheelSettle));
 
   const documentPreviewUrl = () => `/a/${props.id}/export?mode=preview&format=jpg&v=${props.version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt() ? `&attempt=${previewAttempt()}` : ''}`;
   const previewUrl = () => {
@@ -144,6 +151,31 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     interaction = null; setInteracting(false); setCamera(held.latest);
   };
 
+  /** Scrolling pans the frame through the page (wheel down → further down); a trackpad pinch, or ctrl/⌘ + wheel,
+   * resizes it about its centre. The frame stays unsharpened until the gesture settles. */
+  const wheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
+    if (!imageReady() || interaction) return;
+    const previewWidth = event.currentTarget.getBoundingClientRect().width;
+    if (previewWidth <= 0) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? WHEEL_LINE : event.deltaMode === 2 ? WHEEL_PAGE : 1;
+    const current = crop();
+    let next: SocialPreviewCrop;
+    if (event.ctrlKey || event.metaKey) {
+      const width = current.width * Math.exp(event.deltaY * unit * PINCH_ZOOM);
+      next = { width, x: current.x + (current.width - width) / 2, y: current.y + (socialPreviewCropHeight(current.width) - socialPreviewCropHeight(width)) / 2 };
+    } else {
+      const scale = camera().width * CAMERA_PADDING / previewWidth;
+      const dx = (event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX) * unit * scale;
+      const dy = (event.shiftKey && !event.deltaX ? 0 : event.deltaY) * unit * scale;
+      next = { ...current, x: current.x + dx, y: current.y + dy };
+    }
+    setInteracting(true);
+    update(next);
+    clearTimeout(wheelSettle);
+    wheelSettle = setTimeout(() => setInteracting(false), WHEEL_SETTLE_MS);
+  };
+
   const moveByKey = (event: KeyboardEvent) => {
     const step = event.shiftKey ? 1 : 10;
     const delta = ({ ArrowLeft: { x: -step, y: 0 }, ArrowRight: { x: step, y: 0 }, ArrowUp: { x: 0, y: -step }, ArrowDown: { x: 0, y: step } } as Record<string, { x: number; y: number }>)[event.key];
@@ -200,7 +232,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     setCrop(documentDraft.crop); setCamera(documentDraft.crop); setReset(documentDraft.reset); setCropDirty(documentDraft.dirty);
   };
 
-  return <Dialog title="Social preview" size="xl" closeLabel="Close social preview" description="Drag to pan. Resize the locked 40:21 frame; release to focus." onClose={props.onClose} initialFocus="[data-cancel-preview]"
+  return <Dialog title="Social preview" size="xl" closeLabel="Close social preview" description="Drag or scroll to pan. Pinch or drag the corner to resize the locked 40:21 frame." onClose={props.onClose} initialFocus="[data-cancel-preview]"
     footer={<div class="flex w-full items-center justify-between gap-3">
       <Button variant="ghost" aria-label="Reset social preview" disabled={!imageReady() || uploading() || saving()}
         onClick={() => { setCropDirty(true); imageDraft = null; const next = imageId() ? defaultImageCrop(sourceHeight()) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); }}>
@@ -217,7 +249,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
       <Show when={imageId()}><Button variant="ghost" size="sm" disabled={uploading() || saving()} onClick={useDocumentFraming}>use document framing</Button></Show>
     </div>
     <div class="min-h-0 flex-1 rounded-panel bg-raised p-3">
-      <div class="relative mx-auto aspect-[40/21] max-h-full overflow-hidden border border-edge bg-surface" aria-label="Social preview canvas">
+      <div class="relative mx-auto aspect-[40/21] max-h-full overflow-hidden border border-edge bg-surface" aria-label="Social preview canvas" onWheel={wheel}>
         <img src={previewUrl()} alt={imageId() ? 'Uploaded social preview' : 'Artifact preview'} draggable={false}
           onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }}
           class={`pointer-events-none absolute h-auto max-w-none select-none ease-out motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width] duration-200'}`}
