@@ -1,4 +1,4 @@
-import type { PageCaller, PageSchema, PageOperationRequest, PageOperationResponse, PageResolverFieldCall, HtmlJson } from '@artifactbin/contracts';
+import type { PageCaller, PageSchema, PageOperationRequest, PageOperationResponse, PageResolverFieldCall, HtmlJson, Scalar } from '@artifactbin/contracts';
 /** Maximum serialized selected GraphQL data; independent of schema, variables and backend execution budgets. */
 export const PAGE_OPERATION_RESULT_BYTES = 4 * 1024 * 1024;
 export type RemoteError = NonNullable<PageOperationResponse['errors']>[number];
@@ -9,6 +9,8 @@ export type RemoteError = NonNullable<PageOperationResponse['errors']>[number];
 export interface PageDatasetPort {
   queryRoots():Record<string,unknown>;
   mutate(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>):Promise<{data?:Record<string,unknown>|null;errors?:ReadonlyArray<{message:string;path?:readonly (string|number)[];extensions:{code:string}}>}>;
+  /** The page's `_sql` (contracts `PAGE_SQL_ROOT`), arguments already checked: one read-only statement as the caller; failures are GraphQL errors with `extensions.code`. */
+  sql(call:{sql:string;params:Readonly<Record<string,Scalar>>}):Promise<{columns:ReadonlyArray<{name:string;type:string}>;rows:ReadonlyArray<Record<string,unknown>>}>;
 }
 export interface ExecuteOptions {
   schema:PageSchema; request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>; caller:PageCaller; invoke(call:PageResolverFieldCall):Promise<HtmlJson>; signal?:AbortSignal; datasets?:PageDatasetPort;

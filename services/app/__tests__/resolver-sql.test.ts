@@ -138,10 +138,10 @@ it('reads the caller\'s role view: filtered rows and hidden columns are absent f
   expect((await sql(f, { subject: f.viewer.userId, role: 'owner' }, { sql: 'SELECT name FROM staff ORDER BY name' })).rows).toEqual([{ name: 'ada' }, { name: 'cy' }]);
 });
 
-it('refuses the call when the caller\'s rule for a mounted table does not allow aggregations', async () => {
+it('refuses the call when the caller\'s rule for a mounted table does not allow SQL (allow_aggregations)', async () => {
   const f = await fixture();
   const other = { subject: f.other.userId, role: 'viewer' };
-  expect(await refusal(sql(f, other, { sql: 'SELECT name FROM staff' }))).toMatch(/^permission_denied: .*staff.*aggregations/);
+  expect(await refusal(sql(f, other, { sql: 'SELECT name FROM staff' }))).toMatch(/^permission_denied: .*staff.*does not allow SQL \(allow_aggregations\)/);
   // Linked datasets the SQL does not name are not mounted; the owner of both may aggregate everything.
   expect((await sql(f, other, { sql: 'SELECT count(*) AS n FROM teams.leads' })).rows).toEqual([{ n: 2 }]);
 });

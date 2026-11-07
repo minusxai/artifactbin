@@ -95,8 +95,9 @@ Mutations run only inside mutation resolvers. It returns `data`; refusals throw 
 
 ## caps.sql: read-only SQL
 
-`await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs, window functions,
-`date_trunc`...) over the linked datasets as the caller and returns `{columns, rows}`. A single-table dataset
+Page totals need no resolver: use `_sql` ([datasets](datasets.md#totals-group-by-and-joins-_sql)).
+`await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs)
+over the linked datasets as the caller and returns `{columns, rows}`. A single-table dataset
 is the table `<link>`, a multi-table one `<link>.<table>`; each has `_id`. You see what `caps.query`
 would; a dataset whose rule for you lacks `allow_aggregations` refuses the
 call. Bind values as `$name`:
@@ -147,7 +148,6 @@ Show `errors`; never report them as saved.
 | File | Source | Secret |
 |---|---|---|
 | `resolver-public-url.ts` | Public CSV/JSON URL | none |
-| `resolver-dataset-sql.ts` | Linked dataset, totals with `caps.sql` | none |
 | `resolver-http-json.ts` | JSON API with a bearer key | `API_KEY` |
 | `resolver-google-sheets.ts` | Private Google Sheet | `GOOGLE_SA` (service account) |
 | `resolver-bigquery.ts` | BigQuery SQL | `GOOGLE_SA` |

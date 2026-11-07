@@ -98,19 +98,19 @@ describe('the roles × answers matrix under own-rows, through the page door', ()
     expect(data.tasks.map((r: any) => r._can)).toEqual([all(false), all(false), all(false)]);
   });
 
-  it('_by_pk, an aggregate\'s nodes and a fragment answer the same per row, each field only as asked', async () => {
+  it('_by_pk, an aliased list and a fragment answer the same per row, each field only as asked', async () => {
     const { tasks } = ok(await gql(w().page, w().owner, '{ tasks(order_by: {title: asc}) { _id title } }'));
     const [mine, seed] = [tasks[0]._id, tasks[1]._id];
     const query = `query Two($mine: ID!, $seed: ID!) {
       mine: tasks_by_pk(_id: $mine) { title _can { update } }
       seed: tasks_by_pk(_id: $seed) { ...Can }
-      tasks_aggregate(order_by: {title: asc}) { nodes { title _can { delete } } }
+      all: tasks(order_by: {title: asc}) { title _can { delete } }
     }
     fragment Can on tasks { title _can { ... on tasks_row_can { delete } update } }`;
     expect(ok(await gql(w().page, w().visitor, query, { mine, seed }))).toEqual({
       mine: { title: 'mine', _can: { update: true } },
       seed: { title: 'seed a', _can: { delete: false, update: false } },
-      tasks_aggregate: { nodes: [{ title: 'mine', _can: { delete: true } }, { title: 'seed a', _can: { delete: false } }, { title: 'seed b', _can: { delete: false } }] },
+      all: [{ title: 'mine', _can: { delete: true } }, { title: 'seed a', _can: { delete: false } }, { title: 'seed b', _can: { delete: false } }],
     });
   });
 

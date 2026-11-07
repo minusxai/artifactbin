@@ -5,8 +5,8 @@ description: Dataset permissions in Hasura's format, the fixed roles, templates 
 ## Read first
 
 Every dataset has one permission document in Hasura's metadata format (version 3). It decides who
-can see, add, change and delete rows, through every door: page GraphQL, a resolver's `caps.query`
-and `caps.sql`, direct `graphql.mjs DATASET_ID`, downloads and SQL. Read it, change it and save it
+can see, add, change and delete rows, through every door: page GraphQL and `_sql`, a resolver's
+`caps.query` and `caps.sql`, direct `graphql.mjs DATASET_ID`, downloads and SQL. Read it, change it and save it
 only with `node scripts/policy.mjs` (`--help`). Only the dataset's owner and editors can.
 
 ## Roles
@@ -43,8 +43,8 @@ editor < owner; see [resolvers](resolvers.md).)
 
 A CSV or JSON dataset is one table, `public.rows`. Rules name source columns (as in the file);
 `policy.mjs get` shows each column's GraphQL field. `select`: `columns` (`"*"` or a list), `filter`,
-`limit` (at most 1000), `allow_aggregations`. `insert`: `columns`, `check`, `set`. `update`:
-`columns`, `filter`, `check`, `set`. `delete`: `filter`. Filters use the query `where` grammar.
+`limit` (at most 1000), `allow_aggregations` (may run SQL, e.g. `_sql` totals; without it rows only).
+`insert`: `columns`, `check`, `set`. `update`: `columns`, `filter`, `check`, `set`. `delete`: `filter`. Filters use the query `where` grammar.
 Hidden columns cannot be read, filtered, sorted or aggregated. A table's `collaborative_columns` (text
 columns) are typed in live together with `@afbin/collab`
 ([datasets](datasets.md#type-together-afbincollab)). `backend_only:true` limits an entry

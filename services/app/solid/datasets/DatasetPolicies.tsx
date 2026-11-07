@@ -294,7 +294,7 @@ function RuleEditor(props: { role: Role; op: Op; columns: Array<{ name: string; 
       <Button variant="ghost" size="sm" onClick={() => setPresets([...presets(), [props.columns.find(c => !presets().some(([k]) => k === c.name))?.name ?? props.columns[0]?.name ?? '', 'X-Hasura-User-Id']])}>Add preset</Button>
     </fieldset></Show>
     <Show when={props.op === 'select'}><div class="flex flex-wrap items-end gap-4">
-      <div class="flex items-center gap-2"><Switch label="Allow counts and totals" checked={props.rule.allow_aggregations === true} onChange={on => patch({ allow_aggregations: on || undefined })} /><span aria-hidden="true">Allow counts and totals</span></div>
+      <div class="flex items-center gap-2"><Switch label="Allow SQL (totals, group by, joins)" checked={props.rule.allow_aggregations === true} onChange={on => patch({ allow_aggregations: on || undefined })} /><span aria-hidden="true">Allow counts and totals</span></div>
       <Field label="Row limit" hint="Empty: up to 1000 rows a request."><Input size="sm" class="w-28" type="number" min="1" max="1000" value={props.rule.limit ?? ''} onInput={event => { const n = Number.parseInt(event.currentTarget.value, 10); patch({ limit: Number.isFinite(n) ? n : undefined }); }} /></Field>
     </div></Show>
     <Show when={props.op !== 'select'}><div class="flex items-center gap-2"><Switch label="Only through the owner's apps" checked={props.rule.backend_only === true} onChange={on => patch({ backend_only: on || undefined })} /><span aria-hidden="true">Only through the owner's apps <span class="text-muted">(saved page actions; never direct API calls)</span></span></div></Show>

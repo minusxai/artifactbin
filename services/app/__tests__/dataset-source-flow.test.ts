@@ -47,20 +47,20 @@ async function fixture(dataset: unknown) {
   };
   return { id, page, owner, publish, run };
 }
-it("aggregates complete stored inputs beyond display windows and bounds paginated output", async () => {
+it("page SQL reads complete stored inputs beyond display windows and bounds paginated output", async () => {
   const f = await fixture(
     Array.from({ length: 10005 }, (_, i) => ({ n: i + 1 })),
   );
   const result = await f.run(
-    "{data_aggregate{aggregate{count sum{n}}} data(limit:2){_id}}",
+    '{_sql(sql:"select count(*) as count, sum(n) as total from data"){rows} data(limit:2){_id}}',
   );
-  expect(result.data_aggregate.aggregate).toEqual({ count: 10005, sum: { n: 50055015 } });
+  expect(result._sql.rows).toEqual([{ count: 10005, total: 50055015 }]);
   expect(result.data).toHaveLength(2);
   const filtered = await f.run(
-    "query($minimum:Float){data_aggregate(where:{n:{_gt:$minimum}}){aggregate{sum{n}}}}",
-    { minimum: 10000 },
+    'query($p:JSON){_sql(sql:"select sum(n) as total from data where n > $minimum", params:$p){rows}}',
+    { p: { minimum: 10000 } },
   );
-  expect(filtered.data_aggregate.aggregate.sum.n).toBe(50015);
+  expect(filtered._sql.rows).toEqual([{ total: 50015 }]);
 });
 it("discovers multi-schema tables and changes only the explicitly selected stable table", async () => {
   const f = await fixture({

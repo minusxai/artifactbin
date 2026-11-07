@@ -48,19 +48,6 @@ it('requires dataset permission separately from page readability and enforces th
  await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
  expect(errorCode(await f.gql(viewer,'{ data { amount } }'))).toBe('dataset_not_found');
 });
-it('aggregates the whole stored source beyond display page limits',async()=>{
- const f=await fixture(Array.from({length:10005},(_,i)=>({amount:i+1,label:'all'})));
- const result=await f.gql(f.actor,'query($m:Float){ data_aggregate(where:{amount:{_gt:$m}}){ aggregate { count sum { amount } avg { amount } } } }',{m:0});
- expect(result.errors).toBeUndefined();
- expect(result.data).toEqual({data_aggregate:{aggregate:{count:10005,sum:{amount:50055015},avg:{amount:5003}}}});
-});
-it('preserves COUNT zero and nullable aggregate values for an empty filtered source',async()=>{
- const f=await fixture();
- const result=await f.gql(f.actor,'{ data_aggregate(where:{amount:{_gt:100}}){ aggregate { count sum { amount } min { label } } } }');
- expect(result.errors).toBeUndefined();
- expect(result.data).toEqual({data_aggregate:{aggregate:{count:0,sum:{amount:null},min:{label:null}}}});
-});
-
 it('keeps native CSV precision, BOM, duplicate headers, date strings and distinct empty/missing-cell semantics',async()=>{
  const f=await fixture('\uFEFFamount,amount,when,note,exact,precise,blank\r\n1.25,2,2026-10-23,"",9007199254740993,123456789012345.12,\r\n3.5,4,2026-10-24,x,9007199254740995,123456789012345.13,');
  const read=await f.gql(f.actor,'{ data(order_by:{amount:asc}) { amount amount_2 when note exact precise blank } }');

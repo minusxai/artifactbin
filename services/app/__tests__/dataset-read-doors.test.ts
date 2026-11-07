@@ -66,6 +66,9 @@ it('admits only roles with a select rule: shared viewer yes, signed-in link hold
 
 it('SQL doors (/a/:id/tables, query_resource) run over the role view: hidden columns cannot be named', async () => {
   const { owner, viewer, id } = await setup();
+  // The viewer may run SQL here: POLICY's rule with allow_aggregations.
+  const sqlRule = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
+  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(sqlRule)]);
   const sql = (token: string, statement: string) => tables(request(`/a/${id}/tables`, { method: 'POST', json: { sql: statement }, token }), params(id));
   sees(await (await sql(owner.token, 'select * from rows')).text(), true);
   sees(await (await sql(viewer.token, 'select * from rows')).text(), false);
@@ -91,7 +94,7 @@ it('query_resource SQL needs allow_aggregations, as caps.sql does: a flagless ro
     for (const sql of ['select count(*) as n from rows', 'select team, count(*) from rows group by team', 'select sum(length(name)) from rows', 'select * from rows']) {
       const refused = await query(who.token, { sql });
       expect(refused.status, sql).toBe(403);
-      expect(await refused.json()).toEqual({ error: 'permission_denied', message: "SQL can aggregate, and your role's rule for public.rows does not allow aggregations" });
+      expect(await refused.json()).toEqual({ error: 'permission_denied', message: "your role's rule for public.rows does not allow SQL (allow_aggregations); read its rows instead" });
     }
     // The server-built row read still answers the role view.
     for (const body of [{}, { name: 'public.rows' }]) {
@@ -137,7 +140,35 @@ it('export and fork refuse a reader whose view hides rows; the owner forks the w
   expect((await fork.run(ctx(owner.actor, `/api/artifacts/${id}/fork`), { id })).status).toBe(201);
 });
 
-it('page GraphQL: generated columns and rows read the view; aggregates need allow_aggregations', async () => {
+it('the dataset explorer door (/a/:id/tables) runs SQL only for a role allowed it; any reader browses a table by name', async () => {
+  const { owner, viewer, id } = await setup();
+  const post = (token: string, json: Record<string, unknown>) => tables(request(`/a/${id}/tables`, { method: 'POST', json, token }), params(id));
+  // POLICY's viewer rule has no allow_aggregations: caller SQL is refused, whatever it computes.
+  for (const statement of ['select count(*) as n from rows', 'select * from rows']) {
+    const refused = await post(viewer.token, { sql: statement });
+    expect(refused.status, statement).toBe(403);
+    expect(await refused.json()).toEqual({ error: 'permission_denied', message: "your role's rule for public.rows does not allow SQL (allow_aggregations); read its rows instead" });
+  }
+  // A table read by name is server-built: the role view's rows, paged.
+  const browsed = await post(viewer.token, { table: { schema: 'public', name: 'rows' }, limit: 1, offset: 1 });
+  expect(browsed.status).toBe(200);
+  const page = await browsed.json();
+  expect(page.rows).toEqual([{ name: 'cy', team: 'red' }]);
+  sees(JSON.stringify((await (await post(viewer.token, { table: { schema: 'public', name: 'rows' } })).json()).rows), false);
+  expect((await post(viewer.token, { table: { schema: 'public', name: 'nope' } })).status).toBe(400);
+  expect((await post(viewer.token, { table: { schema: 'public', name: 'rows' }, sql: 'select 1' })).status).toBe(400);
+  // The owner still runs SQL.
+  expect((await (await post(owner.token, { sql: 'select count(*) as n from rows' })).json()).rows).toEqual([{ n: 3 }]);
+});
+
+it('a document\'s dataset queries run for a reader only when their role may run SQL', async () => {
+  const { owner, viewer, id } = await setup();
+  expect(await datasetResolverForActor(viewer.actor)(id, 'catalog')).toBeNull();
+  expect(await datasetResolverForActor(viewer.actor)(id, 'import')).toBeNull();
+  expect(await datasetResolverForActor(owner.actor)(id, 'catalog')).not.toBeNull();
+});
+
+it('page GraphQL: generated columns and rows read the view; no role has an aggregate root', async () => {
   const { owner, viewer, id } = await setup();
   const link = liveLink(id);
   const ownerRows = await linkedGql(owner.actor, link, '{ data { name team salary } }');
@@ -148,14 +179,16 @@ it('page GraphQL: generated columns and rows read the view; aggregates need allo
   expect(viewerRows.errors).toBeUndefined();
   expect(viewerRows.data!.data).toHaveLength(2);
   sees(JSON.stringify(viewerRows.data), false);
-  // A hidden column is not in the viewer's schema, and neither is the aggregate root.
+  // A hidden column is not in the viewer's schema; the aggregate root is in nobody's (totals are the page's _sql).
   expect(errorCode(await linkedGql(viewer.actor, link, '{ data { name salary } }'))).toBe('validation_failed');
   expect(errorCode(await linkedGql(viewer.actor, link, '{ data_aggregate { aggregate { count } } }'))).toBe('validation_failed');
-  expect((await linkedGql(owner.actor, link, '{ data_aggregate { aggregate { count } } }')).data).toEqual({ data_aggregate: { aggregate: { count: 3 } } });
+  expect(errorCode(await linkedGql(owner.actor, link, '{ data_aggregate { aggregate { count } } }'))).toBe('validation_failed');
 });
 
 it('markup imports read the reader\'s view', async () => {
   const { owner, viewer, id } = await setup();
+  const sqlRule = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
+  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(sqlRule)]);
   const imported = async (actor: AccessActor) => JSON.stringify((await datasetResolverForActor(actor)(id, 'import'))?.tables ?? null);
   sees(await imported(owner.actor), true);
   sees(await imported(viewer.actor), false);

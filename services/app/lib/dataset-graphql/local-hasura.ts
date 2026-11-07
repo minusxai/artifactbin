@@ -1,8 +1,9 @@
 /**
  * THE GENERATED API IN LOCAL PREVIEW: one local dataset (declared CSV/JSON files) on the generated Hasura-style
- * API, as the page's owner sees it (every column, aggregates, every write). Node-only: the rows live in an
+ * API, as the page's owner sees it (every column, every write). Node-only: the rows live in an
  * in-memory `node:sqlite` database and the SAME compilers as the server (./hasura-read, ./hasura-write) produce
- * the statements, so where/order_by/aggregate/insert/update/delete answer as published pages do. Edits stay in
+ * the statements, so where/order_by/insert/update/delete answer as published pages do. The page's `_sql` reads
+ * this session's rows through ./local-sql. Edits stay in
  * this session until the caller explicitly exports them; nothing touches the filesystem or the network.
  */
 import { createHash } from 'node:crypto';
@@ -11,7 +12,7 @@ import { DATASET_GRAPHQL_WRITE_LIMITS, type DatasetColumn, type DatasetGraphqlEr
 import { CAN_FIELD, hasuraSdl, type HasuraColumn, type HasuraScalar, type HasuraTableModel } from './hasura-schema';
 import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraNames } from './hasura-names';
-import { compileAggregate, compileRows, HasuraReadError, type HasuraAggregate, type HasuraReadArgs } from './hasura-read';
+import { compileRows, HasuraReadError, type HasuraReadArgs } from './hasura-read';
 import { compileMutation, HasuraWriteError, mutationRoots, type HasuraMutationKind } from './hasura-write';
 import { ID_COLUMN, initialRowIds, quote, tableIdentity } from './model';
 import type { LocalDatasetTable } from './local-types';
@@ -57,7 +58,7 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
     const model: HasuraTableModel = {
       root: input.length === 1 ? name : `${name}_${tableNames.root}`,
       table: { schema: declared.schema, name: declared.name },
-      columns, aggregations: true,
+      columns,
       write: { insert: columns, update: columns, delete: true },
       // The owner previews: every control applies.
       can: { insert: columns.length > 0, update: columns.length > 0, delete: true },
@@ -86,10 +87,6 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
     if (plan.window.limit === 0) return [];
     return withCan(model, asked, db.prepare(`${plan.statement.sql} LIMIT $af_limit OFFSET $af_offset`).all(bindable({ ...plan.statement.params, af_limit: plan.window.limit, af_offset: plan.window.offset })).map((r) => shaped(model, r, 'field')));
   };
-  const aggregate = (model: HasuraTableModel, args: HasuraReadArgs, what: HasuraAggregate) => {
-    const statement = compileAggregate(model, args, what);
-    return db.prepare(statement.sql).all(bindable(statement.params))[0] ?? null;
-  };
 
   function queryRoots(): Record<string, unknown> {
     const root: Record<string, unknown> = {};
@@ -97,16 +94,6 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
       root[model.root] = async (args: HasuraReadArgs, _: unknown, info?: GraphQLResolveInfo) => rows(model, args, info);
       root[`${model.root}_by_pk`] = async ({ _id }: { _id: string }, _: unknown, info?: GraphQLResolveInfo) => rows(model, { where: { _id: { _eq: _id } }, limit: 1 }, info)[0] ?? null;
       root[`${model.root}_can`] = async () => tableCan(model);
-      root[`${model.root}_aggregate`] = async (args: HasuraReadArgs) => ({
-        aggregate: {
-          count: async ({ columns, distinct }: { columns?: string[]; distinct?: boolean | null }) => Number(aggregate(model, args, { kind: 'count', ...(columns ? { columns } : {}), ...(distinct ? { distinct } : {}) })?.value ?? 0),
-          sum: async () => aggregate(model, args, { kind: 'sum' }),
-          avg: async () => aggregate(model, args, { kind: 'avg' }),
-          max: async () => aggregate(model, args, { kind: 'max' }),
-          min: async () => aggregate(model, args, { kind: 'min' }),
-        },
-        nodes: async (_: unknown, __: unknown, info?: GraphQLResolveInfo) => rows(model, args, info),
-      });
     }
     return root;
   }
@@ -154,7 +141,7 @@ export async function createLocalHasuraDataset(name: string, input: readonly Loc
   return {
     source: { name, fileId: `local_${name}`, version: 'live', typeDefs: sdl, kind: 'dataset-hasura' },
     queryRoots,
-    owns: (field) => writes.has(field) || tables.some(({ model: m }) => field === m.root || field === `${m.root}_by_pk` || field === `${m.root}_aggregate` || field === `${m.root}_can`),
+    owns: (field) => writes.has(field) || tables.some(({ model: m }) => field === m.root || field === `${m.root}_by_pk` || field === `${m.root}_can`),
     mutate,
     revision: () => revision,
     export: () => ({

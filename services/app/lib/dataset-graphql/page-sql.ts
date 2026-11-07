@@ -1,0 +1,68 @@
+/**
+ * A PAGE'S `_sql`: one read-only statement over the datasets the page VERSION links, as the reader, on the SQL
+ * service (lib/datasets `executeMounted`). The links are the ones the request already loaded for the page's dataset
+ * roots (`loadPageDatasets`): the same page audience rule, pinned revisions and read fences, so `_sql` never reads
+ * more than the reader's GraphQL reads. A single-table dataset is the table `<link>`; a multi-table one is
+ * `<link>.<table>`; every table carries `_id`, the row's GraphQL id. Each table is the role view's: hidden columns
+ * absent, the rule's filter and limit applied, tables the role cannot select absent.
+ *
+ * SQL can aggregate, so like a resolver's caps.sql (lib/page-operations sql) only the links the SQL text names are
+ * mounted, and a mounted table whose rule for the reader does not allow SQL (`allow_aggregations`,
+ * dataset-permissions `canRunSql`) refuses the call (owner and editor always may). caps.sql reads the page HEAD's links (a resolver run names a page, not a revision); `_sql`
+ * answers for the revision the reader has open. Limits: SQL_READ_LIMITS rows and statement deadline; the page
+ * response's own 4 MiB cap bounds the answer.
+ *
+ * Mounts are keyed by content (object, columns, row IDs, role view), so repeated reads of unchanged rows under one
+ * view answer from the engine's prepared database: a live refetch after an unrelated write costs one query.
+ */
+import { GraphQLError } from 'graphql';
+import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts';
+import { CatalogQueryFailure, executeMounted, type CatalogMount } from '@/lib/datasets';
+import { sqlRefusalMessage } from '@/lib/dataset-permissions';
+import { ID_COLUMN, tableIdentity } from './model';
+import type { DatasetSnapshot } from './types';
+
+/** One loaded link as `_sql` mounts it: its page name, the reader's snapshot (null: it only writes) and its tables. */
+export interface SqlLinkedDataset { link: string; snapshot: DatasetSnapshot | null; tables: ReadonlyArray<{ tableId: string; selectable: boolean }> }
+export interface PageSqlCall { sql: string; params: Readonly<Record<string, Scalar>> }
+export interface PageSqlAnswer { columns: Array<{ name: string; type: ColumnType }>; rows: Array<Record<string, unknown>> }
+
+const refuse = (code: string, message: string): never => { throw new GraphQLError(message, { extensions: { code } }); };
+/** Could this SQL name the link? SQLite folds ASCII identifiers, so a name absent from the text is never read. */
+const mentions = (sql: string, link: string) => sql.toLowerCase().includes(link.toLowerCase());
+
+/** The reader's tables of the links the statement names, refused whole when one may not run SQL. */
+function pageSqlMounts(loaded: readonly SqlLinkedDataset[], sql: string): CatalogMount[] {
+  const mounts: CatalogMount[] = [];
+  for (const l of loaded) {
+    const snapshot = l.snapshot;
+    if (!snapshot || !mentions(sql, l.link)) continue;
+    const single = Object.keys(snapshot.names ?? {}).length <= 1;
+    for (const { tableId, selectable } of l.tables) {
+      const visible = selectable ? snapshot.catalog.tables.find((t) => tableIdentity(t) === tableId) : undefined;
+      if (!visible || visible.sql !== undefined) continue;
+      if (!snapshot.runsSql?.[tableId]) refuse('permission_denied', `_sql: ${sqlRefusalMessage(l.link)}`);
+      const id = !visible.columns.some((c) => c.name.toLowerCase() === '_id');
+      const columns: DatasetColumn[] = [...(id ? [{ name: '_id', type: 'string' as const }] : []), ...visible.columns.map((c) => ({ name: c.name, type: c.type }))];
+      mounts.push({
+        schema: single ? 'main' : l.link, name: single ? l.link : visible.name, columns, stored: visible, view: snapshot.view ?? null,
+        rowIds: { column: ID_COLUMN, ids: snapshot.rowIds[tableId] ?? [], ...(id ? { as: '_id' } : {}) },
+      });
+    }
+  }
+  return mounts;
+}
+
+export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal): Promise<PageSqlAnswer> {
+  const mounts = pageSqlMounts(loaded, call.sql);
+  let result;
+  try {
+    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: SQL_READ_LIMITS.timeoutMs, signal });
+  } catch (e) {
+    if (e instanceof CatalogQueryFailure) return refuse(e.timedOut ? 'timeout' : 'validation_failed', e.timedOut ? `a statement runs at most ${SQL_READ_LIMITS.timeoutMs} ms` : e.message);
+    if (e instanceof Error && e.message.startsWith('Dataset SQL: ')) return refuse('validation_failed', e.message);
+    throw e;
+  }
+  if (result.truncated) refuse('result_too_large', `a result is at most ${SQL_READ_LIMITS.rows} rows; aggregate or filter in SQL`);
+  return { columns: result.columns.map((c) => ({ name: c.name, type: c.type })), rows: result.rows as Array<Record<string, unknown>> };
+}

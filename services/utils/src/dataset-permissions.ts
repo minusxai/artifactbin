@@ -519,6 +519,8 @@ function roleSentence(t: DatasetTablePermissions, role: DatasetRuleRole): string
         : `see ${cols}`
       : `see ${cols} of rows where ${describe(select.filter)}`;
     if (select.limit !== undefined) text += `, at most ${select.limit} rows`;
+    // allow_aggregations (Hasura's name) is the SQL permission: counts, totals, group by and joins are SQL.
+    text += select.allow_aggregations ? ', and run SQL over them' : ' (rows only, no SQL)';
     clauses.push(text);
   }
   if (insert) {

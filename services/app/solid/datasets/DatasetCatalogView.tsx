@@ -18,6 +18,8 @@ const PAGE_SIZE = 50;
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 type ExplorerCatalog = Pick<DatasetCatalog, 'kind' | 'defaultSchema' | 'refreshSeconds'> & { tables: Array<{ schema: string; name: string }> };
 export type CatalogQuery = (sql: string, options: { limit: number; offset: number; refresh?: boolean }) => Promise<CatalogPreview>;
+/** One table's rows by name, server-built: how a reader whose rules do not allow SQL still browses the dataset. */
+export type CatalogBrowse = (table: { schema: string; name: string }, options: { limit: number; offset: number; refresh?: boolean }) => Promise<CatalogPreview>;
 
 export function CatalogRows(props: { result: CatalogPreview; label?: string }): JSX.Element {
   return <div aria-label={props.label ?? 'Table preview'} class="max-h-[32rem] overflow-auto rounded-panel border border-edge bg-surface">
@@ -29,14 +31,17 @@ export function CatalogRows(props: { result: CatalogPreview; label?: string }): 
   </div>;
 }
 
-export function DatasetCatalogView(props: { id: string; catalog: DatasetCatalog; canEdit: boolean }): JSX.Element {
-  const query: CatalogQuery = async (sql, options) => {
-    const response = await apiFetch(`/a/${encodeURIComponent(props.id)}/tables`, 'POST', { sql, ...options });
+/** A dataset's catalog for a reader: tables browse by name for everyone; `canRunSql` (their rules allow SQL) adds Run SQL. */
+export function DatasetCatalogView(props: { id: string; catalog: DatasetCatalog; canEdit: boolean; canRunSql: boolean }): JSX.Element {
+  const read = async (body: Record<string, unknown>): Promise<CatalogPreview> => {
+    const response = await apiFetch(`/a/${encodeURIComponent(props.id)}/tables`, 'POST', body);
     const data = await response.json();
-    if (!response.ok) throw new Error(data.details?.[0] ?? data.error ?? 'Could not load this query.');
+    if (!response.ok) throw new Error(data.message ?? data.details?.[0] ?? data.error ?? 'Could not load this query.');
     return data;
   };
-  return <DatasetExplorer catalog={props.catalog} query={query} schemaTables={props.catalog.tables} editHref={props.canEdit ? artifactEditPath(props.id) : undefined} />;
+  const query: CatalogQuery = (sql, options) => read({ sql, ...options });
+  const browse: CatalogBrowse = (table, options) => read({ table, ...options });
+  return <DatasetExplorer catalog={props.catalog} query={query} browse={browse} sql={props.canRunSql} schemaTables={props.catalog.tables} editHref={props.canEdit ? artifactEditPath(props.id) : undefined} />;
 }
 
 function DatasetSchemaBrowser(props: { tables: DatasetCatalog['tables'] }): JSX.Element {
@@ -60,7 +65,7 @@ function DatasetSchemaBrowser(props: { tables: DatasetCatalog['tables'] }): JSX.
   </Panel>;
 }
 
-export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: CatalogQuery; paginate?: boolean; editHref?: string; schemaTables?: DatasetCatalog['tables'] }): JSX.Element {
+export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: CatalogQuery; browse?: CatalogBrowse; sql?: boolean; paginate?: boolean; editHref?: string; schemaTables?: DatasetCatalog['tables'] }): JSX.Element {
   const initial = props.catalog.tables.find((table) => table.schema === props.catalog.defaultSchema) ?? props.catalog.tables[0];
   const [selection, setSelection] = createSignal({ schema: initial?.schema ?? props.catalog.defaultSchema, name: initial?.name ?? '', offset: 0 });
   const [mode, setMode] = createSignal<'table' | 'sql'>('table');
@@ -90,7 +95,9 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
     consumedRefresh = refresh();
     let alive = true;
     setBusy(true); setError('');
-    void untrack(() => props.query(querySql, { limit: PAGE_SIZE, offset, ...(force ? { refresh: true } : {}) }))
+    const options = { limit: PAGE_SIZE, offset, ...(force ? { refresh: true } : {}) }, shown = table();
+    // A table view reads the table by name when the page can (no SQL needed); typed SQL always runs as SQL.
+    void untrack(() => executedSql() === null && props.browse && shown ? props.browse({ schema: shown.schema, name: shown.name }, options) : props.query(querySql, options))
       .then((data) => { if (alive) { setResult({ data, offset, table: executedSql() === null }); setNow(Date.now()); } })
       .catch((err) => { if (alive) setError(err instanceof Error ? err.message : 'Could not load this query.'); })
       .finally(() => { if (alive) setBusy(false); });
@@ -106,8 +113,8 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
   const choose = (schema: string, name: string) => { setResult(null); setError(''); setExecutedSql(null); setSelection({ schema, name, offset: 0 }); };
   return <section aria-label="Dataset catalog" class="mx-auto min-w-0 w-full max-w-6xl space-y-4 p-4 sm:p-6">
     <div class="flex flex-wrap items-center gap-2">
-      <ToggleGroup label="Dataset view" size="md" value={mode()} onChange={next => { if (next === 'table') { setMode('table'); choose(selection().schema, selection().name); } else { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); } }}
-        options={[{ value: 'table', label: 'Table view' }, { value: 'sql', label: 'Run SQL', ariaLabel: 'SQL view' }]} />
+      <Show when={props.sql !== false}><ToggleGroup label="Dataset view" size="md" value={mode()} onChange={next => { if (next === 'table') { setMode('table'); choose(selection().schema, selection().name); } else { setMode('sql'); if (!sqlDraft()) setSqlDraft(tableSql()); } }}
+        options={[{ value: 'table', label: 'Table view' }, { value: 'sql', label: 'Run SQL', ariaLabel: 'SQL view' }]} /></Show>
       <Show when={props.editHref}><a aria-label="Edit dataset" href={props.editHref} class={`ml-auto text-sm ${LINK}`}>Edit dataset</a></Show>
     </div>
     <Show when={props.schemaTables}><DatasetSchemaBrowser tables={props.schemaTables!} /></Show>

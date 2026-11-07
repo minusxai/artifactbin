@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {composePageSchema,executePageOperation,FieldFailed} from '../index';
-import {DATASET_ROLES,type DatasetRole} from '@artifactbin/contracts';
+import {DATASET_ROLES,type DatasetRole,type HtmlJsonObject} from '@artifactbin/contracts';
 import {resolverFieldRefusal} from '../namespaces';
 const signal=new AbortController().signal;
 const sources=[{name:'tasks',fileId:'backend1',version:'sha1',typeDefs:'type Query { value: Int } type Mutation { save(n:Int!):Int @auth(role:editor) }'}];
@@ -130,6 +130,39 @@ describe('generated dataset roots (dataset-hasura sources)', () => {
     expect(() => composePageSchema([{ ...sources[0]!, name: 'orders_meta' }, generated('orders', 'orders_meta')])).toThrow(/graphql_root_collision: link orders generates orders_meta, which link orders_meta also names/);
     expect(() => composePageSchema([generated('a', 'orders'), generated('b', 'orders')])).toThrow(/graphql_root_collision/);
   });
+  it('reserves _sql and its types: no backend, link root or generated type may take them', () => {
+    expect(() => composePageSchema([{ ...sources[0]!, name: '_sql' }])).toThrow(/reserved for the built-in read-only SQL query/);
+    expect(() => composePageSchema([generated('_sql')])).toThrow(/graphql_root_collision: link _sql generates _sql, the built-in read-only SQL query/);
+    expect(() => composePageSchema([generated('orders', 'SqlResult')])).toThrow(/graphql_root_collision/);
+    expect(() => composePageSchema([generated('JSON')])).toThrow(/graphql_root_collision/);
+  });
+  it('mounts _sql only on a page that links a dataset, and runs it through the port with checked arguments', async () => {
+    expect(composePageSchema([...sources]).sdl).not.toContain('_sql');
+    const schema = composePageSchema([...sources, generated('orders')]);
+    expect(schema.sdl).toMatch(/_sql\(sql: String!, params: JSON\): SqlResult\n/);
+    const asked: unknown[] = [];
+    const datasets = {
+      queryRoots: () => ({}), mutate: async () => ({ data: null }),
+      sql: async (call: { sql: string; params: Readonly<Record<string, unknown>> }) => { asked.push(call); return { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 2 }] }; },
+    };
+    const caller = { pageId: 'page1', subject: null, role: 'anonymous' as const };
+    const run = (query: string, variables?: Record<string, unknown>) => executePageOperation({ schema, request: { query, ...(variables ? { variables: variables as HtmlJsonObject } : {}) }, caller, signal, invoke: async () => null, datasets });
+    expect(await run('query($p: JSON) { _sql(sql: "select count(*) as n from orders where region = $r", params: $p) { columns { name type } rows } }', { p: { r: 'w' } }))
+      .toEqual({ data: { _sql: { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 2 }] } } });
+    expect(asked).toEqual([{ sql: 'select count(*) as n from orders where region = $r', params: { r: 'w' } }]);
+    const code = async (query: string, variables?: Record<string, unknown>) => (await run(query, variables)).errors?.[0]?.extensions?.code;
+    expect(await code('query($p: JSON) { _sql(sql: "select 1", params: $p) { rows } }', { p: { r: { nested: 1 } } })).toBe('validation_failed');
+    expect(await code('query($p: JSON) { _sql(sql: "select 1", params: $p) { rows } }', { p: ['w'] })).toBe('validation_failed');
+    expect(await code('query($p: JSON) { _sql(sql: "select 1", params: $p) { rows } }', { p: { 'bad-name': 1 } })).toBe('validation_failed');
+    expect(await code('query($p: JSON) { _sql(sql: "select 1", params: $p) { rows } }', { p: Object.fromEntries(Array.from({ length: 241 }, (_, i) => [`p${i}`, i])) })).toBe('input_too_large');
+    expect(await code('query($s: String!) { _sql(sql: $s) { rows } }', { s: 'x'.repeat(64_001) })).toBe('input_too_large');
+    expect(asked).toHaveLength(1);
+    // The port's own refusals keep their code.
+    const refusing = { ...datasets, sql: async () => { const { GraphQLError } = await import('graphql'); throw new GraphQLError('no', { extensions: { code: 'permission_denied' } }); } };
+    expect((await executePageOperation({ schema, request: { query: '{ _sql(sql: "select 1") { rows } }' }, caller, signal, invoke: async () => null, datasets: refusing })).errors).toEqual([{ message: 'no', path: ['_sql'], extensions: { code: 'permission_denied' } }]);
+    // `_sql` is a query root: a mutation cannot name it.
+    expect((await run('mutation { _sql(sql: "select 1") { rows } }')).errors?.[0]?.message).toMatch(/_sql|Mutation/);
+  });
   it('leaves a page with only resolver links byte-identical (no @dataset directive)', () => {
     const resolvers = [{ name: 'staff', fileId: 'rs1', version: 'v1', typeDefs: 'type Query { total: Int } type Mutation { setTotal: Int }' }];
     expect(composePageSchema(resolvers).sdl).not.toContain('@dataset');
@@ -141,6 +174,7 @@ describe('generated dataset roots (dataset-hasura sources)', () => {
     const datasets = {
       queryRoots: () => ({ orders: async (args: { where?: unknown }) => [{ _id: 'r1', region: JSON.stringify(args.where ?? null) }] }),
       mutate: async (request: unknown) => { calls.push(request); return { data: { gone: { affected_rows: 2 } } }; },
+      sql: async () => ({ columns: [], rows: [] }),
     };
     const caller = { pageId: 'page1', subject: 'u1', role: 'viewer' as const };
     const read = await executePageOperation({ schema, request: { query: '{ orders(where: {region: {_eq: "w"}}) { _id region } tasks { value } }' }, caller, signal, invoke: async () => 5, datasets });

@@ -11,7 +11,7 @@ const region = { field: 'region', source: 'Region', type: 'String' as const };
 const amount = { field: 'amount', source: 'amount', type: 'Float' as const };
 const paid = { field: 'paid', source: 'paid', type: 'Boolean' as const };
 const T: HasuraTableModel = {
-  root: 'orders', table: { schema: 'public', name: 'rows' }, aggregations: false, columns: [region, amount],
+  root: 'orders', table: { schema: 'public', name: 'rows' }, columns: [region, amount],
   write: { insert: [region, amount, paid], update: [region, amount], delete: true },
 };
 const ids = (i: number) => `r_${i}`;

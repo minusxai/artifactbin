@@ -10,8 +10,8 @@ export interface DatasetSnapshot {
  rowIds:Readonly<Record<string,readonly string[]>>;
  /** The reader's role view (lib/dataset-permissions), or null when it shows every row (owner, editor, a whole rule). */
  view?:CatalogRowView|null;
- /** Per table: may this role run aggregate queries (the select rule's allow_aggregations; owner and editor always). */
- aggregatable?:Readonly<Record<string,boolean>>;
+ /** Per table: may this role run SQL over it (dataset-permissions `canRunSql`: the select rule's allow_aggregations; owner and editor always). */
+ runsSql?:Readonly<Record<string,boolean>>;
  /** The role the view was decided for (lib/dataset-permissions `datasetRole`). */
  role?:DatasetRole;
  /** The dataset head the read was authorized on (a pinned link's too): the write decision reads it rather than again. */

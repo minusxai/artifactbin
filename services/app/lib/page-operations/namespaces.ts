@@ -13,8 +13,9 @@
  * (the shared prelude once), and they execute through the request's dataset
  * port (lib/dataset-graphql `loadPageDatasets`), a mutation whole.
  *
- * Every page also answers the built-in `viewer` (contracts `PAGE_VIEWER_ROOT`) from the caller alone; no link may
- * be named, or generate, its root or type.
+ * Every page also answers the built-in `viewer` (contracts `PAGE_VIEWER_ROOT`) from the caller alone, and a page
+ * that links a dataset the read-only `_sql` (contracts `PAGE_SQL_ROOT`) through the request's dataset port; no link
+ * may be named, or generate, their roots or types.
  */
 import {
   execute,
@@ -43,7 +44,7 @@ import {
   type GraphQLTypeResolver,
   type TypeNode,
 } from "graphql";
-import { DATASET_ROLES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, datasetRoleAtLeast, type DatasetRole, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
+import { DATASET_ROLES, PAGE_SQL_ROOT, PAGE_SQL_TYPES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, SQL_READ_LIMITS, datasetRoleAtLeast, type Scalar, type DatasetRole, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
 import { PAGE_OPERATION_RESULT_BYTES, FIELD_ERROR_CODE, FieldFailed, FieldNotExecuted, boundedDetail, type ExecuteOptions, type RemoteError } from './contracts';
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 import {
@@ -71,6 +72,11 @@ const DATASET_DIRECTIVE =
 /** The built-in viewer (contracts `PAGE_VIEWER_ROOT`): mounted on every page's Query, answered from the caller alone. */
 const VIEWER_SDL = `type ${PAGE_VIEWER_TYPE} {\n  signedIn: Boolean!\n  id: ID\n  name: String\n  "May this viewer edit this page (its text regions)? Owner and shared editors only. Advisory: edits are still judged."\n  canEdit: Boolean!\n}\n`;
 const BUILT_IN_VIEWER = "the built-in viewer query";
+/** The read-only SQL door (contracts `PAGE_SQL_ROOT`): mounted on Query when the page links a dataset. */
+const SQL_SDL = `"One read-only SQL answer: its columns in order, and its rows as objects keyed by column name."\ntype SqlResult {\n  columns: [SqlColumn!]!\n  rows: [JSON!]!\n}\ntype SqlColumn {\n  name: String!\n  type: String!\n}\n"Any JSON value."\nscalar JSON\n`;
+const SQL_FIELD = `  "One read-only SQL statement over the page's linked datasets, as this reader: a single-table dataset is the table named like its link, a multi-table one <link>.<table>; each shows only the rows and columns the reader's rule shows. $name params bind values. A rule without allow_aggregations refuses it."\n  ${PAGE_SQL_ROOT}(sql: String!, params: JSON): SqlResult`;
+const BUILT_IN_SQL = "the built-in read-only SQL query";
+const SQL_PARAM = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const authRole = (value: unknown): DatasetRole | null =>
   typeof value === 'string' && (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
 
@@ -193,6 +199,8 @@ export function composePageSchema(
       throw Error(`Backend name ${label} is not a GraphQL name`);
     if (name === PAGE_VIEWER_ROOT)
       throw Error(`Backend name ${label} is reserved for ${BUILT_IN_VIEWER}`);
+    if (name === PAGE_SQL_ROOT)
+      throw Error(`Backend name ${label} is reserved for ${BUILT_IN_SQL}`);
     if (names.includes(name))
       throw Error(`Backend name ${label} is used more than once`);
     if (
@@ -227,7 +235,8 @@ export function composePageSchema(
       mutation.push(`  ${name}: ${name}${SEPARATOR}Mutation! ${mount}`);
   }
   if (generated.length) {
-    parts.splice(2, 0, DATASET_DIRECTIVE);
+    parts.splice(2, 0, DATASET_DIRECTIVE, SQL_SDL);
+    query.push(SQL_FIELD);
     mountDatasets(generated, names, owners, parts, query, mutation);
   }
   parts.push(`type Query {\n${query.join("\n")}\n}`);
@@ -282,6 +291,8 @@ function mountDatasets(
           if (root === "no_queries_available") continue;
           if (root === PAGE_VIEWER_ROOT)
             throw Error(`graphql_root_collision: link ${name} generates ${root}, ${BUILT_IN_VIEWER}`);
+          if (root === PAGE_SQL_ROOT)
+            throw Error(`graphql_root_collision: link ${name} generates ${root}, ${BUILT_IN_SQL}`);
           const other = rootOwner.get(root);
           if (other !== undefined)
             throw Error(`graphql_root_collision: link ${name} generates ${root}, which link ${other} also names`);
@@ -299,6 +310,8 @@ function mountDatasets(
       const printed = print(definition);
       if (type === PAGE_VIEWER_TYPE)
         throw Error(`graphql_root_collision: link ${name} generates the type ${type}, ${BUILT_IN_VIEWER}`);
+      if ((PAGE_SQL_TYPES as readonly string[]).includes(type))
+        throw Error(`graphql_root_collision: link ${name} generates the type ${type}, ${BUILT_IN_SQL}`);
       const prior = types.get(type);
       if (prior === printed) continue;
       const claimed = rootOwner.get(type);
@@ -535,6 +548,7 @@ export async function executePageOperation(
   for (const [name, mounted] of roots)
     rootValue[name] = namespaceValue(mounted);
   if (!mutating) rootValue[PAGE_VIEWER_ROOT] = viewerValue(options);
+  if (!mutating) rootValue[PAGE_SQL_ROOT] = (args: Record<string, unknown>) => pageSql(options, args, signal);
 
   // A mutation naming a generated dataset root goes whole through the dataset door: one dataset, one atomic step.
   const touched = mutating ? topLevelFields(document, operation).filter((field) => field.name.value !== "__typename") : [];
@@ -624,6 +638,31 @@ function viewerValue({ caller, viewerName, canEdit }: ExecuteOptions): Record<st
   if (subject === null || resolverFieldRefusal(caller.role, { signedIn: true }) !== null)
     return { signedIn: false, id: null, name: null, canEdit: editable };
   return { signedIn: true, id: subject, name: async () => (await viewerName?.(subject)) ?? null, canEdit: editable };
+}
+
+const sqlFailure = (code: string, message: string) => new GraphQLError(message, { extensions: { code } });
+/**
+ * `_sql`: its arguments checked here, for every port alike (a statement of at most SQL_READ_LIMITS.sqlBytes; params an
+ * object of at most SQL_READ_LIMITS.params scalars under identifiers), then run by the request's dataset port as
+ * the caller. Failures keep the port's `extensions.code`.
+ */
+async function pageSql({ datasets }: ExecuteOptions, args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
+  if (!datasets?.sql) throw sqlFailure("unavailable", "The linked datasets are unavailable");
+  const sql = args.sql;
+  if (typeof sql !== "string" || !sql.trim()) throw sqlFailure("validation_failed", "_sql takes one SQL statement");
+  if (new TextEncoder().encode(sql).length > SQL_READ_LIMITS.sqlBytes) throw sqlFailure("input_too_large", `a statement is at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
+  const raw = args.params ?? {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw sqlFailure("validation_failed", "params must be an object of scalars");
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > SQL_READ_LIMITS.params) throw sqlFailure("input_too_large", `at most ${SQL_READ_LIMITS.params} params`);
+  const params: Record<string, Scalar> = {};
+  for (const [key, value] of entries) {
+    const scalar = value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value));
+    if (!SQL_PARAM.test(key) || !scalar) throw sqlFailure("validation_failed", `param ${key.slice(0, 64)} must be a string, number, boolean or null under an identifier`);
+    params[key] = value as Scalar;
+  }
+  signal.throwIfAborted();
+  return datasets.sql({ sql, params });
 }
 
 /** The operation's top-level fields, through inline fragments and fragment spreads. */

@@ -15,7 +15,7 @@
 import { DATASET_GRAPHQL_READ_LIMITS, DATASET_PERMISSION_LIMITS, type Scalar } from '@artifactbin/contracts';
 import { patternSql } from '@artifactbin/utils/dataset-policy';
 import { ID_COLUMN, quote } from './model';
-import { operatorsFor, orderable, summable, type HasuraColumn, type HasuraTableModel } from './hasura-schema';
+import { operatorsFor, type HasuraColumn, type HasuraTableModel } from './hasura-schema';
 import type { DatasetStatement } from './types';
 import { canSelect, type CanAsked } from './can';
 
@@ -148,7 +148,7 @@ function filtered(t: HasuraTableModel, args: HasuraReadArgs, params: Record<stri
 export interface HasuraRowsPlan { statement: DatasetStatement; window: { limit: number; offset: number } }
 
 /**
- * A list field (or `_by_pk`, or an aggregate's `nodes`): `_id` and every visible column, under their GraphQL
+ * A list field (or `_by_pk`): `_id` and every visible column, under their GraphQL
  * names, and the `_can` fields `asked` decides in the same read (./can). The window is `limit` (default 100) cut
  * to 1000 and the select rule's limit, from `offset`.
  */
@@ -159,36 +159,4 @@ export function compileRows(t: HasuraTableModel, args: HasuraReadArgs, asked: Ca
   const sql = `SELECT ${select.join(', ')} FROM ${from(t)}${filtered(t, args, params)} ORDER BY ${order.join(', ')}`;
   const limit = Math.min(nonNegative(args.limit, 'limit') ?? DATASET_GRAPHQL_READ_LIMITS.defaultLimit, DATASET_GRAPHQL_READ_LIMITS.maxLimit, t.limit ?? Number.POSITIVE_INFINITY);
   return { statement: { sql, params: params as Record<string, Scalar> }, window: { limit, offset: nonNegative(args.offset, 'offset') ?? 0 } };
-}
-
-export type HasuraAggregate =
-  | { kind: 'count'; columns?: readonly string[]; distinct?: boolean }
-  | { kind: 'sum' | 'avg' | 'min' | 'max' };
-
-/**
- * One aggregate over the rows the same arguments select (the whole filtered view when no `limit` is given:
- * aggregates count every visible row). `count` answers column `value`; `sum`/`avg`/`min`/`max` answer one
- * column per eligible visible field.
- */
-export function compileAggregate(t: HasuraTableModel, args: HasuraReadArgs, aggregate: HasuraAggregate): DatasetStatement {
-  const params: Record<string, unknown> = {};
-  const limit = nonNegative(args.limit, 'limit'), offset = nonNegative(args.offset, 'offset');
-  const order = compileOrder(t, args.order_by);
-  const windowed = limit !== undefined || offset !== undefined;
-  const ordering = order.length || windowed ? ` ORDER BY ${[...order, `${quote(ID_COLUMN)} ASC`].join(', ')}` : '';
-  const window = windowed ? ` LIMIT ${limit ?? -1} OFFSET ${offset ?? 0}` : '';
-  const inner = `SELECT * FROM ${from(t)}${filtered(t, args, params)}${ordering}${window}`;
-  let select: string;
-  if (aggregate.kind === 'count') {
-    const columns = (aggregate.columns ?? []).map((field) => (field === '_id' ? refuse('count takes visible columns') : column(t, field)));
-    const expr = !columns.length ? '*'
-      : columns.length === 1 ? `${aggregate.distinct ? 'DISTINCT ' : ''}${quote(columns[0]!.source)}`
-      : aggregate.distinct ? `DISTINCT json_array(${columns.map((c) => quote(c.source)).join(', ')})` : '*';
-    select = `COUNT(${expr}) AS ${quote('value')}`;
-  } else {
-    const eligible = t.columns.filter(aggregate.kind === 'sum' || aggregate.kind === 'avg' ? summable : orderable);
-    if (!eligible.length) refuse(`${t.root} has no columns for ${aggregate.kind}`);
-    select = eligible.map((c) => `${aggregate.kind.toUpperCase()}(${quote(c.source)}) AS ${quote(c.field)}`).join(', ');
-  }
-  return { sql: `SELECT ${select} FROM (${inner}) AS af_hasura`, params: params as Record<string, Scalar> };
 }

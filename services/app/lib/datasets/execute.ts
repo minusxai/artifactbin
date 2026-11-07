@@ -6,7 +6,10 @@ import { datasetSqlParams } from '@/lib/dataflow/server';
 import {DatasetError} from './errors';
 import type { AccessActor } from '@/lib/accounts';
 import {storedTables} from './catalog';
-import type {CatalogRowView,DatasetCatalog} from './types';
+import {loadDatasetRows} from './dataset-store';
+import {createSharedReads} from './shared-reads';
+import type {CatalogRowView,DatasetCatalog,DatasetTable} from './types';
+import type {Row} from '@artifactbin/contracts';
 interface CatalogQueryOptions {/** The caller's role view (lib/dataset-permissions), or null: decided at every door, never defaulted. */view:CatalogRowView|null;/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>;/** A door's row IDs for one stored table (`table`: its catalog index), by position in its stored object, added as `column` before the role view filters: the generated GraphQL's `_id`. */rowIds?:{table:number;column:string;ids:readonly string[]}}
 type CatalogResult=TableResult&{refreshedAt:string};
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('base64url');
@@ -22,6 +25,31 @@ function sourceKey(saved:DatasetCatalog,i:number,opts:CatalogQueryOptions):strin
  const table=saved.tables[i]!;
  return sha([table.objectKey??null,table.columns,opts.rowIds?.table===i?[opts.rowIds.column,idDigest(opts.rowIds.ids)]:null,opts.view?.identity??null]);
 }
+type ReadCatalog=NonNullable<Parameters<typeof runQueries>[0]['catalog']>;
+type ReadTables=Parameters<typeof runQueries>[0]['tables'];
+interface KeyedRead {catalog:ReadCatalog;sql:string;params:Record<string,Scalar>;limit:number;timeoutMs?:number;execute?:typeof runQueries;page?:{name:string;limit:number;offset:number;sort?:{col:string;dir:'asc'|'desc'}}}
+/**
+ * ONE KEYED CATALOG READ: every stored source names its content (`key`), so the SQL engine answers from the database it
+ * prepared for these keys; only a miss loads, filters and sends the rows (`load`) and asks again (services/sql/CONTRACT.md).
+ */
+async function keyedRead(read:KeyedRead,load:()=>Promise<ReadTables>):Promise<CatalogResult>{
+ const run=(tables:ReadTables)=>(read.execute??runQueries)({tables,catalog:read.catalog,queries:[{name:'result',sql:read.sql}],params:read.params,limit:read.limit,timeoutMs:read.timeoutMs,...(read.page?{page:read.page}:{})});
+ let out=await run({});
+ if(out.result&&isQueryFailure(out.result)&&out.result.rowsRequired)out=await run(await load());
+ const table=out.result;
+ if(!table)throw new DatasetError('Query failed');
+ if(isQueryFailure(table))throw new CatalogQueryFailure(table.error,table.timedOut===true);
+ return {...table,refreshedAt:new Date().toISOString()};
+}
+/** The engine refused or interrupted the statement: its message is about the caller's SQL. */
+export class CatalogQueryFailure extends DatasetError {
+ constructor(message:string,readonly timedOut:boolean){super(message);}
+}
+/** Every $name the statement reads must be supplied: SQLite would bind a missing one as NULL and answer quietly. */
+function requireParams(sql:string,params:Record<string,Scalar>):void{
+ const undeclared=datasetSqlParams(sql).find(name=>!Object.hasOwn(params,name));
+ if(undeclared)throw new Error(`Dataset SQL: undeclared parameter $${undeclared}`);
+}
 /** Callers authorize dataset access before entering this execution/cache boundary. */
 async function executeCatalogDirect(saved:DatasetCatalog,sql:string,params:Record<string,Scalar>,opts:CatalogQueryOptions):Promise<CatalogResult> {
  // The role view first: hidden columns leave the catalog every statement is checked against.
@@ -34,22 +62,57 @@ async function executeCatalogDirect(saved:DatasetCatalog,sql:string,params:Recor
   await opts.authorize?.();
  };
  await authorize();
- // Every $name the statement reads must be supplied: SQLite would bind a missing one as NULL and answer quietly.
- const undeclared=datasetSqlParams(sql).find(name=>!Object.hasOwn(params,name));
- if(undeclared)throw new Error(`Dataset SQL: undeclared parameter $${undeclared}`);
+ requireParams(sql,params);
  const readCatalog={defaultSchema:catalog.defaultSchema,tables:catalog.tables.map((table,i)=>({schema:table.schema,name:table.name,columns:table.columns,...(table.sql?{sql:table.sql}:{source:`dataset_table_${i}`,key:sourceKey(saved,i,opts)})})),paramTypes:opts.paramTypes};
- // Keys first: the SQL engine answers from the database it prepared for these keys; only a miss loads, filters and sends the rows.
- const read=(tables:Awaited<ReturnType<typeof storedTables>>)=>(opts.execute??runQueries)({tables,catalog:readCatalog,queries:[{name:'result',sql}],params,limit,timeoutMs:opts.timeoutMs,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}});
- let out=await read({});
- if(out.result&&isQueryFailure(out.result)&&out.result.rowsRequired){
+ const response=await keyedRead({catalog:readCatalog,sql,params,limit,timeoutMs:opts.timeoutMs,execute:opts.execute,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}},async()=>{
   const stored=await storedTables(catalog,opts.objects);
   if(opts.rowIds){const loaded=stored[`dataset_table_${opts.rowIds.table}`],{column,ids}=opts.rowIds;if(loaded)loaded.rows=loaded.rows.map((row,k)=>({...row,[column]:ids[k]}));}
   if(opts.view)for(const i of catalog.tables.keys()){const loaded=stored[`dataset_table_${i}`];if(loaded)loaded.rows=opts.view.rows(saved.tables[i]!,loaded.rows);}
-  out=await read(stored);
- }
- const table=out.result;if(!table||isQueryFailure(table))throw new DatasetError(table?.error??'Query failed');
- const response={...table,refreshedAt:new Date().toISOString()};
+  return stored;
+ });
  await authorize();return response;
+}
+
+/**
+ * One stored table a multi-dataset read mounts (a page's `_sql`): the logical `schema`.`name` it is read as, the
+ * columns the reader may name, the stored table its rows come from, the role view that filters them and the row IDs
+ * a door adds before the view (`column`), shown to SQL as `as` when given.
+ */
+export interface CatalogMount {
+ schema:string;name:string;columns:DatasetTable['columns'];
+ stored:DatasetTable;view:CatalogRowView|null;
+ rowIds?:{column:string;ids:readonly string[];as?:string};
+}
+interface MountedQueryOptions {limit:number;timeoutMs:number;signal?:AbortSignal;objects?:Pick<ContentObjects,'get'>;execute?:typeof runQueries}
+/** A mount's rows as its key names them: the stored object, the door's row IDs, the role view, the `as` rename. */
+async function loadMount(m:CatalogMount,objects?:Pick<ContentObjects,'get'>):Promise<Row[]>{
+ let rows:Record<string,unknown>[]=m.stored.objectKey?(objects?JSON.parse((await objects.get(m.stored.objectKey)).toString('utf8')):await loadDatasetRows({meta:{objectKey:m.stored.objectKey}})):[];
+ const ids=m.rowIds;
+ if(ids)rows=rows.map((row,k)=>({...row,[ids.column]:ids.ids[k]}));
+ if(m.view)rows=m.view.rows(m.stored,rows);
+ if(ids?.as)rows=rows.map(row=>{const {[ids.column]:id,...rest}=row;return {...rest,[ids.as!]:id};});
+ return rows as Row[];
+}
+const mountRows=createSharedReads<Row[]>();
+/** A mount's content address: its object, stored and shown columns, row IDs and role view (as `sourceKey`). */
+const mountKey=(m:CatalogMount)=>sha([m.stored.objectKey??null,m.stored.columns,m.columns,m.rowIds?[m.rowIds.column,m.rowIds.as??null,idDigest(m.rowIds.ids)]:null,m.view?.identity??null]);
+/**
+ * ONE READ OVER STORED TABLES OF SEVERAL DATASETS, each under its own logical name and role view, as one keyed catalog:
+ * repeated reads of unchanged rows under the same views answer from the engine's prepared database. The caller has
+ * authorized every mount (and checks its fences after); the answer is at most `limit` rows (`truncated` past it).
+ */
+export async function executeMounted(mounts:readonly CatalogMount[],sql:string,params:Record<string,Scalar>,opts:MountedQueryOptions):Promise<CatalogResult>{
+ opts.signal?.throwIfAborted();
+ requireParams(sql,params);
+ const keys=mounts.map(mountKey);
+ const catalog:ReadCatalog={defaultSchema:'main',tables:mounts.map((m,i)=>({schema:m.schema,name:m.name,columns:m.columns,source:`mount_${i}`,key:keys[i]!}))};
+ const signal=opts.signal??new AbortController().signal;
+ const result=await keyedRead({catalog,sql,params,limit:opts.limit,timeoutMs:opts.timeoutMs,...(opts.execute?{execute:opts.execute}:{})},async()=>Object.fromEntries(await Promise.all(mounts.map(async(m,i)=>
+  // Readers missing the same mount at once (a live refetch after a write) load, filter and send its rows once.
+  [`mount_${i}`,{rows:await mountRows(keys[i]!,signal,()=>loadMount(m,opts.objects)),columns:m.columns}] as const,
+ ))));
+ opts.signal?.throwIfAborted();
+ return result;
 }
 
 let executorOverride: typeof executeCatalogDirect | undefined;

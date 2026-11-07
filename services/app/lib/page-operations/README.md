@@ -106,9 +106,11 @@ so a link name absent from the text cannot be read): a single-table dataset is t
 one `<link>.<table>` (an attached schema, as the service mounts imports), each with `_id`, the row's
 generated-API id. Rows come from the same load `caps.query` uses (`lib/dataset-graphql` `readLinkedDatasetTables`
 over `loadLinked`: each dataset's role view for the caller through the page, `X-Hasura-Page-Id` the page), so
-filtered rows, hidden columns and unreadable datasets are absent. SQL can aggregate, so a mounted table whose
-rule for the caller lacks `allow_aggregations` refuses the call (`permission_denied`; owner and editor always
-may). Reads of one revision under one role view are shared while in flight (`lib/datasets` `createSharedReads`).
+filtered rows, hidden columns and unreadable datasets are absent. A mounted table whose rule for the caller does
+not allow SQL (`allow_aggregations`, the one SQL permission) refuses the call (`permission_denied`; owner and editor
+always may). caps.sql reads the page head's links (a resolver run names no revision); the page's own `_sql`
+(`lib/dataset-graphql` `page-sql`) reads the links of the revision the reader has open, on the same engine and
+permission, through keyed catalog sources rather than shipped rows. Reads of one revision under one role view are shared while in flight (`lib/datasets` `createSharedReads`).
 Limits are the registered page queries' (`SQL_READ_LIMITS` in `services/contracts`): 10,000 input rows (inline
 and dataset together), a million cells and 8 MiB of input, 5 s per `run`, 20 s per call; the answer is bounded
 by `RESOLVER_LIMITS.queryResultBytes` and each call counts toward the 32-request limit. Refusals throw with

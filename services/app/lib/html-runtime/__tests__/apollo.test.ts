@@ -65,21 +65,46 @@ describe('HTML page client', () => {
     const remote: RemotePort = { online: () => true, execute: async (request): ReturnType<RemotePort['execute']> => {
       sent.push(request);
       return request.operation === 'query'
-        ? { data: { orders: [{ _id: 'r1' }], orders_aggregate: { aggregate: { count: 1 } } } }
+        ? { data: { orders: [{ _id: 'r1' }], orders_can: { insert: true } } }
         : { data: { insert_orders_one: { _id: 'r2' } }, extensions: { outcomes: { insert_orders_one: 'committed' } } };
     } };
     const state = createLocalStore({ orders_filter: 'west', ordersheet: 1 });
     const client = createClient({ backends: ['orders'], datasets: ['orders'], state, remote, idempotencyKey: () => 'key_0123456789abcdef' });
-    const read = await client.query({ query: gql`{ orders_filter ordersheet orders { _id } orders_aggregate { aggregate { count } } }` });
+    const read = await client.query({ query: gql`{ orders_filter ordersheet orders { _id } orders_can { insert } }` });
     // `orders_filter` is a remote root of the generated link; `ordersheet` (no underscore) stays local.
-    expect(read.data).toEqual({ orders_filter: null, ordersheet: 1, orders: [{ _id: 'r1' }], orders_aggregate: { aggregate: { count: 1 } } });
-    expect(sent[0]!.query).toContain('orders_aggregate');
+    expect(read.data).toEqual({ orders_filter: null, ordersheet: 1, orders: [{ _id: 'r1' }], orders_can: { insert: true } });
+    expect(sent[0]!.query).toContain('orders_can');
     const written = await client.mutate({ mutation: gql`mutation { insert_orders_one(object: {}) { _id } }` });
     expect(written.extensions?.outcomes).toEqual({ insert_orders_one: 'committed' });
     expect(sent[1]).toMatchObject({ operation: 'mutation', idempotencyKey: 'key_0123456789abcdef' });
     // A lost reply leaves the root's own outcome unknown (not a child path).
     remote.execute = async () => { throw new Error('connection lost'); };
     expect((await client.mutate({ mutation: gql`mutation { delete_orders_by_pk(_id: "r1") { _id } }` })).extensions?.outcomes).toEqual({ delete_orders_by_pk: 'unknown' });
+  });
+
+  it('asks the page for _sql, never local state of that name, and refetches a watched _sql when a linked dataset changes', async () => {
+    let total = 3, notify: ((reason?: 'data') => void) | undefined;
+    const sent: string[] = [];
+    const remote: RemotePort = {
+      online: () => true,
+      execute: async (request) => { sent.push(request.query); return { data: { _sql: { rows: [{ n: total }] } } }; },
+      subscribe: (listener) => { notify = listener as typeof notify; return () => { notify = undefined; }; },
+    };
+    const client = createClient({ backends: [], datasets: ['orders'], state: createLocalStore({ _sql: { rows: [{ n: -1 }] } }), remote });
+    const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+    const values: unknown[] = [];
+    const watch = client.watchQuery({ query: gql`{ _sql(sql: "select count(*) as n from orders") { rows } }` }).subscribe((result) => values.push(result.data));
+    await settle();
+    expect(values.at(-1)).toEqual({ _sql: { rows: [{ n: 3 }] } });
+    expect(sent[0]).toContain('_sql(sql: "select count(*) as n from orders")');
+    // Another reader's write to a linked dataset: the page's live stream invalidates, and _sql reads again.
+    total = 4;
+    notify!('data');
+    await settle();
+    expect(values.at(-1)).toEqual({ _sql: { rows: [{ n: 4 }] } });
+    expect(sent).toHaveLength(2);
+    watch.unsubscribe();
+    await expect(client.updateQuery({ query: gql`{ _sql { rows } }` }, (data) => data)).rejects.toThrow('_sql is a backend');
   });
 
   it('sends one fresh Idempotency-Key per client.mutate; legacy namespaces keep their shape', async () => {

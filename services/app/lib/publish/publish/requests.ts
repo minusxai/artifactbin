@@ -18,7 +18,7 @@ import type {PreparedHtmlBackend} from '@/lib/html-backends';
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { CONTENT_FIELDS, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
+import { CONTENT_FIELDS, PAGE_SQL_ROOT, PAGE_SQL_TYPES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { prepareCatalog, catalogOf, DatasetError, graphqlRootNameProblem } from '@/lib/datasets';
 import { json, thrownMessage } from '@/lib/http';
@@ -50,16 +50,18 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
 
 /**
  * A dataset link mounts its roots flat at the top of the page schema: one equal to another link's name or to
- * another link's generated root or type refuses the page, naming both links; so does one meeting the built-in viewer.
+ * another link's generated root or type refuses the page, naming both links; so does one meeting the built-in viewer
+ * or `_sql`.
  */
 async function graphqlRootCollision(actor:AccessActor,backends:readonly string[],datasets:readonly HtmlDatasetLink[]):Promise<string|null>{
- const builtIn=(link:string,name:string)=>`link "${link}" ${link===name?'names':'generates'} ${name}, the built-in viewer query; rename the link`;
- // Every page answers the built-in viewer: no link may be named, or generate, its root or type.
- for(const name of backends)if(name===PAGE_VIEWER_ROOT)return builtIn(name,name);
+ const reserved=(name:string)=>name===PAGE_VIEWER_ROOT||name===PAGE_VIEWER_TYPE?'the built-in viewer query':name===PAGE_SQL_ROOT||(PAGE_SQL_TYPES as readonly string[]).includes(name)?'the built-in read-only SQL query':null;
+ const builtIn=(link:string,name:string)=>`link "${link}" ${link===name?'names':'generates'} ${name}, ${reserved(name)}; rename the link`;
+ // Every page answers the built-in viewer and `_sql`: no link may be named, or generate, their roots or types.
+ for(const name of backends)if(name===PAGE_VIEWER_ROOT||name===PAGE_SQL_ROOT)return builtIn(name,name);
  const owner=new Map<string,string>([...backends,...datasets.map(link=>link.name)].map(name=>[name,name]));
  for(const link of datasets){
   for(const name of await pageDatasetRoots(actor,link)){
-   if(name===PAGE_VIEWER_ROOT||name===PAGE_VIEWER_TYPE)return builtIn(link.name,name);
+   if(reserved(name))return builtIn(link.name,name);
    const other=owner.get(name);
    if(other!==undefined&&!(other===link.name&&name===link.name))return `link "${link.name}" generates ${name}, which link "${other}" also names; rename one link`;
    owner.set(name,link.name);

@@ -73,13 +73,14 @@ it('stores a new link as name, dataset and mode and mounts its roots flat, per r
   expect(owner).toMatch(/staff\(where: staff_bool_exp.*\): \[staff!\] @dataset\(link: "staff", file: "[^"]+", version: "live", table: "staff", field: "select"\)/);
   expect(owner).toContain('insert_staff_one(object: staff_insert_input!): staff @dataset');
   expect(owner).not.toContain('staff: staff__Query');
-  // The viewer share: no salary anywhere, no aggregate, no writes (no rule).
+  // The viewer share: no salary anywhere, no writes (no rule); no role has an aggregate root.
   expect(viewer).toMatch(/type staff \{\s+_id: ID!\s+name: String\s+team: String\s+page: String\s+by: String\s+"[^"]+"\s+_can: staff_row_can!\s+\}/);
   expect(viewer).not.toContain('staff_aggregate');
   expect(viewer).not.toContain('type Mutation');
   // Another account through the page is signed_in: its insert input names only the rule's columns, less presets.
   expect(other).toMatch(/input staff_insert_input \{\s+name: String\s+team: String\s+\}/);
-  expect(other).toContain('staff_aggregate');
+  expect(other).not.toContain('staff_aggregate');
+  expect(other).toContain('_sql(sql: String!, params: JSON): SqlResult');
   expect(anonymous).toMatch(/type staff \{\s+_id: ID!\s+name: String\s+"[^"]+"\s+_can: staff_row_can!\s+\}/);
   expect(anonymous).not.toContain('type Mutation');
 });
@@ -91,7 +92,7 @@ it('reads through the page as owner, viewer, signed_in and anonymous under the r
   expect(names(await gql(f.page, f.viewer, query))).toEqual(['ada']);
   expect(names(await gql(f.page, f.other, query))).toEqual(['ada', 'bo']);
   expect(names(await gql(f.page, null, query))).toEqual(['ada', 'bo']);
-  expect((await gql(f.page, f.other, '{ staff_aggregate { aggregate { count sum { salary } } } }')).body.data).toEqual({ staff_aggregate: { aggregate: { count: 2, sum: { salary: 30 } } } });
+  expect((await gql(f.page, f.other, '{ _sql(sql: "select count(*) as n, sum(salary) as s from staff") { rows } }')).body.data).toEqual({ _sql: { rows: [{ n: 2, s: 30 }] } });
   const hidden = await gql(f.page, f.viewer, '{ staff { salary } }');
   expect(hidden.body.errors?.[0]?.message).toMatch(/Cannot query field "salary"/);
 });

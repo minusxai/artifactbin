@@ -50,7 +50,8 @@ import { CAN_FIELD, hasuraSdl, type HasuraCan, type HasuraColumn, type HasuraRow
 import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraGeneratedNames, hasuraNames, storedConfiguration, type HasuraTableNames } from './hasura-names';
 import { datasetBindingCatalog, DatasetBindingUnsupportedError, resolveDatasetBinding } from './authority';
-import { compileAggregate, compileRows, HasuraReadError, type HasuraAggregate, type HasuraReadArgs } from './hasura-read';
+import { compileRows, HasuraReadError, type HasuraReadArgs } from './hasura-read';
+import { runPageSql, type PageSqlAnswer, type PageSqlCall } from './page-sql';
 import { compileMutation, HasuraWriteError, mutationRoots, type HasuraMutationKind } from './hasura-write';
 import type { DatasetSnapshot, DatasetStatement } from './types';
 import { collaborativeColumns } from './cells';
@@ -143,7 +144,7 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
     const read = await port.snapshot(actor, binding, signal);
     const tables = read.catalog.tables.map((table): LoadedTable => {
       const tableId = tableIdentity(table), names = read.names?.[tableId] ?? (() => { throw notFound(); })();
-      return { model: { root: names.root, table: { schema: table.schema, name: table.name }, columns: columnsOf(table, names), aggregations: read.aggregatable?.[tableId] ?? false }, tableId, declared: table };
+      return { model: { root: names.root, table: { schema: table.schema, name: table.name }, columns: columnsOf(table, names) }, tableId, declared: table };
     });
     if (!tables.length) throw notFound();
     return { datasetId: binding.datasetId, snapshot: read, tables, port, fences };
@@ -167,7 +168,6 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
       table: { schema: table.schema, name: table.name },
       // A live link's text columns the owner made collaborative say so (a pinned link never opens one).
       columns: visible ? columnsOf(visible, names, collaborativeColumns(row, table)) : [],
-      aggregations: !!visible && (snapshot?.aggregatable?.[tableId] ?? false),
       ...(visible ? {} : { select: false }),
       ...(write ? { write } : {}),
       can,
@@ -210,7 +210,7 @@ function classify(e: GraphQLError): DatasetGraphqlError {
   return error('the read failed', 'unexpected', e.path);
 }
 
-/** Root resolvers over the loaded tables: one engine statement per list, `_by_pk` and aggregate leaf; `budget` is shared by every dataset in one request. */
+/** Root resolvers over the loaded tables: one engine statement per list and `_by_pk`; `budget` is shared by every dataset in one request. */
 function rootValue(actor: AccessActor, loaded: Loaded, signal: AbortSignal, budget = { statements: 0 }, root: Record<string, unknown> = {}): Record<string, unknown> {
   const run = async (tableId: string, statement: DatasetStatement, window: { limit: number; offset: number }) => {
     if (++budget.statements > DATASET_GRAPHQL_READ_LIMITS.statements) throw new HasuraReadError(`a request runs at most ${DATASET_GRAPHQL_READ_LIMITS.statements} reads`);
@@ -227,25 +227,6 @@ function rootValue(actor: AccessActor, loaded: Loaded, signal: AbortSignal, budg
     root[model.root] = (args: HasuraReadArgs, _: unknown, info?: GraphQLResolveInfo) => rows(args, info);
     root[`${model.root}_by_pk`] = async ({ _id }: { _id: string }, _: unknown, info?: GraphQLResolveInfo) => (await rows({ where: { _id: { _eq: _id } }, limit: 1 }, info))[0] ?? null;
     root[`${model.root}_can`] = () => tableCan(model);
-    if (!model.aggregations) continue;
-    root[`${model.root}_aggregate`] = (args: HasuraReadArgs) => {
-      const memo = new Map<string, Promise<Record<string, unknown> | null>>();
-      const one = (aggregate: HasuraAggregate) => {
-        const key = JSON.stringify(aggregate);
-        if (!memo.has(key)) memo.set(key, run(tableId, compileAggregate(model, args, aggregate), { limit: 1, offset: 0 }).then((r) => r[0] ?? null));
-        return memo.get(key)!;
-      };
-      return {
-        aggregate: {
-          count: async ({ columns, distinct }: { columns?: string[]; distinct?: boolean | null }) => Number((await one({ kind: 'count', ...(columns ? { columns } : {}), ...(distinct ? { distinct } : {}) }))?.value ?? 0),
-          sum: () => one({ kind: 'sum' }),
-          avg: () => one({ kind: 'avg' }),
-          max: () => one({ kind: 'max' }),
-          min: () => one({ kind: 'min' }),
-        },
-        nodes: (_: unknown, __: unknown, info?: GraphQLResolveInfo) => rows(args, info),
-      };
-    };
   }
   return root;
 }
@@ -399,8 +380,8 @@ export interface PageDatasetCheckSource {
 }
 
 /**
- * THE PAGE'S DATASETS AS PUBLISH CHECKS SEE THEM: every link under its page name with every root, column, aggregate
- * and write a role could be given (role-independent, from the declared tables, as `pageDatasetRoots`), so a document
+ * THE PAGE'S DATASETS AS PUBLISH CHECKS SEE THEM: every link under its page name with every root, column and write
+ * a role could be given (role-independent, from the declared tables, as `pageDatasetRoots`), so a document
  * valid for any reader is never refused; `sdl` is all of them as one API, what a resolver's caps.query validates
  * against. Null when no dataset is linked.
  */
@@ -413,7 +394,7 @@ export async function pageDatasetCheckSources(actor: AccessActor, links: readonl
     const names = hasuraNames(declared.tables, { title: row.title, configuration: storedConfiguration(row.dataset_policy) });
     const models = declared.tables.map((table, i): HasuraTableModel => {
       const columns = columnsOf(table, names[i]!);
-      return { root: linkedRoot(link.name, declared.tables.length, names[i]!.root), table: { schema: table.schema, name: table.name }, columns, aggregations: true, write: { insert: columns, update: columns, delete: true } };
+      return { root: linkedRoot(link.name, declared.tables.length, names[i]!.root), table: { schema: table.schema, name: table.name }, columns, write: { insert: columns, update: columns, delete: true } };
     });
     const renames: Record<string, string> = {};
     names.forEach(({ root }, i) => {
@@ -443,6 +424,8 @@ export interface PageDatasets {
   queryRoots(): Record<string, unknown>;
   /** One mutation operation over these datasets (all its fields one dataset's): one atomic, idempotent step. */
   mutate(request: DatasetGraphqlRequest): Promise<DatasetGraphqlReply>;
+  /** The page's `_sql`: one read-only statement over these links as the reader (./page-sql); failures carry `extensions.code`. */
+  sql(call: PageSqlCall): Promise<PageSqlAnswer>;
 }
 
 /** A failure inside a page query root as a GraphQL error the page passes on with its code. */
@@ -454,7 +437,7 @@ function codedError(e: unknown): GraphQLError {
     : error('the read failed', 'unexpected');
   return new GraphQLError(coded.message, { extensions: { code: coded.extensions.code } });
 }
-/** Every resolver function in a root value (the aggregate's leaves included), its failures coded. */
+/** Every resolver function in a root value, its failures coded. */
 function coded(value: unknown): unknown {
   if (typeof value === 'function') return async (...args: unknown[]) => { try { return coded(await (value as (...a: unknown[]) => unknown)(...args)); } catch (e) { throw codedError(e); } };
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
@@ -477,7 +460,6 @@ export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlD
     for (const m of models) if (m.select !== false) {
       roots[m.root] = { table: m.root, field: 'select' };
       roots[`${m.root}_by_pk`] = { table: m.root, field: 'select_by_pk' };
-      if (m.aggregations) roots[`${m.root}_aggregate`] = { table: m.root, field: 'select_aggregate' };
       roots[`${m.root}_can`] = { table: m.root, field: 'select_can' };
     }
     for (const [field, { model, kind }] of mutationRoots(models)) roots[field] = { table: model.root, field: kind };
@@ -500,6 +482,7 @@ export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlD
       if (parsed.operation.operation !== 'mutation') return { errors: [error('not a mutation', 'validation_failed')] };
       return linkedMutation(actor, loaded, parsed.document, { ...request, ...(scope.idempotencyKey ? { idempotencyKey: scope.idempotencyKey } : {}) }, scope.pageId);
     },
+    sql: (call) => runPageSql(loaded.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, signal),
   };
 }
 

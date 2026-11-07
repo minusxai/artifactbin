@@ -21,8 +21,8 @@ interface LinkedSqlTable {
   table: string | null;
   columns: DatasetColumn[];
   rows: Row[];
-  /** May the caller's role aggregate it (the select rule's allow_aggregations; owner and editor always)? */
-  aggregatable: boolean;
+  /** May the caller's role run SQL over it (dataset-permissions `canRunSql`; owner and editor always)? */
+  runsSql: boolean;
 }
 
 /** More rows than the call may take: the caller's tables together exceed `maxRows`. */
@@ -67,7 +67,7 @@ export async function readLinkedDatasetTables(actor: AccessActor, links: readonl
       // A full window may hide more rows: one past it says whether the table fits.
       if (rows.length === limit && (await read(1, limit)).length) throw new LinkedSqlInputLimit();
       remaining -= rows.length;
-      out.push({ link: l.link!.name, table: single ? null : visible.name, columns: [...(id ? [{ name: '_id', type: 'string' as const }] : []), ...columns], rows, aggregatable: snapshot.aggregatable?.[tableId] ?? false });
+      out.push({ link: l.link!.name, table: single ? null : visible.name, columns: [...(id ? [{ name: '_id', type: 'string' as const }] : []), ...columns], rows, runsSql: snapshot.runsSql?.[tableId] ?? false });
     }
   }
   // Rows leave only if the role, policy and head they were read under still hold.
