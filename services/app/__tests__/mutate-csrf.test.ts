@@ -3,6 +3,7 @@
  * longer authorize browser access. Bearer writes remain independent of Origin,
  * and logged-out readers cannot mutate even a public document's dataset.
  */
+import { DOMAIN_READ_ONLY_MESSAGE } from '@artifactbin/contracts/domain-footer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {nativeDatasetClient} from './native-dataset-http';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -123,11 +124,11 @@ describe('cross-site writes', () => {
     const doc=await bind(t.token,ds,'public'); // public
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });
-    expect(res.status).toBe(200);
-    // Anonymous has no insert rule: the page schema has no insert root for it, so nothing runs.
+    // An opaque origin only reads (lib/page-graphql opaqueOriginRead): a mutation is refused before it runs.
+    expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.data ?? null).toBeNull();
-    expect(body.errors?.[0]?.message).toBeTruthy();
+    expect(body.errors?.[0]?.message).toBe(DOMAIN_READ_ONLY_MESSAGE);
     expect((await getArtifactById(ds))!.version).toBe(1);
   });
 });
