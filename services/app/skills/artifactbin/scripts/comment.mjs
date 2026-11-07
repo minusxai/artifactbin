@@ -18,10 +18,12 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   (default 240; at least 60 with --next). Common: --server, --json, --help.
 Watch --next: Claude Code: start it with the Bash tool's run_in_background first, then send your
   reply as your last message and end your turn; you are woken when it prints. Other harnesses:
-  a message can carry text and a command together, so write your reply as the text of the message
-  that runs it (no final message is needed), and run it in the foreground with its
-  default wait and a shell timeout of at least 300000 ms. It returns as soon as someone comments,
-  and on its own within 4 minutes: handle what it printed and run it again until it says to stop
+  in one turn, say your reply to the user (the page link first; a reply form the user set, such
+  as just the link, is what you say), then call the watch: the words before a tool call are your
+  reply, and nothing after the call may be read, since the session can end while it waits. Run
+  it in the foreground with its default wait and a
+  shell timeout of at least 300000 ms. It returns as soon as someone comments, and on its own
+  within 4 minutes: handle what it printed and run it again until it says to stop
   watching. Watching is part of every task, however short the reply. It prints the next comments
   from someone else (one JSON line each; a first call also prints threads still waiting for your
   answer) and exits 0. After 4 minutes it
