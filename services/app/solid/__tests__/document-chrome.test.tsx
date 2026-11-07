@@ -185,7 +185,9 @@ it('never takes the served frame out of the document: a moved iframe loads its s
     const originalSrc = frame.getAttribute('src');
     // The retained read-only rail opens and closes around the frame; it never adopts the frame into UI.
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
-    const rail = await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' });
+    // The rail is a lazy chunk: its first open waits on Vite transforming it, which on a loaded CI runner outlasted the
+    // default one-second find (pr fast run 42355800862, attempt 2).
+    const rail = await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' }, { timeout: 10_000 });
     expect(rail).toHaveTextContent('You have read-only comment access.');
     expect(host.querySelector('[data-mx-frame-slot]')!.childElementCount).toBe(0);
     fireEvent.click(within(rail).getByRole('button', { name: 'Close comments' }));
