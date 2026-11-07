@@ -92,7 +92,8 @@ until [permissions](permissions.md) allow more; a page link never grants writes.
 `client.watchQuery({query}).subscribe(...)` refetches after committed writes and when the dataset
 changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Use these rather
 than polling. The installed `examples/csv-dashboard.html` reads every page and charts it;
-`examples/shared-app.html` writes through a resolver ([resolvers](resolvers.md)).
+`examples/shared-app.html` writes through a resolver ([resolvers](resolvers.md));
+`examples/shared-list.html` writes rows directly and draws its controls from `_can`.
 
 ## Type together (`@afbin/collab`)
 

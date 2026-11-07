@@ -1,17 +1,23 @@
-/** Command: the shared-app starter (examples/shared-app.html) set up in one call. */
-export const DESCRIPTION = `Set up the shared-app starter in one call: files, datasets, rules, ids.
-Copies examples/shared-app.html as index.html, with budget.ts, steps.mjs, guest.mjs and
-  cleanup.mjs (its steps files), into the project; writes transactions.csv (generated sample rows
-  or your --data CSV) and targets.csv; publishes both as datasets; gives targets the starter's
-  rules (everyone reads; viewer and signed_in write); fills the ref: ids and title into index.html.
-Usage: node scripts/new-app.mjs --title NAME [--data FILE.csv] [--dir DIR]
-Flags: --title NAME the app's name, for <title> (a bare title argument works too);
-  --data FILE.csv your own rows (date, merchant, category, amount, payer) instead of sample rows;
-  --dir DIR the project directory (default: the current one; created when missing).
-  Common: --server ORIGIN, --json, --output FILE, --help.
+/** Command: a shared-app starter (examples/shared-app.html or shared-list.html) set up in one call. */
+export const DESCRIPTION = `Set up a shared-app starter in one call: files, datasets, rules, ids.
+--kind budget (default): copies examples/shared-app.html as index.html, with budget.ts,
+  steps.mjs, guest.mjs and cleanup.mjs (its steps files), into the project; writes
+  transactions.csv (generated sample rows or your --data CSV) and targets.csv; publishes both as
+  datasets; gives targets the starter's rules (everyone reads; viewer and signed_in write).
+--kind list: copies examples/shared-list.html as index.html with its steps, guest and cleanup
+  files; publishes an empty entries dataset (name, choice, note, created_by) with own-rows rules
+  (everyone reads; signed-in people add entries and change or remove only their own).
+Both fill the ref: ids and title into index.html.
+Usage: node scripts/new-app.mjs [--kind budget|list] --title NAME [--data FILE.csv] [--dir DIR]
+Flags: --kind budget (a shared budget dashboard) or list (a sign-up sheet, RSVP or roster);
+  --title NAME the app's name, for <title> (a bare title argument works too);
+  --data FILE.csv budget only: your own rows (date, merchant, category, amount, payer) instead
+  of sample rows; --dir DIR the project directory (default: the current one; created when
+  missing). Common: --server ORIGIN, --json, --output FILE, --help.
 Examples:
   node scripts/new-app.mjs --title "Trip budget"
   node scripts/new-app.mjs --title "Our spending" --data ~/Downloads/spending.csv
+  node scripts/new-app.mjs --kind list --title "Riverside cleanup volunteers"
 Gotchas: a rerun is safe: an existing file is kept (and listed as kept), never overwritten, and
   the datasets recorded in transactions.csv.af.json and targets.csv.af.json are reused, so
   nothing is created twice. The steps, guest, cleanup and policy files need no reading or editing;
@@ -37,6 +43,8 @@ const EXAMPLES = new URL('../examples/', import.meta.url);
 const FILES = [['shared-app.html', 'index.html'], ['budget.ts', 'budget.ts'],
   ['shared-app-steps.mjs', 'steps.mjs'], ['shared-app-guest.mjs', 'guest.mjs'],
   ['shared-app-cleanup.mjs', 'cleanup.mjs']];
+const LIST_FILES = [['shared-list.html', 'index.html'], ['shared-list-steps.mjs', 'steps.mjs'],
+  ['shared-list-guest.mjs', 'guest.mjs'], ['shared-list-cleanup.mjs', 'cleanup.mjs']];
 const ROLES = ['date', 'merchant', 'category', 'amount', 'payer'];
 const CHECK = 'node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps ' +
   'steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
@@ -78,12 +86,39 @@ async function transactions(base, data) {
   return run.stdout;
 }
 
-/** The dataset FILE's companion records, or a new one published from it. */
-async function dataset(file, title, server, options) {
+/** The dataset FILE's companion records, or a new one published from it (extra: publish flags). */
+async function dataset(file, title, server, options, extra = {}) {
   const companion = await optionalFile(file + '.af.json');
   if (companion) return {id: dataBaseline(companion, file, server).id, reused: true};
-  const done = await publishCommand({values: {server, title}, positionals: [file]}, options);
+  const done = await publishCommand({values: {server, title, ...extra}, positionals: [file]},
+    options);
   return {id: done.id, reused: false};
+}
+
+/** The list starter: its files, an empty entries dataset with own-rows rules, the filled page. */
+async function listApp({title, dir, at, server, options}) {
+  const created = [], kept = [];
+  await mkdir(dir, {recursive: true});
+  const starter = await readFile(new URL('shared-list.html', EXAMPLES), 'utf8');
+  const outputs = [...await Promise.all(LIST_FILES.map(async ([from, to]) => [to,
+    await readFile(new URL(from, EXAMPLES))])), ['entries.csv', 'name,choice,note,created_by\n']];
+  for (const [name, bytes] of outputs) (await create(at(name), bytes) ? created : kept).push(name);
+  const entries = await dataset(at('entries.csv'), `${title} entries`, server, options,
+    {name: 'entries', template: 'own-rows', 'owner-column': 'created_by'});
+  const page = await readFile(at('index.html'), 'utf8'), filledPage = fill(page, starter,
+    {title, ids: {entries: entries.id}});
+  if (filledPage !== page) await writeFile(at('index.html'), filledPage);
+  const rules = 'entries: everyone reads; signed-in people add entries and change or remove only ' +
+    'their own';
+  const note = [created.length ? `created ${created.join(', ')}` : '',
+    kept.length ? `kept ${kept.join(', ')} (already there; not overwritten)` : '',
+    `entries ${entries.id} (${entries.reused ? 'reused' : 'empty, own-rows rules set'})`,
+    filledPage !== page ? 'index.html now links it and is titled ' + JSON.stringify(title) : ''
+  ].filter(Boolean).join('; ') + '.';
+  return {project: dir, title, kind: 'list', created, kept,
+    datasets: {entries: {id: entries.id, rows: 0, reused: entries.reused}}, rules, note,
+    next: 'Next: in index.html edit only APP: its [bracketed] text and choices (the options ' +
+      `people pick from); then ${CHECK}`};
 }
 
 /** Gives the targets dataset the starter's rules; nothing is written when they already hold. */
@@ -99,7 +134,7 @@ async function applyRules(client, id) {
 /** index.html with the starter's placeholders that are still there replaced. */
 function fill(html, starter, {title, ids, data}) {
   const placeholder = /<title>(\[[^\]<]+\])<\/title>/.exec(starter)?.[1];
-  let out = html.replaceAll('ref:DATASET_ID', 'ref:' + ids.transactions)
+  let out = html.replaceAll('ref:DATASET_ID', 'ref:' + (ids.transactions ?? ids.entries))
     .replaceAll('ref:TARGETS_ID', 'ref:' + ids.targets);
   if (placeholder) out = out.replaceAll(`<title>${placeholder}</title>`,
     `<title>${htmlText(title)}</title>`);
@@ -113,6 +148,14 @@ export async function newAppCommand({values, positionals}, options = {}) {
   const base = options.cwd ?? process.cwd(), dir = resolve(base, values.dir ?? '.');
   const server = serverOrigin(selectedServer(values, options.env));
   const at = name => path.join(dir, name), created = [], kept = [];
+  const kind = values.kind ?? 'budget';
+  if (!['budget', 'list'].includes(kind)) throw new ToolError('invalid_kind',
+    `--kind ${kind} is not a starter.`, 2, 'Use --kind budget or --kind list.');
+  if (kind === 'list') {
+    if (values.data !== undefined) throw new ToolError('data_not_for_list',
+      'A list starts empty: people add the entries.', 2, 'Drop --data and rerun.');
+    return listApp({title, dir, at, server, options});
+  }
   const rows = await transactions(base, values.data);
   const existing = await optionalFile(at('transactions.csv'));
   if (values.data !== undefined && existing && String(existing) !== rows) {

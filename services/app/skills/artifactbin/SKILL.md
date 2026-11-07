@@ -20,7 +20,8 @@ Describe testing, build and permissions only from what `check` reported.
 Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
-  -steps, -guest, -cleanup .mjs); csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
+  -steps, -guest, -cleanup .mjs); shared-list.html (shared-list-steps, -guest, -cleanup .mjs);
+  csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
   gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
@@ -75,8 +76,9 @@ settings, never in chat. ACLs and trash have no script. Groups: `node scripts/gr
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
   index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (shared edits: everyone's
   changes are dataset rows, which its resolver checks before writing; it sets up the files,
-  datasets and rules and prints the next step);
-  `cp examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have:
+  datasets and rules and prints the next step); `node scripts/new-app.mjs --kind list --title
+  "NAME"` (a list people add themselves to and change only their own entry: sign-up sheet, RSVP,
+  roster); `cp examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have:
   dashboard, report or chart); `cp examples/report.html index.html` (a report without data). Data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.

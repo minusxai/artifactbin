@@ -22,6 +22,8 @@ function fakeServer(){
   if(pathname==='/api/artifacts'&&method==='POST'){const id='DATA'+String(++made).padStart(4,'0');
    policies.set(id,{revision:1,policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[]}]}});
    return Response.json({id,url:server+'/a/'+id,version:1,state:'a'.repeat(64),format:'dataset'},{status:201});}
+  const templates=/^\/api\/artifacts\/(\w+)\/policy\/templates$/.exec(pathname);
+  if(templates&&method==='GET')return Response.json({revision:policies.get(templates[1]!).revision,templates:[{name:'own-rows',ok:true,policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'anonymous'}],insert_permissions:[{role:'signed_in'}]}]}}]});
   const policy=/^\/api\/artifacts\/(\w+)\/policy$/.exec(pathname);
   if(policy&&method==='GET')return Response.json({...policies.get(policy[1]!),source:'v3',readBack:'Table public.rows'});
   if(policy&&method==='PUT'){const saved={revision:policies.get(policy[1]!).revision+1,policy:sorted(body.policy)};policies.set(policy[1]!,saved);
@@ -48,7 +50,7 @@ it('sets up the shared app in one call: files, two datasets, the rules and the f
   expect(result.created).toEqual(['index.html','budget.ts','steps.mjs','guest.mjs','cleanup.mjs','transactions.csv','targets.csv']);
   expect(result.kept).toEqual([]);
   expect(result.datasets).toEqual({transactions:{id:'DATA0001',rows:expect.any(Number),reused:false},targets:{id:'DATA0002',rows:1,reused:false}});
-  expect(result.datasets.transactions.rows).toBeGreaterThan(200);
+  expect((result.datasets as any).transactions.rows).toBeGreaterThan(200);
   // The two creates carry readable titles; the rules go on targets only, at the revision read.
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','POST /api/artifacts','GET /api/artifacts/DATA0002/policy','PUT /api/artifacts/DATA0002/policy']);
   expect(p.calls[0]!.body).toMatchObject({title:'Household budget transactions (sample)',visibility:'unlisted'});
@@ -88,7 +90,7 @@ it('takes your CSV by relative or absolute path and refuses one that differs fro
  try{
   await writeFile(path.join(p.root,'bank.csv'),'date,merchant,category,amount,payer\n2026-01-02,Shop,Groceries,12.50,Ada\n');
   const result=await p.run({dir:'app',title:'Our money',data:'bank.csv'});
-  expect(result.datasets.transactions).toMatchObject({rows:1,reused:false});
+  expect((result.datasets as any).transactions).toMatchObject({rows:1,reused:false});
   expect(p.calls[0]!.body).toMatchObject({title:'Our money transactions',dataset:expect.stringContaining('Shop,Groceries')});
   // Your own rows are not sample data.
   expect(await readFile(path.join(p.dir,'index.html'),'utf8')).not.toContain('· sample data');
@@ -109,5 +111,27 @@ it('keeps a file that already exists and says so, and asks for a title with the 
   const result=await p.run({dir:'app',title:'Budget'});
   expect(result.kept).toEqual(['steps.mjs']);expect(result.note).toContain('kept steps.mjs');
   expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).toBe('// mine\n');
+ }finally{await p.done();}
+});
+
+it('sets up the list starter: its files, an empty entries dataset with own-rows rules and the filled page',async()=>{
+ const p=await project();
+ try{
+  const result=await p.run({dir:'app',kind:'list',title:'Riverside cleanup'});
+  expect((await readdir(p.dir)).filter(name=>!name.endsWith('.af.json')).sort()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
+  expect(result.datasets).toEqual({entries:{id:'DATA0001',rows:0,reused:false}});
+  // One create (the header only, named entries), then the own-rows template stamped on created_by.
+  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
+  expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',name:'entries',dataset:'name,choice,note,created_by\n',columns:[{name:'name'},{name:'choice'},{name:'note'},{name:'created_by'}]});
+  const html=await readFile(path.join(p.dir,'index.html'),'utf8');
+  expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<title>Riverside cleanup</title>');
+  expect(html).not.toMatch(/ref:DATASET_ID|\[List name\]/);
+  expect(result.next).toBe('Next: in index.html edit only APP: its [bracketed] text and choices (the options people pick from); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs');
+  // A rerun reuses the dataset and writes nothing.
+  p.calls.length=0;
+  expect((await p.run({dir:'app',kind:'list',title:'Riverside cleanup'})).kept).toHaveLength(5);
+  expect(p.calls).toEqual([]);
+  await expect(p.run({dir:'app',kind:'list',title:'X',data:'rows.csv'})).rejects.toMatchObject({code:'data_not_for_list',exit:2});
+  await expect(p.run({dir:'app',kind:'poll',title:'X'})).rejects.toMatchObject({code:'invalid_kind',exit:2});
  }finally{await p.done();}
 });

@@ -42,7 +42,7 @@ async function load(html: string, answer: (query: string) => unknown): Promise<P
   const dom = new JSDOM(html.replace(/<script type="module"[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only'});
   const page: Page = {dom, queries: [], specs: []};
   Object.assign(dom.window, {IntersectionObserver: class { observe() {} disconnect() {} }, stubs: {
-    apollo: {gql: (strings: readonly string[]) => strings.join(''),
+    apollo: {gql: (strings: readonly string[]) => strings.join(''), onResolverChange: () => ({unsubscribe() {}}),
       client: {query: async ({query}: {query: string}) => { page.queries.push(query); return answer(query); }}},
     compile: (spec: Record<string, unknown>) => { page.specs.push(spec); return {spec}; },
     vega: {parse: (spec: unknown) => spec, expressionInterpreter: {}, View: class {
@@ -56,7 +56,7 @@ async function load(html: string, answer: (query: string) => unknown): Promise<P
   try {
     for (const script of scripts) {
       const body = script.replace(/^import .*$/gm, '');
-      await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile}=stubs,{client,gql}=stubs.apollo;${body}})()`);
+      await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile}=stubs,{client,gql,onResolverChange}=stubs.apollo;${body}})()`);
     }
   } catch (error) {
     page.error = error;
@@ -88,7 +88,7 @@ const rowsAnswer = (name: string) => () => ({data: {[name]: ROWS}});
 const sum = (key: 'completed' | 'waiting') => ROWS.reduce((total, row) => total + row[key], 0);
 
 it('imports only hosted @afbin modules from every starter', () => {
-  for (const name of ['csv-dashboard.html', 'deck.html', 'report.html', 'shared-app.html']) {
+  for (const name of ['csv-dashboard.html', 'deck.html', 'report.html', 'shared-app.html', 'shared-list.html']) {
     const names = [...read(name).matchAll(/(?:from|import)\s*['"]@afbin\/([a-z0-9-]+)['"]/g)].map(m => m[1]!);
     expect(names.length, name).toBeGreaterThan(0);
     for (const imported of names) expect(HOSTED.has(imported), `${name} imports @afbin/${imported}`).toBe(true);
@@ -204,4 +204,26 @@ it('hands Vega-Lite specs that the pinned libraries compile and render with mark
     view.finalize();
     expect(svg, JSON.stringify(spec.mark)).toMatch(/class="mark-(?:rect|line|symbol)[^"]*"[^>]*>\s*<path/);
   }
+});
+
+it('shows the list starter\'s add form, and Edit and Remove only on entries the server lets this viewer change', async () => {
+  const entries = [{_id: 'a1', name: 'Ada', choice: 'First choice', note: 'gloves', _can: {update: true, delete: true}},
+    {_id: 'b2', name: 'Bo', choice: 'Second choice', note: '', _can: {update: false, delete: false}}];
+  const signedIn = await load(fill(read('shared-list.html')),
+    () => ({data: {entries, entries_can: {insert: true}, viewer: {signedIn: true}}}));
+  expect(signedIn.error).toBeUndefined();
+  const doc = signedIn.dom.window.document, ids = (suffix: string) =>
+    [...doc.querySelectorAll(`[data-af-id$="${suffix}"]`)].map(n => (n as HTMLElement).dataset.afId);
+  expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(false);
+  expect(ids('-edit')).toEqual(['entry-a1-edit']);expect(ids('-remove')).toEqual(['entry-a1-remove']);
+  expect(doc.querySelector('[data-af-id="choice-first-choice-count"]')?.textContent).toBe('1 signed up');
+  expect(doc.querySelector('[data-af-id="choice-third-choice-empty"]')?.textContent).toBe('No one yet.');
+  expect(doc.querySelector('#status')?.textContent).toBe('2 signed up so far.');
+  // Signed out: no form, the sign-in prompt, and no controls even on an entry the owner could change.
+  const guest = await load(fill(read('shared-list.html')), () => ({data: {entries: entries.map(e => ({...e,
+    _can: {update: false, delete: false}})), entries_can: {insert: false}, viewer: {signedIn: false}}}));
+  const g = guest.dom.window.document;
+  expect((g.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
+  expect((g.querySelector('#signin') as HTMLElement).hidden).toBe(false);
+  expect(g.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]').length).toBe(0);
 });
