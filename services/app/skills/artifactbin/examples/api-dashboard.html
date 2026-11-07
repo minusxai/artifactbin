@@ -1,0 +1,139 @@
+<!doctype html>
+<!-- Example: an API dashboard with shared notes. Usage: and Gotchas: are above APP; keep it. -->
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="artifactbin:design-system" content="meridian">
+<title>[Dashboard name]</title><!-- the page's name: the heading, the tab and link previews -->
+<link rel="af-resolver" data-af-name="api" href="./api.ts">
+<link rel="af-dataset" data-af-name="notes" href="ref:DATASET_ID">
+<script type="module" id="app-config">
+// Items from an HTTP API behind a key, grouped by one field with totals; signed-in readers add
+//   notes on an item that everyone sees, and change or remove only their own.
+// Usage: node scripts/new-app.mjs --kind api --url URL --title "NAME" sets this page up as
+//   index.html with api.ts, its notes dataset and rules, and prints the next step: edit only
+//   APP, then publish and check (node scripts/new-app.mjs --help).
+// Gotchas: the key is a secret only the page owner sets (page settings, Resolvers, API_KEY; Test
+//   connection then lists the API's field names); until then the page says why no items load.
+//   Who may add or remove a note comes from the server (notes_can and each note's _can).
+// Built with: one HTML page; an api.ts resolver that reads the API on the server with the
+//   owner's key; a notes dataset with own-rows rules, written directly through its generated API.
+// The only part to edit. fields: the API's field for each item's id, name, group and amount.
+window.APP = {
+  fields: {id:'id', name:'name', group:'category', amount:'amount'},
+  only: {}, // show only items whose fields hold these values, e.g. {status:'open'}
+  currency: 'USD', // '' for plain numbers
+  kicker: '[Team · source]',
+  summary: '[What these items are, and what the notes are for.]',
+  labels: {items:'[Items]', amount:'[Total amount]'}};
+</script>
+<style>
+*{box-sizing:border-box}body{line-height:1.5}.number{font-variant-numeric:tabular-nums}
+main{max-width:980px;margin:auto;padding:clamp(20px,4vw,48px)}p{max-width:68ch}.muted{opacity:.75}
+button,input{font:inherit;padding:6px 10px;color:inherit;background:var(--background);
+  border:1px solid currentColor;border-radius:4px}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--primary);outline-offset:2px}[role=status]{min-height:1.5em}
+.totals{display:flex;flex-wrap:wrap;gap:16px 40px;margin:20px 0}
+.totals div{border-top:2px solid currentColor;padding-top:6px}
+.totals b{display:block;font-size:28px}
+section{margin-top:28px}section h2{display:flex;justify-content:space-between;gap:12px;margin:0;
+  border-bottom:2px solid currentColor;padding-bottom:6px}
+ul{list-style:none;margin:0;padding:0}.item{padding:12px 0;border-bottom:1px solid var(--border)}
+.head{display:flex;justify-content:space-between;gap:12px}.notes li{display:flex;gap:12px;
+  align-items:center;justify-content:space-between;padding:4px 0 4px 12px;border-left:2px solid
+  var(--border)}.add-note{display:flex;gap:8px;margin-top:6px}.add-note input{flex:1;min-width:0}
+</style>
+</head><body><main>
+<p id="kicker" class="muted"></p><h1 id="title" class="t-display-l"></h1><p id="summary"></p>
+<div id="totals" class="totals"></div>
+<p id="signin" hidden>Sign in to add a note. Everyone with the link reads the notes.</p>
+<p id="status" role="status" aria-live="polite">Loading…</p>
+<div id="board" aria-busy="true"></div>
+</main>
+<script type="module">
+import {client,gql,onResolverChange} from '@afbin/apollo';
+const APP=window.APP,F=APP.fields,$=s=>document.querySelector(s),status=$('#status');
+// Two requests, so items that cannot load (an unset key) never hide the notes.
+const itemsQuery=gql`{api{items}}`;
+const notesQuery=gql`{notes(limit:5000){_id item note _can{delete}} notes_can{insert}
+  viewer{signedIn}}`;
+const insert=gql`mutation Add($o:notes_insert_input!){insert_notes_one(object:$o){_id}}`;
+const remove=gql`mutation Remove($id:ID!){delete_notes_by_pk(_id:$id){_id}}`;
+let items=null,problem='',notes=[],canAdd=false,signedIn=false;
+for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,summary:APP.summary}))
+  $('#'+id).textContent=text;
+const money=new Intl.NumberFormat(undefined,APP.currency?{style:'currency',currency:APP.currency,
+  maximumFractionDigits:0}:{maximumFractionDigits:2});
+const done=result=>{if(result.errors?.length)throw Error(result.errors[0].message);return result;};
+async function loadItems(){
+  try{const {data}=done(await client.query({query:itemsQuery,fetchPolicy:'network-only'}));
+    const only=Object.entries(APP.only??{}).filter(([,value])=>value!==undefined);
+    items=data.api.items.filter(r=>only.every(([key,value])=>String(r[key])===String(value)))
+      .map(r=>({id:String(r[F.id]??''),name:String(r[F.name]??''),group:String(r[F.group]??
+        'Other'),amount:Number(r[F.amount])||0}));problem='';}
+  catch(error){items=null;problem=`Could not read the ${APP.labels.items.toLowerCase()} from ` +
+    `the API: ${error.message}. If its key is not set yet, the page owner sets API_KEY in the ` +
+    "page's settings under Resolvers.";}}
+async function loadNotes(){
+  const {data}=done(await client.query({query:notesQuery,fetchPolicy:'network-only'}));
+  notes=data.notes;canAdd=data.notes_can.insert;signedIn=data.viewer.signedIn;}
+// Script-made nodes take data-af-ids from the item's id, the group or the note's _id.
+const node=(tag,id,props={})=>{const n=Object.assign(document.createElement(tag),props);
+  if(id)n.dataset.afId=id;return n;};
+const slug=text=>String(text).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'x';
+const sum=rows=>rows.reduce((total,row)=>total+row.amount,0);
+function noteList(key,list,showItem){const ul=node('ul',key+'-notes',{className:'notes'});
+  ul.append(...list.map(n=>{const li=node('li','note-'+n._id);
+    li.append(node('span','note-'+n._id+'-text',{textContent:(showItem?n.item+': ':'')+n.note}));
+    // Remove only where the server says this viewer may (their own notes; the owner's all).
+    if(n._can.delete)li.append(node('button','note-'+n._id+'-remove',{type:'button',
+      textContent:'Remove',ariaLabel:'Remove note: '+n.note,onclick:()=>void write('Removed a ' +
+        'note.',{mutation:remove,variables:{id:n._id}})}));
+    return li;}));return ul;}
+function itemView(item){const key='item-'+slug(item.id),li=node('li',key,{className:'item'});
+  const head=node('div',key+'-head',{className:'head'});
+  head.append(node('strong',key+'-name',{textContent:item.name}),node('span',key+'-amount',
+    {className:'number',textContent:money.format(item.amount)}));
+  li.append(head,noteList(key,notes.filter(n=>n.item===item.id)));
+  if(canAdd){const form=node('form',key+'-add',{className:'add-note'}),input=node('input',
+    key+'-note',{required:true,maxLength:280,ariaLabel:'Note on '+item.name,placeholder:'Note'});
+    form.append(input,node('button',key+'-add-button',{type:'submit',textContent:'Add note'}));
+    form.onsubmit=event=>{event.preventDefault();const note=input.value.trim();
+      if(note)void write(`Added a note on ${item.name}.`,{mutation:insert,variables:{o:{
+        item:item.id,note}}});};
+    li.append(form);}
+  return li;}
+function render(){
+  $('#signin').hidden=canAdd||signedIn;
+  const list=items??[],groups=new Map(),ids=new Set(list.map(item=>item.id));
+  for(const item of list)groups.set(item.group,[...groups.get(item.group)??[],item]);
+  const stat=(id,label,value)=>{const div=node('div',id);div.append(node('span',id+'-label',
+    {className:'muted',textContent:label}),node('b',id+'-value',{className:'number',
+      textContent:value}));return div;};
+  $('#totals').replaceChildren(...items?[stat('total-count',APP.labels.items,String(list.length)),
+    stat('total-amount',APP.labels.amount,money.format(sum(list)))]:[]);
+  const sections=[...groups].map(([group,rows])=>{const key='group-'+slug(group),
+    section=node('section',key),h2=node('h2',key+'-title',{className:'t-title'});
+    h2.append(node('span',key+'-name',{textContent:group}),node('span',key+'-total',{className:
+      'muted number',textContent:`${rows.length} · ${money.format(sum(rows))}`}));
+    const ul=node('ul',key+'-items');ul.append(...rows.map(itemView));
+    section.append(h2,ul);return section;});
+  // Notes on items the API no longer lists (or cannot list now) stay readable under their id.
+  const other=notes.filter(n=>!ids.has(n.item));
+  if(other.length){const section=node('section','other-notes');
+    section.append(node('h2','other-notes-title',{className:'t-title',textContent:
+      'Notes on other items'}),noteList('other-items',other,true));sections.push(section);}
+  $('#board').replaceChildren(...sections);$('#board').setAttribute('aria-busy','false');}
+const summary=()=>problem||`${items.length} ${APP.labels.items.toLowerCase()}, ${notes.length} ` +
+  (notes.length===1?'note.':'notes.');
+// One write, then a fresh read of the notes; the status names what happened or what went wrong.
+async function write(message,request){status.textContent='Saving…';
+  try{done(await client.mutate(request));await loadNotes();render();status.textContent=message;}
+  catch(error){status.textContent=error.message||'Could not save.';}}
+// A new note, or signing in or out, refreshes the notes; a changed resolver re-reads the items.
+onResolverChange(names=>{const work=[];if(names.includes('api'))work.push(loadItems());
+  if(names.includes('notes')||names.includes('viewer'))work.push(loadNotes());
+  if(work.length)void Promise.all(work).then(render).catch(()=>{});});
+try{await Promise.all([loadItems(),loadNotes()]);render();status.textContent=summary();}
+catch(error){render();status.textContent=error.message||'Could not load the notes.';}
+</script>
+</body></html>

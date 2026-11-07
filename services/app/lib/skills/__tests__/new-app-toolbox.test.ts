@@ -135,3 +135,48 @@ it('sets up the list starter: its files, an empty entries dataset with own-rows 
   await expect(p.run({dir:'app',kind:'poll',title:'X'})).rejects.toMatchObject({code:'invalid_kind',exit:2});
  }finally{await p.done();}
 });
+
+it('sets up the API starter: the resolver aimed at --url, an empty notes dataset with own-rows rules and the filled page',async()=>{
+ const p=await project();
+ try{
+  // A key file beside the project is never read: nothing the starter writes carries its value.
+  await writeFile(path.join(p.dir,'pipeline-key.txt'),'sk-live-never-copied\n');
+  const result=await p.run({dir:'app',kind:'api',title:'Open deals',url:'https://crm.example.com/v1/deals?status=open'});
+  expect((await readdir(p.dir)).filter(name=>!name.endsWith('.af.json')).sort()).toEqual(['api.ts','cleanup.mjs','guest.mjs','index.html','notes.csv','pipeline-key.txt','steps.mjs']);
+  expect(result.created).toEqual(['index.html','api.ts','steps.mjs','guest.mjs','cleanup.mjs','notes.csv']);
+  expect(result.datasets).toEqual({notes:{id:'DATA0001',rows:0,reused:false}});
+  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
+  expect(p.calls[0]!.body).toMatchObject({title:'Open deals notes',name:'notes',dataset:'item,note,created_by\n'});
+  // The resolver reads that address, and the key goes only to its host, as a secret the owner sets.
+  const resolver=await readFile(path.join(p.dir,'api.ts'),'utf8');
+  expect(resolver).toContain("const HOST = 'crm.example.com';");expect(resolver).toContain("const PATH = '/v1/deals?status=open';");
+  expect(resolver).toContain('export const secrets = { API_KEY: HOST };');expect(resolver).not.toContain('api.example.com');
+  const html=await readFile(path.join(p.dir,'index.html'),'utf8');
+  expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<link rel="af-resolver" data-af-name="api" href="./api.ts">');
+  expect(html).toContain('<title>Open deals</title>');expect(html).not.toMatch(/ref:DATASET_ID|\[Dashboard name\]/);
+  for(const name of await readdir(p.dir))if(name!=='pipeline-key.txt')expect(await readFile(path.join(p.dir,name),'utf8'),name).not.toContain('sk-live');
+  expect(JSON.stringify(result)).not.toContain('sk-live');
+  expect(result.rules).toBe('notes: everyone reads; signed-in people add notes and change or remove only their own');
+  // The next step: edit APP, publish and check, and send the owner to Resolvers for the key.
+  expect(result.next).toMatch(/^Next: in index\.html edit only APP: fields \(the API's field names\)/);
+  expect(result.next).toContain('node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs');
+  expect(result.next).toMatch(/API_KEY[^.]*Resolvers/);expect(result.next).toContain('Not tested');
+  // A rerun keeps every file and the dataset, and writes nothing.
+  p.calls.length=0;
+  const again=await p.run({dir:'app',kind:'api',title:'Open deals',url:'https://crm.example.com/v1/deals?status=open'});
+  expect(again.kept).toEqual(['index.html','api.ts','steps.mjs','guest.mjs','cleanup.mjs','notes.csv']);
+  expect(again.datasets).toEqual({notes:{id:'DATA0001',rows:0,reused:true}});expect(p.calls).toEqual([]);
+ }finally{await p.done();}
+});
+
+it('refuses an API starter without an HTTPS address on port 443, or with --data, before writing anything',async()=>{
+ const p=await project();
+ try{
+  await expect(p.run({dir:'app',kind:'api',title:'Deals'})).rejects.toMatchObject({code:'missing_url',exit:2,recovery:expect.stringContaining('--kind api --url https://')});
+  for(const url of ['http://crm.example.com/v1/deals','https://crm.example.com:8443/v1/deals','https://user:pw@crm.example.com/v1','https://127.0.0.1/v1','https://localhost/v1','not a url'])
+   await expect(p.run({dir:'app',kind:'api',title:'Deals',url}),url).rejects.toMatchObject({code:'invalid_url',exit:2,recovery:expect.stringContaining('HTTPS on port 443')});
+  await expect(p.run({dir:'app',kind:'api',title:'Deals',url:'https://crm.example.com/v1',data:'rows.csv'})).rejects.toMatchObject({code:'data_not_for_api',exit:2});
+  await expect(p.run({dir:'app',title:'Budget',url:'https://crm.example.com/v1'})).rejects.toMatchObject({code:'url_not_for_kind',exit:2});
+  expect(p.calls).toEqual([]);expect(await readdir(p.dir)).toEqual([]);
+ }finally{await p.done();}
+});

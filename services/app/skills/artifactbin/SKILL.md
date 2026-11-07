@@ -21,9 +21,9 @@ Describe testing, build and permissions only from what `check` reported.
 Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
-  -steps, -guest, -cleanup .mjs); shared-list.html (shared-list-steps, -guest, -cleanup .mjs);
-  csv-dashboard.html (csv-dashboard-steps.mjs); report.html;
-  gen-transactions.mjs; repairs.csv
+  -steps, -guest, -cleanup .mjs); shared-list.html and api-dashboard.html (api-dashboard.ts),
+  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html (csv-dashboard-steps.mjs);
+  report.html; gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
 serve, new-app, new-page
@@ -80,10 +80,12 @@ script. Groups: `node scripts/groups.mjs list`
   changes are dataset rows, which its resolver checks before writing; it sets up the files,
   datasets and rules and prints the next step); `node scripts/new-app.mjs --kind list --title
   "NAME"` (a list people add themselves to and change only their own entry: sign-up sheet, RSVP,
-  roster); `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
+  roster); `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items
+  behind a key, grouped with totals, with notes signed-in readers share);
+  `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it publishes the dataset and writes a DATA block over its columns,
   and `--artifact ID` rebuilds an existing page); `cp examples/report.html index.html` (a report
-  without data). Data
+  without data). Other data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
