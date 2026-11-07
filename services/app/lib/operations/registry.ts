@@ -745,10 +745,10 @@ const refreshAssetOp: Operation = {
 
 const queryResourceOp:Operation={
  name:'query_resource',title:'Query dataset rows or declared document queries',http:{method:'POST',path:'/api/artifacts/{id}/query'},
- description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows.',
+ description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows. SQL needs allow_aggregations in your role\'s select rule for every table you can read (owner and editors always have it); without it, read rows by table name.',
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
  annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
- errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'}],
+ errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'},{status:403,code:'permission_denied',fix:'your role\'s select rule does not allow aggregations, so SQL is refused; omit sql and pass name to read the table\'s rows, or ask the owner to allow aggregations'}],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
 };
 

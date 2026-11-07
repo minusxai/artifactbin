@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import { artifactState, readableArtifact } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {catalogOf, executeCatalog, DatasetError} from '../datasets';
-import {datasetReadAccess, datasetView, viewCatalog} from '../dataset-permissions';
+import {datasetReadAccess, datasetView, sqlAggregationRefusal, viewCatalog} from '../dataset-permissions';
 import {json, parseQueryRequest} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
@@ -40,6 +40,9 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
   if(row.format==='dataset'){
    const stored=catalogOf(row);if(!stored)return json({error:'not_a_dataset'},400);
    const catalog=decision?.allowed?viewCatalog(decision,stored):stored;
+   // Caller SQL can aggregate: refused as caps.sql refuses it when the role's rule lacks allow_aggregations.
+   const refused=typeof body.sql==='string'&&decision?.allowed?sqlAggregationRefusal(decision):null;
+   if(refused)return json({error:'permission_denied',message:`SQL can aggregate, and your role's rule for ${refused.schema}.${refused.name} does not allow aggregations`},403);
    const selected=typeof body.name==='string'?catalog.tables.find(table=>table.name===body.name||`${table.schema}.${table.name}`===body.name):catalog.tables.length===1?catalog.tables[0]:undefined;
    if(body.name&&!selected||!body.sql&&!selected)return json({error:'unknown_table',hint:'Select a table with --name.',names:catalog.tables.map(table=>`${table.schema}.${table.name}`)},400);
    const quote=(value:string)=>'"'+value.replaceAll('"','""')+'"';

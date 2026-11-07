@@ -108,6 +108,17 @@ export function canAggregate(decision: DatasetReadDecision, table: DatasetTableN
   return !!selectFor(decision, table)?.allow_aggregations;
 }
 
+/**
+ * Caller-written SQL can aggregate, so it needs `allow_aggregations` on every table the role reads: the first
+ * readable table whose rule lacks it, or null. Tables the role cannot read are skipped (they answer no rows).
+ * The SQL is never inspected (a count hides in subqueries, windows and scalar calls); caps.sql refuses the same
+ * way (lib/page-operations sql), and a flagless role reads rows through the server-built table read.
+ */
+export function sqlAggregationRefusal(decision: DatasetReadDecision): DatasetTableName | null {
+  if (!decision.allowed || decision.admin) return null;
+  return decision.tables.find((t) => t.permission && !canAggregate(decision, t)) ?? null;
+}
+
 const notFound = () => new DatasetError('Dataset not found', 404);
 /** Declared by the dataset (never a door's decoration, such as the page row ID). */
 const declared = (decision: DatasetReadDecision, table: DatasetTableName) => entryFor(decision, table)?.columns ?? [];

@@ -17,6 +17,7 @@ import { POST as tables } from '@/app/a/[id]/tables/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as frame } from '@/app/a/[id]/events/frame/route';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
+import { POST as queryRead } from '@/app/api/artifacts/[id]/query/route';
 
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -75,6 +76,35 @@ it('SQL doors (/a/:id/tables, query_resource) run over the role view: hidden col
   const run = async (actor: AccessActor) => (await op.run({ actor, base: 'http://localhost:3000', request: request(`/api/artifacts/${id}/query`) } as unknown as OpContext, { id })).body;
   sees(JSON.stringify(await run(owner.actor)), true);
   sees(JSON.stringify(await run(viewer.actor)), false);
+});
+
+it('query_resource SQL needs allow_aggregations, as caps.sql does: a flagless role reads rows by table name only', async () => {
+  const { owner, viewer, other, id } = await setup();
+  const db = await getDb();
+  const editor = await person('editor');
+  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor')", [id, editor.userId, editor.email]);
+  // signed_in (the link holder) gets a flagless rule too; viewer keeps POLICY's.
+  const flagless = { columns: ['name', 'team'], filter: { team: { _eq: 'red' } } };
+  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify({ ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [...POLICY.tables[0]!.select_permissions, { role: 'signed_in', permission: flagless }] }] })]);
+  const query = (token: string, body: Record<string, unknown>) => queryRead(request(`/api/artifacts/${id}/query`, { method: 'POST', token, json: body }), params(id));
+  for (const who of [viewer, other]) {
+    for (const sql of ['select count(*) as n from rows', 'select team, count(*) from rows group by team', 'select sum(length(name)) from rows', 'select * from rows']) {
+      const refused = await query(who.token, { sql });
+      expect(refused.status, sql).toBe(403);
+      expect(await refused.json()).toEqual({ error: 'permission_denied', message: "SQL can aggregate, and your role's rule for public.rows does not allow aggregations" });
+    }
+    // The server-built row read still answers the role view.
+    for (const body of [{}, { name: 'public.rows' }]) {
+      const rows = await query(who.token, body);
+      expect(rows.status).toBe(200);
+      sees(await rows.text(), false);
+    }
+  }
+  for (const who of [owner, editor]) {
+    const counted = await query(who.token, { sql: 'select count(*) as n from rows' });
+    expect(counted.status).toBe(200);
+    expect((await counted.json()).results[0].rows).toEqual([{ n: 3 }]);
+  }
 });
 
 it('raw, content, get_artifact and the live frame serve the role view', async () => {
