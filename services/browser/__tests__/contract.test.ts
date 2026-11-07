@@ -26,6 +26,10 @@ const SLIDE_CHROME_PAGE=`<html><body style="margin:0"><main style="width:600px">
 <div data-af-slide style="height:630px;background:#3c3;position:relative">Second<footer style="position:absolute;bottom:0;width:100%;height:20px;background:#33c">Authored footer</footer></div>
 <nav data-af-deck-chrome="toolbar" style="position:fixed;bottom:0;left:0;width:600px;height:100px;background:#f00">1 / 2<i style="position:absolute;inset:0;background:#f00;transition:all 2s"></i><b class="dot"></b></nav><style>.dot::after{content:"";position:absolute;inset:0;background:#f00;transition:all 2s}</style>
 </af-slide-deck></main></body></html>`;
+/* A stacked deck: every slide sits in the same box, hidden until the deck's script marks it active. */
+const STACKED_COLORS=Array.from({length:8},(_,i)=>[30*i+10,200-20*i,90+10*i]);
+const STACKED_DECK_PAGE=`<html><head><style>.slide{position:absolute;inset:0;visibility:hidden;opacity:0;transition:opacity .26s ease,visibility .26s}.slide.is-active{visibility:visible;opacity:1}</style></head><body style="margin:0"><main style="position:relative;width:600px;height:630px">
+${STACKED_COLORS.map(([r,g,b],i)=>`<section data-af-slide class="slide${i<7?'':' is-active'}" style="background:rgb(${r},${g},${b})">Slide ${i+1}</section>`).join('')}</main></body></html>`;
 /* A deck whose script threw before drawing a slide: only the fixed deck chrome is left, so the body has no height. */
 const EMPTY_DECK_PAGE = `<html><body style="margin:0"><main id="deck"></main><nav data-af-deck-chrome style="position:fixed;bottom:0;left:0;width:200px;height:40px">01 / 06</nav><script type="module">throw Error('The dataset returned no usable rows.')</script></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
@@ -52,7 +56,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -149,6 +153,19 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     const full=await sharp(Buffer.from(live.bytes)).raw().toBuffer({resolveWithObject:true});
     const at=(580*full.info.width+300)*full.info.channels;
     expect([...full.data.subarray(at,at+3)]).toEqual([255,0,0]);
+  });
+  // A restyled deck may stack its slides and show only the active one: every slide is still exportable, drawn
+  // on its own, the count the check reports.
+  it('shoots each slide of a stacked deck whose inactive slides are hidden', async () => {
+    for (let n = 1; n <= 8; n++) {
+      const r = await svc.render({ ...base(), url: pages.base + '/stacked', viewport: { width: 600, height: 630 }, capture: { slide: n } });
+      if (!r.ok) throw Error(`slide ${n}: ${JSON.stringify(r)}`);
+      const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+      expect(info).toMatchObject({ width: 600, height: 630 });
+      const at = (300 * info.width + 500) * info.channels;
+      expect([...data.subarray(at, at + 3)], `slide ${n}`).toEqual(STACKED_COLORS[n - 1]);
+    }
+    expect(await svc.render({ ...base(), url: pages.base + '/stacked', capture: { slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 8 });
   });
   it('answers no_slide with the count', async () => {
     expect(await svc.render({ ...base(), capture: { slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 3 });

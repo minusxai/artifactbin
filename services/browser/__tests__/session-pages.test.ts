@@ -281,3 +281,24 @@ it('saves each slide of a framed deck at the deck viewport, without its deck chr
  const {data}=await sharp(Buffer.from(slides[0]!.base64,'base64')).raw().toBuffer({resolveWithObject:true});
  expect([data[0],data[1],data[2]]).not.toEqual([0,0,0]);
 },30_000);
+
+// A restyled deck may stack its slides and show only the active one: the check still saves every slide, each
+// drawn on its own (its colour, not the active slide's), and saves as many as it counts.
+it('saves each slide of a stacked deck whose inactive slides are hidden', async () => {
+ const {chromium}=await import('playwright');const browser=await chromium.launch();
+ const colors=Array.from({length:8},(_,i)=>[30*i+10,200-20*i,90+10*i]);
+ const html=`<html><head><style>.slide{position:absolute;inset:0;visibility:hidden;opacity:0;transition:opacity .26s ease,visibility .26s}.slide.is-active{visibility:visible;opacity:1}</style></head><body style="margin:0"><main style="position:relative;height:100vh">${colors.map(([r,g,b],i)=>`<section data-af-slide class="slide${i<7?'':' is-active'}" style="background:rgb(${r},${g},${b})">Slide ${i+1}</section>`).join('')}</main></body></html>`;
+ const page=await browser.newPage();
+ try{
+  const result=await inspectPage(page,{target:'data:text/html,'+encodeURIComponent(html),viewport:{width:1200,height:630},capture:true,slides:true},null) as unknown as Shot&{slides?:{count:number};screenshot?:{slides?:{base64:string}[];slidesPartial?:string}};
+  expect(result.slides?.count).toBe(8);
+  expect(result.screenshot!.slidesPartial).toBeUndefined();
+  const slides=result.screenshot!.slides!;expect(slides).toHaveLength(8);
+  const {default:sharp}=await import('sharp');
+  for(const [i,s] of slides.entries()){
+   const {data,info}=await sharp(Buffer.from(s.base64,'base64')).raw().toBuffer({resolveWithObject:true});
+   const at=(300*info.width+1000)*info.channels;
+   expect([...data.subarray(at,at+3)],`slide ${i+1}`).toEqual(colors[i]);
+  }
+ }finally{await page.close();await browser.close();}
+},30_000);

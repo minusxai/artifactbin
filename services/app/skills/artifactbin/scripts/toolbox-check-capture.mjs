@@ -63,13 +63,21 @@ export async function capture(page, options, deck) {
       const box = el.getBoundingClientRect();
       return !el.closest('[data-af-deck-chrome]') && box.width > 1 && box.height > 1 ? [i] : [];
     }));
-    const style = '[data-af-deck-chrome],[data-af-deck-chrome] *{visibility:hidden!important}';
+    // Drawn alone, as slide export draws it (services/browser/src/local.ts, the same rule): a
+    // stacked deck hides all but its active slide.
+    const style = '[data-af-deck-chrome],[data-af-deck-chrome] *{visibility:hidden!important}' +
+      '[data-af-slide]{transition:none!important;animation:none!important}' +
+      '[data-af-slide]:not([data-af-slide-shot]){visibility:hidden!important;opacity:0!important}' +
+      '[data-af-slide-shot]{visibility:visible!important;opacity:1!important}';
     const shots = [], end = Date.now() + 5000;
     let size = 0, why = '';
     for (const i of laid.slice(0, 20)) {
       if (Date.now() > end) { why = ': out of time'; break; }
       try {
-        const png = Buffer.from(await all.nth(i).screenshot({style, timeout: 1500}));
+        const one = all.nth(i);
+        await one.evaluate(el => el.setAttribute('data-af-slide-shot', ''));
+        const png = Buffer.from(await one.screenshot({style, timeout: 1500}).finally(() =>
+          one.evaluate(el => el.removeAttribute('data-af-slide-shot')).catch(() => {})));
         const base64 = png.toString('base64');
         if ((size += base64.length) > 6 * 1024 * 1024) { why = ': the rest are too large'; break; }
         shots.push({base64, width: png.readUInt32BE(16), height: png.readUInt32BE(20)});
