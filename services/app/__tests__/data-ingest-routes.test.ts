@@ -62,6 +62,15 @@ describe('CSV text through the route', () => {
     expect(body).toMatchObject({ error: 'invalid_dataset', code: 'empty' });
   });
 
+  it('publishes a header-only CSV with declared columns as an empty table', async () => {
+    // What publish.mjs sends for a CSV people fill in later (a sign-up sheet): the header and its columns.
+    const columns = [{ name: 'name', type: 'string' }, { name: 'created_by', type: 'string' }];
+    const { status, body } = await create({ title: 'signups', dataset: 'name,created_by\n', columns });
+    expect(status).toBe(201);
+    expect(body.columns).toEqual(columns);
+    expect(await storedRows(body.id)).toEqual([]);
+  });
+
   it('keeps the first MAX_ROWS_LIMIT rows and SAYS what it left out', async () => {
     // A big sheet is a legitimate source: 200k rows import fine and then make an
     // unloadable page, because every row is fetched, parsed and serialized into

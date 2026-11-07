@@ -130,8 +130,14 @@ describe('ingestDataset', () => {
   it('rejects empty content and a header-only file', async () => {
     await expect(ingestDataset({ kind: 'csv', text: '' })).rejects.toMatchObject({ code: 'empty' });
     await expect(ingestDataset({ kind: 'csv', text: '   ' })).rejects.toMatchObject({ code: 'empty' });
-    // Headers but no data rows: publishDataset requires a non-empty array.
+    // Headers but no data rows and no declared columns: nothing says what the table is.
     await expect(ingestDataset({ kind: 'csv', text: 'a,b' })).rejects.toMatchObject({ code: 'empty' });
+  });
+
+  it('reads a header-only file with declared columns as zero rows', async () => {
+    const r = await ingestDataset({ kind: 'csv', text: 'a,b\n' }, [{ name: 'a', type: 'string' }, { name: 'b', type: 'string' }]);
+    expect(r.rows).toEqual([]);
+    expect(r.totalRows).toBe(0);
   });
 
   it('keeps the first MAX_ROWS_LIMIT rows and reports the true total', async () => {
