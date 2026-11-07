@@ -15,6 +15,8 @@ interface SessionState {
   user: { id: string; email: string | null; username: string | null; image: string | null } | null;
   kind: 'account' | 'none';
   onboarded: boolean;
+  /** This browser edits live (regions, dataset cells): an account session, or a browser session's scripted browser. */
+  liveEditor: boolean;
 }
 
 interface SessionContext {

@@ -262,11 +262,12 @@ it('forwards complete SSE segments verbatim and releases the live subscription',
  const encoder=new TextEncoder();let cancelled=0;
  const wire=': alive\r\n\r\nid: position-7\r\nretry: 1200\r\nevent: update\r\ndata: café\r\n\r\n';
  const options={baseURL:'http://app',async request(){return new Response(new ReadableStream({start(controller){for(const byte of encoder.encode(wire))controller.enqueue(Uint8Array.of(byte));},cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream','set-cookie':'secret=value'}});}};
- for(const url of ['http://app/a/abc123/events','http://app/api/my/people/events']){
+ const urls=['http://app/a/abc123/events','http://app/api/my/people/events','http://app/api/artifacts/abc123/regions/stream?after=af-1:3'];
+ for(const url of urls){
  const result=await forwardSessionFetch({url,method:'GET',headers:{}},ANONYMOUS,options);
  expect(Buffer.from(result.body,'base64').toString()).toBe(wire);
  expect(result.headers['content-type']).toBe('text/event-stream');expect(result.headers['set-cookie']).toBeUndefined();}
- expect(cancelled).toBe(2);
+ expect(cancelled).toBe(urls.length);
 });
 
 it('waits for a split SSE frame instead of flushing a partial event',async()=>{

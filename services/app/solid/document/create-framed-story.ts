@@ -140,11 +140,17 @@ interface FramedStoryOptions {
   /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
   htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
   /**
+   * Whether this browser edits live (the session payload's `liveEditor`: an account session, or a browser session's
+   * scripted browser). Its dataset cells are relayed to the server, which decides; otherwise (absent, signed out) the
+   * frame is told `readonly` for every cell, with no request made and no chunk loaded.
+   */
+  liveEditor?: Accessor<boolean>;
+  /** How the cell relay loads (tests); default the lazy chunk. */
+  loadCells?: CellEditingLoader;
+  /**
    * Live editing of the page's editable regions, for a reader who may edit this page (never a viewer or commenter):
    * once the frame's controller runs, the saved page names its regions and the frame is told them (region-editing).
    */
-  /** How the cell relay loads (tests); default the lazy chunk. */
-  loadCells?: CellEditingLoader;
   regions?: {
     enabled: Accessor<boolean>;
     /** The saved head's HTML, as an editor reads it (ArtifactBackend.load). */
@@ -267,10 +273,11 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     }));
     onCleanup(() => { stopped = true; stopEditing(); });
   }
-  // Live dataset text cells, for any reader of the page: a signed-out reader's frame is told `readonly` here, with no
-  // request made and no chunk loaded; a signed-in one's cells are relayed by cell-editing, whose server decides.
+  // Live dataset text cells, for any reader of the page: a frame whose browser does not edit live (signed out) is told
+  // `readonly` here, with no request made and no chunk loaded; a live editor's cells are relayed by cell-editing, whose
+  // server decides.
   let cells: CellEditing | null = null, cellsLoading: Promise<void> | null = null, cellsStopped = false;
-  const signedIn = () => options.htmlContext?.().uploadSession?.state === 'signed-in';
+  const signedIn = () => options.liveEditor?.() === true;
   createEffect(on(current, (bridge) => {
     if (!bridge) return;
     onCleanup(bridge.subscribeRegion((message) => {

@@ -111,7 +111,7 @@ binding.destroy(); text.destroy();
 
 The owner opts each text column in with the policy's table key `"collaborative_columns":["description"]`
 ([permissions](permissions.md)); other columns never open. Who may type is the update rule for that row
-and column; everyone else (and anyone signed out, or a downloaded copy) gets `readonly`: set the field to
+and column (a check.mjs browser types as its viewer); everyone else (and anyone signed out, or a downloaded copy) gets `readonly`: set the field to
 the value you read before `bind`. Keys typed before the live session starts are kept and merged in.
 Typing is saved as one dataset version when someone leaves or after a quiet spell; a GraphQL write
 meanwhile is merged with the typing. A deleted row, or text the update rule's `check` refuses, ends

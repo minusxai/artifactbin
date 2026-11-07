@@ -125,6 +125,8 @@ export async function openCellStream(store: CellStore, options: RegionStreamOpti
   keepalive = clock.setInterval(() => { void write(options.keepaliveFrame()); wake(); }, options.keepaliveMs);
   signal?.addEventListener('abort', () => void close(), { once: true });
   void writer.closed.catch(() => void close());
+  // A heartbeat first, as the region stream sends (stream.ts): a finite window always carries a complete frame.
+  void write(options.keepaliveFrame());
   wake();
   return { status: 'open', stream: readable };
 }
