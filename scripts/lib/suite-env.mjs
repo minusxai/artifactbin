@@ -7,6 +7,10 @@ import path from 'node:path';
 export function suiteEnv(root) {
   return {
     APP_PACKAGE_ROOT: path.resolve(root, 'services/app'),
+    // Never the implicit store (services/app/data/pglite), which `npm run dev` holds open in the same checkout: the
+    // setup files open an in-memory PGLite per file, and this covers what they cannot, a server, script or tool a
+    // test spawns, which inherits the environment. Two PGLite instances on one directory delete each other's files.
+    DATABASE_URL: 'pglite://memory',
     ADMIN__SECRET: 'test-secret',
     ARTIFACTS__ALLOW_PUBLIC: '1',
     // lib/email refuses to send without a key (a login code in a log is an
