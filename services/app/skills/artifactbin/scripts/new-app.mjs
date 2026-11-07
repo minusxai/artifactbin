@@ -1,4 +1,4 @@
-/** Command: a shared-app starter (examples/shared-app.html or shared-list.html) set up in one call. */
+/** Command: a shared-app starter (examples/shared-app.html or shared-list.html) in one call. */
 export const DESCRIPTION = `Set up a shared-app starter in one call: files, datasets, rules, ids.
 --kind budget (default): copies examples/shared-app.html as index.html, with budget.ts,
   steps.mjs, guest.mjs and cleanup.mjs (its steps files), into the project; writes
@@ -66,7 +66,6 @@ async function create(file, bytes) {
     throw error;
   }
 }
-
 /** The CSV to publish as transactions: your --data file, or the seeded sample generator's. */
 async function transactions(base, data) {
   if (data !== undefined) {
@@ -85,7 +84,6 @@ async function transactions(base, data) {
     'Download the skill zip again and extract its whole artifactbin/ folder.');
   return run.stdout;
 }
-
 /** The dataset FILE's companion records, or a new one published from it (extra: publish flags). */
 async function dataset(file, title, server, options, extra = {}) {
   const companion = await optionalFile(file + '.af.json');
@@ -94,7 +92,6 @@ async function dataset(file, title, server, options, extra = {}) {
     options);
   return {id: done.id, reused: false};
 }
-
 /** The list starter: its files, an empty entries dataset with own-rows rules, the filled page. */
 async function listApp({title, dir, at, server, options}) {
   const created = [], kept = [];
@@ -120,7 +117,6 @@ async function listApp({title, dir, at, server, options}) {
     next: 'Next: in index.html edit only APP: its [bracketed] text and choices (the options ' +
       `people pick from); then ${CHECK}`};
 }
-
 /** Gives the targets dataset the starter's rules; nothing is written when they already hold. */
 async function applyRules(client, id) {
   const route = `/api/artifacts/${id}/policy`, read = await client.request(route);
@@ -130,7 +126,6 @@ async function applyRules(client, id) {
     body: {policy, expectedPolicyRevision: read.revision}});
   return true;
 }
-
 /** index.html with the starter's placeholders that are still there replaced. */
 function fill(html, starter, {title, ids, data}) {
   const placeholder = /<title>(\[[^\]<]+\])<\/title>/.exec(starter)?.[1];
@@ -140,7 +135,6 @@ function fill(html, starter, {title, ids, data}) {
     `<title>${htmlText(title)}</title>`);
   return data ? out.replace(/ · sample data'/, "'") : out;
 }
-
 export async function newAppCommand({values, positionals}, options = {}) {
   const title = String(values.title ?? positionals.join(' ')).trim()
     .replace(/^\[(.*)\]$/, '$1').trim();

@@ -87,7 +87,8 @@ function rowView(row){
     choice.replaceChildren(...options(row.choice));
     const label=(text,input)=>{const l=node('label');l.append(text,input);return l;};
     const actions=node('div',null,{className:'actions'});
-    actions.append(node('button',key+'-save',{type:'submit',className:'primary',textContent:'Save'}),
+    actions.append(node('button',key+'-save',{type:'submit',className:'primary',
+      textContent:'Save'}),
       node('button',key+'-cancel',{type:'button',textContent:'Cancel',onclick:()=>{editing=null;
         render();}}));
     form.append(label('Name',name),label(APP.choiceLabel,choice),label(APP.noteLabel,note),actions);
