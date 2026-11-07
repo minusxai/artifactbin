@@ -35,7 +35,8 @@ window.DATA = {
     `${h.one('totals').weeks} weeks.]`,
   stats: [
     {id:'completed', label:'[Completed]', value: h => h.fmt(h.one('totals').completed)},
-    {id:'waiting', label:'[Waiting in the latest week]', value: h => h.fmt(h.one('latest').waiting)},
+    {id:'waiting', label:'[Waiting in the latest week]',
+      value: h => h.fmt(h.one('latest').waiting)},
   ],
   charts: [
     {id:'completed', title:'[Completed repairs by week]', mark:'bar', query:'weekly', x:'week',

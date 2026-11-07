@@ -95,12 +95,11 @@ Mutations run only inside mutation resolvers. It returns `data`; refusals throw 
 
 ## caps.sql: read-only SQL
 
-A page computing totals over its own datasets needs no resolver: it asks `_sql`
-([datasets](datasets.md#totals-group-by-and-joins-_sql)). In a resolver,
-`await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs, window functions,
-`date_trunc`...) over the linked datasets as the caller and returns `{columns, rows}`. A single-table dataset
+Page totals need no resolver: use `_sql` ([datasets](datasets.md#totals-group-by-and-joins-_sql)).
+`await caps.sql(sql, params)` runs one read-only SQLite query (joins, CTEs)
+over the linked datasets as the caller and returns `{columns, rows}`. A single-table dataset
 is the table `<link>`, a multi-table one `<link>.<table>`; each has `_id`. You see what `caps.query`
-would; a dataset whose rule for you lacks `allow_aggregations` (SQL) refuses the
+would; a dataset whose rule for you lacks `allow_aggregations` refuses the
 call. Bind values as `$name`:
 
 ```ts

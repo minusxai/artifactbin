@@ -80,7 +80,7 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 import * as vega from '@afbin/vega';import {compile} from '@afbin/vega-lite';
 import {client,gql} from '@afbin/apollo';
 const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
-// Chart slides naming dataset columns first ask _sql for y summed per x, in the order column's order.
+// Chart slides naming dataset columns ask _sql for y summed per x, in the order column's order.
 const DATASET=window.DATA?.dataset,sqlName=n=>'"'+String(n).replaceAll('"','""')+'"';
 const sums=gql(['query Sums($sql:String!){_sql(sql:$sql){rows}}']); // gql takes a 1-string array
 for(const s of DATASET?SLIDES.filter(s=>s.type==='chart'&&s.y&&!s.data):[])try{ // y: 1+ columns

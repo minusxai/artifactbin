@@ -13,7 +13,7 @@ with a durable `Idempotency-Key` and an origin-bound bearer, never from page HTM
 {"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n","title":"Repair bench sample","visibility":"unlisted"}
 ```
 
-Sample figures. A dataset needs at least one data row. New datasets are readable by anyone who can
+A dataset needs at least one data row. New datasets are readable by anyone who can
 open them; only the owner and editors change rows. To let readers add or edit rows,
 set rules: [permissions](permissions.md). To read your own Postgres or MySQL database, use a
 resolver ([`caps.db`](resolvers.md#capsdb-your-own-database)).
@@ -22,8 +22,7 @@ resolver ([`caps.db`](resolvers.md#capsdb-your-own-database)).
 <link rel="af-dataset" data-af-name="orders" href="ref:DATASET_ID">
 ```
 
-`data-af-name` is unique across a page's links. Live is the
-default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version and is read-only.
+`data-af-name` is unique per page. Live is the default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version and is read-only.
 
 ## Contents
 
@@ -51,15 +50,12 @@ if(errors?.length)throw Error(errors[0].message);
 ```
 
 - `orders(where,order_by,limit,offset)`: `limit` defaults to 100, at most 1000; `_id` is always the
-  last sort key, so `offset` paging is stable. Read pages until one is shorter than `limit`.
+  last sort key, so `offset` paging is stable.
 - `orders_by_pk(_id:ID!)` is null when the row is missing or hidden from you.
 - `orders_can{insert}` and a row's `_can{update delete}` say what you may change
   ([permissions](permissions.md#what-this-viewer-may-change)): show only those controls.
 - `where`: `_and _or _not`; per column `_eq _neq _gt _gte _lt _lte _in _nin _is_null`, plus
   `_like _ilike _nlike _nilike` on strings. `order_by`: `asc desc` and their `_nulls_first`/`_last`.
-
-Every number a page shows comes from the data (typed-in numbers go stale); never page through every
-row to sum it in script.
 
 ## Totals, group by and joins: `_sql`
 
@@ -74,7 +70,7 @@ One read-only SQLite `SELECT` over the page's linked datasets as the reader: a d
 named by its `data-af-name` (`orders`; multi-table `orders.<table>`), with `_id`; join them freely.
 `$name` binds `params.name`. It sees only rows and columns your rule shows; each dataset it names
 needs `allow_aggregations` in your rule ([permissions](permissions.md)). At most 10,000 rows, 5 s.
-`watchQuery` refetches it when a linked dataset changes; local preview runs it too.
+`watchQuery` refetches it on change; local preview runs it too.
 
 ## Write
 
@@ -86,8 +82,7 @@ mutation Drop($id:ID!){delete_orders_by_pk(_id:$id){_id}}
 ```
 
 `insert_orders(objects)` takes up to 100 rows; `update_`/`delete_orders(where)` return
-`affected_rows`. One mutation is atomic, writes one dataset and changes at most 100 rows.
-It applies to the current rows: for compare-and-set put old values in `where`; `affected_rows:0`
+`affected_rows`. One mutation is atomic, writes one dataset and changes at most 100 rows. For compare-and-set put old values in `where`; `affected_rows:0`
 means "changed meanwhile". There is no upsert: read the row, then `update_…_by_pk`
 or `insert_…_one`. `_id` is generated and never set. Returned rows need a select rule.
 
@@ -101,14 +96,15 @@ until [permissions](permissions.md) allow more; a page link never grants writes.
 ## Live views
 
 `client.watchQuery({query}).subscribe(...)` refetches after committed writes and when the dataset
-changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Never poll. The installed `examples/csv-dashboard.html` charts `_sql` group-bys;
+changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Never poll.
+`examples/csv-dashboard.html` charts `_sql` group-bys;
 `examples/shared-app.html` writes through a resolver ([resolvers](resolvers.md));
 `examples/shared-list.html` writes rows directly and draws its controls from `_can`.
 
 ## Type together (`@afbin/collab`)
 
 Bind a text cell to an `<input>` or `<textarea>`: everyone allowed to change it types in it live
-(no typing lost); reads, exports and history see a plain string.
+(no typing lost); reads and exports see a plain string.
 
 ```js
 import {collab} from '@afbin/collab';
@@ -120,8 +116,9 @@ binding.destroy(); text.destroy();
 ```
 
 The owner opts each text column in with the policy's table key `"collaborative_columns":["description"]`
-([permissions](permissions.md)). Who may type is the update rule for that row and column; a check.mjs browser types as
-its viewer; everyone else (signed out, a downloaded copy) gets `readonly`: set the field to the value you read before `bind`. Keys typed before the session starts are merged in.
+([permissions](permissions.md)). Who may type is the update rule for that row and column (a check.mjs browser as its
+viewer); anyone else gets `readonly`: set the field to the value you read before `bind`. Keys typed
+before the session starts are merged in.
 Typing is saved as one dataset version when someone leaves or after a quiet spell; a GraphQL write
 meanwhile is merged with the typing. A deleted row, or text the update rule's `check` refuses, ends
 editing: the field turns read-only and `error` says why (`removed`, `check_violation`, `rejected`).
