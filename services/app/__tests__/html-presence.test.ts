@@ -4,6 +4,7 @@ import {beforeEach,expect,it,vi} from 'vitest';
 import {POST} from '@/app/api/artifacts/[id]/presence/route';
 import {GET} from '@/app/a/[id]/events/route';
 import {request,useAppHarness} from './harness';
+import {attachActor} from '@artifactbin/utils';
 import { createUser } from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
 import {getDb} from '@/lib/platform/db';
@@ -28,8 +29,8 @@ it('assigns distinct public identities per window without broadcasting session s
  expect(a.id).toMatch(/^[a-f0-9]{64}$/);expect(a.id).not.toBe(b.id);expect(again.id).toBe(a.id);expect(JSON.stringify(a)).not.toContain(session);
  const guest=await(await publish('prespublic',{session,revision:'1'})).json();expect(guest.id).not.toBe(a.id);
 });
-it('fans a native cursor out to simultaneous mixed-case page readers on their existing document streams',async()=>{
- const connections=await Promise.all([0,1,2].map(async()=>{const abort=new AbortController();const req=new Request(request('/a/presMixed/events'),{signal:abort.signal});const response=await runWithRequest(req,()=>GET(req,params('presMixed')));expect(response.status).toBe(200);return {abort,reader:response.body!.getReader()};}));
+it('fans a guest\'s native cursor out to simultaneous signed-in readers on their existing document streams',async()=>{
+ const connections=await Promise.all([0,1,2].map(async()=>{const abort=new AbortController();const req=attachActor(new Request(request('/a/presMixed/events'),{signal:abort.signal}),actor());const response=await runWithRequest(req,()=>GET(req,params('presMixed')));expect(response.status).toBe(200);return {abort,reader:response.body!.getReader()};}));
  const readPresence=async(reader:ReadableStreamDefaultReader<Uint8Array>)=>{while(true){const chunk=await reader.read();if(chunk.done)throw new Error('Stream closed before presence');const text=new TextDecoder().decode(chunk.value);if(text.includes('event: presence'))return text;}};
  try{
   await Promise.all(connections.map(({reader})=>readPresence(reader)));
@@ -40,7 +41,7 @@ it('fans a native cursor out to simultaneous mixed-case page readers on their ex
 });
 
 it('rebinds presence to a published source revision without closing document updates, then closes on lost access',async()=>{
- const abort=new AbortController(),req=new Request(request('/a/presMixed/events'),{signal:abort.signal});
+ const abort=new AbortController(),req=attachActor(new Request(request('/a/presMixed/events'),{signal:abort.signal}),actor());
  const response=await runWithRequest(req,()=>GET(req,params('presMixed'))),stream=sseStream(response.body!);
  const db=await harness.db();
  try{
@@ -95,4 +96,20 @@ it.each([
  const req=proxiedPresence(headers);const response=await runWithRequest(req,()=>POST(req,params('prespublic')));
  expect(response.status).toBe(status);if(status===200)expect(await response.json()).toMatchObject({id:expect.stringMatching(/^[a-f0-9]{64}$/)});
  else expect(await response.text()).toBe('forbidden');
+});
+
+// Other readers' cursors, selections and handles go only to signed-in readers; a guest's own cursor
+// still reaches them (the test above).
+it('sends a signed-out reader no presence while a signed-in reader on the same page gets it',async()=>{
+ const open=async(signedIn:boolean)=>{const abort=new AbortController();const base=new Request(request('/a/presMixed/events'),{signal:abort.signal});const req=signedIn?attachActor(base,actor()):base;const response=await runWithRequest(req,()=>GET(req,params('presMixed')));expect(response.status).toBe(200);return {abort,stream:sseStream(response.body!)};};
+ const guest=await open(false),member=await open(true);
+ try{
+  expect((await member.stream.named('message'))[0]?.data.version).toBe(1);
+  expect((await guest.stream.named('message'))[0]?.data.version).toBe(1);
+  await publish('presMixed',{session,revision:'1',cursor:{nodeId:'p',x:.4,y:.5},visible:true});
+  const deadline=Date.now()+2000;let seen=false;
+  while(Date.now()<deadline&&!seen)seen=JSON.stringify(await member.stream.named('presence',1,deadline-Date.now())).includes('"nodeId":"p"');
+  expect(seen).toBe(true);
+  expect(await guest.stream.named('presence',1,500)).toEqual([]);
+ }finally{for(const c of [guest,member]){c.abort.abort();c.stream.close();}}
 });

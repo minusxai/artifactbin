@@ -267,6 +267,9 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
 
   let presenceRevision:string|undefined,replacingPresence=false;
   const followPresence=async(row:NonNullable<Awaited<ReturnType<typeof getArtifactById>>>)=>{
+    // A signed-out reader gets no presence: other readers' cursors, selections and handles go only to
+    // signed-in readers. A guest still shares its own cursor (app/api/artifacts/[id]/presence).
+    if(!actor.userId)return;
     if(closed||row.format!=='html'||presenceRevision===String(row.version))return;
     // A new source revision replaces only its presence room, never the document stream.
     replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;

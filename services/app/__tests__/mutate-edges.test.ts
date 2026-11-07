@@ -33,10 +33,10 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 import { artifactChannel, annotationsChannel, regionsChannel } from '@artifactbin/contracts';
-import { presenceChannel } from '@/lib/html-presence';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 /** An HTML page's stream also follows its live text (lib/publish/realtime live-pings): one regions channel per page. */
-const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1, [regionsChannel(id)]: 1 });
+// These streams are signed out: they get no presence, so no presence channel and no presence ACL subscriber.
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 1, [annotationsChannel(id)]: 1, [regionsChannel(id)]: 1 });
 
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) => `<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;
@@ -103,7 +103,6 @@ describe('the stream releases what it watched', () => {
     const res = await eventsRoute(request, params({ id: doc }));
     expect(res.status).toBe(200);
     const stream=sseStream(res.body!);await stream.named('message');
-    // Presence also holds an ACL subscriber on the document's shared channel.
     expect(subscriptions()).toEqual({ ...documentSubscriptions(doc), [artifactChannel(ds)]: 1 });
     stream.close();
     controller.abort();
@@ -121,7 +120,7 @@ describe('the stream releases what it watched', () => {
     const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`,{signal:second.signal}), params({ id: b }));
     const streamA=sseStream(resA.body!),streamB=sseStream(resB.body!);
     await Promise.all([streamA.named('message'),streamB.named('message')]);
-    // One dataset transport has two subscribers; each page keeps its own comment and presence channels.
+    // One dataset transport has two subscribers; each page keeps its own comment channel.
     expect(subscriptions()).toEqual({ ...documentSubscriptions(a), ...documentSubscriptions(b), [artifactChannel(ds)]: 2 });
     streamA.close();
     first.abort();
