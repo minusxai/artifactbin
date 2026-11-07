@@ -220,9 +220,12 @@ try {
     check(text === settled && settled.includes('alpha from the owner') && settled.includes('bravo from the editor') && settled.includes('Slash heading') && settled.includes('fastYnext-line'), `the viewer's open page follows the editors' typing to their settled text (${JSON.stringify(text?.slice(0, 80))}…)`);
     const read = await viewerHead();
     check(read.version === 1 && read.html.includes('alpha from the owner'), `no version was made: the viewer reads the live text at version ${read.version}`);
+    // A viewer is never told a region is editable, so its press asks for nothing: no key buffer is put in, no request
+    // goes (the last leg checks the viewer's region traffic) and its keys reach no editor. All of it happens at the
+    // press and the keys themselves, and nothing the editors typed is still on its way, so it is read at once.
     await c.locator('[data-af-id="p1"]').click();
     await C.keyboard.type('viewer keys');
-    await sleep(500);
+    check(await c.locator('textarea[data-af="region-keys"]').count() === 0, 'a viewer\'s press holds no keys for an editor');
     check(await c.locator(REGION).getAttribute('contenteditable') === null && await c.locator(REGION).getAttribute('tabindex') === null, 'a viewer\'s press mounts no editor');
     const after = await textOf(c);
     check(after === text && !after.includes('viewer keys'), `a viewer's keys change nothing (${JSON.stringify(after.slice(-48))})`);
