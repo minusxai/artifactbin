@@ -208,18 +208,24 @@ try {
     await A.keyboard.type('kept');
     check((await both([a, b], '/kept'))[1]?.includes('/kept'), 'Escape left the `/`, and typing went on after it in the text');
     for (let i = 0; i < '/kept'.length; i++) await A.keyboard.press('Backspace');
+    const cleared = await Promise.all([a, b].map((frame) => until(() => textOf(frame), (text) => text !== undefined && !text.includes('/kept'), 15_000)));
+    check(cleared.every((text) => text !== undefined && !text.includes('/kept')), 'Backspace took the `/kept` back out on both editors');
   });
 
   await section('the viewer reads the live text with no save, and never opens a session', async () => {
-    const text = await until(() => textOf(c), (value) => !!value?.includes('alpha from the owner') && value.includes('Slash heading') && value.includes('fastYnext-line'), 15_000);
-    check(!!text?.includes('alpha from the owner') && text.includes('bravo from the editor') && text.includes('Slash heading'), `the viewer's open page follows the editors' typing (${JSON.stringify(text?.slice(0, 80))}…)`);
+    // The viewer follows live text one refetch at a time, so it can trail the editors' last keys (the Backspaces
+    // above): what it must reach is the editors' settled text, not just words that were there before those keys.
+    const settled = await textOf(a);
+    const text = await until(() => textOf(c), (value) => value === settled, 15_000);
+    check(text === settled && settled.includes('alpha from the owner') && settled.includes('bravo from the editor') && settled.includes('Slash heading') && settled.includes('fastYnext-line'), `the viewer's open page follows the editors' typing to their settled text (${JSON.stringify(text?.slice(0, 80))}…)`);
     const read = await viewerHead();
     check(read.version === 1 && read.html.includes('alpha from the owner'), `no version was made: the viewer reads the live text at version ${read.version}`);
     await c.locator('[data-af-id="p1"]').click();
     await C.keyboard.type('viewer keys');
     await sleep(500);
     check(await c.locator(REGION).getAttribute('contenteditable') === null && await c.locator(REGION).getAttribute('tabindex') === null, 'a viewer\'s press mounts no editor');
-    check(await textOf(c) === text, 'a viewer\'s keys change nothing');
+    const after = await textOf(c);
+    check(after === text && !after.includes('viewer keys'), `a viewer's keys change nothing (${JSON.stringify(after.slice(-48))})`);
   });
 
   await section('latency: 20 characters from A\'s key to B\'s frame', async () => {
