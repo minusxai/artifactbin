@@ -11,15 +11,18 @@ import { getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platf
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
 import { createHash } from 'node:crypto';
-import { ArtifactRow, getArtifactById, getVersionFor, VERSION_PARAM } from '@/lib/artifacts';
+import { ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, getVersionFor, VERSION_PARAM } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { datasetReadAccess } from '@/lib/dataset-permissions';
+import type { HtmlPageLink } from '@artifactbin/contracts';
 import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
   type SocialPreviewCrop,
 } from '../document';
 import { scriptRenderAllowance } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
-import { mintExportKey } from './read-key';
+import { mintExportKey, type ExportReader } from './read-key';
 import { json } from '../http';
 import { objectStore } from '../object-store/index';
 
@@ -102,6 +105,17 @@ function exportRevision(artifact: ExportIdentity): string {
   return `${artifact.version}${edit}`;
 }
 
+/**
+ * WHOSE PICTURE IT IS, as an ADDITIVE segment — absent, byte for byte, for the anonymous audience, whose render any
+ * reader of the page may be served. A requester's render read the page's data with THEIR access, so it is kept under
+ * their account (or bare token), hashed: never served to another audience, and never naming the account in a key.
+ */
+function audienceSegment(audience: ExportReader | null): string {
+  if (!audience || (!audience.userId && !audience.tokenId)) return '';
+  const who = audience.userId ? `u:${audience.userId}` : `t:${audience.tokenId}`;
+  return `-a${createHash('sha256').update(who).digest('hex').slice(0, 16)}`;
+}
+
 /** Stable output identity; revision freshness is tracked separately in the DB. */
 export function exportCacheKey(
   artifact: ExportIdentity,
@@ -112,8 +126,46 @@ export function exportCacheKey(
   selection = '',
   /** The ARCHIVED version this shot is of (`?version=N`), or null for the head. */
   version: number | null = null,
+  /** Who the capture read as (see audienceSegment): null for the shared anonymous render. */
+  audience: ExportReader | null = null,
 ): string {
-  return `${artifact.id}:${exportCaptureKey(capture, slide, selection, version)}:${format}`;
+  return `${artifact.id}:${exportCaptureKey(capture, slide, selection, version)}${audienceSegment(audience)}:${format}`;
+}
+
+const pageLinksOf = (artifact: Partial<Pick<ArtifactRow, 'meta'>>) =>
+  (((artifact.meta as { htmlLinks?: HtmlPageLink[] } | undefined)?.htmlLinks) ?? []);
+
+/**
+ * WHO THE CAPTURE READS AS: the requester the door admitted, or nobody (the shared render). Nobody asks as nobody;
+ * the data tiers render whole under the key whoever asks. A document read by anybody else is rendered with their
+ * access, unless it reads no data at all and nobody may read it anyway, whose picture is the same for everyone.
+ */
+async function exportAudience(artifact: Pick<ArtifactRow, 'id' | 'format'> & Partial<Pick<ArtifactRow, 'meta'>>, reader: AccessActor | undefined): Promise<ExportReader | null> {
+  if (artifact.format !== 'html' || !reader || (!reader.userId && !reader.tokenId)) return null;
+  if (!pageLinksOf(artifact).length) {
+    const header = await getArtifactHeaderById(artifact.id);
+    if (header && await canReadArtifact(header, ANONYMOUS_ACTOR)) return null;
+  }
+  return { userId: reader.userId, tokenId: reader.tokenId };
+}
+
+/**
+ * WHAT THE AUDIENCE MAY READ OF THE PAGE'S DATASETS NOW, as a revision segment: each linked dataset's role view
+ * through this page (lib/dataset-permissions), hashed. A share revoked, a dataset made private or a rule narrowed
+ * moves it, so a stored image is never served after its audience lost what it shows — the page's own revision
+ * does not move when a dataset's access does. Empty for a page that links no dataset.
+ */
+async function datasetAccessRevision(artifact: Pick<ArtifactRow, 'id'> & Partial<Pick<ArtifactRow, 'meta'>>, audience: ExportReader | null): Promise<string> {
+  const links = pageLinksOf(artifact).filter((link) => link.kind === 'dataset');
+  if (!links.length) return '';
+  const actor: AccessActor = audience ? { ...ANONYMOUS_ACTOR, ...audience } : ANONYMOUS_ACTOR;
+  const views = await Promise.all(links.map(async (link) => {
+    const row = await getArtifactHeaderById(link.datasetId);
+    if (!row || row.format !== 'dataset') return [link.datasetId, null];
+    const decision = await datasetReadAccess(row, actor, { throughPage: true, pageId: artifact.id });
+    return decision.allowed ? [link.datasetId, decision.role, decision.full, decision.tables] : [link.datasetId, false];
+  }));
+  return `-d${createHash('sha256').update(JSON.stringify(views)).digest('hex').slice(0, 16)}`;
 }
 
 export type RenderResult =
@@ -238,6 +290,10 @@ interface ImageOptions {
  current?:boolean;
  /** The ARCHIVED version being photographed (`?version=N`), absent for the head. */
  version?:number|null;
+ /** Who the capture reads as (exportAudience): absent for the shared anonymous render. */
+ audience?:ExportReader|null;
+ /** What that audience may read of the page's data now (datasetAccessRevision), appended to the revision. */
+ access?:string;
 }
 async function renderWithRetry(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop):Promise<Shot>{
  const started=Date.now();let result=await renderOnce(input,format,capture,slide,crop);
@@ -258,8 +314,8 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
  const capture=opts.capture??'full',slide=opts.slide??0;
  try {
   const image=await (await sharedCache()).read({
-   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null),
-   artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,current:capture!=='card'||opts.current===true,stable:capture==='card',
+   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null,opts.audience??null),
+   artifactId:artifact.id,revision:`${exportRevision(artifact)}${opts.access??''}`,refresh:opts.refresh,current:capture!=='card'||opts.current===true,stable:capture==='card',
   },async id=>{
    const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},store=objectStore(),browser=services().browser;
    if(store.signedUpload&&browser.renderAndUpload){
@@ -315,7 +371,7 @@ async function imageResponse(image:ExportImage,base:string,delivery:'bytes'|'red
 export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
-  artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'>,
+  artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'> & Partial<Pick<ArtifactRow, 'meta'>>,
   q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null;
     /** The caller's reader may EDIT the artifact (the door decided): only then does `refresh` re-render. */
     editor?: boolean;
@@ -327,7 +383,13 @@ export async function exportImageResponse(
      * key is scoped to the ARTIFACT and not to a version, which is why the door
      * and never this module decides who may ask for one.
      */
-    version?: number | null },
+    version?: number | null;
+    /**
+     * The requester the calling door ADMITTED (it ran the read ACL). A document's capture reads its data as them —
+     * what they may read is what their export shows — and their render is stored as theirs (exportAudience).
+     * Absent: nobody, the shared anonymous render.
+     */
+    reader?: AccessActor },
   base: string,
   delivery:'bytes'|'redirect'='bytes',
 ): Promise<Response> {
@@ -391,7 +453,11 @@ export async function exportImageResponse(
   if (imageOverview) return json({ error: 'image_unavailable' }, 404);
 
   const version = q.version ?? null;
+  const audience = await exportAudience(artifact, q.reader);
+  const access = isDocument ? await datasetAccessRevision(artifact, audience) : '';
   const options:ImageOptions = {
+    ...(audience ? { audience } : {}),
+    ...(access ? { access } : {}),
     refresh,
     ...(current ? { current } : {}),
     capture,
@@ -405,7 +471,8 @@ export async function exportImageResponse(
     // The headless browser has no session, so a private page would 404 on
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
-    // value any reader has seen. Minted lazily (see RenderInput): a key that
+    // value any reader has seen. It names the audience the capture reads its
+    // data as (lib/page-graphql): the requester, or nobody for a shared render. Minted lazily (see RenderInput): a key that
     // expires while the request waits produces a 200 PNG of a 404 page.
     // A markup document is photographed from its OWN page (`raw?chrome=0` —
     // the document with none of the reading chrome); the data tiers have no
@@ -416,7 +483,7 @@ export async function exportImageResponse(
         // raw route resolves it under the exporter's verified key, so the shot
         // is of that version or it is the uniform 404 — never of the head
         // wearing an archived version's number.
-        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${version === null ? '' : `&${VERSION_PARAM}=${version}`}`
+        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id, undefined, undefined, audience ?? undefined)}${version === null ? '' : `&${VERSION_PARAM}=${version}`}`
         : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
       EXPORT_INTERNAL_ORIGIN ?? base,
     ).toString(),

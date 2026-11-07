@@ -24,3 +24,14 @@ it('never sends a write, and reports a refusal or an unreachable host the way th
  const down=createDomainReadTransport({pageId:'abc123',revision:'1'},location,async()=>{throw new TypeError('Failed to fetch');});
  await expect(down.execute({query:'{counter{count}}',variables:{},operation:'query'})).rejects.toBeInstanceOf(RemoteUnreachable);
 });
+it('carries the exporter\'s key from the capture\'s own address in the body, and nothing it was not given',async()=>{
+ const send=vi.fn<typeof fetch>(async()=>new Response(JSON.stringify({data:{sales:{count:2}}})));
+ const capture=createDomainReadTransport({pageId:'abc123',revision:'2'},{href:'http://localhost:3030/a/abc123/raw?chrome=0&key=123.abc.def'},send);
+ await capture.execute({query:'{sales{count}}',variables:{},operation:'query'});
+ const [url,init]=send.mock.calls[0]!;
+ expect(String(url)).toBe('http://localhost:3030/api/artifacts/abc123/graphql');
+ expect(init).toMatchObject({credentials:'omit',headers:{'content-type':'text/plain;charset=UTF-8'}});
+ expect(JSON.parse(String(init!.body))).toEqual({query:'{sales{count}}',variables:{},operation:'query',revision:'2',key:'123.abc.def'});
+ expect(await capture.execute({query:'mutation{sales{add}}',variables:{},operation:'mutation'})).toEqual({data:null,errors:[{message:DOMAIN_READ_ONLY_MESSAGE}]});
+ expect(send).toHaveBeenCalledTimes(1);
+});

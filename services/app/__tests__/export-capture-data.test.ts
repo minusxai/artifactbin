@@ -3,8 +3,9 @@
  * sandbox, with no app frame, so the frame relay never attaches. Without a transport of its own every `@afbin/apollo`
  * read answered "offline: nothing was sent": a deck that guards the read exported its slides with no numbers, and a
  * deck that throws drew no slide and the render failed at the deadline. The capture reads the page GraphQL endpoint
- * directly (html-runtime/domain-reads), as a guest: an opaque origin's request is answered with the anonymous read
- * ACL by construction, whatever credential it carries, query-only, and readable cross-origin.
+ * directly (html-runtime/domain-reads): an opaque origin's request is answered with the anonymous read ACL whatever
+ * credential it carries, query-only, and readable cross-origin — unless it carries an export key minted for a
+ * requester, read as that requester (export-access.test.ts).
  */
 import { beforeEach, expect, it } from 'vitest';
 import { mintAccountToken, request, setSession, useAppHarness } from './harness';

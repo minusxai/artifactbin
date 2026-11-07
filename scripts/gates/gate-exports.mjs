@@ -29,6 +29,7 @@ import { pagesServer } from './lib/pages-server.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
+import { connectAgent, connectionBrowserCookie } from './lib/account-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('exports');
@@ -52,8 +53,8 @@ const publish = async (body) => {
 /** PNG dimensions straight from the IHDR chunk — no image library for two integers. */
 const pngSize = (buf) => ({ width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) });
 
-async function shot(id, query = '') {
-  const res = await fetch(`${BASE}/a/${id}/export${query}`);
+async function shot(id, query = '', token = null) {
+  const res = await fetch(`${BASE}/a/${id}/export${query}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
   const type = res.headers.get('content-type') ?? '';
   const body = type.startsWith('image/') ? Buffer.from(await res.arrayBuffer()) : await res.json().catch(() => null);
   return { status: res.status, type, body };
@@ -126,22 +127,53 @@ async function deckLeg(browser) {
  * `@afbin/apollo` read answered "offline: nothing was sent". This deck draws a green slide from two rows and throws
  * on none, as an agent's deck does: a slide without its data drew no slide, and the export failed at the deadline.
  */
-async function dataDeckLeg() {
+/** A deck that draws one green slide from its dataset's two rows, and throws on anything less. */
+async function publishDataDeck(visibility) {
   const start = await startDocument(BASE);
-  const created = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset: [{ stage: 'Data access', days: 3.5 }, { stage: 'Security review', days: 2.5 }], title: 'Stages', visibility: 'unlisted' }) });
+  const created = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset: [{ stage: 'Data access', days: 3.5 }, { stage: 'Security review', days: 2.5 }], title: 'Stages', visibility }) });
   const dataset = await created.json();
-  check(created.status === 201, `published the deck's dataset (${created.status})`);
+  check(created.status === 201, `published the ${visibility} deck's dataset (${created.status})`);
   const script = "const {data,errors}=await client.query({query:gql`{stages(order_by:{stage:asc}){stage days}}`});if(errors?.length)throw Error(errors[0].message);"
     + "if(data?.stages?.length!==2)throw Error('no rows');const s=document.createElement('section');s.setAttribute('data-af-slide','');s.style.cssText='height:630px;background:rgb(51,204,51)';s.textContent=data.stages.map(r=>r.stage+' '+r.days).join(', ');document.querySelector('#deck').append(s);";
   const put = await fetch(`${BASE}/api/artifacts/${start.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Data deck', html: nativeHtml('Data deck', `<link rel="af-dataset" data-af-name="stages" href="ref:${dataset.id}"><main id="deck"></main>`, { script }) }) });
-  check(put.status === 200, `published the data deck (${put.status})`);
+  check(put.status === 200, `published the ${visibility} data deck (${put.status})`);
+  if (visibility === 'private') {
+    const shared = await fetch(`${BASE}/api/my/artifacts/${start.id}/sharing`, { method: 'PUT', headers: { origin: new URL(BASE).origin, 'sec-fetch-site': 'same-origin', cookie: connectionBrowserCookie(BASE, start.token), 'Content-Type': 'application/json' }, body: JSON.stringify({ visibility: 'private' }) });
+    check(shared.ok, `made the data deck private (${shared.status})`);
+  }
+  return start;
+}
+const greenSlide = async (one, who) => {
+  if (!Buffer.isBuffer(one.body)) return;
+  const { data } = await sharp(one.body).extract({ left: 600, top: 300, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+  check(data[0] < 100 && data[1] > 150 && data[2] < 100, `and it is the slide drawn from the rows, for ${who} (rgb ${[...data.subarray(0, 3)].join(',')})`);
+};
+
+async function dataDeckLeg() {
+  const start = await publishDataDeck('unlisted');
   const started = Date.now();
   const one = await shot(start.id, '?slide=1');
   check(one.status === 200 && Buffer.isBuffer(one.body), `a dataset-drawn slide exports (${one.status} ${Buffer.isBuffer(one.body) ? '' : JSON.stringify(one.body)} in ${Date.now() - started}ms)`);
-  if (Buffer.isBuffer(one.body)) {
-    const { data } = await sharp(one.body).extract({ left: 600, top: 300, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
-    check(data[0] < 100 && data[1] > 150 && data[2] < 100, `and it is the slide drawn from the rows (rgb ${[...data.subarray(0, 3)].join(',')})`);
-  }
+  await greenSlide(one, 'an anonymous reader');
+  const again = await shot(start.id, '?slide=1');
+  check(Buffer.isBuffer(one.body) && Buffer.isBuffer(again.body) && again.body.equals(one.body), 'and a repeat anonymous export serves the stored render, byte for byte');
+}
+
+/**
+ * AN EXPORT SHOWS WHAT ITS REQUESTER MAY SEE. A PRIVATE deck reading a PRIVATE dataset exports its slide with real
+ * rows for its owner — the capture reads as the requester the export key was minted for (lib/page-graphql) — and a
+ * second account, or nobody, who cannot read the page is refused, never handed the owner's image.
+ */
+async function privateDataDeckLeg() {
+  const start = await publishDataDeck('private');
+  const one = await shot(start.id, '?slide=1', start.token);
+  check(one.status === 200 && Buffer.isBuffer(one.body), `a private dataset-drawn slide exports for its owner (${one.status} ${Buffer.isBuffer(one.body) ? '' : JSON.stringify(one.body)})`);
+  await greenSlide(one, 'the owner');
+  const stranger = await connectAgent(BASE);
+  const refused = await shot(start.id, '?slide=1', stranger.token);
+  check(refused.status === 404, `a second account without access is refused (${refused.status})`);
+  const nobody = await shot(start.id, '?slide=1');
+  check(nobody.status === 404, `and so is a reader with no session (${nobody.status})`);
 }
 
 /** Real Chromium cache behavior, including navigation and an explicit refresh. */
@@ -281,7 +313,7 @@ async function socialLeg(browser) {
 const browser = await launchChromium();
 const leg = (name, run) => run().catch((error) => check(false, `${name} could not finish (${String(error?.stack ?? error).split('\n').slice(0, 4).join(' | ')})`));
 try {
-  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser)), leg('the HTML download leg',()=>downloadLeg(browser)), leg('the thumbnail cache leg',()=>thumbnailCacheLeg(browser)), leg('the data deck leg',()=>dataDeckLeg())]);
+  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser)), leg('the HTML download leg',()=>downloadLeg(browser)), leg('the thumbnail cache leg',()=>thumbnailCacheLeg(browser)), leg('the data deck leg',()=>dataDeckLeg()), leg('the private data deck leg',()=>privateDataDeckLeg())]);
 } finally {
   await browser.close();
 }
