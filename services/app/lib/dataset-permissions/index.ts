@@ -7,7 +7,7 @@
  * lattice and its derivation in @artifactbin/contracts. Entered only through this index.
  */
 export {
-  canAggregate, datasetExportable, datasetReadAccess, datasetRowsFor, datasetView, viewCatalog, viewDatasetWire, type DatasetReadDecision,
+  canAggregate, datasetExportable, datasetReadAccess, datasetRowsFor, datasetView, sqlAggregationRefusal, viewCatalog, viewDatasetWire, type DatasetReadDecision,
 } from './read';
 export { storedPolicy, type StoredPolicy } from './stored-policy';
 export { filterAdmits } from './view';
