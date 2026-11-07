@@ -453,6 +453,28 @@ describe('keys typed between the press and the editor', () => {
     expect(texts(h.root)).toEqual(['x仮名', 'yLive text', 'Second']);
   });
 
+  it('a reader (never told a region is editable): a press and keys ask for nothing, hold nothing and change nothing, at once', async () => {
+    const loads = { count: 0 };
+    const h = open({ loads });
+    for (const enabled of [null, []] as const) {
+      if (enabled) h.receive({ kind: 'regions-enabled', regionIds: [...enabled] });
+      press(h);
+      h.root.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      for (const name of [...'viewer keys', 'Enter', 'Backspace']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+      }
+      // All of it is decided at the press: nothing was asked for, so nothing can arrive later.
+      expect(h.posted).toEqual([]);
+      expect(keysInput()).toBeNull();
+      expect(h.root.hasAttribute('tabindex')).toBe(false);
+      expect(h.root.hasAttribute('contenteditable')).toBe(false);
+      expect(texts(h.root)).toEqual(['Saved text.']);
+    }
+    await settle();
+    expect(loads.count).toBe(0);
+    expect(h.editors).toHaveLength(0);
+  });
+
   it('drops what was held when the session is refused, and leaves no input behind', async () => {
     const h = open();
     h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
