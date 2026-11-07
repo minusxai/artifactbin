@@ -124,7 +124,7 @@ function render(){
       'Notes on other items'}),noteList('other-items',other,true));sections.push(section);}
   $('#board').replaceChildren(...sections);$('#board').setAttribute('aria-busy','false');}
 const summary=()=>problem||`${items.length} ${APP.labels.items.toLowerCase()}, ${notes.length} ` +
-  'notes.';
+  (notes.length===1?'note.':'notes.');
 // One write, then a fresh read of the notes; the status names what happened or what went wrong.
 async function write(message,request){status.textContent='Saving…';
   try{done(await client.mutate(request));await loadNotes();render();status.textContent=message;}
