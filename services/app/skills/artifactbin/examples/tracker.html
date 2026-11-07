@@ -114,7 +114,7 @@ function editForm(row,key){
       onclick:()=>{editing=null;render();}}));
   form.append(wrap(APP.nameLabel,name),wrap(APP.groupLabel,grp),wrap(APP.noteLabel,note),actions);
   // @feature collab
-  // Typed together, live; Save does not send it (the typing saves itself as the form closes).
+  // Typed together, live; Save does not send it: it is saved once its editors leave the page.
   const area=node('textarea',key+'-description-input',{value:row.description,maxLength:2000});
   const box=wrap('Description',area);box.className='description';form.append(box);
   closeTyping();const text=collab.text('entries',row.id,'description');

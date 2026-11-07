@@ -250,14 +250,10 @@ try {
     check(await synced(ta) === 'synced' && await synced(tb) === 'synced', 'the description opens live for the owner and the entry\'s author');
     await area(ta).click(); await area(tb).click();
     await Promise.all([TA.keyboard.type('owner-typed ', { delay: 25 }), TB.keyboard.type('author-typed ', { delay: 25 })]);
-    const typed = await Promise.all([ta, tb].map((frame) => until(() => area(frame).inputValue(), (text) => /owner-typed/.test(text ?? '') && /author-typed/.test(text ?? ''), 15_000)));
-    check(typed[0] === typed[1] && /owner-typed/.test(typed[0] ?? ''), `both see both people's typing (${JSON.stringify(typed[0])})`);
+    // Both fields hold every key of both people, the same text, before anyone leaves.
+    const typed = await until(() => Promise.all([ta, tb].map((frame) => area(frame).inputValue())), (values) => values?.[0] === values?.[1] && !!values?.[0]?.includes('owner-typed ') && values[0].includes('author-typed '), 15_000) ?? [];
+    check(typed[0] === typed[1] && !!typed[0]?.includes('owner-typed ') && typed[0].includes('author-typed '), `both see both people's typing (${JSON.stringify(typed)})`);
     await Promise.all([ta, tb].map((frame) => frame.getByRole('button', { name: 'Cancel', exact: true }).click()));
-    const bo = (await trackerGql('{ entries(where: {name: {_eq: "Bo task"}}) { _id description } }')).data.entries[0];
-    const savedText = await until(async () => (await trackerGql('query($id: ID!) { entries_by_pk(_id: $id) { description } }', { id: bo._id })).data.entries_by_pk.description, (text) => text === typed[0], 20_000);
-    check(savedText === typed[0], 'closing the forms saves the typing to the entry');
-    const read = await until(() => tc.locator('#lists').textContent(), (text) => !!text?.includes('author-typed') && text.includes('owner-typed'), 15_000);
-    check(!!read?.includes('author-typed') && read.includes('owner-typed'), 'the signed-out reader\'s list shows the saved description');
 
     // table: the owner switches to the table and opens an entry's form from its Edit cell.
     await ta.getByRole('button', { name: 'Table', exact: true }).click();
@@ -271,7 +267,17 @@ try {
     check(/Done is full \(3 entries\)/.test(refused.errors?.[0]?.message ?? ''), `the fourth entry is refused by the server (${JSON.stringify(refused.errors?.[0]?.message)})`);
     check(await until(() => tb.locator('[data-af-id="group-done-count"]').textContent(), (text) => text === '3 of 3', 10_000) === '3 of 3', 'the page counts the group with _sql: 3 of 3');
     check(errors.length === 0, `no page or console error, the table included (${errors.join(' | ') || 'none'})`);
-    await Promise.all([TA, TB, TC].map((p) => p.close()));
+    // Typing is saved as one dataset version about 5 s after its last editor leaves the page.
+    await Promise.all([TA, TB].map((p) => p.close({ runBeforeUnload: true })));
+    const bo = (await trackerGql('{ entries(where: {name: {_eq: "Bo task"}}) { _id description } }')).data.entries[0];
+    const savedText = await until(async () => (await trackerGql('query($id: ID!) { entries_by_pk(_id: $id) { description } }', { id: bo._id })).data.entries_by_pk.description, (text) => text === typed[0], 20_000);
+    check(savedText === typed[0], 'both leaving saves the typing to the entry');
+    await TC.reload({ waitUntil: 'load' });
+    const tc2 = await documentFrame(TC);
+    await loaded(tc2);
+    const read = await until(() => tc2.locator('#lists').textContent(), (text) => !!text?.includes('author-typed') && text.includes('owner-typed'), 15_000);
+    check(!!read?.includes('author-typed') && read.includes('owner-typed'), 'the signed-out reader reloads and reads the saved description in the list');
+    await TC.close();
   });
 
   await section('a downloaded copy works offline: the library loads and the field is read-only', async () => {

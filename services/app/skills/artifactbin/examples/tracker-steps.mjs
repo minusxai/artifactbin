@@ -37,8 +37,9 @@ if(page.viewportSize().width>800){
     await page.reload();await loaded();
     await testRow().getByText(NOTE).waitFor({timeout:2000});});
   // @feature collab
-  // Typing is saved to the dataset about 5 s after the last editor leaves; until then the server
-  //   keeps it live, so reopening the entry after a reload shows it (guest.mjs reads the save).
+  // Typing is saved to the dataset about 5 s after its last editor leaves the page; until then
+  //   the server keeps it live, so reopening the entry after a reload shows it (guest.mjs reads
+  //   the save, made once this check's page closes).
   const synced=()=>page.waitForFunction(()=>document.querySelector(
     '[data-af-id$="-description-input"]')?.dataset.status==='synced',null,{timeout:3000});
   await step('its description is typed live and kept after a reload',async()=>{
