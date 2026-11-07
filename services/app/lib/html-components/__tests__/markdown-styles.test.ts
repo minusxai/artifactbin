@@ -52,7 +52,7 @@ describe('the Markdown stylesheet',()=>{
 
  it('styles a doc article and af-markdown output the same way',()=>{
   sheet(MARKDOWN_CSS);
-  const article=document.createElement('article');article.setAttribute(MARKDOWN_ROOT.slice(1,-1),'');article.innerHTML='<h2>Doc</h2><p>Text</p>';document.body.append(article);
+  const article=document.createElement('article');article.className=MARKDOWN_ROOT.slice(1);article.innerHTML='<h2>Doc</h2><p>Text</p>';document.body.append(article);
   const el=document.createElement('af-markdown');el.textContent='## Doc\n\nText';document.body.append(el);
   for(const property of ['line-height','font-weight','letter-spacing','margin-block-end'] as const){
    expect(getComputedStyle(el.querySelector('h2')!).getPropertyValue(property),property).toBe(getComputedStyle(article.querySelector('h2')!).getPropertyValue(property));
@@ -66,7 +66,7 @@ describe('the Markdown stylesheet',()=>{
   sheet('article{line-height:1.4}h2{letter-spacing:normal}');
   // af-markdown appends its own copy of the sheet after the page's styles.
   const el=document.createElement('af-markdown');el.textContent='x';document.body.append(el);
-  const article=document.createElement('article');article.setAttribute(MARKDOWN_ROOT.slice(1,-1),'');article.innerHTML='<h2>Doc</h2>';document.body.append(article);
+  const article=document.createElement('article');article.className=MARKDOWN_ROOT.slice(1);article.innerHTML='<h2>Doc</h2>';document.body.append(article);
   expect(getComputedStyle(article).lineHeight).toBe('1.4');
   expect(getComputedStyle(article.querySelector('h2')!).letterSpacing).toBe('normal');
  });

@@ -1,6 +1,7 @@
 /**
  * THE MARKDOWN STYLESHEET: the one typography for Markdown-shaped text, used by docs and by af-markdown.
- * Root: any element with `data-af-markdown` (a doc's `<article>`, af-markdown's generated output).
+ * Root: any element with class `af-markdown-body` (a doc's `<article>`, af-markdown's generated output). A class, not a
+ *   `data-af-*` attribute: those mark platform behaviour, and a reader's live morph rebuilds the page around them.
  * Delivery: the platform stylesheet a design system links carries it (lib/html-systems htmlSystemsCss), so a doc's HTML
  *   carries none; af-markdown also injects it, for pages without a design system.
  * Layering: every selector is zero-specificity (`:where`), so the design system (fonts, colours: --font-display,
@@ -11,7 +12,7 @@
  *   region-editor-styles), so text does not move when editing starts.
  * Pure strings, no imports: lib/html-systems loads this module under plain Node too (the skill's local preview).
  */
-export const MARKDOWN_ROOT = '[data-af-markdown]';
+export const MARKDOWN_ROOT = '.af-markdown-body';
 
 const R = `:where(${MARKDOWN_ROOT})`;
 const DARK = `:where(.dark,[data-theme="dark"],[data-af-dark="true"]) ${R},${R}:where(.dark,[data-theme="dark"])`;

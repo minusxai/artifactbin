@@ -19,7 +19,7 @@ const head = (title: string, extra = '') => `<head><meta charset="utf-8"><meta n
 /**
  * A DOC's page layout only: its column, body size and the empty title's greyed name (saved, and while edited, where
  * ProseMirror holds an empty block open with a trailing break) without being content. Its prose typography is the one
- * Markdown stylesheet (lib/html-components markdown-styles) the platform serves for its `data-af-markdown` article,
+ * Markdown stylesheet (lib/html-components markdown-styles) the platform serves for its `af-markdown-body` article,
  * on the design system's tokens. The doc is the page: no focus ring around it while it is edited (the caret is the focus).
  */
 const DOC_LAYOUT_CSS = [
@@ -35,7 +35,7 @@ const DOC_LAYOUT_CSS = [
  * Its `<title>` follows its first heading on each region save until someone renames it (lib/artifacts doc-title).
  */
 function docStarterHtml(): string {
-  return `<!doctype html><html lang="en">${head(UNTITLED_DOCUMENT, `<meta name="artifactbin:design-system" content="meridian"><style>${DOC_LAYOUT_CSS}</style>`)}<body><main><article data-af-editable="rich" data-af-markdown><h1></h1><p></p></article></main></body></html>`;
+  return `<!doctype html><html lang="en">${head(UNTITLED_DOCUMENT, `<meta name="artifactbin:design-system" content="meridian"><style>${DOC_LAYOUT_CSS}</style>`)}<body><main><article data-af-editable="rich" class="af-markdown-body"><h1></h1><p></p></article></main></body></html>`;
 }
 
 /** The page an agent handoff starts from (`/api/start`): a bare titled page the agent replaces whole. */

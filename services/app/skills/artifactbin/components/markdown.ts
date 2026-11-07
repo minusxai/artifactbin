@@ -10,7 +10,7 @@
  * Gotchas: the initial text is read once as the source; later edits go through source.
  */
 import { registerComponent } from './register-component';
-/** Generated output is a `data-af-markdown` root styled by the one Markdown stylesheet
+/** Generated output is an `af-markdown-body` root styled by the one Markdown stylesheet
  * (./markdown-styles), the same sheet docs use; copy controls overlay code without changing its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }
@@ -36,7 +36,7 @@ for(const key of ['source','copyControls'] as const)if(Object.prototype.hasOwnPr
 if(!this.output) { this.literalSource=[...this.childNodes].filter(node=>node.nodeType===3).map(
     node=>node.textContent ?? '').join(''); for(const node of [...this.childNodes]) if(
     node.nodeType===3) node.remove(); this.output=this.ownerDocument.createElement('div');
-    this.output.className='mx-markdown'; this.output.setAttribute(MARKDOWN_ROOT.slice(1,-1),'');
+    this.output.className=`mx-markdown ${MARKDOWN_ROOT.slice(1)}`;
     this.append(this.output); }
   this.render();
  }

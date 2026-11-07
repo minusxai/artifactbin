@@ -83,7 +83,7 @@ describe('a new doc', () => {
     const regions = editableRegions(row.source!);
     expect(regions).toEqual([expect.objectContaining({ kind: 'rich' })]);
     const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(row.source!)?.[1] ?? '';
-    expect(body).toMatch(/^<main data-af-id="[^"]+"><article data-af-editable="rich" data-af-markdown data-af-id="[^"]+"><h1 data-af-id="[^"]+"><\/h1><p data-af-id="[^"]+"><\/p><\/article><\/main>$/);
+    expect(body).toMatch(/^<main data-af-id="[^"]+"><article data-af-editable="rich" class="af-markdown-body" data-af-id="[^"]+"><h1 data-af-id="[^"]+"><\/h1><p data-af-id="[^"]+"><\/p><\/article><\/main>$/);
   });
 
   it('carries no Markdown typography of its own: the platform serves the one Markdown stylesheet for it', () => {
@@ -96,7 +96,7 @@ describe('a new doc', () => {
     }
     for (const rule of MARKDOWN_CSS.split('}').map((block) => block.trim()).filter(Boolean)) expect(html).not.toContain(rule);
     // Its article is the root the shared sheet styles, and a served doc links the sheet that carries it.
-    expect(html).toMatch(new RegExp(`<article[^>]*\\s${MARKDOWN_ROOT.slice(1, -1)}[\\s>]`));
+    expect(html).toContain(`<article data-af-editable="rich" class="${MARKDOWN_ROOT.slice(1)}">`);
     const served = assembleHtmlPage({ html, core: 'core()', config: { pageId: 'doc', revision: '1', backends: [] }, systemsHref: PLATFORM_STYLES_PATH });
     expect(served).toContain(`<link rel="stylesheet" data-af="platform-styles" href="${PLATFORM_STYLES_PATH}">`);
     expect(htmlSystemsCss()).toContain(MARKDOWN_CSS);
@@ -147,7 +147,7 @@ describe('a new doc', () => {
     expect(titleTag(saved.source)).toBe('Q3 plan');
     expect(saved.source).toMatch(/<h1 data-af-id="[^"]+">Q3 plan<\/h1>/);
     // The article keeps the Markdown root through region saves: the region is its content, not the element.
-    expect(saved.source).toMatch(/<article data-af-editable="rich" data-af-markdown data-af-id="[^"]+">/);
+    expect(saved.source).toMatch(/<article data-af-editable="rich" class="af-markdown-body" data-af-id="[^"]+">/);
 
     await typeAtStart(live, owner, id, regionId, 'Draft: ');
     expect(await flush(live, owner, id)).toBe(3);

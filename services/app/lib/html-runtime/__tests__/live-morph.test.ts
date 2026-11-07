@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {applyHtmlVersion,LOADED_SOURCE,morphHtmlVersion,VersionRefused} from '../live-morph';
+import {applyHtmlVersion,interactive,LOADED_SOURCE,morphHtmlVersion,VersionRefused} from '../live-morph';
+import {MARKDOWN_ROOT} from '@/lib/html-components/markdown-styles';
 
 const SCRIPT='<script type="module" data-af-id="s1">document.querySelector(".chart").append(document.createElement("canvas"));</script>';
 /** A served page: runtime JSON (revision, source IDs, script fingerprint) and the author's markup. */
@@ -180,4 +181,13 @@ describe('applyHtmlVersion (inside the frame)',()=>{
   }
   history.replaceState(null,'','/');
  });
+});
+
+it('keeps a doc region that carries the Markdown root morphable: a styling hook is not an interactive element',()=>{
+ // A doc's article is the rich region AND the Markdown stylesheet's root (lib/workspace artifact-starters); readers
+ // follow its typing by morphing, so marking it for the stylesheet must not make it platform behaviour.
+ const marker=MARKDOWN_ROOT.startsWith('.')?`class="${MARKDOWN_ROOT.slice(1)}"`:MARKDOWN_ROOT.slice(1,-1);
+ const article=new DOMParser().parseFromString(`<article data-af-editable="rich" ${marker} data-af-id="a"><h1 data-af-id="t">Title</h1></article>`,'text/html').querySelector('article')!;
+ expect(article.matches(MARKDOWN_ROOT)).toBe(true);
+ expect(interactive(article)).toBe(false);
 });

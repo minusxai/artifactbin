@@ -40,7 +40,8 @@ has no empty paragraph: blank paragraphs are dropped. `--html` reads and writes 
 HTML in the same subset instead (`p`, `h1`-`h6`, `ul`/`ol`/`li`, `blockquote`, `pre>code`, `hr`,
 `strong`, `em`, `code`, `a href`).
 
-Docs and `af-markdown` share one Markdown stylesheet (`components/markdown-styles.ts`); the design
+Docs and `af-markdown` share one Markdown stylesheet (`components/markdown-styles.ts`, root class
+`af-markdown-body`); the design
 system sets fonts and colours. For one page, add a small `<style>` override such as
 `article { line-height: 1.4 }`: read the page (`scripts/read.mjs`), add it, republish it
 (`scripts/publish.mjs`). A whole-page write merges live regions three-way, keeping people's typing.

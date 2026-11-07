@@ -29,7 +29,7 @@ it('creates a doc from the first item of the Create menu: unlisted, marked a doc
   const body = created();
   expect(body).toMatchObject({ visibility: 'unlisted', parent_id: 'folder1', template: 'doc' });
   expect(body.html).toContain('<title>Untitled document</title>');
-  expect(body.html).toContain('<article data-af-editable="rich" data-af-markdown><h1></h1><p></p></article>');
+  expect(body.html).toContain('<article data-af-editable="rich" class="af-markdown-body"><h1></h1><p></p></article>');
   expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
 });
 
