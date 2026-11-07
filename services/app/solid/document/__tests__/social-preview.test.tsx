@@ -97,6 +97,30 @@ describe('social preview editor', () => {
     fireEvent.pointerUp(resize, { pointerId: 2 });
   });
 
+  it('scrolls the frame down the page with the wheel and resizes it with a pinch, sharpening once the gesture settles', () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('fetch', vi.fn());
+      render(() => <SocialPreviewEditor id="story1" source="<p>x</p>" editId="e1" version={1} onClose={() => {}} />);
+      loadOverview();
+      const canvas = screen.getByLabelText('Social preview canvas');
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ width: 800 } as DOMRect);
+      const frame = screen.getByLabelText('Move social preview crop');
+
+      expect(fireEvent.wheel(canvas, { deltaY: 100 })).toBe(false);
+      expect(frame).toHaveAttribute('aria-valuetext', 'x 0, y 216, width 1600');
+      expect(document.querySelector('img[src*="focus=1"]')).toBeNull();
+
+      fireEvent.wheel(canvas, { deltaY: -100, ctrlKey: true });
+      const width = Number(frame.getAttribute('aria-valuetext')?.match(/width (\d+)/)?.[1]);
+      expect(width).toBeLessThan(1600);
+      expect(width).toBeGreaterThanOrEqual(400);
+
+      vi.advanceTimersByTime(500);
+      expect(document.querySelector('img[src*="focus=1"]')).toHaveAttribute('src', expect.stringContaining(`width%3D${width}`));
+    } finally { vi.useRealTimers(); }
+  });
+
   it('keeps the draft framing when a concurrent edit moves the document head', async () => {
     const fetchMock = vi.fn(async () => response(409, { error: 'doc_changed', edit_id: 'e2', source: '<head><title>new</title></head><p>x</p>' }));
     vi.stubGlobal('fetch', fetchMock);
