@@ -10,6 +10,7 @@
   "scripts/__tests__/stored-shape-pins.test.mjs",
   "scripts/__tests__/v3-ci.test.mjs",
   "scripts/__tests__/workflows.test.mjs",
+  "services/app/lib/agent-copy/__tests__/agent-starter-consistency.test.ts",
   "services/app/lib/live-regions/__tests__/region-doc-guard.test.ts",
   "services/app/lib/skills/__tests__/retired-phrasing.test.ts",
   "services/app/lib/skills/__tests__/skill-archive-budget.test.ts",
