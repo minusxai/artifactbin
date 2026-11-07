@@ -121,6 +121,10 @@ const commands = {
   'new-app': {
     starter: 'examples/shared-app.html',
     flags: {kind: flag(), title: flag(), data: flag(), dir: flag()}
+  },
+  'new-page': {
+    starter: 'examples/csv-dashboard.html',
+    flags: {title: flag(), data: flag(), dir: flag(), artifact: flag()}
   }
 };
 export const COMMANDS = Object.freeze(commands);

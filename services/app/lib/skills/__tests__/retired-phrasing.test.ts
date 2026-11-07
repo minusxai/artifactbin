@@ -193,7 +193,8 @@ describe('retired skill phrasing', () => {
   });
   it('states the reply rule once, in SKILL.md Read first', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
-    expect(skill).toContain('The reply is the link plus what the user asked for, in the form they asked for. ' +
+    expect(skill).toContain('The reply is the link plus what the user asked for, in the form they asked for; ' +
+      "a form they prescribe limits the reply's text, never the watch. " +
       'Describe testing, build and permissions only from what `check` reported.');
     expect(skill.match(/The reply is/g)).toHaveLength(1);
   });

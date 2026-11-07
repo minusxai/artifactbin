@@ -87,14 +87,20 @@ export async function withWatchLock(file,run){
 }
 /** How to run watch --next: the one place the order of reply and watch is stated (comment.mjs help
  * prints the same text). Claude Code ends a turn on a reply and wakes on a background command's
- * output; other harnesses block on it. */
+ * output. In other harnesses (Pi, Codex, OpenCode) a message without a command ends the session, so
+ * the reply rides on the message that runs the blocking watch: "send your reply, then run it" left
+ * DeepSeek in Pi skipping the watch, or killing it with timeout, & or nohup (4 of 5 failures). */
 export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_background first, "+
  'then send your reply as your last message and end your turn; you are woken when it prints. '+
- 'Other harnesses: send your reply, then run it as a blocking command with a shell timeout of at '+
- 'least 300000 ms.';
-/** The reply, then the watch as its own last line, a literal command: it is a separate step. */
-const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts}, and run `+
- 'the comment watch as a separate step, even when the reply is only the link. '+WATCH_MODE+
+ 'Other harnesses: a message can carry text and a command together, so write your reply as the '+
+ 'text of the message that runs it (no final message is needed), and run it in the '+
+ 'foreground with its default wait and a shell timeout of at least 300000 ms. It returns as soon '+
+ 'as someone comments, and on its own within 4 minutes: handle what it printed and run it again '+
+ 'until it says to stop watching. '+
+ 'Watching is part of every task, however short the reply.';
+/** The reply, then the watch as its own last line, a literal command. */
+const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and run `+
+ 'the comment watch, even when the reply is only the link. '+WATCH_MODE+
  `\n  node scripts/comment.mjs watch ${id} --next`;
 /** The step after publishing page content (publish.mjs, doc.mjs write) or answering a comment
  * (comment.mjs reply). */

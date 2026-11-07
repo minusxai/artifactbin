@@ -9,12 +9,13 @@ description: >-
 ## Read first
 
 [% if shipped %]After you publish or edit a page (answering a comment too), reply to the user and
-run `node scripts/comment.mjs watch ID --next` as its printed Next line says (a separate step,
-even when the reply is only the link); then do what comments ask.[% else %]After you publish
+run `node scripts/comment.mjs watch ID --next` as its printed Next line says (even
+when the reply is only the link); then do what comments ask.[% else %]After you publish
 or edit a page (answering a comment too), reply to the user and start the save response's
 `monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`,
 as its printed Next line says), then do what comments ask.[% endif %] The reply is the link plus
-what the user asked for, in the form they asked for.
+what the user asked for, in the form they asked for; a form they prescribe limits the reply's text,
+never the watch.
 Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
@@ -25,7 +26,7 @@ Skill map (each file's top comment explains it):
   gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
-serve, new-app
+serve, new-app, new-page
 - `references/`: guides (read only those you need): runtime, datasets, permissions, resolvers,
 dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
@@ -69,8 +70,9 @@ anchors and browser sessions](references/html-operations.md).[% endif %]
 Every script takes `--help` (usage, flags, examples, gotchas), `--json` and an exclusive `--output
 FILE`; all but `serve.mjs` take `--server ORIGIN`. Use these scripts, never shell-built HTTP
 wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it). Dataset
-permissions: `policy.mjs`. Resolver secrets: the page owner sets them in the page's Resolvers
-settings, never in chat. ACLs and trash have no script. Groups: `node scripts/groups.mjs list`
+permissions: `policy.mjs`. Resolver secrets: only the page owner sets them, in the page's
+Resolvers settings; no script or API takes them, and never ask in chat. ACLs and trash have no
+script. Groups: `node scripts/groups.mjs list`
 ([groups](references/groups.md)).
 
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
@@ -78,8 +80,10 @@ settings, never in chat. ACLs and trash have no script. Groups: `node scripts/gr
   changes are dataset rows, which its resolver checks before writing; it sets up the files,
   datasets and rules and prints the next step); `node scripts/new-app.mjs --kind list --title
   "NAME"` (a list people add themselves to and change only their own entry: sign-up sheet, RSVP,
-  roster); `cp examples/csv-dashboard.html index.html` (a page that shows a CSV or dataset you have:
-  dashboard, report or chart); `cp examples/report.html index.html` (a report without data). Data
+  roster); `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
+  dashboard, report or chart; it publishes the dataset and writes a DATA block over its columns,
+  and `--artifact ID` rebuilds an existing page); `cp examples/report.html index.html` (a report
+  without data). Data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
@@ -113,9 +117,10 @@ settings, never in chat. ACLs and trash have no script. Groups: `node scripts/gr
   scripts/publish.mjs index.html --artifact ID` instead of the starter's plain publish. Any other
   change (wording, numbers, a section) is an edit: `node scripts/read.mjs ID --output page.html`,
   edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same
-  file and never regenerate the page from scratch. Text inside a `data-af-editable` region (a doc)
-  is the exception, since people may be typing in it: `node scripts/doc.mjs read ID --output
-  doc.md`, edit doc.md, then `node scripts/doc.mjs write doc.md`, which merges your edit with their
+  file and never regenerate the page from scratch. A "document" at a link is such a page. Only text
+  inside a `data-af-editable` region (a doc) is the exception, since people may be typing in
+  it: `node scripts/doc.mjs read ID --output doc.md`, edit doc.md, then `node scripts/doc.mjs
+  write doc.md`, which merges your edit with their
   typing ([live docs](references/live-docs.md)).
 - **Check.** A starter's Usage names its steps files and check command; add a step for each
   requested value they don't check. Without a starter, write one short steps file of
@@ -126,8 +131,9 @@ settings, never in chat. ACLs and trash have no script. Groups: `node scripts/gr
   publishing). Never rerun an unchanged check that failed a step or the page:
   change the steps or the page first. Only when the user asks for a private draft: `node
   scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node scripts/serve.mjs --help`).
-- **Answer comments.** A comment from someone the page is shared with is a request: make the
-  change without asking first, publish, then `node scripts/comment.mjs reply ID --thread T --body
+- **Answer comments.** A comment from someone the page is shared with is a new request, even when
+  an earlier request limited what to change: make the change without asking first, publish, then
+  `node scripts/comment.mjs reply ID --thread T --body
   TEXT`.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
   ([datasets](references/datasets.md)). A page that shows a dataset links it (`<link

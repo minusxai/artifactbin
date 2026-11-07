@@ -185,13 +185,14 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
  // Interrupted or taken over: what this call held back is printed by the next one.
  if(signal?.aborted)return {events:0,timedOut:false,stopped:false};
  const quiet=quietMs>=60000?`${Math.round(quietMs/60000)} minutes`:`${Math.round(quietMs/1000)} s`;
- const answer=`do what it asks (publish a requested change first), then node scripts/comment.mjs `+
-  `reply ${id} --thread`;
+ const answer='do what it asks, even past limits an earlier request set (publish the change '+
+  `first), then node scripts/comment.mjs reply ${id} --thread`;
  if(unanswered)await print(`answer the comment(s) printed above first (${unanswered.join(', ')}):`+
   ` ${answer} THREAD --body TEXT; then run watch --next again`);
  else if(stopped)await print(`no new comments for ${quiet}: stop watching and end your turn; if`+
   ' the person asks you to watch again, run watch --next');
- else if(timedOut)await print(QUIET);
+ else if(timedOut)await print(QUIET);else if(values.once)await print('--once waited for nothing;'+
+  ` to watch for new comments: node scripts/comment.mjs watch ${id} --next`);
  // Agents re-watched before replying and missed the person's wait: print the order here.
  else if(next&&events>0)await print(`next: answer each comment above: ${answer} <annotation_id> `+
   '--body TEXT; the reply prints how to watch again.'+(reacted?' '+REACTIONS:''));
