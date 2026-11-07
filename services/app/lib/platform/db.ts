@@ -12,7 +12,6 @@ import { DATABASE_URL } from './config';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
 import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
-import { withStateLock } from '@artifactbin/utils/node/state-lock';
 
 /**
  * The single database knob, dispatched on scheme — the URL IS the type:
@@ -104,12 +103,8 @@ class PgliteDb implements Db {
 
   private opQueue: Promise<unknown> = Promise.resolve();
 
-  /** Gives up the data directory (holdDataDir) once the instance is closed; nothing for an in-memory one. */
-  private release: () => Promise<void>;
-
-  constructor(db: PgliteDb['db'], release: () => Promise<void> = async () => {}) {
+  constructor(db: PgliteDb['db']) {
     this.db = db;
-    this.release = release;
   }
 
   private serialize<T>(op: () => Promise<T>): Promise<T> {
@@ -174,11 +169,7 @@ class PgliteDb implements Db {
    * "after what was asked for", not "now, mid-statement".
    */
   async close(): Promise<void> {
-    try {
-      await this.serialize(() => this.db.close());
-    } finally {
-      await this.release();
-    }
+    await this.serialize(() => this.db.close());
   }
 }
 
@@ -353,32 +344,6 @@ export function configureDb(options: DbOptions | undefined): void {
   global.__artifact_bin_db_options__ = options;
 }
 
-/**
- * ONE PROCESS PER DATA DIRECTORY. PGLite locks nothing: a second process on a directory another holds open (a test
- * harness, a script that boots the app, a second server in the same checkout) truncates and rewrites relation files
- * under the first, which then fails every query that reaches them until the data is moved aside. The opener holds the
- * directory's state lock (@artifactbin/utils node/state-lock: an OS lock, released with the process even when it dies)
- * until it closes, and any other opener is refused at once rather than queued behind a server that never exits.
- * Resolves to the release.
- */
-async function holdDataDir(dataDir: string): Promise<() => Promise<void>> {
-  const directory = path.resolve(dataDir);
-  let release!: () => void;
-  const released = new Promise<void>((resolve) => { release = resolve; });
-  let held!: Promise<void>;
-  try {
-    await new Promise<void>((acquired, refused) => {
-      held = withStateLock(path.dirname(directory), `pglite:${directory}`, () => { acquired(); return released; }, { waitMs: 0, reentrant: false });
-      held.catch(refused);
-    });
-  } catch (error) {
-    if (!(error instanceof Error) || !error.message.startsWith('workspace_busy')) throw error;
-    throw new Error(`database_busy: another process has the PGLite directory ${directory} open (a running server?). `
-      + 'PGLite allows one process per directory: give this one its own DATABASE_URL (pglite://<path> or pglite://memory).');
-  }
-  return async () => { release(); await held; };
-}
-
 async function createDb(): Promise<Db> {
   const options = global.__artifact_bin_db_options__ ?? {};
   const target = options.target ?? databaseTargetForRuntime(DATABASE_URL);
@@ -415,22 +380,11 @@ async function createDb(): Promise<Db> {
     // directory (e.g. ./data) doesn't exist yet.
     const { mkdirSync } = await import('fs');
     mkdirSync(target.dataDir, { recursive: true });
-    const release = await holdDataDir(target.dataDir);
-    let db: PgliteDb | undefined;
-    try {
-      db = new PgliteDb(new PGlite(target.dataDir, { parsers }) as unknown as ConstructorParameters<typeof PgliteDb>[0], release);
-      await db.initializeSchema();
-      await applyBackfills(db);
-      return db;
-    } catch (error) {
-      // A failed boot gives the directory back, so the next getDb (which retries) is not refused by this process.
-      await (db ? db.close() : release()).catch(() => undefined);
-      throw error;
-    }
   }
-  const image = options.schemaImage;
+  const image = target.dataDir ? undefined : options.schemaImage;
   const snapshot = image?.load();
-  const raw = new PGlite(snapshot ? { parsers, loadDataDir: snapshot } : { parsers });
+  const raw = target.dataDir ? new PGlite(target.dataDir, { parsers })
+    : new PGlite(snapshot ? { parsers, loadDataDir: snapshot } : { parsers });
   const db = new PgliteDb(raw as unknown as ConstructorParameters<typeof PgliteDb>[0]);
   if (snapshot) {
     await raw.waitReady;
