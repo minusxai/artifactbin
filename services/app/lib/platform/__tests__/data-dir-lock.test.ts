@@ -11,6 +11,8 @@ import { once } from 'node:events';
 import { afterAll, afterEach, expect, it } from 'vitest';
 import { configureDb, getDb, resetDb } from '@/lib/platform/db';
 
+// harness-exempt: reset closing the database hands its data directory to the next opener, which IS the subject here
+
 const suiteOptions = globalThis.__artifact_bin_db_options__;
 const root = mkdtempSync(path.join(tmpdir(), 'afbin-pglite-lock-'));
 const dataDir = path.join(root, 'pglite');
