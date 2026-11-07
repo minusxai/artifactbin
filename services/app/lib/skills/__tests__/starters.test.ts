@@ -31,7 +31,7 @@ const ROWS = read('repairs.csv').trim().split('\n').slice(1).map((line, index) =
   return {_id: 'r' + index, week, completed: Number(completed), waiting: Number(waiting)};
 });
 
-interface Page {dom: JSDOM; queries: string[]; specs: Array<Record<string, any>>; error?: unknown}
+interface Page {dom: JSDOM; queries: string[]; specs: Array<Record<string, any>>; error?: unknown; change?: (names: string[]) => void}
 
 /**
  * Loads a starter in jsdom: the module scripts run in order with `@afbin/*` imports replaced by stubs. `answer` is
@@ -42,7 +42,7 @@ async function load(html: string, answer: (query: string) => unknown): Promise<P
   const dom = new JSDOM(html.replace(/<script type="module"[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only'});
   const page: Page = {dom, queries: [], specs: []};
   Object.assign(dom.window, {IntersectionObserver: class { observe() {} disconnect() {} }, stubs: {
-    apollo: {gql: (strings: readonly string[]) => strings.join(''), onResolverChange: () => ({unsubscribe() {}}),
+    apollo: {gql: (strings: readonly string[]) => strings.join(''), onResolverChange: (listener: (names: string[]) => void) => { page.change = listener; return {unsubscribe() {}}; },
       client: {query: async ({query}: {query: string}) => { page.queries.push(query); return answer(query); }}},
     compile: (spec: Record<string, unknown>) => { page.specs.push(spec); return {spec}; },
     vega: {parse: (spec: unknown) => spec, expressionInterpreter: {}, View: class {
@@ -226,4 +226,16 @@ it('shows the list starter\'s add form, and Edit and Remove only on entries the 
   expect((g.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
   expect((g.querySelector('#signin') as HTMLElement).hidden).toBe(false);
   expect(g.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]').length).toBe(0);
+});
+
+it('keeps what someone typed into an open list entry when another change refreshes the list', async () => {
+  const entries = [{_id: 'a1', name: 'Ada', choice: 'First choice', note: 'gloves', _can: {update: true, delete: true}}];
+  const page = await load(fill(read('shared-list.html')), () => ({data: {entries, entries_can: {insert: true}, viewer: {signedIn: true}}}));
+  const doc = page.dom.window.document;
+  (doc.querySelector('[data-af-id="entry-a1-edit"]') as HTMLButtonElement).click();
+  const note = () => doc.querySelector('[data-af-id="entry-a1-note-input"]') as HTMLInputElement | null;
+  note()!.value = 'typed, not saved';
+  page.change!(['entries']);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(note()?.value).toBe('typed, not saved');
 });

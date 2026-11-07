@@ -137,9 +137,11 @@ $('#add').onsubmit=async event=>{event.preventDefault();const name=$('#add-name'
   if(await write(`Added ${name} to ${$('#add-choice').value}.`,{mutation:insert,variables:{o:{
     name,choice:$('#add-choice').value,note:$('#add-note').value.trim()}}}))
     $('#add-name').value=$('#add-note').value='';};
-// Someone else's change, or signing in or out, refreshes the list; an open edit stays open.
+// Someone else's change, or signing in or out, refreshes the list. While an entry is open for
+//   editing the list is not redrawn (that would drop what was typed); saving or Cancel redraws it.
 onResolverChange(names=>{if(names.includes('entries')||names.includes('viewer'))void load()
-  .then(()=>{if(!rows.some(r=>r.id===editing))editing=null;render();}).catch(()=>{});});
+  .then(()=>{if(editing&&rows.some(r=>r.id===editing))return;editing=null;render();})
+  .catch(()=>{});});
 try{await load();render();status.textContent=`${rows.length} signed up so far.`;}
 catch(error){status.textContent=error.message||'Could not load the list.';}
 </script>
