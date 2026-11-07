@@ -13,7 +13,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { pack, readTimings } from '../lib/timed-sequencer.mjs';
+import { pack, readTimings, weigher } from '../lib/timed-sequencer.mjs';
 
 const OUT = path.resolve(import.meta.dirname, 'test-timings.json');
 /** The Vitest projects CI runs with `--shard` (ci.yml's api, ui and node jobs; pr-fast.yml's suite shards). */
@@ -57,8 +57,9 @@ export function mergeTimings(timings, measured) {
 
 /** Each job's shards as the sequencer packs every recorded file: [{ files, ms }] per shard. */
 export function shardLoads(timings) {
+  const weigh = weigher(timings);
   return Object.fromEntries(Object.entries(JOBS).map(([job, { projects, count }]) => {
-    const items = projects.flatMap((project) => Object.entries(timings.files[project] ?? {}).map(([file, ms]) => ({ key: `${project}:${file}`, weight: ms })));
+    const items = projects.flatMap((project) => Object.keys(timings.files[project] ?? {}).map((file) => ({ key: `${project}:${file}`, weight: weigh(project, file) })));
     const weights = new Map(items.map((item) => [item.key, item.weight]));
     return [job, pack(items, count).map((keys) => ({ files: keys.length, ms: keys.reduce((sum, key) => sum + weights.get(key), 0) }))];
   }));

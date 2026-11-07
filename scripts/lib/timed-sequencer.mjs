@@ -30,11 +30,26 @@ function median(values) {
 }
 
 /**
- * Weight of one file of `project` (ms). A file measured under another project (moved between
- * `api` and `api-isolated`) keeps its time; a never-measured one weighs the median of its project,
- * or of every file when its project has none.
+ * WHAT A FILE COSTS BEYOND ITS OWN TIME, by project. Vitest's per-file time (the table) is the file's tests alone; a file
+ * in an isolated project also imports a fresh module graph, and under jsdom builds a fresh window, before its first
+ * test. The shared projects (`api`, `islands`) pay that once per worker, not per file. Measured on pr fast run
+ * 42356365156: api runners given two or three api-isolated files spent 24-30s in Vitest against 13-20s for those given
+ * none at the same recorded load (~4s of import and transform per file), and the jsdom runners' environment time came
+ * to ~2s per `ui` file.
+ */
+export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 4000, ui: 2000 });
+
+/**
+ * Weight of one file of `project` (ms): its recorded time plus its project's per-file isolation cost. A file measured
+ * under another project (moved between `api` and `api-isolated`) keeps its time; a never-measured one weighs the
+ * median of its project, or of every file when its project has none.
  */
 export function weigher(timings) {
+  const recorded = recordedWeigher(timings);
+  return (project, file) => recorded(project, file) + (ISOLATED_FILE_MS[project] ?? 0);
+}
+
+function recordedWeigher(timings) {
   const medians = new Map();
   const anyProject = new Map();
   for (const files of Object.values(timings.files)) for (const [file, ms] of Object.entries(files)) anyProject.set(file, ms);

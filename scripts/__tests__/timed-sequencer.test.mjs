@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pack, readTimings, weigher } from '../lib/timed-sequencer.mjs';
+import { ISOLATED_FILE_MS, pack, readTimings, weigher } from '../lib/timed-sequencer.mjs';
 import { mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
@@ -44,8 +44,23 @@ describe('timed shard packing', () => {
 
   it('keeps a file\'s time when it moves to another project', () => {
     const weigh = weigher({ files: { api: { 'mocks.test.ts': 8000, 'b.test.ts': 2000 } } });
-    expect(weigh('api-isolated', 'mocks.test.ts')).toBe(8000);
-    expect(weigh('api-isolated', 'new.test.ts')).toBe(8000);
+    expect(weigh('api-isolated', 'mocks.test.ts')).toBe(8000 + ISOLATED_FILE_MS['api-isolated']);
+    expect(weigh('api-isolated', 'new.test.ts')).toBe(8000 + ISOLATED_FILE_MS['api-isolated']);
+  });
+
+  // Vitest's per-file time is the file's tests alone. A file in an isolated project also pays a fresh module graph (and,
+  // under jsdom, a fresh window) that its time leaves out: on pr fast run 42356365156 the api runners given two or three
+  // api-isolated files ran 24-30s against 13-20s for those given none, at the same recorded load.
+  it('weighs a file that runs in a fresh module graph by its time plus that graph\'s cost', () => {
+    const weigh = weigher({ files: { api: { 'a.test.ts': 3000 }, 'api-isolated': { 'm.test.ts': 3000 }, ui: { 'u.test.ts': 300 }, islands: { 'i.test.tsx': 300 } } });
+    expect(weigh('api', 'a.test.ts')).toBe(3000);
+    expect(weigh('islands', 'i.test.tsx')).toBe(300);
+    expect(weigh('api-isolated', 'm.test.ts')).toBe(3000 + ISOLATED_FILE_MS['api-isolated']);
+    expect(weigh('ui', 'u.test.ts')).toBe(300 + ISOLATED_FILE_MS.ui);
+    expect(Object.keys(ISOLATED_FILE_MS).sort()).toEqual(['api-isolated', 'ui']);
+    // The table's loads are what the sequencer packs: the same weights.
+    const loads = shardLoads({ files: { 'api-isolated': { 'm.test.ts': 3000 }, api: { 'a.test.ts': 3000 } } });
+    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(6000 + ISOLATED_FILE_MS['api-isolated']);
   });
 
   it('reads per-file times from Vitest CI log lines', () => {
@@ -78,6 +93,6 @@ describe('timed shard packing', () => {
     expect(loads.node.map((shard) => shard.files).reduce((a, b) => a + b)).toBe(5);
     expect(loads.node.map((shard) => shard.ms)).toEqual([50, 40, 30, 20, 10, 0]);
     expect(loads.node.reduce((sum, shard) => sum + shard.ms, 0)).toBe(150);
-    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12);
+    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12 + ISOLATED_FILE_MS['api-isolated']);
   });
 });
