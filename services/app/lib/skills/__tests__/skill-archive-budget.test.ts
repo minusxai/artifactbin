@@ -12,7 +12,10 @@ import {archiveFor} from '@/lib/skills';
 // 1.68 MiB: main sat 155 bytes under 1.67; local preview's `_sql` (node:sqlite, ~2.3 KB) replaces GraphQL aggregation.
 // 1.70 MiB: main sat 6.7 KB under 1.68; the API dashboard starter (examples/api-dashboard*, its new-app helper; ~21 KB
 // net) lets one command answer "a dashboard of an API behind a key, with shared notes", built from scratch in 340-511 s.
-const SKILL_ARCHIVE_MAX_BYTES=1.70*1024*1024;
+// 1.73 MiB: the codebase report (examples/codebase-report*, new-codebase-report.mjs and its git gatherer, ~28 KB
+// stored) is the report-from-data starter for agents working inside a repository: an agent asked to report on
+// a codebase published it in 142 s, 31 turns. The shared-app/shared-list removal frees more than that.
+const SKILL_ARCHIVE_MAX_BYTES=1.73*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

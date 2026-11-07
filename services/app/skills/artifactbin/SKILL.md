@@ -22,7 +22,7 @@ Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); shared-list.html and api-dashboard.html (api-dashboard.ts),
-  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html (csv-dashboard-steps.mjs);
+  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html, codebase-report.html (+ -steps.mjs);
   report.html; gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
@@ -84,8 +84,11 @@ script. Groups: `node scripts/groups.mjs list`
   behind a key, grouped with totals, with notes signed-in readers share);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it publishes the dataset and writes a DATA block over its columns,
-  and `--artifact ID` rebuilds an existing page); `cp examples/report.html index.html` (a report
-  without data). Other data
+  and `--artifact ID` rebuilds an existing page); `node scripts/new-codebase-report.mjs --repo DIR
+  --title "NAME"` (a report analysing the codebase you work in, DIR its repository: hotspots, who
+  works where, how its areas import each other, how it changes; it publishes the git history as
+  datasets and prints the facts to write the findings from); `cp examples/report.html index.html`
+  (a report without data). Other data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta

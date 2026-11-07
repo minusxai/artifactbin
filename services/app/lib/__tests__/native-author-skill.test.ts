@@ -90,7 +90,7 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs','shared-list.html','shared-list-steps.mjs','shared-list-guest.mjs','shared-list-cleanup.mjs','api-dashboard.html','api-dashboard.ts','api-dashboard-steps.mjs','api-dashboard-guest.mjs','api-dashboard-cleanup.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs','shared-list.html','shared-list-steps.mjs','shared-list-guest.mjs','shared-list-cleanup.mjs','api-dashboard.html','api-dashboard.ts','api-dashboard-steps.mjs','api-dashboard-guest.mjs','api-dashboard-cleanup.mjs','codebase-report.html','codebase-report-steps.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
   for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon']){expect(Object.hasOwn(files,`resolvers/resolver-${resolver}.ts`),resolver).toBe(true);expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(false);}
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
@@ -101,7 +101,7 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','autofix','groups','policy','new-app','new-page'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
    // The installed autofix runs standalone and edits only the selected file.
    const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
    expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);

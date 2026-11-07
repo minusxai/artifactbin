@@ -125,6 +125,11 @@ const commands = {
   'new-page': {
     starter: 'examples/csv-dashboard.html',
     flags: {title: flag(), data: flag(), dir: flag(), artifact: flag()}
+  },
+  'new-codebase-report': {
+    starter: 'examples/codebase-report.html',
+    flags: {title: flag(), repo: flag(), since: flag(), areas: flag(), dir: flag(),
+      artifact: flag()}
   }
 };
 export const COMMANDS = Object.freeze(commands);

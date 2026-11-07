@@ -1,0 +1,200 @@
+<!doctype html>
+<!-- Example: a codebase report from the repository's own git history, files and imports, every
+number computed by read-only SQL (_sql). Usage: and Gotchas: are above DATA; keep this line. -->
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="artifactbin:design-system" content="drafting">
+<title>[How this codebase changes]</title>
+<link rel="af-dataset" data-af-name="commits" href="ref:COMMITS_ID">
+<link rel="af-dataset" data-af-name="files" href="ref:FILES_ID">
+<link rel="af-dataset" data-af-name="imports" href="ref:IMPORTS_ID">
+<script type="module" id="page-data">
+// Usage: node scripts/new-codebase-report.mjs --repo DIR --title "NAME" (DIR the repository;
+//   it publishes commits, files and imports as datasets and fills this page and steps.mjs in a
+//   project directory outside the repository); read the facts it prints, then edit only DATA:
+//   rewrite each [bracketed] text as what the reader should do, with the numbers that show it;
+//   then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+// Gotchas: findings first, evidence after. Every number is a DATA query: one read-only SQLite
+//   SELECT over the linked tables commits, files and imports, run through _sql (never summed in
+//   script). A text is a function of h: h.one(name) a query's first row, h.rows(name) its rows,
+//   h.fmt(n). A chart is a Vega-Lite mark and encoding over one query's columns; one with diagram
+//   draws its rows as a Pele flowchart (from, to, weight). changes counts the window's commits
+//   that touched a file; an import counts file pairs between two areas.
+// Built with: one HTML page; three datasets gathered from git; _sql queries in one watched
+//   request; Vega-Lite charts and a Pele flowchart, each with a table of its values.
+window.DATA = {
+  source: {repo: '[repo name]', head: '[commit id]', since: '[1 year ago]'},
+  queries: {
+    totals: 'select count(*) as commits, count(distinct author) as authors, min(date) as first,' +
+      ' max(date) as last from commits',
+    size: 'select count(*) as files, sum(lines) as lines, count(distinct area) as areas from files',
+    hotspots: 'select path, area, lines, changes, authors from files where changes > 0 and' +
+      ' lines > 0 order by changes * lines desc limit 150',
+    people: 'select author, count(*) as commits, round(100.0 * count(*) / (select count(*) from' +
+      ' commits)) as share from commits group by author order by commits desc limit 8',
+    grid: 'select c.author, c.area, count(*) as commits from commits c join (select author from' +
+      ' commits group by author order by count(*) desc limit 8) t using (author)' +
+      ' group by c.author, c.area order by c.author, c.area',
+    imports: 'select source_area, target_area, count(*) as imports from imports where' +
+      ' source_area <> target_area group by 1, 2 order by imports desc limit 20',
+    weekly: "select date(date, '-6 days', 'weekday 1') as week, count(*) as commits," +
+      ' sum(added + deleted) as lines_changed from commits group by week order by week',
+    busiest: "select date(date, '-6 days', 'weekday 1') as week, count(*) as commits from" +
+      ' commits group by week order by commits desc limit 1',
+  },
+  labels: {path:'File', area:'Area', lines:'Lines', changes:'Commits that changed it',
+    authors:'Authors', author:'Author', commits:'Commits', share:'Share of commits (%)',
+    source_area:'From area', target_area:'To area', imports:'File imports', week:'Week of',
+    lines_changed:'Lines changed'},
+  lead: h => `[${h.fmt(h.one('totals').commits)} commits by ${h.one('totals').authors} people `+
+    `changed this ${h.fmt(h.one('size').files)}-file codebase since ${h.one('totals').first}; `+
+    `most of the risk sits in a handful of files.]`,
+  findings: [
+    {id:'hotspot', see:'hotspots', title:'[Change concentrates in a few large files]',
+      text: h => `[${h.one('hotspots').path} changed in ${h.one('hotspots').changes} commits `+
+        `and is ${h.fmt(h.one('hotspots').lines)} lines long: review, test and split it first.]`},
+    {id:'people', see:'grid', title:'[A few people make most changes]',
+      text: h => `[${h.one('people').author} made ${h.one('people').share}% of the `+
+        `${h.fmt(h.one('totals').commits)} commits; the grid shows areas only one person knows.]`},
+    {id:'coupling', see:'modules', title:'[One dependency carries the architecture]',
+      text: h => `[${h.one('imports').source_area} imports ${h.one('imports').target_area} in `+
+        `${h.fmt(h.one('imports').imports)} places, the thickest arrow in the diagram.]`},
+    {id:'pace', see:'weekly', title:'[Work comes in bursts]',
+      text: h => `[The busiest week, from ${h.one('busiest').week}, had `+
+        `${h.one('busiest').commits} commits.]`},
+  ],
+  charts: [
+    {id:'hotspots', title:'[Hotspots: files changed often that are also large]',
+      query:'hotspots', rows:10, open:true, spec:{mark:{type:'point', filled:true, opacity:.6},
+        encoding:{x:{field:'lines', type:'quantitative', scale:{type:'log'}},
+          y:{field:'changes', type:'quantitative'}}}},
+    {id:'grid', title:'[Who works where]', query:'grid', spec:{mark:'rect', encoding:{
+      x:{field:'area', type:'nominal', axis:{labelAngle:-35}}, y:{field:'author', type:'nominal'},
+      color:{field:'commits', type:'quantitative'}}}},
+    {id:'modules', title:'[How the areas import each other]', query:'imports',
+      diagram:{from:'source_area', to:'target_area', weight:'imports'}},
+    {id:'weekly', title:'[Commits per week]', query:'weekly', spec:{mark:{type:'line',
+      point:true}, encoding:{x:{field:'week', type:'temporal', scale:{type:'utc'},
+        axis:{format:'%b %d'}},
+        y:{field:'commits', type:'quantitative'}}}},
+  ],
+  method: h => `Gathered by scripts/new-codebase-report.mjs from ${DATA.source.repo} at `+
+    `${DATA.source.head}: ${h.fmt(h.one('totals').commits)} commits without merges since `+
+    `${DATA.source.since} (${h.one('totals').first} to ${h.one('totals').last}) and `+
+    `${h.fmt(h.one('size').files)} tracked text files in ${h.one('size').areas} areas, `+
+    'lockfiles left out. Imports are read from JavaScript, TypeScript and Python, tests left out.',
+};
+</script>
+<style>
+*{box-sizing:border-box}body{line-height:1.6}h1{max-width:20ch;margin:12px 0 24px}
+main{max-width:1080px;margin:auto;padding:clamp(20px,5vw,72px)}p,li{max-width:70ch}
+.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
+[role=status]{min-height:1.6em}summary{cursor:pointer}
+.number,td.n{font-variant-numeric:tabular-nums}td.n{text-align:right;white-space:nowrap}
+.rule{border-top:1px solid var(--border);padding-top:24px;margin-top:32px;min-width:0}
+.chart{width:100%;min-height:280px;overflow:auto}.chart svg{max-width:100%;height:auto}
+table{border-collapse:collapse;width:100%;margin-top:12px}details{overflow-x:auto}
+td:first-child{overflow-wrap:anywhere;min-width:14ch}
+td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
+.chart{--pele-bg:var(--background);--pele-fg:var(--foreground);--pele-line:var(--foreground);
+  --pele-muted:var(--muted-foreground);--pele-surface:var(--card);--pele-border:var(--border);
+  --pele-surface-alt:var(--muted);--pele-accent:var(--primary);--pele-font:var(--font-body)}
+@media(max-width:640px){h1{font-size:36px!important}}
+</style>
+</head><body><main>
+<p id="kicker" class="muted"></p>
+<h1 id="title" class="t-display-xl"></h1>
+<p id="lead" class="lead number"></p>
+<p id="status" role="status" aria-live="polite">Loading the linked datasets…</p>
+<section class="rule"><h2>Findings</h2><ol id="findings"></ol></section>
+<div id="charts"></div>
+<section class="rule"><h2>How this was measured</h2><p id="method" class="muted"></p></section>
+</main>
+<script type="module">
+import {client,gql} from '@afbin/apollo';
+import * as vega from '@afbin/vega';
+import {compile} from '@afbin/vega-lite';
+import {mount} from '@afbin/pele-flowchart';
+const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
+const label=col=>D.labels[col]??col,fmt=n=>Number.isFinite(n)?n.toLocaleString():'–';
+// One request: each DATA query an aliased _sql field, its SQL a variable (never spliced in).
+const pageQuery=gql([`query Page(${names.map((_,i)=>`$s${i}:String!`).join(',')}){`+
+  names.map((name,i)=>`${name}:_sql(sql:$s${i}){rows}`).join(' ')+'}']);
+const variables=Object.fromEntries(names.map((name,i)=>[`s${i}`,D.queries[name]]));
+let answers={},views=[],diagrams=[];
+const h={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
+// Script-made nodes take data-af-ids from DATA ids and row positions, stable on every render.
+const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
+  if(text!==undefined)n.textContent=text;return n;};
+function table(c){const id=`chart-${c.id}-table`,rows=h.rows(c.query).slice(0,c.rows??50);
+  const box=node('details',id+'-box'),t=node('table',id),cols=Object.keys(rows[0]??{});
+  box.open=!!c.open;box.append(node('summary',id+'-summary',c.rows?`Top ${rows.length}`:
+    'Values'),t);
+  const head=node('tr',id+'-head');
+  head.append(...cols.map(col=>node('th',`${id}-${col}`,label(col))));
+  t.append(head,...rows.map((row,i)=>{const tr=node('tr',`${id}-${i}`);
+    tr.append(...cols.map(col=>{const n=typeof row[col]==='number',
+      td=node('td',`${id}-${i}-${col}`,n?fmt(row[col]):row[col]);if(n)td.className='n';
+      return td;}));return tr;}));
+  return box;}
+const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function spec(c,rows){const ink=token('--foreground'),line=token('--border'),
+  colors=[1,2,3,4,5].map(n=>token('--chart-'+n)).filter(Boolean),
+  encoding=structuredClone(c.spec.encoding??{});
+  for(const channel of Object.values(encoding))
+    if(channel.field)channel.title??=label(channel.field);
+  const tooltip=Object.keys(rows[0]??{}).map(field=>({field,title:label(field),
+    type:typeof rows[0][field]==='number'?'quantitative':'nominal'}));
+  return {description:c.title,width:'container',height:280,background:'transparent',
+    autosize:{type:'fit',contains:'padding'},data:{values:rows},...c.spec,
+    encoding:{tooltip,...encoding},config:{view:{stroke:null},font:token('--font-body'),
+      mark:{color:colors[0]||ink},range:{category:colors,heatmap:[token('--muted')||line,
+        colors[0]||ink]},axis:{labelColor:ink,titleColor:ink,domainColor:line,tickColor:line,
+        gridColor:line,gridDash:[3,3],labelFontSize:11,titleFontWeight:'normal'},
+      legend:{labelColor:ink,titleColor:ink}}};}
+// A chart with diagram: its query's rows as a flowchart, one arrow per row labelled by weight.
+function flow(c){const ids=new Map(),d=c.diagram,key=name=>{
+  if(!ids.has(name))ids.set(name,'a'+ids.size);return ids.get(name);};
+  const edges=h.rows(c.query).map(r=>`  ${key(r[d.from])} -->|${fmt(r[d.weight])}| `+
+    key(r[d.to]));
+  return edges.length?['flowchart LR',...[...ids].map(([name,id])=>`  ${id}["${String(name)
+    .replace(/"/g,'#quot;')}"]`),...edges].join('\n'):'';}
+async function draw(){views.forEach(view=>view.finalize());diagrams.forEach(d=>d.destroy());
+  diagrams=[];await document.fonts?.ready;
+  views=(await Promise.all(D.charts.map(async c=>{
+    const host=$(`[data-af-id="chart-${c.id}-plot"]`),source=c.diagram&&flow(c);
+    if(c.diagram&&!source)host.textContent='No imports between areas.';
+    if(c.diagram)return source&&new Promise(done=>diagrams.push(mount(host,source,{zoom:'auto',
+      onRender(){host.dataset.drawn=String(h.rows(c.query).length);done();},
+      onError(){host.dataset.drawn='0';done();}}))).then(()=>null);
+    const view=new vega.View(vega.parse(compile(spec(c,h.rows(c.query))).spec,undefined,
+      {ast:true}),{container:host,renderer:'svg',expr:vega.expressionInterpreter});
+    await view.runAsync();return view;}))).filter(Boolean);}
+function render(){$('#title').textContent=document.title;$('#lead').textContent=D.lead(h);
+  $('#kicker').textContent=`Codebase report · ${D.source.repo} at ${D.source.head}`;
+  $('#findings').replaceChildren(...D.findings.map(f=>{const li=node('li','finding-'+f.id),
+    see=node('a',`finding-${f.id}-see`,'See the evidence');see.href='#chart-'+f.see;
+    li.append(node('strong',`finding-${f.id}-title`,f.title),node('p',`finding-${f.id}-text`,
+      f.text(h)),see);return li;}));
+  $('#charts').replaceChildren(...D.charts.map(c=>{const section=node('section','chart-'+c.id),
+    plot=node('div',`chart-${c.id}-plot`);section.id='chart-'+c.id;section.className='rule';
+    plot.className='chart';plot.setAttribute('role','img');plot.setAttribute('aria-label',c.title);
+    section.append(node('h2',`chart-${c.id}-title`,c.title),plot,table(c));return section;}));
+  $('#method').textContent=D.method(h);}
+// Charts follow the reader's light or dark mode and the owner's design system.
+const theme=new MutationObserver(()=>{if(names.some(name=>answers[name]))void draw();});
+theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark',
+  'data-af-design-system']});
+// watchQuery answers now and again whenever a linked dataset changes (the command reruns).
+const watch=client.watchQuery({query:pageQuery,variables}).subscribe(async result=>{
+  if(result.loading)return;
+  if(result.errors?.length){status.textContent=result.errors[0].message||
+    'Could not read the linked datasets.';return;}
+  try{answers=Object.fromEntries(names.map(name=>[name,result.data?.[name]?.rows??[]]));render();
+    await draw();status.textContent=`Computed ${names.length} queries from the linked datasets.`;
+  }catch(error){status.textContent=error.message||'Could not draw the linked datasets.';}});
+addEventListener('pagehide',()=>{watch.unsubscribe();theme.disconnect();
+  views.forEach(view=>view.finalize());diagrams.forEach(d=>d.destroy());},{once:true});
+</script>
+</body></html>
