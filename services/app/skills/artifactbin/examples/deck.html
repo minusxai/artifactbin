@@ -21,7 +21,8 @@
 //   (traction chart id), milestone (target only; shown as "last traction value → target"), items≤3
 //   [{label,amount} or {label,pct}]} (a funding ask: sum, shares; any other ask is bullets).
 //   Titles ≤2 lines. Unique ids key data-af-id. Every slide shows "Illustrative figures"; real:true
-//   removes it.
+//   removes it. The platform already serves each slide as an image
+//   (/a/ID/export?format=png&slide=N; check prints the links), so slides need no export code.
 // Built with: one HTML page from a SLIDES block; Vega-Lite charts; keyboard and click navigation.
 // The only part to edit: DATA, and one SLIDES entry per slide, rendered by the template below.
 window.DATA = {dataset: ''}; // a linked dataset's data-af-name, or '' when charts carry their data
