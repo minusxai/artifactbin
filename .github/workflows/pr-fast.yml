@@ -183,7 +183,7 @@ jobs:
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - if: matrix.suite
-        run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}
+        run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --maxWorkers=4 --shard=${{ matrix.suite }}
       - if: matrix.suite == '1/12' && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:

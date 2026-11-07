@@ -120,7 +120,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  for(const entry of suites)expect(job.strategy.matrix.part).not.toContain(entry.part);
  const run=job.steps.find(step=>step.if==='matrix.suite'&&step.run?.includes('vitest.mjs run'));
  // The full suite's own configuration and projects (vitest.config.ts), as ci.yml's api and ui jobs run them.
- expect(run.run).toBe('node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}');
+ expect(run.run).toBe('node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --maxWorkers=4 --shard=${{ matrix.suite }}');
  expect(run.run).not.toContain('--config');
  // The timed sequencer packs these four projects' files from the recorded table (scripts/ci/test-timings.mjs `--sums`).
  expect(readFileSync(new URL('../../vitest.config.ts',import.meta.url),'utf8')).toContain('sequence: { sequencer: TimedSequencer }');
