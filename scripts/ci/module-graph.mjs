@@ -163,7 +163,7 @@ const BUNDLED_LEAVES = {
   'lib/data-ingest': ['coerce', 'csv', 'types'],
   'lib/datasets': ['dataset-usage', 'definition', 'graphql-names', 'types'],
   'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'region-carets', 'selection', 'selection-contract', ],
-  'lib/html-components': ['hosted.json', 'markdown-typography', 'row-identity', 'table-comparison', 'table-values'],
+  'lib/html-components': ['hosted.json', 'markdown-styles', 'row-identity', 'table-comparison', 'table-values'],
   'lib/html-page': ['core-script', 'design-system', 'html-source', 'pwa-settings'],
   'lib/offline-dependencies': ['contracts'],
   'lib/html-presence': ['contract', 'model', 'preferences', 'reader-session'],
@@ -179,7 +179,7 @@ const BUNDLED_LEAVES = {
   'lib/jsx': [
     ],
   'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
-  'lib/markdown': ['content', 'styles'],
+  'lib/markdown': ['content'],
   'lib/mermaid-images': ['reader-draw'],
   'lib/page-operations': ['namespaces'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],

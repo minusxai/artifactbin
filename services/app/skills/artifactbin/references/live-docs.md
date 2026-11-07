@@ -5,8 +5,8 @@ description: Reading and editing the text of a doc (or any page's editable regio
 ## Read first
 
 A doc is a page whose text lives in an editable region (`data-af-editable="rich"` or `"text"`),
-which people with edit access type into live. To change that text, never republish the page:
-read the region as Markdown, edit it, and write it back with the version you read. Your edit is
+which people with edit access type into live. To change that text, never republish the page
+(this is about the text, not the page's CSS or layout): read the region as Markdown, edit it, and write it back with the version you read. Your edit is
 merged with everyone's unsaved typing (nothing of theirs is lost), appears in their open page
 live, and is saved as a new version.
 
@@ -39,6 +39,12 @@ mailto or relative). Images, tables, hard line breaks and raw HTML are refused b
 has no empty paragraph: blank paragraphs are dropped. `--html` reads and writes the region's
 HTML in the same subset instead (`p`, `h1`-`h6`, `ul`/`ol`/`li`, `blockquote`, `pre>code`, `hr`,
 `strong`, `em`, `code`, `a href`).
+
+Docs and `af-markdown` share one Markdown stylesheet (`components/markdown-styles.ts`, root class
+`af-markdown-body`); the design
+system sets fonts and colours. For one page, add a small `<style>` override such as
+`article { line-height: 1.4 }`: read the page (`scripts/read.mjs`), add it, republish it
+(`scripts/publish.mjs`). A whole-page write merges live regions three-way, keeping people's typing.
 
 Reading includes everyone's unsaved typing, as the open page shows it. With edit access, `read`
 (and `GET /api/artifacts/ID`) first saves that typing as a version, so the version you write from

@@ -1,5 +1,5 @@
 /**
- * "New" makes a DOC (lib/workspace artifactStarter): a private page owned by its creator whose whole body is ONE rich
+ * "New" makes a DOC (lib/workspace artifactStarter): an unlisted page owned by its creator whose whole body is ONE rich
  * editable region, marked `template: 'doc'` so its editors' page opens that region on load. Through the real create,
  * replace, metadata and region-session doors: what is stored, that an untouched doc stays version 1 when an editor opens
  * and leaves it, that its name follows its first heading on a region save until it is renamed, that an agent's whole-page
@@ -18,6 +18,9 @@ import { createRegionSessions, type RegionSessions } from '@/lib/region-sessions
 import { getDb } from '@/lib/platform';
 import { listOwnedArtifacts } from '@/lib/workspace';
 import { artifactStarter } from '@/lib/workspace/artifact-starters';
+import { assembleHtmlPage } from '@/lib/html-runtime';
+import { MARKDOWN_CSS, MARKDOWN_ROOT } from '@/lib/html-components/markdown-styles';
+import { PLATFORM_STYLES_PATH, htmlSystemsCss } from '@/lib/html-systems';
 import { mintAccountToken, request, useAppHarness } from './harness';
 
 useAppHarness();
@@ -70,9 +73,9 @@ const flush = async (live: RegionSessions, owner: AccessActor, id: string) => {
 const titleTag = (html: string | null) => /<title[^>]*>([^<]*)<\/title>/.exec(html ?? '')?.[1];
 
 describe('a new doc', () => {
-  it('is a private page of its creator, marked a doc, whose body is one rich region with an empty title block', async () => {
+  it('is an unlisted page of its creator, marked a doc, whose body is one rich region with an empty title block', async () => {
     const { userId, row } = await newDoc('doc_shape');
-    expect(row).toMatchObject({ format: 'html', user_id: userId, visibility: 'private', version: 1, title: 'Untitled document' });
+    expect(row).toMatchObject({ format: 'html', user_id: userId, visibility: 'unlisted', version: 1, title: 'Untitled document' });
     expect(row.meta).toMatchObject({ template: 'doc' });
     expect(row.meta.startPlaceholder).toBeUndefined();
     expect(titleTag(row.source)).toBe('Untitled document');
@@ -80,7 +83,24 @@ describe('a new doc', () => {
     const regions = editableRegions(row.source!);
     expect(regions).toEqual([expect.objectContaining({ kind: 'rich' })]);
     const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(row.source!)?.[1] ?? '';
-    expect(body).toMatch(/^<main data-af-id="[^"]+"><article data-af-editable="rich" data-af-id="[^"]+"><h1 data-af-id="[^"]+"><\/h1><p data-af-id="[^"]+"><\/p><\/article><\/main>$/);
+    expect(body).toMatch(/^<main data-af-id="[^"]+"><article data-af-editable="rich" class="af-markdown-body" data-af-id="[^"]+"><h1 data-af-id="[^"]+"><\/h1><p data-af-id="[^"]+"><\/p><\/article><\/main>$/);
+  });
+
+  it('carries no Markdown typography of its own: the platform serves the one Markdown stylesheet for it', () => {
+    const { html } = artifactStarter('doc');
+    // Only page layout stays in the doc (column, the empty-title placeholder); no prose rules.
+    const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]).join('');
+    for (const [, selector, declarations] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      expect(selector, selector).not.toMatch(/(^|[\s>+~,(])(h[2-6]|p|ul|ol|li|blockquote|pre|code|hr|a)(?=$|[\s>+~,):.[])/);
+      expect(declarations, selector).not.toMatch(/font-family|line-height|letter-spacing|margin-block|text-decoration/);
+    }
+    for (const rule of MARKDOWN_CSS.split('}').map((block) => block.trim()).filter(Boolean)) expect(html).not.toContain(rule);
+    // Its article is the root the shared sheet styles, and a served doc links the sheet that carries it.
+    expect(html).toContain(`<article data-af-editable="rich" class="${MARKDOWN_ROOT.slice(1)}">`);
+    const served = assembleHtmlPage({ html, core: 'core()', config: { pageId: 'doc', revision: '1', backends: [] }, systemsHref: PLATFORM_STYLES_PATH });
+    expect(served).toContain(`<link rel="stylesheet" data-af="platform-styles" href="${PLATFORM_STYLES_PATH}">`);
+    expect(htmlSystemsCss()).toContain(MARKDOWN_CSS);
+    expect(htmlSystemsCss(['meridian'])).toContain(MARKDOWN_CSS);
   });
 
   it('passes the publish autofix untouched, with nothing refused', () => {
@@ -126,6 +146,8 @@ describe('a new doc', () => {
     expect(saved.title).toBe('Q3 plan');
     expect(titleTag(saved.source)).toBe('Q3 plan');
     expect(saved.source).toMatch(/<h1 data-af-id="[^"]+">Q3 plan<\/h1>/);
+    // The article keeps the Markdown root through region saves: the region is its content, not the element.
+    expect(saved.source).toMatch(/<article data-af-editable="rich" class="af-markdown-body" data-af-id="[^"]+">/);
 
     await typeAtStart(live, owner, id, regionId, 'Draft: ');
     expect(await flush(live, owner, id)).toBe(3);

@@ -251,3 +251,19 @@ it('keeps component sources out of Markdown teaching while including them in the
   expect(()=>skillZip({...installed,'components/button.js':'export {};'})).toThrow('Unsupported skill member: components/button.js');
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+it('ships the one Markdown stylesheet beside af-markdown, and the component imports it from the skill itself',()=>{
+ const assets=loadSkillAssets(path.resolve(path.dirname(new URL(import.meta.url).pathname),'../../../skills/artifactbin'));
+ const styles=assets['components/markdown-styles.ts'];
+ expect(styles).toContain('export const MARKDOWN_CSS');
+ const markdown=assets['components/markdown.ts']!;
+ // A sibling import of every stylesheet it uses, and none from outside the shipped tree.
+ expect(markdown).toMatch(/from '\.\/markdown-styles'/);
+ expect(markdown).not.toMatch(/from '\.\.\/markdown\/styles'|markdown-typography/);
+ expect(Object.keys(assets)).not.toContain('components/markdown-typography.ts');
+ // Every relative sibling import of a shipped component resolves to a shipped component, but the registration helper
+ // the build omits on purpose (scripts/build/build-html-components.mjs readableOmit: platform plumbing).
+ const dangling=Object.entries(assets).filter(([name])=>name.startsWith('components/')).flatMap(([name,text])=>
+  [...text.matchAll(/(?:from|import)\s*\(?\s*['"]\.\/([a-z0-9-]+)(?:\.ts)?['"]/g)].map(match=>`components/${match[1]}.ts`).filter(target=>target!=='components/register-component.ts'&&!(target in assets)).map(target=>`${name} -> ${target}`));
+ expect(dangling).toEqual([]);
+});
