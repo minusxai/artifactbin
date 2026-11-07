@@ -89,7 +89,8 @@ export function checkDigest(envelope,file){
   c.verified.join('; ')}`).join(' | ');
  if(!(envelope.smokePassed&&done.length)&&envelope.unverified?.length)lines.push(
   '  unverified: '+envelope.unverified.join(', '));
- const shots=(envelope.checks??[]).map(check=>check?.screenshot?.path).filter(Boolean);
+ const shots=(envelope.checks??[]).map(c=>c?.screenshot).filter(s=>s?.path).map(s=>s.path+(
+  s.partial?` (${s.partial})`:''));
  if(shots.length)lines.push('  screenshots: '+shots.join(', '));
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
   '  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');

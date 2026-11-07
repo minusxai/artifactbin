@@ -186,12 +186,35 @@ it('keeps check diagnostics top-level on failure, without a details copy',async(
  expect(toolFailure('check',new ToolError('invalid_viewport','Invalid',2))).toMatchObject({ok:false,smokePassed:false,checks:[]});
  expect(toolFailure('read',new ToolError('refused','Refused'))).not.toHaveProperty('checks');
 });
-it('captures a bounded viewport and labels hosted shell scope without a full body capture',async()=>{
+// The saved screenshot is the document's full height at the viewport's width (capped), so an agent sees below the fold
+// without re-running the check at a taller viewport; a deck keeps its viewport capture.
+it('captures the document at its full height, capped at 8000 px, and keeps a deck or an oversized page to its viewport',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
- const captures:unknown[]=[];
- const page={url:()=> 'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},goto:async()=>{},mainFrame:()=>({locator:()=>({waitFor:async()=>{}})}),locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})}),screenshot:async(options:unknown)=>{captures.push(options);return Buffer.from('fixture');}};
- const result=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844},hosted:true,capture:true});
- expect(captures).toEqual([{fullPage:false,timeout:1000}]);expect(result).toMatchObject({screenshot:{scope:'reader-viewport'}});
+ const fake=({full,bar=0,deck=false,bytes=7}:{full:number;bar?:number;deck?:boolean;bytes?:number})=>{
+  const calls:unknown[]=[];let height=0;
+  const shot=(target:string)=>async(options:{fullPage?:boolean})=>{calls.push({target,...options});return Buffer.alloc(options.fullPage===false?7:bytes);};
+  const frame={waitFor:async()=>{},count:async()=>bar?1:0,screenshot:shot('frame')};
+  const page={url:()=>'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},waitForFunction:async()=>{},goto:async()=>{},
+   setViewportSize:async(size:{width:number;height:number})=>{calls.push({resize:size});height=size.height;},
+   evaluate:async()=>[full,height-bar],mainFrame:()=>({locator:()=>frame}),
+   locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async(fn:Function)=>fn.name==='slides'?(deck?{count:3}:null):{viewport:390,content:390,fits:true}}),
+   screenshot:shot('page')};
+  return {page,calls};
+ };
+ const run=async(spec:Parameters<typeof fake>[0],hosted:boolean)=>{const {page,calls}=fake(spec);const viewport={width:1280,height:800};const result=await inspectPage(page,{target:'/a/PAGE12',viewport,hosted,capture:true});return {calls:calls.slice(1),screenshot:(result as {screenshot?:{partial?:string}}).screenshot};};
+ // A local preview: the page's own full-page capture, clipped to the viewport's width and the cap.
+ expect(await run({full:20000},false)).toMatchObject({calls:[{target:'page',fullPage:true,clip:{x:0,y:0,width:1280,height:8000}}],screenshot:{scope:'local-viewport',height:8000,partial:'capped at 8000 px'}});
+ const local=await run({full:2400},false);
+ expect(local.calls).toMatchObject([{target:'page',fullPage:true,clip:{height:2400}}]);expect(local.screenshot).toMatchObject({height:2400});expect(local.screenshot).not.toHaveProperty('partial');
+ // A hosted check grows the viewport until the reader's frame holds the whole document, then captures the frame.
+ const hosted=await run({full:3000,bar:48},true);
+ expect(hosted.calls).toMatchObject([{resize:{width:1280,height:3048}},{target:'frame'}]);expect(hosted.screenshot).toMatchObject({scope:'reader-viewport',height:3000});expect(hosted.screenshot).not.toHaveProperty('partial');
+ // A document past the cap fills the frame to 8000 px; only growth beyond its own height marks a viewport-sized page.
+ expect(await run({full:20000,bar:48},true)).toMatchObject({calls:[{resize:{width:1280,height:8048}},{target:'frame'}],screenshot:{height:8000,partial:'capped at 8000 px'}});
+ // A page that fits, a deck and a capture over the session's output budget keep the viewport capture.
+ for(const [spec,partial] of [[{full:600,bar:48},undefined],[{full:3000,bar:48,deck:true},undefined],[{full:3000,bar:48,bytes:6*1024*1024},/first viewport/]] as const){
+  const kept=await run(spec,true);expect(kept.calls.at(-1)).toEqual({target:'page',fullPage:false,timeout:1000});expect(kept.screenshot?.partial).toEqual(partial?expect.stringMatching(partial):undefined);
+ }
 });
 
 it('measures the page only after the reader loading placeholder is gone',async()=>{

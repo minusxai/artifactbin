@@ -151,6 +151,9 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(passed).toMatch(/unverified: visual appearance/);
  // The digest names the screenshots it saved (M7).
  expect(passed).toContain('  screenshots: /tmp/390x844.png');
+ // A screenshot that is not the whole page says why next to its path.
+ const tall=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},screenshot:{path:'/tmp/390x844.png',height:8000,partial:'capped at 8000 px'}}],unverified:[]},'qa.json');
+ expect(tall).toContain('  screenshots: /tmp/390x844.png (capped at 8000 px)');
  // A clean pass of a published page ends with the reply facts and the watch line; this envelope has none (a local preview).
  expect(passed).toContain('clean pass on the local preview; a check of the published page prints the facts for your reply.');
  expect(passed).not.toMatch(/until the user stops|Verified:|For your reply:/);
