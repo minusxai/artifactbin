@@ -17,12 +17,34 @@ export async function runSteps(page, hosted, task, ready, evidence) {
   const timings = (evidence.stepTimings = []),
     started = Date.now();
   let current = null;
-  const step = async (label, fn) => {
-    current = {label: String(label).slice(0, 160), at: Date.now()};
-    await fn();
-    timings.push({label: current.label, ms: Date.now() - current.at});
-    verified.push(current.label);
-    current = null;
+  // step(label, fn) is lazy: it runs fn(page) when awaited, so an `export default [step(…), …]`
+  // array runs its steps in order, and a step the body never awaited runs after the body. page
+  // is its own .page, so fn may take page, {page} or nothing.
+  const queued = [];
+  const step = (label, fn) => {
+    label = String(label).slice(0, 160);
+    if (typeof fn !== 'function')
+      throw TypeError(
+        `step(${JSON.stringify(label)}, fn): fn must be a function such as async ({page}) => …;` +
+          ` got ${typeof fn}`
+      );
+    let started = null;
+    const start = () =>
+      (started ??= (async () => {
+        const outer = current,
+          entry = (current = {label, at: Date.now()});
+        await fn(wrapped);
+        timings.push({label, ms: Date.now() - entry.at});
+        verified.push(label);
+        current = outer;
+      })());
+    const handle = {
+      then: (resolve, reject) => start().then(resolve, reject),
+      catch: reject => start().catch(reject),
+      finally: done => start().finally(done)
+    };
+    queued.push({handle, started: () => started !== null});
+    return handle;
   };
   // Keyboard focus in the page's document, so page.keyboard reaches it without a click first.
   if (hosted)
@@ -93,10 +115,15 @@ export async function runSteps(page, hosted, task, ready, evidence) {
         };
       }
     });
+  const wrapped = wrap(page, 'page');
   let timer;
   try {
     evidence.task = await Promise.race([
-      task(wrap(page, 'page'), step),
+      (async () => {
+        const value = await task(wrapped, step);
+        for (let i = 0; i < queued.length; i++) if (!queued[i].started()) await queued[i].handle;
+        return value;
+      })(),
       new Promise((_, reject) => {
         timer = setTimeout(
           () => reject(Error('Task deadline exceeded; inspect the awaited condition')),

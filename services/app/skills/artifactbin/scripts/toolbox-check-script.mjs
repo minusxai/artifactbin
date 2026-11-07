@@ -49,8 +49,23 @@ export function checkTarget(value) {
     throw Error('Use an artifact ID or an HTTP loopback preview URL.');
   return {mode: 'local', target: url.href, origin: url.origin};
 }
-/** A steps file written as a module (export default async function(page){…} or async ({page}) =>
- * …) as a function body. */
+// Runs a steps module's default export: a function of (page, step), or step calls awaited in order.
+const RUN_DEFAULT = String.raw`
+;return await (async (steps, step) => {
+const forms = "Steps file: export default must be an async function taking page or {page}, " +
+"or an array of step('label', async ({page}) => …) calls; got ";
+const rest = ". Or write a plain body of await step('label', async () => {…}) calls: " +
+"page and step are in scope.";
+if (typeof steps === 'function') return steps(page, step);
+if (!Array.isArray(steps)) throw TypeError(forms + (steps === null ? 'null' : typeof steps) + rest);
+for (const [i, item] of steps.entries()) {
+if (typeof item === 'function' && step) await step('step ' + (i + 1), item);
+else if (typeof item?.then === 'function') await item;
+else throw TypeError(forms + 'an array whose item ' + (i + 1) + ' is ' + typeof item + rest);
+}
+})(__afSteps, typeof step === 'function' ? step : undefined);`;
+/** A steps file written as a module (export default async ({page}) => …, a function of page, or
+ * an array of step(…) calls) as a function body. */
 export function stepsBody(source) {
   const match = /^\s*export\s+default\s+/m.exec(source);
   if (!match) return source;
@@ -58,7 +73,7 @@ export function stepsBody(source) {
     source.slice(0, match.index) +
     'const __afSteps = ' +
     source.slice(match.index + match[0].length) +
-    "\n;return await __afSteps(page, typeof step === 'function' ? step : undefined);"
+    RUN_DEFAULT
   );
 }
 /**

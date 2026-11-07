@@ -191,6 +191,26 @@ it('focuses the framed document for page.keyboard and runs an export-default ste
  expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({key:'End'});
 },30_000);
 
+// The steps file that ended a hosted session on production (2026-11-07): an array of step calls taking {page}.
+it('runs an export-default array of step calls through the session worker, and the session keeps working', async () => {
+ const {stepsBody}=await import('../../app/skills/artifactbin/scripts/check.mjs');
+ const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
+ worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
+  const url=new URL(request.url);
+  if(url.origin===BASE&&url.pathname==='/a/doc1')return html(`<!doctype html><html><body><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/"></iframe></body></html>`);
+  if(url.origin===DOC_ORIGIN&&url.pathname==='/')return html(`<!doctype html><html><body><main><img src="logo.bda07120.svg" alt="Logo"><p id="signups">Signups</p><figure><img src="chart.png" alt="Chart"></figure></main></body></html>`);
+  return new Response('not found',{status:404});
+ }});
+ const steps=stepsBody(`export default [
+  step('logo above title', async ({ page }) => { const n = await page.locator('main > img').first().evaluate(el => el.getAttribute('src')); if (!n.includes('logo.bda07120.svg')) throw new Error('logo missing: ' + n); }),
+  step('picture after signups paragraph', async ({ page }) => { const n = await page.locator('#signups + figure img').count(); if (n !== 1) throw new Error('figure missing'); }),
+ ];`);
+ const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async(page,step)=>{${steps}\n});}finally{await checkPage.close();}`);
+ expect(out.error).toBeUndefined();
+ expect(out.result).toMatchObject({steps:{ran:true,passed:true},verified:['logo above title','picture after signups paragraph']});
+ expect((await worker.run('return 7')).result).toBe(7);
+},30_000);
+
 // A step past the deadline names the numbered call still running and what the page shows, so the agent sees why it waits.
 it('names the running step call and the page status when a steps file hits its deadline', async () => {
  const {chromium}=await import('playwright');const browser=await chromium.launch();const page=await browser.newPage();
