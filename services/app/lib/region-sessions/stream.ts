@@ -254,6 +254,9 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions, 
     keepalive = clock.setInterval(() => { void write(options.keepaliveFrame()); wake(); }, options.keepaliveMs);
     signal?.addEventListener('abort', () => void close(), { once: true });
     void writer.closed.catch(() => void close());
+    // A heartbeat first: a reader that takes the stream in finite windows (a browser session's scripted browser,
+    // services/browser forwardSessionFetch) always gets a complete frame, and reopens from its cursor.
+    void write(options.keepaliveFrame());
     wake();
     return { status: 'open', stream: readable };
   }

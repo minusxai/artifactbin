@@ -62,7 +62,7 @@ describe('a session cookie alone',()=>{
   const actor=verified(a.userId!,a.email!);
   expect((await list(request('/api/artifacts',{actor}))).status).toBe(401);
   expect((await raw(request('/a/door01/raw',{actor}),ctx({id:'door01'}))).status).toBe(200);
-  expect(await (await pageSession(request('/api/page/session',{actor}))).json()).toMatchObject({user:{id:a.userId},kind:'account'});
+  expect(await (await pageSession(request('/api/page/session',{actor}))).json()).toMatchObject({user:{id:a.userId},kind:'account',liveEditor:true});
  });
 });
 
@@ -112,7 +112,15 @@ describe('the browser-session header',()=>{
  });
  it('admits only a live token that belongs to the attached account',async()=>{
   const forged=request('/api/page/session',{actor:{credential:'bearer',userId:a.userId!,tokenId:b.id},headers:{[BROWSER_SESSION_HEADER]:'1'}});
-  expect(await (await pageSession(forged)).json()).toMatchObject({user:null,kind:'none'});
+  expect(await (await pageSession(forged)).json()).toMatchObject({user:null,kind:'none',liveEditor:false});
+ });
+ it('marks a scripted browser as a live editor (regions, cells), never a plain bearer or the mark alone',async()=>{
+  const bearer:Actor={credential:'bearer',userId:a.userId!,tokenId:a.id};
+  const live=async(req:Request)=>(await (await pageSession(req)).json() as {liveEditor:boolean;kind:string}).liveEditor;
+  expect(await (await pageSession(request('/api/page/session',{actor:bearer,headers:{[BROWSER_SESSION_HEADER]:'1'}}))).json()).toMatchObject({user:null,kind:'none',liveEditor:true});
+  expect(await live(request('/api/page/session',{actor:bearer}))).toBe(false);
+  expect(await live(both('/api/page/session',a.token,bearer,{headers:{[BROWSER_SESSION_HEADER]:'1'}}))).toBe(false);
+  expect(await live(request('/api/page/session',{headers:{[BROWSER_SESSION_HEADER]:'1'}}))).toBe(false);
  });
 });
 

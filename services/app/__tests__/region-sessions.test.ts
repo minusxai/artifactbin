@@ -7,12 +7,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
-import { createUser } from '@/lib/accounts';
+import { createTestUser, createUser, identityForUser } from '@/lib/accounts';
 import { artifactState, createArtifact, getArtifactById, revertArtifactFor } from '@/lib/artifacts';
 import { editableRegions, normalizeRegionHtml, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
-import { identityForUser } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
-import type { Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { attachActor } from '@artifactbin/utils';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';
@@ -53,7 +52,8 @@ async function stream(person: Person | null, after: string, id = pageId, extra: 
   const unsigned = request(`/api/artifacts/${id}/regions/stream?after=${encodeURIComponent(after)}`, { ...sessionOpts(null, extra), origin: undefined });
   // The attached actor is keyed by the Request object, so it is attached to the one carrying the signal.
   const signalled = new Request(unsigned, { signal: abort.signal });
-  const req = person ? attachActor(signalled, as(person)) : signalled;
+  const actor = person ? as(person) : extra.actor;
+  const req = actor ? attachActor(signalled, actor) : signalled;
   const response = await call(req, () => streamRoute(req, { params: Promise.resolve({ id }) }));
   if (response.status !== 200) return { response, frames: null };
   const reader = sseStream(response.body!);
@@ -69,8 +69,8 @@ async function put(body: string, expectedVersion?: number) {
 }
 
 /** An editor's replica: the server's bytes, writing under the client id its open was given. */
-async function join(person: Person, regionId = rich) {
-  const response = await open(person, pageId, regionId);
+async function join(person: Person | null, regionId = rich, extra: RequestOptions = {}, id = pageId) {
+  const response = await open(person, id, regionId, extra);
   expect(response.status).toBe(200);
   const reply = await response.json() as { clientId: number; seq: number; state: string; kind: string; savedVersion: number };
   const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
@@ -81,7 +81,7 @@ async function join(person: Person, regionId = rich) {
     /** Sends everything typed since the last push, merged, and answers the reply. */
     async push() {
       const update = Y.mergeUpdates(pending.splice(0));
-      const response = await send(person, { clientId: reply.clientId, update: Buffer.from(update).toString('base64') }, pageId, regionId);
+      const response = await send(person, { clientId: reply.clientId, update: Buffer.from(update).toString('base64') }, id, regionId, extra);
       return { status: response.status, body: await response.json() as Record<string, unknown>, update };
     },
     receive(updates: string[]) { for (const update of updates) Y.applyUpdate(doc, Buffer.from(update, 'base64'), 'server'); },
@@ -162,6 +162,49 @@ describe('who may edit live', () => {
     const region = editableRegions(svg.source!)[0]!.id;
     const refused = await open(owner, svg.id, region);
     expect([refused.status, (await refused.json()).error]).toEqual([422, 'unsupported_content']);
+  });
+});
+
+/** A browser session's scripted browser (check.mjs, `viewer:{testuser}`): the transport attaches its bearer and marks it, sending no Authorization. */
+const scripted = (userId: string, tokenId: string): RequestOptions => ({ origin: undefined, actor: { credential: 'bearer', userId, tokenId }, headers: { [BROWSER_SESSION_HEADER]: '1' } });
+
+describe('a browser session\'s scripted browser', () => {
+  it('opens, types and streams like the person it browses as; a plain bearer call, the mark alone and the signed-out stay refused', async () => {
+    const token = await mintAccountToken('regions-browser', owner.id);
+    const browser = scripted(owner.id, token.id);
+    const typing = await join(null, rich, browser);
+    typing.text.insert(0, 'Typed by a scripted browser ', {});
+    expect((await typing.push()).status).toBe(200);
+    const { response } = await stream(null, `${rich}:${typing.reply.seq}`, pageId, browser);
+    expect(response.status).toBe(200);
+    expect((await flush(null, pageId, browser)).status).toBe(200);
+    expect((await getArtifactById(pageId))!.source).toContain('Typed by a scripted browser');
+    const bearer: Actor = { credential: 'bearer', userId: owner.id, tokenId: token.id };
+    const refused: [string, RequestOptions][] = [
+      ['a bearer the proxy resolved (Authorization present)', { actor: bearer, headers: { authorization: `Bearer ${token.token}` } }],
+      ['a marked bearer still carrying Authorization', { actor: bearer, headers: { authorization: `Bearer ${token.token}`, [BROWSER_SESSION_HEADER]: '1' } }],
+      ['an explicit bearer', { token: token.token, headers: { [BROWSER_SESSION_HEADER]: '1' } }],
+      ['a bearer with no mark', { actor: bearer }],
+      ['the mark with no actor', { headers: { [BROWSER_SESSION_HEADER]: '1' } }],
+      ['a revoked token', scripted(owner.id, 'tok_gone')],
+    ];
+    for (const [name, extra] of refused) {
+      expect([name, (await open(null, pageId, rich, extra)).status]).toEqual([name, 404]);
+      expect([name, (await send(null, { clientId: typing.reply.clientId, update: 'AAA=' }, pageId, rich, extra)).status]).toEqual([name, 404]);
+    }
+  });
+
+  it('as a test user, edits a page inside its own sandbox and is refused on its parent\'s', async () => {
+    const parent = await mintAccountToken('regions-parent', owner.id);
+    const minted = await createTestUser(identityForUser(owner.id, parent.id));
+    if (!minted.ok) throw new Error(minted.error);
+    const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'unlisted' });
+    const sandboxRich = editableRegions(sandbox.source!).find((region) => region.kind === 'rich')!.id;
+    const browser = scripted(minted.userId, minted.tokenId);
+    expect((await open(null, sandbox.id, sandboxRich, browser)).status).toBe(200);
+    expect((await open(null, pageId, rich, browser)).status).toBe(404);
+    const unlisted = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'unlisted' });
+    expect((await open(null, unlisted.id, editableRegions(unlisted.source!).find((region) => region.kind === 'rich')!.id, browser)).status).toBe(404);
   });
 });
 
@@ -267,6 +310,13 @@ describe('the stream', () => {
     await (await db()).query('DELETE FROM artifact_shares WHERE artifact_id = $1 AND email = $2', [pageId, editor.email]);
     await (await db()).query("SELECT pg_notify($1, '')", [`artifact_${pageId.toLowerCase()}`]);
     expect((await framesUntil(frames!, (frame) => frame.type === 'closed'))[0]).toEqual({ type: 'closed', regionId: rich, reason: 'access' });
+  });
+
+  it('opens with a heartbeat frame, so a finite window (a browser session\'s scripted browser) always carries one', async () => {
+    const { reply } = await join(owner);
+    const { frames } = await stream(owner, `${rich}:${reply.seq}`);
+    const [first] = await frames!.next(1, 2000);
+    expect(first?.event).toBe('keepalive');
   });
 
   it('refuses a malformed cursor', async () => {

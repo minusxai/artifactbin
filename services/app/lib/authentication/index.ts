@@ -6,7 +6,7 @@
  * Server-only.
  */
 export { browserActor, refusesCrossSite, requestActor, withAgentOrBrowserAuth, withTokenAuth } from './doors';
-export { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from './request-identity';
+export { browserSessionKind, isBrowserSessionRequest, isEditingBrowser, requestOrSessionActor, sessionActor } from './request-identity';
 export { auth, overrideSession, type Session } from './session';
 export { setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-editor';
 export { hostedAuthorization, hostedOperationCompleted, hostedRefusal } from './request-authority';

@@ -276,6 +276,8 @@ export function DocumentPage(): JSX.Element {
           readOnly: !!page.archived,
           uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
         }) : undefined,
+        // Cells open for a browser that edits live: a person signed in, or a browser session's scripted browser.
+        liveEditor: () => session()?.liveEditor === true,
         // Live editing of the page's editable regions: editors of the head only (a viewer or commenter never opens one).
         regions: backend ? { enabled: editable, loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc', autoFocus: !opensComment(window.location.search) } : undefined,
       });

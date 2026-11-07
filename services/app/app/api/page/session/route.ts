@@ -9,6 +9,10 @@
  * here, never repaired: this is a hot `no-store` payload, so a handle-less row
  * stays handle-less (no `ensureUsername`) and the route performs no write.
  *
+ * `liveEditor` says whether this browser edits live (lib/authentication `isEditingBrowser`, the region and cell doors'
+ * own test): a person signed in, or a browser session's scripted browser, which is no account session (`user` null,
+ * `kind` none) yet types into regions and dataset cells as the account it browses as.
+ *
  * `onboarded` is FALSE for exactly one kind of visitor: an account whose row
  * still has `welcome_pending`. Everybody else — a guest, a test user, an
  * anonymous browser, nobody at all — is true, because the shell's gate reads
@@ -21,7 +25,7 @@
 import { avatarUrl } from '@/lib/avatars';
 import { json } from '@/lib/http';
 import { getUserById, welcomePending } from '@/lib/accounts';
-import { browserSessionKind, sessionActor } from '@/lib/authentication';
+import { browserSessionKind, isEditingBrowser, sessionActor } from '@/lib/authentication';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
@@ -32,5 +36,5 @@ export async function GET(request: Request) {
     ? { id: userId, email: actor.email, username: row?.username ?? null, image: row ? avatarUrl(row) : null }
     : null;
   const onboarded = userId ? !(await welcomePending(row)) : true;
-  return json({ user, kind, onboarded }, 200, { 'Cache-Control': 'no-store' });
+  return json({ user, kind, onboarded, liveEditor: isEditingBrowser(request, actor) }, 200, { 'Cache-Control': 'no-store' });
 }

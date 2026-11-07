@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import { cellKey, type Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, cellKey, type Actor } from '@artifactbin/contracts';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
@@ -24,7 +24,7 @@ import { GET as streamRoute } from '@/app/api/artifacts/[id]/regions/stream/rout
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 import { patchMetadata } from './conditional-request';
 import { nativeDatasetClient } from './native-dataset-http';
-import { mintAccountToken, request, useAppHarness } from './harness';
+import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
 import { sseStream } from './sse';
 
 useAppHarness();
@@ -77,12 +77,12 @@ const as = (person: Person): Actor => ({ credential: 'session', userId: person.i
 const call = <T>(req: Request, run: () => Promise<T>) => runWithRequest(req, run);
 const key = (rowId: string, column = 'description', dataset = 'tasks') => cellKey({ dataset, rowId, column });
 
-async function open(person: Person | null, regionId: string, id = pageId) {
-  const req = request(`/api/artifacts/${id}/regions/${encodeURIComponent(regionId)}/open`, { method: 'POST', origin: 'same', ...(person ? { actor: as(person) } : {}) });
+async function open(person: Person | null, regionId: string, id = pageId, extra: RequestOptions = {}) {
+  const req = request(`/api/artifacts/${id}/regions/${encodeURIComponent(regionId)}/open`, { method: 'POST', origin: 'same', ...(person ? { actor: as(person) } : {}), ...extra });
   return call(req, () => openRoute(req, { params: Promise.resolve({ id, regionId }) }));
 }
-async function send(person: Person, regionId: string, body: unknown) {
-  const req = request(`/api/artifacts/${pageId}/regions/${encodeURIComponent(regionId)}/updates`, { method: 'POST', json: body, origin: 'same', actor: as(person) });
+async function send(person: Person | null, regionId: string, body: unknown, extra: RequestOptions = {}) {
+  const req = request(`/api/artifacts/${pageId}/regions/${encodeURIComponent(regionId)}/updates`, { method: 'POST', json: body, origin: 'same', ...(person ? { actor: as(person) } : {}), ...extra });
   return call(req, () => updatesRoute(req, { params: Promise.resolve({ id: pageId, regionId }) }));
 }
 async function flushCells(person: Person) {
@@ -186,6 +186,29 @@ describe('who may open a cell', () => {
     expect(seen).toEqual(expected);
   });
 
+  it('admits a browser session\'s scripted browser by the same rules as the person it browses as; a plain bearer stays refused', async () => {
+    // The session transport attaches the bearer it browses as and marks the request; it sends no Authorization.
+    const scripted = async (person: Person): Promise<RequestOptions> => {
+      const token = await mintAccountToken(`cells_browser_${person.id}`, person.id);
+      return { origin: undefined, actor: { credential: 'bearer', userId: person.id, tokenId: token.id }, headers: { [BROWSER_SESSION_HEADER]: '1' } };
+    };
+    const ownerBrowser = await scripted(owner), readerBrowser = await scripted(reader);
+    const opened = await open(null, key(blue), pageId, ownerBrowser);
+    expect(opened.status, await opened.clone().text()).toBe(200);
+    const reply = await opened.json() as { clientId: number; state: string };
+    const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
+    const before = Y.encodeStateVector(doc);
+    doc.getText('region').insert(0, 'typed by a browser session ');
+    const typed = await send(null, key(blue), { clientId: reply.clientId, update: Buffer.from(Y.encodeStateAsUpdate(doc, before)).toString('base64') }, ownerBrowser);
+    expect(typed.status, await typed.clone().text()).toBe(200);
+    // signed_in's update rule admits the red row's description only, exactly as for the person.
+    expect((await open(null, key(red), pageId, readerBrowser)).status).toBe(200);
+    expect((await open(null, key(blue), pageId, readerBrowser)).status).toBe(404);
+    const plain = { origin: undefined, token: ownerToken };
+    expect((await open(null, key(red), pageId, plain)).status).toBe(404);
+    expect((await open(null, key(red), pageId, { origin: undefined, headers: { [BROWSER_SESSION_HEADER]: '1' } })).status).toBe(404);
+  });
+
   it('refuses a pinned link, an unknown link, row or field, and a column the owner has not made collaborative', async () => {
     for (const regionId of [key(red, 'description', 'pinned'), key(red, 'description', 'other'), key('r_nosuchrow'), key(red, 'nosuch')]) expect((await open(owner, regionId)).status, regionId).toBe(404);
     const head = (await getArtifactById(datasetId))!;
@@ -236,6 +259,13 @@ describe('typing together', () => {
     // A format is not plain text: refused.
     a.text.format(0, 3, { bold: true });
     expect((await a.push()).status).toBe(422);
+  });
+
+  it('a stream of cells opens with a heartbeat frame, so a finite window (a scripted browser) always carries one', async () => {
+    const { reply } = await join(reader);
+    const { frames } = await stream(reader, `${key(red)}:${reply.seq}`);
+    const [first] = await frames!.next(1, 2000);
+    expect(first?.event).toBe('keepalive');
   });
 
   it('a stream of cells needs no page edit access, and never mixes regions', async () => {

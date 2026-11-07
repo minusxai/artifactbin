@@ -42,6 +42,10 @@ function scriptedFontOrigin(url: URL): boolean {
   return url.protocol === 'https:' && !url.username && !url.password && !url.port && FONT_ORIGINS.has(url.origin);
 }
 
+/** The platform's live streams whose readers reopen from a cursor or the current head: a page's events, the people
+ * feed, and a page's live-editing stream (regions and dataset cells, reopened `?after=` its cursors). */
+const CATCH_UP_STREAMS = [/^\/a\/[A-Za-z0-9]{6,12}\/events$/, /^\/api\/my\/people\/events$/, /^\/api\/artifacts\/[A-Za-z0-9]{6,12}\/regions\/stream$/];
+
 /** Finite real SSE windows keep the credential-blind IPC bridge bounded. Only complete
  * frames cross it; platform consumers reconnect with cursor/canonical catch-up. */
 async function sessionResponse(response: Response, signal?: AbortSignal, catchupStream = false): Promise<{ status: number; headers: Record<string, string>; body: string }> {
@@ -155,7 +159,7 @@ export async function forwardSessionFetch(
       options.jar?.store(at, answer);
       return answer;
     }, origins.allows);
-    fetched = await sessionResponse(response,signal,(/^\/a\/[A-Za-z0-9]{6,12}\/events$/.test(url.pathname)||url.pathname==='/api/my/people/events'));
+    fetched = await sessionResponse(response,signal,CATCH_UP_STREAMS.some(path=>path.test(url.pathname)));
   });
   return fetched!;
 }

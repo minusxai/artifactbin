@@ -272,6 +272,19 @@ export function isBrowserSessionRequest(request: Request): boolean {
   return request.headers.get(BROWSER_SESSION_HEADER) === '1' && actorOf(request) !== null;
 }
 
+/**
+ * A BROWSER THAT EDITS LIVE (the region and cell doors, and the reader's cue to open cells): a person's account
+ * session, or a browser session's scripted browser — the bearer it browses as, attached and marked by the session
+ * transport (`isBrowserSessionRequest`), which sends no Authorization and whose token `attachedIdentity` re-checks on
+ * every request. That browser is already this account's reader everywhere else (its pages ticket, `issuePagesTicket`).
+ * A plain bearer call (Authorization present), an agent cookie and nobody are not: agents edit text through the
+ * region HTTP API, which merges.
+ */
+export function isEditingBrowser(request: Request, actor: Pick<RequestIdentity, 'credential' | 'userId' | 'tokenId'>): boolean {
+  if (!actor.userId || request.headers.has('authorization')) return false;
+  return actor.credential === 'session' || (actor.credential === 'bearer' && !!actor.tokenId && isBrowserSessionRequest(request));
+}
+
 /** Browser controls reflect email sessions only; legacy ownership proofs are not login. */
 export async function browserSessionKind(request?: Request, admitted?: RequestIdentity): Promise<'account' | 'none'> {
   const actor = admitted ?? await sessionActor(request);
