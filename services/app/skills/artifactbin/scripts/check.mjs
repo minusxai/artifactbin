@@ -28,7 +28,7 @@ Examples:
   Assert rendered, rounded text ("$1,240"), not raw numbers.
 Output: one summary line per viewport: errors, overflow, contrast (text under 2:1 fails), slides,
   your task result; each failing item (up to 12 of a kind) names its text and element or slide;
-  then the screenshot paths. Smoke fails on page or console errors, failed requests, overflow,
+  then the full-page screenshots. Smoke fails on page or console errors, failed requests, overflow,
   unreadable text and duplicate data-af-id values (first ids and counts listed). A warning (not a
   failure) lists script-created data-af-ids that differ between two loads; checked on the first
   viewport, only when the page has any. A clean pass of a published page ends with the facts

@@ -179,12 +179,8 @@ export async function checkCommand({values, positionals}, options = {}) {
           `${check.viewer ? '-' + check.viewer : ''}.png`
       );
       await exclusive(file, Buffer.from(check.screenshot.base64, 'base64'));
-      check.screenshot = {
-        path: file,
-        mime: 'image/png',
-        scope: check.screenshot.scope,
-        visuallyReviewed: false
-      };
+      const {base64, ...shot} = check.screenshot;
+      check.screenshot = {path: file, ...shot, visuallyReviewed: false};
     }
   }
   if (!result.smokePassed)

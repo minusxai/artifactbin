@@ -11,9 +11,12 @@ import {layout, overflow, ids} from './toolbox-check-probes.mjs';
 import {contrast} from './toolbox-check-contrast.mjs';
 import {slides} from './toolbox-check-slides.mjs';
 import {graphql} from './toolbox-check-graphql.mjs';
+import {capture} from './toolbox-check-capture.mjs';
 
 /** The self-contained parts inspectPage calls; the hosted script defines each from its source. */
-export const PARTS = {ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides, graphql};
+export const PARTS = {
+  ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides, graphql, capture
+};
 
 /** Runs in either the server session or a fresh local browser context. No credentials. */
 // One page, one viewport: load it, optionally compare IDs across a reload, run the steps, then
@@ -141,13 +144,8 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   clearTimeout(wait);
   if (options.capture)
     try {
-      evidence.screenshot = {
-        mime: 'image/png',
-        scope: options.hosted ? 'reader-viewport' : 'local-viewport',
-        base64: Buffer.from(await page.screenshot({fullPage: false, timeout: 1000})).toString(
-          'base64'
-        )
-      };
+      // The document's full height (capped); a deck keeps its viewport.
+      evidence.screenshot = await parts.capture(page, options, evidence.slides?.count > 0);
     } catch (error) {
       evidence.screenshotError = String(error.message);
     }

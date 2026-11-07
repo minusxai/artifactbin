@@ -218,3 +218,36 @@ it('reports duplicate data-af-id values and script-created IDs that change on re
   expect((await run(['list'],script("['row-1']"),false)).idStability).toBeUndefined();
  }finally{await browser.close();}
 }, 30_000);
+
+// The check's screenshot is the document's full height at the viewport's width: in a hosted check the document
+// scrolls inside the reader's frame, so a viewport capture of the app page shows only its first screen.
+const png=(base64:string)=>{const bytes=Buffer.from(base64,'base64');return {width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};};
+type Shot={screenshot?:{base64:string;height:number;partial?:string};screenshotError?:string};
+it('saves the framed document at its full height in a hosted check, and the first viewport where the page sizes to it', async () => {
+ const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
+ const docs:Record<string,string>={'/tall':'<div style="height:3000px;background:linear-gradient(#f00,#00f)">Tall</div>',
+  '/hero':'<section style="min-height:100vh;background:#f00">Hero</section><div style="height:2000px">Rest</div>'};
+ worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
+  const url=new URL(request.url);
+  // The reader's layout (lib/document-serving/document-frame): a fixed host under a 48 px bar, the frame filling it.
+  if(url.origin===BASE&&url.pathname.startsWith('/a/'))return html(`<!doctype html><html><body style="margin:0"><header style="height:48px">App bar</header><div style="position:fixed;inset:0;top:48px;display:flex;flex-direction:column"><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/${url.pathname.slice(3)}" style="display:block;flex:1 1 0;min-height:0;width:100%;border:0"></iframe></div></body></html>`);
+  if(url.origin===DOC_ORIGIN&&docs[url.pathname])return html(`<!doctype html><html><body style="margin:0">${docs[url.pathname]}</body></html>`);
+  return new Response('not found',{status:404});
+ }});
+ const check=async(name:string)=>{const out=await worker!.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/${name}',viewport:{width:1280,height:800},hosted:true,capture:true},null);}finally{await checkPage.close();}`);expect(out.error).toBeUndefined();return out.result as Shot;};
+ const tall=await check('tall');
+ expect(tall.screenshotError).toBeUndefined();
+ expect(png(tall.screenshot!.base64)).toEqual({width:1280,height:3000});expect(tall.screenshot).toMatchObject({height:3000});expect(tall.screenshot!.partial).toBeUndefined();
+ // Growing the frame grows a 100vh section with it, so such a page keeps the reader's first viewport and says so.
+ const hero=await check('hero');
+ expect(png(hero.screenshot!.base64)).toEqual({width:1280,height:800});expect(hero.screenshot!.partial).toMatch(/first viewport/);
+},30_000);
+
+it('saves a local preview at its full height, capped at 8000 px and saying so', async () => {
+ const {chromium}=await import('playwright');const browser=await chromium.launch();
+ const shot=async(height:number)=>{const page=await browser.newPage();try{return await inspectPage(page,{target:'data:text/html,'+encodeURIComponent(`<html><body style="margin:0"><div style="height:${height}px">Long</div></body></html>`),viewport:{width:800,height:600},capture:true},null) as unknown as Shot;}finally{await page.close();}};
+ try{
+  const long=await shot(1500);expect(png(long.screenshot!.base64)).toEqual({width:800,height:1500});expect(long.screenshot!.partial).toBeUndefined();
+  const capped=await shot(20000);expect(png(capped.screenshot!.base64)).toEqual({width:800,height:8000});expect(capped.screenshot).toMatchObject({height:8000,partial:'capped at 8000 px'});
+ }finally{await browser.close();}
+},30_000);
