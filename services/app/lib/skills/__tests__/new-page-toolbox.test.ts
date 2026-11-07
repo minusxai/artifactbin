@@ -44,7 +44,11 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
   expect(data).not.toMatch(/repairs|completed|waiting|week/);
   for(const col of data.matchAll(/(?:h\.(?:sum|last|mean)\('|[xy]:')(\w+)'/g))expect(['month','region','revenue','orders']).toContain(col[1]);
   expect(data).toContain("{id:'revenue', title:'[Revenue by month]', mark:'bar', x:'month', y:'revenue'}");
-  expect(result.next).toMatch(/^Next: in index\.html edit only DATA: its \[bracketed\] text/);
+  // What it drew and how to change it, in this CSV's own names: an agent that misread the starter
+  // ("a chart per region, not what we want") wrote its own page instead (2026-11-07).
+  expect(result.draws).toBe('DATA draws a lead, a total per number column (revenue, orders), and a bar chart of revenue summed per month and orders summed per month, each with a table of its values (3 rows).');
+  expect(result.next).toMatch(/^Next: in index\.html edit only DATA \(its \[bracketed\] text/);
+  for(const variation of ["one line: mark:'line'","a line or bar per region: series:'region'","only some rows: where:{region:'North'}","one value per month as given: aggregate:'last'",'no value table: table:false','no stats or sections: stats:[], sections:[]',"a number for one month in a text: h.where({month:'2026-01'}).sum('revenue')"])expect(result.next).toContain(variation);
   expect(result.next).toContain('node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs');
   // A rebuild of an existing page publishes over it.
   const again:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region',artifact:'PAGE01'});
