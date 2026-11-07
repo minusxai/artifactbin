@@ -23,12 +23,13 @@ const LINE = /[✓✗×]\s+([\w-]+)\s+(\S+\.test\.\w+)\s+\(\d+ tests?[^)]*\)\s+(
 // Vitest colours its lines in CI; `gh run view --log` hands them back as ESC bytes or as literal `^[[…m`.
 const COLOUR = /(?:\u001b|\^\[)\[[0-9;]*m/g;
 /** The job each set of Vitest projects runs in, with its shard count: ci.yml's node, api and ui jobs, and pr-fast.yml's
- * `suites` shards, which run the api and jsdom projects together on every pull request. */
+ * api and ui runners, which run the same projects on every pull request. */
 export const JOBS = {
   node: { projects: ['node'], count: 6 },
   api: { projects: ['api', 'api-isolated'], count: 4 },
   ui: { projects: ['ui', 'islands'], count: 2 },
-  suites: { projects: ['api', 'api-isolated', 'ui', 'islands'], count: 24 },
+  'pr-api': { projects: ['api', 'api-isolated'], count: 20 },
+  'pr-ui': { projects: ['ui', 'islands'], count: 4 },
 };
 
 /** Per-file times (ms) by project from Vitest log text. */

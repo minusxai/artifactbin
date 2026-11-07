@@ -7,7 +7,7 @@ name: pr fast
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
 # (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json), the contract tests
-# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `suite-*` parts), all at
+# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts), all at
 # once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
 # (#1138, #1141: each a red main, and production held for a whole extra merge), so every pull request runs them. The guard tests read
 # the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
@@ -54,59 +54,84 @@ jobs:
             shard: 1/2
           - part: guards-2
             shard: 2/2
-          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api, api-isolated, ui and islands projects, the
-          # same files ci.yml's api and ui jobs run after the merge, packed longest-first onto 24 runners by their
-          # measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json; `--sums` prints each
-          # runner's load). None of them launches Chromium, so no runner provisions a browser. Add a runner when a
-          # shard's load nears the clock; never move a file out to make room.
-          - part: suite-1
-            suite: 1/24
-          - part: suite-2
-            suite: 2/24
-          - part: suite-3
-            suite: 3/24
-          - part: suite-4
-            suite: 4/24
-          - part: suite-5
-            suite: 5/24
-          - part: suite-6
-            suite: 6/24
-          - part: suite-7
-            suite: 7/24
-          - part: suite-8
-            suite: 8/24
-          - part: suite-9
-            suite: 9/24
-          - part: suite-10
-            suite: 10/24
-          - part: suite-11
-            suite: 11/24
-          - part: suite-12
-            suite: 12/24
-          - part: suite-13
-            suite: 13/24
-          - part: suite-14
-            suite: 14/24
-          - part: suite-15
-            suite: 15/24
-          - part: suite-16
-            suite: 16/24
-          - part: suite-17
-            suite: 17/24
-          - part: suite-18
-            suite: 18/24
-          - part: suite-19
-            suite: 19/24
-          - part: suite-20
-            suite: 20/24
-          - part: suite-21
-            suite: 21/24
-          - part: suite-22
-            suite: 22/24
-          - part: suite-23
-            suite: 23/24
-          - part: suite-24
-            suite: 24/24
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 20 runners, its ui and
+          # islands projects on 4, the same files ci.yml's api and ui jobs run after the merge, each group packed
+          # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
+          # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
+          # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
+          # runner provisions a browser. Add a runner when a group's load nears the clock; never move a file out.
+          - part: api-1
+            projects: --project=api --project=api-isolated
+            suite: 1/20
+          - part: api-2
+            projects: --project=api --project=api-isolated
+            suite: 2/20
+          - part: api-3
+            projects: --project=api --project=api-isolated
+            suite: 3/20
+          - part: api-4
+            projects: --project=api --project=api-isolated
+            suite: 4/20
+          - part: api-5
+            projects: --project=api --project=api-isolated
+            suite: 5/20
+          - part: api-6
+            projects: --project=api --project=api-isolated
+            suite: 6/20
+          - part: api-7
+            projects: --project=api --project=api-isolated
+            suite: 7/20
+          - part: api-8
+            projects: --project=api --project=api-isolated
+            suite: 8/20
+          - part: api-9
+            projects: --project=api --project=api-isolated
+            suite: 9/20
+          - part: api-10
+            projects: --project=api --project=api-isolated
+            suite: 10/20
+          - part: api-11
+            projects: --project=api --project=api-isolated
+            suite: 11/20
+          - part: api-12
+            projects: --project=api --project=api-isolated
+            suite: 12/20
+          - part: api-13
+            projects: --project=api --project=api-isolated
+            suite: 13/20
+          - part: api-14
+            projects: --project=api --project=api-isolated
+            suite: 14/20
+          - part: api-15
+            projects: --project=api --project=api-isolated
+            suite: 15/20
+          - part: api-16
+            projects: --project=api --project=api-isolated
+            suite: 16/20
+          - part: api-17
+            projects: --project=api --project=api-isolated
+            suite: 17/20
+          - part: api-18
+            projects: --project=api --project=api-isolated
+            suite: 18/20
+          - part: api-19
+            projects: --project=api --project=api-isolated
+            suite: 19/20
+          - part: api-20
+            projects: --project=api --project=api-isolated
+            suite: 20/20
+          - part: ui-1
+            projects: --project=ui --project=islands
+            suite: 1/4
+          - part: ui-2
+            projects: --project=ui --project=islands
+            suite: 2/4
+          - part: ui-3
+            projects: --project=ui --project=islands
+            suite: 3/4
+          - part: ui-4
+            projects: --project=ui --project=islands
+            suite: 4/4
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -207,8 +232,8 @@ jobs:
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - if: matrix.suite
-        run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}
-      - if: matrix.suite == '1/24' && steps.test-builds.outputs.cache-hit != 'true'
+        run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
+      - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |

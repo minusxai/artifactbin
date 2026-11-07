@@ -113,29 +113,34 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
 it('runs every api, api-isolated, ui and islands test on every pull request, packed by measured time, each file once',()=>{
  const job=workflow('pr-fast.yml').jobs.fast;
  const suites=job.strategy.matrix.include.filter(entry=>entry.suite);
- const count=JOBS.suites.count;
- expect(JOBS.suites.projects).toEqual(['api','api-isolated','ui','islands']);
- expect(suites.map(entry=>[entry.part,entry.suite])).toEqual(Array.from({length:count},(_,i)=>[`suite-${i+1}`,`${i+1}/${count}`]));
+ const timings=JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8'));
+ // Two groups, each one Vitest project set sharded whole: the api projects and the jsdom projects, as ci.yml's api and ui
+ // jobs run them after the merge. Every project the full suite's api and ui jobs run is in exactly one group.
+ const groups={api:JOBS['pr-api'],ui:JOBS['pr-ui']};
+ expect([...groups.api.projects,...groups.ui.projects]).toEqual(['api','api-isolated','ui','islands']);
+ expect(groups.api.projects).toEqual(JOBS.api.projects);expect(groups.ui.projects).toEqual(JOBS.ui.projects);
+ const expected=Object.entries(groups).flatMap(([name,{projects,count}])=>Array.from({length:count},(_,i)=>({part:`${name}-${i+1}`,projects:projects.map(project=>`--project=${project}`).join(' '),suite:`${i+1}/${count}`})));
+ expect(suites).toEqual(expected);
  // Every part the matrix adds is a job with the lane's one clock as its last step (asserted above).
  for(const entry of suites)expect(job.strategy.matrix.part).not.toContain(entry.part);
  const run=job.steps.find(step=>step.if==='matrix.suite'&&step.run?.includes('vitest.mjs run'));
- // The full suite's own configuration and projects (vitest.config.ts), as ci.yml's api and ui jobs run them.
- expect(run.run).toBe('node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}');
- expect(run.run).not.toContain('--config');
- // The timed sequencer packs these four projects' files from the recorded table (scripts/ci/test-timings.mjs `--sums`).
+ // The full suite's own configuration (vitest.config.ts) and its timed sequencer.
+ expect(run.run).toBe('node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}');
  expect(readFileSync(new URL('../../vitest.config.ts',import.meta.url),'utf8')).toContain('sequence: { sequencer: TimedSequencer }');
- const loads=shardLoads(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8'))).suites;
- expect(loads).toHaveLength(count);
- for(const project of JOBS.suites.projects)expect(Object.keys(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8')).files[project]??{}).length,project).toBeGreaterThan(0);
+ const loads=shardLoads(timings);
+ for(const [name,{projects,count}] of Object.entries(groups)){
+  expect(loads[`pr-${name}`]).toHaveLength(count);
+  for(const project of projects)expect(Object.keys(timings.files[project]??{}).length,project).toBeGreaterThan(0);
+ }
  // No browser: no file in these projects launches Chromium.
  expect(JSON.stringify(job.steps)).not.toContain('playwright');
- // The test builds restore before the run; only the first suite runner saves, and only on an exact miss.
+ // The test builds restore before the run; only the first api runner saves, and only on an exact miss.
  const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
  expect(restore).toBeGreaterThan(-1);expect(restore).toBeLessThan(steps.indexOf(run));
  expect(steps[restore].uses).toMatch(/^actions\/cache\/restore@/);
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe(`matrix.suite == '1/${count}' && steps.test-builds.outputs.cache-hit != 'true'`);
+ expect(save[0].if).toBe("matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
 });
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
