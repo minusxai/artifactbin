@@ -68,7 +68,7 @@ describe('GET /api/page/session', () => {
     const db = await getDb();
     await db.query("UPDATE users SET welcome_pending=false WHERE id='usr_new'");
     expect(await (await get(actor)).json()).toMatchObject({ onboarded: true });
-    expect(await (await get()).json()).toEqual({ user: null, kind: 'none', onboarded: true, liveEditor: false });
+    expect(await (await get()).json()).toEqual({ user: null, kind: 'none', onboarded: true });
   });
 });
 
