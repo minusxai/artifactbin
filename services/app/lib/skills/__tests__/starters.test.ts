@@ -56,6 +56,12 @@ const source = (name: string) => inline(read(name));
  * stubs. `answer` is what the stubbed `client.query` returns for a query text; each Vega view draws one bar path per
  * value it is given and keeps its click listener; a deck.gl map draws a canvas and keeps its props.
  */
+type View = {width: number; height: number; longitude: number; latitude: number; zoom: number};
+/** The stub deck.gl viewport's projection: equirectangular at deck.gl's scale, enough to place names on. */
+const project = ({width, height, longitude, latitude, zoom}: View, [lon, lat]: number[]) => {
+  const k = 512 * 2 ** zoom / 360;
+  return [width / 2 + (lon! - longitude) * k, height / 2 - (lat! - latitude) * k];
+};
 async function load(html: string, answer: Answer): Promise<Page> {
   html = inline(html);
   const scripts = [...html.matchAll(/<script type="module"[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]!);
@@ -79,7 +85,10 @@ async function load(html: string, answer: Answer): Promise<Page> {
     compile: (spec: Record<string, unknown>) => { page.specs.push(spec); return {spec}; },
     deck: {Deck: class { constructor(public props: Record<string, any>) { page.decks.push(props); props.parent.append(dom.window.document.createElement('canvas')); } finalize() {} },
       MapView: class {}, ScatterplotLayer: Layer, TextLayer: Layer,
-      WebMercatorViewport: class { fitBounds() { return {longitude: 5, latitude: 52, zoom: 7}; } }},
+      WebMercatorViewport: class { constructor(public props: View) {} project(at: number[]) { return project(this.props, at); }
+        fitBounds([[west, south], [east, north]]: number[][], {padding}: {padding: number}) { const {width, height} = this.props;
+          return {longitude: (west! + east!) / 2, latitude: (south! + north!) / 2,
+            zoom: Math.log2(Math.min((width - 2 * padding) / (east! - west!), (height - 2 * padding) / (north! - south!)) * 360 / 512)}; } }},
     // A live text that opens synced and types nothing (collab's own tests drive real sessions).
     collab: {text: () => ({status: 'synced', on() {}, destroy() {}, bind: () => ({destroy() {}})})},
     vega: {parse: (spec: unknown) => spec, expressionInterpreter: {}, View: class {
@@ -290,6 +299,57 @@ it('links its charts: a picked category or city reruns every query with it as a 
   expect(page.variables.at(-1)!.p).toEqual({city: null, category: null});
   expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.length));
   expect(doc.querySelector('[data-af-id^="filter-c"]')).toBeNull();
+});
+
+it('names a map place only where its name fits: no name covers another or comes near a dot, and a dropped one keeps its dot, tooltip and row', async () => {
+  type Place = {x: string; y: number; lon: number; lat: number; offset: number[]};
+  const named = (page: Page, picked?: string) => {
+    const deck = page.decks.at(-1)!, [dots, names] = deck.layers as Array<{props: Record<string, any>}>;
+    const view = {width: deck.width, height: deck.height, ...deck.initialViewState} as View;
+    // jsdom has no canvas, so the page measures a 12px name as 0.6em a character.
+    const box = (v: Place) => { const [x, y] = project(view, [v.lon, v.lat]), [dx, dy] = names!.props.getPixelOffset(v);
+      const half = v.x.length * 3.6 + 2;
+      return [x! + dx - half, y! + dy - 8, x! + dx + half, y! + dy + 8]; };
+    const dot = (v: Place) => { const [x, y] = project(view, [v.lon, v.lat]), s = dots!.props.getRadius(v) + 3;
+      return [x! - s, y! - s, x! + s, y! + s]; };
+    const hit = (a: number[], b: number[]) => a[0]! < b[2]! && b[0]! < a[2]! && a[1]! < b[3]! && b[1]! < a[3]!;
+    const list = names!.props.data as Place[];
+    for (const v of list) {
+      const own = box(v);
+      expect(own[0]! >= 0 && own[1]! >= 0 && own[2]! <= view.width && own[3]! <= view.height, v.x).toBe(true);
+      for (const other of list) if (other !== v) expect(hit(own, box(other)), `${v.x} over ${other.x}`).toBe(false);
+      // A picked place's name may cover the other dots, dimmed then.
+      if (v.x !== picked) for (const other of dots!.props.data as Place[]) if (other.x !== v.x) expect(hit(own, dot(other)), `${v.x} by ${other.x}'s dot`).toBe(false);
+    }
+    return {deck, dots: dots!.props.data as Place[], names: list.map(v => v.x)};
+  };
+  // The sample's Randstad cities sit too close to name them all on a narrow map: the biggest keeps its name.
+  const page = await load(fill(read('csv-dashboard.html')), sqlAnswer());
+  const {deck, dots, names} = named(page), doc = page.dom.window.document;
+  expect(dots).toHaveLength(8);
+  expect(names.length).toBeGreaterThan(0);expect(names.length).toBeLessThan(8);
+  expect(names).toContain([...countBy(ROWS, 'city')].sort((a, b) => b[1] - a[1])[0]![0]);
+  const dropped = dots.filter(v => !names.includes(v.x));
+  for (const v of dropped) {
+    expect(deck.getTooltip({object: v})).toContain(v.x);
+    expect(doc.querySelector(`[data-af-id="chart-cities-table-row-${v.x}-pick"]`)?.textContent).toBe(v.x);
+  }
+  // A picked place is named first, even under a bigger dot.
+  for (const v of dropped) {
+    deck.onClick({object: {x: v.x}});
+    await settle(page);
+    expect(named(page, v.x).names).toContain(v.x);
+    page.decks.at(-1)!.onClick({object: {x: v.x}});
+    await settle(page);
+  }
+  // Two places at one spot: only the bigger is named, until the other is picked.
+  const counts = countBy(ROWS, 'city'), [big, small] = ['Amsterdam', 'Utrecht'].sort((a, b) => counts.get(b)! - counts.get(a)!);
+  const stacked = await load(fill(read('csv-dashboard.html')), sqlAnswer(ROWS.map(row =>
+    row.city === big || row.city === small ? {...row, lat: 52.37, lon: 4.9} : row)));
+  expect(named(stacked).names).toContain(big);expect(named(stacked).names).not.toContain(small);
+  stacked.decks.at(-1)!.onClick({object: {x: small}});
+  await settle(stacked);
+  expect(named(stacked, small).names).toContain(small);
 });
 
 it('drops a superseded answer: the last pick wins even when an earlier pick answers later', async () => {
