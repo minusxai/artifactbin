@@ -1,6 +1,6 @@
 ---
 name: groups
-description: Group membership, email invitations, page sharing and explicit ownership moves through the installed script or HTTP API.
+description: "Read to share a page with a group or team, manage group members and email invitations, or move a page into a group's space, through the installed script or the HTTP API."
 ---
 ## Read first
 

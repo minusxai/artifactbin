@@ -1,6 +1,6 @@
 ---
 name: resolvers
-description: Resolver files for pages, caps.fetch with host-filled secrets, caps.query over linked datasets as the caller, read-only caps.sql, caps.db to the owner's database, @auth roles and Test connection.
+description: "Read before a page uses an HTTP API, a key or secret, an owner's database, or checks and derived values on the server: resolver files, caps.fetch, caps.query, caps.sql, caps.db, @auth roles and Test connection."
 ---
 ## Read first: dataset or resolver?
 

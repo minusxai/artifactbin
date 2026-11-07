@@ -1,6 +1,6 @@
 ---
 name: runtime
-description: Normal HTML scripts and Apollo state, viewer-local persistence, shared namespaces and offline behavior.
+description: "Read for page state and behaviour: Apollo state, viewer-local persistence, shared namespaces, elements a script creates and their comments, and offline or downloaded pages."
 ---
 ## Read first
 
