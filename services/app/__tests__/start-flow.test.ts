@@ -14,12 +14,12 @@ const harness=useAppHarness(),params=(id:string)=>({params:Promise.resolve({id})
 const native=(text:string)=>`<!doctype html><html><head><title>Report</title></head><body><h1>${text}</h1></body></html>`;
 
 describe('native start flow',()=>{
- it('creates private HTML starters owned by the signed-in account without saved setup UI',async()=>{
+ it('creates HTML starters owned by the signed-in account without saved setup UI: a doc unlisted, the rest private',async()=>{
   const user=await createUser({email:'starters@example.test'}),actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
   for(const type of ['doc','deck'] as const){
    const response=await createBrowserArtifact(request('/api/my/artifacts',{method:'POST',actor,json:artifactStarter(type)}));expect(response.status).toBe(201);
    const row=(await getArtifactById((await response.json()).id))!;
-   expect(row).toMatchObject({format:'html',user_id:user.id,visibility:'private'});
+   expect(row).toMatchObject({format:'html',user_id:user.id,visibility:type==='doc'?'unlisted':'private'});
    expect(row.source).toContain('<!doctype html>');expect(row.source).toContain('data-af-id=');
    expect(row.source).not.toMatch(/<Markdown|Copy agent instructions|Waiting for your agent/);
   }

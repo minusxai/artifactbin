@@ -1,11 +1,12 @@
 /**
- * THE PLATFORM STYLESHEET for HTML pages (D3): base styles, type roles, highlight-token colours and every design
- * system's variables, each keyed by `:root[data-af-design-system="NAME"]` (dark values under `[data-af-dark="true"]`),
+ * THE PLATFORM STYLESHEET for HTML pages (D3): the one Markdown stylesheet docs use (lib/html-components
+ * markdown-styles), base styles, type roles, highlight-token colours and every design system's variables, each keyed by `:root[data-af-design-system="NAME"]` (dark values under `[data-af-dark="true"]`),
  * plus every family's @font-face rules on the platform's /af/fonts/ files (a face downloads only when text uses it).
  * Hosted pages link the whole sheet at one stable address (PLATFORM_STYLES_PATH, revalidated by ETag); exports, offline copies and the
  * local preview carry only the active system. Data: lib/html-systems/html-systems (generated from design-systems/specs).
  */
 import {HTML_SYSTEMS,HTML_SYSTEM_FACES} from './html-systems.ts';
+import {MARKDOWN_CSS} from '../html-components/markdown-styles.ts';
 import {HTML_SYSTEM_MODES} from '../validation/html-system-modes.ts';
 
 /** The platform stylesheet's one address: no version or hash, so a deploy shows up on the next load (ETag + no-cache). */
@@ -19,11 +20,12 @@ export const platformFontName = (hashed: string): string | null => /^\/fonts\/([
 export const HTML_SYSTEM_NAMES = Object.keys(HTML_SYSTEM_MODES);
 export const isHtmlSystem = (name: unknown): name is string => typeof name === 'string' && Object.hasOwn(HTML_SYSTEM_MODES, name);
 
-/** The stylesheet for the named systems (every system when omitted): their families' faces, then their rules. */
+/** The stylesheet for the named systems (every system when omitted): their families' faces, the Markdown sheet (zero
+ * specificity, so the systems and page CSS layer over it), then the systems' rules. */
 export function htmlSystemsCss(names: readonly string[] = HTML_SYSTEM_NAMES): string {
   const chosen = names.filter(isHtmlSystem).map((name) => HTML_SYSTEMS[name as keyof typeof HTML_SYSTEMS]);
   const families = [...new Set(chosen.flatMap((system) => system.families as readonly string[]))];
-  return `/* Artifactbin platform stylesheet: design systems keyed by <html data-af-design-system>. */\n${families.map((family) => HTML_SYSTEM_FACES[family] ?? '').filter(Boolean).join('\n')}\n${chosen.map((system) => system.rules).join('')}`;
+  return `/* Artifactbin platform stylesheet: design systems keyed by <html data-af-design-system>. */\n${families.map((family) => HTML_SYSTEM_FACES[family] ?? '').filter(Boolean).join('\n')}\n${MARKDOWN_CSS}\n${chosen.map((system) => system.rules).join('')}`;
 }
 
 /** The platform font files the named systems' faces load (absolute /af/fonts/ paths). */

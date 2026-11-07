@@ -17,7 +17,7 @@ function open() {
 }
 const created = () => { const [url, init] = vi.mocked(fetch).mock.calls[0]!; expect(url).toBe('/api/my/artifacts'); return JSON.parse(init!.body as string); };
 
-it('creates a doc from the first item of the Create menu: private, marked a doc, its body one rich region', async () => {
+it('creates a doc from the first item of the Create menu: unlisted, marked a doc, its body one rich region', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'doc123' }, { status: 201 })));
   render(() => <WorkspaceCreate parentId="folder1" onCreated={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
@@ -27,9 +27,9 @@ it('creates a doc from the first item of the Create menu: private, marked a doc,
   await waitFor(() => expect(openDocument).toHaveBeenCalledWith('/a/doc123'));
   expect(replaceDocument).not.toHaveBeenCalled();
   const body = created();
-  expect(body).toMatchObject({ visibility: 'private', parent_id: 'folder1', template: 'doc' });
+  expect(body).toMatchObject({ visibility: 'unlisted', parent_id: 'folder1', template: 'doc' });
   expect(body.html).toContain('<title>Untitled document</title>');
-  expect(body.html).toContain('<article data-af-editable="rich"><h1></h1><p></p></article>');
+  expect(body.html).toContain('<article data-af-editable="rich" data-af-markdown><h1></h1><p></p></article>');
   expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
 });
 

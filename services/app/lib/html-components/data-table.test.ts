@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { STORY_BARE_TYPOGRAPHY_CSS } from "@/lib/html-components/markdown-typography";
 import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';
@@ -179,29 +178,17 @@ it("remeasures changed columns and restores virtual grid layout after comparison
   expect(el.querySelector<HTMLTableElement>("table")?.style.display).toBe("block");
   rectSpy.mockRestore();
 });
-it("keeps component-owned table cells out of bare document typography", () => {
-  const page = document.createElement("div");
-  page.setAttribute("data-mx-story-root", "");
-  const style = document.createElement("style");
-  style.setAttribute("data-table-layout-test", "");
-  style.textContent = STORY_BARE_TYPOGRAPHY_CSS;
-  document.head.append(style);
+it("keeps component-owned table cells classed, so bare-text page defaults never match them", () => {
+  // Pages from the retired story renderer style only class-less elements (document-serving legacy-story-typography test).
   const el = document.createElement("af-data-table") as AfDataTable;
   el.data = {
     columns: [{ name: "value", type: "number" }],
     rows: [{ value: 1 }],
   };
-  page.append(el);
-  document.body.append(page);
-
-  const table = el.querySelector("table")!;
-  const head = el.querySelector("thead th")!;
-  const cell = el.querySelector("tbody td[data-column]")!;
-  expect(table.hasAttribute("class")).toBe(true);
-  expect(head.hasAttribute("class")).toBe(true);
-  expect(cell.hasAttribute("class")).toBe(true);
-  expect(getComputedStyle(table).maxWidth).not.toBe("68ch");
-  expect(getComputedStyle(head).borderLeftStyle).not.toBe("solid");
+  document.body.append(el);
+  expect(el.querySelector("table")!.hasAttribute("class")).toBe(true);
+  expect(el.querySelector("thead th")!.hasAttribute("class")).toBe(true);
+  expect(el.querySelector("tbody td[data-column]")!.hasAttribute("class")).toBe(true);
 });
 it("fills a GridItem without turning standalone height into a forced fill", () => {
   const gridItem = document.createElement("div");

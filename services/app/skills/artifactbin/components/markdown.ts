@@ -5,59 +5,18 @@
  * Props: source (property wins over the source attribute, then the initial text).
  * Examples:
  *   <af-markdown>## Notes\n- one\n- two</af-markdown>
+ * Styles: Markdown and docs share one stylesheet (markdown-styles.ts); the design system sets fonts and colours;
+ *   for one page add a small <style> override such as `article { line-height: 1.4 }`.
  * Gotchas: the initial text is read once as the source; later edits go through source.
  */
 import { registerComponent } from './register-component';
-/** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay
- * code without changing its layout.
+/** Generated output is a `data-af-markdown` root styled by the one Markdown stylesheet
+ * (./markdown-styles), the same sheet docs use; copy controls overlay code without changing its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }
 import { markdownContent } from '../markdown/content';
-import { MARKDOWN_CSS } from '../markdown/styles';
-import { STORY_BARE_TYPOGRAPHY_CSS } from './markdown-typography';
+import { MARKDOWN_CSS, MARKDOWN_ROOT } from './markdown-styles';
 let nextHeadingScope = 0;
-function splitSelectors(value:string):string[]{
- const selectors:string[]=[];let start=0,depth=0,quote='',comment=false;
- for(let index=0;index<value.length;index++){
-  const char=value[index],next=value[index+1];
-  if(comment){if(char==='*'&&next==='/'){comment=false;index++;}continue;}
-  if(quote){if(char==='\\'){index++;continue;}if(char===quote)quote='';continue;}
-  if(char==='/'&&next==='*'){comment=true;index++;continue;}
-  if(char==='"'||char==="'"){quote=char;continue;}
-  if(char==='('||char==='[')depth++;
-  else if(char===')'||char===']')depth--;
-  else if(char===','&&depth===0){selectors.push(value.slice(start,index));start=index+1;}
- }
- selectors.push(value.slice(start));return selectors;
-}
-function scopeMarkdownBranch(value:string):string{
- const leading=value.match(/^(?:(?:\s+)|(?:\/\*[\s\S]*?\*\/\s*))*/)?.[0]??'';
- const selector=value.slice(leading.length).trim();
- const ancestorTheme=selector.match(/^(\.dark|\[data-theme=["']dark["']\])\s+(.*)$/s);
-if(ancestorTheme){const scoped=`${ancestorTheme[1]} af-markdown ${ancestorTheme[2]}`;
-   return `${leading}${ancestorTheme[
-   1]==='.dark'?`${scoped}, [data-af-dark="true"] af-markdown ${ancestorTheme[2]}`:scoped}`;}
- if(selector.startsWith(':where(')){
-  let depth=1,quote='',comment=false,close=-1;
-  for(let index=7;index<selector.length;index++){
-   const char=selector[index],next=selector[index+1];
-   if(comment){if(char==='*'&&next==='/'){comment=false;index++;}continue;}
-   if(quote){if(char==='\\'){index++;continue;}if(char===quote)quote='';continue;}
-   if(char==='/'&&next==='*'){comment=true;index++;continue;}
-   if(char==='"'||char==="'"){quote=char;continue;}
-   if(char==='(')depth++;else if(char===')'&&--depth===0){close=index;break;}
-  }
-if(close>=0){const scoped=splitSelectors(selector.slice(7,close)).map(scopeMarkdownBranch).join(
-    ', ');return `${leading}:where(${scoped})${selector.slice(close+1)}`;}
- }
- return `${leading}af-markdown ${selector}`;
-}
-function scopeMarkdownCss(css:string):string{
- // MARKDOWN_CSS is a flat list of rules. Split only selector commas at the
- // top level so commas inside :where(), :has(), fallbacks, and strings survive.
-return css.replace(/(^|})([^{}]+)\{/g,(_rule,close:string,selectors:string)=>
-   `${close}${splitSelectors(selectors).map(scopeMarkdownBranch).join(', ')}{`);
-}
 /** Only generated output is replaced; the host remains the authored identity. */
 export class AfMarkdown extends HTMLElement implements MarkdownContract {
  static observedAttributes = ['source','copy-controls'];
@@ -77,7 +36,8 @@ for(const key of ['source','copyControls'] as const)if(Object.prototype.hasOwnPr
 if(!this.output) { this.literalSource=[...this.childNodes].filter(node=>node.nodeType===3).map(
     node=>node.textContent ?? '').join(''); for(const node of [...this.childNodes]) if(
     node.nodeType===3) node.remove(); this.output=this.ownerDocument.createElement('div');
-    this.output.className='mx-markdown'; this.append(this.output); }
+    this.output.className='mx-markdown'; this.output.setAttribute(MARKDOWN_ROOT.slice(1,-1),'');
+    this.append(this.output); }
   this.render();
  }
  attributeChangedCallback(): void { this.render(); }
@@ -99,28 +59,10 @@ if(this.copyControls)this.output.querySelectorAll('pre').forEach(pre=>{const cod
     } catch {button.textContent='Copy unavailable';}}); pre.append(button);});
  }
 }
-// The retained document applies preflight, Markdown, bare prose, then the
-// every-document table scroll rule. Keep that cascade inside generated output.
-const readerBareTypography=STORY_BARE_TYPOGRAPHY_CSS
- .replaceAll(':where([data-mx-story-root])',':where(af-markdown .mx-markdown)')
- .replaceAll(':where([data-mx-story-root]:not([data-mx-styled]))',':where(af-markdown):not(*)');
-const markdownStyles=`
-:where(af-markdown .mx-markdown,af-markdown .mx-markdown *){box-sizing:border-box;margin:0;` +
-  `padding:0;border:0 solid}
-:where(af-markdown pre,af-markdown code,af-markdown kbd,` +
-  `af-markdown samp){font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Monaco,` +
-  `Consolas,"Liberation Mono","Courier New",monospace);font-feature-settings:normal;` +
-  `font-variation-settings:normal;font-size:1em}
-${scopeMarkdownCss(MARKDOWN_CSS)}
-/* The original reader's Markdown sheet follows the application preflight,
-   which leaves code at its parent size. Restore that final cascade after the
-   shared Markdown rules, for inline and fenced code alike. */
-:where(af-markdown .mx-markdown code){font-size:1em}
-${readerBareTypography}
-af-markdown .mx-markdown table{display:block;width:fit-content;max-width:100%;overflow-x:auto;` +
-  `-webkit-overflow-scrolling:touch}
+// The shared Markdown sheet, then this element's own chrome: block display and the copy button.
+const markdownStyles=`${MARKDOWN_CSS}
 af-markdown{display:block}
-af-markdown pre{position:relative;overflow:auto}
+af-markdown pre{position:relative}
 af-markdown pre button{position:absolute;top:.5rem;right:.5rem;opacity:0;padding:.25rem .5rem;` +
   `color:var(--foreground,CanvasText);background:var(--background,Canvas);` +
   `border:1px solid var(--border,#8888);border-radius:var(--radius-sm,calc(var(--radius,` +

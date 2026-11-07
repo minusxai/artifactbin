@@ -29,11 +29,11 @@ it('derives native title and description from head and honors explicit API overr
  const updated=await PUT(request(`/api/artifacts/${created.id}`,{method:'PUT',token:actor.token,json:{html:head.html.replace('Native &amp; clear','Next title'),expectedVersion:head.version,expectedState:head.state}}),params(created.id));expect(updated.status).toBe(200);head=await read();expect(head.title).toBe('Next title');
  const overridden=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html,title:'API title',description:'API description'}}));expect(overridden.status).toBe(201);const override=await overridden.json();expect(override.title).toBe('API title');expect(override.description).toBe('API description');
 });
-it('creates every New artifact choice as private native HTML through the original browser API',async()=>{
+it('creates every New artifact choice as native HTML through the original browser API: a doc unlisted, the rest private',async()=>{
  const user=await createUser({email:'mxmx_test_native_starters@example.com'});const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
  for(const {template} of ARTIFACT_STARTERS){
   const response=await browserCreate(request('/api/my/artifacts',{method:'POST',actor,json:artifactStarter(template)}));expect(response.status).toBe(201);const saved=await response.json();
-  const db=await harness.db();const row=(await db.query<{format:string;source:string;user_id:string;visibility:string}>('SELECT format,source,user_id,visibility FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.format).toBe('html');expect(row?.source).toContain('/af/core.js');expect(row?.source).not.toMatch(/<Markdown|className=|<Helmet/);expect(row?.user_id).toBe(user.id);expect(row?.visibility).toBe('private');
+  const db=await harness.db();const row=(await db.query<{format:string;source:string;user_id:string;visibility:string}>('SELECT format,source,user_id,visibility FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.format).toBe('html');expect(row?.source).toContain('/af/core.js');expect(row?.source).not.toMatch(/<Markdown|className=|<Helmet/);expect(row?.user_id).toBe(user.id);expect(row?.visibility).toBe(template==='doc'?'unlisted':'private');
  }
 });
 it('preserves original dataset and byte-file publication beside native pages',async()=>{
