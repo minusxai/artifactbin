@@ -31,8 +31,8 @@ resolver ([`caps.db`](resolvers.md#capsdb-your-own-database)).
 ## Names: discover before querying
 
 `node scripts/graphql.mjs schema PAGE_ID` (or `DATASET_ID`) prints the SDL (and role) you get. In a
-page the root is the link's `data-af-name` (`orders`); queried directly it comes from the title (or
-`data`), or `publish.mjs --name orders` (create body `name`) fixes it for good. A column keeps its name when it is a valid GraphQL name;
+page the root is the link's `data-af-name` (`orders`); queried directly it is the file's name
+(`orders.csv` → `orders`) unless `publish.mjs --name` set one. A column keeps its name when it is a valid GraphQL name;
 otherwise it is lower-cased with `_` for other characters (`Created By` → `created_by`). Every row
 has `_id: ID!`, the stable row ID (a CSV `id` column stays ordinary). Types: number → `Float`,
 boolean → `Boolean`, text, dates and user IDs → `String`; every column is nullable.

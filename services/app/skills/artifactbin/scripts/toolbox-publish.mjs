@@ -30,8 +30,7 @@ positional(positionals,0);if(Object.keys(values).some(flag=>!['resume','server',
 const saved=await jsonFile(values.resume),server=serverOrigin(selectedServer(values,options.env)??
     saved.server);
 const client=makeClient(server,options),done=await finishPublication(await resumeJournal(
-    values.resume,client,'publish'));return watched(client,done,options);
- }
+    values.resume,client,'publish'));return watched(client,done,options);}
 const file=await realpath(positional(positionals)),server=serverOrigin(selectedServer(values,
    options.env)),client=makeClient(server,options),bytes=await readFile(file),extension=
    path.extname(file).toLowerCase();
@@ -102,8 +101,7 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
     'see the autofix report.':'--strict refuses fixable problems; see the autofix report.',2,
     fixed.problems.length?'Fix the listed lines, then publish again.':
     'Run without --strict to apply the fixes, or fix them by hand.',
-    {autofix:autofixDetail(fixed,report)});
-  }
+    {autofix:autofixDetail(fixed,report)});}
   source=fixed.html;
 const extra=values.manifest?await jsonFile(values.manifest):{};if(Object.keys(extra).some(key=>
     key!=='manifest')||extra.manifest!==undefined&&!Array.isArray(
@@ -134,13 +132,16 @@ if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.e
  else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
+ // A new dataset is named after its file (sales.csv → sales), the name a page links it by.
+ const stem=path.basename(file).replace(/\.[^.]+$/,'').toLowerCase().replace(/[^a-z0-9]+/g,'_')
+  .replace(/^_+|_+$/g,''),named=/^(?!dataset|true$|false$|null$)[a-z][a-z0-9_]{0,40}$/;
  if(values.name!==undefined)body.name=values.name;
+ else if(type==='dataset'&&!baseline&&named.test(stem))body.name=stem;
  if(values.personal){
   if(baseline)throw new ToolError('personal_not_for_update',
     '--personal places a new page; it never moves an existing one.',2,
     'Drop --personal (updates keep their owner) or use --create for a new page.');
-  body.destination={type:'personal'};
- }
+  body.destination={type:'personal'};}
  // --group HANDLE: create the page directly in a group you can edit. The server refuses a
  // destination that conflicts with the parent's owner.
  if(values.group!==undefined){
@@ -152,8 +153,7 @@ if(baseline)throw new ToolError('group_not_for_update',
 if(detail.group?.role!=='editor')throw new ToolError('group_not_editor',
     'Publishing into a group needs editor access in it.',3,
     'Ask a group editor for editor access, or publish without --group.');
-  body.destination={type:'group',id:detail.group.id};
- }
+  body.destination={type:'group',id:detail.group.id};}
  if(values['dry-run']){
 const report=fixed&&(await import('./preview-html.mjs')).formatAutofixReport(fixed,{file:
     path.basename(file),landed:'dry run; nothing written',dryRun:true,routine:fixed.routine});if(
@@ -192,8 +192,7 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'utf8'))-ids(bytes.toString('utf8'));
  const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} `+
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
- return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},
-  report)};
+ return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},report)};
 }
 /** A publish resets the quiet time of the page's comment watch; it never fails the publish. */
 async function watched(client,done,{now}={}){await noteWatchActivity(client.root,client.server,

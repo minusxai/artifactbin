@@ -12,8 +12,9 @@ Flags: --artifact ID replaces that existing page with FILE: its companion FILE.a
   --manifest FILE JSON {"manifest":[paths]} of extra runtime-loaded files; --title;
   --visibility (new pages default to unlisted); --template read-only|own-rows|editors-only
   [--owner-column C] a new dataset's permissions (prints readBack); --name NAME a new dataset's
-  GraphQL root (default: from the title; fixed once created); --group HANDLE creates a new page
-  in that group (you need editor access; it resolves GET /api/groups/HANDLE first); a destination
+  GraphQL root (default: the file's name, sales.csv → sales; fixed once created); --group
+  HANDLE creates a new page in that group (you need editor access; it resolves GET
+  /api/groups/HANDLE first); a destination
   that conflicts with the parent's owner is refused, and it never moves existing pages, so
   updates reject it; --dry-run validates and plans without writes; --strict refuses fixable
   autofix problems instead of fixing them; --create publishes FILE as a new page even when it
