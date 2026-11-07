@@ -75,26 +75,28 @@ window.DATA = {
     {id:'modules', title:'[How the areas import each other]', query:'imports',
       diagram:{from:'source_area', to:'target_area', weight:'imports'}},
     {id:'weekly', title:'[Commits per week]', query:'weekly', spec:{mark:{type:'line',
-      point:true}, encoding:{x:{field:'week', type:'temporal', scale:{type:'utc'}},
+      point:true}, encoding:{x:{field:'week', type:'temporal', scale:{type:'utc'},
+        axis:{format:'%b %d'}},
         y:{field:'commits', type:'quantitative'}}}},
   ],
   method: h => `Gathered by scripts/new-codebase-report.mjs from ${DATA.source.repo} at `+
     `${DATA.source.head}: ${h.fmt(h.one('totals').commits)} commits without merges since `+
     `${DATA.source.since} (${h.one('totals').first} to ${h.one('totals').last}) and `+
     `${h.fmt(h.one('size').files)} tracked text files in ${h.one('size').areas} areas, `+
-    'lockfiles left out. Imports are read from JavaScript, TypeScript and Python.',
+    'lockfiles left out. Imports are read from JavaScript, TypeScript and Python, tests left out.',
 };
 </script>
 <style>
 *{box-sizing:border-box}body{line-height:1.6}h1{max-width:20ch;margin:12px 0 24px}
 main{max-width:1080px;margin:auto;padding:clamp(20px,5vw,72px)}p,li{max-width:70ch}
 .muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
-[role=status]{min-height:1.6em}
-.number,td.n{font-variant-numeric:tabular-nums}td.n{text-align:right}summary{cursor:pointer}
+[role=status]{min-height:1.6em}summary{cursor:pointer}
+.number,td.n{font-variant-numeric:tabular-nums}td.n{text-align:right;white-space:nowrap}
 .rule{border-top:1px solid var(--border);padding-top:24px;margin-top:32px;min-width:0}
 .chart{width:100%;min-height:280px;overflow:auto}.chart svg{max-width:100%;height:auto}
-table{border-collapse:collapse;width:100%;margin-top:12px}
-td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;margin-top:12px}details{overflow-x:auto}
+td:first-child{overflow-wrap:anywhere;min-width:14ch}
+td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
 .chart{--pele-bg:var(--background);--pele-fg:var(--foreground);--pele-line:var(--foreground);
   --pele-muted:var(--muted-foreground);--pele-surface:var(--card);--pele-border:var(--border);
   --pele-surface-alt:var(--muted);--pele-accent:var(--primary);--pele-font:var(--font-body)}

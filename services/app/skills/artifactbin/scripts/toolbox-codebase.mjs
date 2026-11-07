@@ -3,9 +3,9 @@
  * one row per commit (no merges) since a date, with its main area (where most lines changed).
  * files: one row per tracked text file, its size now and its history in that window. imports:
  * file-to-file imports that cross areas (JS/TS relative, tsconfig paths and workspace packages;
- * Python modules). Areas are the top directories, the largest split while it holds over a fifth
- * of the files. Lockfiles are left out. Every table keeps at most 10,000 rows (a dataset's cap)
- * and says what it cut.
+ * Python modules; tests import everything, so they are left out). Areas are the top directories,
+ * the largest split while it holds over a fifth of the files. Lockfiles are left out. Every table
+ * keeps at most 10,000 rows (a dataset's cap) and says what it cut.
  * Used by: new-codebase-report.mjs, codebase-toolbox.test.ts.
  */
 import {execFileSync} from 'node:child_process';
@@ -25,6 +25,7 @@ const RESOLVE = ['', '.ts', '.tsx', '.js', '.mjs', '.jsx', '.cjs', '.mts', '/ind
 const JS_IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'"\n]+)['"]/g;
 const LOCKFILE = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|[\w.-]+\.lockb?|go\.sum)$/;
 const PY_IMPORT = /^[ \t]*(?:from[ \t]+(\.*[\w.]*)[ \t]+import\b|import[ \t]+([\w.]+))/gm;
+const TEST = /(^|\/)(__tests__|tests?|spec)\/|[._](test|spec)\.[^/]+$|(^|\/)test_[^/]+\.py$/;
 
 const git = (repo, args) => execFileSync('git', ['-c', 'core.quotepath=false', '-C', repo,
   ...args], {encoding: 'utf8', maxBuffer: 1 << 30});
@@ -160,7 +161,8 @@ export function gatherCodebase(repo, {since = '1 year ago', areas: max = 20,
     files.push({path: file, area: areaOf(file), language: LANGUAGES[path.extname(file).slice(1)
       .toLowerCase()] ?? 'Other', lines: lineCount(bytes), changes: seen?.changes ?? 0,
     churn: seen?.churn ?? 0, authors: seen?.authors.size ?? 0, last_change: seen?.last ?? ''});
-    if (/\.(?:[cm]?[jt]sx?|py)$/.test(file)) code.set(file, bytes.toString('utf8'));
+    if (/\.(?:[cm]?[jt]sx?|py)$/.test(file) && !TEST.test(file)) code.set(file,
+      bytes.toString('utf8'));
   }
   files.sort((a, b) => b.changes - a.changes || b.lines - a.lines);
   const resolve = resolver(repo, known), edges = new Map();

@@ -45,6 +45,7 @@ beforeAll(async () => {
     'packages/shared/package.json': '{"name":"shared"}\n',
     'packages/shared/thing.ts': 'export const thing = 1;\n',
     'tools/cli.mjs': "const app = await import('@/app');\nconst math = require(\"../lib/math\");\n",
+    'tools/cli.test.mjs': "import {add} from '../lib/math';\n",
     'app/__init__.py': '', 'app/models.py': 'import os\nclass User: pass\n',
     'app/api/__init__.py': '', 'app/api/views.py': 'from ..models import User\nimport json\n',
     'scripts/run.py': 'from app.api.views import index\nimport app.models\n',
@@ -85,7 +86,7 @@ it('reads commits, files and the imports between areas from the repository', asy
   expect(result.commits.map(({commit, ...row}: {commit: string}) => (expect(commit).toMatch(/^[0-9a-f]{10}$/), row))).toEqual([
     {date: '2026-01-20', author: 'Ada', area: 'old', files: 1, added: 0, deleted: 1},
     {date: '2026-01-14', author: 'Bo', area: 'lib', files: 2, added: 3, deleted: 0},
-    {date: '2026-01-05', author: 'Ada', area: '(root)', files: 15, added: 47, deleted: 0},
+    {date: '2026-01-05', author: 'Ada', area: '(root)', files: 16, added: 48, deleted: 0},
   ]);
   expect(result.tables.commits.split('\n')[0]).toBe('commit,date,author,area,files,added,deleted');
   // Text files only (no logo.png, no package-lock.json), most changed first.
@@ -121,7 +122,7 @@ it('keeps the window, caps every table and says what it cut', async () => {
   const capped = gatherCodebase(repo, {limit: 2});
   expect(capped.commits).toHaveLength(2);
   expect(capped.tables.files.trim().split('\n')).toHaveLength(3);
-  expect(capped.truncated).toEqual(['commits: kept 2 of 3', 'files: kept 2 of 13', 'imports: kept 2 of 8']);
+  expect(capped.truncated).toEqual(['commits: kept 2 of 3', 'files: kept 2 of 14', 'imports: kept 2 of 8']);
   // Nothing in the window: no commit rows (the command refuses that); a repository without imports
   // between areas still gets one row, which SQL's source_area <> target_area leaves out.
   expect(gatherCodebase(repo, {since: '2027-01-01'}).tables.commits).toBe('');

@@ -22,7 +22,8 @@ Gotchas: a rerun reads the repository again and publishes the new rows over the 
   is brought up to date. A table keeps at most 10,000 rows (the newest commits, the most changed
   files); truncated names what was cut, and a shorter --since keeps the window whole. Authors
   are git's names: a .mailmap merges one person's identities. Lockfiles and binary files are
-  left out; areas are the top directories, the largest split into its biggest subdirectories.
+  left out, and tests from imports; areas are the top directories, the largest split into its
+  biggest subdirectories (--areas caps them).
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
   rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
   Results never contain credentials.`;
