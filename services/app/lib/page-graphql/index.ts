@@ -8,10 +8,12 @@ import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,createResolverSql,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
 import {executeLinkedDatasetGraphql, loadPageDatasets, readLinkedDatasetTables, type PageDatasets} from '@/lib/dataset-graphql';
-import {getDb,services} from '@/lib/platform';
+import {getDb,runWithRequest,services} from '@/lib/platform';
 import {people} from '@/lib/datasets';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
+import {ACTOR_HEADER} from '@artifactbin/contracts';
+import {DOMAIN_READ_ONLY_MESSAGE} from '@artifactbin/contracts/domain-footer';
 /** The page's dataset links: each mounts its dataset's generated roots flat at the top of the page schema. */
 const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
 async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[]>{
@@ -63,6 +65,35 @@ export const resolverDatasets:ResolverDatasets={
 const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Original request identity and ACLs guard both SDL and executions. */
 export async function pageGraphql(request:Request,pageId:string):Promise<Response>{
+ if(request.method==='POST'&&request.headers.get('origin')==='null')return opaqueOriginRead(request,pageId);
+ return answer(request,pageId);
+}
+/** Every header a credential arrives in (the proxy's attached actor included); an opaque origin's read carries none. */
+const CREDENTIAL_HEADERS=['cookie','authorization','proxy-authorization',ACTOR_HEADER];
+/** Any origin may read what nobody may read; never with credentials. */
+const READ_CORS={'Access-Control-Allow-Origin':'*','Cache-Control':'no-store'};
+/**
+ * AN OPAQUE ORIGIN'S READ: a sandboxed document no app frame relays for (the exporter's capture, document-serving/raw)
+ * reads its own page's data here directly (html-runtime/domain-reads). It is answered as NOBODY by construction — every
+ * credential header is dropped and the read runs as that credential-less request — so the `*` CORS exposes exactly what
+ * an anonymous fetch already gets; and only queries run.
+ */
+async function opaqueOriginRead(request:Request,pageId:string):Promise<Response>{
+ const headers=new Headers(request.headers);
+ for(const name of CREDENTIAL_HEADERS)headers.delete(name);
+ const body=await request.text();
+ let parsed:unknown=null;try{parsed=JSON.parse(body);}catch{/* refused below */}
+ const {query,operationName}=(parsed&&typeof parsed==='object'?parsed:{}) as {query?:unknown;operationName?:unknown};
+ const kind=typeof query==='string'?pageOperationKind(query,typeof operationName==='string'?operationName:undefined):null;
+ if(kind==='mutation')return json({data:null,errors:[{message:DOMAIN_READ_ONLY_MESSAGE}]},403,READ_CORS);
+ if(kind!=='query')return json({error:'invalid_graphql_operation'},400,READ_CORS);
+ const guest=new Request(request.url,{method:'POST',headers,body,signal:request.signal});
+ const answered=await runWithRequest(guest,()=>answer(guest,pageId));
+ const cors=new Headers(answered.headers);
+ cors.set('access-control-allow-origin','*');cors.delete('access-control-allow-credentials');
+ return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:cors});
+}
+async function answer(request:Request,pageId:string):Promise<Response>{
  const actor=await requestOrSessionActor(request);
  if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
  try{

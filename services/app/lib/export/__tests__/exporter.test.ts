@@ -111,6 +111,14 @@ describe('the export answer',()=>{
   expect(missing.status).toBe(404);
   expect(await missing.json()).toEqual({error:'slide_not_found',slides:3});
   await resetExportRenderer();
+  // A document that drew no slide at all says so, rather than leaving "0 slides" to be guessed at.
+  browser(()=>({ok:false,reason:'no_slide',slides:0}));
+  const none=await exportImageResponse(page(),{slide:'1'},BASE);
+  expect(none.status).toBe(404);
+  const told=await none.json() as {error:string;slides:number;hint?:string};
+  expect([told.error,told.slides]).toEqual(['slide_not_found',0]);
+  expect(told.hint).toMatch(/no data-af-slide/);
+  await resetExportRenderer();
   browser(()=>({ok:false,reason:'unavailable'}));
   const unavailable=await exportImageResponse(page(),{},BASE);
   expect([unavailable.status,(await unavailable.json() as {error:string}).error]).toEqual([503,'render_unavailable']);

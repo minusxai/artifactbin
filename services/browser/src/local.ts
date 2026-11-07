@@ -178,7 +178,11 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw deadlineElapsed(e) ? new Error('Render deadline') : new NavigationError((e as Error).message); });
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
-      await surface.waitFor({ timeout });
+      // A slide capture counts what the page drew. A deck whose script drew no slide leaves an empty body (its fixed
+      // chrome takes no height), which never becomes visible: waiting for that spent the whole deadline and answered
+      // `failed`, where the answer is no_slide with a count of 0.
+      const slideCapture = 'capture' in req && typeof req.capture === 'object' && req.capture !== null && 'slide' in req.capture;
+      await surface.waitFor({ timeout, state: slideCapture ? 'attached' : 'visible' });
       // SSR emits pending diagram markers before hydration. Wait through the
       // lazy engine and image decode; a handled syntax error is also settled.
       await page.waitForFunction(selector => {
