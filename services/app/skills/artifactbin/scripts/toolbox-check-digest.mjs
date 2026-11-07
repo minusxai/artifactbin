@@ -36,6 +36,8 @@ export function checkDigest(envelope,file){
     `${clip(item.id,60)} x${item.count}`).join(', ')}${
     check.ids.duplicates>check.ids.items.length?
      `; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
+  if(check.unreachable?.length)errors.push(`not loaded here (this browser has no internet; `+
+   `readers' browsers load it): ${check.unreachable.join(', ')}`);
   const blocked=check.needsSecret,task=check.error?'task error: '+clip(check.error,1000):
    blocked&&'step' in blocked?`steps stopped ${blocked.step==null?'outside a step':'at '+
     JSON.stringify(blocked.step)}: needs secret ${blocked.secrets.join(', ')}`:
@@ -125,7 +127,9 @@ const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.vie
  * Next line. */
 function replyFacts({reply,slideLinks,checks,needsSecrets},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
- const untried=[...(needsSecrets??[]).map(untested),'visual appearance',...(guest?
+ const outside=[...new Set((checks??[]).flatMap(check=>check?.unreachable??[]))];
+ const untried=[...(needsSecrets??[]).map(untested),...(outside.length?[`content from ${outside
+  .join(', ')} (the check browser has no internet)`]:[]),'visual appearance',...(guest?
   ['sharing between two signed-in users (the guest is signed out)']:[])];
  return ['For your reply:','Link: '+reply.link,
   ...(reply.builtWith?['Built with: '+reply.builtWith]:[]),'Tested: '+(tested||loads(checks)),

@@ -127,6 +127,34 @@ it('collects errors, separates only known telemetry, and catches overflow withou
  expect(summarizeCheck([evidence])).toMatchObject({smokePassed:false,unverified:['task behavior','persistence','permissions']});
 });
 
+it('lists content the hosted check browser cannot reach (it has no internet) without failing the page',async()=>{
+ const {inspectPage,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const listeners:Record<string,Function>={};
+ const frames=[{url:()=>'https://app.example.test/a/PAGE12'},{url:()=>'https://abc123.runner.pages.test/PAGE12'}];
+ const fail=(url:string)=>listeners.requestfailed!({url:()=>url,failure:()=>({errorText:'net::ERR_FAILED'})});
+ const page={url:()=>'https://app.example.test/a/PAGE12',frames:()=>frames,on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},goto:async()=>{
+  // A comment asked for a remote logo: the session browser cannot resolve it, a reader's browser can.
+  fail('https://minusx.ai/logo.svg');fail('https://minusx.ai/growth.webp');
+  listeners.console!({type:()=>'error',text:()=>'Failed to load resource: net::ERR_FAILED',location:()=>({url:'https://minusx.ai/logo.svg'})});
+ },locator:()=>({waitFor:async()=>{},innerText:async()=>'Fixture',evaluate:async()=>({viewport:390,content:390,fits:true})})};
+ const evidence=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844},hosted:true},null);
+ expect(evidence.unreachable).toEqual(['https://minusx.ai']);
+ expect(evidence.failedRequests).toEqual([]);expect(evidence.consoleErrors).toEqual([]);
+ // The fake page has no frame to inspect; with what a real inspection fills in, the origin it could
+ // not reach leaves smoke passing.
+ const inspected={...evidence,error:undefined,inspectionError:undefined,overflow:{viewport:390,content:390,fits:true},text:'Growth update'};
+ expect(summarizeCheck([inspected]).smokePassed).toBe(true);
+ const digest=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[inspected],unverified:[]},'qa.json');
+ expect(digest).toContain("not loaded here (this browser has no internet; readers' browsers load it): https://minusx.ai");
+ // The platform's own asset hosts and Google Fonts are reachable: their failures still fail the page.
+ const again=await inspectPage({...page,goto:async()=>{fail('https://assets.runner.pages.test/a.png');fail('https://fonts.gstatic.com/f.woff2');}},{target:'/a/PAGE12',viewport:{width:390,height:844},hosted:true},null);
+ expect(again.unreachable).toEqual([]);expect(again.failedRequests).toHaveLength(2);
+ // A local preview has the internet: a failed remote request is a page failure there.
+ const local=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}},null);
+ expect(local.unreachable).toEqual([]);expect(local.failedRequests).toHaveLength(2);
+});
+
 it('captures each failed GraphQL field with its owner detail, and keeps a detail-less read for an owner re-run',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};

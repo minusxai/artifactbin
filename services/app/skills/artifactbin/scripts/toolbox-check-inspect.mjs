@@ -28,7 +28,24 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     httpErrors = [],
     telemetry = [],
     graphqlErrors = [],
-    graphqlReads = [];
+    graphqlReads = [],
+    unreachable = [];
+  // A hosted check's browser reaches only the platform's own sites and Google Fonts (no internet):
+  // a request elsewhere fails there yet loads for readers, so it is listed, never a page failure.
+  const site = host => host.split('.').slice(-2).join('.');
+  const offPlatform = value => {
+    try {
+      const {host, protocol} = new URL(value);
+      const fonts = /(^|\.)(googleapis|gstatic)\.com$/.test(host);
+      if (!options.hosted || !/^https?:$/.test(protocol) || fonts) return false;
+      const sites = page.frames().map(frame => {
+        try { return site(new URL(frame.url()).host); } catch { return ''; }
+      });
+      return !sites.includes(site(host));
+    } catch {
+      return false;
+    }
+  };
   const classify = value => {
     try {
       const url = new URL(value);
@@ -48,7 +65,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     if (message.type() === 'error') {
       const url = message.location?.().url;
       if (url && classify(url)) record(telemetry, {url, error: message.text()});
-      else record(consoleErrors, message.text());
+      else if (!(url && offPlatform(url))) record(consoleErrors, message.text());
     }
   });
   // A main-frame navigation (e.g. a step's reload) cancels requests that started before it; those
@@ -82,6 +99,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   };
   page.on('requestfailed', request => {
     const item = {url: request.url(), error: request.failure()?.errorText};
+    if (offPlatform(item.url)) return record(unreachable, new URL(item.url).origin);
     const aborted =
       item.error === 'net::ERR_ABORTED' &&
       (started.get(request) < navigation || readerFetch(item.url));
@@ -107,6 +125,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     failedRequests,
     httpErrors,
     telemetry,
+    unreachable,
     text: '',
     overflow: null,
     task: null
@@ -157,6 +176,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     failedRequests: [...failedRequests],
     httpErrors: [...httpErrors],
     telemetry: [...telemetry],
+    unreachable: [...new Set(unreachable)],
     datasetReads,
     ...(graphqlErrors.length ? {graphqlErrors: [...graphqlErrors]} : {})
   };
