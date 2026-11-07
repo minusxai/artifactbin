@@ -7,6 +7,7 @@ import { parseTableHeight, type SortSpec } from "@/lib/html-components/table-val
 import type { AfDataTable } from "./data-table";
 import { renderComparison } from "./data-table-compare";
 import { renderGrid } from "./data-table-grid";
+import { renderAfterResize } from "./data-table-measure";
 import {
   DATA_TABLE_CLASSES,
   TableLoader,
@@ -37,6 +38,7 @@ export interface TableState {
   viewport?: HTMLDivElement;
   viewportObserver?: ResizeObserver;
   rowObserver?: ResizeObserver;
+  resizeFrame?: number;
   rowHeights: Map<string, number>;
   measuredHeaderWidths: number[] | null;
   columnSignature: string;
@@ -134,7 +136,7 @@ export function renderTable(el: AfDataTable, s: TableState) {
     });
   }
   if (!s.viewportObserver && typeof ResizeObserver !== "undefined") {
-    s.viewportObserver = new ResizeObserver(() => s.render());
+    s.viewportObserver = new ResizeObserver(() => renderAfterResize(s));
     s.viewportObserver.observe(s.viewport!);
   }
   const table = s.table, body = table.tBodies[0]!, head = table.tHead!.rows[0]!;
@@ -165,6 +167,7 @@ export function renderTable(el: AfDataTable, s: TableState) {
 }
 /** Light-DOM styles, injected once per document when data-table.ts registers. */
 export const dataTableStyles =
+  "af-data-table[hidden]{display:none}" +
   "af-data-table{display:flex;flex-direction:column;width:100%;min-width:0;" +
   "box-sizing:border-box;overflow:hidden;border:1px solid var(--border,#ddd);" +
   "border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));" +
