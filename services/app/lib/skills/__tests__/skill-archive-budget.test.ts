@@ -10,7 +10,9 @@ import {archiveFor} from '@/lib/skills';
 // 1.65 MiB since #1014: local preview bundles the generated Hasura dataset API (preview-datasets.mjs, ~25 KB).
 // 1.67 MiB: the shared sign-up list starter (examples/shared-list*, ~19 KB) took the sign-up task from 118-364 s to 42 s.
 // 1.68 MiB: main sat 155 bytes under 1.67; local preview's `_sql` (node:sqlite, ~2.3 KB) replaces GraphQL aggregation.
-const SKILL_ARCHIVE_MAX_BYTES=1.68*1024*1024;
+// 1.70 MiB: main sat 6.7 KB under 1.68; the API dashboard starter (examples/api-dashboard*, its new-app helper; ~21 KB
+// net) lets one command answer "a dashboard of an API behind a key, with shared notes", built from scratch in 340-511 s.
+const SKILL_ARCHIVE_MAX_BYTES=1.70*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

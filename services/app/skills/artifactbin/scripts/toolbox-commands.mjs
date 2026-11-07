@@ -120,7 +120,7 @@ const commands = {
   doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}},
   'new-app': {
     starter: 'examples/shared-app.html',
-    flags: {kind: flag(), title: flag(), data: flag(), dir: flag()}
+    flags: {kind: flag(), title: flag(), data: flag(), url: flag(), dir: flag()}
   },
   'new-page': {
     starter: 'examples/csv-dashboard.html',

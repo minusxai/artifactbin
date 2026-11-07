@@ -109,7 +109,8 @@ const sqlAnswer = (rows: ReadonlyArray<Record<string, unknown>> = ROWS): Answer 
 const sum = (key: 'completed' | 'waiting') => ROWS.reduce((total, row) => total + row[key], 0);
 
 it('imports only hosted @afbin modules from every starter', () => {
-  for (const name of ['csv-dashboard.html', 'deck.html', 'report.html', 'shared-app.html', 'shared-list.html']) {
+  for (const name of ['csv-dashboard.html', 'deck.html', 'report.html', 'shared-app.html', 'shared-list.html',
+    'api-dashboard.html']) {
     const names = [...read(name).matchAll(/(?:from|import)\s*['"]@afbin\/([a-z0-9-]+)['"]/g)].map(m => m[1]!);
     expect(names.length, name).toBeGreaterThan(0);
     for (const imported of names) expect(HOSTED.has(imported), `${name} imports @afbin/${imported}`).toBe(true);
@@ -257,4 +258,84 @@ it('keeps what someone typed into an open list entry when another change refresh
   page.change!(['entries']);
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(note()?.value).toBe('typed, not saved');
+});
+
+/** The API starter's two requests: the resolver's items (or its error) and the notes with what this viewer may do. */
+const apiAnswer = (items: unknown, notes: Array<Record<string, unknown>>, signedIn = true): Answer => query =>
+  /api\s*\{\s*items/.test(query) ? items : {data: {notes, notes_can: {insert: signedIn}, viewer: {signedIn}}};
+const DEALS = [{id: 7, name: 'Acme renewal', category: 'Proposal', amount: 1200, owner: 'x'},
+  {id: 8, name: 'Globex pilot', category: 'Proposal', amount: 300}, {id: 9, name: 'Initech', category: 'Won', amount: 50},
+  {id: 10, name: 'Closed one', category: 'Won', amount: 999, status: 'lost'}];
+const NOTES = [{_id: 'n1', item: '7', note: 'Call Tuesday', _can: {delete: true}},
+  {_id: 'n2', item: '9', note: 'Signed', _can: {delete: false}}, {_id: 'n3', item: 'gone', note: 'Old deal', _can: {delete: false}}];
+/** Money as the page formats it in this locale. */
+const usd = (n: number) => new Intl.NumberFormat(undefined, {style: 'currency', currency: 'USD', maximumFractionDigits: 0}).format(n);
+const apiPage = (answer: Answer, edit = (html: string) => html) => load(edit(fill(read('api-dashboard.html'))), answer);
+
+it('groups the API starter\'s items with totals, shows every note on its item and offers a note form to signed-in readers', async () => {
+  const page = await apiPage(apiAnswer({data: {api: {items: DEALS}}}, NOTES));
+  expect(page.error).toBeUndefined();
+  const doc = page.dom.window.document, text = (id: string) => doc.querySelector(`[data-af-id="${id}"]`)?.textContent;
+  // Two requests, each its own: the items failing never hides the notes.
+  expect(page.queries).toHaveLength(2);
+  expect([...doc.querySelectorAll('#board > section')].map(s => (s as HTMLElement).dataset.afId)).toEqual(['group-proposal', 'group-won', 'other-notes']);
+  expect(text('group-proposal-total')).toBe(`2 · ${usd(1500)}`);
+  expect(text('total-count-value')).toBe('4');expect(text('total-amount-value')).toBe(usd(2549));
+  expect(text('item-7-name')).toBe('Acme renewal');expect(text('item-7-amount')).toBe(usd(1200));
+  expect(text('item-7-notes')).toContain('Call Tuesday');expect(text('item-9-notes')).toContain('Signed');
+  // A note whose item the API no longer lists stays readable, under its item id.
+  expect(text('other-notes')).toContain('Old deal');expect(text('other-notes')).toContain('gone');
+  // Remove only where the server says this viewer may; a form on every item for a signed-in reader.
+  expect([...doc.querySelectorAll('[data-af-id$="-remove"]')].map(n => (n as HTMLElement).dataset.afId)).toEqual(['note-n1-remove']);
+  expect(doc.querySelector('[data-af-id="note-n1-remove"]')!.getAttribute('aria-label')).toBe('Remove note: Call Tuesday');
+  expect(doc.querySelectorAll('form.add-note')).toHaveLength(4);
+  expect((doc.querySelector('#signin') as HTMLElement).hidden).toBe(true);
+  expect(doc.querySelector('#board')!.getAttribute('aria-busy')).toBe('false');
+  // Script-made nodes carry unique data-af-ids.
+  const ids = [...doc.querySelectorAll('[data-af-id]')].map(node => node.getAttribute('data-af-id'));
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+it('shows only the items APP.only keeps, and maps the API\'s own field names through APP.fields', async () => {
+  const renamed = DEALS.map(({id, name, category, amount, status}) => ({deal_id: id, title: name, stage: category, value: amount, status}));
+  const page = await apiPage(apiAnswer({data: {api: {items: renamed}}}, []), html => html.replace(/fields: \{[^}]*\}/,
+    "fields: {id:'deal_id', name:'title', group:'stage', amount:'value'}").replace('only: {}', "only: {status: 'lost'}"));
+  const doc = page.dom.window.document;
+  expect([...doc.querySelectorAll('li.item strong')].map(n => n.textContent)).toEqual(['Closed one']);
+  expect(doc.querySelector('[data-af-id="total-amount-value"]')!.textContent).toBe(usd(999));
+});
+
+it('says why the API starter\'s items cannot load, still shows the notes, and gives a guest no controls', async () => {
+  const failed = {data: {api: null}, errors: [{message: 'Backend execution failed', extensions: {detail: 'secret_unavailable: API_KEY'}}]};
+  const page = await apiPage(apiAnswer(failed, NOTES.map(note => ({...note, _can: {delete: false}})), false));
+  expect(page.error).toBeUndefined();
+  const doc = page.dom.window.document;
+  expect(doc.querySelector('#status')!.textContent).toMatch(/Backend execution failed[^]*API_KEY[^]*Resolvers/);
+  expect(doc.querySelector('[data-af-id="other-notes"]')!.textContent).toContain('Call Tuesday');
+  expect(doc.querySelectorAll('form.add-note,[data-af-id$="-remove"]')).toHaveLength(0);
+  expect((doc.querySelector('#signin') as HTMLElement).hidden).toBe(false);
+  expect(doc.querySelector('#board')!.getAttribute('aria-busy')).toBe('false');
+});
+
+it('reads the API starter\'s list from the body or its first list, keeps only scalar fields and lets an unset key throw', async () => {
+  const {declaresResolverTest} = await import('@/lib/page-operations');
+  const {secretHostMap} = await import('@/lib/html-backend-secrets');
+  const resolver = await import('../../../skills/artifactbin/examples/api-dashboard.ts');
+  expect(declaresResolverTest(resolver.typeDefs)).toBe(true);
+  expect(secretHostMap(resolver.secrets)).toEqual({API_KEY: 'api.example.com'});
+  const sent: Array<{url: string; headers?: Record<string, string>}> = [];
+  const caps = (body: unknown, ok = true) => ({fetch: async (url: string, init?: {headers?: Record<string, string>}) => {
+    sent.push({url, ...init});
+    return {ok, status: ok ? 200 : 401, text: async () => 'bad key', json: async () => body};
+  }});
+  const row = {id: 1, name: 'Acme', stage: 'Won', amount: 5, open: true, contact: {email: 'x@y'}, tags: ['a']};
+  expect(await resolver.default.items({}, null, caps({total: 1, data: [row, 'junk']}))).toEqual([{id: 1, name: 'Acme', stage: 'Won', amount: 5, open: true}]);
+  expect(await resolver.default.items({}, null, caps([row]))).toHaveLength(1);
+  // The key is a placeholder the host fills, sent only to HOST.
+  expect(sent[0]).toEqual({url: 'https://api.example.com/v1/items', headers: {Authorization: 'Bearer {{API_KEY}}', Accept: 'application/json'}});
+  expect(await resolver.default.test({}, null, caps([row]))).toBe('Read 1 items from api.example.com/v1/items; fields: id, name, stage, amount, open');
+  await expect(resolver.default.items({}, null, caps({}, false))).rejects.toThrow('api.example.com answered 401: bad key');
+  await expect(resolver.default.items({}, null, caps({count: 3}))).rejects.toThrow('sent no list');
+  const unset = {fetch: async () => { throw Error('secret_unavailable: API_KEY'); }};
+  await expect(resolver.default.items({}, null, unset)).rejects.toThrow('secret_unavailable: API_KEY');
 });
