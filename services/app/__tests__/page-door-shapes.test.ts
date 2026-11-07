@@ -60,7 +60,8 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
     const w = await world();
     const body = await w.answer(await w.make({ dataset: [{ n: 1 }, { n: 2 }] }));
     expect(Object.keys(body).sort()).toEqual(DOC_TOP.concat('surface').sort());
-    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'catalog', 'compiledCss', 'source'].sort());
+    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'canRunSql', 'catalog', 'compiledCss', 'source'].sort());
+    expect(body.surface.canRunSql).toBe(true);
     expect(shape(body.surface.catalog)).toEqual({ defaultSchema: 'string', kind: 'string', refreshSeconds: 'number', tables: [{ columns: [{ name: 'string', type: 'string' }], name: 'string', schema: 'string' }] });
   });
 

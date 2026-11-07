@@ -91,7 +91,7 @@ it('sees only the page\'s linked datasets under their page names', async () => {
   const owner = { subject: f.owner.userId, role: 'owner' };
   await expect(inProcess(f, owner, '{ hidden { secret } }')).rejects.toThrow(/^validation_failed: /);
   await expect(inProcess(f, owner, '{ budget { targets } }')).rejects.toThrow(/^validation_failed: /);
-  expect(await inProcess(f, owner, '{ staff { name } }')).toEqual({ staff: [{ name: 'ada' }, { name: 'bo' }, { name: 'cy' }] });
+  expect(await inProcess(f, owner, '{ staff(order_by: {name: asc}) { name } }')).toEqual({ staff: [{ name: 'ada' }, { name: 'bo' }, { name: 'cy' }] });
   await expect(inProcess(f, owner, '{ staff_aggregate { aggregate { count } } }')).rejects.toThrow(/^validation_failed: /);
 });
 
