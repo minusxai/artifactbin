@@ -21,18 +21,17 @@ Watch --next: Claude Code: start it with the Bash tool's run_in_background first
   in one turn, say your reply to the user (the page link first; a reply form the user set, such
   as just the link, is what you say), then call the watch: the words before a tool call are your
   reply, and nothing after the call may be read, since the session can end while it waits. Run
-  it in the foreground with its default wait and a
-  shell timeout of at least 300000 ms. It returns as soon as someone comments, and on its own
-  within 4 minutes: handle what it printed and run it again until it says to stop
-  watching. Watching is part of every task, however short the reply. It prints the next comments
-  from someone else (one JSON line each; a first call also prints threads still waiting for your
-  answer) and exits 0. After 4 minutes it
-  prints "no new comments yet: run the same watch --next command
-  again". After 15 minutes with no comment, reply or publish from anyone it prints "no new
-  comments for 15 minutes: stop watching and end your turn"; a later --next starts a new 15
-  minutes. A second --next on the same page takes over from the running one, which stops. It
-  resumes from watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or
-  ~/.artifactbin), or from the --output LOG --append / --cursor you pass.
+  it in the foreground with its default wait and a shell timeout of at least 300000 ms. It
+  returns as soon as someone comments, and on its own within 4 minutes: handle what it printed
+  and run it again until it says to stop watching. Watching is part of every task, however short
+  the reply. It prints the next comments from someone else (one JSON line each; a first call also
+  prints threads still waiting for your answer) and exits 0. After 4 minutes it prints "no new
+  comments yet: run the same watch --next command again".
+  After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for
+  15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
+  second --next on the same page takes over from the running one, which stops. It resumes from
+  watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or from
+  the --output LOG --append / --cursor you pass.
 Examples:
   node scripts/comment.mjs watch ID --next
   node scripts/comment.mjs reply ID --thread T --body "Done: the intro is two lines now."
@@ -69,8 +68,7 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
 import {existsSync, mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {
-  runTool,
-  resolveTarget,
+  runTool, resolveTarget,
   selectedServer,
   makeClient,
   positional,

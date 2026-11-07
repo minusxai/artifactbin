@@ -93,7 +93,8 @@ export async function withWatchLock(file,run){
  * "write your reply as the text of the message that runs it (no final message is needed)" left it
  * watching first and saving the reply for after (11 of 16 tasks without the link): it took "the
  * message's text" for a final message and planned to answer after the watch. Narration before a
- * tool call is something it already writes, so the reply is framed as that (12 of 14 with the link). */
+ * tool call is something it already writes, so the reply is framed as that (12 of 14 with the
+ * link). */
 export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_background first, "+
  'then send your reply as your last message and end your turn; you are woken when it prints. '+
  'Other harnesses: in one turn, say your reply to the user (the page link first; a reply form '+
