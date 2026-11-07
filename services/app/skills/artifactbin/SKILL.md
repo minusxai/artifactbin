@@ -142,8 +142,10 @@ script. Groups: `node scripts/groups.mjs list`
   TEXT`.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
   ([datasets](references/datasets.md)). A page that shows a dataset links it (`<link
-  rel="af-dataset">`) and computes its numbers from its rows in page script
-  ([datasets](references/datasets.md#read)); charts use Vega-Lite
+  rel="af-dataset">`), reads rows with GraphQL and computes every number (counts, totals, group
+  by, joins) with read-only SQL, `_sql`
+  ([datasets](references/datasets.md#totals-group-by-and-joins-_sql)), never by summing rows in
+  script; charts use Vega-Lite
   ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
