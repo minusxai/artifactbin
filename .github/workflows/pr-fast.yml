@@ -55,34 +55,58 @@ jobs:
           - part: guards-2
             shard: 2/2
           # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api, api-isolated, ui and islands projects, the
-          # same files ci.yml's api and ui jobs run after the merge, packed longest-first onto 12 runners by their
+          # same files ci.yml's api and ui jobs run after the merge, packed longest-first onto 24 runners by their
           # measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json; `--sums` prints each
           # runner's load). None of them launches Chromium, so no runner provisions a browser. Add a runner when a
           # shard's load nears the clock; never move a file out to make room.
           - part: suite-1
-            suite: 1/12
+            suite: 1/24
           - part: suite-2
-            suite: 2/12
+            suite: 2/24
           - part: suite-3
-            suite: 3/12
+            suite: 3/24
           - part: suite-4
-            suite: 4/12
+            suite: 4/24
           - part: suite-5
-            suite: 5/12
+            suite: 5/24
           - part: suite-6
-            suite: 6/12
+            suite: 6/24
           - part: suite-7
-            suite: 7/12
+            suite: 7/24
           - part: suite-8
-            suite: 8/12
+            suite: 8/24
           - part: suite-9
-            suite: 9/12
+            suite: 9/24
           - part: suite-10
-            suite: 10/12
+            suite: 10/24
           - part: suite-11
-            suite: 11/12
+            suite: 11/24
           - part: suite-12
-            suite: 12/12
+            suite: 12/24
+          - part: suite-13
+            suite: 13/24
+          - part: suite-14
+            suite: 14/24
+          - part: suite-15
+            suite: 15/24
+          - part: suite-16
+            suite: 16/24
+          - part: suite-17
+            suite: 17/24
+          - part: suite-18
+            suite: 18/24
+          - part: suite-19
+            suite: 19/24
+          - part: suite-20
+            suite: 20/24
+          - part: suite-21
+            suite: 21/24
+          - part: suite-22
+            suite: 22/24
+          - part: suite-23
+            suite: 23/24
+          - part: suite-24
+            suite: 24/24
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -183,8 +207,8 @@ jobs:
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - if: matrix.suite
-        run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --maxWorkers=4 --shard=${{ matrix.suite }}
-      - if: matrix.suite == '1/12' && steps.test-builds.outputs.cache-hit != 'true'
+        run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}
+      - if: matrix.suite == '1/24' && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
