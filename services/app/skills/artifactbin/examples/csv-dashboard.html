@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- Example: a page computed from every row of a linked dataset. Usage: and Gotchas: are above
-DATA; keep this line. -->
+<!-- Example: a page computed from a linked dataset with read-only SQL (_sql). Usage: and Gotchas:
+are above DATA; keep this line. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -10,35 +10,42 @@ DATA; keep this line. -->
 <script type="module" id="page-data">
 // Usage: node scripts/publish.mjs data.csv --type dataset (examples/repairs.csv is the sample);
 //   cp examples/csv-dashboard.html index.html && cp examples/csv-dashboard-steps.mjs steps.mjs;
-//   put the dataset's id after ref: above and its name in data-af-name and DATA.dataset; edit
-//   only DATA and <title> (the page heading); then node scripts/publish.mjs index.html &&
+//   put the dataset's id after ref: above and its name in data-af-name and the SQL; edit only
+//   DATA and <title> (the page heading); then node scripts/publish.mjs index.html &&
 //   node scripts/check.mjs index.html --steps steps.mjs
-// Gotchas: labels lists every column the page reads, by its field name (graphql.mjs schema ID
-//   lists them), with the name readers see. Every number comes from the rows: a text is a
-//   function of h, whose h.sum(col), h.mean(col), h.min(col), h.max(col), h.last(col) and
-//   h.count() read every row, h.where({col:value}) the matching rows, h.fmt(n, digits) formats.
-//   Charts: mark bar|line; x, y and an optional series name columns; y is summed per x (and
-//   series) unless aggregate is mean, min, max or last; where:{col:value} keeps matching rows.
-//   Each chart draws with Vega-Lite and lists its values in a table (table:false hides it); empty
-//   stats or sections show nothing. ids are unique keys.
-// Built with: one HTML page; a published CSV dataset read live through its generated API, every
-//   row; numbers computed in page script; Vega-Lite charts, each with a table of its values.
+// Gotchas: every number comes from DATA.queries, each one read-only SQLite SELECT over the linked
+//   datasets (the table is the data-af-name; join links freely), run as the reader through _sql
+//   and rerun when the data changes. A text is a function of h: h.one(name) is a query's first
+//   row, h.rows(name) all its rows, h.fmt(n, digits) formats. A chart draws one query's rows: x,
+//   y and an optional series column, as the query computed them (GROUP BY in SQL, never in
+//   script); table:false hides its value table. Empty stats or sections show nothing. labels
+//   names columns for readers. ids are unique keys.
+// Built with: one HTML page; a published CSV dataset; totals and group-bys computed by _sql
+//   (watchQuery keeps them live); Vega-Lite charts, each with a table of its values.
 window.DATA = {
-  dataset: 'repairs', order: 'week',
+  queries: {
+    totals: 'select count(*) as weeks, sum(completed) as completed from repairs',
+    latest: 'select waiting from repairs order by week desc limit 1',
+    weekly: 'select week, sum(completed) as completed, sum(waiting) as waiting from repairs' +
+      ' group by week order by week',
+  },
   labels: {week:'Week', completed:'Completed repairs', waiting:'Waiting repairs'},
   kicker: '[Operations notebook] · sample data',
-  lead: h => `[${h.fmt(h.sum('completed'))} repairs were completed across ${h.count()} weeks.]`,
+  lead: h => `[${h.fmt(h.one('totals').completed)} repairs were completed across `+
+    `${h.one('totals').weeks} weeks.]`,
   stats: [
-    {id:'completed', label:'[Completed]', value: h => h.fmt(h.sum('completed'))},
-    {id:'waiting', label:'[Waiting in the latest week]', value: h => h.fmt(h.last('waiting'))},
+    {id:'completed', label:'[Completed]', value: h => h.fmt(h.one('totals').completed)},
+    {id:'waiting', label:'[Waiting in the latest week]', value: h => h.fmt(h.one('latest').waiting)},
   ],
   charts: [
-    {id:'completed', title:'[Completed repairs by week]', mark:'bar', x:'week', y:'completed'},
-    {id:'waiting', title:'[Waiting repairs by week]', mark:'line', x:'week', y:'waiting'},
+    {id:'completed', title:'[Completed repairs by week]', mark:'bar', query:'weekly', x:'week',
+      y:'completed'},
+    {id:'waiting', title:'[Waiting repairs by week]', mark:'line', query:'weekly', x:'week',
+      y:'waiting'},
   ],
   sections: [
     {id:'reading', title:'[How to read this]', text: h => `[Waiting work is a weekly snapshot, so `+
-      `its ${h.count()} values are not added up.]`},
+      `its ${h.one('totals').weeks} values are not added up.]`},
   ],
 };
 </script>
@@ -71,39 +78,26 @@ td,th{padding:8px;border-bottom:1px solid var(--border);text-align:left}td{text-
 import {client,gql} from '@afbin/apollo';
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
-const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),PAGE=1000;
+const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
 const label=col=>D.labels[col]??col;
-// gql also takes a one-string array, so the query is built from DATA's names. The API returns up to
-// 1000 rows per page, ordered by DATA.order (then _id), so offset paging is stable.
-const rowsQuery=gql([`query Rows($o:Int!){${D.dataset}(order_by:{${D.order}:asc},limit:${PAGE},`+
-  `offset:$o){_id ${Object.keys(D.labels).join(' ')}}}`]);
-let rows=[],views=[];
-async function loadRows(){const out=[];
-  for(let offset=0;;offset+=PAGE){ // a page shorter than PAGE is the last one
-    const result=await client.query({query:rowsQuery,variables:{o:offset}});
-    if(result.errors?.length)throw Error(result.errors[0].message);
-    const page=result.data[D.dataset];out.push(...page);if(page.length<PAGE)break;}
-  return out;}
-const AGG={sum:v=>v.reduce((a,b)=>a+b,0),mean:v=>AGG.sum(v)/v.length,min:v=>Math.min(...v),
-  max:v=>Math.max(...v),last:v=>v.at(-1)};
-const matches=where=>row=>Object.entries(where??{}).every(([col,value])=>row[col]===value);
-// The numbers every text reads; empty cells are left out, never counted as zero.
-function helpers(list){const nums=col=>list.map(row=>row[col]).filter(Number.isFinite);
-  return {count:()=>list.length,last:col=>nums(col).at(-1),where:where=>helpers(list.filter(
-    matches(where))),fmt:(n,digits=0)=>Number.isFinite(n)?n.toLocaleString(undefined,
-    {minimumFractionDigits:digits,maximumFractionDigits:digits}):'–',...Object.fromEntries(['sum',
-    'mean','min','max'].map(name=>[name,col=>nums(col).length?AGG[name](nums(col)):NaN]))};}
-// One value per x (and series), in the order rows were read; the chart and its table share it.
-function values(c){const groups=new Map();
-  for(const row of rows.filter(matches(c.where))){const y=row[c.y];if(!Number.isFinite(y))continue;
-    const x=String(row[c.x]??''),series=c.series?String(row[c.series]??''):'',key=x+'\u0000'+series;
-    if(!groups.has(key))groups.set(key,{x,series,all:[]});groups.get(key).all.push(y);}
-  return [...groups.values()].map(({x,series,all})=>({x,series,y:AGG[c.aggregate??'sum'](all)}));}
+// gql also takes a one-string array: one request, each DATA query an aliased _sql field whose SQL
+// travels as a variable (never spliced into the document).
+const pageQuery=gql([`query Page(${names.map((_,i)=>`$s${i}:String!`).join(',')}){`+
+  names.map((name,i)=>`${name}:_sql(sql:$s${i}){rows}`).join(' ')+'}']);
+const variables=Object.fromEntries(names.map((name,i)=>[`s${i}`,D.queries[name]]));
+let answers={},views=[];
+const fmt=(n,digits=0)=>Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:digits,
+  maximumFractionDigits:digits}):'–';
+// What every text reads: a query's rows as SQL answered them.
+const helpers={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
+// One value per row of the chart's query; the chart and its table share them.
+const values=c=>helpers.rows(c.query).filter(row=>Number.isFinite(row[c.y])).map(row=>({
+  x:String(row[c.x]??''),series:c.series?String(row[c.series]??''):'',y:row[c.y]}));
 // Script-made nodes take data-af-ids from DATA ids and row values, stable on every render.
 const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
   if(text!==undefined)n.textContent=text;return n;};
 function table(c,list){const id='chart-'+c.id+'-table',series=[...new Set(list.map(v=>v.series))];
-  const t=node('table',id),head=node('tr',id+'-head'),fmt=helpers([]).fmt;
+  const t=node('table',id),head=node('tr',id+'-head');
   head.append(node('th',id+'-head-x',label(c.x)),...series.map(s=>node('th',`${id}-head-${s}`,
     s||label(c.y))));
   t.append(node('caption',id+'-caption',`Values in this chart: ${label(c.y)}`),head);
@@ -133,7 +127,7 @@ async function draw(){views.forEach(view=>view.finalize());
         legend:{orient:'top',labelColor:ink,titleColor:ink}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,
       renderer:'svg',expr:vega.expressionInterpreter});await view.runAsync();return view;}));}
-function render(){const h=helpers(rows);
+function render(){const h=helpers;
   $('#title').textContent=document.title;$('#kicker').textContent=D.kicker;$('#lead').textContent=
     D.lead(h);
   $('#stats').replaceChildren(...D.stats.map(s=>{const box=node('div','stat-'+s.id);
@@ -149,13 +143,18 @@ function render(){const h=helpers(rows);
     'section-'+s.id);section.className='rule';section.append(node('h2',`section-${s.id}-title`,
     s.title),node('p',`section-${s.id}-text`,s.text(h)));return section;}));}
 // Charts follow the reader's light or dark mode and the owner's design system.
-const theme=new MutationObserver(()=>{if(rows.length)void draw();});
+const theme=new MutationObserver(()=>{if(names.some(name=>answers[name]))void draw();});
 theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark',
   'data-af-design-system']});
-addEventListener('pagehide',()=>{theme.disconnect();views.forEach(view=>view.finalize());},
-  {once:true});
-try{rows=await loadRows();render();await draw();
-  status.textContent=`Loaded ${rows.length} rows from the linked dataset.`;
-}catch(error){status.textContent=error.message||'Could not read the linked dataset.';}
+// watchQuery answers now and again whenever the linked dataset changes (another reader's write).
+const watch=client.watchQuery({query:pageQuery,variables}).subscribe(async result=>{
+  if(result.loading)return;
+  if(result.errors?.length){status.textContent=result.errors[0].message||
+    'Could not read the linked dataset.';return;}
+  try{answers=Object.fromEntries(names.map(name=>[name,result.data?.[name]?.rows??[]]));render();
+    await draw();status.textContent=`Computed ${names.length} queries from the linked dataset.`;
+  }catch(error){status.textContent=error.message||'Could not draw the linked dataset.';}});
+addEventListener('pagehide',()=>{watch.unsubscribe();theme.disconnect();
+  views.forEach(view=>view.finalize());},{once:true});
 </script>
 </body></html>

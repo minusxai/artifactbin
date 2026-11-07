@@ -1,8 +1,8 @@
 /**
  * THE GENERATED SCHEMA (Hasura v2 subset) for one caller's role. The model holds only what the role may
- * select: a hidden column is in no type (row, bool_exp, order_by, select_column, aggregate fields), so it
- * cannot be read, filtered, sorted, aggregated or introspected. `<root>_aggregate` exists only when the select
- * rule has `allow_aggregations`. Shared input types come once from the prelude.
+ * select: a hidden column is in no type (row, bool_exp, order_by), so it cannot be read, filtered, sorted or
+ * introspected. There are no aggregate roots: counts, totals, group by and joins are the page's read-only SQL door
+ * (`_sql`, lib/dataset-graphql page-sql). Shared input types come once from the prelude.
  *
  * The mutation root is generated from the role's insert, update and delete rules (`write`): a root exists only
  * for a rule the role has, and the insert and `_set` inputs name only the rule's columns less its presets
@@ -36,7 +36,6 @@ export interface HasuraTableModel {
   table: DatasetTableName;
   /** The columns the role may select, in declared order. */
   columns: readonly HasuraColumn[];
-  aggregations: boolean;
   /** The select rule's row limit, when it has one. */
   limit?: number;
   /** May the role select this table (default true)? Without it `columns` is empty and only `write` applies. */
@@ -90,9 +89,8 @@ const PRELUDE = [
   comparison('Boolean'),
 ];
 
-/** Columns `sum`/`avg` take (numeric) and `min`/`max` take (numeric or string). */
+/** Columns `_inc` takes (numeric). */
 export const summable = (c: HasuraColumn) => c.type === 'Float';
-export const orderable = (c: HasuraColumn) => c.type === 'Float' || c.type === 'String';
 
 const list = (items: string[]) => items.join(' ');
 const fieldsOf = (columns: readonly HasuraColumn[]) => list(columns.map((c) => `${c.field}: ${c.type}`));
@@ -112,16 +110,6 @@ function tableTypes(t: HasuraTableModel): string[] {
   if (selects(t) || w.set || w.delete) out.push(`input ${r}_bool_exp { ${list([`_and: [${r}_bool_exp!]`, `_or: [${r}_bool_exp!]`, `_not: ${r}_bool_exp`, '_id: ID_comparison_exp', ...t.columns.map((c) => `${c.field}: ${c.type}_comparison_exp`)])} }`);
   if (selects(t)) out.push(`input ${r}_order_by { ${list(['_id: order_by', ...t.columns.map((c) => `${c.field}: order_by`)])} }`);
   out.push(...writeTypes(t));
-  if (!selects(t) || !t.aggregations) return out;
-  if (t.columns.length) out.push(`enum ${r}_select_column { ${list(t.columns.map((c) => c.field))} }`);
-  out.push(`type ${r}_aggregate { aggregate: ${r}_aggregate_fields nodes: [${r}!]! }`);
-  const sums = t.columns.filter(summable), extremes = t.columns.filter(orderable);
-  const fields = [`count${t.columns.length ? `(columns: [${r}_select_column!], distinct: Boolean)` : ''}: Int!`];
-  if (sums.length) fields.push(`sum: ${r}_sum_fields`, `avg: ${r}_avg_fields`);
-  if (extremes.length) fields.push(`max: ${r}_max_fields`, `min: ${r}_min_fields`);
-  out.push(`type ${r}_aggregate_fields { ${list(fields)} }`);
-  if (sums.length) for (const kind of ['sum', 'avg']) out.push(`type ${r}_${kind}_fields { ${list(sums.map((c) => `${c.field}: Float`))} }`);
-  if (extremes.length) for (const kind of ['max', 'min']) out.push(`type ${r}_${kind}_fields { ${list(extremes.map((c) => `${c.field}: ${c.type}`))} }`);
   return out;
 }
 
@@ -153,7 +141,6 @@ function rootFields(t: HasuraTableModel): string[] {
   return [
     `  ${r}${args}: [${r}!]!`,
     `  ${r}_by_pk(_id: ID!): ${r}`,
-    ...(t.aggregations ? [`  ${r}_aggregate${args}: ${r}_aggregate!`] : []),
     `  ${JSON.stringify(CAN_DESCRIPTION)} ${r}_can: ${r}_can!`,
   ];
 }

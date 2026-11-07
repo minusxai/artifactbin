@@ -65,7 +65,7 @@ describe('root names', () => {
   it('never collides with another root, its generated fields or types, or a shared type', () => {
     const t = (...names: string[]) => names.map((name) => ({ schema: 'public', name }));
     // insert_orders_2 is already orders_2's insert root.
-    expect(hasuraRootNames(t('orders', 'Orders!', 'orders_aggregate', 'insert_orders'), {})).toEqual(['orders', 'orders_2', 'orders_aggregate_2', 'insert_orders_3']);
+    expect(hasuraRootNames(t('orders', 'Orders!', 'orders_by_pk', 'insert_orders'), {})).toEqual(['orders', 'orders_2', 'orders_by_pk_2', 'insert_orders_3']);
     expect(hasuraRootNames(t('order_by', 'String', 'Query', 'Float_comparison_exp'), {})).toEqual(['order_by_2', 'String_2', 'Query_2', 'Float_comparison_exp_2']);
     expect(hasuraRootNames(t('a', 'b'), { configuration: () => ({ custom_name: 'same' }) })).toEqual(['same', 'same_2']);
   });

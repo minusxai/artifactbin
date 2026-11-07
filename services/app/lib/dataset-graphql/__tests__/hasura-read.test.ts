@@ -5,11 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { HasuraTableModel } from '../hasura-schema';
-import { compileAggregate, compileRows, compileWhere, HasuraReadError } from '../hasura-read';
+import { compileRows, compileWhere, HasuraReadError } from '../hasura-read';
 import { withCan } from '../can';
 
 const T: HasuraTableModel = {
-  root: 'orders', table: { schema: 'public', name: 'rows' }, aggregations: true,
+  root: 'orders', table: { schema: 'public', name: 'rows' },
   columns: [
     { field: 'region', source: 'Region', type: 'String' },
     { field: 'amount', source: 'amount', type: 'Float' },
@@ -91,24 +91,6 @@ describe('rows', () => {
 
   it('_by_pk is the rows plan on one _id', () => {
     expect(compileRows(T, { where: { _id: { _eq: 'r_x' } }, limit: 1 }).statement.sql).toContain('WHERE (("__af_graphql_row_id" = $w0))');
-  });
-});
-
-describe('aggregates', () => {
-  it('aggregates over the filtered, ordered, windowed visible rows', () => {
-    expect(compileAggregate(T, { where: { region: { _eq: 'w' } }, order_by: { amount: 'desc' }, limit: 3, offset: 1 }, { kind: 'count', columns: ['amount'], distinct: true })).toEqual({
-      sql: 'SELECT COUNT(DISTINCT "amount") AS "value" FROM (SELECT * FROM "public"."rows" WHERE (("Region" = $w0)) ORDER BY "amount" DESC NULLS FIRST, "__af_graphql_row_id" ASC LIMIT 3 OFFSET 1) AS af_hasura',
-      params: { w0: 'w' },
-    });
-    expect(compileAggregate(T, {}, { kind: 'count' }).sql).toBe('SELECT COUNT(*) AS "value" FROM (SELECT * FROM "public"."rows") AS af_hasura');
-    expect(compileAggregate(T, {}, { kind: 'count', columns: ['region', 'amount'] }).sql).toContain('COUNT(*)');
-    expect(compileAggregate(T, {}, { kind: 'count', columns: ['region', 'amount'], distinct: true }).sql).toContain('COUNT(DISTINCT json_array("Region", "amount"))');
-    expect(compileAggregate(T, {}, { kind: 'sum' }).sql).toBe('SELECT SUM("amount") AS "amount" FROM (SELECT * FROM "public"."rows") AS af_hasura');
-    expect(compileAggregate(T, {}, { kind: 'max' }).sql).toBe('SELECT MAX("Region") AS "region", MAX("amount") AS "amount" FROM (SELECT * FROM "public"."rows") AS af_hasura');
-  });
-
-  it('refuses a hidden or unknown count column', () => {
-    expect(() => compileAggregate(T, {}, { kind: 'count', columns: ['salary'] })).toThrow(HasuraReadError);
   });
 });
 

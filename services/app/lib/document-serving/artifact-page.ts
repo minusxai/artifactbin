@@ -4,7 +4,7 @@ import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
 import { publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
-import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-permissions';
+import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/lib/dataset-permissions';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -342,7 +342,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     }),
     dataPreview,
     columns: meta.columns ?? [],
-    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:datasetDecision?.allowed?viewCatalog(datasetDecision,publicCatalogOf(artifact)!):publicCatalogOf(artifact)!}:{}),
+    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:datasetDecision?.allowed?viewCatalog(datasetDecision,publicCatalogOf(artifact)!):publicCatalogOf(artifact)!,
+      // May the reader run SQL in the explorer (dataset-permissions `sqlRefusal`, the check its door applies)? A creator holding its token owns it.
+      canRunSql:datasetDecision?!sqlRefusal(datasetDecision):true}:{}),
     // A stored FILE is not a document the app renders: its page shows the two
     // facts a person picks a file by, the link that opens it, and the browser's viewer.
     ...(artifact.format === 'pdf' || artifact.format === 'file' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),

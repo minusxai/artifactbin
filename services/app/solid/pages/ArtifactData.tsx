@@ -47,6 +47,8 @@ export interface DataAnswer {
     /** The data tiers' content: a viz recipe's source, a dataset's legacy rows (JSON) — null for readers where withheld. */
     source?: string | null; dataPreview: string; columns: Array<{ name: string; type?: string }>;
     catalog?: DatasetCatalog;
+    /** With a catalog: may this reader run SQL in the explorer (their rules allow it)? Without, tables browse by name. */
+    canRunSql?: boolean;
     /** pdf / file: the two facts a person picks a file by, and a stored file's own name (its viewer's extension). */
     bytes?: number; pages?: number | null; filename?: string;
     author?: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
@@ -150,7 +152,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           <FileViewer tall name={fileName()} size={surface.bytes ?? 0} url={rawUrl()} pdfUrl={format === 'pdf' ? rawUrl() : null} />
         </div>}</Show>
       </Show>
-      <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={false} />}</Show>
+      <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={false} canRunSql={surface.canRunSql === true} />}</Show>
       <Show when={format === 'dataset' && !catalog()}>
         <p class="mt-4 font-sans text-xs text-muted" aria-label="Dataset summary">
           {formatCount(rows().length)} rows · {surface.columns.length} columns

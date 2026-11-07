@@ -158,7 +158,7 @@ export interface RemotePort {
 export interface ClientOptions {
   /** The page's `data-af-name`s. */
   backends: readonly string[] | (() => readonly string[]);
-  /** The dataset links on the generated API: their flat roots (`orders`, `orders_aggregate`, `insert_orders_one`…) are remote. */
+  /** The dataset links on the generated API: their flat roots (`orders`, `orders_by_pk`, `insert_orders_one`…) are remote, as is `_sql`. */
   datasets?: readonly string[] | (() => readonly string[]);
   /** A fresh Idempotency-Key per client.mutate (default crypto.randomUUID). */
   idempotencyKey?: () => string;

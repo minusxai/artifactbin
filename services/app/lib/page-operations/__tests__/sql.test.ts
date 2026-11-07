@@ -10,8 +10,8 @@ const links = [
   { kind: 'dataset' as const, name: 'staff', datasetId: 'ds1', mode: 'live' as const },
   { kind: 'dataset' as const, name: 'shop', datasetId: 'ds2', mode: 'live' as const },
 ];
-const STAFF: ResolverSqlTable = { link: 'staff', table: null, columns: [{ name: '_id', type: 'string' }, { name: 'name', type: 'string' }], rows: [{ _id: 'r1', name: 'ada' }], aggregatable: true };
-const ORDERS: ResolverSqlTable = { link: 'shop', table: 'orders', columns: [{ name: '_id', type: 'string' }, { name: 'total', type: 'number' }], rows: [{ _id: 'o1', total: 5 }], aggregatable: true };
+const STAFF: ResolverSqlTable = { link: 'staff', table: null, columns: [{ name: '_id', type: 'string' }, { name: 'name', type: 'string' }], rows: [{ _id: 'r1', name: 'ada' }], runsSql: true };
+const ORDERS: ResolverSqlTable = { link: 'shop', table: 'orders', columns: [{ name: '_id', type: 'string' }, { name: 'total', type: 'number' }], rows: [{ _id: 'o1', total: 5 }], runsSql: true };
 const ok = (rows: Record<string, unknown>[] = [{ n: 1 }]): QueryOutcome => ({ columns: [{ name: 'n', type: 'number', choices: [1] }], rows });
 
 function port(options: { tables?: readonly ResolverSqlTable[]; read?: ResolverSqlPorts['read']; run?: (input: RunInput) => Record<string, QueryOutcome> | Promise<Record<string, QueryOutcome>>; scheduleDeadline?: ResolverSqlPorts['scheduleDeadline'] } = {}) {
@@ -70,9 +70,9 @@ describe('createResolverSql', () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
-  it('refuses the call when a mounted table\'s rule for the caller does not allow aggregations', async () => {
-    const { run, sql } = port({ tables: [{ ...STAFF, aggregatable: false }, ORDERS] });
-    expect(await code(sql(call({ sql: 'SELECT name FROM staff' })))).toEqual(['permission_denied', expect.stringContaining('does not allow aggregations')]);
+  it('refuses the call when a mounted table\'s rule for the caller does not allow SQL', async () => {
+    const { run, sql } = port({ tables: [{ ...STAFF, runsSql: false }, ORDERS] });
+    expect(await code(sql(call({ sql: 'SELECT name FROM staff' })))).toEqual(['permission_denied', expect.stringContaining('does not allow SQL (allow_aggregations)')]);
     // A dataset the SQL never names is not mounted, so its rule does not matter.
     expect(await sql(call({ sql: 'SELECT count(*) AS n FROM shop.orders' }))).toMatchObject({ rows: [{ n: 1 }] });
     expect(run).toHaveBeenCalledTimes(1);

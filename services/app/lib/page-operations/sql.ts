@@ -10,8 +10,9 @@
  * by name, and `tables` are inline author-typed tables. `only` names the queries whose answers come back (all by
  * default): the others still run, as dependencies, and neither travel back nor count against the answer cap. Dataset tables come from the caller's role view through the
  * same load `caps.query` uses (`read` port), so a call never shows more than the caller reads through GraphQL. A call
- * mounts only the linked datasets its SQL names. SQL can aggregate, so a mounted table whose rule for the caller
- * lacks `allow_aggregations` refuses the call. Limits are the registered page queries' (contracts
+ * mounts only the linked datasets its SQL names. A mounted table whose rule for the caller does not allow SQL
+ * (`allow_aggregations`) refuses the call. It reads the page HEAD's links: a resolver run names a page, not a
+ * revision (a page's own `_sql`, lib/dataset-graphql page-sql, reads the revision the reader has open). Limits are the registered page queries' (contracts
  * `SQL_READ_LIMITS`); the answer counts against `RESOLVER_LIMITS.queryResultBytes`.
  */
 import { RESOLVER_LIMITS, SQL_READ_LIMITS as limits, type ColumnType, type DatasetColumn, type HtmlDatasetLink, type QueryOutcome, type Row, type RunInput, type RunnerCaller, type RunnerJson, type Scalar } from '@artifactbin/contracts';
@@ -34,11 +35,11 @@ export interface ResolverSqlTable {
   table: string | null;
   columns: DatasetColumn[];
   rows: Row[];
-  aggregatable: boolean;
+  runsSql: boolean;
 }
 
 export interface ResolverSqlPorts {
-  /** The datasets the page links now (its head), live and pinned. */
+  /** The datasets the page links now (its head), live and pinned: a resolver run names no page revision. */
   links(pageId: string): Promise<readonly HtmlDatasetLink[]>;
   /** The caller's tables of these links, at most `maxRows` rows together (more throws `sql_input_limit`). */
   read(actor: AccessActor, links: readonly HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal): Promise<readonly ResolverSqlTable[]>;
@@ -171,8 +172,8 @@ export function createResolverSql(ports: ResolverSqlPorts): ResolverSql {
           throw new ResolverQueryError('unavailable');
         }
       }
-      const refused = mounted.find((t) => !t.aggregatable);
-      if (refused) throw new ResolverQueryError('permission_denied', `caps.sql can aggregate, and your role's rule for ${refused.link} does not allow aggregations`);
+      const refused = mounted.find((t) => !t.runsSql);
+      if (refused) throw new ResolverQueryError('permission_denied', `caps.sql: your role's rule for ${refused.link} does not allow SQL (allow_aggregations); read its rows through caps.query instead`);
       const input: RunInput = { tables: { ...call.tables }, queries: call.queries, params: call.params, paramTypes: call.paramTypes, limit: limits.rows, timeoutMs: limits.timeoutMs };
       const imports: NonNullable<RunInput['imports']> = {};
       for (const t of mounted) {

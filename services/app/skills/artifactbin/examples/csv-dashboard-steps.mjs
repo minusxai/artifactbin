@@ -2,16 +2,17 @@
  * Example: check.mjs steps for examples/csv-dashboard.html (a function body that receives page).
  * Usage: cp examples/csv-dashboard-steps.mjs steps.mjs (no edits needed: it reads the counts from
  *   the page); then node scripts/check.mjs index.html --steps steps.mjs
- * Gotchas: it waits for #status "Loaded N rows", then checks that every DATA chart drew marks and
- *   a table, and that no [bracketed] starter text is left. Add a step for each requested number.
+ * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through _sql),
+ *   then checks that every DATA chart drew marks and a table, and that no [bracketed] starter text
+ *   is left. Add a step for each requested number.
  */
 const PLACEHOLDERS_OK=false;
 const status=()=>page.evaluate(()=>document.querySelector('#status')?.textContent??'');
-await page.waitForFunction(()=>/^Loaded \d+ rows|Could not|error/i.test(document
+await page.waitForFunction(()=>/^Computed \d+ queries|Could not|error|allow/i.test(document
   .querySelector('#status')?.textContent??''),null,{timeout:6000}).catch(()=>{});
-const count=(await status()).match(/^Loaded (\d+) rows/)?.[1];
-await step(`page loaded ${count} dataset rows`,async()=>{
-  if(!Number(count))throw Error('no rows loaded: '+await status());});
+const count=(await status()).match(/^Computed (\d+) queries/)?.[1];
+await step(`page computed its ${count} queries from the dataset`,async()=>{
+  if(!Number(count))throw Error('no query answered: '+await status());});
 await step('every chart draws marks and lists its values in a table',async()=>{
   const missing=await page.evaluate(()=>(window.DATA?.charts??[]).flatMap(c=>{
     const section=document.querySelector(`[data-af-id="chart-${c.id}"]`);

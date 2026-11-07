@@ -3,7 +3,7 @@ import {catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
 import type {DatasetGraphqlPort} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
-import {canAggregate,datasetView,viewCatalog} from '@/lib/dataset-permissions';
+import {canRunSql,datasetView,viewCatalog} from '@/lib/dataset-permissions';
 import {hasuraNames,storedConfiguration} from './hasura-names';
 import {liveAccessFacts,memoAccessFacts,type AccessFacts} from '@/lib/artifact-access';
 import type {AccessActor} from '@/lib/accounts';
@@ -57,10 +57,10 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
    }
    // Schema metadata a caller does not fence has no later check: recheck readership after object loads.
    if(!options.fenced)await verify();
-   const aggregatable=Object.fromEntries(catalog.tables.map(table=>[tableIdentity(table),canAggregate(decision,table)]));
+   const runsSql=Object.fromEntries(catalog.tables.map(table=>[tableIdentity(table),canRunSql(decision,table)]));
    // Generated names come from every declared table and column, so they never depend on the role.
    const names=hasuraNames(declared.tables,{title:row.title,configuration:storedConfiguration(row.dataset_policy)});
-   return {id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,view,aggregatable,role:decision.role,head,names:Object.fromEntries(declared.tables.map((table,i)=>[tableIdentity(table),names[i]!]))};
+   return {id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,view,runsSql,role:decision.role,head,names:Object.fromEntries(declared.tables.map((table,i)=>[tableIdentity(table),names[i]!]))};
   },
   async execute(actor,snapshot,tableId,statement,window,signal){
    const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===tableId);if(!table?.objectKey)throw unavailable();

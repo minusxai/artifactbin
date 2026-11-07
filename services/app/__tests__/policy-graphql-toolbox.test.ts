@@ -45,7 +45,7 @@ it('gets, explains, builds a template, dry-runs and saves it with the revision t
   const got = await policy(f.owner.token, 'get', [f.id]);
   expect(got).toMatchObject({ revision: 0, source: 'none', tables: [{ root: 'signups', columns: [{ name: 'name', field: 'name' }, { name: 'created_by', field: 'created_by' }] }] });
   const explained = await policy(f.owner.token, 'explain', [f.id]);
-  expect(explained.readBack).toEqual(['Table public.rows', '- Owner, editors: see and change everything.', '- Shared viewers, signed-in link holders, signed-out link holders: see all rows and columns; cannot change anything.', 'Warnings: none.']);
+  expect(explained.readBack).toEqual(['Table public.rows', '- Owner, editors: see and change everything.', '- Shared viewers, signed-in link holders, signed-out link holders: see all rows and columns, and run SQL over them; cannot change anything.', 'Warnings: none.']);
 
   expect(await failure(policy(f.owner.token, 'template', ['own-rows', f.id]))).toMatchObject({ code: 'invalid_template', exit: 2, details: { errors: [{ path: 'ownerColumn' }] } });
   const template = await policy(f.owner.token, 'template', ['own-rows', f.id], { 'owner-column': 'created_by' });
@@ -54,7 +54,7 @@ it('gets, explains, builds a template, dry-runs and saves it with the revision t
   const saved = await f.file('own-rows.json', { ok: true, code: 'completed', ...template });
   const dry = await policy(f.owner.token, 'set', [f.id], { file: saved, 'dry-run': true });
   expect(dry).toMatchObject({ dryRun: true, saved: false, revision: 0 });
-  expect(dry.readBack).toContain('- Signed-out link holders: see all rows and columns; cannot change anything.');
+  expect(dry.readBack).toContain('- Signed-out link holders: see all rows and columns, and run SQL over them; cannot change anything.');
   expect((await getArtifactById(f.id))!.policy_revision ?? 0).toBe(0);
   expect(await policy(f.owner.token, 'set', [f.id], { file: saved })).toMatchObject({ saved: true, revision: 1 });
   expect((await policy(f.owner.token, 'get', [f.id])).source).toBe('v3');

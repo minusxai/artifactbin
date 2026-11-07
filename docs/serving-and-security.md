@@ -46,7 +46,11 @@ Native `<link rel="af-dataset">` and `<link rel="af-resolver">` declarations bin
 unique GraphQL namespaces. The page version pins backend versions and any pinned
 dataset revisions; live datasets use current data. Page GraphQL at
 `/api/artifacts/ID/graphql` checks page access, revision and current authority.
-Dataset ACLs and row/column write policies apply independently. Viewer-local Apollo
+Dataset ACLs and row/column write policies apply independently. Its reserved
+read-only `_sql` root reads the same links of the same revision as the reader:
+each dataset's role view (hidden columns absent, row filters and limits applied),
+refused for a table whose rule does not allow SQL (`allow_aggregations`), under
+the same read fences; it never writes. Viewer-local Apollo
 state is private browser state, not a shared database or an authorization source.
 
 A backend source file exports GraphQL types and resolvers. Publication validates

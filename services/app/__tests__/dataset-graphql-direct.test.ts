@@ -48,20 +48,20 @@ async function staff(visibility: 'unlisted' | 'private' = 'unlisted') {
   return { owner, viewer, other, id };
 }
 
-it('GET answers the caller\'s own schema and role: hidden columns and ungranted aggregates are absent', async () => {
+it('GET answers the caller\'s own schema and role: hidden columns are absent, and no role has an aggregate root', async () => {
   const { owner, viewer, other, id } = await staff();
   const owned = await (await schema(id, owner)).json();
   expect(owned.role).toBe('owner');
   expect(owned.revision).toBe('1');
   expect(owned.sdl).toMatch(/type staff \{ _id: ID! name: String team: String salary: Float "[^"]+" _can: staff_row_can! \}/);
-  expect(owned.sdl).toContain('staff_aggregate(');
+  expect(owned.sdl).not.toContain('_aggregate');
   const viewed = await (await schema(id, viewer)).json();
   expect(viewed.role).toBe('viewer');
   expect(viewed.sdl).toMatch(/type staff \{ _id: ID! name: String team: String "[^"]+" _can: staff_row_can! \}/);
   expect(viewed.sdl).not.toMatch(/salary|_aggregate/);
   const linked = await (await schema(id, other)).json();
   expect(linked.role).toBe('signed_in');
-  expect(linked.sdl).toContain('staff_aggregate(');
+  expect(linked.sdl).not.toContain('_aggregate');
   // No rule for anonymous: the uniform 404, byte-identical to an id that does not exist.
   const anonymous = await schema(id);
   const missing = await schema('nosuchid');
@@ -92,14 +92,12 @@ it('reads compose the caller\'s where with the select rule; _by_pk is not an ora
   }
 });
 
-it('aggregates follow allow_aggregations and cover only rows the role sees; the rule\'s limit caps reads', async () => {
+it('the rule\'s limit caps reads; an aggregate root is not part of the API', async () => {
   const { owner, other, id } = await staff();
-  expect((await gql(id, owner, '{ staff_aggregate { aggregate { count sum { salary } } } }')).body.data).toEqual({ staff_aggregate: { aggregate: { count: 3, sum: { salary: 60 } } } });
+  expect((await gql(id, owner, '{ staff_aggregate { aggregate { count } } }')).body.errors![0]!.extensions.code).toBe('validation_failed');
   // The rule's limit is a prefix of the stored rows (the role view, as at every door), then the query applies.
   expect((await gql(id, other, '{ staff(limit: 10, order_by: {name: asc}) { name } }')).body.data!.staff).toEqual([{ name: 'ada' }, { name: 'bo' }]);
   expect((await gql(id, other, '{ staff(order_by: {salary: desc}) { name } }')).body.data!.staff).toEqual([{ name: 'bo' }, { name: 'ada' }]);
-  expect((await gql(id, other, '{ staff_aggregate { aggregate { count sum { salary } } nodes(order_by: {name: asc}) { name } } }')).body.errors![0]!.extensions.code).toBe('validation_failed');
-  expect((await gql(id, other, '{ staff_aggregate(order_by: {name: asc}) { aggregate { count sum { salary } } nodes { name } } }')).body.data).toEqual({ staff_aggregate: { aggregate: { count: 2, sum: { salary: 30 } }, nodes: [{ name: 'ada' }, { name: 'bo' }] } });
 });
 
 it('a private dataset has no link audience directly; a refused POST answers as a missing id', async () => {
@@ -186,8 +184,6 @@ it('operators, ordering and paging behave as in Hasura\'s documented examples', 
   expect(await titles('(order_by: {rating: asc}, limit: 2, offset: 1)')).toEqual(['AMET consectetur', 'Lorem ipsum amet']);
   const nulls = await gql(id, owner, '{ articles(where: {rating: {_eq: null}}) { title } }');
   expect(nulls.body.errors![0]!.extensions.code).toBe('validation_failed');
-  expect((await gql(id, owner, `{ articles_aggregate { aggregate { count c: count(columns: [rating]) d: count(columns: [author], distinct: true) sum { rating } avg { rating } max { rating } min { title } } } }`)).body.data)
-    .toEqual({ articles_aggregate: { aggregate: { count: 4, c: 3, d: 3, sum: { rating: 12 }, avg: { rating: 4 }, max: { rating: 5 }, min: { title: 'AMET consectetur' } } } });
 });
 
 it('pages: 100 rows by default, never more than 1000, offset past the end is empty, negative limits are refused', async () => {
@@ -200,7 +196,6 @@ it('pages: 100 rows by default, never more than 1000, offset past the end is emp
   expect(await count('(offset: 5000)')).toBe(0);
   expect(await count('(limit: 0)')).toBe(0);
   expect((await gql(id, owner, '{ many(limit: -1) { n } }')).body.errors![0]!.extensions.code).toBe('validation_failed');
-  expect((await gql(id, owner, '{ many_aggregate { aggregate { count } } }')).body.data).toEqual({ many_aggregate: { aggregate: { count: 1200 } } });
   const page = (await gql(id, owner, '{ many(order_by: {n: desc}, limit: 2, offset: 3) { n } }')).body.data!.many;
   expect(page).toEqual([{ n: 1196 }, { n: 1195 }]);
 });

@@ -45,10 +45,10 @@ describe('native saved-page dataset queries',()=>{
   expect(Object.keys(first.data.sales[0]).sort()).toEqual(['_id','revenue']);
   expect([...first.data.sales,...next.data.sales].map((row:{revenue:number})=>row.revenue)).toEqual([3,837,1200]);
  });
- it('runs variable filters and whole-source aggregates through the generated schema',async()=>{
+ it('runs variable filters and whole-source totals through the page SQL door',async()=>{
   const f=await fixture();
-  const result=await f.call('query($minimum:Float){sales_aggregate(where:{revenue:{_gte:$minimum}}){aggregate{sum{revenue}}}}',{minimum:10});
-  expect(result.errors).toBeUndefined();expect(result.data.sales_aggregate.aggregate.sum.revenue).toBe(2037);
+  const result=await f.call('query($p:JSON){_sql(sql:"select sum(revenue) as total from sales where revenue >= $minimum",params:$p){rows}}',{p:{minimum:10}});
+  expect(result.errors).toBeUndefined();expect(result.data._sql.rows).toEqual([{total:2037}]);
  });
  it('keeps private page and dataset reads behind the original reader identity',async()=>{
   const f=await fixture('private');expect(await f.call('{sales{region}}')).toEqual({error:'page_operation_unavailable'});

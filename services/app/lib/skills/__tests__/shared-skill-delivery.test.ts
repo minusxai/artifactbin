@@ -141,7 +141,7 @@ describe('installable shared skill folder',()=>{
     const added=await run('mutation { insert_sales_one(object: {amount: 7}) { _id amount } }','preview_key_0123456789');
     expect(added.data.insert_sales_one.amount).toBe(7);expect(added.extensions.outcomes).toEqual({insert_sales_one:'committed'});
     expect(await run('mutation { insert_sales_one(object: {amount: 7}) { _id amount } }','preview_key_0123456789')).toEqual(added);
-    expect((await run('{ sales_aggregate { aggregate { count sum { amount } } } }')).data).toEqual({sales_aggregate:{aggregate:{count:2,sum:{amount:9}}}});
+    expect((await run('{ _sql(sql: "select count(*) as n, sum(amount) as total from sales") { rows } }')).data).toEqual({_sql:{rows:[{n:2,total:9}]}});
     expect((await (await fetch(flat+'/export/sales')).json()).tables[0].rows).toEqual([{amount:2},{amount:7}]);
     const fresh=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
     expect(fresh.localPreview.endpoint).toBe(config.localPreview.endpoint);

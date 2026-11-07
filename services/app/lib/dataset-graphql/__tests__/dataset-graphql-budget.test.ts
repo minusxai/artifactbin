@@ -53,7 +53,8 @@ async function gql(world: World, door: Door, token: string, query: string): Prom
 }
 
 const ONE = '{ staff(order_by: {name: asc}, limit: 3) { name team } }';
-const TWO = '{ staff(order_by: {name: asc}, limit: 3) { name team } staff_aggregate { aggregate { count } } }';
+const TWO = '{ staff(order_by: {name: asc}, limit: 3) { name team } red: staff(where: {team: {_eq: "red"}}, order_by: {name: asc}, limit: 1) { name } }';
+const SQL = '{ _sql(sql: "select team, count(*) as n from staff group by team order by team") { rows } }';
 const CAN = '{ staff_can { insert } staff(order_by: {name: asc}, limit: 3) { name team _can { update delete } } }';
 
 /**
@@ -82,8 +83,8 @@ describe('the statement budget', () => {
 
   describe.each(['direct', 'page'] as const)('of a dataset GraphQL read through the %s door', (door) => {
     it('answers the owner every row and the viewer only what the rule shows', async () => {
-      expect((await cost(door, 'owner', TWO)).reply.data).toEqual({ staff: [{ name: 'n0', team: 'red' }, { name: 'n1', team: 'blue' }, { name: 'n10', team: 'red' }], staff_aggregate: { aggregate: { count: 40 } } });
-      expect((await cost(door, 'viewer', TWO)).reply.data).toEqual({ staff: [{ name: 'n0', team: 'red' }, { name: 'n10', team: 'red' }, { name: 'n12', team: 'red' }], staff_aggregate: { aggregate: { count: 20 } } });
+      expect((await cost(door, 'owner', TWO)).reply.data).toEqual({ staff: [{ name: 'n0', team: 'red' }, { name: 'n1', team: 'blue' }, { name: 'n10', team: 'red' }], red: [{ name: 'n0' }] });
+      expect((await cost(door, 'viewer', TWO)).reply.data).toEqual({ staff: [{ name: 'n0', team: 'red' }, { name: 'n10', team: 'red' }, { name: 'n12', team: 'red' }], red: [{ name: 'n0' }] });
     });
 
     it.each(['owner', 'viewer'] as const)('keeps the %s list within its statement budget', async (who) => {
@@ -153,5 +154,46 @@ describe.each(['direct', 'page'] as const)('one authorization per request, throu
     expect(sql.filter((text) => /UPDATE artifact_shares SET user_id/.test(text))).toHaveLength(1);
     const db = await getDb();
     expect((await db.query('SELECT user_id FROM artifact_shares WHERE artifact_id=$1', [world.dataset])).rows).toEqual([{ user_id: world.viewer.userId }]);
+  });
+});
+
+/**
+ * THE PAGE'S `_sql` COSTS WHAT A LIST COSTS: the same one authorization and fence, and a warm read (a live refetch
+ * after an unrelated change, another reader under the same view) answers from the engine's prepared database
+ * without loading the stored object. Its fence holds too: a share revoked while it runs withholds its rows.
+ */
+describe('the page SQL door', () => {
+  const world = harness.shared(() => seed((viewer) => viewer));
+
+  it.each(['owner', 'viewer'] as const)('answers the %s within the page list budget and loads no stored object when warm', async (who) => {
+    const { token } = world()[who];
+    const first = await gql(world(), 'page', token, SQL);
+    expect(first.data?._sql.rows).toEqual(who === 'owner' ? [{ team: 'blue', n: 20 }, { team: 'red', n: 20 }] : [{ team: 'red', n: 20 }]);
+    const spy = vi.spyOn(objectStore(), 'get');
+    try {
+      const { value, count, sql } = await recordStatements(() => gql(world(), 'page', token, SQL));
+      expect(value).toEqual(first);
+      console.info('[budget] page _sql, %s: statements=%d', who, count);
+      expect(count, sql.join('\n')).toBeLessThanOrEqual(BUDGET.page[who]);
+      expect(spy).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
+
+  it('fences afresh: a share revoked while _sql runs withholds its rows', async () => {
+    const fresh = await seed((viewer) => viewer);
+    let revoked = false;
+    // The cold read loads the stored object: the owner revokes the viewer's share then, after authorization.
+    const get = objectStore().get.bind(objectStore());
+    const spy = vi.spyOn(objectStore(), 'get').mockImplementation(async (...args: Parameters<typeof get>) => {
+      if (!revoked) { revoked = true; await (await getDb()).query('DELETE FROM artifact_shares WHERE artifact_id=$1', [fresh.dataset]); }
+      return get(...args);
+    });
+    try {
+      const response = await POST(request(`/api/artifacts/${fresh.page}/graphql`, { method: 'POST', token: fresh.viewer.token, json: { query: SQL, revision: '1' } }), { params: Promise.resolve({ id: fresh.page }) });
+      const body = await response.text();
+      expect(body).not.toMatch(/"n":20/);
+      expect((JSON.parse(body) as Reply).data?._sql ?? null).toBeNull();
+    } finally { spy.mockRestore(); }
+    expect(revoked).toBe(true);
   });
 });

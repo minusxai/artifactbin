@@ -91,7 +91,8 @@ it('sees only the page\'s linked datasets under their page names', async () => {
   const owner = { subject: f.owner.userId, role: 'owner' };
   await expect(inProcess(f, owner, '{ hidden { secret } }')).rejects.toThrow(/^validation_failed: /);
   await expect(inProcess(f, owner, '{ budget { targets } }')).rejects.toThrow(/^validation_failed: /);
-  expect(await inProcess(f, owner, '{ staff_aggregate { aggregate { count } } }')).toEqual({ staff_aggregate: { aggregate: { count: 3 } } });
+  expect(await inProcess(f, owner, '{ staff { name } }')).toEqual({ staff: [{ name: 'ada' }, { name: 'bo' }, { name: 'cy' }] });
+  await expect(inProcess(f, owner, '{ staff_aggregate { aggregate { count } } }')).rejects.toThrow(/^validation_failed: /);
 });
 
 it('refuses mutations in query resolvers; in mutation resolvers they write as the caller under the dataset rules', async () => {

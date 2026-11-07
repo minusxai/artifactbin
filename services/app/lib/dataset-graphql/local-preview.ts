@@ -3,6 +3,7 @@ import {parse,getOperationAST,Kind,type SelectionSetNode,type FragmentDefinition
 import {composePageSchema,executePageOperation} from '../page-operations/namespaces';
 import {loadLocalTables,type LocalDatasetFile,type LocalDatasetFileOptions} from './local-files';
 import {createLocalHasuraDataset} from './local-hasura';
+import {runLocalSql} from './local-sql';
 /** Explicit local dataset links, each previewed on its generated API; never infer or replace remote ref bindings. */
 export interface LocalPreviewDatasetDeclaration {name:string;files:readonly LocalDatasetFile[]}
 /** The operation's top-level field names (through fragments). */
@@ -27,6 +28,8 @@ export async function createLocalPreviewDatasets(root:string,declarations:readon
  const [owner]=[...owners];if(!owner)return {errors:[{message:'no linked dataset has these fields',extensions:{code:'validation_failed'}}]};
  return owner.dataset.mutate({query:request.query,...(request.variables?{variables:request.variables}:{}),...(request.operationName?{operationName:request.operationName}:{}),...(request.idempotencyKey?{idempotencyKey:request.idempotencyKey}:{})});
  },
+ // The page's `_sql` over this session's current rows (./local-sql: the hosted engine's answer is authoritative).
+ sql:(call:{sql:string;params:Readonly<Record<string,import('@artifactbin/contracts').Scalar>>})=>runLocalSql(generated.flatMap(entry=>{const {tables}=entry.dataset.export();return tables.map(t=>({link:entry.name,table:tables.length===1?null:t.name,columns:t.columns,rows:t.rows,rowIds:t.rowIds??[]}));}),call.sql,call.params),
  };
  return {
  schema,
@@ -37,7 +40,7 @@ export async function createLocalPreviewDatasets(root:string,declarations:readon
  for(const [i,entry] of generated.entries())if(entry.dataset.revision()!==initialGenerated[i])namespaces.push(entry.name);
  return {dirty:namespaces.length>0,namespaces};
  },
- execute:(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>&{idempotencyKey?:string},signal:AbortSignal)=>executePageOperation({schema,request,signal,caller:{pageId:'local-preview',subject:null,role:'owner'},canEdit:async()=>true,datasets:{queryRoots:datasets.queryRoots,mutate:mutation=>datasets.mutate({...mutation,...(request.idempotencyKey?{idempotencyKey:request.idempotencyKey}:{})})},invoke:()=>{throw new Error('local_dataset_namespace');}}),
+ execute:(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>&{idempotencyKey?:string},signal:AbortSignal)=>executePageOperation({schema,request,signal,caller:{pageId:'local-preview',subject:null,role:'owner'},canEdit:async()=>true,datasets:{queryRoots:datasets.queryRoots,sql:datasets.sql,mutate:mutation=>datasets.mutate({...mutation,...(request.idempotencyKey?{idempotencyKey:request.idempotencyKey}:{})})},invoke:()=>{throw new Error('local_dataset_namespace');}}),
  export:(namespace:string)=>{const generatedEntry=generated.find(e=>e.name===namespace);if(!generatedEntry)throw new Error('local_dataset_namespace');return generatedEntry.dataset.export();}
  };
 }

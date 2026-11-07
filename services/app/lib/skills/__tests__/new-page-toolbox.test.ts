@@ -37,18 +37,19 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
   expect(html).toContain('<title>Revenue by region</title>');
   expect(html).toContain('data-af-name="sales" href="ref:DATA0001"');
-  expect(html).toContain("dataset: 'sales', order: 'month'");
+  expect(html).toContain("totals: 'select count(*) as row_count, sum(revenue) as revenue, sum(orders) as orders from sales'");
+  expect(html).toContain("by_month: 'select month, sum(revenue) as revenue, sum(orders) as orders from sales group by month order by month'");
   expect(html).toContain("labels: {month:'Month', region:'Region', revenue:'Revenue', orders:'Orders'}");
   // Every column DATA reads is one of this CSV's: nothing of the sample (repairs) is left.
   const data=html.slice(html.indexOf('window.DATA'),html.indexOf('</script>'));
   expect(data).not.toMatch(/repairs|completed|waiting|week/);
-  for(const col of data.matchAll(/(?:h\.(?:sum|last|mean)\('|[xy]:')(\w+)'/g))expect(['month','region','revenue','orders']).toContain(col[1]);
-  expect(data).toContain("{id:'revenue', title:'[Revenue by month]', mark:'bar', x:'month', y:'revenue'}");
+  for(const col of data.matchAll(/(?:\[|\b[xy]:)'(\w+)'/g))expect(['month','region','revenue','orders']).toContain(col[1]);
+  expect(data).toContain("{id:'revenue', title:'[Revenue by month]', mark:'bar', query:'by_month', x:'month', y:'revenue'}");
   // What it drew and how to change it, in this CSV's own names: an agent that misread the starter
   // ("a chart per region, not what we want") wrote its own page instead (2026-11-07).
-  expect(result.draws).toBe('DATA draws a lead, a total per number column (revenue, orders), and a bar chart of revenue summed per month and orders summed per month, each with a table of its values (3 rows).');
+  expect(result.draws).toBe("DATA's _sql queries compute a total per number column (revenue, orders) and revenue summed per month and orders summed per month; it draws a lead, those totals and a bar chart of each, with a table of its values (3 rows).");
   expect(result.next).toMatch(/^Next: in index\.html edit only DATA \(its \[bracketed\] text/);
-  for(const variation of ["one line: mark:'line'","a line or bar per region: series:'region'","only some rows: where:{region:'North'}","one value per month as given: aggregate:'last'",'no value table: table:false','no stats or sections: stats:[], sections:[]',"a number for one month in a text: h.where({month:'2026-01'}).sum('revenue')"])expect(result.next).toContain(variation);
+  for(const variation of ["one line: mark:'line'","a line or bar per region: select and group by region in the query, then series:'region'","only some rows: where region = 'North' in the query","one value per month as given: a query without sum or group by",'no value table: table:false','no stats or sections: stats:[], sections:[]',"a number for one month in a text: a query with sum(revenue) where month = '2026-01', read as h.one(name).revenue",'another dataset: link it and join it in SQL'])expect(result.next).toContain(variation);
   expect(result.next).toContain('node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs');
   // A rebuild of an existing page publishes over it.
   const again:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region',artifact:'PAGE01'});

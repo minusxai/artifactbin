@@ -7,7 +7,7 @@ export { parseDatasetDefinition, serializeDatasetDefinition } from './definition
 export { executeDocumentQueries } from './document-queries';
 export type { DocumentQuerySourceMode } from './document-queries';
 export { DatasetError } from './errors';
-export { executeCatalog } from './execute';
+export { CatalogQueryFailure, executeCatalog, executeMounted, type CatalogMount } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';
 export { datasetResponse } from './http';
 export { createSharedReads } from './shared-reads';

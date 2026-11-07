@@ -229,6 +229,11 @@ the test suite does). Statements are one warm request's (lib/platform `measureQu
 requests after 3 warm-ups; RSS is the process peak, sampled every 10 ms. The statement budgets are pinned by
 `services/app/lib/dataset-graphql/__tests__/dataset-graphql-budget.test.ts`.
 
+The tables below are historical: their `2 roots (list + count)` and `count + sum + nodes` rows used the removed
+`<root>_aggregate` root. Counts and totals are now a page's read-only `_sql`; `--page-sql` measures it under
+concurrent readers and live refetches (9,900 rows, 20 readers: warm 17 CPU ms/request against 18 for a 100-row
+list; a write then every reader refetching, 31 against 35).
+
 ```sh
 node --import tsx scripts/dataset-graphql-latency.ts                 # 20,000 rows, worker pool
 node --import tsx scripts/dataset-graphql-latency.ts --rows 2000 --sql thread --json out.json

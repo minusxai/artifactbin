@@ -22,7 +22,7 @@ export interface DatasetCatalog {
  * host-owned read such as model probing), so no door reads rows without deciding.
  */
 export interface CatalogRowView {
-  /** The role, policy revision, session and rules this view applies: part of every cache key over it. */
+  /** The rules, declared columns and read session values this view applies (never the reader): part of every cache key over it. */
   identity: string;
   /** Throws the uniform 404 when the catalog cannot be viewed. */
   catalog(catalog: DatasetCatalog): DatasetCatalog;

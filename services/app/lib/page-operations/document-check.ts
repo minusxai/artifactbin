@@ -35,7 +35,7 @@ import {
   type GraphQLSchema,
   type OperationDefinitionNode,
 } from 'graphql';
-import { PAGE_VIEWER_ROOT } from '@artifactbin/contracts';
+import { PAGE_SQL_ROOT, PAGE_VIEWER_ROOT } from '@artifactbin/contracts';
 import { composePageSchema } from './namespaces';
 
 /** One dataset link: its role-independent SDL under its page name, and its own API names → page names. */
@@ -278,7 +278,7 @@ function remoteRule(check: PageDocumentCheck): (name: string) => 'local' | 'chec
   const datasets = check.datasets.map((dataset) => dataset.name);
   return (name) => {
     if (unchecked.has(name)) return 'unchecked';
-    if (name === PAGE_VIEWER_ROOT || backends.has(name)) return 'checked';
+    if (name === PAGE_VIEWER_ROOT || name === PAGE_SQL_ROOT || backends.has(name)) return 'checked';
     const bare = name.replace(/^(?:insert|update|delete)_/, '');
     return datasets.some((link) => bare === link || bare.startsWith(`${link}_`) || name === link || name.startsWith(`${link}_`)) ? 'checked' : 'local';
   };

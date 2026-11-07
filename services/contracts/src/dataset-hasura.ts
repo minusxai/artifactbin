@@ -8,9 +8,9 @@ import type { DatasetRole } from './dataset-permissions';
 export const DATASET_GRAPHQL_READ_LIMITS = {
   /** Rows a list field returns when the query names no `limit`. */
   defaultLimit: 100,
-  /** Rows one list field (or an aggregate's `nodes`) returns at most; a select rule's `limit` lowers it. */
+  /** Rows one list field returns at most; a select rule's `limit` lowers it. */
   maxLimit: 1000,
-  /** Engine statements one request may run (each root field and each aggregate leaf is one). */
+  /** Engine statements one request may run (each list or `_by_pk` root field is one). */
   statements: 32,
   /** Serialized `data` bytes one request may answer. */
   resultBytes: 4 * 1024 * 1024,

@@ -13,7 +13,7 @@
  *
  * The filter may read columns the rule hides (it runs on the server). A column list shows only the columns it
  * names (and DOOR_COLUMNS): a column the head no longer declares, read from an archived revision, stays hidden. Which rows are kept depends only on
- * the stored object, the rule and the session, so the kept positions are cached by exactly those
+ * the stored object, the rule and the session values the rule reads (`sessionRead`), so the kept positions are cached by exactly those
  * (content-addressed: a new revision is a new object key, a new rule a new key); a full view
  * (`columns:"*"`, `filter:{}`, no limit) is the rows themselves, with nothing evaluated or copied.
  */
@@ -30,6 +30,22 @@ export function unrestricted(permission: DatasetSelectPermission): boolean {
 }
 
 class Unavailable extends Error {}
+
+/**
+ * The session values a rule's filter reads (its `X-Hasura-*` operands), by lowercased name: which rows it keeps
+ * depends on these and nothing else of the session, so caches over a view key on them (a rule that names no
+ * session value is one cache entry for every reader it applies to, not one per account).
+ */
+export function sessionRead(permission: DatasetSelectPermission, session: DatasetSession): Record<string, Scalar | null> {
+  const used: Record<string, Scalar | null> = {};
+  const walk = (value: unknown): void => {
+    if (typeof value === 'string') { if (/^x-hasura-/i.test(value)) { const key = value.toLowerCase(); used[key] = session[key] ?? null; } return; }
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  walk(permission.filter ?? {});
+  return used;
+}
 
 /** A session variable (`X-Hasura-User-Id`, any case) resolves from the server session; anything else is a literal. */
 function sessionValue(value: unknown, session: DatasetSession): unknown {
@@ -153,7 +169,7 @@ const keptCache = new Map<string, number[]>();
 export function viewRows(rows: readonly Row[], columns: readonly string[], permission: DatasetSelectPermission, session: DatasetSession, objectKey?: string): Row[] {
   if (unrestricted(permission)) return rows as Row[];
   // Kept positions depend only on the object, rule and session, except when the rule reads the row IDs a door carries.
-  const key = objectKey && !namedColumns(permission.filter ?? {}).has(DATASET_ROW_ID) ? JSON.stringify([objectKey, rows.length, columns, permission.filter ?? {}, permission.limit ?? null, session]) : null;
+  const key = objectKey && !namedColumns(permission.filter ?? {}).has(DATASET_ROW_ID) ? JSON.stringify([objectKey, rows.length, columns, permission.filter ?? {}, permission.limit ?? null, sessionRead(permission, session)]) : null;
   let kept = key ? keptCache.get(key) : undefined;
   if (kept) { keptCache.delete(key!); keptCache.set(key!, kept); }
   else {

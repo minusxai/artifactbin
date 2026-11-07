@@ -97,7 +97,7 @@ it('dry-runs: every problem by path naming the role, table or column, and the re
   const dry = await put(f.id, f.owner, { policy: OWN_ROWS, dryRun: true });
   expect(dry.status).toBe(200);
   expect(dry.body).toMatchObject({ dryRun: true, saved: false, revision: 0, policy: OWN_ROWS });
-  expect(dry.body.readBack).toContain('Shared viewers: see all rows and columns; add rows (filling name; created_by is set to them); change name only on rows they created.');
+  expect(dry.body.readBack).toContain('Shared viewers: see all rows and columns (rows only, no SQL); add rows (filling name; created_by is set to them); change name only on rows they created.');
   expect(dry.body.readBack).toContain('Signed-in link holders, signed-out link holders: no access.');
   expect(dry.body.warnings).toEqual([]);
   expect(await stored(f.id)).toEqual({ policy: null, revision: 0 });

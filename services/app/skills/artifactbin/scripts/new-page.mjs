@@ -2,8 +2,8 @@
 export const DESCRIPTION = `Set up a page computed from a CSV in one call: a dashboard, report or
 chart page. Copies the CSV into the project and publishes it as a dataset; copies
 examples/csv-dashboard.html as index.html and its steps file as steps.mjs; links the dataset and
-writes a DATA block that reads this CSV's columns (labels, a stat per number column, a chart per
-number column by the first text column), with [bracketed] text for you to write.
+writes a DATA block whose _sql queries read this CSV's columns (labels, a total per number
+column, a chart per number column by the first text column), with [bracketed] text for you to write.
 Usage: node scripts/new-page.mjs --data FILE.csv --title NAME [--artifact ID] [--dir DIR]
 Flags: --data FILE.csv the rows (a header line, then one row per line); --title NAME the page's
   name, for <title>; --artifact ID an existing page this one replaces (a rebuild: the printed
@@ -54,19 +54,31 @@ async function create(file, bytes) {
     throw error;
   }
 }
-/** The DATA block for these columns: every text a [bracketed] draft computed from the rows. */
+/** A column in SQL: bare when it is a plain name, else double-quoted. */
+const sqlName = column => /^[a-z_][a-z0-9_]*$/i.test(column) ? column :
+  `"${column.replace(/"/g, '""')}"`;
+/** The DATA block for these columns: _sql queries, every text a [bracketed] draft. */
 function dataBlock(name, columns, numbers) {
   const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
-  const shown = numbers.slice(0, 3), first = numbers[0];
+  const shown = numbers.slice(0, 3), first = numbers[0], by = `by_${x.replace(/\W+/g, '_')}`;
+  const sums = cols => cols.map(col => `sum(${sqlName(col)}) as ${sqlName(col)}`).join(', ');
+  const totals = `select count(*) as row_count${shown.length ? ', ' + sums(shown) : ''} ` +
+    `from ${name}`;
+  const grouped = `select ${sqlName(x)}, ${sums(shown.slice(0, 2))} from ${name} ` +
+    `group by ${sqlName(x)} order by ${sqlName(x)}`;
   const stat = col => `    {id:${quote(col)}, ` +
     `label:${quote(`[Total ${label(col).toLowerCase()}]`)}, ` +
-    `value: h => h.fmt(h.sum(${quote(col)}))},`;
+    `value: h => h.fmt(h.one('totals')[${quote(col)}])},`;
   const chart = col => `    {id:${quote(col)}, title:${quote(`[${label(col)} by ${x}]`)}, ` +
-    `mark:'bar', x:${quote(x)}, y:${quote(col)}},`;
-  const lead = first ? `\`[\${h.fmt(h.sum(${quote(first)}))} ` +
-    `${label(first).toLowerCase()} across \${h.count()} rows.]\`` : '`[${h.count()} rows.]`';
+    `mark:'bar', query:${quote(by)}, x:${quote(x)}, y:${quote(col)}},`;
+  const lead = first ? `\`[\${h.fmt(h.one('totals')[${quote(first)}])} ` +
+    `${label(first).toLowerCase()} across \${h.one('totals').row_count} rows.]\`` :
+    "`[${h.one('totals').row_count} rows.]`";
   return ['window.DATA = {',
-    `  dataset: ${quote(name)}, order: ${quote(x)},`,
+    '  queries: {',
+    `    totals: ${quote(totals)},`,
+    ...shown.length ? [`    ${by}: ${quote(grouped)},`] : [],
+    '  },',
     `  labels: {${columns.map(col => `${col}:${quote(label(col))}`).join(', ')}},`,
     "  kicker: '[Kicker]',",
     `  lead: h => ${lead},`,
@@ -74,7 +86,7 @@ function dataBlock(name, columns, numbers) {
     '  charts: [', ...shown.slice(0, 2).map(chart), '  ],',
     '  sections: [',
     "    {id:'reading', title:'[How to read this]', text: h => `[What the reader should take " +
-      "from these ${h.count()} rows.]`},",
+      "from these ${h.one('totals').row_count} rows.]`},",
     '  ],', '};'].join('\n');
 }
 /** The starter with this CSV's dataset, DATA block and title in place of the sample's. */
@@ -89,20 +101,23 @@ function fill(starter, {title, id, name, columns, numbers}) {
 /** What the written DATA shows, in this CSV's names: what the agent keeps or changes. */
 function draws(columns, numbers, rows) {
   const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
-  return `DATA draws a lead, a total per number column (${numbers.slice(0, 3).join(', ') ||
-    'none'}), and a bar chart of ${numbers.slice(0, 2).map(y => `${y} summed per ${x}`)
-    .join(' and ') || 'nothing'}, each with a table of its values (${rows.length} rows).`;
+  return `DATA's _sql queries compute a total per number column (${numbers.slice(0, 3)
+    .join(', ') || 'none'}) and ${numbers.slice(0, 2).map(y => `${y} summed per ${x}`)
+    .join(' and ') || 'nothing'}; it draws a lead, those totals and a bar chart of each, with a ` +
+    `table of its values (${rows.length} rows).`;
 }
 /** The usual changes, written with this CSV's own columns and a real value. */
 function variations(columns, numbers, rows) {
   const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
   const other = columns.find(column => column !== x && !numbers.includes(column));
   const y = numbers[0] ?? columns[1] ?? x, at = col => rows[0]?.[columns.indexOf(col)] ?? '';
-  return [`one line: mark:'line'`, other && `a line or bar per ${other}: series:'${other}'`,
-    other && `only some rows: where:{${other}:'${at(other)}'}`,
-    `one value per ${x} as given: aggregate:'last'`, 'no value table: table:false',
-    'no stats or sections: stats:[], sections:[]',
-    `a number for one ${x} in a text: h.where({${x}:'${at(x)}'}).sum('${y}')`]
+  return [`one line: mark:'line'`, other && `a line or bar per ${other}: select and group by ` +
+    `${other} in the query, then series:'${other}'`,
+    other && `only some rows: where ${other} = '${at(other)}' in the query`,
+    `one value per ${x} as given: a query without sum or group by`,
+    'no value table: table:false', 'no stats or sections: stats:[], sections:[]',
+    `a number for one ${x} in a text: a query with sum(${y}) where ${x} = '${at(x)}', read as ` +
+    `h.one(name).${y}`, 'another dataset: link it and join it in SQL']
     .filter(Boolean).join('; ');
 }
 export async function newPageCommand({values, positionals}, options = {}) {

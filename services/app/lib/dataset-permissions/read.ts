@@ -22,7 +22,7 @@ import { liveAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artif
 import { catalogOf, DatasetError, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
 import { datasetRole, type DatasetRoleRow } from './role';
 import { storedPolicy } from './stored-policy';
-import { shows, unrestricted, viewRows, type DatasetSession } from './view';
+import { sessionRead, shows, unrestricted, viewRows, type DatasetSession } from './view';
 
 /** The dataset columns a read decision consults: its access columns, its policy and its catalog. */
 export type DatasetReadRow = DatasetRoleRow & Pick<ArtifactRow, 'format' | 'meta'> & Partial<Pick<ArtifactRow, 'dataset_policy' | 'policy_revision'>>;
@@ -101,23 +101,30 @@ function selectFor(decision: DatasetReadDecision, table: DatasetTableName): Data
   return entryFor(decision, table)?.permission ?? null;
 }
 
-/** May this role aggregate the table (the GraphQL aggregate fields)? */
-export function canAggregate(decision: DatasetReadDecision, table: DatasetTableName): boolean {
+/**
+ * May this role run SQL over the table? The select rule's `allow_aggregations` (Hasura's name, kept in policies)
+ * means exactly that now: SQL can count, sum, group and join, so it is the one SQL permission. Owner and editor always.
+ */
+export function canRunSql(decision: DatasetReadDecision, table: DatasetTableName): boolean {
   if (!decision.allowed) return false;
   if (decision.admin) return true;
   return !!selectFor(decision, table)?.allow_aggregations;
 }
 
 /**
- * Caller-written SQL can aggregate, so it needs `allow_aggregations` on every table the role reads: the first
- * readable table whose rule lacks it, or null. Tables the role cannot read are skipped (they answer no rows).
- * The SQL is never inspected (a count hides in subqueries, windows and scalar calls); caps.sql refuses the same
- * way (lib/page-operations sql), and a flagless role reads rows through the server-built table read.
+ * THE ONE SQL CHECK for a door that runs caller-written SQL over a whole dataset (query_resource, the dataset explorer,
+ * a document's queries): the first readable table whose rule does not allow SQL, or null. Tables the role cannot read
+ * are skipped (they answer no rows). The SQL is never inspected (a count hides in subqueries, windows and scalar
+ * calls). A page's `_sql` and a resolver's caps.sql refuse the same way per mounted table; a flagless role reads
+ * rows through GraphQL or the server-built table read.
  */
-export function sqlAggregationRefusal(decision: DatasetReadDecision): DatasetTableName | null {
+export function sqlRefusal(decision: DatasetReadDecision): DatasetTableName | null {
   if (!decision.allowed || decision.admin) return null;
-  return decision.tables.find((t) => t.permission && !canAggregate(decision, t)) ?? null;
+  return decision.tables.find((t) => t.permission && !canRunSql(decision, t)) ?? null;
 }
+
+/** What every SQL door says when `sqlRefusal` (or its per-table form) refuses: `table` as the caller names it. */
+export const sqlRefusalMessage = (table: string) => `your role's rule for ${table} does not allow SQL (allow_aggregations); read its rows instead`;
 
 const notFound = () => new DatasetError('Dataset not found', 404);
 /** Declared by the dataset (never a door's decoration, such as the page row ID). */
@@ -135,7 +142,10 @@ const emptyModel = (table: DatasetTable): DatasetTable => ({ ...table, sql: `SEL
 export function datasetView(decision: DatasetReadDecision): CatalogRowView | null {
   if (!decision.allowed) throw notFound();
   if (decision.full) return null;
-  const { session, identity } = decision;
+  const { session } = decision;
+  // The rows and columns this view yields depend on each table's rule, its declared columns and the session values
+  // the rule reads, never on who asks: readers under the same rule and values share every cache keyed on it.
+  const identity = JSON.stringify(decision.tables.map((t) => [t.schema, t.name, t.columns, t.permission, t.permission ? sessionRead(t.permission, session) : null]));
   return {
     identity,
     catalog(catalog: DatasetCatalog): DatasetCatalog {
