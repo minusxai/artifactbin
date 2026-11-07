@@ -154,6 +154,11 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A screenshot that is not the whole page says why next to its path.
  const tall=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},screenshot:{path:'/tmp/390x844.png',height:8000,partial:'capped at 8000 px'}}],unverified:[]},'qa.json');
  expect(tall).toContain('  screenshots: /tmp/390x844.png (capped at 8000 px)');
+ // A deck's slides are listed as the files they are, with their size and why any are missing.
+ const slideShots=(partial?:string)=>checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},screenshot:{path:'/tmp/1200x630.png',slides:[1,2].map(n=>({path:`/tmp/1200x630-slide-${n}.png`,width:1200,height:630})),...(partial?{slidesPartial:partial}:{})}}],unverified:[]},'qa.json');
+ expect(slideShots()).toContain('  slides, one PNG per slide at 1200x630 (these files are the slides): /tmp/1200x630-slide-1.png, /tmp/1200x630-slide-2.png\n');
+ expect(slideShots('first 20 of 24 slides')).toContain(' at 1200x630 (these files are the slides; first 20 of 24 slides): /tmp/1200x630-slide-1.png');
+ expect(passed).not.toContain('slides, one PNG');
  // A clean pass of a published page ends with the reply facts and the watch line; this envelope has none (a local preview).
  expect(passed).toContain('clean pass on the local preview; a check of the published page prints the facts for your reply.');
  expect(passed).not.toMatch(/until the user stops|Verified:|For your reply:/);
@@ -541,14 +546,26 @@ it('checks a deck at deck viewports without --viewport and attaches the reply fa
   if(url.pathname==='/api/artifacts/DATA12')return Response.json({id:'DATA12'});
   const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
   const size=/"width":(\d+),"height":(\d+)/.exec(body.code)!;sizes.push(size[1]+'x'+size[2]);
-  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:Number(size[1]),height:Number(size[2])},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:1,content:1,fits:true}}});};
+  // Only the first viewport of the signed-in run asks for the slides; the session answers with each as a PNG.
+  const slides=/"slides":true/.test(body.code);if(slides)sliced.push(size[1]+'x'+size[2]);
+  const screenshot={mime:'image/png',scope:'reader-viewport',base64:Buffer.from('view').toString('base64'),
+   ...(slides?{slides:[1,2].map(n=>({base64:Buffer.from('slide '+n).toString('base64'),width:1200,height:630}))}:{})};
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:Number(size[1]),height:Number(size[2])},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:1,content:1,fits:true},slides:{count:2},screenshot}});};
+ const sliced:string[]=[];
  try{
   const result=await checkCommand({values:{},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher});
-  expect(sizes.sort()).toEqual(['1200x630','1280x800']);
+  expect(sizes.sort()).toEqual(['1200x630','1280x800']);expect(sliced).toEqual(['1200x630']);
+  // Each slide is saved beside the viewport screenshots; the result names the files, never their bytes.
+  const shot=(result.checks.find((check:any)=>check.viewport.width===1200) as any).screenshot;
+  expect(shot.slides).toEqual([1,2].map(n=>({path:path.join(path.dirname(shot.path),`1200x630-slide-${n}.png`),width:1200,height:630})));
+  const {readFile}=await import('node:fs/promises');
+  expect(await Promise.all(shot.slides.map((s:any)=>readFile(s.path,'utf8')))).toEqual(['slide 1','slide 2']);
+  expect(JSON.stringify(result)).not.toContain(Buffer.from('slide 1').toString('base64'));
+  expect(result.slideLinks).toEqual(['https://h.test/a/PAGE12/export?format=png&slide=1','https://h.test/a/PAGE12/export?format=png&slide=2']);
   expect(result.reply).toEqual({id:'PAGE12',link:'https://h.test/a/PAGE12',builtWith:'one HTML page from a SLIDES data block',permissions:[{id:'DATA12',name:'sales',lines:['Table public.sales','- Signed-out link holders: see rows.']}]});
   // An explicit --viewport wins.
   sizes.length=0;await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher});
-  expect(sizes).toEqual(['390x844']);
+  expect(sizes).toEqual(['390x844']);expect(sliced).toEqual(['1200x630','390x844']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('fails a published page that links a dataset but never reads it, and passes one read in any viewport',async()=>{

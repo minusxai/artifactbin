@@ -92,6 +92,12 @@ export function checkDigest(envelope,file){
  const shots=(envelope.checks??[]).map(c=>c?.screenshot).filter(s=>s?.path).map(s=>s.path+(
   s.partial?` (${s.partial})`:''));
  if(shots.length)lines.push('  screenshots: '+shots.join(', '));
+ // A deck's slides as files, with their size and why any are missing.
+ for(const s of (envelope.checks??[]).map(c=>c?.screenshot).filter(s=>s?.slides?.length||
+  s?.slidesPartial))lines.push(s.slides?.length?`  slides, one PNG per slide at ${[...new Set(
+   s.slides.map(x=>`${x.width}x${x.height}`))].join(', ')} (these files are the slides${
+   s.slidesPartial?'; '+s.slidesPartial:''}): ${s.slides.map(x=>x.path).join(', ')}`:
+   `  slides: none saved (${s.slidesPartial})`);
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
   '  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
  else if(clean&&!envelope.reply)lines.push('  clean pass on the local preview; a check of the'+

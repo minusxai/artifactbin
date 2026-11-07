@@ -75,7 +75,8 @@ export async function checkCommand({values, positionals}, options = {}) {
     const html = await fetch(checkTarget(input).target, {signal: AbortSignal.timeout(3000)})
       .then(response => response.text()).catch(() => '');
     result = await checkLocal(
-      {target: checkTarget(input).target, viewports: sized(html), steps, capture: true},
+      {target: checkTarget(input).target, viewports: sized(html), steps, capture: true,
+        slides: true},
       chromium
     );
     // The preview's autofix findings for this page (lib/html-autofix), listed first in the summary.
@@ -133,6 +134,7 @@ export async function checkCommand({values, positionals}, options = {}) {
         viewports,
         steps,
         capture: true,
+        slides: true,
         viewer: viewer === 'guest' ? 'guest' : undefined,
         requester
       });
@@ -165,23 +167,23 @@ export async function checkCommand({values, positionals}, options = {}) {
         (_, n) => `${server}/a/${id}/export?format=png&slide=${n + 1}`
       );
   }
+  // Each screenshot, and a deck's slides beside it, saved as files; the result keeps the paths.
   const directory = path.join(credentialRoot(options.env), 'checks', randomUUID());
-  let created = false;
+  const save = async (name, base64) => {
+    await mkdir(directory, {recursive: true, mode: 0o700});
+    const file = path.join(directory, name + '.png');
+    await exclusive(file, Buffer.from(base64, 'base64'));
+    return file;
+  };
   for (const check of result.checks) {
-    if (check.screenshot) {
-      if (!created) {
-        await mkdir(directory, {recursive: true, mode: 0o700});
-        created = true;
-      }
-      const file = path.join(
-        directory,
-        `${check.viewport.width}x${check.viewport.height}` +
-          `${check.viewer ? '-' + check.viewer : ''}.png`
-      );
-      await exclusive(file, Buffer.from(check.screenshot.base64, 'base64'));
-      const {base64, ...shot} = check.screenshot;
-      check.screenshot = {path: file, ...shot, visuallyReviewed: false};
-    }
+    if (!check.screenshot) continue;
+    const {width, height} = check.viewport,
+      name = `${width}x${height}${check.viewer ? '-' + check.viewer : ''}`;
+    const {base64, slides, ...shot} = check.screenshot;
+    check.screenshot = {path: await save(name, base64), ...shot, visuallyReviewed: false};
+    if (slides)
+      check.screenshot.slides = await Promise.all(slides.map(async ({base64, ...size}, n) =>
+        ({path: await save(`${name}-slide-${n + 1}`, base64), ...size})));
   }
   if (!result.smokePassed)
     throw new ToolError(

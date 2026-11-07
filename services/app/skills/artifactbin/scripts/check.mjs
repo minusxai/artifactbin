@@ -28,12 +28,13 @@ Examples:
   Assert rendered, rounded text ("$1,240"), not raw numbers.
 Output: one summary line per viewport: errors, overflow, contrast (text under 2:1 fails), slides,
   your task result; each failing item (up to 12 of a kind) names its text and element or slide;
-  then the full-page screenshots. Smoke fails on page or console errors, failed requests, overflow,
-  unreadable text and duplicate data-af-id values (first ids and counts listed). A warning (not a
-  failure) lists script-created data-af-ids that differ between two loads; checked on the first
-  viewport, only when the page has any. A clean pass of a published page ends with the facts
-  for your reply (the link, Built with, Tested: from your step labels, Not tested:, who can do
-  what in each linked dataset, slide images) and the Next line. A failed resolver or GraphQL
+  then the full-page screenshots and, for a deck, one PNG per slide (up to 20) at the first
+  viewport: these files are the slides. Smoke fails on page or console errors, failed requests,
+  overflow, unreadable text and duplicate data-af-id values (first ids and counts listed). A
+  warning (not a failure) lists script-created data-af-ids that differ between two loads; checked
+  on the first viewport, only when the page has any. A clean pass of a published page ends with
+  the facts for your reply (the link, Built with, Tested: from your step labels, Not tested:, who
+  can do what in each linked dataset, slide images) and the Next line. A failed resolver or GraphQL
   field is named with the owner-only detail (a guest's read is asked again as you). What failed
   only because a resolver secret has no value yet is listed as Not tested (the owner sets it in
   the page's Resolvers settings), not failed.
