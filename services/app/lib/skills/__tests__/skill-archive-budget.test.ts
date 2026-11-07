@@ -19,7 +19,10 @@ import {archiveFor} from '@/lib/skills';
 // examples/csv-dashboard.mjs with linked _sql filters, a map, a heatmap and small multiples, its steps' linked-filter
 // check and the gen-deliveries.mjs generator in place of repairs.csv) is where every CSV page starts; the dashboard
 // eval passed 3/3 with it as on main. The shared-app/shared-list removal also covers this.
-const SKILL_ARCHIVE_MAX_BYTES=1.75*1024*1024;
+// 1.74 MiB: the tracker (examples/tracker*: one template new-app trims by features, its checks and limits resolver)
+// replaced shared-app (with budget.ts) and shared-list, leaving the archive at 1,817,470 bytes (1.733 MiB);
+// the cap comes back down to what that needs, with the usual few KB of headroom.
+const SKILL_ARCHIVE_MAX_BYTES=1.74*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

@@ -21,8 +21,8 @@ Describe testing, build and permissions only from what `check` reported.
 Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker.ts, tracker-features) and
-  api-dashboard.html (api-dashboard.ts), each with -steps, -guest, -cleanup .mjs; csv-dashboard.html/.mjs, codebase-report.html
-  (+ -steps.mjs); report.html; gen-*.mjs sample data
+  api-dashboard.html (api-dashboard.ts), each with -steps, -guest, -cleanup .mjs;
+  csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html; gen-*.mjs sample data
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
 serve, new-app, new-page
