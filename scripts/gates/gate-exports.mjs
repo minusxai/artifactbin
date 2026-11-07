@@ -120,6 +120,30 @@ async function deckLeg(browser) {
   check(capture.status === 200 && bare.includes('First slide'), `and still carries the document (${capture.status})`);
 }
 
+/**
+ * A DECK DRAWN FROM ITS DATASET EXPORTS ITS SLIDES. The capture (`raw?chrome=0&key=…`) is a top-level page in the
+ * opaque sandbox with no app frame; before it read the page GraphQL endpoint itself (document-serving/raw), every
+ * `@afbin/apollo` read answered "offline: nothing was sent". This deck draws a green slide from two rows and throws
+ * on none, as an agent's deck does: a slide without its data drew no slide, and the export failed at the deadline.
+ */
+async function dataDeckLeg() {
+  const start = await startDocument(BASE);
+  const created = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset: [{ stage: 'Data access', days: 3.5 }, { stage: 'Security review', days: 2.5 }], title: 'Stages', visibility: 'unlisted' }) });
+  const dataset = await created.json();
+  check(created.status === 201, `published the deck's dataset (${created.status})`);
+  const script = "const {data,errors}=await client.query({query:gql`{stages(order_by:{stage:asc}){stage days}}`});if(errors?.length)throw Error(errors[0].message);"
+    + "if(data?.stages?.length!==2)throw Error('no rows');const s=document.createElement('section');s.setAttribute('data-af-slide','');s.style.cssText='height:630px;background:rgb(51,204,51)';s.textContent=data.stages.map(r=>r.stage+' '+r.days).join(', ');document.querySelector('#deck').append(s);";
+  const put = await fetch(`${BASE}/api/artifacts/${start.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Data deck', html: nativeHtml('Data deck', `<link rel="af-dataset" data-af-name="stages" href="ref:${dataset.id}"><main id="deck"></main>`, { script }) }) });
+  check(put.status === 200, `published the data deck (${put.status})`);
+  const started = Date.now();
+  const one = await shot(start.id, '?slide=1');
+  check(one.status === 200 && Buffer.isBuffer(one.body), `a dataset-drawn slide exports (${one.status} ${Buffer.isBuffer(one.body) ? '' : JSON.stringify(one.body)} in ${Date.now() - started}ms)`);
+  if (Buffer.isBuffer(one.body)) {
+    const { data } = await sharp(one.body).extract({ left: 600, top: 300, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+    check(data[0] < 100 && data[1] > 150 && data[2] < 100, `and it is the slide drawn from the rows (rgb ${[...data.subarray(0, 3)].join(',')})`);
+  }
+}
+
 /** Real Chromium cache behavior, including navigation and an explicit refresh. */
 async function thumbnailCacheLeg(browser) {
   // HTTP asset hosts deliberately use byte delivery for CLI safety. This
@@ -257,7 +281,7 @@ async function socialLeg(browser) {
 const browser = await launchChromium();
 const leg = (name, run) => run().catch((error) => check(false, `${name} could not finish (${String(error?.stack ?? error).split('\n').slice(0, 4).join(' | ')})`));
 try {
-  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser)), leg('the HTML download leg',()=>downloadLeg(browser)), leg('the thumbnail cache leg',()=>thumbnailCacheLeg(browser))]);
+  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser)), leg('the HTML download leg',()=>downloadLeg(browser)), leg('the thumbnail cache leg',()=>thumbnailCacheLeg(browser)), leg('the data deck leg',()=>dataDeckLeg())]);
 } finally {
   await browser.close();
 }

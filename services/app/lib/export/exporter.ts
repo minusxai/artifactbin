@@ -43,7 +43,7 @@ const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after m
 const RENDER_RETRY_MS = 1_000;
 
 /** Bump to invalidate images made by an older capture implementation. */
-export const EXPORT_RENDER_GENERATION = 9;
+export const EXPORT_RENDER_GENERATION = 10;
 
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -430,7 +430,8 @@ export async function exportImageResponse(
   if (!rendered.ok) {
     // A document with fewer slides than asked for is a missing RESOURCE, and
     // the count is the one thing the caller needs to correct itself in one step.
-    if (rendered.reason === 'no_slide') return json({ error: 'slide_not_found', slides: rendered.slides }, 404);
+    // None at all is a document whose script drew no slide (it threw, say): named, so it is not mistaken for a render fault.
+    if (rendered.reason === 'no_slide') return json({ error: 'slide_not_found', slides: rendered.slides, ...(rendered.slides === 0 ? { hint: 'the page drew no data-af-slide element by capture time; check its script for errors (node scripts/check.mjs ID)' } : {}) }, 404);
     const unavailable = rendered.reason === 'unavailable';
     return json({ error: unavailable ? 'render_unavailable' : 'render_failed' }, unavailable ? 503 : 500);
   }
