@@ -173,7 +173,7 @@ it('refuses an API starter without an HTTPS address on port 443, or with --data,
  const p=await project();
  try{
   await expect(p.run({dir:'app',kind:'api',title:'Deals'})).rejects.toMatchObject({code:'missing_url',exit:2,recovery:expect.stringContaining('--kind api --url https://')});
-  for(const url of ['http://crm.example.com/v1/deals','https://crm.example.com:8443/v1/deals','https://user:pw@crm.example.com/v1','not a url'])
+  for(const url of ['http://crm.example.com/v1/deals','https://crm.example.com:8443/v1/deals','https://user:pw@crm.example.com/v1','https://127.0.0.1/v1','https://localhost/v1','not a url'])
    await expect(p.run({dir:'app',kind:'api',title:'Deals',url}),url).rejects.toMatchObject({code:'invalid_url',exit:2,recovery:expect.stringContaining('HTTPS on port 443')});
   await expect(p.run({dir:'app',kind:'api',title:'Deals',url:'https://crm.example.com/v1',data:'rows.csv'})).rejects.toMatchObject({code:'data_not_for_api',exit:2});
   await expect(p.run({dir:'app',title:'Budget',url:'https://crm.example.com/v1'})).rejects.toMatchObject({code:'url_not_for_kind',exit:2});

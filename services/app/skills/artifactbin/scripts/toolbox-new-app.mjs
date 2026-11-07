@@ -54,15 +54,19 @@ export function fill(html, starter, {title, ids, data}) {
     `<title>${htmlText(title)}</title>`);
   return data ? out.replace(/ · sample data'/, "'") : out;
 }
-/** --url for --kind api: an HTTPS address on port 443, the only kind a resolver may fetch. */
+/** A DNS name a secret may be bound to: two labels or more, the last alphabetic (no IP). */
+const HOST_NAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;
+/** --url for --kind api: an HTTPS address on port 443 at a host name, which a resolver may fetch
+ * with a secret. */
 export function apiUrl(raw) {
   if (raw === undefined) throw new ToolError('missing_url', 'The API starter needs the ' +
     "API's address.", 2, `Pass it: ${API_URL} (the key stays out: the owner sets it later).`);
   let url = null;
   try { url = new URL(String(raw)); } catch {}
-  if (url?.protocol !== 'https:' || url.port || url.username || url.password)
-    throw new ToolError('invalid_url', `${raw} is not an https:// address without a port or ` +
-      'credentials.', 2, `A resolver reaches HTTPS on port 443 only: ${API_URL}`);
+  if (url?.protocol !== 'https:' || url.port || url.username || url.password ||
+    !HOST_NAME.test(url.hostname)) throw new ToolError('invalid_url', `${raw} is not an ` +
+    'https:// address at a host name, without a port or credentials.', 2, 'A resolver reaches ' +
+    `HTTPS on port 443 only, at a public host name: ${API_URL}`);
   return url;
 }
 /** An own-rows starter: its files, an empty dataset with own-rows rules, the filled page. */
