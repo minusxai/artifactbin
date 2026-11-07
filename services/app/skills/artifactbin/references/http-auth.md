@@ -1,6 +1,6 @@
 ---
 name: http-auth
-description: Direct HTTP email sign-in, origin-scoped credential storage and OAuth refresh.
+description: "HTTP API without the installed scripts: email sign-in, origin-scoped credential storage and OAuth refresh."
 ---
 ## Read first
 

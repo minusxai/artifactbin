@@ -1,6 +1,6 @@
 ---
 name: diagrams
-description: Author native HTML diagrams with Pele and Mermaid syntax.
+description: "Read for a flowchart, sequence, architecture or other diagram in a page: Pele with Mermaid syntax."
 ---
 
 ## Read first

@@ -1,6 +1,6 @@
 ---
 name: permissions
-description: Dataset permissions in Hasura's format, the fixed roles, templates and the policy.mjs dry run, read-back and set flow.
+description: "Read before deciding who may see, add or change a dataset's rows: Hasura-format permissions, the fixed roles, templates and the policy.mjs dry run, read-back and set flow."
 ---
 ## Read first
 

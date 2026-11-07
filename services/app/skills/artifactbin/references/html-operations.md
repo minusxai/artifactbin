@@ -1,6 +1,6 @@
 ---
 name: html-operations
-description: Native HTML comment anchor contract, HTTP comment operations and watching, and the server browser session.
+description: "HTTP API without the installed scripts: the comment anchor contract on saved HTML nodes, comment operations and watching, and the server browser session."
 ---
 
 ## Read first

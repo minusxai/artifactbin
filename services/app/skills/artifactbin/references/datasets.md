@@ -1,6 +1,6 @@
 ---
 name: datasets
-description: CSV and JSON datasets, linking them into pages, the generated GraphQL API for rows and writes, and read-only `_sql` for totals and joins.
+description: "Read before a page shows or writes dataset rows: CSV and JSON datasets, linking them into pages, GraphQL rows and writes, and read-only `_sql` for every total, count and join."
 ---
 ## Read first
 

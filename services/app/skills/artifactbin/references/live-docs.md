@@ -1,6 +1,6 @@
 ---
 name: live-docs
-description: Reading and editing the text of a doc (or any page's editable region) while people are typing in it, as Markdown, through the installed script or the HTTP API.
+description: "Read to change the text of a doc (or any page's editable region) while people may be typing in it: Markdown through the installed script or the HTTP API."
 ---
 ## Read first
 

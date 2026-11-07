@@ -119,7 +119,7 @@ describe('the brief', () => {
     for (const trigger of ['artifactbin.dev', 'HTTP', 'publish', 'edit', 'comment', 'query', 'export', 'dashboard', 'deck', 'dataset']) {
       expect(brief.description).toContain(trigger);
     }
-    expect(brief.description).toContain('Use for artifactbin.dev');
+    // Which use cases it must name, and that SKILL.md routes each: `lib/skills/__tests__/skill-description.test.ts`.
   });
 
 });

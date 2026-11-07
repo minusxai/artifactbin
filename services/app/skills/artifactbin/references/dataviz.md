@@ -1,6 +1,6 @@
 ---
 name: dataviz
-description: Chart choice, truthful encodings and Vega-Lite or Vega authoring for native HTML pages.
+description: "Read before drawing any chart: chart choice, truthful encodings and Vega-Lite or Vega in a native HTML page."
 ---
 ## Read first
 

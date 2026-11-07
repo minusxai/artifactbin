@@ -1,6 +1,6 @@
 ---
 name: maps
-description: Build native HTML maps with the pinned framework-free deck.gl API.
+description: "Read for an interactive map or geospatial layers in a page: the pinned framework-free deck.gl API."
 ---
 
 ## Read first
