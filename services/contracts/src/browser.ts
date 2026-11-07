@@ -22,7 +22,8 @@ interface RenderCardCrop {
   width: number;
 }
 
-/** Slide capture selects visible author-owned data-af-slide elements in document order.
+/** Slide capture selects laid-out author-owned data-af-slide elements outside deck chrome, in document order, and draws
+ * the chosen one alone (revealed, the others hidden), so a stacked deck's inactive slides export too.
  * Generated data-af-deck-chrome is excluded only during capture; authored content and live navigation remain unchanged. */
 type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
 

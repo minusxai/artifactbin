@@ -256,7 +256,7 @@ it('captures each laid-out slide of a deck at the viewport size, after its viewp
   // Laid-out slides first, then rail miniatures inside deck chrome, which are not slides of their own.
   const els=[...Array.from({length:count},()=>({closest:()=>null,getBoundingClientRect:()=>({width:1200,height:630})})),
    ...Array.from({length:chrome},()=>({closest:()=>({}),getBoundingClientRect:()=>({width:120,height:63})}))];
-  const slides={evaluateAll:async(fn:Function)=>fn(els),nth:(n:number)=>({screenshot:async(options:{style?:string})=>{
+  const slides={evaluateAll:async(fn:Function)=>fn(els),nth:(n:number)=>({evaluate:async()=>{},screenshot:async(options:{style?:string})=>{
    calls.push({slide:n,style:options.style});if(fail&&n===fail)throw Error('Timeout 1500ms exceeded');return png(1200,height-bar,bytes);}})};
   const frame={waitFor:async()=>{},count:async()=>bar?1:0,screenshot:async()=>png(1200,height)};
   const page={url:()=>'https://example.test/a/DECK12',on:()=>{},setDefaultTimeout:()=>{},waitForFunction:async()=>{},goto:async()=>{},

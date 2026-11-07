@@ -29,6 +29,10 @@ const PREVIEW_MAX_HEIGHT = 4_096;
 const PAGE_CLOSE_WAIT_MS = 5_000;
 
 class NavigationError extends Error {}
+// The one slide drawn, whatever the deck's own CSS shows: the same rule as toolbox-check-capture.mjs's.
+const SLIDE_REVEAL_CSS = '[data-af-slide]{transition:none!important;animation:none!important}'
+  + '[data-af-slide]:not([data-af-slide-shot]){visibility:hidden!important;opacity:0!important}'
+  + '[data-af-slide-shot]{visibility:visible!important;opacity:1!important}';
 class NoSlideError extends Error { constructor(readonly slides: number) { super(`document has ${slides} slides`); } }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -231,12 +235,19 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
-        // Bare readers retain hidden rail miniatures for hydration. Number only
-        // rendered slides; Playwright's visibility includes offscreen content.
-        const slides = surface.locator('[data-af-slide]:visible');
-        const count = await slides.count();
-        if (req.capture.slide > count) throw new NoSlideError(count);
-        const one = slides.nth(req.capture.slide - 1);
+        // Number the slides the author check counts (toolbox-check-capture.mjs and toolbox-check-slides.mjs, pinned
+        // alike by a stacked deck in contract.test.ts and session-pages.test.ts): laid out and outside deck chrome,
+        // so the hidden rail miniatures bare readers keep for hydration take no number. A stacked deck hides all but
+        // its active slide; the slide is marked and revealed alone, the others hidden, as the check draws it.
+        const slides = surface.locator('[data-af-slide]');
+        const laid = await slides.evaluateAll(els => els.flatMap((el, i) => {
+          const box = el.getBoundingClientRect();
+          return !el.closest('[data-af-deck-chrome]') && box.width > 1 && box.height > 1 ? [i] : [];
+        }));
+        if (req.capture.slide > laid.length) throw new NoSlideError(laid.length);
+        const one = slides.nth(laid[req.capture.slide - 1]!);
+        await one.evaluate(el => el.setAttribute('data-af-slide-shot', ''));
+        await page.addStyleTag({ content: SLIDE_REVEAL_CSS });
         await one.scrollIntoViewIfNeeded({ timeout });
         await waitForCharts();
         return { mime, bytes: new Uint8Array(await one.screenshot({ ...shotOpts, style: '[data-af-deck-chrome],[data-af-deck-chrome] *,[data-af-deck-chrome]::before,[data-af-deck-chrome]::after,[data-af-deck-chrome] *::before,[data-af-deck-chrome] *::after{visibility:hidden!important;transition:none!important;animation:none!important}' })) };
