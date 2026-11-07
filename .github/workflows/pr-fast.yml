@@ -6,8 +6,10 @@ name: pr fast
 #
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
-# (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json) and the contract tests
-# (scripts/ci/contract-tests.json) on five runners at once, each restoring main's install cache. The guard tests read
+# (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json), the contract tests
+# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `suite-*` parts), all at
+# once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
+# (#1138, #1141: each a red main, and production held for a whole extra merge), so every pull request runs them. The guard tests read
 # the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
 # the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
 # server's native acceptance) through the real handlers, which the audit refuses too. Each guards a contract whose
@@ -52,6 +54,35 @@ jobs:
             shard: 1/2
           - part: guards-2
             shard: 2/2
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api, api-isolated, ui and islands projects, the
+          # same files ci.yml's api and ui jobs run after the merge, packed longest-first onto 12 runners by their
+          # measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json; `--sums` prints each
+          # runner's load). None of them launches Chromium, so no runner provisions a browser. Add a runner when a
+          # shard's load nears the clock; never move a file out to make room.
+          - part: suite-1
+            suite: 1/12
+          - part: suite-2
+            suite: 2/12
+          - part: suite-3
+            suite: 3/12
+          - part: suite-4
+            suite: 4/12
+          - part: suite-5
+            suite: 5/12
+          - part: suite-6
+            suite: 6/12
+          - part: suite-7
+            suite: 7/12
+          - part: suite-8
+            suite: 8/12
+          - part: suite-9
+            suite: 9/12
+          - part: suite-10
+            suite: 10/12
+          - part: suite-11
+            suite: 11/12
+          - part: suite-12
+            suite: 12/12
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -136,6 +167,30 @@ jobs:
         run: node scripts/ci/fast-check.mjs
       - if: matrix.shard
         run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
+      # The test global setup's server reader and hosted libraries (build-runtime.global.ts), keyed by what they are
+      # built from (scripts/ci/ci.mjs `test-builds-key`); main's warm-caches writes the entry. A pull request that
+      # changes those inputs rebuilds them (~10s) and its first runner saves the result, so its next push restores it.
+      - if: matrix.suite
+        id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - if: matrix.suite
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - if: matrix.suite
+        run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}
+      - if: matrix.suite == '1/12' && steps.test-builds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:

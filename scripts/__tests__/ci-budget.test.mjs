@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {CI_BUDGETS, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
+import {JOBS, shardLoads} from '../ci/test-timings.mjs';
 const workflow=(name='ci.yml')=>yaml.parse(readFileSync(new URL(`../../.github/workflows/${name}`,import.meta.url),'utf8'));
 
 it('reports four-minute per-job diagnostics while the complete chain owns the hard limit',()=>{
@@ -99,7 +100,7 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint','vitest.mjs run --config vitest.guard.config.ts'])expect(runs).toContain(command);
  expect(job.strategy.matrix.part).toEqual(['types','lint','tests','guards','guards-2']);
  // The guard config runs as two time-packed shards, every guard part one of them, so each file runs exactly once.
- const shards=job.strategy.matrix.include.map(entry=>[entry.part,entry.shard]);
+ const shards=job.strategy.matrix.include.filter(entry=>entry.shard).map(entry=>[entry.part,entry.shard]);
  expect(shards).toEqual([['guards','1/2'],['guards-2','2/2']]);
  expect(job.steps.find(step=>step.run?.includes('vitest.guard.config.ts'))).toMatchObject({if:'matrix.shard',run:expect.stringMatching(/ --shard=\$\{\{ matrix\.shard \}\}$/)});
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain('sequence: { sequencer: TimedSequencer }');
@@ -107,6 +108,35 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  expect(runs).toContain('sha256sum --check --strict');
  expect(JSON.stringify(lane)).not.toMatch(/tested-(tree|patch)/);
  expect(job.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact')).map(step=>step.with.name)).toEqual(['tsgo-buildinfo']);
+});
+// #1138 (ui) and #1141 (api) each turned main red after a green pull request: neither suite ran before the merge.
+it('runs every api, api-isolated, ui and islands test on every pull request, packed by measured time, each file once',()=>{
+ const job=workflow('pr-fast.yml').jobs.fast;
+ const suites=job.strategy.matrix.include.filter(entry=>entry.suite);
+ const count=JOBS.suites.count;
+ expect(JOBS.suites.projects).toEqual(['api','api-isolated','ui','islands']);
+ expect(suites.map(entry=>[entry.part,entry.suite])).toEqual(Array.from({length:count},(_,i)=>[`suite-${i+1}`,`${i+1}/${count}`]));
+ // Every part the matrix adds is a job with the lane's one clock as its last step (asserted above).
+ for(const entry of suites)expect(job.strategy.matrix.part).not.toContain(entry.part);
+ const run=job.steps.find(step=>step.if==='matrix.suite'&&step.run?.includes('vitest.mjs run'));
+ // The full suite's own configuration and projects (vitest.config.ts), as ci.yml's api and ui jobs run them.
+ expect(run.run).toBe('node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --project=ui --project=islands --shard=${{ matrix.suite }}');
+ expect(run.run).not.toContain('--config');
+ // The timed sequencer packs these four projects' files from the recorded table (scripts/ci/test-timings.mjs `--sums`).
+ expect(readFileSync(new URL('../../vitest.config.ts',import.meta.url),'utf8')).toContain('sequence: { sequencer: TimedSequencer }');
+ const loads=shardLoads(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8'))).suites;
+ expect(loads).toHaveLength(count);
+ for(const project of JOBS.suites.projects)expect(Object.keys(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8')).files[project]??{}).length,project).toBeGreaterThan(0);
+ // No browser: no file in these projects launches Chromium.
+ expect(JSON.stringify(job.steps)).not.toContain('playwright');
+ // The test builds restore before the run; only the first suite runner saves, and only on an exact miss.
+ const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
+ expect(restore).toBeGreaterThan(-1);expect(restore).toBeLessThan(steps.indexOf(run));
+ expect(steps[restore].uses).toMatch(/^actions\/cache\/restore@/);
+ const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save'));
+ expect(save).toHaveLength(1);
+ expect(save[0].if).toBe(`matrix.suite == '1/${count}' && steps.test-builds.outputs.cache-hit != 'true'`);
+ expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
 });
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
 it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{
@@ -124,7 +154,9 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
  expect(cold).toHaveLength(1);
  expect(cold[0].if).toBe("steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''");
- expect(steps.some(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))).toBe(false);
+ // Restore only: no stale install is ever saved from a pull request. The one save is the suite runners' test builds.
+ expect(steps.filter(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@')).map(step=>step.with.key))
+  .toEqual(['test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}']);
 });
 it('fails the pull request lane past 60 seconds with the plain budget message',()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-pr-elapsed-'));

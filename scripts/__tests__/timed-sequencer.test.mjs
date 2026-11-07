@@ -28,8 +28,10 @@ describe('timed shard packing', () => {
     const timings = readTimings();
     const count = (project) => Object.keys(timings.files[project] ?? {}).length;
     // `api-isolated` is the handful of api files that mock modules; it shards inside the api job.
-    for (const project of ['api', 'api-isolated', 'node']) expect(count(project), project).toBeGreaterThan(0);
-    for (const job of [['api', 'api-isolated'], ['node']]) expect(job.reduce((sum, project) => sum + count(project), 0), job.join('+')).toBeGreaterThan(10);
+    // `ui` and `islands` too: pr-fast.yml's suite runners pack them beside the api files, so a jsdom file weighed at a
+    // median instead of its time would unbalance the runners the pull request clock waits on.
+    for (const project of ['api', 'api-isolated', 'node', 'ui', 'islands']) expect(count(project), project).toBeGreaterThan(0);
+    for (const job of [['api', 'api-isolated'], ['node'], ['ui', 'islands']]) expect(job.reduce((sum, project) => sum + count(project), 0), job.join('+')).toBeGreaterThan(10);
     // Every shard job runs Vitest alone (integration and the CLI suite are jobs of their own): no shard is preloaded.
     expect(Object.keys(timings)).toEqual(['files']);
   });

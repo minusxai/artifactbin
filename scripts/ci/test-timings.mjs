@@ -16,14 +16,20 @@ import path from 'node:path';
 import { pack, readTimings } from '../lib/timed-sequencer.mjs';
 
 const OUT = path.resolve(import.meta.dirname, 'test-timings.json');
-/** The Vitest projects CI runs with `--shard` (the api and node jobs). */
-const SHARDED = ['api', 'api-isolated', 'node'];
+/** The Vitest projects CI runs with `--shard` (ci.yml's api, ui and node jobs; pr-fast.yml's suite shards). */
+const SHARDED = ['api', 'api-isolated', 'node', 'ui', 'islands'];
 // ` ✓  api  services/app/__tests__/x.test.ts (12 tests) 3456ms` (also ✗/× for a failed file).
 const LINE = /[✓✗×]\s+([\w-]+)\s+(\S+\.test\.\w+)\s+\(\d+ tests?[^)]*\)\s+(\d+)ms/;
 // Vitest colours its lines in CI; `gh run view --log` hands them back as ESC bytes or as literal `^[[…m`.
 const COLOUR = /(?:\u001b|\^\[)\[[0-9;]*m/g;
-/** The job each set of Vitest projects runs in, with its shard count (.github/workflows/ci.yml). */
-const JOBS = { node: { projects: ['node'], count: 6 }, api: { projects: ['api', 'api-isolated'], count: 4 } };
+/** The job each set of Vitest projects runs in, with its shard count: ci.yml's node, api and ui jobs, and pr-fast.yml's
+ * `suites` shards, which run the api and jsdom projects together on every pull request. */
+export const JOBS = {
+  node: { projects: ['node'], count: 6 },
+  api: { projects: ['api', 'api-isolated'], count: 4 },
+  ui: { projects: ['ui', 'islands'], count: 2 },
+  suites: { projects: ['api', 'api-isolated', 'ui', 'islands'], count: 12 },
+};
 
 /** Per-file times (ms) by project from Vitest log text. */
 export function parseTimings(text) {
