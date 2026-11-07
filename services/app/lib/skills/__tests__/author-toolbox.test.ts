@@ -410,7 +410,7 @@ it('does not ask agents to write what the platform adds, and says what each side
  expect(http).not.toMatch(/<script src="\/af\/[^"]*core\.js"/);
  expect(http).not.toMatch(/(?:write|add|load|keep)[^.\n]*core (?:script )?tag/i);
  expect(http).not.toMatch(/<html[^>]*data-af-[a-z-]+="/);
- for(const example of ['report','csv-dashboard','shared-app','deck']){
+ for(const example of ['report','csv-dashboard','shared-app','shared-list','deck']){
   const html=await readFile(new URL(`../../../skills/artifactbin/examples/${example}.html`,import.meta.url),'utf8');
   expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }

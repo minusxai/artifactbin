@@ -90,7 +90,7 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs','shared-list.html','shared-list-steps.mjs','shared-list-guest.mjs','shared-list-cleanup.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
   for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon']){expect(Object.hasOwn(files,`resolvers/resolver-${resolver}.ts`),resolver).toBe(true);expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(false);}
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });

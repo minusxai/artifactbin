@@ -120,7 +120,7 @@ const commands = {
   doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}},
   'new-app': {
     starter: 'examples/shared-app.html',
-    flags: {title: flag(), data: flag(), dir: flag()}
+    flags: {kind: flag(), title: flag(), data: flag(), dir: flag()}
   }
 };
 export const COMMANDS = Object.freeze(commands);

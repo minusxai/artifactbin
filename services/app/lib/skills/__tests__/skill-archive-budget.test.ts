@@ -8,7 +8,8 @@ import {archiveFor} from '@/lib/skills';
 
 // 1.6 MiB: the data-driven examples, their steps files and the generator are worth more to agents than the bytes.
 // 1.65 MiB since #1014: local preview bundles the generated Hasura dataset API (preview-datasets.mjs, ~25 KB).
-const SKILL_ARCHIVE_MAX_BYTES=1.65*1024*1024;
+// 1.67 MiB: the shared sign-up list starter (examples/shared-list*, ~19 KB) took the sign-up task from 118-364 s to 42 s.
+const SKILL_ARCHIVE_MAX_BYTES=1.67*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

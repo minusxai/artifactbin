@@ -64,8 +64,8 @@ anonymous has no user ID; direct calls have no page ID. Use them in `filter`, `c
 - `own-rows --owner-column created_by`: everyone reads; viewer and signed_in add rows (the column is
   set to them) and change or delete only rows they added; anonymous never writes. The page shows
   edit controls where `_can` says so ([below](#what-this-viewer-may-change)). The CSV needs the owner
-  column. Rows the owner adds are not stamped, so a check's cleanup deletes its
-  test rows with `graphql.mjs`, not through the page.
+  column; rows the owner adds are not stamped. `node scripts/new-app.mjs --kind list` sets up a
+  page built on it (`examples/shared-list.html`).
 - `editors-only`: only the owner and editors read or write; everyone else gets not found.
 
 For something else (everyone signed in edits every row, hidden columns), edit the template's
