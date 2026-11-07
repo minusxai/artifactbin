@@ -130,16 +130,21 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # The test global setup builds the server reader behind content-verified
-      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
-      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      # The test global setup builds the server reader and the hosted libraries behind one content marker
+      # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
+      # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer
+      # matches this tree rebuilds, so a stale restore costs only the build it replaces. BOTH directories: the marker
+      # lists the libraries as outputs, and restoring build-assets alone rebuilt everything on every shard.
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-builds-v1-${{ runner.os }}-
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
       - run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/6
 
   # The heavy tests that `npm test` leaves out — a disposable Dockerised Postgres and real Chromium — live in
@@ -184,16 +189,21 @@ jobs:
       - run: docker pull postgres:17-alpine
       # The resolver caps.db end-to-end test starts its own TLS MySQL from this image (and skips without it).
       - run: docker pull mysql:8
-      # The test global setup builds the server reader behind content-verified
-      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
-      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      # The test global setup builds the server reader and the hosted libraries behind one content marker
+      # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
+      # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer
+      # matches this tree rebuilds, so a stale restore costs only the build it replaces. BOTH directories: the marker
+      # lists the libraries as outputs, and restoring build-assets alone rebuilt everything on every shard.
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-builds-v1-${{ runner.os }}-
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
       - run: npm run test:integration
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
@@ -231,16 +241,21 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # The test global setup builds the server reader behind content-verified
-      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
-      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      # The test global setup builds the server reader and the hosted libraries behind one content marker
+      # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
+      # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer
+      # matches this tree rebuilds, so a stale restore costs only the build it replaces. BOTH directories: the marker
+      # lists the libraries as outputs, and restoring build-assets alone rebuilt everything on every shard.
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-builds-v1-${{ runner.os }}-
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
       - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2
 
   # The BUILD catches what tsc and vitest cannot: a route the generated table
@@ -292,14 +307,17 @@ jobs:
           key: app-build-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}
       # The island and server-reader builds inside `npm run build` take `--cache` (build-prep.mjs):
       # restoring the test shards' builds turns the ~27s island build into a marker check.
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - if: steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-builds-v1-${{ runner.os }}-
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
       # NO GATE WAITS FOR THIS JOB: each gate shard builds what it runs (scripts/build/build-gate-inputs.mjs)
       # while it provisions browsers. This job proves the production build and caches it for a rerun.
       - if: steps.build-cache.outputs.cache-hit != 'true'
@@ -344,35 +362,24 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # The export tests drive real headless Chromium (lib/export.ts). The
-      # browser download is the slow half of the install; cache it on what pins
-      # the browser (playwright-core's browsers.json), as the gates do — keyed on
-      # the whole lockfile, any dependency change missed it and paid a download
-      # plus a --with-deps apt pass: 135s on api shard 6 of run 36867180747.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: playwright
-        with:
-          path: |
-            ~/.cache/ms-playwright/chromium-*
-            ~/.cache/ms-playwright/chromium_headless_shell-*
-            ~/.cache/ms-playwright/ffmpeg-*
-          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
-      # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
-      # deps pass is only worth paying for when the browser is actually being downloaded.
-      # No `--with-deps`, hit or miss: ubuntu-latest already ships Chromium's libraries, and the apt
-      # pass on a miss cost 135s on api shard 6 of run 36867180747. A miss now costs the download.
-      - run: npx playwright install chromium
-      # The test global setup builds the server reader behind content-verified
-      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
-      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      # NO BROWSER: no api or api-isolated file launches Chromium (scripts/lib/chromium-tests.mjs finds none, and every
+      # api and jsdom file passes with an empty PLAYWRIGHT_BROWSERS_PATH), so the browser cache restore and install cost
+      # each shard ~4-6s for nothing. The tests that launch it run in `integration`, which provisions it.
+      # The test global setup builds the server reader and the hosted libraries behind one content marker
+      # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
+      # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer
+      # matches this tree rebuilds, so a stale restore costs only the build it replaces. BOTH directories: the marker
+      # lists the libraries as outputs, and restoring build-assets alone rebuilt everything on every shard.
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-builds-v1-${{ runner.os }}-
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
       # Files are packed by measured time (scripts/lib/timed-sequencer.mjs), not by count, and the
       # api project shares one module graph per worker; the files that mock modules run isolated.
       - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/4
@@ -381,7 +388,8 @@ jobs:
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
 
   # EACH SHARD BUILDS WHAT IT RUNS, while it provisions browsers. The shards used to download the `build`
   # job's artifact and poll that job until it finished: on runs 36875673784 and 36876517464 they sat
@@ -434,13 +442,16 @@ jobs:
           key: app-build-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}
       # The server reader with their content markers (see the api job): the build below
       # takes `--cache`, so a restore that matches this tree turns the ~27s island build into a check.
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - if: steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-builds-v1-${{ runner.os }}-
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
       # IN THE BACKGROUND: every stream is redirected, or the runner would hold this step open until the
       # build closed the step's output pipe. "Wait for this shard's build" below collects it.
       - name: Build the app and server in the background
@@ -627,11 +638,14 @@ jobs:
         run: npm run build
       # What the test shards restore (see the api job): the server reader with their markers.
       - run: (cd services/app && node scripts/build-server-reader.mjs --cache)
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             services/app/lib/build-assets
-          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #

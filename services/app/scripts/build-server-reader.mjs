@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { recordServerReader, repoRelative, serverReaderFresh, stampInputs } from './server-reader-cache.mjs';
+import { librariesFresh, recordLibraries, recordServerReader, repoRelative, serverReaderFresh, stampInputs } from './server-reader-cache.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'lib/build-assets');
@@ -22,8 +22,16 @@ const componentSources = fs.readdirSync(path.join(root, 'lib/html-components')).
 let componentGraph = [];
 try { componentGraph = JSON.parse(fs.readFileSync(path.join(output, 'html-components-receipt.json'), 'utf8')).inputs.map((input) => input.path); } catch { /* first build */ }
 const stamped = stampInputs([...[...libraryFiles, ...componentSources].map(repoRelative), ...componentGraph]);
+const registry = JSON.parse(fs.readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
+const libraryOutputs = Object.entries(registry).map(([name, spec]) => repoRelative(path.join(root, 'public/libraries', `${name}-${spec.version}`, 'index.js')));
 
-await import('./build-libraries.mjs');
+// The hosted libraries rebuild only when what they are built from changed (server-reader-cache.mjs `librariesFresh`).
+if (cache && librariesFresh()) console.log('build-server-reader: hosted libraries unchanged, skipping their rebuild (cache hit)');
+else {
+  const librariesStamp = stampInputs(libraryFiles.map(repoRelative));
+  await import('./build-libraries.mjs');
+  recordLibraries(librariesStamp, libraryOutputs);
+}
 // The hosted component modules (lib/build-assets/components, served at /af/components/) and the skill's readable copies.
 // A separate process: the repository build scripts import from this package's scripts, never the reverse.
 execFileSync(process.execPath, [path.join(root, '../../scripts/build/build-html-components.mjs')], { stdio: 'inherit' });
@@ -44,9 +52,8 @@ fs.writeFileSync(path.join(output, 'maplibre-gl-worker.mjs'), worker.replace(/\n
 // Older checkouts copied MapLibre v5's CSP worker here.
 fs.rmSync(path.join(output, 'maplibre-gl-csp-worker.js'), { force: true });
 
-const registry = JSON.parse(fs.readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
 recordServerReader(stamped, [
   ...['maplibre-gl-worker.mjs'].map((file) => repoRelative(path.join(output, file))),
-  ...Object.entries(registry).map(([name, spec]) => repoRelative(path.join(root, 'public/libraries', `${name}-${spec.version}`, 'index.js'))),
+  ...libraryOutputs,
   ...components.map((name) => repoRelative(path.join(output, 'components', `${name}.js`))),
 ]);

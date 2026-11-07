@@ -31,6 +31,7 @@ const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   const table = /^CREATE TABLE IF NOT EXISTS (\w+)/.exec(statement)?.[1];
   return table ? [table] : [];
 });
+const WIPE_SQL = SCHEMA_TABLES.toReversed().map((table) => `DELETE FROM ${table};`).join('\n');
 
 /** Authenticated route fixtures always belong to an email account. Explicit null
  * remains available for legacy-credential rejection and historical alias tests. */
@@ -176,10 +177,12 @@ export function useAppHarness(): AppHarness {
     const db = await database!;
     if (keepRows) return;
     // The schema is declared parent-first. Reverse it so a future foreign key
-    // can never make the shared wipe depend on a copied cleanup list.
-    for (const table of SCHEMA_TABLES.toReversed()) {
-      await db.query(`DELETE FROM ${table}`);
-    }
+    // can never make the shared wipe depend on a copied cleanup list. ONE simple-protocol batch, not a statement per
+    // table: ~55 round trips were 6.8ms of every test's 9ms of harness work (1.3ms batched), before every one of the
+    // api project's ~1,700 tests.
+    const raw = db.raw();
+    if (raw.kind !== 'pglite') throw new Error('The harness database is PGLite.');
+    await (raw.instance as { exec(sql: string): Promise<unknown> }).exec(WIPE_SQL);
     // Co-hosted auth creates its tables at service boot, outside SCHEMA_TABLES.
     // Discover them rather than copying Better Auth's table list into each test.
     const authTables=await db.query<{name:string}>("SELECT format('%I.%I',schemaname,tablename) AS name FROM pg_tables WHERE schemaname='auth' ORDER BY tablename");

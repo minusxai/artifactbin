@@ -6,8 +6,10 @@ name: pr fast
 #
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
-# (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json) and the contract tests
-# (scripts/ci/contract-tests.json) on five runners at once, each restoring main's install cache. The guard tests read
+# (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json), the contract tests
+# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts), all at
+# once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
+# (#1138, #1141: each a red main, and production held for a whole extra merge), so every pull request runs them. The guard tests read
 # the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
 # the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
 # server's native acceptance) through the real handlers, which the audit refuses too. Each guards a contract whose
@@ -52,6 +54,93 @@ jobs:
             shard: 1/2
           - part: guards-2
             shard: 2/2
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 20 runners, its ui and
+          # islands projects on 4, the same files ci.yml's api and ui jobs run after the merge, each group packed
+          # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
+          # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
+          # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
+          # runner provisions a browser. Add a runner when a group's load nears the clock; never move a file out.
+          - part: api-1
+            projects: --project=api --project=api-isolated
+            suite: 1/22
+          - part: api-2
+            projects: --project=api --project=api-isolated
+            suite: 2/22
+          - part: api-3
+            projects: --project=api --project=api-isolated
+            suite: 3/22
+          - part: api-4
+            projects: --project=api --project=api-isolated
+            suite: 4/22
+          - part: api-5
+            projects: --project=api --project=api-isolated
+            suite: 5/22
+          - part: api-6
+            projects: --project=api --project=api-isolated
+            suite: 6/22
+          - part: api-7
+            projects: --project=api --project=api-isolated
+            suite: 7/22
+          - part: api-8
+            projects: --project=api --project=api-isolated
+            suite: 8/22
+          - part: api-9
+            projects: --project=api --project=api-isolated
+            suite: 9/22
+          - part: api-10
+            projects: --project=api --project=api-isolated
+            suite: 10/22
+          - part: api-11
+            projects: --project=api --project=api-isolated
+            suite: 11/22
+          - part: api-12
+            projects: --project=api --project=api-isolated
+            suite: 12/22
+          - part: api-13
+            projects: --project=api --project=api-isolated
+            suite: 13/22
+          - part: api-14
+            projects: --project=api --project=api-isolated
+            suite: 14/22
+          - part: api-15
+            projects: --project=api --project=api-isolated
+            suite: 15/22
+          - part: api-16
+            projects: --project=api --project=api-isolated
+            suite: 16/22
+          - part: api-17
+            projects: --project=api --project=api-isolated
+            suite: 17/22
+          - part: api-18
+            projects: --project=api --project=api-isolated
+            suite: 18/22
+          - part: api-19
+            projects: --project=api --project=api-isolated
+            suite: 19/22
+          - part: api-20
+            projects: --project=api --project=api-isolated
+            suite: 20/22
+          - part: api-21
+            projects: --project=api --project=api-isolated
+            suite: 21/22
+          - part: api-22
+            projects: --project=api --project=api-isolated
+            suite: 22/22
+          - part: ui-1
+            projects: --project=ui --project=islands
+            suite: 1/5
+          - part: ui-2
+            projects: --project=ui --project=islands
+            suite: 2/5
+          - part: ui-3
+            projects: --project=ui --project=islands
+            suite: 3/5
+          - part: ui-4
+            projects: --project=ui --project=islands
+            suite: 4/5
+          - part: ui-5
+            projects: --project=ui --project=islands
+            suite: 5/5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -136,6 +225,30 @@ jobs:
         run: node scripts/ci/fast-check.mjs
       - if: matrix.shard
         run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
+      # The test global setup's server reader and hosted libraries (build-runtime.global.ts), keyed by what they are
+      # built from (scripts/ci/ci.mjs `test-builds-key`); main's warm-caches writes the entry. A pull request that
+      # changes those inputs rebuilds them (~10s) and its first runner saves the result, so its next push restores it.
+      - if: matrix.suite
+        id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - if: matrix.suite
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - if: matrix.suite
+        run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
+      - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:

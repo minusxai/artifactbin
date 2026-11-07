@@ -17,10 +17,8 @@ it('gives every browser a disjoint immutable cache that the main warmer also pop
   for(const other of browsers.filter(name=>name!==browser))expect(reader.with.path).not.toContain(`/${other}-*`);
   if(browser!=='chromium')expect(reader.if).toContain(`'${browser}'`);
  }
- for(const name of ['api','integration']){
-  const chromium=jobs[name].steps.find(step=>step.id==='playwright');
-  expect(chromium.with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
- }
+ const chromium=jobs.integration.steps.find(step=>step.id==='playwright');
+ expect(chromium.with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
  const selection=jobs.gates.steps.findIndex(step=>step.id==='gate-browsers');
  expect(selection).toBeLessThan(jobs.gates.steps.findIndex(step=>step.id==='browser-chromium'));
  const install=warm.find(step=>step.run?.includes('install --with-deps chromium firefox webkit'));

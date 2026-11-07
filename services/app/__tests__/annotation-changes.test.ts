@@ -33,7 +33,32 @@ it('resumes from a checkpoint and delivers a human reply on an older thread exac
 // Route requests stay real; only the subscription seam is controlled to force
 // the otherwise narrow subscribe/read race. PGLite evidence is serial only.
 const human: AnnotationAuthor = {kind: 'human', label: 'Reviewer', transport: 'browser'};
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+/**
+ * A WAIT'S SECONDS ON A VIRTUAL CLOCK. The feed sleeps with `setTimeout` and reads its deadline from `Date.now()`; a test
+ * that waits on the real clock spends the wait itself (a ten-second idle wait, a five-second access recheck: ~30s of
+ * this file). Only those two are faked: the database and the request keep real time. `until` lets the request run on
+ * the real event loop and, whenever it sleeps, moves the clock straight to its next timer, until it settles; `elapsed`
+ * reads the virtual time since the clock started, so an assertion on WHEN a wait ended still holds the feed to its
+ * deadline and its access-recheck interval, to the millisecond.
+ */
+function virtualClock() {
+ vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'Date']});
+ const started = Date.now();
+ return {
+  elapsed: () => Date.now() - started,
+  async until<T>(pending: Promise<T>): Promise<T> {
+   let settled = false;
+   pending.then(() => { settled = true; }, () => { settled = true; });
+   while (!settled) {
+    if (Date.now() - started > 120_000) throw new Error('A wait outlived two virtual minutes.');
+    await new Promise(resolve => setImmediate(resolve));
+    if (!settled) await vi.advanceTimersToNextTimerAsync();
+   }
+   return pending;
+  },
+ };
+}
 async function fixture() {
  const token = await mintAccountToken('monitor');
  const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p data-af-id="intro">Read this</p>')}}));
@@ -112,23 +137,23 @@ it('waits outside the transaction and returns the committed reply to an old root
  expect(live.liveChannelCount()).toBe(0);
 });
 it('returns a bounded empty timeout with a reusable checkpoint',async()=>{
- const f=await fixture();const started=Date.now();const response=await f.read(f.cursor,'wait=1');
+ const f=await fixture();const clock=virtualClock();const response=await clock.until(f.read(f.cursor,'wait=1'));
  expect(response.status).toBe(200);expect(await response.json()).toEqual({events:[],next_cursor:f.cursor,has_more:false});
- expect(Date.now()-started).toBeGreaterThanOrEqual(900);expect(Date.now()-started).toBeLessThan(2500);expect(live.liveChannelCount()).toBe(0);
+ expect(clock.elapsed()).toBeGreaterThanOrEqual(900);expect(clock.elapsed()).toBeLessThan(2500);expect(live.liveChannelCount()).toBe(0);
 });
 it('rechecks membership while idle even without annotation notifications',async()=>{
  const f=await fixture();const stranger=await mintAccountToken('commenter');const db=await getDb();
  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.doc.id]);
  await db.query("INSERT INTO artifact_shares (artifact_id,email,user_id,role) VALUES ($1,$2,$3,'commenter')",[f.doc.id,stranger.email,stranger.userId]);
  const baseline=await f.read('now','',undefined,f.doc.id,stranger.token);expect(baseline.status).toBe(200);
- const cursor=(await baseline.json()).next_cursor;const polling=f.read(cursor,'wait=3',undefined,f.doc.id,stranger.token);
+ const cursor=(await baseline.json()).next_cursor;const clock=virtualClock();const polling=f.read(cursor,'wait=3',undefined,f.doc.id,stranger.token);
  await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.doc.id]);
- expect((await polling).status).toBe(404);expect(live.liveChannelCount()).toBe(0);
+ expect((await clock.until(polling)).status).toBe(404);expect(live.liveChannelCount()).toBe(0);
 });
 it('returns uniform not_found when the artifact is deleted during a wait',async()=>{
- const f=await fixture();const polling=f.read(f.cursor,'wait=3');await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));
+ const f=await fixture();const clock=virtualClock();const polling=f.read(f.cursor,'wait=3');await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));
  await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[f.doc.id]);
- const response=await polling;expect(response.status).toBe(404);expect(await response.json()).toEqual({error:'not_found'});expect(live.liveChannelCount()).toBe(0);
+ const response=await clock.until(polling);expect(response.status).toBe(404);expect(await response.json()).toEqual({error:'not_found'});expect(live.liveChannelCount()).toBe(0);
 });
 it('aborts waits, clears subscriptions, and cannot deliver a later comment',async()=>{
  const f=await fixture();const abort=new AbortController();const polling=f.read(f.cursor,'wait=60',abort.signal);
@@ -188,12 +213,13 @@ it.each(['timeout','access loss','subscription error'] as const)('releases accou
   for(let index=0;index<4;index++)await expect(f.read(f.cursor,'wait=1')).rejects.toThrow('subscription failed');
   failure.mockRestore();
  }else{
-  const waiting=Array.from({length:4},()=>f.read(f.cursor,'wait=1'));
+  const clock=virtualClock();const waiting=Array.from({length:4},()=>f.read(f.cursor,'wait=1'));
   if(reason==='access loss'){
    await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));
    await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[f.doc.id]);
   }
-  for(const response of await Promise.all(waiting))expect(response.status).toBe(reason==='timeout'?200:404);
+  for(const response of await clock.until(Promise.all(waiting)))expect(response.status).toBe(reason==='timeout'?200:404);
+  vi.useRealTimers();
   if(reason==='access loss')await (await getDb()).query('UPDATE artifacts SET deleted_at=NULL WHERE id=$1',[f.doc.id]);
  }
  const controllers=Array.from({length:4},()=>new AbortController());const polling=controllers.map(c=>f.read(f.cursor,'wait=60',c.signal));
@@ -228,26 +254,27 @@ it.each(['viewer','editor'] as const)('revokes a group %s ongoing private monito
  await db.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)',['grp_monitor',member.userId,role]);
  await db.query("UPDATE artifacts SET visibility='private',user_id=NULL,group_id='grp_monitor' WHERE id=$1",[f.doc.id]);
  const baseline=await f.read('now','wait=0',undefined,f.doc.id,member.token);expect(baseline.status).toBe(200);
- const cursor=(await baseline.json()).next_cursor;const polling=f.read(cursor,'wait=3',undefined,f.doc.id,member.token);
+ const cursor=(await baseline.json()).next_cursor;const clock=virtualClock();const polling=f.read(cursor,'wait=3',undefined,f.doc.id,member.token);
  await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));await db.query('DELETE FROM group_members WHERE user_id=$1',[member.userId]);
- expect((await polling).status).toBe(404);expect(live.liveChannelCount()).toBe(0);
+ expect((await clock.until(polling)).status).toBe(404);expect(live.liveChannelCount()).toBe(0);
  expect((await f.read(cursor,'wait=0',undefined,f.doc.id,member.token)).status).toBe(404);
 });
 
 it('spends a handful of statements on an idle ten second wait, not three per second',async()=>{
- const f=await fixture();
- const idle=await measureQueries(()=>readCommentChangesFor(identityForUser(f.token.userId, f.token.id),f.doc.id,{after:f.cursor,limit:100,waitSeconds:10,signal:new AbortController().signal}));
+ const f=await fixture();const clock=virtualClock();
+ const idle=await clock.until(measureQueries(()=>readCommentChangesFor(identityForUser(f.token.userId, f.token.id),f.doc.id,{after:f.cursor,limit:100,waitSeconds:10,signal:new AbortController().signal})));
  expect(idle.value).toMatchObject({events:[],has_more:false});
+ expect(clock.elapsed()).toBeGreaterThanOrEqual(10_000);
  expect(idle.stats.count).toBeLessThanOrEqual(10);
-},20000);
+});
 it('refuses a waiter whose access is revoked mid-wait within the access recheck interval, not at the deadline',async()=>{
  const f=await fixture();const stranger=await mintAccountToken('commenter');const db=await getDb();
  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.doc.id]);
  await db.query("INSERT INTO artifact_shares (artifact_id,email,user_id,role) VALUES ($1,$2,$3,'commenter')",[f.doc.id,stranger.email,stranger.userId]);
  const cursor=(await (await f.read('now','',undefined,f.doc.id,stranger.token)).json()).next_cursor;
- const polling=f.read(cursor,'wait=30',undefined,f.doc.id,stranger.token);
+ const clock=virtualClock();const polling=f.read(cursor,'wait=30',undefined,f.doc.id,stranger.token);
  await vi.waitFor(()=>expect(live.liveChannelCount()).toBe(1));const revoked=Date.now();
  await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.doc.id]);
- expect((await polling).status).toBe(404);
+ expect((await clock.until(polling)).status).toBe(404);
  expect(Date.now()-revoked).toBeLessThan(7000);expect(live.liveChannelCount()).toBe(0);
 },20000);

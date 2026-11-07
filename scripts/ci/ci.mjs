@@ -5,7 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { installFingerprint } from '../lib/lock-fingerprint.mjs';
-import { CI_JOBS, buildKey, checkCiResults, planCi } from '../lib/ci-plan.mjs';
+import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
 import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
 
 const env = process.env;
@@ -94,6 +94,11 @@ if (mode === 'plan') {
   const { key, inputs } = buildKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
   console.log(`build key ${key} over ${inputs} build inputs`);
+} else if (mode === 'test-builds-key') {
+  // The test-builds cache's key (scripts/lib/ci-plan.mjs `testBuildsKey`).
+  const { key, inputs } = testBuildsKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
+  console.log(`test-builds key ${key} over ${inputs} inputs`);
 } else if (mode === 'type-info') {
   // THE ROOT TYPE CHECK'S INCREMENTAL STATE, from the newest `tsgo-buildinfo` artifact any run of this
   // repository uploaded (pr-fast.yml's `types` job and main's `warm-caches`): the native compiler's build info
@@ -127,5 +132,5 @@ if (mode === 'plan') {
     console.log(`No type check build info (${error.message}); the type check runs cold.`);
   }
 } else {
-  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint, build-key or type-info');
+  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint, build-key, test-builds-key or type-info');
 }

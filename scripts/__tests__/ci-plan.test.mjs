@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
-import { CI_JOBS, checkCiResults, isBuildInput, planCi } from '../lib/ci-plan.mjs';
+import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
@@ -250,7 +250,9 @@ describe('CI avoids duplicate integration setup', () => {
   });
   it('provisions Chromium, Postgres and MySQL only for the integration project, in its own job beside the node shards', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.steps.filter(step => step.id === 'playwright' || /playwright install|docker pull|test:integration/.test(step.run ?? ''))).toEqual([]);
+    // No api or api-isolated file launches Chromium (the whole project passes without a browser installed), so the api
+    // shards provision none either.
+    for (const job of ['node', 'api']) expect(jobs[job].steps.filter(step => step.id === 'playwright' || /playwright|docker pull|test:integration/.test(step.run ?? '')), job).toEqual([]);
     const steps = jobs.integration.steps;
     expect(jobs.integration.needs).toEqual(['plan']);
     expect(jobs.integration.if).toBe("needs.plan.outputs.integration == 'true'");
@@ -295,7 +297,43 @@ describe('CI avoids duplicate integration setup', () => {
       expect(restore, name).toBeLessThan(steps.findIndex(step => (step.run ?? '').includes(runs)));
       expect(steps[restore].with.path).toContain('services/app/lib/build-assets');
     }
-    expect(jobs['warm-caches'].steps.some(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v1-'))).toBe(true);
+    expect(jobs['warm-caches'].steps.some(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v2-'))).toBe(true);
+  });
+  // The server-reader marker lists the hosted libraries as outputs: an entry without them is a miss on every shard,
+  // which rebuilt both (~10s) at the start of every api, node, ui and integration shard (run 42349357334).
+  it('caches the test builds whole, under the key of what they are built from, in every workflow that reads them', () => {
+    const steps = ['ci.yml', 'pr-fast.yml'].flatMap(file => Object.entries(yaml.parse(readFileSync(path.join(root, '.github/workflows', file), 'utf8')).jobs)
+      .map(([name, job]) => [`${file} ${name}`, job.steps]));
+    let entries = 0;
+    for (const [name, jobSteps] of steps) {
+      const caches = jobSteps.filter(step => String(step.with?.key ?? '').startsWith('test-builds-'));
+      for (const cache of caches) {
+        entries++;
+        expect(cache.with.path.split('\n').filter(Boolean), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries']);
+        expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
+        if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
+        const key = jobSteps.findIndex(step => step.id === 'test-builds-key');
+        expect(key, name).toBeGreaterThan(-1);
+        expect(key, name).toBeLessThan(jobSteps.indexOf(cache));
+        expect(jobSteps[key].run, name).toBe('node scripts/ci/ci.mjs test-builds-key');
+      }
+    }
+    expect(entries).toBeGreaterThanOrEqual(10);
+  });
+  it('keys the test builds on their own inputs, so a change elsewhere keeps the entry and one here moves it', () => {
+    const line = (file, id = 'a'.repeat(40)) => `100644 ${id} 0\t${file}`;
+    const base = ['services/app/lib/html-components/tabs.ts', 'services/contracts/src/index.ts', 'services/app/lib/libraries/registry.json',
+      'services/app/scripts/build-libraries.mjs', 'scripts/lib/html-components-build.mjs', 'package-lock.json', 'services/app/server/app.ts',
+      'services/app/lib/html-components/__tests__/tabs.test.ts'].map(file => line(file)).join('\n');
+    const { key, inputs } = testBuildsKey(base);
+    expect(inputs).toBe(6);
+    // Outside the inputs (server code, tests): the same key.
+    expect(testBuildsKey(base.replace(line('services/app/server/app.ts'), line('services/app/server/app.ts', 'b'.repeat(40)))).key).toBe(key);
+    expect(testBuildsKey(base.replace(line('services/app/lib/html-components/__tests__/tabs.test.ts'), line('services/app/lib/html-components/__tests__/tabs.test.ts', 'b'.repeat(40)))).key).toBe(key);
+    // A component, a contract, a library or a build tool: a new key.
+    for (const file of ['services/app/lib/html-components/tabs.ts', 'services/contracts/src/index.ts', 'services/app/lib/libraries/registry.json', 'services/app/scripts/build-libraries.mjs', 'package-lock.json']) {
+      expect(testBuildsKey(base.replace(line(file), line(file, 'c'.repeat(40)))).key, file).not.toBe(key);
+    }
   });
 });
 
