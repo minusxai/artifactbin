@@ -14,7 +14,7 @@ it('keeps the Prism core manual on browser load and renders only through the exp
   expect(renderCodeBlock('const draft = 2;', 'js')).toContain('mx-code-token-keyword');
 });
 
-it('matches reader parent font sizing for inline, plain fenced, and highlighted code', async () => {
+it('sizes inline code at .9em of the reader parent and fenced and highlighted code at its size', async () => {
   const previousSize = document.body.style.fontSize;
   document.body.style.fontSize = '16px';
   const markdown = document.createElement('af-markdown') as AfMarkdown;
@@ -24,7 +24,7 @@ it('matches reader parent font sizing for inline, plain fenced, and highlighted 
     const inline = markdown.querySelector('p code')!;
     const [plain, highlighted] = markdown.querySelectorAll('pre code');
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(getComputedStyle(inline).fontSize).toBe('16px');
+    expect(getComputedStyle(inline).fontSize).toBe('14.4px'); // the Markdown stylesheet's inline code: .9em
     expect(getComputedStyle(plain!).fontSize).toBe('16px');
     expect(getComputedStyle(highlighted!).fontSize).toBe('16px');
   } finally {

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 import { replaceDocument } from '@/solid/lib/document-navigation';
+import { artifactStarter } from '@/lib/workspace/artifact-starters';
 
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
@@ -57,7 +58,8 @@ it('starts one doc and leaves the Solid route for it', async () => {
   await waitFor(() => expect(calls.filter(call => call.url === '/api/my/artifacts')).toHaveLength(1));
   const [create] = calls.filter(call => call.url === '/api/my/artifacts');
   expect(create!.method).toBe('POST');
-  expect(JSON.parse(create!.body!)).toMatchObject({ template: 'doc', visibility: 'private', html: expect.stringContaining('data-af-editable="rich"') });
+  // The route sends the doc starter itself (lib/workspace artifactStarter), so its visibility and HTML are the starter's.
+  expect(JSON.parse(create!.body!)).toEqual(artifactStarter('doc'));
   expect(calls.some(call => call.url === '/api/start')).toBe(false);
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1'));
 });
