@@ -8,7 +8,10 @@ import {inspectPage} from './toolbox-check-inspect.mjs';
 import {checkTarget, summarizeCheck} from './toolbox-check-script.mjs';
 
 // Local: a disposable headless Chromium that can only reach the preview's own origin.
-export async function checkLocal({target, viewports, steps = '', capture = false}, chromium) {
+export async function checkLocal(
+  {target, viewports, steps = '', capture = false, slides = false},
+  chromium
+) {
   const selected = checkTarget(target);
   if (selected.mode !== 'local') throw Error('Local checks require a loopback preview URL.');
   // launch() creates a disposable temporary profile; never attach to an existing browser or
@@ -38,7 +41,8 @@ export async function checkLocal({target, viewports, steps = '', capture = false
         checks.push(
           await inspectPage(
             page,
-            {target, viewport, capture, compareReload: viewport === viewports[0]},
+            {target, viewport, capture, compareReload: viewport === viewports[0],
+              slides: slides && viewport === viewports[0]},
             steps ? new AsyncFunction('page', 'step', steps) : null
           )
         );

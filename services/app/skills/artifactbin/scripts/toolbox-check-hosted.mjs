@@ -26,7 +26,7 @@ function origin(value) {
 // closed.
 export async function checkHosted(
   {target, viewports, steps = '', viewer, server, token = undefined, requester = undefined,
-    capture = false, busyDelayMs = 5000},
+    capture = false, slides = false, busyDelayMs = 5000},
   fetcher = fetch
 ) {
   server = origin(server);
@@ -104,7 +104,9 @@ export async function checkHosted(
           viewports: [viewport],
           steps,
           capture,
-          compareReload: viewport === viewports[0]
+          compareReload: viewport === viewports[0],
+          // A deck's slides, once: on the first viewport of a run that asks for them.
+          slides: slides && viewport === viewports[0]
         }),
         ...(viewer ? {viewer} : {})
       };

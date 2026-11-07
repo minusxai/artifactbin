@@ -5,7 +5,9 @@
  */
 
 /** The document's full height at the viewport's width, up to 8000 px. A deck, a page that fits
- * and one that cannot be captured whole keep the viewport; `partial` says why it is not whole. */
+ * and one that cannot be captured whole keep the viewport; `partial` says why it is not whole.
+ * With options.slides a deck adds each laid-out slide (`slides`; `slidesPartial` says why any is
+ * missing). */
 export async function capture(page, options, deck) {
   const {width, height: tall} = options.viewport;
   const frame = page.mainFrame().locator('iframe[data-mx-document-frame]');
@@ -24,7 +26,9 @@ export async function capture(page, options, deck) {
   // Hosted, page.evaluate runs in the reader's document frame, which scrolls inside the viewport.
   const measure = () =>
     page.evaluate(() => [document.documentElement.scrollHeight, innerHeight]).catch(() => [0, 0]);
+  const frames = () => new Promise(go => requestAnimationFrame(() => requestAnimationFrame(go)));
   const [full, inner] = await measure();
+  if (deck && options.slides) return {...(await first()), ...(await slides())};
   if (deck || full <= inner) return first();
   const height = Math.min(full, 8000),
     extra = {height, ...(full > height ? {partial: 'capped at 8000 px'} : {})};
@@ -33,7 +37,6 @@ export async function capture(page, options, deck) {
     // The frame fills the viewport under the reader's bar: grow the viewport by what it scrolls.
     await page.setViewportSize({width, height: tall + height - inner});
     grown = true;
-    const frames = () => new Promise(go => requestAnimationFrame(() => requestAnimationFrame(go)));
     await page.evaluate(frames);
     // A page sized by the viewport (100vh sections) grows with the frame: it is never whole.
     if ((await measure())[0] > full + 2)
@@ -47,4 +50,35 @@ export async function capture(page, options, deck) {
   return result.base64.length > 5 * 1024 * 1024
     ? first('first viewport only: the whole page is too large to return')
     : result;
+  // Each slide the slides probe counts, as slide export draws it (deck chrome hidden), at the
+  // viewport's size: hosted, the frame first grows by the reader's bar. Up to 20 slides, 6 MB
+  // of PNG and 5 s, so the result fits what a hosted script returns within its time.
+  async function slides() {
+    if (hosted && inner < tall) {
+      await page.setViewportSize({width, height: 2 * tall - inner});
+      await page.evaluate(frames);
+    }
+    const all = page.locator('[data-af-slide]');
+    const laid = await all.evaluateAll(els => els.flatMap((el, i) => {
+      const box = el.getBoundingClientRect();
+      return !el.closest('[data-af-deck-chrome]') && box.width > 1 && box.height > 1 ? [i] : [];
+    }));
+    const style = '[data-af-deck-chrome],[data-af-deck-chrome] *{visibility:hidden!important}';
+    const shots = [], end = Date.now() + 5000;
+    let size = 0, why = '';
+    for (const i of laid.slice(0, 20)) {
+      if (Date.now() > end) { why = ': out of time'; break; }
+      try {
+        const png = Buffer.from(await all.nth(i).screenshot({style, timeout: 1500}));
+        const base64 = png.toString('base64');
+        if ((size += base64.length) > 6 * 1024 * 1024) { why = ': the rest are too large'; break; }
+        shots.push({base64, width: png.readUInt32BE(16), height: png.readUInt32BE(20)});
+      } catch (error) {
+        why = ': ' + String(error.message).split('\n')[0].slice(0, 120);
+        break;
+      }
+    }
+    const partial = `first ${shots.length} of ${laid.length} slides${why}`;
+    return {slides: shots, ...(shots.length < laid.length ? {slidesPartial: partial} : {})};
+  }
 }

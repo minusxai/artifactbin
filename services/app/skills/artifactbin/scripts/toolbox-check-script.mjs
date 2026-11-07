@@ -84,11 +84,14 @@ export function checkScript({
   steps = '',
   timeoutMs = 2500,
   capture = false,
-  compareReload = false
+  compareReload = false,
+  slides = false
 }) {
   if (!viewports || viewports.length !== 1)
     throw Error('Each hosted execution checks one viewport.');
-  const options = {target, viewport: viewports[0], timeoutMs, hosted: true, capture, compareReload};
+  const options = {
+    target, viewport: viewports[0], timeoutMs, hosted: true, capture, compareReload, slides
+  };
   return (
     `const page=await context.newPage();try{return await (${inspectSource()})(page,` +
     `${JSON.stringify(options)},${steps ? `async(page,step)=>{${steps}\n}` : 'null'});}` +

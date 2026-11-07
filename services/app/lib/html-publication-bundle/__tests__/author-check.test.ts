@@ -217,6 +217,59 @@ it('captures the document at its full height, capped at 8000 px, and keeps a dec
  }
 });
 
+// A deck's check also saves each laid-out slide (deck chrome hidden) at the viewport's size, so an agent sees every
+// slide without exporting it: hosted, the frame grows by the reader's bar first. Capped at 20 slides and at what a
+// hosted script may return, saying so.
+it('captures each laid-out slide of a deck at the viewport size, after its viewport shot, capped and saying so',async()=>{
+ const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const png=(width:number,height:number,bytes=64)=>{const b=Buffer.alloc(bytes);b.writeUInt32BE(width,16);b.writeUInt32BE(height,20);return b;};
+ const fake=({count,bar=0,chrome=0,bytes=64,fail=0}:{count:number;bar?:number;chrome?:number;bytes?:number;fail?:number})=>{
+  const calls:any[]=[];let height=0;
+  // Laid-out slides first, then rail miniatures inside deck chrome, which are not slides of their own.
+  const els=[...Array.from({length:count},()=>({closest:()=>null,getBoundingClientRect:()=>({width:1200,height:630})})),
+   ...Array.from({length:chrome},()=>({closest:()=>({}),getBoundingClientRect:()=>({width:120,height:63})}))];
+  const slides={evaluateAll:async(fn:Function)=>fn(els),nth:(n:number)=>({screenshot:async(options:{style?:string})=>{
+   calls.push({slide:n,style:options.style});if(fail&&n===fail)throw Error('Timeout 1500ms exceeded');return png(1200,height-bar,bytes);}})};
+  const frame={waitFor:async()=>{},count:async()=>bar?1:0,screenshot:async()=>png(1200,height)};
+  const page={url:()=>'https://example.test/a/DECK12',on:()=>{},setDefaultTimeout:()=>{},waitForFunction:async()=>{},goto:async()=>{},
+   setViewportSize:async(size:{width:number;height:number})=>{calls.push({resize:size});height=size.height;},
+   evaluate:async()=>[height-bar,height-bar],mainFrame:()=>({locator:()=>frame}),
+   locator:(selector:string)=>selector==='[data-af-slide]'?slides:({waitFor:async()=>{},innerText:async()=>'Ready',
+    evaluate:async(fn:Function)=>fn.name==='slides'?{count}:{viewport:1200,content:1200,fits:true}}),
+   screenshot:async(options:unknown)=>{calls.push({page:options});return png(1200,height);}};
+  return {page,calls};
+ };
+ type Deck={base64:string;slides?:{base64:string;width:number;height:number}[];slidesPartial?:string};
+ const run=async(spec:Parameters<typeof fake>[0],hosted:boolean,slides=true)=>{const {page,calls}=fake(spec);
+  const result=await inspectPage(page,{target:'/a/DECK12',viewport:{width:1200,height:630},hosted,capture:true,slides});
+  return {calls:calls.slice(1),screenshot:(result as {screenshot?:Deck}).screenshot!,error:(result as {screenshotError?:string}).screenshotError};};
+ // Hosted: the reader's viewport first, then the frame grows by the 48 px bar so each slide is 1200x630.
+ const hosted=await run({count:6,bar:48,chrome:6},true);
+ expect(hosted.error).toBeUndefined();
+ expect(hosted.calls.slice(0,2)).toEqual([{page:{fullPage:false,timeout:1000}},{resize:{width:1200,height:678}}]);
+ expect(hosted.calls.slice(2).map((call:any)=>call.slide)).toEqual([0,1,2,3,4,5]);
+ expect(hosted.calls[2].style).toMatch(/\[data-af-deck-chrome\][^{]*\{[^}]*visibility:hidden/);
+ expect(hosted.screenshot.slides).toHaveLength(6);expect(hosted.screenshot.slides![0]).toMatchObject({width:1200,height:630});
+ expect(hosted.screenshot).not.toHaveProperty('slidesPartial');
+ // A local preview has no bar: no resize.
+ const local=await run({count:3},false);
+ expect(local.calls.filter((call:any)=>call.resize)).toEqual([]);expect(local.screenshot.slides).toHaveLength(3);
+ // At most 20 slides, saying so.
+ const many=await run({count:24},false);
+ expect(many.screenshot.slides).toHaveLength(20);expect(many.screenshot.slidesPartial).toBe('first 20 of 24 slides');
+ // Never past what a hosted script may return (8 MB): the slides that fit, and why the rest are missing.
+ const heavy=await run({count:10,bytes:1024*1024},true);
+ expect(heavy.screenshot.slides!.length).toBeLessThan(10);expect(heavy.screenshot.slides!.length).toBeGreaterThan(0);
+ expect(heavy.screenshot.slidesPartial).toMatch(new RegExp(`^first ${heavy.screenshot.slides!.length} of 10 slides: .*too large`));
+ // A slide that cannot be captured stops the slides, never the viewport shot.
+ const stuck=await run({count:4,fail:2},false);
+ expect(stuck.error).toBeUndefined();expect(stuck.screenshot.base64).toBeTruthy();
+ expect(stuck.screenshot.slides).toHaveLength(2);expect(stuck.screenshot.slidesPartial).toMatch(/^first 2 of 4 slides: .*Timeout/);
+ // Without the option (a guest or cleanup run, or a later viewport) a deck keeps only its viewport shot.
+ const plain=await run({count:6,bar:48},true,false);
+ expect(plain.calls).toEqual([{page:{fullPage:false,timeout:1000}}]);expect(plain.screenshot).not.toHaveProperty('slides');
+});
+
 it('measures the page only after the reader loading placeholder is gone',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  let busy=true;const order:string[]=[];

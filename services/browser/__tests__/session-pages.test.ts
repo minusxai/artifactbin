@@ -251,3 +251,33 @@ it('saves a local preview at its full height, capped at 8000 px and saying so', 
   const capped=await shot(20000);expect(png(capped.screenshot!.base64)).toEqual({width:800,height:8000});expect(capped.screenshot).toMatchObject({height:8000,partial:'capped at 8000 px'});
  }finally{await browser.close();}
 },30_000);
+
+// A deck's check saves each slide at the deck viewport: in the reader the frame sits under a 48 px bar, so a
+// 100vh slide is 48 px short of the viewport until the frame grows by it. Deck chrome (the rail's miniatures,
+// the toolbar) is neither counted nor drawn.
+it('saves each slide of a framed deck at the deck viewport, without its deck chrome', async () => {
+ const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
+ const slide=(n:number)=>`<section data-af-slide style="height:100vh;display:flex;align-items:center;justify-content:center;background:hsl(${n*50} 70% 50%)"><h2>Slide ${n}</h2></section>`;
+ const deck=`<nav data-af-deck-chrome="rail" style="position:fixed;left:0;top:0;width:120px;height:100%;background:#000">${slide(9).replace('100vh','63px')}</nav>`+
+  Array.from({length:6},(_,n)=>slide(n+1)).join('');
+ worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
+  const url=new URL(request.url);
+  if(url.origin===BASE&&url.pathname==='/a/deck')return html(`<!doctype html><html><body style="margin:0"><header style="height:48px">App bar</header><div style="position:fixed;inset:0;top:48px;display:flex;flex-direction:column"><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/deck" style="display:block;flex:1 1 0;min-height:0;width:100%;border:0"></iframe></div></body></html>`);
+  if(url.origin===DOC_ORIGIN&&url.pathname==='/deck')return html(`<!doctype html><html><body style="margin:0">${deck}</body></html>`);
+  return new Response('not found',{status:404});
+ }});
+ const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/deck',viewport:{width:1200,height:630},hosted:true,capture:true,slides:true},null);}finally{await checkPage.close();}`);
+ expect(out.error).toBeUndefined();
+ const result=out.result as Shot&{slides?:{count:number};screenshot?:{slides?:{base64:string;width:number;height:number}[];slidesPartial?:string}};
+ expect(result.screenshotError).toBeUndefined();expect(result.slides?.count).toBe(6);
+ // The reader's own viewport stays the first screenshot.
+ expect(png(result.screenshot!.base64)).toEqual({width:1200,height:630});
+ const slides=result.screenshot!.slides!;
+ expect(slides.map(s=>png(s.base64))).toEqual(Array.from({length:6},()=>({width:1200,height:630})));
+ expect(slides.map(({width,height})=>({width,height}))).toEqual(Array.from({length:6},()=>({width:1200,height:630})));
+ expect(result.screenshot!.slidesPartial).toBeUndefined();
+ // The rail is hidden while a slide is drawn: its left edge shows the slide's own colour, not the rail's black.
+ const {default:sharp}=await import('sharp');
+ const {data}=await sharp(Buffer.from(slides[0]!.base64,'base64')).raw().toBuffer({resolveWithObject:true});
+ expect([data[0],data[1],data[2]]).not.toEqual([0,0,0]);
+},30_000);
