@@ -10,8 +10,8 @@ number computed by read-only SQL (_sql). Usage: and Gotchas: are above DATA; kee
 <link rel="af-dataset" data-af-name="files" href="ref:FILES_ID">
 <link rel="af-dataset" data-af-name="imports" href="ref:IMPORTS_ID">
 <script type="module" id="page-data">
-// Usage: node scripts/new-codebase-report.mjs --title "NAME" from inside the repository (it
-//   publishes commits, files and imports as datasets and fills this page and steps.mjs in a
+// Usage: node scripts/new-codebase-report.mjs --repo DIR --title "NAME" (DIR the repository;
+//   it publishes commits, files and imports as datasets and fills this page and steps.mjs in a
 //   project directory outside the repository); read the facts it prints, then edit only DATA:
 //   rewrite each [bracketed] text as what the reader should do, with the numbers that show it;
 //   then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
