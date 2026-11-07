@@ -15,7 +15,11 @@ import {archiveFor} from '@/lib/skills';
 // 1.73 MiB: the codebase report (examples/codebase-report*, new-codebase-report.mjs and its git gatherer, ~28 KB
 // stored) is the report-from-data starter for agents working inside a repository: an agent asked to report on
 // a codebase published it in 142 s, 31 turns. The shared-app/shared-list removal frees more than that.
-const SKILL_ARCHIVE_MAX_BYTES=1.73*1024*1024;
+// 1.75 MiB: main sat under 1 KB below 1.73; the deep CSV dashboard (~17 KB stored: its renderer
+// examples/csv-dashboard.mjs with linked _sql filters, a map, a heatmap and small multiples, its steps' linked-filter
+// check and the gen-deliveries.mjs generator in place of repairs.csv) is where every CSV page starts; the dashboard
+// eval passed 3/3 with it as on main. The shared-app/shared-list removal also covers this.
+const SKILL_ARCHIVE_MAX_BYTES=1.75*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
