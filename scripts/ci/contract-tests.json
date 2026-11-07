@@ -1,4 +1,5 @@
 [
+  "services/app/lib/agent-copy/__tests__/agent-starter-consistency.test.ts",
   "services/app/lib/dataset-graphql/__tests__/dataset-graphql-budget.test.ts",
   "services/app/lib/document-serving/__tests__/native-html-publication-bundle.test.ts",
   "services/app/lib/html-backends/__tests__/native-acceptance.test.ts",
