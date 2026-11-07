@@ -15,13 +15,17 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   omitted, the command reads the thread's current revision itself. Write commands also take
   --request FILE (exclusive saved journal) and --resume FILE (replay it exactly; nothing else may
   change). list --status defaults to open; --limit 1-100 (default 20); watch --wait SECONDS
-  (default 240). Common: --server, --json, --help.
+  (default 240; at least 60 with --next). Common: --server, --json, --help.
 Watch --next: Claude Code: start it with the Bash tool's run_in_background first, then send your
   reply as your last message and end your turn; you are woken when it prints. Other harnesses:
-  send your reply, then run it as a blocking command with a shell timeout of at least 300000 ms.
-  It prints the next comments from someone else (one JSON line each; a first call also prints
-  threads still waiting for your answer) and exits 0: handle what it printed, then start it again
-  the same way. After 4 minutes it prints "no new comments yet: run the same watch --next command
+  a message can carry text and a command together, so write your reply as the text of the message
+  that runs it (no final message is needed), and run it in the foreground with its
+  default wait and a shell timeout of at least 300000 ms. It returns as soon as someone comments,
+  and on its own within 4 minutes: handle what it printed and run it again until it says to stop
+  watching. Watching is part of every task, however short the reply. It prints the next comments
+  from someone else (one JSON line each; a first call also prints threads still waiting for your
+  answer) and exits 0. After 4 minutes it
+  prints "no new comments yet: run the same watch --next command
   again". After 15 minutes with no comment, reply or publish from anyone it prints "no new
   comments for 15 minutes: stop watching and end your turn"; a later --next starts a new 15
   minutes. A second --next on the same page takes over from the running one, which stops. It
@@ -111,10 +115,11 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     // structure.
     return values.json || values.output ? page : listText(page);
   }
-  // watch streams the comment feed until interrupted (or --once drains the backlog); --next
-  // returns after the next comment from someone else. Its checkpoint lives beside the saved
-  // sign-in, never in the working directory: a loop that changes directory must not baseline twice.
+  // watch streams comments (--once drains the backlog; --next returns after the next one); its
+  // checkpoint lives beside the saved sign-in, so a loop that changes directory never rebaselines.
   if (sub === 'watch') {
+    if (values.next && Number(values.wait ?? 240) < 60) throw new ToolError('wait_too_short',
+      '--next waits for the next comment: drop --wait; it returns as soon as someone comments.', 2);
     const controller = new AbortController(), stop = () => controller.abort();
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, stop);
     let watchValues = values;
@@ -150,11 +155,8 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
       typeof anchor.nodeId !== 'string' ||
       typeof anchor.quote !== 'string'
     )
-      throw new ToolError(
-        'invalid_anchor',
-        'Provide a native html-node anchor with canonical revision/nodeId/quote.',
-        2
-      );
+      throw new ToolError('invalid_anchor',
+        'Provide a native html-node anchor with canonical revision/nodeId/quote.', 2);
   // react: PUT of the desired state, idempotent, so retrying the same call is safe.
   } else if (sub === 'react') {
     requireFlags(values, ['comment', 'active']);

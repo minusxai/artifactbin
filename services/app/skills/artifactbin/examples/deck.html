@@ -14,8 +14,9 @@
 // Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
 //   traction, business model, competition, ask); N topics means N slides. Types: cover is the
 //   problem slide {label "Problem · Company", title ≤40 characters (default: the <title>), text one
-//   line, stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y}] or dataset columns x, y
-//   (y summed per x, sorted by the column order, default x), format ".1f", unit "$#B"}, flow
+//   line, stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y,series?}] or dataset
+//   columns x, y (summed per x, in column order; y:['now','goal'] and names {now:'Today'} compare
+//   series), format ".1f", unit "$#B"}, flow
 //   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit, from
 //   (traction chart id), milestone (target only; shown as "last traction value → target"), items≤3
 //   [{label,amount} or {label,pct}]} (shows sum, shares; titled from these). Titles ≤2 lines.
@@ -80,22 +81,22 @@ import {client,gql} from '@afbin/apollo';
 const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
 // Chart slides naming dataset columns first read every row (1000 a page) and sum y per x.
 const DATASET=window.DATA?.dataset;
-for(const s of DATASET?SLIDES.filter(s=>s.type==='chart'&&typeof s.y==='string'):[])try{
-  const by=s.order??s.x,sums=new Map(),query=gql([`query Rows($o:Int!){${DATASET}(order_by:{${by}:`+
-    `asc},limit:1000,offset:$o){_id ${[...new Set([s.x,s.y,by])].join(' ')}}}`]); // 1-string array
+for(const s of DATASET?SLIDES.filter(s=>s.type==='chart'&&s.y&&!s.data):[])try{ // y: 1+ columns
+  const ys=[s.y].flat(),by=s.order??s.x,sums=new Map(),query=gql([`query Rows($o:Int!){${DATASET}`+
+    `(order_by:{${by}:asc},limit:1000,offset:$o){_id ${[...new Set([s.x,...ys,by])].join(' ')}}}`]);
   for(let o=0,page=[];!o||page.length===1000;o+=1000){const r=await client.query({query,
     variables:{o}});if(r.errors?.length)throw Error(r.errors[0].message);page=r.data[DATASET];
-    for(const row of page)if(Number.isFinite(row[s.y]))sums.set(String(row[s.x]),
-      (sums.get(String(row[s.x]))??0)+row[s.y]);}
-  s.data=[...sums].map(([x,y])=>({x,y}));}catch(e){s.data=[];s.error=s.label+': '+e.message;}
+    for(const row of page)for(const y of ys)if(Number.isFinite(row[y]))sums.set(JSON.stringify(
+      [String(row[s.x]),y]),(sums.get(JSON.stringify([String(row[s.x]),y]))??0)+row[y]);}
+  s.data=[...sums].map(([k,y])=>{const [x,c]=JSON.parse(k);return {x,y,...ys[1]?{series:s.names?.[c]
+    ??c}:{}};});}catch(e){s.data=[];s.error=s.label+': '+e.message;}
 const make=(node,attrs,text)=>{for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);
   if(text!==undefined)node.textContent=text;return node;};
 const el=(tag,id,attrs={},text)=>make(document.createElement(tag),{...attrs,'data-af-id':id},text);
 const svgEl=(t,a,x)=>make(document.createElementNS('http://www.w3.org/2000/svg',t),a,x);
 const list=(id,items)=>{const ul=el('ul',id,{class:'items t-body'});
   items.slice(0,3).forEach((item,n)=>ul.append(el('li',`${id}-${n}`,{},item)));return ul;};
-function flow(s){
-  const steps=s.steps.slice(0,4),w=900/steps.length;
+function flow(s){const steps=s.steps.slice(0,4),w=900/steps.length;
   const svg=svgEl('svg',{viewBox:'0 0 900 220',role:'img','aria-label':steps.join(' to ')});
   steps.forEach((step,n)=>{
     const x=n*w+10,mid=n===Math.floor(steps.length/2),ink=mid?'var(--ds-on-red)':'currentColor';
@@ -176,12 +177,14 @@ async function drawCharts(){views.forEach(view=>view.finalize());
     // Labels use the chart's decimals, or two significant digits under 1 ("$0.28B").
     const dp=+(s.format?.match(/\.(\d)/)?.[1]??0),line=s.mark==='line',end=s.data.length-1,num=y=>
       Math.abs(y)<1&&y?String(+y.toPrecision(2)):y.toFixed(dp),values=s.data.map((d,i)=>({...d,
-        label:!line||!i||i===end?(s.unit??'#').replace('#',num(d.y)):''}));
-    const spec=compile({width:'container',height:240,autosize:{type:'fit',contains:'padding'},
-      background:'transparent',data:{values},layer:[{mark:line?{type:'line',point:true,color:red,
-        strokeWidth:3}:{type:'bar',color:red,cornerRadiusEnd:2}},{mark:{type:'text',dy:-10,
-        color:ink,fontSize:14},encoding:{text:{field:'label'}}}],
-      encoding:{x:{field:'x',type:'ordinal',sort:null,title:null,axis:{labelAngle:0}},
+        label:!line||!i||i===end||d.series?(s.unit??'#').replace('#',num(d.y)):''}));
+    const multi=values.some(d=>d.series),hue=multi?{}:{color:red},spec=compile({width:'container',
+      height:240,autosize:{type:'fit',contains:'padding'},background:'transparent',data:{values},
+      layer:[{mark:line?{type:'line',point:true,strokeWidth:3,...hue}:{type:'bar',cornerRadiusEnd:2,
+        ...hue}},{mark:{type:'text',dy:-10,color:ink,fontSize:14},encoding:{text:{field:'label'}}}],
+      encoding:{...multi?{color:{field:'series',type:'nominal',sort:null,scale:{range:[red,ink]},
+        legend:{orient:'top',title:null}},...line?{}:{xOffset:{field:'series',sort:null}}}:{},
+        x:{field:'x',type:'ordinal',sort:null,title:null,axis:{labelAngle:0}},
         y:{field:'y',type:'quantitative',title:s.yTitle??null,axis:{format:s.format}},
         tooltip:[{field:'x',type:'nominal',title:s.label},{field:'y',type:'quantitative',
           title:s.yTitle,format:s.format}]},
