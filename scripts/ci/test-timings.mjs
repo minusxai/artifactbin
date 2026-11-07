@@ -28,8 +28,8 @@ export const JOBS = {
   node: { projects: ['node'], count: 6 },
   api: { projects: ['api', 'api-isolated'], count: 4 },
   ui: { projects: ['ui', 'islands'], count: 2 },
-  'pr-api': { projects: ['api', 'api-isolated'], count: 20 },
-  'pr-ui': { projects: ['ui', 'islands'], count: 4 },
+  'pr-api': { projects: ['api', 'api-isolated'], count: 22 },
+  'pr-ui': { projects: ['ui', 'islands'], count: 5 },
 };
 
 /** Per-file times (ms) by project from Vitest log text. */
