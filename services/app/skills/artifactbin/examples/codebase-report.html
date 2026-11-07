@@ -90,12 +90,12 @@ window.DATA = {
 *{box-sizing:border-box}body{line-height:1.6}h1{max-width:20ch;margin:12px 0 24px}
 main{max-width:1080px;margin:auto;padding:clamp(20px,5vw,72px)}p,li{max-width:70ch}
 .muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
-[role=status]{min-height:1.6em}summary{cursor:pointer}
-.number,td.n{font-variant-numeric:tabular-nums}td.n{text-align:right;white-space:nowrap}
+[role=status]{min-height:1.6em}summary{cursor:pointer}a{color:var(--primary)}
+.number,.n{font-variant-numeric:tabular-nums}.n{text-align:right}td.n{white-space:nowrap}
 .rule{border-top:1px solid var(--border);padding-top:24px;margin-top:32px;min-width:0}
 .chart{width:100%;min-height:280px;overflow:auto}.chart svg{max-width:100%;height:auto}
 table{border-collapse:collapse;width:100%;margin-top:12px}details{overflow-x:auto}
-td:first-child{overflow-wrap:anywhere;min-width:14ch}
+td:first-child{overflow-wrap:anywhere;min-width:14ch}.chart[data-drawn]{min-height:0}
 td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
 .chart{--pele-bg:var(--background);--pele-fg:var(--foreground);--pele-line:var(--foreground);
   --pele-muted:var(--muted-foreground);--pele-surface:var(--card);--pele-border:var(--border);
@@ -125,23 +125,23 @@ const variables=Object.fromEntries(names.map((name,i)=>[`s${i}`,D.queries[name]]
 let answers={},views=[],diagrams=[];
 const h={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
 // Script-made nodes take data-af-ids from DATA ids and row positions, stable on every render.
-const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
-  if(text!==undefined)n.textContent=text;return n;};
+const node=(tag,id,text,cls)=>{const n=document.createElement(tag);n.dataset.afId=id;
+  if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 function table(c){const id=`chart-${c.id}-table`,rows=h.rows(c.query).slice(0,c.rows??50);
-  const box=node('details',id+'-box'),t=node('table',id),cols=Object.keys(rows[0]??{});
-  box.open=!!c.open;box.append(node('summary',id+'-summary',c.rows?`Top ${rows.length}`:
-    'Values'),t);
-  const head=node('tr',id+'-head');
-  head.append(...cols.map(col=>node('th',`${id}-${col}`,label(col))));
+  const box=node('details',id+'-box'),t=node('table',id),cols=Object.keys(rows[0]??{}),
+    head=node('tr',id+'-head'),num=col=>rows.some(row=>typeof row[col]==='number')?'n':'';
+  box.append(node('summary',id+'-summary',c.rows?`Top ${rows.length}`:'Values'),t);
+  box.open=!!c.open;head.append(...cols.map(col=>node('th',`${id}-${col}`,label(col),num(col))));
   t.append(head,...rows.map((row,i)=>{const tr=node('tr',`${id}-${i}`);
-    tr.append(...cols.map(col=>{const n=typeof row[col]==='number',
-      td=node('td',`${id}-${i}-${col}`,n?fmt(row[col]):row[col]);if(n)td.className='n';
-      return td;}));return tr;}));
+    tr.append(...cols.map(col=>{const n=typeof row[col]==='number';return node('td',
+      `${id}-${i}-${col}`,n?fmt(row[col]):row[col],n?'n':'');}));return tr;}));
   return box;}
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 function spec(c,rows){const ink=token('--foreground'),line=token('--border'),
   colors=[1,2,3,4,5].map(n=>token('--chart-'+n)).filter(Boolean),
-  encoding=structuredClone(c.spec.encoding??{});
+  encoding=structuredClone(c.spec.encoding??{}),
+  // A count's ramp is one hue, light or dark: the background tinted toward the first series.
+  tint=vega.interpolate('rgb')(token('--background'),colors[0]||ink);
   for(const channel of Object.values(encoding))
     if(channel.field)channel.title??=label(channel.field);
   const tooltip=Object.keys(rows[0]??{}).map(field=>({field,title:label(field),
@@ -149,8 +149,8 @@ function spec(c,rows){const ink=token('--foreground'),line=token('--border'),
   return {description:c.title,width:'container',height:280,background:'transparent',
     autosize:{type:'fit',contains:'padding'},data:{values:rows},...c.spec,
     encoding:{tooltip,...encoding},config:{view:{stroke:null},font:token('--font-body'),
-      mark:{color:colors[0]||ink},range:{category:colors,heatmap:[token('--muted')||line,
-        colors[0]||ink]},axis:{labelColor:ink,titleColor:ink,domainColor:line,tickColor:line,
+      mark:{color:colors[0]||ink},range:{category:colors,heatmap:[.2,.4,.6,.8,1].map(tint)},
+      axis:{labelColor:ink,titleColor:ink,domainColor:line,tickColor:line,
         gridColor:line,gridDash:[3,3],labelFontSize:11,titleFontWeight:'normal'},
       legend:{labelColor:ink,titleColor:ink}}};}
 // A chart with diagram: its query's rows as a flowchart, one arrow per row labelled by weight.

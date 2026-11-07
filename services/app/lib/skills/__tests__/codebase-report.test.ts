@@ -78,7 +78,7 @@ async function load(html: string, reply: typeof answer = answer): Promise<Page> 
       queueMicrotask(() => options.onRender());
       return {destroy() {}};
     },
-    vega: {parse: (spec: unknown) => spec, expressionInterpreter: {}, View: class {
+    vega: {parse: (spec: unknown) => spec, expressionInterpreter: {}, interpolate: (vega as unknown as {interpolate: unknown}).interpolate, View: class {
       constructor(private spec: {data?: {values?: unknown[]}}, private options: {container: Element}) {}
       async runAsync() {
         const marks = '<path></path>'.repeat(this.spec.data?.values?.length ?? 0);
@@ -112,6 +112,12 @@ async function steps(dom: JSDOM, source: string) {
     return {labels, failure: (error as Error).message};
   }
 }
+/** The design system's tokens as the platform sets them on the root, light or dark. */
+const TOKENS = {light: {background: '#eeede6', 'chart-1': '#2a5bd7'}, dark: {background: '#0f1b2d', 'chart-1': '#8fb4ff'}};
+const themed = (html: string, tokens: Record<string, string>) => html.replace('<html lang="en">',
+  `<html lang="en" style="${Object.entries(tokens).map(([name, value]) => `--${name}:${value}`).join(';')}">`);
+const rgb = (color: string) => color.startsWith('#') ? [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16))
+  : color.match(/\d+/g)!.map(Number);
 const text = (page: Page, id: string) => page.dom.window.document.querySelector(`[data-af-id="${id}"]`)?.textContent;
 
 it('imports only hosted @afbin modules and names its design system, nothing the platform adds', () => {
@@ -192,4 +198,33 @@ it('keeps a [segment] in a file path, which is not starter text', async () => {
   const page = await load(fill(read('codebase-report.html')).replace("'repo name'", "'app/[id]'"));
   expect(page.dom.window.document.querySelector('#kicker')!.textContent).toContain('app/[id]');
   expect((await steps(page.dom, read('codebase-report-steps.mjs'))).failure).toBeNull();
+});
+
+it('ramps a count in one hue, from the background tinted toward the first series colour, light and dark', async () => {
+  for (const tokens of Object.values(TOKENS)) {
+    const page = await load(themed(fill(read('codebase-report.html')), tokens));
+    const stops = (page.specs[1]!.config.range.heatmap as string[]).map(rgb);
+    const [ground, series] = [rgb(tokens.background), rgb(tokens['chart-1'])];
+    expect(stops.at(-1)).toEqual(series);
+    // Every stop lies on the line from the background to the series colour, each nearer the series than
+    // the last, and the lowest is visibly tinted, so a cell of 1 differs from the page around it.
+    const along = (stop: number[]) => stop.map((value, i) => (value - ground[i]!) / (series[i]! - ground[i]!));
+    const steps = stops.map(stop => along(stop));
+    for (const step of steps) for (const share of step) expect(share).toBeCloseTo(step[2]!, 1);
+    for (let i = 1; i < steps.length; i++) expect(steps[i]![2]).toBeGreaterThan(steps[i - 1]![2]!);
+    expect(steps[0]![2]).toBeGreaterThanOrEqual(0.15);
+  }
+});
+
+it('aligns a numeric column header with its numbers and sizes the diagram to its drawing', async () => {
+  const page = await load(fill(read('codebase-report.html')));
+  const document = page.dom.window.document;
+  expect([...document.querySelectorAll('[data-af-id="chart-hotspots-table"] th')].map(th => [th.textContent, th.className]))
+    .toEqual([['File', ''], ['Area', ''], ['Lines', 'n'], ['Commits that changed it', 'n'], ['Authors', 'n']]);
+  const style = (id: string) => page.dom.window.getComputedStyle(document.querySelector(`[data-af-id="${id}"]`)!);
+  expect([style('chart-hotspots-table-0-lines').textAlign, style('chart-hotspots-table-lines').textAlign,
+    style('chart-hotspots-table-path').textAlign]).toEqual(['right', 'right', 'left']);
+  // A chart keeps room for its plot while it draws; the diagram is as tall as its flowchart, no taller.
+  expect(style('chart-hotspots-plot').minHeight).toBe('280px');
+  expect(style('chart-modules-plot').minHeight).toBe('0px');
 });
