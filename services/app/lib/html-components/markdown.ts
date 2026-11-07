@@ -5,13 +5,15 @@
  * Props: source (property wins over the source attribute, then the initial text).
  * Examples:
  *   <af-markdown>## Notes\n- one\n- two</af-markdown>
- * Styles: Markdown and docs share one stylesheet (markdown-styles.ts); the design system sets fonts and colours;
- *   for one page add a small <style> override such as `article { line-height: 1.4 }`.
+ * Styles: Markdown and docs share one stylesheet (markdown-styles.ts); the design system sets
+ *   fonts and colours; for one page add a small <style> override such as
+ *   `article { line-height: 1.4 }`.
  * Gotchas: the initial text is read once as the source; later edits go through source.
  */
 import { registerComponent } from './register-component';
 /** Generated output is an `af-markdown-body` root styled by the one Markdown stylesheet
- * (./markdown-styles), the same sheet docs use; copy controls overlay code without changing its layout.
+ * (./markdown-styles), the same sheet docs use; copy controls overlay code without changing
+ * its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }
 import { markdownContent } from '../markdown/content';
