@@ -48,7 +48,7 @@ it('names the page-name replacement for a dataset field written under its own na
   ]);
 });
 
-it('follows a module-level const the call names, as the shared-app resolver writes them', async () => {
+it('follows a module-level const the call names, as the tracker resolver writes them', async () => {
   const source = `const FIND=\`query Find($n:String!){deal_notes(where:{note:{_eq:$n}}){_id}}\`;
 const OK=\`mutation Add($o:notes_insert_input!){insert_notes_one(object:$o){_id}}\`;
 export const typeDefs='type Query { x: Int }';

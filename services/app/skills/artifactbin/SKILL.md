@@ -20,9 +20,8 @@ Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
 
-- `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
-  -steps, -guest, -cleanup .mjs); shared-list.html and api-dashboard.html (api-dashboard.ts),
-  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html/.mjs, codebase-report.html
+- `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker.ts, tracker-features) and
+  api-dashboard.html (api-dashboard.ts), each with -steps, -guest, -cleanup .mjs; csv-dashboard.html/.mjs, codebase-report.html
   (+ -steps.mjs); report.html; gen-*.mjs sample data
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
@@ -76,12 +75,13 @@ script. Groups: `node scripts/groups.mjs list`
 ([groups](references/groups.md)).
 
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
-  index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (shared edits: everyone's
-  changes are dataset rows, which its resolver checks before writing; it sets up the files,
-  datasets and rules and prints the next step); `node scripts/new-app.mjs --kind list --title
-  "NAME"` (a list people add themselves to and change only their own entry: sign-up sheet, RSVP,
-  roster); `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items
-  behind a key, grouped with totals, with notes signed-in readers share);
+  index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (a team task tracker:
+  people add entries, change their own, type descriptions together, sort a table, at most N per
+  group; `--without FEATURE,…` drops parts; it sets up the files, dataset and rules and prints
+  the next step); `node scripts/new-app.mjs --kind list --title "NAME"` (a list people add
+  themselves to and change only their own entry: sign-up sheet, RSVP, roster);
+  `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items behind a
+  key, grouped with totals, with notes signed-in readers share);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it publishes the dataset and writes a DATA block over its columns,
   and `--artifact ID` rebuilds an existing page); `node scripts/new-codebase-report.mjs --repo DIR

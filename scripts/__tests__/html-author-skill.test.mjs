@@ -25,7 +25,7 @@ beforeAll(async()=>{
 afterAll(async()=>{if(installedDir)await rm(installedDir,{recursive:true,force:true});});
 describe('native author resources',()=>{
  it('prepares real HTML and paired resolver requests without leaking a credential',async()=>{
-  for(const name of ['report','csv-dashboard','shared-app']){
+  for(const name of ['report','csv-dashboard','tracker']){
    const saved=await prepareSample(name);
    expect(saved).toMatchObject({server:BASE,method:'POST',idempotencyKey:expect.stringMatching(/^[a-z0-9-]{36}$/)});
    expect(JSON.stringify(saved)).not.toContain('ARTIFACTBIN_TOKEN');
@@ -38,7 +38,7 @@ describe('native author resources',()=>{
    expect(script).toContain("from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
-   if(name==='shared-app'){const budget=saved.body.publicationBundle.files.find(file=>file.path==='examples/budget.ts');expect(Buffer.from(budget.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
+   if(name==='tracker'){const resolver=saved.body.publicationBundle.files.find(file=>file.path==='examples/tracker.ts');expect(Buffer.from(resolver.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
   }
  });
  it('generates every shipped design-system stylesheet from the retained specification',async()=>{

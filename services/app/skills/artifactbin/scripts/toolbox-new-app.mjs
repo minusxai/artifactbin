@@ -1,8 +1,8 @@
 /**
  * Internal: what new-app.mjs's starters share (files copied without overwriting, a dataset
  * published once and reused through its companion, the page's placeholders filled) and the
- * own-rows starters whole: --kind list (a sign-up list) and --kind api (an HTTP API's items with
- * shared notes, read by a resolver whose key only the page owner sets).
+ * --kind api starter whole (an HTTP API's items with shared notes, read by a resolver whose key
+ * only the page owner sets). The tracker's trimming is toolbox-tracker.mjs.
  * Used by: new-app.mjs.
  */
 import path from 'node:path';
@@ -22,9 +22,6 @@ const API_URL = 'node scripts/new-app.mjs --kind api --url https://HOST/PATH --t
 /** Starter file → its name in the project, the dataset each own-rows kind starts empty, what to
  * edit and who may do what. */
 const KINDS = {
-  list: {page: 'shared-list.html', files: ['steps', 'guest', 'cleanup'], table: 'entries',
-    columns: 'name,choice,note,created_by', what: 'entries', edit: 'its [bracketed] text and ' +
-      'choices (the options people pick from)'},
   api: {page: 'api-dashboard.html', files: ['steps', 'guest', 'cleanup'], table: 'notes',
     columns: 'item,note,created_by', what: 'notes', resolver: ['api-dashboard.ts', 'api.ts'],
     edit: "fields (the API's field names), only and its [bracketed] text"}
@@ -46,13 +43,11 @@ export async function dataset(file, title, server, options, extra = {}) {
   return {id: done.id, reused: false};
 }
 /** index.html with the starter's placeholders that are still there replaced. */
-export function fill(html, starter, {title, ids, data}) {
+export function fill(html, starter, {title, ids}) {
   const placeholder = /<title>(\[[^\]<]+\])<\/title>/.exec(starter)?.[1];
-  let out = html.replaceAll('ref:DATASET_ID', 'ref:' + (ids.transactions ?? ids.own))
-    .replaceAll('ref:TARGETS_ID', 'ref:' + ids.targets);
-  if (placeholder) out = out.replaceAll(`<title>${placeholder}</title>`,
-    `<title>${htmlText(title)}</title>`);
-  return data ? out.replace(/ · sample data'/, "'") : out;
+  const out = html.replaceAll('ref:DATASET_ID', 'ref:' + ids.own);
+  return placeholder ? out.replaceAll(`<title>${placeholder}</title>`,
+    `<title>${htmlText(title)}</title>`) : out;
 }
 /** A DNS name a secret may be bound to: two labels or more, the last alphabetic (no IP). */
 const HOST_NAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;

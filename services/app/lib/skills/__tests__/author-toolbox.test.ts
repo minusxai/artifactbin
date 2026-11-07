@@ -418,7 +418,7 @@ it('does not ask agents to write what the platform adds, and says what each side
  expect(http).not.toMatch(/<script src="\/af\/[^"]*core\.js"/);
  expect(http).not.toMatch(/(?:write|add|load|keep)[^.\n]*core (?:script )?tag/i);
  expect(http).not.toMatch(/<html[^>]*data-af-[a-z-]+="/);
- for(const example of ['report','csv-dashboard','shared-app','shared-list','api-dashboard','deck']){
+ for(const example of ['report','csv-dashboard','tracker','api-dashboard','deck']){
   const html=await readFile(new URL(`../../../skills/artifactbin/examples/${example}.html`,import.meta.url),'utf8');
   expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }
@@ -525,7 +525,7 @@ it('publish --name sends a new dataset\'s GraphQL root in the create body, and o
 it('reads Built with from the page starter comment, and only datasets with a stored policy for who can do what',async()=>{
  const {builtWith,datasetLinks,replyFacts}=await import('../../../skills/artifactbin/scripts/toolbox-check-reply.mjs');
  const {readFile}=await import('node:fs/promises');
- const app=await readFile(new URL('../../../skills/artifactbin/examples/shared-app.html',import.meta.url),'utf8');
+ const app=await readFile(new URL('../../../skills/artifactbin/examples/tracker.html',import.meta.url),'utf8');
  expect(builtWith(app)).toMatch(/^one HTML page; .* through its generated API\.$/);expect(builtWith(app)).not.toContain('//');
  expect(builtWith('<!-- Example: x.\nBuilt with: one HTML page and\n  a CSV dataset. -->\n<p>x</p>')).toBe('one HTML page and a CSV dataset.');
  expect(builtWith('<p>no starter</p>')).toBeNull();
@@ -702,12 +702,12 @@ it('publish refuses an empty page and starter placeholders by line, and drops ha
    await writeFile(file,empty);
    await expect(publishCommand({values:{},positionals:[file]},options)).rejects.toMatchObject({code:'empty_page',exit:2,recovery:expect.stringContaining('Write the page into index.html')});
   }
-  await writeFile(file,'<!doctype html>\n<title>[App name]</title>\n<link rel="af-dataset" data-af-name="t" href="ref:DATASET_ID">\n<p>Hi</p>');
+  await writeFile(file,'<!doctype html>\n<title>[Tracker name]</title>\n<link rel="af-dataset" data-af-name="t" href="ref:DATASET_ID">\n<p>Hi</p>');
   const refused=await publishCommand({values:{},positionals:[file]},options).catch((error:any)=>error);
   expect(refused).toMatchObject({code:'autofix_refused'});
   expect(refused.details.autofix.problems.map((p:any)=>[p.rule,p.line])).toEqual([['starter-placeholder',2],['starter-placeholder',3]]);
   expect(refused.details.autofix.report).toContain('ref:DATASET_ID is a starter placeholder: publish that data first');
-  expect(refused.details.autofix.report).toContain('starter placeholder [App name] is still in the page');
+  expect(refused.details.autofix.report).toContain('starter placeholder [Tracker name] is still in the page');
   expect(sent).toEqual([]);
   // A starter's own code and comments are not placeholders: an index expression, a ref: in a comment.
   const {placeholderProblems}=await import('../../../skills/artifactbin/scripts/toolbox-publish-guard.mjs');

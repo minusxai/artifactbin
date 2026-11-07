@@ -39,7 +39,7 @@ async function publish(body) {
 }
 const source = `<!doctype html><html><head><title>Portable native page</title>
 <style>body{font-family:system-ui;background:#fff;color:#17202b}.status{color:rgb(20,90,40)}</style>
-<link rel="af-resolver" data-af-name="budget" href="./budget.ts">
+<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">
 <script type="application/json" data-af="state">{"count":3}</script>
 <script src="/af/core.js"></script></head><body>
 <h1 class="status">Portable native page</h1><output id="count">Starting</output>
@@ -51,9 +51,9 @@ import {client,gql} from '@afbin/apollo';
 const count=gql\`{count}\`;
 client.watchQuery({query:count}).subscribe(({data})=>document.querySelector('#count').textContent=String(data.count));
 document.querySelector('#increment').onclick=()=>client.updateQuery({query:count},({count})=>({count:count+1}));
-document.querySelector('#shared').onclick=async()=>{const result=await client.mutate({mutation:gql\`mutation {budget{setTarget(category:"Rent",amount:1){category amount}}}\`});document.querySelector('#outcome').textContent=result.extensions?.outcomes['budget.setTarget']??'missing';};
+document.querySelector('#shared').onclick=async()=>{const result=await client.mutate({mutation:gql\`mutation {tracker{add(name:"Offline",grp:"Later"){_id}}}\`});document.querySelector('#outcome').textContent=result.extensions?.outcomes['tracker.add']??'missing';};
 </script></body></html>`;
-const id = await publish({ html: source, visibility: 'private', resolverSources: { budget: readFileSync(path.join(ROOT, 'services/app/skills/artifactbin/examples/budget.ts'), 'utf8') } });
+const id = await publish({ html: source, visibility: 'private', resolverSources: { tracker: readFileSync(path.join(ROOT, 'services/app/skills/artifactbin/examples/tracker.ts'), 'utf8') } });
 const response = await fetch(`${BASE}/a/${id}/download`, { headers });
 if (response.status !== 200) throw new Error(`download -> ${response.status}: ${await response.text()}`);
 const html = await response.text();
