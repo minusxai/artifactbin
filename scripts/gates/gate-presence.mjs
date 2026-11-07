@@ -38,7 +38,9 @@ try{
  check(await until(()=>peerFrame.locator('[data-af-presence-cursor]').count(),n=>n>0)>0,'second account sees the first reader cursor');
  check(await until(()=>peerFrame.locator('[data-af-presence-selection]').count(),n=>n>0)>0,'second account sees exact native text selection');
  check(await ownFrame.evaluate(()=>getSelection().toString())==='Shared reader selection stays native.','remote overlays preserve sender native selection');
- check(await until(()=>guestFrame.locator('[data-af-presence-selection]').count(),n=>n>0)>0,'anonymous reader receives authorized presence');
+ // Signed-out readers get no presence (#1165): the owner's cursor and selection never reach the guest.
+ await new Promise(r=>setTimeout(r,1500));
+ check(await guestFrame.locator('[data-af-presence-cursor],[data-af-presence-selection]').count()===0,'a signed-out reader receives no presence');
  await setPreference(other,'Show other cursors');
  check(await until(()=>peerFrame.locator('[data-af-presence-cursor]').count(),n=>n===0)===0,'reader hides cursors independently');
  check(await peerFrame.locator('[data-af-presence-selection]').count()>0,'hiding cursors retains other selections');
