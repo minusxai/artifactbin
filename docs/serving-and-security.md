@@ -53,6 +53,13 @@ refused for a table whose rule does not allow SQL (`allow_aggregations`), under
 the same read fences; it never writes. Viewer-local Apollo
 state is private browser state, not a shared database or an authorization source.
 
+An image export (`/a/ID/export`, `export_artifact`) shows what its requester may
+read. The exporter's capture has no session; its short-lived key names the
+requester the export door admitted, and the capture's page GraphQL reads run as
+that requester, queries only, under the same checks. Renders read as nobody may
+be shared; a requester's render is stored for that requester alone and re-made
+when their access to the page's datasets changes.
+
 A backend source file exports GraphQL types and resolvers. Publication validates
 and bundles it server-side. The RunnerService executes pinned code with trusted
 principal and capability checks; the browser never fetches the backend source as

@@ -8,7 +8,7 @@ import type {RenderRequest} from '@artifactbin/contracts';
 import {CARD_HEIGHT,CARD_WIDTH} from '@artifactbin/contracts';
 import {useAppHarness} from '@/__tests__/harness';
 import {setServices} from '@/lib/platform';
-import {EXPORT_RENDER_GENERATION,exportCacheKey,exportImageResponse,mintExportKey,parseExportCapture,parseExportFormat,parseExportSlide,renderArtifactImage,resetExportRenderer,verifyExportKey} from '..';
+import {EXPORT_RENDER_GENERATION,exportCacheKey,exportImageResponse,exportKeyReader,mintExportKey,parseExportCapture,parseExportFormat,parseExportSlide,renderArtifactImage,resetExportRenderer,verifyExportKey} from '..';
 
 useAppHarness();
 const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64');
@@ -63,6 +63,20 @@ describe('the read key',()=>{
  it('accepts exactly one spelling of a key',()=>{
   const [expiry,mac]=mintExportKey('abc123').split('.') as [string,string];
   for(const key of [undefined,'','abc',`0${expiry}.${mac}`,`+${expiry}.${mac}`,` ${expiry}.${mac}`,`${expiry}.${mac}.x`,`${expiry}.${mac.toUpperCase()}`,`${expiry}.${mac.slice(1)}`,`${expiry}.${'0'.repeat(64)}`])expect(verifyExportKey('abc123',key)).toBe(false);
+ });
+ it('names the requester it was minted for, and cannot be re-pointed at another one or another artifact',()=>{
+  expect(exportKeyReader('abc123',mintExportKey('abc123'))).toEqual({userId:null,tokenId:null,email:null,documentEditor:false});
+  const key=mintExportKey('abc123',undefined,undefined,{userId:'u_ada',tokenId:'t_1'});
+  expect(verifyExportKey('abc123',key)).toBe(true);
+  expect(exportKeyReader('abc123',key)).toEqual({userId:'u_ada',tokenId:'t_1',email:null,documentEditor:false});
+  expect(exportKeyReader('abc123',mintExportKey('abc123',undefined,undefined,{userId:null,tokenId:'t_2'}))).toMatchObject({userId:null,tokenId:'t_2'});
+  // Nobody is the anonymous key itself, never a requester segment.
+  expect(mintExportKey('abc123',undefined,undefined,{userId:null,tokenId:null}).split('.')).toHaveLength(2);
+  const [expiry,reader,mac]=key.split('.') as [string,string,string];
+  const bo=Buffer.from(JSON.stringify(['u_bo','t_1'])).toString('base64url');
+  for(const forged of [`${expiry}.${bo}.${mac}`,`${expiry}.${mac}`,`${expiry}.${reader}.${'0'.repeat(64)}`,`${expiry}.${reader}.${mac}.x`])expect(exportKeyReader('abc123',forged),forged).toBeNull();
+  expect(exportKeyReader('abc124',key)).toBeNull();
+  expect(exportKeyReader('abc123',mintExportKey('abc123',-1,Date.now(),{userId:'u_ada',tokenId:null}))).toBeNull();
  });
 });
 

@@ -67,6 +67,8 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   // the social crop are read from the markup being shot, not from the head's.
   return exportImageResponse(await servedRow(artifact, at), {
     ...(at ? { version: at.version } : {}),
+    // The capture reads the page's data as this requester: what they may read is what their export shows.
+    reader: actor,
     refresh: q.get('refresh'),
     editor,
     format: q.get('format'),

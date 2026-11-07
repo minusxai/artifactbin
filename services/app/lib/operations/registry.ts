@@ -583,6 +583,8 @@ const exportArtifactOp: Operation = {
     if (!authorized) return reply({ error: 'not_found' }, 404);
     void trackEvent('export', artifact.id, { userId: ctx.actor.userId ?? null });
     const res = await exportImageResponse(artifact, {
+      // The capture reads the page's data as the tool's actor (lib/export): readable = exportable, and no more.
+      reader: ctx.actor,
       ...(input.slide !== undefined ? { slide: String(input.slide) } : {}),
       ...(typeof input.format === 'string' ? { format: input.format } : {}),
       ...(input.refresh === true ? { refresh: '1' } : typeof input.refresh === 'string' ? { refresh: input.refresh } : {}),

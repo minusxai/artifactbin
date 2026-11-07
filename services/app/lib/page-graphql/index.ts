@@ -14,6 +14,7 @@ import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 import {ACTOR_HEADER} from '@artifactbin/contracts';
 import {DOMAIN_READ_ONLY_MESSAGE} from '@artifactbin/contracts/domain-footer';
+import {exportKeyReader} from '@/lib/export';
 /** The page's dataset links: each mounts its dataset's generated roots flat at the top of the page schema. */
 const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
 async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[]>{
@@ -70,13 +71,18 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
 }
 /** Every header a credential arrives in (the proxy's attached actor included); an opaque origin's read carries none. */
 const CREDENTIAL_HEADERS=['cookie','authorization','proxy-authorization',ACTOR_HEADER];
-/** Any origin may read what nobody may read; never with credentials. */
+/** An opaque origin's read is never credentialed by the browser: no cookie-borne answer is exposed. */
 const READ_CORS={'Access-Control-Allow-Origin':'*','Cache-Control':'no-store'};
 /**
- * AN OPAQUE ORIGIN'S READ: a sandboxed document no app frame relays for (the exporter's capture, document-serving/raw)
- * reads its own page's data here directly (html-runtime/domain-reads). It is answered as NOBODY by construction — every
- * credential header is dropped and the read runs as that credential-less request — so the `*` CORS exposes exactly what
- * an anonymous fetch already gets; and only queries run.
+ * AN OPAQUE ORIGIN'S READ: a sandboxed document no app frame relays for (the exporter's capture, document-serving/raw;
+ * an anonymous owner host's page) reads its own page's data here directly (html-runtime/domain-reads). Every
+ * credential header is dropped, so no cookie or bearer the browser attaches ever reads here; only queries run.
+ *
+ * It reads as NOBODY, or as the requester an EXPORT KEY was minted for (lib/export read-key, carried in the body from
+ * the capture's own address): the export door admitted that requester and the capture shows what they may read, so
+ * the read runs under their access, re-checked at read time like any reader's, and never anyone else's. A key that
+ * does not verify for this page reads as nobody. The `*` CORS exposes the answer to that capture page alone: the key
+ * is seconds-long, scoped to this page and never shown to a reader.
  */
 async function opaqueOriginRead(request:Request,pageId:string):Promise<Response>{
  const headers=new Headers(request.headers);
@@ -87,19 +93,24 @@ async function opaqueOriginRead(request:Request,pageId:string):Promise<Response>
  const kind=typeof query==='string'?pageOperationKind(query,typeof operationName==='string'?operationName:undefined):null;
  if(kind==='mutation')return json({data:null,errors:[{message:DOMAIN_READ_ONLY_MESSAGE}]},403,READ_CORS);
  if(kind!=='query')return json({error:'invalid_graphql_operation'},400,READ_CORS);
+ const key=(parsed as {key?:unknown}|null)?.key;
+ const reader=typeof key==='string'?exportKeyReader(pageId,key):null;
  const guest=new Request(request.url,{method:'POST',headers,body,signal:request.signal});
- const answered=await runWithRequest(guest,()=>answer(guest,pageId));
+ const answered=await runWithRequest(guest,()=>answer(guest,pageId,reader??undefined));
  const cors=new Headers(answered.headers);
  cors.set('access-control-allow-origin','*');cors.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:cors});
 }
-async function answer(request:Request,pageId:string):Promise<Response>{
- const actor=await requestOrSessionActor(request);
- if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
+/** `reader`: an export capture's requester (opaqueOriginRead), read as given; otherwise the request's own credential. */
+async function answer(request:Request,pageId:string,reader?:AccessActor):Promise<Response>{
+ const requested=reader?null:await requestOrSessionActor(request);
+ // An export reader carries no cookie, so no same-site guard applies; its writes were refused before it got here.
+ if(requested&&refusesCrossSite(request,requested))return json({error:'forbidden'},403);
+ const actor:AccessActor=reader??requested!;
  try{
   const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
   const verifyPage=async(revision:string)=>{
-   const currentActor=await requestOrSessionActor(request,{revalidate:true});
+   const currentActor:AccessActor=reader??await requestOrSessionActor(request,{revalidate:true});
    if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
    // One header read decides both: the head did not move, and this reader may still read it.
    const readable=await readableArtifactHeader(currentActor,pageId),current=readable?.row;
@@ -122,6 +133,8 @@ async function answer(request:Request,pageId:string):Promise<Response>{
   if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400);
   const operationKind=pageOperationKind(body.query,typeof body.operationName==='string'?body.operationName:undefined);
   if(!operationKind||(body.operation!==undefined&&body.operation!==operationKind))return json({error:'invalid_graphql_operation'},400);
+  // An export reader reads; never more (opaqueOriginRead refused its writes already).
+  if(reader&&operationKind!=='query')return json({data:null,errors:[{message:DOMAIN_READ_ONLY_MESSAGE}]},403);
   const head=await readHtmlPage(actor,pageId);
   if(operationKind==='mutation'&&head.revision!==body.revision)return json({error:'archived_page_readonly'},403);
   // The head just read is this revision when the request names it: one read of the page's source, not two.

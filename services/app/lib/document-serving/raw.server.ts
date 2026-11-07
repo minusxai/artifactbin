@@ -148,8 +148,9 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
    * with no app frame, so the frame relay never attaches and every `@afbin/apollo` read answered "offline: nothing was
    * sent" — a deck that guards the read exported with no numbers, one that throws drew no slide at all. It reads its
    * data straight from the page GraphQL endpoint, as an anonymous owner host's page does (html-runtime/domain-reads),
-   * and that endpoint answers an opaque origin as nobody (lib/page-graphql): the image shows what an anonymous reader
-   * of the page sees, never the key's or a session's view, since one stored export is served to every reader.
+   * and that endpoint answers an opaque origin as the requester the key was minted for, or as nobody (lib/page-graphql):
+   * the image shows what its requester may read, never a session's view, and lib/export stores it for that audience.
+   * The key stays on the address it came on; it is never written into the page.
    */
   const directReads = !!domain || (byExportKey && !pages);
   // Declarations belong to each immutable version; current viewer grants remain dynamic.
