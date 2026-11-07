@@ -6,7 +6,7 @@
  *
  * The person's own test of a live doc, with nothing asking for a save (no flush, no pause): the live text IS the
  * document (lib/artifacts current-page), and versions are history.
- *   - the owner types a heading and a body into a new doc shared unlisted;
+ *   - the owner types a heading and a body into a new doc, unlisted from the start (its link reads it);
  *   - a signed-out reader with the doc open sees the text, and the header the heading names it by, within about
  *     three seconds of the typing, and a fresh signed-out visitor is served it;
  *   - the open reader follows further typing live, with no reload;
@@ -80,10 +80,8 @@ try {
     const created = await api('');
     // The read wire carries no template for a page: the doc's mark shows as its page opening the region (below).
     check(/<article data-af-editable="rich"[^>]*><h1[^>]*><\/h1><p[^>]*><\/p><\/article>/.test(created.html), 'the new page is the doc template: one rich region with an empty title');
-    check(created.version === 1 && created.visibility === 'private', `it is private at version 1 (${created.visibility} v${created.version})`);
-    // Shared before anything is typed: the person's test is a doc others already have the link to.
-    const shared = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PATCH', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ visibility: 'unlisted', expectedState: created.state }) });
-    check(shared.ok, `the doc is shared as unlisted (${shared.status})`);
+    // Unlisted from the start: the person's test is a doc others already have the link to, with nothing to share first.
+    check(created.version === 1 && created.visibility === 'unlisted', `it is unlisted at version 1 (${created.visibility} v${created.version})`);
   });
 
   const reader = await (await browser.newContext({ viewport: { width: 1100, height: 800 } })).newPage();
