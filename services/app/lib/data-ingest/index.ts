@@ -30,7 +30,8 @@ export async function ingestDataset(source: DatasetSource, declared: DeclaredCol
 
   const { headers, rows, quotedEmptyCells } = parseCsv(text);
   if (headers.length === 0) throw new IngestError('empty', 'No data found.');
-  if (rows.length === 0) throw new IngestError('empty', 'The file has a header row but no data rows.');
+  // A header with declared columns is an empty table people fill in later; publishDataset takes its shape from them.
+  if (rows.length === 0 && declared.length === 0) throw new IngestError('empty', 'The file has a header row but no data rows.');
   // Truncate rather than reject: a big sheet is a legitimate source, and the
   // first N rows are useful where a 400 is not. Recorded, never silent —
   // callers surface totalRows so nobody charts a sample believing it is the set.
