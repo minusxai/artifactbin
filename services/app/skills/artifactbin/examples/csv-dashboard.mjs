@@ -7,7 +7,8 @@
  *   loads it with <script type="module" src="./csv-dashboard.mjs">. Change DATA, not this file.
  * Gotchas: a chart's mark is bar, line, point, rect (a heatmap) or map; series with multiples:true
  *   draws one small panel per series value on a shared scale. Picking a filter reruns every
- *   query with its $param set; a late answer for an older pick is dropped.
+ *   query with its $param set; a late answer for an older pick is dropped. A map names only
+ *   the places whose names fit; every dot keeps its tooltip and the table lists them all.
  */
 import {client,gql} from '@afbin/apollo';
 import * as vega from '@afbin/vega';
@@ -87,19 +88,37 @@ async function map(c,host,list){const unavailable=()=>{host.textContent=
     const lon=list.map(v=>v.lon),lat=list.map(v=>v.lat),place=v=>[v.lon,v.lat];
     const fit=new deck.WebMercatorViewport({width:w,height:h}).fitBounds([[Math.min(...lon),
       Math.min(...lat)],[Math.max(...lon),Math.max(...lat)]],{padding:60});
+    const at={longitude:fit.longitude,latitude:fit.latitude,zoom:Math.min(fit.zoom,10)},
+      font=token('--font-body')||'sans-serif',named=fits(list,new deck.WebMercatorViewport({
+        width:w,height:h,...at}),w,h,r,sel,font);
     const [ink,on,off]=[rgb('--foreground'),rgb('--chart-1'),rgb('--muted-foreground')];
     return new deck.Deck({parent:host,width:w,height:h,views:new deck.MapView(),controller:false,
-      initialViewState:{longitude:fit.longitude,latitude:fit.latitude,zoom:Math.min(fit.zoom,10)},
+      initialViewState:at,
       getCursor:({isHovering})=>isHovering?'pointer':'default',onError:unavailable,
       getTooltip:({object})=>object&&`${object.x}: ${fmt(object.y)} ${label(c.y)}`,
       onClick:({object})=>{if(object&&c.filter)pick(c.filter,object.x);},
       layers:[new deck.ScatterplotLayer({id:c.id+'-dots',data:list,getPosition:place,getRadius:r,
         radiusUnits:'pixels',pickable:true,stroked:true,lineWidthUnits:'pixels',getLineColor:ink,
         getFillColor:v=>sel&&v.x!==sel?[...off,90]:[...on,210]}),
-      new deck.TextLayer({id:c.id+'-names',data:list,getPosition:place,getText:v=>v.x,getSize:12,
-        getColor:ink,getPixelOffset:v=>[0,-r(v)-9],characterSet:'auto',
-        fontFamily:token('--font-body')||'sans-serif'})]});
+      new deck.TextLayer({id:c.id+'-names',data:named,getPosition:place,getText:v=>v.x,getSize:12,
+        getColor:ink,getPixelOffset:v=>v.offset,characterSet:'auto',fontFamily:font})]});
   }catch{return unavailable();}}
+// The names that fit, biggest place first: above its dot, else below, right or left of it, 3px
+// clear of its dot. A name that would cover a placed name, come within 3px of another dot or
+// leave the map is dropped: close places never print over each other or read as each other's,
+// and the dot's tooltip and the table still name it. A picked place goes first, over dim dots.
+function fits(list,view,w,h,r,sel,font){const size=12,taken=[],hit=(a,b)=>a[0]<b[2]&&b[0]<a[2]&&
+  a[1]<b[3]&&b[1]<a[3],dots=list.map(v=>{const [x,y]=view.project([v.lon,v.lat]),s=r(v)+3;
+    return {v,x,y,s,box:[x-s,y-s,x+s,y+s]};});
+  if(paint)paint.font=`${size}px ${font}`;
+  return [...dots].sort((a,b)=>(b.v.x===sel)-(a.v.x===sel)||b.v.y-a.v.y).flatMap(d=>{
+    const tw=(paint?paint.measureText(d.v.x).width:d.v.x.length*size*.6)/2+2,th=size/2+2;
+    for(const [dx,dy] of [[0,-d.s-th],[0,d.s+th],[d.s+tw,0],[-d.s-tw,0]]){
+      const x=d.x+dx,y=d.y+dy,box=[x-tw,y-th,x+tw,y+th];
+      if(box[0]<0||box[1]<0||box[2]>w||box[3]>h||taken.some(b=>hit(b,box))||
+        d.v.x!==sel&&dots.some(o=>o!==d&&hit(o.box,box)))continue;
+      taken.push(box);return [{...d.v,offset:[dx,dy]}];}
+    return [];});}
 async function draw(){views.forEach(view=>view.finalize());width=$('#charts').clientWidth;
   const ink=css('--foreground'),line=css('--border'),font=token('--font-body'),config={
     view:{stroke:null},font,range:{category:[1,2,3,4,5].map(n=>css('--chart-'+n))},
