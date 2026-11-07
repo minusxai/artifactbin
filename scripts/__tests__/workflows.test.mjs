@@ -89,7 +89,7 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
     expect(wait?.run).toContain('gate-build.status');
     const at = (name) => steps.findIndex((step) => step.name === name);
     // Overlapped: after the install and the island restore, before every provisioning step it overlaps.
-    const restore = steps.findIndex((step) => String(step.with?.key ?? '').startsWith('test-builds-v1-'));
+    const restore = steps.findIndex((step) => String(step.with?.key ?? '').startsWith('test-builds-v2-'));
     expect(restore).toBeGreaterThan(-1);
     expect(steps.indexOf(start)).toBeGreaterThan(restore);
     expect(steps.indexOf(start)).toBeLessThan(at('Install selected gate browsers'));

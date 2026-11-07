@@ -50,3 +50,26 @@ export function buildKey(stagedIndex) {
   const index = stagedIndex.split('\n').filter((line) => line && isBuildInput(line.slice(line.indexOf('\t') + 1)));
   return { key: createHash('sha256').update(index.join('\n')).digest('hex').slice(0, 32), inputs: index.length };
 }
+
+/**
+ * WHAT THE TEST GLOBAL SETUP BUILDS FROM. Every Vitest run first asks the server reader's content marker
+ * (services/app/scripts/server-reader-cache.mjs) whether `lib/build-assets` and `public/libraries` match this tree,
+ * and rebuilds both on a miss (~10s on a runner). CI caches the two directories under a hash of the paths this
+ * accepts (scripts/ci/ci.mjs `test-builds-key`): the build tools, the hosted components and libraries, and the source
+ * trees the component bundle reads. The key only chooses which entry to restore; the marker still re-hashes every input
+ * the last build read, so a path missing here costs a rebuild, never stale bytes.
+ */
+const TEST_BUILD_INPUTS = /^(?:package-lock\.json|services\/app\/package\.json|services\/app\/scripts\/(?:build-server-reader|server-reader-cache|build-libraries|precompress)\.mjs|scripts\/build\/build-html-components\.mjs|scripts\/lib\/(?:html-components-build|component-asset-proof)\.mjs|services\/app\/lib\/(?:html-components|html-component-specs|libraries|dataflow|markdown|mermaid-images|ui-runtime)\/|services\/(?:contracts|utils)\/src\/)/;
+
+/**
+ * The test-builds cache key from `git ls-files -s` output, over the paths `TEST_BUILD_INPUTS` accepts, tests excluded.
+ * @param {string} stagedIndex  `git ls-files -s` output
+ * @returns {{ key: string, inputs: number }}
+ */
+export function testBuildsKey(stagedIndex) {
+  const index = stagedIndex.split('\n').filter((line) => {
+    const file = line.slice(line.indexOf('\t') + 1);
+    return line && TEST_BUILD_INPUTS.test(file) && !/(^|\/)__tests__\//.test(file) && !/\.test\.[cm]?[jt]sx?$/.test(file);
+  });
+  return { key: createHash('sha256').update(index.join('\n')).digest('hex').slice(0, 32), inputs: index.length };
+}
