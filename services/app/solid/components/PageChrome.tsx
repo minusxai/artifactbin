@@ -5,6 +5,7 @@ import { createContext, createEffect, createSignal, For, on, onMount, onCleanup,
 import { Bell, ChevronRight, CircleUser, SlidersVertical, X } from 'lucide-solid';
 import { Dynamic } from 'solid-js/web';
 import { useLocation } from '@solidjs/router';
+import { useResolvedBreadcrumbs } from '../lib/page-breadcrumbs';
 import { crumbsFor } from '@/lib/workspace/breadcrumb';
 import { PageBar } from './PageBar';
 import { CHROME_IDENTITY } from './chrome-identity';
@@ -96,7 +97,8 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const [ownMode, setMode] = createSignal<'light' | 'dark'>(typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   const mode = () => (props.mode ? props.mode() : ownMode());
   const person = () => session()?.kind === 'account' ? session()?.user : null;
-  const crumbs = () => crumbsFor(location.pathname, props.title);
+  const resolvedCrumbs = useResolvedBreadcrumbs();
+  const crumbs = () => props.title ? crumbsFor(location.pathname, props.title) : resolvedCrumbs() ?? crumbsFor(location.pathname);
   const label = () => props.label ?? 'Page controls';
   const controlsName = () => label().toLowerCase();
   let opener: HTMLElement | undefined;

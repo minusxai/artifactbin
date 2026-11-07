@@ -32,7 +32,7 @@ export default function WorkspaceShell(props: { children: JSX.Element; parentId?
     { label: 'Notifications', href: '/notifications', Icon: Bell },
   ];
   const personalView = () => location.pathname === '/' && new URLSearchParams(location.search).get('personal') === '1';
-  const active = (href: string) => href === '/?personal=1' ? personalView() : href === '/' ? (location.pathname === '/' && !personalView()) || Boolean(props.parentId) : href === '/groups' ? location.pathname === '/groups' || (Boolean(props.groupId) && location.pathname.startsWith('/@')) : location.pathname === href;
+  const active = (href: string) => href === '/?personal=1' ? personalView() : href === '/' ? (location.pathname === '/' && !personalView()) || Boolean(props.parentId) : href === '/groups' ? location.pathname === '/groups' || location.pathname.startsWith('/groups/') || (Boolean(props.groupId) && location.pathname.startsWith('/@')) : location.pathname === href;
   return <div class="workspace-shell">
     <nav aria-label="Workspace" class="workspace-nav" data-expanded={navigationOpen()}>
       <div class="workspace-nav-top">

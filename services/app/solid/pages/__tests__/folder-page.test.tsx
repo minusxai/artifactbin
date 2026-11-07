@@ -3,6 +3,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
+import { PageChrome } from '../../components/PageChrome';
+import { PageBreadcrumbProvider } from '../../lib/page-breadcrumbs';
 import { FolderPage } from '@/solid/pages/Folder';
 import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 
@@ -16,12 +18,14 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it('names the folder, count and readable trail', () => {
-  open('viewer', folder({ trail: [{ id: 'r1', title: 'Work', url: '/a/r1' }] }));
+  render(()=> <MemoryRouter><Route path="*" component={()=> <PageBreadcrumbProvider><PageChrome star={false}/><FolderPage role="viewer" folder={folder({group:{id:'g1',handle:'team',name:'Team'},trail:[{id:'r1',title:'Work',url:'/a/r1'}]})}/></PageBreadcrumbProvider>}/></MemoryRouter>);
   expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports');
   expect(screen.getByText('2 documents and 1 folder')).toBeInTheDocument();
-  const trail = within(screen.getByLabelText('Folder trail'));
-  expect(trail.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+  const trail = within(screen.getByRole('navigation',{name:'Current page'}));
+  expect(trail.getByRole('link', { name: '@team' })).toHaveAttribute('href', '/@team');
   expect(trail.getByRole('link', { name: 'Work' })).toHaveAttribute('href', '/a/r1');
+  expect(trail.getByText('Reports')).toHaveAttribute('aria-current','page');
+  expect(screen.queryByLabelText('Folder trail')).toBeNull();
 });
 
 it('offers rename only to writers and saves by conditional metadata PATCH', async () => {
@@ -83,4 +87,13 @@ it('re-reads the listing when its live stream comes back after a cut: what chang
   sources[1]!.onmessage?.(new MessageEvent('message', { data: '{"editId":"e1"}' }));
   await screen.findByRole('heading', { name: 'Filed while away' });
   expect(fetches).toHaveBeenCalledWith('/api/page/artifact/fold01', expect.anything());
+});
+
+it('renders authorized group children even when the account workspace shelf is empty',()=>{
+ const data=folder({group:{id:'g1',handle:'team',name:'Team'}});
+ const workspace={artifacts:[],shared:[],stats:{artifacts:0,assets:0,views:0},views:{},viewsOverTime:[],likes:0,likesOverTime:[],followers:0,forks:0} as unknown as AccountWorkspace;
+ render(()=> <MemoryRouter><Route path="*" component={()=> <FolderPage folder={data} role="owner" workspace={workspace}/>}/></MemoryRouter>);
+ expect(screen.getByLabelText('Open Doc aaa111')).toBeInTheDocument();
+ expect(screen.getByLabelText('Open Doc bbb222')).toBeInTheDocument();
+ expect(screen.queryByLabelText('Empty folder')).toBeNull();
 });

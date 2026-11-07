@@ -1,8 +1,9 @@
 /* @jsxImportSource solid-js */
 /** The Solid app: every route below, every artifact address included. */
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
-import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
+import { Navigate, Route, Router, useParams, type RouteSectionProps } from '@solidjs/router';
 import { useLocation } from '@solidjs/router';
+import { PageBreadcrumbProvider } from './lib/page-breadcrumbs';
 import { SessionProvider } from './lib/session';
 import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
@@ -24,6 +25,8 @@ const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.Doc
 const GettingStartedPage = lazy(() => import('./pages/GettingStarted').then((m) => ({ default: m.GettingStartedPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
 const ProfileAliasRoute = lazy(() => import('./pages/ProfileAlias').then((m) => ({ default: m.ProfileAliasRoute })));
+// Group settings load separately from the reader.
+const GroupSettingsPage = lazy(() => import('./pages/Group').then(m=>({default:m.GroupSettingsPage})));
 const GroupsPage = lazy(() => import('./pages/Groups').then(m=>({default:m.GroupsPage})));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
 const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((m) => ({ default: m.ArtifactAddressRoute })));
@@ -67,14 +70,14 @@ function Root(props: RouteSectionProps): JSX.Element {
     <IntentPreload />
     <InboxProvider>
     <OnboardingGate>
-      <ChromeVisibilityContext.Provider value={setShowChrome}>
+      <ChromeVisibilityContext.Provider value={setShowChrome}><PageBreadcrumbProvider>
         <Show when={!documentRoute() && location.pathname !== '/local/connect' && showChrome()}><PageChrome /></Show>
         {/* A deploy while this tab was open: a missing chunk loads the new build; a page known stale navigates fresh. */}
         <StaleBuildNavigation />
         <ErrorBoundary fallback={(error, reset) => <PageFailure error={error} reset={reset} />}>
           <Show when={workspaceRoute()} fallback={<Suspense fallback={<PendingPage />}>{props.children}</Suspense>}><Suspense fallback={<PendingPage />}><WorkspaceShell><Suspense fallback={<PendingPage />}>{props.children}</Suspense></WorkspaceShell></Suspense></Show>
         </ErrorBoundary>
-      </ChromeVisibilityContext.Provider>
+      </PageBreadcrumbProvider></ChromeVisibilityContext.Provider>
     </OnboardingGate>
     </InboxProvider>
     </SessionProvider>
@@ -130,6 +133,7 @@ export function App(): JSX.Element {
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
       <Route path="/groups" component={GroupsPage} />
+      <Route path="/groups/:identity/settings" component={()=><GroupSettingsPage identity={useParams().identity!}/>} />
       <Route path="/getting-started" component={GettingStartedPage} />
       {UiGallery && <Route path="/dev/ui" component={UiGallery} />}
       <Route path="/:user" component={ProfilePage} />
