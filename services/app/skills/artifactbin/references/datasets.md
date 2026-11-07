@@ -98,8 +98,8 @@ until [permissions](permissions.md) allow more; a page link never grants writes.
 `client.watchQuery({query}).subscribe(...)` refetches after committed writes and when the dataset
 changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Never poll.
 `examples/csv-dashboard.html` charts `_sql` group-bys;
-`examples/shared-app.html` writes through a resolver ([resolvers](resolvers.md));
-`examples/shared-list.html` writes rows directly and draws its controls from `_can`.
+`examples/tracker.html` writes rows directly, draws its controls from `_can`, counts with
+`_sql` and, with its limits feature, adds through a resolver ([resolvers](resolvers.md)).
 
 ## Type together (`@afbin/collab`)
 

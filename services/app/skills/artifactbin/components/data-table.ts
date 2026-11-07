@@ -8,6 +8,8 @@
  *   [{col,template}]; columnIdentities {col: {afId,id?}}; resolveSrc(url) for image columns;
  *   source.read({offset,limit,sort,signal}) returns {rows,columns,totalRows?,truncated?}.
  * Events: af-sort-change (detail: sort) and af-edit-intent (detail: {row,key,column,value}).
+ *   The table draws no editor and never fires af-edit-intent itself: it fires only when a cell
+ *   renderer calls context.edit(value) (e.g. from an Edit button it returns).
  * Examples:
  *   table.data={rows:[{id:1,name:"Ada"}],columns:[{name:"id",type:"number"},
  *     {name:"name",type:"string"}]};
@@ -22,7 +24,7 @@ import { parseSortSpec, type SortSpec } from "@/lib/html-components/table-values
 import {
   createTableState, dataTableStyles, emptyTable, loadTableRows, renderTable,
 } from "./data-table-frame";
-import { invalidateMeasurements } from "./data-table-measure";
+import { cancelResizeRender, invalidateMeasurements } from "./data-table-measure";
 import {
   freezeColumnIdentities, type TableColumnIdentity, type TableData, type TableSource,
   type TableCellRenderer, type TableTemplate,
@@ -158,6 +160,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     s.viewportObserver = undefined;
     s.rowObserver?.disconnect();
     s.rowObserver = undefined;
+    cancelResizeRender(s);
   }
   attributeChangedCallback(name: string, _old: string | null, value: string | null) {
     if (["columns", "sort", "metrics"].includes(name)) {

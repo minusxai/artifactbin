@@ -119,8 +119,9 @@ const commands = {
   }},
   doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}},
   'new-app': {
-    starter: 'examples/shared-app.html',
-    flags: {kind: flag(), title: flag(), data: flag(), url: flag(), dir: flag()}
+    starter: 'examples/tracker.html',
+    flags: {kind: flag(), title: flag(), preset: flag(), without: flag(), limit: flag(),
+      url: flag(), dir: flag()}
   },
   'new-page': {
     starter: 'examples/csv-dashboard.html',

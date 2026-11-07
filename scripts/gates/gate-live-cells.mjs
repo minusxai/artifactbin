@@ -15,7 +15,11 @@
  *   5. both leave: the typing is saved as the cell's value through the dataset, and the signed-out reader, reloading,
  *      reads exactly it;
  *   6. typing before the session arrives (a slowed open) is kept and merged in, not lost or doubled;
- *   7. a downloaded copy opened from disk with no network loads the library and shows the field read-only.
+ *   7. the generated tracker (new-app.mjs's tasks preset, toolbox-tracker): a signed-in link holder adds an entry and
+ *      gets no controls on the owner's (own-rows); owner and author type its description together and the save reaches
+ *      a signed-out reader; the table's Edit opens the form with no page or console error; tracker.ts refuses a full
+ *      group and the page counts it with `_sql`;
+ *   8. a downloaded copy opened from disk with no network loads the library and shows the field read-only.
  *
  *   node scripts/gates/gate-live-cells.mjs [base]
  */
@@ -31,6 +35,8 @@ import { documentFrame } from './lib/page-facts.mjs';
 import { createChecker, createSection } from './lib/assert.mjs';
 import { sleep } from './lib/sleep.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
+import { trackerFeatures, trackerFiles } from '../../services/app/skills/artifactbin/scripts/toolbox-tracker.mjs';
+import { rules as trackerRules } from '../../services/app/skills/artifactbin/examples/tracker-features.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('live-cells');
@@ -200,6 +206,78 @@ try {
     await until(stored, (value) => value === `${before} early-D`, 20_000);
     check(await stored() === `${before} early-D`, `the early keys were kept once, at the end (${JSON.stringify(saved?.slice(-40))})`);
     await context.close();
+  });
+
+  await section('the generated tracker (every feature): own entries, typing together, the table and the limit', async () => {
+    // The page new-app.mjs writes for `--preset tasks --limit 3`, with the rules its features need.
+    const keep = trackerFeatures({});
+    const files = await trackerFiles(keep, { limit: 3 });
+    const { id: entriesId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ dataset: [{ name: 'Ada task', grp: 'To do', note: '', created_by: '', description: 'Start here' }], title: 'Tracker entries', visibility: 'unlisted' }), headers: { 'idempotency-key': randomUUID() } });
+    const { revision, templates } = await api(`/api/artifacts/${entriesId}/policy/templates?ownerColumn=created_by`);
+    const own = templates.find((t) => t.name === 'own-rows').policy;
+    const saved = await api(`/api/artifacts/${entriesId}/policy`, { method: 'PUT', body: JSON.stringify({ policy: { ...own, tables: own.tables.map((t) => trackerRules(t, keep)) }, expectedPolicyRevision: revision }) });
+    check(saved.saved === true && /Typed live together/.test(saved.readBack), 'the tracker\'s rules are own-rows, team and collab (the read-back says description is typed live)');
+    const html = files['index.html'].replaceAll('ref:DATASET_ID', `ref:${entriesId}`).replace(/'\[([^\]']+)\]'/g, "'$1'").replace('[Tracker name]', 'Launch tasks');
+    const { id: trackerId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ html, title: 'Launch tasks', visibility: 'public', resolverSources: { tracker: files['tracker.ts'] } }), headers: { 'idempotency-key': randomUUID() } });
+    const trackerGql = (query, variables = {}) => api(`/api/artifacts/${trackerId}/graphql`, { method: 'POST', body: JSON.stringify({ query, variables, revision: '1' }), headers: { 'idempotency-key': randomUUID().replaceAll('-', '') } });
+    const [TA, TB, TC] = await Promise.all(contexts.map((context) => context.newPage()));
+    const errors = [];
+    for (const p of [TA, TB]) {
+      p.on('pageerror', (error) => errors.push(error.message));
+      p.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    }
+    await Promise.all([TA, TB, TC].map((p) => p.goto(`${BASE}/a/${trackerId}`, { waitUntil: 'load' })));
+    const [ta, tb, tc] = await Promise.all([TA, TB, TC].map((p) => documentFrame(p)));
+    const loaded = (frame) => frame.waitForFunction(() => document.querySelector('#lists')?.getAttribute('aria-busy') === 'false', null, { timeout: 15_000 });
+    await Promise.all([ta, tb, tc].map(loaded));
+    const row = (frame, name) => frame.locator('[data-af-id^="entry-"]').filter({ has: frame.getByText(name, { exact: true }) });
+
+    // own-rows: the signed-in link holder adds an entry, may change it, and may not change the owner's.
+    await tb.locator('#add-name').fill('Bo task');
+    await tb.locator('#add-button').click();
+    const added = await until(() => tb.locator('#status').textContent(), (text) => /^Added Bo task/.test(text ?? ''));
+    check(/^Added Bo task/.test(added ?? ''), `the signed-in link holder adds an entry through the page (${JSON.stringify(added)})`);
+    await row(tb, 'Bo task').getByRole('button', { name: 'Edit Bo task' }).waitFor({ timeout: 5000 });
+    check(await row(tb, 'Ada task').getByRole('button').count() === 0, 'the link holder gets no Edit or Remove on the owner\'s entry (own-rows, from _can)');
+    check(await tc.locator('#add').isVisible() === false && await tc.getByRole('button', { name: /^(?:Edit|Remove) / }).count() === 0, 'the signed-out reader gets no add form and no controls');
+
+    // collab: the owner and the link holder type into the link holder's entry at once.
+    await ta.waitForFunction(() => document.body.textContent.includes('Bo task'), null, { timeout: 10_000 });
+    await row(ta, 'Bo task').getByRole('button', { name: 'Edit Bo task' }).click();
+    await row(tb, 'Bo task').getByRole('button', { name: 'Edit Bo task' }).click();
+    const area = (frame) => frame.locator('[data-af-id$="-description-input"]');
+    const synced = (frame) => until(() => area(frame).getAttribute('data-status'), (s) => s === 'synced', 15_000);
+    check(await synced(ta) === 'synced' && await synced(tb) === 'synced', 'the description opens live for the owner and the entry\'s author');
+    await area(ta).click(); await area(tb).click();
+    await Promise.all([TA.keyboard.type('owner-typed ', { delay: 25 }), TB.keyboard.type('author-typed ', { delay: 25 })]);
+    // Both fields hold every key of both people, the same text, before anyone leaves.
+    const typed = await until(() => Promise.all([ta, tb].map((frame) => area(frame).inputValue())), (values) => values?.[0] === values?.[1] && !!values?.[0]?.includes('owner-typed ') && values[0].includes('author-typed '), 15_000) ?? [];
+    check(typed[0] === typed[1] && !!typed[0]?.includes('owner-typed ') && typed[0].includes('author-typed '), `both see both people's typing (${JSON.stringify(typed)})`);
+    await Promise.all([ta, tb].map((frame) => frame.getByRole('button', { name: 'Cancel', exact: true }).click()));
+
+    // table: the owner switches to the table and opens an entry's form from its Edit cell.
+    await ta.getByRole('button', { name: 'Table', exact: true }).click();
+    await ta.getByRole('button', { name: 'Edit Bo task in the table' }).click();
+    check(await ta.locator('[data-af-id$="-name-input"]').isVisible(), 'the table\'s Edit opens the entry\'s form in the grouped view');
+    await ta.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    // limits: tracker.ts refuses a fourth entry in a group on the server, whoever asks.
+    for (const name of ['One', 'Two', 'Three']) check(!(await trackerGql('mutation($n: String!) { tracker { add(name: $n, grp: "Done") { _id } } }', { n: name })).errors?.length, `"${name}" fits in Done`);
+    const refused = await trackerGql('mutation { tracker { add(name: "Four", grp: "Done") { _id } } }');
+    check(/Done is full \(3 entries\)/.test(refused.errors?.[0]?.message ?? ''), `the fourth entry is refused by the server (${JSON.stringify(refused.errors?.[0]?.message)})`);
+    check(await until(() => tb.locator('[data-af-id="group-done-count"]').textContent(), (text) => text === '3 of 3', 10_000) === '3 of 3', 'the page counts the group with _sql: 3 of 3');
+    check(errors.length === 0, `no page or console error, the table included (${errors.join(' | ') || 'none'})`);
+    // Typing is saved as one dataset version about 5 s after its last editor leaves the page.
+    await Promise.all([TA, TB].map((p) => p.close({ runBeforeUnload: true })));
+    const bo = (await trackerGql('{ entries(where: {name: {_eq: "Bo task"}}) { _id description } }')).data.entries[0];
+    const savedText = await until(async () => (await trackerGql('query($id: ID!) { entries_by_pk(_id: $id) { description } }', { id: bo._id })).data.entries_by_pk.description, (text) => text === typed[0], 20_000);
+    check(savedText === typed[0], 'both leaving saves the typing to the entry');
+    await TC.reload({ waitUntil: 'load' });
+    const tc2 = await documentFrame(TC);
+    await loaded(tc2);
+    const read = await until(() => tc2.locator('#lists').textContent(), (text) => !!text?.includes('author-typed') && text.includes('owner-typed'), 15_000);
+    check(!!read?.includes('author-typed') && read.includes('owner-typed'), 'the signed-out reader reloads and reads the saved description in the list');
+    await TC.close();
   });
 
   await section('a downloaded copy works offline: the library loads and the field is read-only', async () => {

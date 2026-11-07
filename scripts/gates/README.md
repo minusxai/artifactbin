@@ -24,7 +24,7 @@ The native data gates retain the platform seams with author-owned HTML:
 The former roadmap fixture was an authored JSX business application, not a
 platform view or sprint API. Its view/filter authoring is represented by the
 installed CSV dashboard example and author trial; shared creation and dialogs
-are represented by booking, shared-app author trials and the native data gates.
+are represented by booking, tracker author trials and the native data gates.
 Those author trials remain separate evidence; a gate pass does not claim them.
 Compiled DataTable virtualization, Select portals, generated roadmap components
 and island DOM takeover assertions retired with those compiler components.

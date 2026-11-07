@@ -90,7 +90,7 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','csv-dashboard.mjs','gen-deliveries.mjs','gen-transactions.mjs','budget.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs','shared-app-policy.mjs','shared-list.html','shared-list-steps.mjs','shared-list-guest.mjs','shared-list-cleanup.mjs','api-dashboard.html','api-dashboard.ts','api-dashboard-steps.mjs','api-dashboard-guest.mjs','api-dashboard-cleanup.mjs','codebase-report.html','codebase-report-steps.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const sample of ['report.html','csv-dashboard.html','tracker.html','deck.html','csv-dashboard.mjs','gen-deliveries.mjs','gen-transactions.mjs','tracker.ts','deck-steps.mjs','tracker-features.mjs','tracker-steps.mjs','tracker-guest.mjs','tracker-cleanup.mjs','api-dashboard.html','api-dashboard.ts','api-dashboard-steps.mjs','api-dashboard-guest.mjs','api-dashboard-cleanup.mjs','codebase-report.html','codebase-report-steps.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
   for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon']){expect(Object.hasOwn(files,`resolvers/resolver-${resolver}.ts`),resolver).toBe(true);expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(false);}
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
@@ -112,7 +112,7 @@ describe('one installable native HTML author skill',()=>{
    // The removed sample flags are refused as invocation errors.
    try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare','report','--server',BASE,'--output',path.join(dir,'report.json')],{cwd:installed,stdio:'pipe'});throw Error('Expected --prepare refusal');}catch(error){expect((error as {status:number}).status).toBe(2);}
    const {prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
-   for(const sample of ['report','csv-dashboard','shared-app']){
+   for(const sample of ['report','csv-dashboard','tracker']){
     const source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
     const saved=await prepareBundle({root:installed,entry:`examples/${sample}.html`,server:BASE,entryHtml:source.replaceAll('ref:DATASET_ID','ref:REALDATA123').replaceAll('ref:TARGETS_ID','ref:REALDATA123')});
     expect(saved).not.toHaveProperty('token');expect(saved.body.publicationBundle).toBeDefined();
@@ -123,7 +123,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="budget"');expect(plan.resolverSources.budget).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });

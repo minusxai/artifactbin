@@ -1,7 +1,9 @@
 /**
- * scripts/new-app.mjs: the shared-app starter set up in one call, against a fake server: copies the
- * starter files, publishes the two datasets, applies the starter's rules and fills the page; a rerun
- * reuses the datasets its companions record and changes nothing.
+ * scripts/new-app.mjs: the tracker starter set up in one call, against a fake server: writes the template trimmed to
+ * the chosen features (a preset minus --without), publishes the empty entries dataset with the template its features
+ * start from, applies the rules they add and fills the page; --limit writes one number into the page and resolver;
+ * unknown features, missing requirements and a limit without limits are refused before anything is written; a rerun
+ * reuses the dataset its companion records and changes nothing.
  */
 import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
@@ -10,27 +12,35 @@ import path from 'node:path';
 
 const server='https://example.test';
 type Call={method:string;path:string;body?:any};
+const USER='X-Hasura-User-Id';
 
 /** Keys sorted at every level, as the real server stores a policy (so a rerun cannot compare key order). */
 const sorted=(value:any):any=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,sorted(value[key])])):value;
-/** A fake origin: each POST creates a dataset with a fresh id; policy GET/PUT keep one policy per id. */
+/** The own-rows template as the server builds it for the entries columns. */
+const ownRows=(columns:string[])=>({version:3,tables:[{table:{schema:'public',name:'rows'},
+ select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),
+ insert_permissions:['viewer','signed_in'].map(role=>({role,permission:{columns:columns.filter(c=>c!=='created_by'),check:{},set:{created_by:USER}}})),
+ update_permissions:['viewer','signed_in'].map(role=>({role,permission:{columns:columns.filter(c=>c!=='created_by'),filter:{created_by:{_eq:USER}},check:{created_by:{_eq:USER}}}})),
+ delete_permissions:['viewer','signed_in'].map(role=>({role,permission:{filter:{created_by:{_eq:USER}}}}))}]});
+/** A fake origin: each POST creates a dataset with a fresh id; templates come from its CSV header; policy GET/PUT keep one policy per id. */
 function fakeServer(){
- const calls:Call[]=[],policies=new Map<string,any>();let made=0;
+ const calls:Call[]=[],policies=new Map<string,any>(),headers=new Map<string,string[]>();let made=0;
  const fetcher=async(url:any,init:any)=>{
   const {pathname}=new URL(String(url)),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):undefined;
   calls.push({method,path:pathname,body});
   if(pathname==='/api/artifacts'&&method==='POST'){const id='DATA'+String(++made).padStart(4,'0');
+   headers.set(id,String(body.dataset).split('\n')[0]!.split(','));
    policies.set(id,{revision:1,policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[]}]}});
    return Response.json({id,url:server+'/a/'+id,version:1,state:'a'.repeat(64),format:'dataset'},{status:201});}
   const templates=/^\/api\/artifacts\/(\w+)\/policy\/templates$/.exec(pathname);
-  if(templates&&method==='GET')return Response.json({revision:policies.get(templates[1]!).revision,templates:[{name:'own-rows',ok:true,policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'anonymous'}],insert_permissions:[{role:'signed_in'}]}]}}]});
+  if(templates&&method==='GET')return Response.json({revision:policies.get(templates[1]!).revision,templates:[{name:'own-rows',ok:true,policy:ownRows(headers.get(templates[1]!)!)}]});
   const policy=/^\/api\/artifacts\/(\w+)\/policy$/.exec(pathname);
   if(policy&&method==='GET')return Response.json({...policies.get(policy[1]!),source:'v3',readBack:'Table public.rows'});
   if(policy&&method==='PUT'){const saved={revision:policies.get(policy[1]!).revision+1,policy:sorted(body.policy)};policies.set(policy[1]!,saved);
    return Response.json({saved:true,revision:saved.revision,readBack:'Table public.rows\n- Everyone: see rows.'});}
   return Response.json({error:'unexpected'},{status:500});
  };
- return {calls,fetcher};
+ return {calls,fetcher,policies};
 }
 
 async function project(){
@@ -39,100 +49,108 @@ async function project(){
  const fake=fakeServer();
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher:fake.fetcher,cwd:root,log:()=>{}};
  const run=(values:Record<string,unknown>,positionals:string[]=[])=>newAppCommand({values:{server,...values},positionals},options);
- return {root,dir,run,calls:fake.calls,done:()=>rm(root,{recursive:true,force:true})};
+ const files=async()=>(await readdir(dir)).filter(name=>!name.endsWith('.af.json')).sort();
+ return {root,dir,run,files,calls:fake.calls,policies:fake.policies,done:()=>rm(root,{recursive:true,force:true})};
 }
+const CHECK='node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
 
-it('sets up the shared app in one call: files, two datasets, the rules and the filled page',async()=>{
+it('sets up the team task tracker in one call: every feature, its dataset, rules, resolver and the filled page',async()=>{
  const p=await project();
  try{
-  const result=await p.run({dir:'app',title:'[Household budget]'});
-  expect((await readdir(p.dir)).filter(name=>!name.endsWith('.af.json')).sort()).toEqual(['budget.ts','cleanup.mjs','guest.mjs','index.html','steps.mjs','targets.csv','transactions.csv']);
-  expect(result.created).toEqual(['index.html','budget.ts','steps.mjs','guest.mjs','cleanup.mjs','transactions.csv','targets.csv']);
-  expect(result.kept).toEqual([]);
-  expect(result.datasets).toEqual({transactions:{id:'DATA0001',rows:expect.any(Number),reused:false},targets:{id:'DATA0002',rows:1,reused:false}});
-  expect((result.datasets as any).transactions.rows).toBeGreaterThan(200);
-  // The two creates carry readable titles; the rules go on targets only, at the revision read.
-  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','POST /api/artifacts','GET /api/artifacts/DATA0002/policy','PUT /api/artifacts/DATA0002/policy']);
-  expect(p.calls[0]!.body).toMatchObject({title:'Household budget transactions (sample)',visibility:'unlisted'});
-  expect(p.calls[1]!.body).toMatchObject({title:'Household budget targets',dataset:'category,amount\nRent,1650\n'});
-  const put=p.calls[3]!.body;expect(put.expectedPolicyRevision).toBe(1);
-  expect(put.policy.tables[0].select_permissions.map((r:any)=>r.role)).toEqual(['viewer','signed_in','anonymous']);
-  expect(put.policy.tables[0].insert_permissions.map((r:any)=>r.role)).toEqual(['viewer','signed_in']);
-  // The page links both ids, carries the title and no ref: placeholder or bracketed title.
+  const result=await p.run({dir:'app',title:'[Launch tasks]'});
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
+  expect(result).toMatchObject({kind:'tracker',preset:'tasks',features:['own-rows','team','collab','table','limits'],
+   created:['index.html','tracker.ts','steps.mjs','guest.mjs','cleanup.mjs','entries.csv'],kept:[],
+   datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
+  // One create (the header, named entries), the own-rows template, then the team and collab rules on top.
+  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy','GET /api/artifacts/DATA0001/policy','PUT /api/artifacts/DATA0001/policy']);
+  expect(p.calls[0]!.body).toMatchObject({title:'Launch tasks entries',name:'entries',dataset:'name,grp,note,created_by,description\n'});
+  const table=p.calls[4]!.body.policy.tables[0];
+  expect(table.collaborative_columns).toEqual(['description']);
+  expect(table.update_permissions.map((e:any)=>[e.role,e.permission.filter])).toEqual([['viewer',{}],['signed_in',{created_by:{_eq:USER}}]]);
+  expect(table.delete_permissions.map((e:any)=>[e.role,e.permission.filter])).toEqual([['viewer',{}],['signed_in',{created_by:{_eq:USER}}]]);
+  expect(p.calls[4]!.body.expectedPolicyRevision).toBe(2);
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
-  expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('href="ref:DATA0002"');
-  expect(html).toContain('<title>Household budget</title>');
-  expect(html).not.toMatch(/ref:(?:DATASET|TARGETS)_ID|\[App name\]/);
-  expect(result.next).toBe('Next: in index.html edit only APP: its [bracketed] text and defaultTargets (plausible monthly amounts); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs');
-  expect(result.note).toContain('DATA0001');
+  expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<title>Launch tasks</title>');
+  expect(html).not.toMatch(/ref:DATASET_ID|\[Tracker name\]|@(?:feature|only|end) !/);
+  expect(html).toContain('<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">');
+  expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own; people the page is shared with change and remove every entry; descriptions are typed in together, live; each group holds at most 5 entries');
+  expect(result.next).toBe(`Next: in index.html edit only APP: its [bracketed] text and groups (the stages entries move through); then ${CHECK}`);
  }finally{await p.done();}
 });
 
-it('reuses its datasets on a rerun and changes no file',async()=>{
- const p=await project();
- try{
-  await p.run({dir:'app'},['Household','budget']);
-  const before=await Promise.all(['index.html','targets.csv','transactions.csv'].map(name=>readFile(path.join(p.dir,name),'utf8')));
-  p.calls.length=0;
-  const again=await p.run({dir:path.join(p.dir),title:'Household budget'});
-  expect(again.created).toEqual([]);
-  expect(again.kept).toEqual(['index.html','budget.ts','steps.mjs','guest.mjs','cleanup.mjs','transactions.csv','targets.csv']);
-  expect(again.datasets).toMatchObject({transactions:{id:'DATA0001',reused:true},targets:{id:'DATA0002',reused:true}});
-  // No create and no rules write: the rules already hold.
-  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['GET /api/artifacts/DATA0002/policy']);
-  const after=await Promise.all(['index.html','targets.csv','transactions.csv'].map(name=>readFile(path.join(p.dir,name),'utf8')));
-  expect(after).toEqual(before);
- }finally{await p.done();}
-});
-
-it('takes your CSV by relative or absolute path and refuses one that differs from the copy it made',async()=>{
- const p=await project();
- try{
-  await writeFile(path.join(p.root,'bank.csv'),'date,merchant,category,amount,payer\n2026-01-02,Shop,Groceries,12.50,Ada\n');
-  const result=await p.run({dir:'app',title:'Our money',data:'bank.csv'});
-  expect((result.datasets as any).transactions).toMatchObject({rows:1,reused:false});
-  expect(p.calls[0]!.body).toMatchObject({title:'Our money transactions',dataset:expect.stringContaining('Shop,Groceries')});
-  // Your own rows are not sample data.
-  expect(await readFile(path.join(p.dir,'index.html'),'utf8')).not.toContain('· sample data');
-  expect(result.next).toContain('columns and defaultTargets (your categories)');
-  // The same file again, by absolute path, is accepted.
-  await p.run({dir:'app',title:'Our money',data:path.join(p.root,'bank.csv')});
-  await writeFile(path.join(p.root,'other.csv'),'date,merchant,category,amount,payer\n2026-02-02,Cafe,Dining out,8,Ada\n');
-  await expect(p.run({dir:'app',title:'Our money',data:'other.csv'})).rejects.toMatchObject({code:'data_conflict',exit:2,recovery:expect.stringContaining('mv transactions.csv')});
- }finally{await p.done();}
-});
-
-it('keeps a file that already exists and says so, and asks for a title with the one command',async()=>{
- const p=await project();
- try{
-  await expect(p.run({dir:'app'})).rejects.toMatchObject({code:'missing_title',exit:2,recovery:'Run node scripts/new-app.mjs --title NAME'});
-  expect(p.calls).toEqual([]);
-  await writeFile(path.join(p.dir,'steps.mjs'),'// mine\n');
-  const result=await p.run({dir:'app',title:'Budget'});
-  expect(result.kept).toEqual(['steps.mjs']);expect(result.note).toContain('kept steps.mjs');
-  expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).toBe('// mine\n');
- }finally{await p.done();}
-});
-
-it('sets up the list starter: its files, an empty entries dataset with own-rows rules and the filled page',async()=>{
+it('sets up the list preset (--kind list): own-rows only, no resolver, no rule beyond the template',async()=>{
  const p=await project();
  try{
   const result=await p.run({dir:'app',kind:'list',title:'Riverside cleanup'});
-  expect((await readdir(p.dir)).filter(name=>!name.endsWith('.af.json')).sort()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
-  expect(result.datasets).toEqual({entries:{id:'DATA0001',rows:0,reused:false}});
-  // One create (the header only, named entries), then the own-rows template stamped on created_by.
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
+  expect(result).toMatchObject({kind:'list',preset:'list',features:['own-rows'],datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
-  expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',name:'entries',dataset:'name,choice,note,created_by\n',columns:[{name:'name'},{name:'choice'},{name:'note'},{name:'created_by'}]});
+  expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',name:'entries',dataset:'name,grp,note,created_by\n',columns:[{name:'name'},{name:'grp'},{name:'note'},{name:'created_by'}]});
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
-  expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<title>Riverside cleanup</title>');
-  expect(html).not.toMatch(/ref:DATASET_ID|\[List name\]/);
-  expect(result.next).toBe('Next: in index.html edit only APP: its [bracketed] text and choices (the options people pick from); then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs');
+  expect(html).toContain("kicker: '[Event · dates]'");expect(html).toContain("groups: ['[First choice]', '[Second choice]', '[Third choice]']");
+  expect(html).not.toMatch(/af-resolver|@afbin\/collab|@afbin\/data-table|@(?:feature|only) (?:team|collab|table|limits)\b/);
+  expect(html).toMatch(/<p id="signin" hidden>/);
+  expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).not.toMatch(/full group|description|table view/);
+  expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own');
+  expect(result.next).toContain('groups (the options people pick from)');
   // A rerun reuses the dataset and writes nothing.
   p.calls.length=0;
   expect((await p.run({dir:'app',kind:'list',title:'Riverside cleanup'})).kept).toHaveLength(5);
   expect(p.calls).toEqual([]);
-  await expect(p.run({dir:'app',kind:'list',title:'X',data:'rows.csv'})).rejects.toMatchObject({code:'data_not_for_list',exit:2});
-  await expect(p.run({dir:'app',kind:'poll',title:'X'})).rejects.toMatchObject({code:'invalid_kind',exit:2});
+ }finally{await p.done();}
+});
+
+it('drops features with --without, keeping the read-only template when own-rows goes',async()=>{
+ const p=await project();
+ try{
+  const result=await p.run({dir:'app',title:'Reading list',without:'own-rows,team,limits,collab'});
+  expect(result).toMatchObject({features:['table']});
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
+  // No template flag (new datasets start read-only) and no rule to add.
+  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts']);
+  expect(p.calls[0]!.body.template).toBeUndefined();
+  const html=await readFile(path.join(p.dir,'index.html'),'utf8');
+  expect(html).toContain("import '@afbin/data-table'");expect(html).not.toContain('id="signin"');
+  expect(html).toContain('insert_entries_one');
+  expect(result.rules).toBe('entries: everyone reads; only you and editors change entries');
+ }finally{await p.done();}
+});
+
+it('writes one --limit into the page and tracker.ts, and refuses bad features and limits before writing anything',async()=>{
+ const p=await project();
+ try{
+  await expect(p.run({dir:'app',title:'X',without:'kanban'})).rejects.toMatchObject({code:'unknown_feature',exit:2,recovery:expect.stringContaining('own-rows, team, collab, table, limits')});
+  await expect(p.run({dir:'app',title:'X',without:'own-rows'})).rejects.toMatchObject({code:'feature_requires',exit:2,recovery:'Drop team too (--without own-rows,team), or keep own-rows.'});
+  await expect(p.run({dir:'app',title:'X',preset:'kanban'})).rejects.toMatchObject({code:'invalid_preset',exit:2});
+  await expect(p.run({dir:'app',title:'X',kind:'poll'})).rejects.toMatchObject({code:'invalid_kind',exit:2});
+  await expect(p.run({dir:'app',title:'X',kind:'list',preset:'tasks'})).rejects.toMatchObject({code:'preset_conflict',exit:2});
+  await expect(p.run({dir:'app',title:'X',kind:'list',limit:'4'})).rejects.toMatchObject({code:'limit_without_limits',exit:2});
+  await expect(p.run({dir:'app',title:'X',limit:'0'})).rejects.toMatchObject({code:'invalid_limit',exit:2});
+  await expect(p.run({dir:'app'})).rejects.toMatchObject({code:'missing_title',exit:2,recovery:'Run node scripts/new-app.mjs --title NAME'});
+  expect(p.calls).toEqual([]);expect(await p.files()).toEqual([]);
+  const result=await p.run({dir:'app',title:'Workshop seats',without:'team,collab,table',limit:'12'});
+  expect(result).toMatchObject({features:['own-rows','limits'],limit:12});
+  expect(await readFile(path.join(p.dir,'index.html'),'utf8')).toMatch(/^ {2}limit: 12,/m);
+  expect(await readFile(path.join(p.dir,'tracker.ts'),'utf8')).toMatch(/^const LIMIT=12;/m);
+  expect(result.rules).toContain('each group holds at most 12 entries');
+ }finally{await p.done();}
+});
+
+it('keeps a file that already exists and says so, and reuses the dataset and rules on a rerun',async()=>{
+ const p=await project();
+ try{
+  await writeFile(path.join(p.dir,'steps.mjs'),'// mine\n');
+  const result=await p.run({dir:'app',title:'Launch tasks'});
+  expect(result.kept).toEqual(['steps.mjs']);expect(result.note).toContain('kept steps.mjs');
+  expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).toBe('// mine\n');
+  const before=await readFile(path.join(p.dir,'index.html'),'utf8');
+  p.calls.length=0;
+  const again=await p.run({dir:path.join(p.dir),title:'Launch tasks'});
+  expect(again.created).toEqual([]);expect(again.datasets).toMatchObject({entries:{id:'DATA0001',reused:true}});
+  // No create and no rules write: the feature rules already hold.
+  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['GET /api/artifacts/DATA0001/policy']);
+  expect(await readFile(path.join(p.dir,'index.html'),'utf8')).toBe(before);
  }finally{await p.done();}
 });
 

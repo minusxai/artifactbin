@@ -1,0 +1,200 @@
+<!doctype html>
+<!-- Example: a shared tracker. Usage: and Gotchas: are above APP; keep this line. -->
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="artifactbin:design-system" content="signout">
+<title>[Tracker name]</title><!-- the tracker's name: the heading, the tab and link previews -->
+<link rel="af-dataset" data-af-name="entries" href="ref:DATASET_ID">
+<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts"><!-- @only limits -->
+<script type="module" id="app-config">
+// Usage: node scripts/new-app.mjs --title "NAME" (and --preset tasks|list, --without FEATURE,…,
+//   --limit N) writes this page with only the chosen features, its dataset, rules and checks,
+//   and prints the next step: edit only APP, then publish and check.
+// Gotchas: who may add, change or remove comes from the server (_can), never from page script.
+// Built with: one HTML page; an entries dataset read and written through its generated API.
+// Features (to drop one, delete its lines ending "@only NAME" and its @feature…@end blocks):
+// - own-rows: signed-in people add entries and change or remove only theirs. // @only own-rows
+// - team: people it is shared with (viewers) change and remove every entry. // @only team
+// - collab: an entry's description is typed in together, live (@afbin/collab). // @only collab
+// - table: a sortable table view of every entry (af-data-table). // @only table
+// - limits: each group holds at most APP.limit entries; tracker.ts enforces it. // @only limits
+// The only part to edit. Each entry is a name, one of groups and an optional note.
+window.APP = {
+  kicker: '[Team · quarter]', summary: '[What we are working on, and who has it.]',
+  nameLabel: '[Task]', groupLabel: '[Status]', noteLabel: '[Owner or note (optional)]',
+  addLabel: '[Add task]', groups: ['[To do]', '[Doing]', '[Done]'],
+  limit: 5, // the same number as LIMIT in tracker.ts (--limit N writes both) // @only limits
+};
+</script>
+<style>
+*{box-sizing:border-box}body{line-height:1.5}.muted{opacity:.75}p{max-width:68ch}
+main{max-width:860px;margin:auto;padding:clamp(20px,4vw,48px)}.actions{display:flex;gap:8px}
+button,input,select,textarea{font:inherit;padding:8px 12px;color:inherit;
+  background:var(--background);border:1px solid currentColor;border-radius:4px}
+button.primary{background:var(--primary);color:var(--primary-foreground);border-color:transparent}
+:focus-visible{outline:3px solid var(--primary);outline-offset:2px}[role=status]{min-height:1.5em}
+.fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr) auto;
+  gap:12px;align-items:end}.fields label{display:grid;gap:4px;min-width:0}
+.fields input,.fields select,.fields textarea{width:100%}button{cursor:pointer}
+#add{border:1px solid var(--border);border-radius:6px;padding:16px;margin:20px 0}
+.group{margin-top:28px}.group h2{display:flex;justify-content:space-between;gap:12px;margin:0;
+  border-bottom:2px solid currentColor;padding-bottom:6px}
+.group li{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;padding:10px 0;
+  border-bottom:1px solid var(--border)}.who{flex:1 1 220px;min-width:0}.note{display:block}
+.group ul{list-style:none;margin:0;padding:0}.group li form{flex:1 1 100%}
+.description{grid-column:1/-1}.desc{display:block;white-space:pre-wrap} /* @only collab */
+.description textarea{min-height:5em;resize:vertical} /* @only collab */
+.views{display:flex;gap:8px;margin:12px 0} /* @only table */
+.views button[aria-pressed=true]{background:var(--muted)} /* @only table */
+@media(max-width:720px){.fields{grid-template-columns:1fr}}
+</style>
+</head><body><main>
+<p id="kicker" class="muted"></p><h1 id="title" class="t-display-l"></h1><p id="summary"></p>
+<form id="add" hidden><div class="fields">
+<label><span id="name-label"></span><input id="add-name" required maxlength="80"></label>
+<label><span id="group-label"></span><select id="add-group"></select></label>
+<label><span id="note-label"></span><input id="add-note" maxlength="140"></label>
+<button id="add-button" class="primary" type="submit"></button></div></form>
+<p id="signin" hidden>Sign in to add an entry.</p><!-- @only own-rows -->
+<div class="views" role="group" aria-label="View"><!-- @only table -->
+<button id="view-list" type="button" aria-pressed="true">Grouped</button><!-- @only table -->
+<button id="view-table" type="button" aria-pressed="false">Table</button></div><!-- @only table -->
+<af-data-table id="table" label="Every entry" hidden></af-data-table><!-- @only table -->
+<p id="status" role="status" aria-live="polite">Loading…</p>
+<div id="lists" aria-busy="true"></div></main>
+<script type="module">
+import {client,gql,onResolverChange} from '@afbin/apollo';
+import {collab} from '@afbin/collab'; // @only collab
+import '@afbin/data-table'; // @only table
+const APP=window.APP,$=s=>document.querySelector(s),status=$('#status');
+// entries_can and each row's _can (as can) say what this viewer may do; counts come from _sql.
+const FIELDS='id:_id name grp note can:_can{update delete}'
+  +' description'; // @only collab
+const listQuery=gql([`query List($groups:String!,$total:String!,$p:JSON){entries(
+  order_by:{name:asc},limit:1000){${FIELDS}} entries_can{insert} viewer{signedIn}
+  groups:_sql(sql:$groups,params:$p){rows} total:_sql(sql:$total){rows}}`]);
+// Entries per listed group; one whose group is no longer listed counts under '' (Other).
+const counts={groups:"select case when grp in (select value from json_each($listed)) then grp "+
+  "else '' end as grp, count(*) as n from entries group by 1",
+  total:'select count(*) as n from entries',p:{listed:JSON.stringify(APP.groups)}};
+// One add: direct, or through tracker.ts with limits (var: the starter template declares both).
+var addRequest=o=>({mutation:gql(['mutation Add($o:entries_insert_input!){'+ // @only !limits
+  'insert_entries_one(object:$o){_id}}']),variables:{o}}); // @only !limits
+const add=gql(['mutation Add($n:String!,$g:String!,$note:String){'+ // @only limits
+  'tracker{add(name:$n,grp:$g,note:$note){_id}}}']); // @only limits
+var addRequest=o=>({mutation:add,variables:{n:o.name,g:o.grp,note:o.note}}); // @only limits
+const update=gql`mutation Edit($id:ID!,$s:entries_set_input!){
+  update_entries_by_pk(pk_columns:{_id:$id},_set:$s){_id}}`;
+const remove=gql`mutation Remove($id:ID!){delete_entries_by_pk(_id:$id){_id}}`;
+let rows=[],sizes=new Map(),total=0,canAdd=false,signedIn=false,editing=null;
+let typing=null; // the open description's live text // @only collab
+const closeTyping=()=>{typing?.binding.destroy();typing?.text.destroy();typing=null;};//@only collab
+for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,summary:APP.summary,
+  'name-label':APP.nameLabel,'group-label':APP.groupLabel,'note-label':APP.noteLabel,
+  'add-button':APP.addLabel}))$('#'+id).textContent=text;
+const options=selected=>APP.groups.map(g=>new Option(g,g,false,g===selected));
+$('#add-group').replaceChildren(...options(APP.groups[0]));
+const done=result=>{if(result.errors?.length)throw Error(result.errors[0].message);return result;};
+async function load(){const {data}=done(await client.query({query:listQuery,variables:counts,
+  fetchPolicy:'network-only'}));canAdd=data.entries_can.insert;signedIn=data.viewer.signedIn;
+  rows=data.entries;total=data.total.rows[0]?.n??0;
+  sizes=new Map(data.groups.rows.map(r=>[r.grp??'',r.n]));}
+// Script-made nodes take data-af-ids from the entry's _id or the group, stable across renders.
+const node=(tag,id,props={})=>{const n=Object.assign(document.createElement(tag),props);
+  if(id)n.dataset.afId=id;return n;};
+const slug=text=>text.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const wrap=(text,input)=>{const l=node('label');l.append(text,input);return l;}; // a <label>
+function editForm(row,key){
+  const form=node('form',key+'-form',{className:'fields'}),name=node('input',key+'-name-input',
+    {value:row.name,required:true,maxLength:80}),grp=node('select',key+'-group-input'),
+    note=node('input',key+'-note-input',{value:row.note,maxLength:140}),
+    actions=node('div',null,{className:'actions'});grp.replaceChildren(...options(row.grp));
+  actions.append(node('button',key+'-save',{type:'submit',className:'primary',textContent:'Save'}),
+    node('button',key+'-cancel',{type:'button',textContent:'Cancel',
+      onclick:()=>{editing=null;render();}}));
+  form.append(wrap(APP.nameLabel,name),wrap(APP.groupLabel,grp),wrap(APP.noteLabel,note),actions);
+  // @feature collab
+  // Typed together, live; Save does not send it: it is saved once its editors leave the page.
+  const area=node('textarea',key+'-description-input',{value:row.description,maxLength:2000});
+  const box=wrap('Description',area);box.className='description';form.append(box);
+  closeTyping();const text=collab.text('entries',row.id,'description');
+  typing={text,binding:text.bind(area)};const shown=()=>{area.dataset.status=text.status;};
+  text.on('status',shown);shown();text.on('error',({message})=>{status.textContent=message;});
+  // @end collab
+  form.onsubmit=event=>{event.preventDefault();void write(`Saved ${name.value.trim()}.`,{
+    mutation:update,variables:{id:row.id,s:{name:name.value.trim(),grp:grp.value,
+      note:note.value.trim()}}});};
+  return form;
+}
+function rowView(row){
+  const key='entry-'+row.id,li=node('li',key),who=node('span',key+'-who',{className:'who'});
+  if(editing===row.id){li.append(editForm(row,key));return li;}
+  who.append(node('strong',key+'-name',{textContent:row.name}));
+  if(row.note)who.append(node('span',key+'-note',{className:'note muted',textContent:row.note}));
+  if(row.description)who.append(node('span',key+'-desc',{className:'desc', // @only collab
+    textContent:row.description})); // @only collab
+  li.append(who); // Edit and Remove only where the server says this viewer may change it.
+  if(row.can.update||row.can.delete){const actions=node('div',key+'-actions',{className:'actions'});
+    if(row.can.update)actions.append(node('button',key+'-edit',{type:'button',textContent:'Edit',
+      ariaLabel:'Edit '+row.name,onclick:()=>{editing=row.id;render();}}));
+    if(row.can.delete)actions.append(node('button',key+'-remove',{type:'button',
+      textContent:'Remove',ariaLabel:'Remove '+row.name,onclick:()=>void write(
+        `Removed ${row.name}.`,{mutation:remove,variables:{id:row.id}})}));
+    li.append(actions);}
+  return li;
+}
+function render(){
+  if(!editing)closeTyping(); // @only collab
+  $('#add').hidden=!canAdd;
+  $('#signin').hidden=canAdd||signedIn; // @only own-rows
+  // Every listed group gets a section; an entry whose group is no longer listed goes under Other.
+  const listed=new Set(APP.groups),other=rows.filter(r=>!listed.has(r.grp));
+  const groups=[...APP.groups.map(g=>[g,rows.filter(r=>r.grp===g),sizes.get(g)??0]),
+    ...other.length?[['Other',other,sizes.get('')??0]]:[]];
+  $('#lists').replaceChildren(...groups.map(([group,list,size])=>{
+    const key='group-'+slug(group),section=node('section',key,{className:'group'});
+    const h2=node('h2',key+'-title',{className:'t-title'}),ul=node('ul',key+'-list');
+    h2.append(node('span',key+'-name',{textContent:group}),node('span',key+'-count',{
+      className:'muted',textContent:`${size}`
+        +` of ${APP.limit}` // @only limits
+      }));
+    ul.append(...list.length?list.map(rowView):[node('li',key+'-empty',{className:'muted',
+      textContent:'Nothing yet.'})]);
+    section.append(h2,ul);return section;}));$('#lists').setAttribute('aria-busy','false');
+  renderTable(); // @only table
+}
+// @feature table
+// Every entry, sortable; its Edit opens the entry's form in the grouped view (one edit path).
+let view='list';const table=$('#table');table.rowKey='id';
+function renderTable(){
+  table.hidden=view!=='table';$('#lists').hidden=view==='table';if(view!=='table')return;
+  table.columns=[{col:'name',title:APP.nameLabel},{col:'grp',title:APP.groupLabel},
+    {col:'note',title:APP.noteLabel},{col:'edit',title:''}];
+  table.data={rows:rows.map(r=>({id:r.id,name:r.name,grp:r.grp,note:r.note,edit:r.can.update})),
+    columns:['id','name','grp','note','edit'].map(name=>({name,type:'string'}))};}
+// af-edit-intent fires only when a cell renderer calls ctx.edit(value): rows with _can.update.
+table.cellRenderers={edit:ctx=>ctx.row.edit?node('button',null,{type:'button',textContent:'Edit',
+  ariaLabel:'Edit '+ctx.row.name+' in the table',onclick:()=>ctx.edit(true)}):''};
+function setView(next){view=next;$('#view-list').ariaPressed=String(next==='list');
+  $('#view-table').ariaPressed=String(next==='table');render();}
+$('#view-list').onclick=()=>setView('list');$('#view-table').onclick=()=>setView('table');
+table.addEventListener('af-edit-intent',event=>{const row=rows.find(r=>r.id===event.detail.key);
+  if(row?.can.update){editing=row.id;setView('list');}});
+// @end table
+// One write, then a fresh read; the status names what happened, or what went wrong.
+async function write(message,request){status.textContent='Saving…';
+  try{done(await client.mutate(request));editing=null;await load();render();
+    status.textContent=message;return true;}
+  catch(error){status.textContent=error.message||'Could not save.';return false;}}
+$('#add').onsubmit=async event=>{event.preventDefault();const name=$('#add-name').value.trim(),
+  grp=$('#add-group').value;if(!name)return;
+  if((sizes.get(grp)??0)>=APP.limit)return void(status.textContent=`${grp} is full.`);//@only limits
+  if(await write(`Added ${name} to ${grp}.`,addRequest({name,grp,note:$('#add-note').value
+    .trim()})))$('#add-name').value=$('#add-note').value='';};
+// Others' changes and signing in or out refresh the list; an entry open for editing is kept.
+onResolverChange(names=>{if(names.some(n=>n==='entries'||n==='viewer'))void load().then(()=>{
+  if(!(editing&&rows.some(r=>r.id===editing))){editing=null;render();}}).catch(()=>{});});
+try{await load();render();status.textContent=`${total} so far.`;}
+catch(error){status.textContent=error.message||'Could not load the list.';}
+</script>
+</body></html>

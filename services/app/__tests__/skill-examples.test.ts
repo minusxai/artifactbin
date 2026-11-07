@@ -144,30 +144,30 @@ describe('installed native author examples',()=>{
    const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-transactions.mjs')]).toString()}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
    // A filled-in starter: publish refuses its [bracketed] placeholders (H4), so the copy writes real text in their place.
    const {starterTexts}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish-guard.mjs')).href);
-   const filled=[...starterTexts()].reduce((text:string,placeholder:string)=>text.replaceAll(placeholder,placeholder.slice(1,-1)),await readFile(path.join(installed,'examples/shared-app.html'),'utf8'));
+   const filled=[...starterTexts()].reduce((text:string,placeholder:string)=>text.replaceAll(placeholder,placeholder.slice(1,-1)),await readFile(path.join(installed,'examples/tracker.html'),'utf8'));
    const html=filled.replaceAll('DATASET_ID',datasetId).replaceAll('TARGETS_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">');
-   const source=path.join(project,'index.html'),backend=path.join(project,'budget.ts');await writeFile(source,html);await writeFile(backend,await readFile(path.join(installed,'examples/budget.ts'),'utf8'));
+   const source=path.join(project,'index.html'),backend=path.join(project,'tracker.ts');await writeFile(source,html);await writeFile(backend,await readFile(path.join(installed,'examples/tracker.ts'),'utf8'));
    const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.updatedInPlace).toBe(true);
     // Copied example headers are fine to keep: publish no longer warns about them.
     expect(first.headers).toBeUndefined();
    // The canonical page binds the backend by name only; the author's working copy keeps its local source path.
-   expect(await readFile(source,'utf8')).toMatch(/<link href="\.\/budget\.ts"[^>]*rel="af-resolver"/);
+   expect(await readFile(source,'utf8')).toMatch(/<link href="\.\/tracker\.ts"[^>]*rel="af-resolver"/);
    await writeFile(backend,(await readFile(backend,'utf8'))+'\n// edited after first publish\n');
    sent.length=0;const second=await publishCommand({values:{server},positionals:[source]},options);expect(second.version).toBe(2);
-   const put=sent.find(body=>body.expectedVersion===1);expect(put.publicationBundle.files.map((file:any)=>file.path)).toContain('budget.ts');
-   expect(Buffer.from(put.publicationBundle.files.find((file:any)=>file.path==='budget.ts').base64,'base64').toString('utf8')).toContain('edited after first publish');
+   const put=sent.find(body=>body.expectedVersion===1);expect(put.publicationBundle.files.map((file:any)=>file.path)).toContain('tracker.ts');
+   expect(Buffer.from(put.publicationBundle.files.find((file:any)=>file.path==='tracker.ts').base64,'base64').toString('utf8')).toContain('edited after first publish');
    // A reader's copy has no local backend source and keeps the published backend.
-   const copy=await readCommand({values:{server,output:path.join(project,'copy.html')},positionals:[first.id]},options);expect(await readFile(copy.source,'utf8')).not.toMatch(/href="\.\/budget\.ts"/);
+   const copy=await readCommand({values:{server,output:path.join(project,'copy.html')},positionals:[first.id]},options);expect(await readFile(copy.source,'utf8')).not.toMatch(/href="\.\/tracker\.ts"/);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
- it('publishes the shared app with its declared backend source atomically',async()=>{
+ it('publishes the tracker with its declared backend source atomically',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-app-'));
   try{
   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
   const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href),owner=await mintAccountToken('sample-app');
   const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-transactions.mjs')]).toString()}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
-  const source=await readFile(path.join(installed,'examples/shared-app.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/shared-app.html',entryHtml:source.replaceAll('DATASET_ID',datasetId).replaceAll('TARGETS_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:{...saved.body,resolverSources:{budget:await readFile(path.join(installed,'examples/budget.ts'),'utf8')}}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
-  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);expect((await head.json()).html).toContain('data-af-name="budget"');
+  const source=await readFile(path.join(installed,'examples/tracker.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/tracker.html',entryHtml:source.replaceAll('DATASET_ID',datasetId).replaceAll('TARGETS_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:{...saved.body,resolverSources:{tracker:await readFile(path.join(installed,'examples/tracker.ts'),'utf8')}}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
+  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);expect((await head.json()).html).toContain('data-af-name="tracker"');
   }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('runs autofix on publish: writes fixes, refuses problems, --strict refuses fixes, and carries IDs forward on regeneration',async()=>{

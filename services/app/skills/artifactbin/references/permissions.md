@@ -65,11 +65,11 @@ anonymous has no user ID; direct calls have no page ID. Use them in `filter`, `c
   set to them) and change or delete only rows they added; anonymous never writes. The page shows
   edit controls where `_can` says so ([below](#what-this-viewer-may-change)). The CSV needs the owner
   column; rows the owner adds are not stamped. `node scripts/new-app.mjs --kind list` sets up a
-  page built on it (`examples/shared-list.html`).
+  page built on it (`examples/tracker.html`).
 - `editors-only`: only the owner and editors read or write; everyone else gets not found.
 
 For something else (everyone signed in edits every row, hidden columns), edit the template's
-`policy` in p.json. `examples/shared-app-policy.mjs` writes a shared-edit table.
+`policy` in p.json. `rules` in `examples/tracker-features.mjs` lets viewers change every row (its team feature).
 
 ## What this viewer may change
 

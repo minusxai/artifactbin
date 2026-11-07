@@ -6,15 +6,15 @@ description: Resolver files for pages, caps.fetch with host-filled secrets, caps
 
 Shared rows (sign-ups, targets) live in a dataset. A page reads and writes it directly
 through the generated API under the dataset's [permissions](permissions.md). Add a resolver for
-what the page cannot do itself: check or derive values before a write (as the shared-app
-starter's `budget.ts` does), or reach an external API or database with a secret. A resolver is a
+what the page cannot do itself: check or derive values before a write (as the tracker
+starter's `tracker.ts` does), or reach an external API or database with a secret. A resolver is a
 TypeScript file published with the page and run on the server in a sandbox:
 
 ```html
-<link rel="af-resolver" data-af-name="budget" href="./budget.ts">
+<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">
 ```
 
-`node scripts/publish.mjs index.html` sends the file (HTTP: `resolverSources:{"budget":"<source>"}`);
+`node scripts/publish.mjs index.html` sends the file (HTTP: `resolverSources:{"tracker":"<source>"}`);
 browsers never fetch it. A page from `read.mjs` has no `href`: add `href="./NAME.ts"` beside the
 file to change it, or leave the link to keep the published version. Removing the link unlinks
 it from new versions only.
@@ -25,7 +25,7 @@ it from new versions only.
 
 ## The file
 
-Start from `resolvers/resolver-*.ts` (usage atop each) or `examples/budget.ts`. Export `typeDefs`, a
+Start from `resolvers/resolver-*.ts` (usage atop each) or `examples/tracker.ts`. Export `typeDefs`, a
 default object of root field resolvers, any `secrets` and always a `test` field (Test connection,
 below). Each resolver gets `(args, principal, caps)`: `principal` is `{tenant, subject, role}` (the
 page ID, the caller's account ID or null, their role), set by the platform; never authorize from a

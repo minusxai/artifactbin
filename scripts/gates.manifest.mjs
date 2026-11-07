@@ -82,8 +82,9 @@ export const GATE_SPECS = Object.freeze([
   { name: 'live-regions-oop', needsMail: true, seconds: 11, timeoutMs: 60_000 },
   // Two signed-in writers and a signed-out reader on one @afbin/collab dataset cell (latency timed, p95 within a second).
   // 35s in `node scripts/gate-container.mjs --cpus 4 live-cells live-regions new-doc` (two leave saves are waited
-  // for: the early-typing and the leave legs); CI weight pending its first run.
-  { name: 'live-cells', needsMail: true, seconds: 35, timeoutMs: 90_000 },
+  // for: the early-typing and the leave legs); CI weight pending its first run. 43s in `node scripts/gate-container.mjs
+  // --cpus 4 live-cells` with the generated tracker leg (new-app's tasks preset: one more leave save is waited for).
+  { name: 'live-cells', needsMail: true, seconds: 43, timeoutMs: 90_000 },
   // One owner: Create → Document, then type at once with no press (the doc's region opens and takes the caret on load);
   // with no save pressed a signed-out reader sees the text and follows new typing. Two pause saves are waited for.
   { name: 'new-doc', needsMail: true, seconds: 20, timeoutMs: 90_000 },

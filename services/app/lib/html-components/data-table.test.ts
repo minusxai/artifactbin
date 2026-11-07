@@ -4,6 +4,8 @@ import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';
 import { measuredTableWindow } from "./table-model";
+/** Resize notifications re-render on the next animation frame, never inside the observer callback. */
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 it("preserves caller column header identities through sorting and removes stale mappings", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.columnIdentities = { value: { afId: "source-column", id: "authored-column" } };
@@ -147,6 +149,7 @@ it("shrinks the virtual range after rendered rows report their actual heights", 
     borderBoxSize: [{ blockSize: 43 }],
   }) as unknown as ResizeObserverEntry);
   callbacks.at(-1)?.(entries, {} as ResizeObserver);
+  await nextFrame();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   expect(el.querySelector<HTMLTableRowElement>("tbody tr[data-row-key]")?.style.transform).toBe("translateY(0px)");
 });
@@ -236,6 +239,7 @@ it("windows rows against the measured scroll viewport and refreshes after resize
     value: 33,
   });
   onResize[0]?.([], {} as ResizeObserver);
+  await nextFrame();
 
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(13);
   el.remove();
@@ -646,21 +650,59 @@ it("remeasures retained keyed rows after data replacement and subsequent viewpor
   const data = {columns: [{name: "id", type: "number" as const}], rows: Array.from({length: 100}, (_, id) => ({id}))};
   el.data = data; document.body.append(el); await Promise.resolve();
   const rowObserver = observers.at(-1)!;
-  rowObserver.flush();
+  rowObserver.flush(); await nextFrame();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   const retained = el.querySelector("tbody tr[data-row-key]");
   el.data = {...data, rows: data.rows.map(row => ({...row}))};
   await Promise.resolve(); // Natural column layout precedes the virtual window.
-  rowObserver.flush();
+  rowObserver.flush(); await nextFrame();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   expect(el.querySelector("tbody tr[data-row-key]")).toBe(retained);
   rowHeight = 53;
   el.data = {...data, rows: data.rows.map(row => ({...row, extra: "taller content"}))};
   await Promise.resolve();
-  rowObserver.flush();
+  rowObserver.flush(); await nextFrame();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(20);
   const viewport = el.querySelector("[data-slot=table-scroll]")!;
   Object.defineProperty(viewport, "clientHeight", {configurable: true, value: 86});
-  observers[0]!.callback([], observers[0]!);
+  observers[0]!.callback([], observers[0]!); await nextFrame();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(14);
+});
+
+it("re-renders after resize notifications on the next frame, once, never inside the observer callback", async () => {
+  // A render inside the callback resizes observed rows in the same frame: browsers then report
+  // "ResizeObserver loop completed with undelivered notifications", a page error to every check.
+  const callbacks: ResizeObserverCallback[] = [];
+  class DeferredResizeObserver implements ResizeObserver {
+    constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal("ResizeObserver", DeferredResizeObserver);
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.height = 420;
+  el.cellRenderers = { edit: () => Object.assign(document.createElement("button"), { textContent: "Edit" }) };
+  el.columns = [{ col: "value" }, { col: "edit", title: "" }];
+  el.data = { columns: [{ name: "value", type: "number" }, { name: "edit", type: "string" }],
+    rows: Array.from({ length: 100 }, (_, value) => ({ value, edit: "" })) };
+  document.body.append(el);
+  await Promise.resolve();
+  const rows = [...el.querySelectorAll<HTMLTableRowElement>("tbody tr[data-row-key]")];
+  expect(rows).toHaveLength(25);
+  const entries = rows.map((target) => ({ target, contentRect: { height: 43 },
+    borderBoxSize: [{ blockSize: 43 }] }) as unknown as ResizeObserverEntry);
+  const render = vi.spyOn(el as unknown as { render(): void }, "render");
+  callbacks.at(-1)?.(entries, {} as ResizeObserver);
+  callbacks[0]?.([], {} as ResizeObserver);
+  expect(render).not.toHaveBeenCalled();
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(25);
+  await nextFrame();
+  expect(render).toHaveBeenCalledTimes(1);
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
+  // A table removed before its frame does not render after it.
+  callbacks[0]?.([], {} as ResizeObserver);
+  el.remove();
+  await nextFrame();
+  expect(render).toHaveBeenCalledTimes(1);
 });

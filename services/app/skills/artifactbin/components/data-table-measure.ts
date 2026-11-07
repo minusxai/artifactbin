@@ -11,8 +11,22 @@ export function invalidateMeasurements(s: TableState, retainRowEstimates = false
   // Reobserve them during render so every rendered row obtains a fresh size.
   s.rowObserver?.disconnect();
 }
+/** Re-renders after a resize on the next frame, once however many sizes arrive. Rendering inside
+ * a ResizeObserver callback resizes observed nodes in the same frame, which the browser reports as
+ * "ResizeObserver loop completed with undelivered notifications" (a page error to every check). */
+export function renderAfterResize(s: TableState) {
+  if (s.resizeFrame !== undefined) return;
+  s.resizeFrame = requestAnimationFrame(() => {
+    s.resizeFrame = undefined;
+    s.render();
+  });
+}
+export function cancelResizeRender(s: TableState) {
+  if (s.resizeFrame !== undefined) cancelAnimationFrame(s.resizeFrame);
+  s.resizeFrame = undefined;
+}
 /** Observes a virtualized row; measured heights feed the window, and the table re-renders
- * only when some height actually changed. */
+ * (next frame) only when some height actually changed. */
 export function observeRowHeight(s: TableState, tr: HTMLTableRowElement) {
   if (s.virtualized && !s.rowObserver && typeof ResizeObserver !== "undefined") {
     s.rowObserver = new ResizeObserver((entries) => {
@@ -26,7 +40,7 @@ export function observeRowHeight(s: TableState, tr: HTMLTableRowElement) {
           changed = true;
         }
       }
-      if (changed) s.render();
+      if (changed) renderAfterResize(s);
     });
   }
   if (s.virtualized) s.rowObserver?.observe(tr);
