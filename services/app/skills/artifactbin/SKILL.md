@@ -22,11 +22,11 @@ Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); shared-list.html and api-dashboard.html (api-dashboard.ts),
-  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html, codebase-report.html (each with
-  its -steps.mjs); report.html; gen-transactions.mjs; repairs.csv
+  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html, codebase-report.html (+ -steps.mjs);
+  report.html; gen-transactions.mjs; repairs.csv
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
-serve, new-app, new-page, new-codebase-report
+serve, new-app, new-page
 - `references/`: guides (read only those you need): runtime, datasets, permissions, resolvers,
 dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
