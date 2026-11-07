@@ -40,7 +40,7 @@ For native Vega, omit the compiler import and pass the Vega spec directly to `pa
 
 ## Choose a chart
 
-Use bars for categories, lines for time, histograms/boxplots for distribution, scatterplots for relationships and heatmaps for categorical pairs. Stacked bars show composition; donuts need few nonnegative parts. Tables show exact values. Prefer small multiples to crowded series.
+Use bars for categories, lines for time, histograms/boxplots for distribution, scatterplots for relationships and heatmaps for categorical pairs. Stacked bars show composition; donuts need few nonnegative parts. Tables show exact values. Prefer small multiples to crowded series. Draw one chart per question asked, not every kind: `examples/csv-dashboard.html` has each, with a map and charts that filter each other.
 
 ## Encodings and theme
 

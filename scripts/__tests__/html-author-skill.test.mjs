@@ -32,7 +32,10 @@ describe('native author resources',()=>{
    expect(saved.body.html).toMatch(/^<!doctype html>/);
    expect(saved.body.html).not.toMatch(/\sclassName="|<Helmet>|DATASET_ID/);
    expect(saved.body.html).not.toContain('core.js');expect(saved.body.html).toContain('artifactbin:design-system');
-   expect(saved.body.html).toContain("from '@afbin/apollo'");
+   // The dashboard's script is its own module, bundled beside the page it loads from.
+   const script=name==='csv-dashboard'?Buffer.from(saved.body.publicationBundle.files.find(file=>file.path==='examples/csv-dashboard.mjs').base64,'base64').toString():saved.body.html;
+   if(name==='csv-dashboard')expect(saved.body.html).toContain('<script type="module" src="./csv-dashboard.mjs"');
+   expect(script).toContain("from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
    if(name==='shared-app'){const budget=saved.body.publicationBundle.files.find(file=>file.path==='examples/budget.ts');expect(Buffer.from(budget.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}

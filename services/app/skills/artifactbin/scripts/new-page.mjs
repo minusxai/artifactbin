@@ -1,7 +1,8 @@
 /** Command: a page computed from a CSV (examples/csv-dashboard.html) set up in one call. */
 export const DESCRIPTION = `Set up a page computed from a CSV in one call: a dashboard, report or
 chart page. Copies the CSV into the project and publishes it as a dataset; copies
-examples/csv-dashboard.html as index.html and its steps file as steps.mjs; links the dataset and
+examples/csv-dashboard.html as index.html, its renderer csv-dashboard.mjs and its steps file as
+steps.mjs; links the dataset and
 writes a DATA block whose _sql queries read this CSV's columns (labels, a total per number
 column, a chart per number column by the first text column), with [bracketed] text for you to write.
 Usage: node scripts/new-page.mjs --data FILE.csv --title NAME [--artifact ID] [--dir DIR]
@@ -57,9 +58,14 @@ async function create(file, bytes) {
 /** A column in SQL: bare when it is a plain name, else double-quoted. */
 const sqlName = column => /^[a-z_][a-z0-9_]*$/i.test(column) ? column :
   `"${column.replace(/"/g, '""')}"`;
+/** Coordinates are numbers but neither summed nor charted as one: a map variation names them. */
+const COORDINATE = /^(lat(itude)?|lon|lng|long|longitude)$/i;
+/** The text columns, in order: the first is what DATA groups by. */
+const texts = (columns, numbers) => columns.filter(column => !numbers.includes(column) &&
+  !COORDINATE.test(column));
 /** The DATA block for these columns: _sql queries, every text a [bracketed] draft. */
 function dataBlock(name, columns, numbers) {
-  const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
+  const x = texts(columns, numbers)[0] ?? columns[0];
   const shown = numbers.slice(0, 3), first = numbers[0], by = `by_${x.replace(/\W+/g, '_')}`;
   const sums = cols => cols.map(col => `sum(${sqlName(col)}) as ${sqlName(col)}`).join(', ');
   const totals = `select count(*) as row_count${shown.length ? ', ' + sums(shown) : ''} ` +
@@ -100,24 +106,38 @@ function fill(starter, {title, id, name, columns, numbers}) {
 }
 /** What the written DATA shows, in this CSV's names: what the agent keeps or changes. */
 function draws(columns, numbers, rows) {
-  const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
+  const x = texts(columns, numbers)[0] ?? columns[0];
   return `DATA's _sql queries compute a total per number column (${numbers.slice(0, 3)
     .join(', ') || 'none'}) and ${numbers.slice(0, 2).map(y => `${y} summed per ${x}`)
     .join(' and ') || 'nothing'}; it draws a lead, those totals and a bar chart of each, with a ` +
     `table of its values (${rows.length} rows).`;
 }
-/** The usual changes, written with this CSV's own columns and a real value. */
+/** The usual changes, written with this CSV's own columns and a real value; the deeper ones
+ * (panels, heatmap, linked filters, bins, scatter, map) as examples/csv-dashboard.html has them. */
 function variations(columns, numbers, rows) {
-  const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
-  const other = columns.find(column => column !== x && !numbers.includes(column));
-  const y = numbers[0] ?? columns[1] ?? x, at = col => rows[0]?.[columns.indexOf(col)] ?? '';
+  const x = texts(columns, numbers)[0] ?? columns[0];
+  const other = texts(columns, numbers).find(column => column !== x);
+  const y = numbers[0] ?? columns[1] ?? x, y2 = numbers[1];
+  const at = col => rows[0]?.[columns.indexOf(col)] ?? '';
+  const lat = columns.find(col => /^lat(itude)?$/i.test(col));
+  const lon = columns.find(col => /^(lon|lng|long|longitude)$/i.test(col));
+  const deeper = [other && `a small panel per ${other}: series:'${other}', multiples:true`,
+    other && `a heatmap of ${x} by ${other}: mark:'rect', series:'${other}'`,
+    other && `charts that filter each other: filters:{${other}:'${label(other)}'}, ` +
+      `filter:'${other}' on a chart with x:'${other}', and where ($${other} is null or ` +
+      `${other} = $${other}) in the other queries`,
+    numbers.length && `the spread of ${y}: bars of count(*) per bin, cast(${y} / 10 as int) * ` +
+      '10, grouped in SQL',
+    y2 && `${y2} against ${y}: mark:'point', x:'${y2}', a row per record, table:false`,
+    lat && lon && `a map: mark:'map', lat:'${lat}', lon:'${lon}', x the place, y its size`];
   return [`one line: mark:'line'`, other && `a line or bar per ${other}: select and group by ` +
     `${other} in the query, then series:'${other}'`,
     other && `only some rows: where ${other} = '${at(other)}' in the query`,
     `one value per ${x} as given: a query without sum or group by`,
     'no value table: table:false', 'no stats or sections: stats:[], sections:[]',
     `a number for one ${x} in a text: a query with sum(${y}) where ${x} = '${at(x)}', read as ` +
-    `h.one(name).${y}`, 'another dataset: link it and join it in SQL']
+    `h.one(name).${y}`, 'another dataset: link it and join it in SQL',
+    'and, as examples/csv-dashboard.html draws them: ' + deeper.filter(Boolean).join(', ')]
     .filter(Boolean).join('; ');
 }
 export async function newPageCommand({values, positionals}, options = {}) {
@@ -139,6 +159,7 @@ export async function newPageCommand({values, positionals}, options = {}) {
     'Pass a CSV with a header line and at least one row.');
   const numbers = columns.filter((_, i) => rows.every(row => row[i] === '' ||
     Number.isFinite(Number(row[i]))) && rows.some(row => row[i] !== ''));
+  const measures = numbers.filter(column => !COORDINATE.test(column));
   await mkdir(dir, {recursive: true});
   const at = name => path.join(dir, name), created = [], kept = [];
   const companion = await optionalFile(at(file) + '.af.json');
@@ -147,11 +168,12 @@ export async function newPageCommand({values, positionals}, options = {}) {
     : null;
   const starter = await readFile(new URL('csv-dashboard.html', EXAMPLES), 'utf8');
   const steps = await readFile(new URL('csv-dashboard-steps.mjs', EXAMPLES));
+  const renderer = await readFile(new URL('csv-dashboard.mjs', EXAMPLES));
   const copied = path.resolve(at(file)) === source || await create(at(file), csv);
   const published = dataset ?? {id: (await publishCommand({values: {server, title:
     `${title} data`, name}, positionals: [at(file)]}, options)).id, reused: false};
   for (const [file2, bytes] of [['index.html', fill(starter, {title, id: published.id, name,
-    columns, numbers})], ['steps.mjs', steps]]) {
+    columns, numbers: measures})], ['csv-dashboard.mjs', renderer], ['steps.mjs', steps]]) {
     (await create(at(file2), bytes) ? created : kept).push(file2);
   }
   (copied === true && !companion ? created : kept).push(file);
@@ -162,9 +184,9 @@ export async function newPageCommand({values, positionals}, options = {}) {
       reused: published.reused},
     note: `${name} ${published.id} (${rows.length} rows${published.reused ? ', reused' : ''}); ` +
       `index.html links it as ${name} and is titled ${JSON.stringify(title)}.`,
-    draws: draws(columns, numbers, rows), next: 'Next: in index.html edit only DATA (its ' +
+    draws: draws(columns, measures, rows), next: 'Next: in index.html edit only DATA (its ' +
       '[bracketed] text, and the stats, charts and sections the request needs); it can do the ' +
-      `layout asked for: ${variations(columns, numbers, rows)}; then ${publish} && ` +
+      `layout asked for: ${variations(columns, measures, rows)}; then ${publish} && ` +
       'node scripts/check.mjs index.html --steps steps.mjs'};
 }
 await runTool('new-page', import.meta.url, newPageCommand);

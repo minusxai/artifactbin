@@ -1,6 +1,5 @@
 /** Publish the actual installed native examples; resolver execution has separate real-runner coverage. */
 import {describe,expect,it,vi} from 'vitest';
-import {skillTree, skillPackageFiles} from '@/lib/skills';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
 import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -15,7 +14,10 @@ import {request,useAppHarness,mintAccountToken} from './harness';
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>{
  const typeDefs=/export const typeDefs\s*=\s*`([\s\S]*?)`/.exec(source)?.[1];if(!typeDefs)throw Error('Missing example schema');return{typeDefs,compiled:source};
 }}));
-useAppHarness();const files=()=>skillPackageFiles(skillTree(),'http://localhost:3000');
+// The suite caps a file at 10 KB (suite-env) so size tests trip cheaply; the dashboard's renderer
+// (examples/csv-dashboard.mjs) is a real-sized bundle dependency, so these publish under the product default.
+vi.mock('@/lib/platform/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/platform/config')>(),MAX_FILE_BYTES:50_000_000}));
+useAppHarness();
 describe('installed native author examples',()=>{
  it('publishes report HTML with canonical data-af identities',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-example-'));
@@ -32,7 +34,7 @@ describe('installed native author examples',()=>{
   try{
    const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
-   const owner=await mintAccountToken('sample-dashboard'),kit=files();const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:kit['examples/repairs.csv']}}));expect(dataset.status).toBe(201);const data=await dataset.json();
+   const owner=await mintAccountToken('sample-dashboard');const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-deliveries.mjs')],{stdio:['ignore','pipe','ignore']}).toString()}}));expect(dataset.status).toBe(201);const data=await dataset.json();
    const source=await readFile(path.join(installed,'examples/csv-dashboard.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/csv-dashboard.html',entryHtml:source.replaceAll('DATASET_ID',data.id).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});
    const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:saved.body}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();expect(page.html).toContain('ref:'+data.id);expect(page.html).not.toContain('DATASET_ID');
   }finally{await rm(dir,{recursive:true,force:true});}

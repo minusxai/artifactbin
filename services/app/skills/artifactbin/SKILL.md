@@ -22,8 +22,8 @@ Skill map (each file's top comment explains it):
 
 - `examples/`: deck.html (deck-steps.mjs); shared-app.html (budget.ts, shared-app-policy,
   -steps, -guest, -cleanup .mjs); shared-list.html and api-dashboard.html (api-dashboard.ts),
-  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html, codebase-report.html (+ -steps.mjs);
-  report.html; gen-transactions.mjs; repairs.csv
+  each with -steps, -guest, -cleanup .mjs; csv-dashboard.html/.mjs, codebase-report.html
+  (+ -steps.mjs); report.html; gen-*.mjs sample data
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
 serve, new-app, new-page

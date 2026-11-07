@@ -1,68 +1,121 @@
 <!doctype html>
-<!-- Example: a page computed from a linked dataset with read-only SQL (_sql). Usage: and Gotchas:
-are above DATA; keep this line. -->
+<!-- Example: a dashboard over one linked dataset, computed by read-only SQL (_sql), whose charts
+filter each other. Usage: and Gotchas: are above DATA; keep this line. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="phosphor">
-<title>[Repair bench capacity]</title>
-<link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID">
+<title>[Courier deliveries, December to May]</title>
+<link rel="af-dataset" data-af-name="deliveries" href="ref:DATASET_ID">
 <script type="module" id="page-data">
-// Usage: node scripts/publish.mjs data.csv --type dataset (examples/repairs.csv is the sample);
-//   cp examples/csv-dashboard.html index.html && cp examples/csv-dashboard-steps.mjs steps.mjs;
-//   put the dataset's id after ref: above and its name in data-af-name and the SQL; edit only
-//   DATA and <title> (the page heading); then node scripts/publish.mjs index.html &&
-//   node scripts/check.mjs index.html --steps steps.mjs
-// Gotchas: every number comes from DATA.queries, each one read-only SQLite SELECT over the linked
-//   datasets (the table is the data-af-name; join links freely), run as the reader through _sql
-//   and rerun when the data changes. A text is a function of h: h.one(name) is a query's first
-//   row, h.rows(name) all its rows, h.fmt(n, digits) formats. A chart draws one query's rows: x,
-//   y and an optional series column, as the query computed them (GROUP BY in SQL, never in
-//   script); table:false hides its value table. Empty stats or sections show nothing. labels
-//   names columns for readers. ids are unique keys.
-// Built with: one HTML page; a published CSV dataset; totals and group-bys computed by _sql
-//   (watchQuery keeps them live); Vega-Lite charts, each with a table of its values.
+// Usage: node scripts/new-page.mjs --data FILE.csv --title NAME publishes the CSV, links it and
+//   copies this page with a simple DATA for that CSV, its renderer csv-dashboard.mjs (leave it as
+//   is) and its steps file (sample: node examples/gen-deliveries.mjs > deliveries.csv). Copy chart
+//   kinds and linked filters from this DATA. Edit only DATA and <title>; then
+//   node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+// Gotchas: pick the chart for the question, one chart per question asked: change over time: line;
+//   a breakdown by category: bar; a distribution: bar over bins made in SQL; two numbers per row:
+//   point (table:false, and say the relationship in a text); two categories or day by hour: rect
+//   (a heatmap: series is its rows, y its colour); the same trend per group: series with
+//   multiples:true; places: map (lat, lon; x names the place, y sizes it). Delete charts and
+//   queries no question needs. Every number comes from DATA.queries, each a read-only SQLite
+//   SELECT over the linked datasets (the table is the data-af-name) run as the reader through
+//   _sql and rerun when the data changes. A text is a function of h: h.one(name) is a query's
+//   first row, h.rows(name) all its rows, h.fmt(n, digits) formats. A chart draws one query's
+//   rows: x, y and an optional series, as SQL computed them (GROUP BY in SQL, never in script);
+//   its values open in a table under it (table:false hides it). filters: {param: label}; a chart
+//   with filter:'city' sets $city to the x a reader picks (a mark or its table button; again
+//   clears it) and reruns every query: each says which filters it obeys with ($city is null or
+//   city = $city), and the picking chart's own query leaves its filter out. labels names columns
+//   for readers. ids are unique keys.
+// Built with: one HTML page; a published CSV dataset; every number computed by _sql (watchQuery
+//   keeps them live); Vega-Lite charts (deck.gl for a map), each with a table of its values.
 window.DATA = {
+  filters: {city:'City', category:'Category'},
   queries: {
-    totals: 'select count(*) as weeks, sum(completed) as completed from repairs',
-    latest: 'select waiting from repairs order by week desc limit 1',
-    weekly: 'select week, sum(completed) as completed, sum(waiting) as waiting from repairs' +
-      ' group by week order by week',
+    totals: `select count(*) as orders, sum(amount) as revenue, avg(minutes) as minutes,
+      avg(minutes <= 45) * 100 as on_time from deliveries
+      where ($city is null or city = $city) and ($category is null or category = $category)`,
+    weekly: `select date(date, '-6 days', 'weekday 1') as week, count(*) as orders from deliveries
+      where ($city is null or city = $city) and ($category is null or category = $category)
+      group by week order by week`,
+    cities: `select city, avg(lat) as lat, avg(lon) as lon, count(*) as orders from deliveries
+      where ($category is null or category = $category) group by city order by orders desc`,
+    categories: `select category, count(*) as orders from deliveries
+      where ($city is null or city = $city) group by category order by orders desc`,
+    monthly: `select city, substr(date, 1, 7) as month, count(*) as orders from deliveries
+      where ($category is null or category = $category) group by city, month order by month`,
+    // A heatmap has every cell, zero included, in a fixed order whatever the filters keep.
+    hours: `with days(n, weekday) as (values (0, 'Mon'), (1, 'Tue'), (2, 'Wed'), (3, 'Thu'),
+      (4, 'Fri'), (5, 'Sat'), (6, 'Sun')), hours as (select distinct hour from deliveries)
+      select hours.hour, days.weekday, count(d.hour) as orders from hours cross join days
+      left join deliveries d on d.hour = hours.hour and (strftime('%w', d.date) + 6) % 7 = days.n
+      and ($city is null or d.city = $city) and ($category is null or d.category = $category)
+      group by hours.hour, days.n order by hours.hour, days.n`,
+    minutes: `select cast(minutes / 5 as int) * 5 as minutes_from, count(*) as orders
+      from deliveries
+      where ($city is null or city = $city) and ($category is null or category = $category)
+      group by minutes_from order by minutes_from`,
+    distance: `select distance_km, minutes from deliveries
+      where ($city is null or city = $city) and ($category is null or category = $category)`,
+    per_km: `select (count(*) * sum(distance_km * minutes) - sum(distance_km) * sum(minutes)) /
+      (count(*) * sum(distance_km * distance_km) - sum(distance_km) * sum(distance_km)) as minutes
+      from deliveries
+      where ($city is null or city = $city) and ($category is null or category = $category)`,
   },
-  labels: {week:'Week', completed:'Completed repairs', waiting:'Waiting repairs'},
-  kicker: '[Operations notebook] · sample data',
-  lead: h => `[${h.fmt(h.one('totals').completed)} repairs were completed across `+
-    `${h.one('totals').weeks} weeks.]`,
+  labels: {week:'Week of', orders:'Deliveries', city:'City', category:'Category', month:'Month',
+    hour:'Hour', weekday:'Day', minutes_from:'Minutes (5-minute bins)',
+    distance_km:'Distance (km)', minutes:'Minutes to deliver'},
+  kicker: '[Courier operations] · sample data',
+  lead: h => `[${h.fmt(h.one('totals').orders)} deliveries; ${h.fmt(h.one('totals').on_time)}%`+
+    ` arrived within 45 minutes.]`,
   stats: [
-    {id:'completed', label:'[Completed]', value: h => h.fmt(h.one('totals').completed)},
-    {id:'waiting', label:'[Waiting in the latest week]',
-      value: h => h.fmt(h.one('latest').waiting)},
+    {id:'orders', label:'[Deliveries]', value: h => h.fmt(h.one('totals').orders)},
+    {id:'revenue', label:'[Order value, €]', value: h => h.fmt(h.one('totals').revenue)},
+    {id:'minutes', label:'[Average minutes]', value: h => h.fmt(h.one('totals').minutes, 1)},
+    {id:'on-time', label:'[Within 45 minutes]', value: h => h.fmt(h.one('totals').on_time)+'%'},
   ],
   charts: [
-    {id:'completed', title:'[Completed repairs by week]', mark:'bar', query:'weekly', x:'week',
-      y:'completed'},
-    {id:'waiting', title:'[Waiting repairs by week]', mark:'line', query:'weekly', x:'week',
-      y:'waiting'},
+    {id:'weekly', title:'[Deliveries per week]', mark:'line', query:'weekly', x:'week',
+      y:'orders', wide:true},
+    {id:'cities', title:'[Deliveries by city]', mark:'map', query:'cities', x:'city', y:'orders',
+      lat:'lat', lon:'lon', filter:'city'},
+    {id:'categories', title:'[Deliveries by category]', mark:'bar', query:'categories',
+      x:'category', y:'orders', filter:'category'},
+    {id:'monthly', title:'[Deliveries per month, by city]', mark:'line', query:'monthly',
+      x:'month', y:'orders', series:'city', multiples:true, wide:true},
+    {id:'hours', title:'[When orders come in]', mark:'rect', query:'hours', x:'hour', y:'orders',
+      series:'weekday', wide:true},
+    {id:'minutes', title:'[How long a delivery takes]', mark:'bar', query:'minutes',
+      x:'minutes_from', y:'orders'},
+    {id:'distance', title:'[Distance against minutes]', mark:'point', query:'distance',
+      x:'distance_km', y:'minutes', table:false},
   ],
   sections: [
-    {id:'reading', title:'[How to read this]', text: h => `[Waiting work is a weekly snapshot, so `+
-      `its ${h.one('totals').weeks} values are not added up.]`},
+    {id:'reading', title:'[How to read this]', text: h => `[Each extra kilometre adds about `+
+      `${h.fmt(h.one('per_km').minutes, 1)} minutes; pick a city or a category to compare.]`},
   ],
 };
 </script>
 <style>
 *{box-sizing:border-box}body{line-height:1.6}
-main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}
+main{max-width:1180px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:20ch;margin:12px 0 24px}
 p{max-width:68ch}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
 .number{font-variant-numeric:tabular-nums}[role=status]{min-height:1.6em}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:24px 0}
-.stats div{border-top:2px solid currentColor;padding-top:8px}.stats b{display:block;font-size:28px}
-.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-  gap:clamp(24px,5vw,56px)}
+.stats div{border-top:2px solid currentColor;padding-top:8px}.stats b{display:block;font-size:30px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));
+  gap:clamp(24px,5vw,56px)}.charts>.wide{grid-column:1/-1}
 .charts>*,.sections>*{min-width:0}.rule{border-top:1px solid var(--border);padding-top:24px}
 .chart{width:100%;min-height:240px}.chart svg{max-width:100%;height:auto}
+.map{position:relative;height:360px;border:1px solid var(--border);background:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:2.4em}
+button{font:inherit;color:inherit;background:transparent;border:1px solid var(--border);
+  border-radius:var(--radius);padding:2px 10px;cursor:pointer}
+button[aria-pressed=true],.filters button{background:var(--primary);color:var(--primary-foreground)}
+summary{cursor:pointer;margin-top:12px}.scroll{overflow-x:auto}
 table{border-collapse:collapse;width:100%;margin-top:12px}
-td,th{padding:8px;border-bottom:1px solid var(--border);text-align:left}td{text-align:right}
+td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}td{text-align:right}
 @media(max-width:640px){h1{font-size:38px!important}main{padding:24px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
@@ -71,91 +124,10 @@ td,th{padding:8px;border-bottom:1px solid var(--border);text-align:left}td{text-
 <h1 id="title" class="t-display-xl"></h1>
 <p id="lead" class="lead number"></p>
 <p id="status" role="status" aria-live="polite">Loading the linked dataset…</p>
+<div id="filters" class="filters"></div>
 <div id="stats" class="stats number"></div>
 <div id="charts" class="charts"></div>
 <div id="sections" class="sections"></div>
 </main>
-<script type="module">
-import {client,gql} from '@afbin/apollo';
-import * as vega from '@afbin/vega';
-import {compile} from '@afbin/vega-lite';
-const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
-const label=col=>D.labels[col]??col;
-// gql also takes a one-string array: one request, each DATA query an aliased _sql field whose SQL
-// travels as a variable (never spliced into the document).
-const pageQuery=gql([`query Page(${names.map((_,i)=>`$s${i}:String!`).join(',')}){`+
-  names.map((name,i)=>`${name}:_sql(sql:$s${i}){rows}`).join(' ')+'}']);
-const variables=Object.fromEntries(names.map((name,i)=>[`s${i}`,D.queries[name]]));
-let answers={},views=[];
-const fmt=(n,digits=0)=>Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:digits,
-  maximumFractionDigits:digits}):'–';
-// What every text reads: a query's rows as SQL answered them.
-const helpers={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
-// One value per row of the chart's query; the chart and its table share them.
-const values=c=>helpers.rows(c.query).filter(row=>Number.isFinite(row[c.y])).map(row=>({
-  x:String(row[c.x]??''),series:c.series?String(row[c.series]??''):'',y:row[c.y]}));
-// Script-made nodes take data-af-ids from DATA ids and row values, stable on every render.
-const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
-  if(text!==undefined)n.textContent=text;return n;};
-function table(c,list){const id='chart-'+c.id+'-table',series=[...new Set(list.map(v=>v.series))];
-  const t=node('table',id),head=node('tr',id+'-head');
-  head.append(node('th',id+'-head-x',label(c.x)),...series.map(s=>node('th',`${id}-head-${s}`,
-    s||label(c.y))));
-  t.append(node('caption',id+'-caption',`Values in this chart: ${label(c.y)}`),head);
-  for(const x of new Set(list.map(v=>v.x))){const tr=node('tr',`${id}-row-${x}`);
-    tr.append(node('th',`${id}-row-${x}-x`,x),...series.map(s=>{
-      const y=list.find(v=>v.x===x&&v.series===s)?.y;
-      return node('td',`${id}-row-${x}-${s||'y'}`,fmt(y??NaN,Number.isInteger(y)?0:2));}));
-    t.append(tr);}
-  return t;}
-const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-async function draw(){views.forEach(view=>view.finalize());
-  const ink=token('--foreground'),line=token('--border'),font=token('--font-body'),
-    colors=[1,2,3,4,5].map(n=>token('--chart-'+n)).filter(Boolean);
-  views=await Promise.all(D.charts.map(async c=>{const host=$(`[data-af-id="chart-${c.id}-plot"]`);
-    const spec=compile({description:c.title,width:'container',height:240,background:'transparent',
-      autosize:{type:'fit',contains:'padding'},data:{values:values(c)},mark:c.mark==='line'?
-      {type:'line',strokeWidth:2,point:{filled:true,size:25}}:{type:'bar',cornerRadiusEnd:2},
-      encoding:{x:{field:'x',type:'ordinal',sort:null,title:label(c.x),axis:{labelAngle:0}},
-        y:{field:'y',type:'quantitative',title:label(c.y),scale:{zero:true},axis:{format:'.3~s'}},
-        ...c.series?{color:{field:'series',type:'nominal',title:label(c.series)}}:{},
-        tooltip:[{field:'x',type:'nominal',title:label(c.x)},...c.series?[{field:'series',
-          type:'nominal',title:label(c.series)}]:[],{field:'y',type:'quantitative',
-          title:label(c.y),format:','}]},
-      config:{view:{stroke:null},font,mark:{color:colors[0]||ink},range:{category:colors},
-        axis:{labelColor:ink,titleColor:ink,domainColor:line,tickColor:line,gridColor:line,
-          gridDash:[3,3],labelFontSize:11,titleFontSize:12,titleFontWeight:'normal'},
-        legend:{orient:'top',labelColor:ink,titleColor:ink}}}).spec;
-    const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,
-      renderer:'svg',expr:vega.expressionInterpreter});await view.runAsync();return view;}));}
-function render(){const h=helpers;
-  $('#title').textContent=document.title;$('#kicker').textContent=D.kicker;$('#lead').textContent=
-    D.lead(h);
-  $('#stats').replaceChildren(...D.stats.map(s=>{const box=node('div','stat-'+s.id);
-    box.append(node('span',`stat-${s.id}-label`,s.label),node('b',`stat-${s.id}-value`,
-      s.value(h)));return box;}));
-  $('#charts').replaceChildren(...D.charts.map(c=>{const section=node('section','chart-'+c.id),
-    plot=node('div',`chart-${c.id}-plot`);plot.className='chart';plot.setAttribute('role','img');
-    plot.setAttribute('aria-label',c.title);section.className='rule';
-    section.append(node('h2',`chart-${c.id}-title`,c.title),plot,...c.table===false?[]:
-      [table(c,values(c))]);
-    return section;}));
-  $('#sections').replaceChildren(...D.sections.map(s=>{const section=node('section',
-    'section-'+s.id);section.className='rule';section.append(node('h2',`section-${s.id}-title`,
-    s.title),node('p',`section-${s.id}-text`,s.text(h)));return section;}));}
-// Charts follow the reader's light or dark mode and the owner's design system.
-const theme=new MutationObserver(()=>{if(names.some(name=>answers[name]))void draw();});
-theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark',
-  'data-af-design-system']});
-// watchQuery answers now and again whenever the linked dataset changes (another reader's write).
-const watch=client.watchQuery({query:pageQuery,variables}).subscribe(async result=>{
-  if(result.loading)return;
-  if(result.errors?.length){status.textContent=result.errors[0].message||
-    'Could not read the linked dataset.';return;}
-  try{answers=Object.fromEntries(names.map(name=>[name,result.data?.[name]?.rows??[]]));render();
-    await draw();status.textContent=`Computed ${names.length} queries from the linked dataset.`;
-  }catch(error){status.textContent=error.message||'Could not draw the linked dataset.';}});
-addEventListener('pagehide',()=>{watch.unsubscribe();theme.disconnect();
-  views.forEach(view=>view.finalize());},{once:true});
-</script>
+<script type="module" src="./csv-dashboard.mjs"></script>
 </body></html>

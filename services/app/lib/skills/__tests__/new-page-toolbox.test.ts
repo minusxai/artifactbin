@@ -1,6 +1,6 @@
 /**
  * scripts/new-page.mjs: a page computed from a CSV set up in one call, against a fake server: it
- * publishes the CSV as a named dataset, copies examples/csv-dashboard.html and its steps file, and
+ * publishes the CSV as a named dataset, copies examples/csv-dashboard.html, its renderer and its steps file, and
  * writes a DATA block that reads only this CSV's columns; a rerun reuses the dataset and keeps edits.
  */
 import {it,expect} from 'vitest';
@@ -30,7 +30,9 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
  const p=await project();
  try{
   const result:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region'});
-  expect((await readdir(p.dir)).filter(n=>!n.endsWith('.af.json')).sort()).toEqual(['index.html','sales.csv','steps.mjs']);
+  expect((await readdir(p.dir)).filter(n=>!n.endsWith('.af.json')).sort()).toEqual(['csv-dashboard.mjs','index.html','sales.csv','steps.mjs']);
+  // The renderer is copied byte for byte, beside the page that loads it.
+  expect(await readFile(path.join(p.dir,'csv-dashboard.mjs'),'utf8')).toBe(await readFile(new URL('../../../skills/artifactbin/examples/csv-dashboard.mjs',import.meta.url),'utf8'));
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts']);
   expect(p.calls[0].body).toMatchObject({title:'Revenue by region data',dataset:CSV});
   expect(result.dataset).toEqual({id:'DATA0001',name:'sales',rows:3,columns:['month','region','revenue','orders'],numbers:['revenue','orders'],reused:false});
@@ -40,22 +42,40 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
   expect(html).toContain("totals: 'select count(*) as row_count, sum(revenue) as revenue, sum(orders) as orders from sales'");
   expect(html).toContain("by_month: 'select month, sum(revenue) as revenue, sum(orders) as orders from sales group by month order by month'");
   expect(html).toContain("labels: {month:'Month', region:'Region', revenue:'Revenue', orders:'Orders'}");
-  // Every column DATA reads is one of this CSV's: nothing of the sample (repairs) is left.
+  expect(html).toContain('<script type="module" src="./csv-dashboard.mjs"></script>');
+  // Every column DATA reads is one of this CSV's: nothing of the sample (deliveries) is left, filters included.
   const data=html.slice(html.indexOf('window.DATA'),html.indexOf('</script>'));
-  expect(data).not.toMatch(/repairs|completed|waiting|week/);
+  expect(data).not.toMatch(/deliveries|distance_km|category|city|filters|\$\w/);
   for(const col of data.matchAll(/(?:\[|\b[xy]:)'(\w+)'/g))expect(['month','region','revenue','orders']).toContain(col[1]);
   expect(data).toContain("{id:'revenue', title:'[Revenue by month]', mark:'bar', query:'by_month', x:'month', y:'revenue'}");
   // What it drew and how to change it, in this CSV's own names: an agent that misread the starter
   // ("a chart per region, not what we want") wrote its own page instead (2026-11-07).
   expect(result.draws).toBe("DATA's _sql queries compute a total per number column (revenue, orders) and revenue summed per month and orders summed per month; it draws a lead, those totals and a bar chart of each, with a table of its values (3 rows).");
   expect(result.next).toMatch(/^Next: in index\.html edit only DATA \(its \[bracketed\] text/);
-  for(const variation of ["one line: mark:'line'","a line or bar per region: select and group by region in the query, then series:'region'","only some rows: where region = 'North' in the query","one value per month as given: a query without sum or group by",'no value table: table:false','no stats or sections: stats:[], sections:[]',"a number for one month in a text: a query with sum(revenue) where month = '2026-01', read as h.one(name).revenue",'another dataset: link it and join it in SQL'])expect(result.next).toContain(variation);
+  for(const variation of ["one line: mark:'line'","a line or bar per region: select and group by region in the query, then series:'region'","only some rows: where region = 'North' in the query","one value per month as given: a query without sum or group by",'no value table: table:false','no stats or sections: stats:[], sections:[]',"a number for one month in a text: a query with sum(revenue) where month = '2026-01', read as h.one(name).revenue",'another dataset: link it and join it in SQL',
+   // The deeper ones, as the starter draws them, in this CSV's names: no map without coordinates.
+   "and, as examples/csv-dashboard.html draws them: a small panel per region: series:'region', multiples:true, a heatmap of month by region: mark:'rect', series:'region', charts that filter each other: filters:{region:'Region'}, filter:'region' on a chart with x:'region', and where ($region is null or region = $region) in the other queries, the spread of revenue: bars of count(*) per bin, cast(revenue / 10 as int) * 10, grouped in SQL, orders against revenue: mark:'point', x:'orders', a row per record, table:false"])expect(result.next).toContain(variation);
+  expect(result.next).not.toContain("mark:'map'");
   expect(result.next).toContain('node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs');
   // A rebuild of an existing page publishes over it.
   const again:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region',artifact:'PAGE01'});
   expect(again.dataset.reused).toBe(true);expect(p.calls.length).toBe(1);
-  expect(again.kept).toEqual(['index.html','steps.mjs','sales.csv']);
+  expect(again.kept).toEqual(['index.html','csv-dashboard.mjs','steps.mjs','sales.csv']);
   expect(again.next).toContain('node scripts/publish.mjs index.html --artifact PAGE01 && node scripts/check.mjs');
+ }finally{await p.done();}
+});
+
+it('names a map among the variations when the CSV has coordinates',async()=>{
+ const p=await project();
+ try{
+  await writeFile(path.join(p.root,'stops.csv'),'stop,lat,lng,visits\nHarbour,52.37,4.9,12\nMarket,52.36,4.88,7\n');
+  const result:any=await p.run({dir:'page',data:'stops.csv',title:'Stops'});
+  expect(result.next).toContain("a map: mark:'map', lat:'lat', lon:'lng', x the place, y its size");
+  // Coordinates are numbers, but DATA neither sums nor charts them: it totals visits per stop.
+  const html=await readFile(path.join(p.dir,'index.html'),'utf8');
+  expect(html).toContain("totals: 'select count(*) as row_count, sum(visits) as visits from stops'");
+  expect(html).toContain("by_stop: 'select stop, sum(visits) as visits from stops group by stop order by stop'");
+  expect(html).not.toMatch(/sum\((?:lat|lng)\)/);
  }finally{await p.done();}
 });
 

@@ -77,9 +77,10 @@ export default {
         '@tailwindcss/vite',
         // Type-only imports of @types/mdast, @types/hast and Vite's bundler types, installed with remark and Vite.
         'mdast', 'rolldown',
-        // The hosted page runtime, which a check steps file imports inside the published page
-        // (skills/artifactbin/examples/api-dashboard-steps.mjs); pages get it from the platform's import map.
-        '@afbin/apollo',
+        // The hosted page modules, which a check steps file (skills/artifactbin/examples/api-dashboard-steps.mjs)
+        // and a page's own module (examples/csv-dashboard.mjs) import inside the published page; pages get them
+        // from the platform's import map.
+        /^@afbin\//,
       ],
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },
