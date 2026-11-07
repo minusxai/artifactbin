@@ -4,9 +4,9 @@ description: "Read before drawing any chart: chart choice, truthful encodings an
 ---
 ## Read first
 
-Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. They are separate libraries: Vega-Lite compiles to Vega. Use documented runtime imports; assume no globals, embed helper or automatic theme.
+Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. They are separate libraries: Vega-Lite compiles to Vega. Use the documented imports: no globals, embed helper or automatic theme. Maps and regions: deck.gl ([maps](maps.md)); Vega `geoshape` draws standard GeoJSON inside out.
 
-Name question, unit, grain, source, period, timezone and missing/partial data. Read [runtime](runtime.md) and [datasets](datasets.md).
+Name question, unit, grain, source, period, timezone and missing data. See [runtime](runtime.md) and [datasets](datasets.md).
 
 ## Bootstrap
 
@@ -88,4 +88,4 @@ Vega: update via `view.data("rows", rows).runAsync()`.
 
 ## Official references
 
-[Vega-Lite docs](https://github.com/vega/vega-lite/tree/main/site); [Vega docs](https://github.com/vega/vega/tree/main).
+[Vega-Lite docs](https://github.com/vega/vega-lite/tree/main/site); [Vega docs](https://github.com/vega/vega).
