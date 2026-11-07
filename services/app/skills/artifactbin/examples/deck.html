@@ -19,8 +19,9 @@
 //   series), format ".1f", unit "$#B"}, flow
 //   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit, from
 //   (traction chart id), milestone (target only; shown as "last traction value → target"), items≤3
-//   [{label,amount} or {label,pct}]} (shows sum, shares; titled from these). Titles ≤2 lines.
-//   Unique ids key data-af-id. Every slide shows "Illustrative figures"; real:true removes it.
+//   [{label,amount} or {label,pct}]} (a funding ask: sum, shares; any other ask is bullets).
+//   Titles ≤2 lines. Unique ids key data-af-id. Every slide shows "Illustrative figures"; real:true
+//   removes it.
 // Built with: one HTML page from a SLIDES block; Vega-Lite charts; keyboard and click navigation.
 // The only part to edit: DATA, and one SLIDES entry per slide, rendered by the template below.
 window.DATA = {dataset: ''}; // a linked dataset's data-af-name, or '' when charts carry their data
@@ -109,8 +110,7 @@ function flow(s){const steps=s.steps.slice(0,4),w=900/steps.length;
       fill:ink,'font-family':'var(--font-mono)'});svg.append(text);
     lines.forEach((line,k)=>text.append(svgEl('tspan',{x:x+(w-70)/2,dy:k?22:0},line)));
     if(n<steps.length-1)svg.append(svgEl('path',{d:`M${x+w-56} 110h40m-10-8 10 8-10 8`,fill:'none',
-      stroke:'currentColor','stroke-width':2}));
-  });return svg;}
+      stroke:'currentColor','stroke-width':2}));});return svg;}
 function matrix(s){const ink={fill:'currentColor'},svg=svgEl('svg',{viewBox:'0 0 900 300',
   role:'img','aria-label':`${s.x} by ${s.y}`});
   svg.append(svgEl('path',{d:'M450 10v260M200 140h500',stroke:'currentColor','stroke-width':2}),
@@ -191,8 +191,7 @@ async function drawCharts(){views.forEach(view=>view.finalize());
       config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,
         gridColor:token('--ds-line'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',
-      expr:vega.expressionInterpreter});await view.runAsync();return view;
-  }));}
+      expr:vega.expressionInterpreter});await view.runAsync();return view;}));}
 await drawCharts();const theme=new MutationObserver(drawCharts);
 theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
 addEventListener('pagehide',()=>{theme.disconnect();seen.disconnect();views.map(v=>v.finalize());});

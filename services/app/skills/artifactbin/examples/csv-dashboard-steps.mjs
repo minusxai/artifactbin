@@ -17,7 +17,8 @@ await step('every chart draws marks and lists its values in a table',async()=>{
     const section=document.querySelector(`[data-af-id="chart-${c.id}"]`);
     const marks=section?.querySelectorAll('.mark-rect path, .mark-line path, .mark-symbol path')
       .length??0,rows=section?.querySelectorAll('table tr').length??0;
-    return marks&&rows>1?[]:[`${c.id} (${marks} marks, ${Math.max(0,rows-1)} table rows)`];}));
+    return marks&&(rows>1||c.table===false)?[]:[`${c.id} (${marks} marks, ${Math.max(0,rows-1)}`+
+      ' table rows)'];}));
   if(missing.length)throw Error('charts with no data: '+missing.join(', ')+
     ': check DATA x, y and where against the dataset columns');});
 await step(PLACEHOLDERS_OK?'no stray text outside main':'no [placeholders] or stray text left',

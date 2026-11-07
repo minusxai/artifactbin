@@ -13,10 +13,8 @@ Examples:
   node scripts/new-page.mjs --data sales.csv --title "Revenue by region"
   node scripts/new-page.mjs --data coffee.csv --title "Coffee at a small startup" --artifact Ab12Cd
 Gotchas: a rerun is safe: existing files are kept, never overwritten, and the dataset its
-  companion (FILE.csv.af.json) records is reused. In DATA, a text is a function of h (h.sum(col),
-  h.mean, h.min, h.max, h.last, h.count(), h.where({col:value}), h.fmt(n, digits)); a chart is
-  {id, title, mark bar|line, x, y, series (a column that splits it), where {col:value},
-  aggregate sum|mean|min|max|last}, and lists its values in a table. steps.mjs needs no edits.
+  companion (FILE.csv.af.json) records is reused. The output names what DATA draws and how to
+  change it with your columns; steps.mjs needs no edits.
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
   rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
   Results never contain credentials.`;
@@ -34,26 +32,22 @@ const resolve = (base, file) => path.resolve(base, String(file).replace(/^~(?=$|
   homedir()));
 const htmlText = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const quote = text => `'${String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
-/** "unit_price" → "Unit price": the name readers see until you change it. */
 const label = column => {
   const words = column.replace(/[_-]+/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
-/** A dataset name from the file name: a letter first, then letters, digits and underscores. */
 const nameOf = file => {
   const name = path.basename(file).replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g,
     '_').replace(/^_+|_+$/g, '');
   return /^[a-z]/.test(name) ? name.slice(0, 40) : 'rows';
 };
 
-/** Header and rows of a simple CSV (quoted fields with commas are kept whole). */
 function parse(text) {
   const cells = line => [...line.matchAll(/("([^"]|"")*"|[^,]*)(,|$)/g)].slice(0, -1)
     .map(m => m[1].replace(/^"|"$/g, '').replace(/""/g, '"').trim());
   const lines = text.split(/\r?\n/).filter(line => line.trim());
   return {columns: cells(lines[0] ?? ''), rows: lines.slice(1).map(cells)};
 }
-/** Writes FILE only when nothing is there yet; false when it was kept. */
 async function create(file, bytes) {
   try { await writeFile(file, bytes, {flag: 'wx'}); return true; } catch (error) {
     if (error.code === 'EEXIST') return false;
@@ -91,6 +85,25 @@ function fill(starter, {title, id, name, columns, numbers}) {
     .replace(`data-af-name="${sample}" href="ref:DATASET_ID"`, `data-af-name="${name}" ` +
       `href="ref:${id}"`)
     .replace(/<title>\[[^\]<]+\]<\/title>/, `<title>${htmlText(title)}</title>`);
+}
+/** What the written DATA shows, in this CSV's names: what the agent keeps or changes. */
+function draws(columns, numbers, rows) {
+  const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
+  return `DATA draws a lead, a total per number column (${numbers.slice(0, 3).join(', ') ||
+    'none'}), and a bar chart of ${numbers.slice(0, 2).map(y => `${y} summed per ${x}`)
+    .join(' and ') || 'nothing'}, each with a table of its values (${rows.length} rows).`;
+}
+/** The usual changes, written with this CSV's own columns and a real value. */
+function variations(columns, numbers, rows) {
+  const x = columns.find(column => !numbers.includes(column)) ?? columns[0];
+  const other = columns.find(column => column !== x && !numbers.includes(column));
+  const y = numbers[0] ?? columns[1] ?? x, at = col => rows[0]?.[columns.indexOf(col)] ?? '';
+  return [`one line: mark:'line'`, other && `a line or bar per ${other}: series:'${other}'`,
+    other && `only some rows: where:{${other}:'${at(other)}'}`,
+    `one value per ${x} as given: aggregate:'last'`, 'no value table: table:false',
+    'no stats or sections: stats:[], sections:[]',
+    `a number for one ${x} in a text: h.where({${x}:'${at(x)}'}).sum('${y}')`]
+    .filter(Boolean).join('; ');
 }
 export async function newPageCommand({values, positionals}, options = {}) {
   const title = String(values.title ?? positionals.join(' ')).trim()
@@ -134,9 +147,9 @@ export async function newPageCommand({values, positionals}, options = {}) {
       reused: published.reused},
     note: `${name} ${published.id} (${rows.length} rows${published.reused ? ', reused' : ''}); ` +
       `index.html links it as ${name} and is titled ${JSON.stringify(title)}.`,
-    next: 'Next: in index.html edit only DATA: its [bracketed] text (kicker, lead, stat labels, ' +
-      'chart titles, sections) and which stats and charts the request needs (each chart: mark, ' +
-      `x, y, series, where, aggregate); then ${publish} && node scripts/check.mjs index.html ` +
-      '--steps steps.mjs'};
+    draws: draws(columns, numbers, rows), next: 'Next: in index.html edit only DATA (its ' +
+      '[bracketed] text, and the stats, charts and sections the request needs); it can do the ' +
+      `layout asked for: ${variations(columns, numbers, rows)}; then ${publish} && ` +
+      'node scripts/check.mjs index.html --steps steps.mjs'};
 }
 await runTool('new-page', import.meta.url, newPageCommand);

@@ -19,7 +19,8 @@ DATA; keep this line. -->
 //   h.count() read every row, h.where({col:value}) the matching rows, h.fmt(n, digits) formats.
 //   Charts: mark bar|line; x, y and an optional series name columns; y is summed per x (and
 //   series) unless aggregate is mean, min, max or last; where:{col:value} keeps matching rows.
-//   Each chart draws with Vega-Lite and lists its values in a table. ids are unique keys.
+//   Each chart draws with Vega-Lite and lists its values in a table (table:false hides it); empty
+//   stats or sections show nothing. ids are unique keys.
 // Built with: one HTML page; a published CSV dataset read live through its generated API, every
 //   row; numbers computed in page script; Vega-Lite charts, each with a table of its values.
 window.DATA = {
@@ -141,7 +142,8 @@ function render(){const h=helpers(rows);
   $('#charts').replaceChildren(...D.charts.map(c=>{const section=node('section','chart-'+c.id),
     plot=node('div',`chart-${c.id}-plot`);plot.className='chart';plot.setAttribute('role','img');
     plot.setAttribute('aria-label',c.title);section.className='rule';
-    section.append(node('h2',`chart-${c.id}-title`,c.title),plot,table(c,values(c)));
+    section.append(node('h2',`chart-${c.id}-title`,c.title),plot,...c.table===false?[]:
+      [table(c,values(c))]);
     return section;}));
   $('#sections').replaceChildren(...D.sections.map(s=>{const section=node('section',
     'section-'+s.id);section.className='rule';section.append(node('h2',`section-${s.id}-title`,
