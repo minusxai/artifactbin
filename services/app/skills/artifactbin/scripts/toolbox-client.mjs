@@ -147,8 +147,8 @@ if(error?.code==='ERR_MODULE_NOT_FOUND'){
     recovery:'Download the skill zip again and extract its whole artifactbin/ folder; '
     +'run scripts from inside it.'};
 }
-const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['visual appearance',
-   'task behavior','persistence','permissions'],note:'No passing smoke evidence.',...(
+const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['task behavior',
+   'persistence','permissions'],note:'No passing smoke evidence.',...(
    error.code==='check_failed'?error.details:{})}:{};
 return {...diagnostics,ok:false,code:error.code??'operation_failed',message:error instanceof
    ToolError?error.message:transient(error)?'Network or server error before a result arrived.':

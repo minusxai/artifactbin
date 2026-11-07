@@ -32,7 +32,7 @@ it('builds bounded smoke checks and refuses remote URLs in the private preview m
  expect(checkTarget('PAGE12')).toMatchObject({mode:'hosted',target:'/a/PAGE12'});
  expect(checkScript({target:'/a/PAGE12',viewports:[{width:390,height:844}],steps:'return {verified: true};'})).toContain('return {verified: true}');
  const result=summarizeCheck([{pageErrors:['intentional error'],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Fixture',overflow:{viewport:390,content:900,fits:false}}]);
- expect(result.smokePassed).toBe(false);expect(result.unverified).toEqual(expect.arrayContaining(['visual appearance','task behavior','persistence','permissions']));
+ expect(result.smokePassed).toBe(false);expect(result.unverified).toEqual(['task behavior','persistence','permissions']);
  expect(summarizeCheck([{pageErrors:[],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}}]).smokePassed).toBe(true);
 });
 
@@ -124,7 +124,7 @@ it('collects errors, separates only known telemetry, and catches overflow withou
  const evidence=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}},async()=>{taskRan=true;return {assertion:'task ran'};});
  listeners.pageerror!(Error('cleanup noise'));
  expect(taskRan).toBe(true);expect(evidence.pageErrors).toEqual(['intentional regression']);expect(evidence.failedRequests).toHaveLength(2);expect(evidence.telemetry).toHaveLength(1);
- expect(summarizeCheck([evidence])).toMatchObject({smokePassed:false,unverified:expect.arrayContaining(['visual appearance','task behavior'])});
+ expect(summarizeCheck([evidence])).toMatchObject({smokePassed:false,unverified:['task behavior','persistence','permissions']});
 });
 
 it('captures each failed GraphQL field with its owner detail, and keeps a detail-less read for an owner re-run',async()=>{

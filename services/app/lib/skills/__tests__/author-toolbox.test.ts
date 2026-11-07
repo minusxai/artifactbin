@@ -144,11 +144,14 @@ it('keeps --json read output as canonical HTML with a matching baseline',async()
 it('summarizes a saved check per viewport so the file need not be reopened',async()=>{
  const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const viewport={width:390,height:844},clean={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[]};
- const passed=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:12,belowAA:0,unreadable:0,low:[]},steps:true,task:{total:42},screenshot:{path:'/tmp/390x844.png'}}],unverified:['visual appearance']},'qa.json');
+ const passed=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:12,belowAA:0,unreadable:0,low:[]},steps:true,task:{total:42},screenshot:{path:'/tmp/390x844.png'}}],unverified:['task behavior','persistence','permissions']},'qa.json');
  // A clean pass needs nothing from the saved JSON: only a failure names the file.
  expect(passed).not.toContain('full result');
  expect(passed).toMatch(/390x844: no errors; fits; contrast ok; task \{"total":42\}/);
- expect(passed).toMatch(/unverified: visual appearance/);
+ // No line sends the agent back to its screenshots after a clean pass ("Inspect task results
+ // separately"): the facts say what is not tested, nothing more.
+ expect(passed).toMatch(/unverified: task behavior, persistence, permissions/);
+ expect(passed).not.toMatch(/visual acceptance|Inspect task results/);
  // The digest names the screenshots it saved (M7).
  expect(passed).toContain('  screenshots: /tmp/390x844.png');
  // A screenshot that is not the whole page says why next to its path.
@@ -520,6 +523,14 @@ it('publish --name sends a new dataset\'s GraphQL root in the create body, and o
   // The name is fixed at creation: an update never sends one.
   await expect(publishCommand({values:{server,name:'renamed'},positionals:[csv]},options)).rejects.toMatchObject({code:'name_not_for_update',exit:2});
   expect(seen).toHaveLength(1);
+  // Without --name a new dataset is named after its file, the name a page links it by: agents
+  // published "Onboarding stage times" (root onboarding_stage_times) and linked it as onboarding.
+  const named=path.join(project,'Onboarding Stages.csv'),generic=path.join(project,'dataset.csv');
+  await writeFile(named,'stage,days\nreview,2\n');await writeFile(generic,'a\n1\n');
+  await publishCommand({values:{server,title:'Onboarding stage times'},positionals:[named]},options);
+  expect(seen.at(-1)!.body).toMatchObject({name:'onboarding_stages',title:'Onboarding stage times'});
+  await publishCommand({values:{server},positionals:[generic]},options);
+  expect(seen.at(-1)!.body.name).toBeUndefined();
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('reads Built with from the page starter comment, and only datasets with a stored policy for who can do what',async()=>{

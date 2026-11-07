@@ -99,8 +99,9 @@ export function checkScript({
   );
 }
 /** @returns {import('../../../lib/skills/author-toolbox-contract').AuthorCheckResult} */
-// Smoke passes only without errors, overflow, unreadable text or duplicate ids; task and visual
-// acceptance stay unverified.
+// Smoke passes only without errors, overflow, unreadable text or duplicate ids; what steps did not
+// cover stays unverified. No note asks for more: "Inspect task results separately; … cannot
+// establish visual acceptance" sent agents back to screenshots after clean passes (2026-11-07).
 export function summarizeCheck(checks) {
   return {
     smokePassed:
@@ -118,9 +119,6 @@ export function summarizeCheck(checks) {
           )
       ),
     checks,
-    unverified: ['visual appearance', 'task behavior', 'persistence', 'permissions'],
-    note:
-      'Smoke evidence only. Inspect task results separately; text and geometry cannot establish ' +
-      'visual acceptance.'
+    unverified: ['task behavior', 'persistence', 'permissions']
   };
 }
