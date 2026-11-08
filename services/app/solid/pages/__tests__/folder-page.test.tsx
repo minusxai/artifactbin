@@ -97,3 +97,15 @@ it('renders authorized group children even when the account workspace shelf is e
  expect(screen.getByLabelText('Open Doc bbb222')).toBeInTheDocument();
  expect(screen.queryByLabelText('Empty folder')).toBeNull();
 });
+
+it('offers every folder on the account shelf when moving a child out of this folder', async () => {
+  const sibling = { ...row('sib001', 'folder', 'Archive'), parent_id: null, ancestor_ids: [] };
+  const self = { ...row('fold01', 'folder', 'Reports'), parent_id: null, ancestor_ids: [] };
+  const workspace = { artifacts: [self, sibling, row('aaa111'), row('bbb222'), row('ccc333', 'folder', 'Q3')], shared: [], stats: { artifacts: 0, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0 } as unknown as AccountWorkspace;
+  render(() => <MemoryRouter><Route path="*" component={() => <FolderPage folder={folder()} role="owner" workspace={workspace} />} /></MemoryRouter>);
+  expect(screen.queryByLabelText('Open folder Archive')).toBeNull();
+  fireEvent.click(screen.getAllByLabelText('More actions for Doc aaa111')[0]!);
+  fireEvent.click(await screen.findByLabelText('Move Doc aaa111'));
+  expect(await screen.findByLabelText('Move to Archive')).toBeInTheDocument();
+  expect(screen.getByLabelText('Move to Reports')).toBeInTheDocument();
+});

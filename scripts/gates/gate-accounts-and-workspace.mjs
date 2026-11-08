@@ -453,7 +453,7 @@ async function foldersLeg(owner) {
       await o.locator('[aria-label^="Open Opening Note"]').waitFor({ timeout: 20000 });
       await o.locator('[aria-label^="Open Quiet Note"]').waitFor({ timeout: 20000 });
     });
-    const head = () => o.locator('header').filter({ has: o.locator('[aria-label="Folder trail"]') }).first().textContent();
+    const head = () => o.locator('main[aria-label="Folder"] header').first().textContent();
     const headText = (await head()) ?? '';
     check(headText.includes('Field Notes'), `the page names the folder it is (${headText.trim().slice(0, 60)})`);
     check(/2 documents/.test(headText), `and counts what is on the shelf, as a sentence (${headText.trim().slice(0, 60)})`);
@@ -479,9 +479,9 @@ async function foldersLeg(owner) {
     const emptyText = (await o.locator('[aria-label="Empty folder"]').textContent()) ?? '';
     check(emptyText.includes('Nothing here yet.'), 'an empty folder says it is empty');
     check(emptyText.includes('menu') && emptyText.includes(`parent_id: "${archiveId}"`), `and names both ways to fill it (${emptyText.trim().slice(0, 90)})`);
-    // NESTED, so it draws the trail — and the crumb is a link back up.
-    const crumb = o.locator('[aria-label="Folder trail"] a');
-    check((await crumb.count()) === 2, 'a nested folder draws Home and its parent above its name');
+    // NESTED, so the page bar draws the trail — and the crumb is a link back up.
+    const crumb = o.getByRole('navigation', { name: 'Current page' }).locator('a:not([href="/"])');
+    check((await crumb.count()) === 2, 'a nested folder draws Personal and its parent above its name');
     check(new URL(await crumb.last().getAttribute('href'), BASE).pathname === `/a/${folder.id}`, 'and the crumb links to the folder above it');
     // The camera's element has to be VISIBLE even here: `main` is what `/a/<id>/export` names, and an element with
     // no height is a 15-second `waitFor` and then `render_failed`.
