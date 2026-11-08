@@ -446,10 +446,10 @@ await section('navigation', async () => {
   await page.reload();
   await page.getByLabel('List view', { exact: true }).click();
   const pageCount = page.context().pages().length;
-  // A document's heading is in its frame; a folder's trail is the app page's own.
+  // A document's heading is in its frame; a folder's page is the app page's own.
   for (const [label, id, destination] of [
     ['Open mxmx_test navigation A', first.id, () => heading('Artifact A')],
-    ['Open folder Navigation folder', folder.id, () => page.getByLabel('Folder trail', { exact: true })],
+    ['Open folder Navigation folder', folder.id, () => page.getByRole('main', { name: 'Folder', exact: true })],
   ]) {
     const link = page.getByLabel(label, { exact: true });
     check(await link.getAttribute('target') !== '_blank', `${label} stays in this tab`);

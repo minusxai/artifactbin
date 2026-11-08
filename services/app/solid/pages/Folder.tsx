@@ -30,6 +30,14 @@ export function FolderPage(props: FolderProps): JSX.Element {
     ...folder().trail.map(crumb=>({label:crumb.title??crumb.id,href:crumb.url})),
     {label:folder().title??'Untitled folder'},
   ]);
+  // The folder's own children always show (a group folder's are not on the account shelf); a personal folder's
+  // shelf also carries the account's other rows, so the move picker can offer every folder, not just subfolders.
+  const shelfRows = createMemo(() => {
+    const own = folder().rows;
+    if (folder().group) return own;
+    const ids = new Set(own.map(row => row.id));
+    return [...(workspace()?.artifacts ?? []).filter(row => !ids.has(row.id)), ...own];
+  });
   const mayWrite = () => canEdit(props.role);
   createEffect(() => { if (props.folder.id !== folder().id) { setFolder(props.folder); setWorkspace(props.workspace); } });
   const reread = () => {
@@ -57,7 +65,7 @@ export function FolderPage(props: FolderProps): JSX.Element {
   const contents = () => <>
     <header class="mb-6 border-b border-edge pb-4"><div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><h1 aria-current="page" class="m-0 min-w-0 break-words"><Show when={editing()} fallback={<Show when={mayWrite()} fallback={<span class={NAME_TYPE}>{folder().title ?? 'Untitled folder'}</span>}><Button variant="ghost" aria-label="Rename folder" onClick={() => { setDraft(folder().title ?? ''); setEditing(true); }} class="max-w-full justify-start"><span class={`${NAME_TYPE} truncate`}>{folder().title ?? 'Untitled folder'}</span></Button></Show>}><Input aria-label="Folder name" autofocus value={draft()} onInput={event => setDraft(event.currentTarget.value)} onBlur={save} onKeyDown={event => { if (event.key === 'Enter') save(); if (event.key === 'Escape') setEditing(false); }} /></Show></h1><Show when={summaryOf(folder().count)}><p class="m-0 shrink-0 font-sans text-sm text-muted">{summaryOf(folder().count)}</p></Show></div></header>
     <Show when={folder().rows.length === 0}><div aria-label="Empty folder" class="mb-5 rounded-lg border border-dashed border-edge bg-surface px-5 py-8"><p class="m-0 font-sans text-sm text-fg">Nothing here yet.</p><Show when={mayWrite()}><p class="m-0 mt-1 font-sans text-sm text-muted">Move a document in from its ⋯ menu, or give your agent <code class="rounded-sm bg-raised px-1 py-0.5 font-mono text-xs text-fg">parent_id: &quot;{folder().id}&quot;</code> when it publishes.</p></Show></div></Show>
-    <Shelf groupId={folder().group?.id} rows={folder().rows} actions={mayWrite() ? 'full' : 'share'} canCreateFolders={mayWrite() && !workspace()} parentId={folder().id} scopeParentId={folder().id} assets={false} />
+    <Shelf groupId={folder().group?.id} rows={shelfRows()} actions={mayWrite() ? 'full' : 'share'} canCreateFolders={mayWrite() && !workspace()} parentId={folder().id} scopeParentId={folder().id} assets={false} />
   </>;
   return <main aria-label="Folder" class={workspace() ? HOME_WORKSPACE_COLUMN : `${PAGE_COLUMN} mt-8 pb-24`}>
     <Show when={workspace()} fallback={contents()}>{owned => <WorkspaceLayout groupId={folder().group?.id} workspace={owned()} parentId={folder().id} onCreated={reread} label="Folder workspace">{contents()}</WorkspaceLayout>}</Show>
