@@ -13,7 +13,7 @@
 - **Full gates belong to main PR and post-merge CI** (9 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge:** FAST checks → commit/push once → bounded fast PR CI green → merge.
   Full builds/browser/container suites run after merge and gate release, not PR approval.
-- **PRs into `main`: ONLY use squash and merge** (`gh pr merge --squash`). NEVER land all
+- **PRs into `main`: ONLY use squash and merge** (`node scripts/ci/merge-fast.mjs owner/repo PR`). This operational entry point verifies the exact completed fast attempt and timing status, then invokes `gh pr merge --squash --admin --match-head-commit SHA`; admin bypass is for reviews only. NEVER land all
   branch commits via the PR methods "Create a merge commit" (`gh pr merge --merge`) or
   "Rebase and merge" (`gh pr merge --rebase`). Each PR lands as one squashed commit on `main`.
   Rebasing a working branch, including onto `main`, is allowed; this restriction applies only
@@ -23,8 +23,8 @@
 
 For PRs targeting **`main`**, the required check is `pr fast` (`.github/workflows/pr-fast.yml`):
 validate, workflow lint, JavaScript syntax and the fast module list on three runners. Aim for
-**under 40 seconds**, warn at **40 seconds**, and fail above **60 seconds**, from `run_started_at` to the last job, and each job's final
-step fails the PR past it (`scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`).
+**under 40 seconds**, warn at **40 seconds**, and fail above **60 seconds**, from `run_started_at` to the last job, with the completed-workflow observer publishing required `pr fast timing` from the last workload job completion. Observer scheduling/publication overhead is separate; it does not measure its own teardown. Each job's final
+step remains an early diagnostic (`scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`).
 Never raise it. **Every post-merge failure on main gets a fast-lane guard:** find why `pr fast` missed it and add a
 deterministic check that would have caught it (`scripts/ci/fast-tests.json`, `scripts/ci/guard-tests.json` or a
 contract test) within the budget. Full `ci.yml`, page-speed, credential-platform and runner-design suites run on main/manual, not automatic PRs. Never add an unbounded extra PR workflow or wait for full release checks before merging. This 40/60 policy applies consistently to application, proxy, evaluator and deployment repositories.
