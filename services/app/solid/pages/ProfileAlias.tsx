@@ -41,7 +41,7 @@ export function ProfileAliasRoute(): JSX.Element {
   const id = createMemo(() => served() ?? parsePrettyPath(segments())?.id ?? null);
   // A one-segment slug the server has not answered on this load may be a title slug, which only the server resolves:
   // a miss at it crosses there, once (an address the server already answered is never sent back).
-  const resolvable = createMemo(() => segments().length === 1 && titleSlug(segments()[0]) === segments()[0]!.toLowerCase() && !served() && !servedAt(location.pathname));
+  const resolvable = createMemo(() => params.user.startsWith('@') && segments().length === 1 && titleSlug(segments()[0]) === segments()[0]!.toLowerCase() && !served() && !servedAt(location.pathname));
   // The ROUTER's address: a client navigation renders this route before the address bar moves.
   const cross = () => replaceDocument(location.pathname + location.search + location.hash);
   createEffect(() => { if (!id() && resolvable()) cross(); });
