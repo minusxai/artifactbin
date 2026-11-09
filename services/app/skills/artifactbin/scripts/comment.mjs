@@ -86,7 +86,8 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   // the session.
   const save = values.as !== undefined || !['list', 'watch'].includes(sub),
     identity = options.identity ??
-      agentIdentity({env: options.env, as: values.as, root: credentialRoot(options.env), save});
+      agentIdentity({env: options.env, as: values.as, root: credentialRoot(options.env), save,
+        ps: options.ps});
   options = {...options, identity};
   // --resume replays a saved journal exactly; no other comment field may change.
   if (values.resume) {

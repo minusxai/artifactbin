@@ -31,16 +31,31 @@ async function twoAgents() {
  const home = path.join(dir, 'home');await mkdir(home);
  const shared = { ARTIFACTBIN_URL: SERVER, ARTIFACTBIN_TOKEN: t.token, ARTIFACTBIN_HOME: home };
  const anchor = async (nodeId: string) => { const file = path.join(dir, `${nodeId}.json`);await writeFile(file, JSON.stringify({ kind: 'html-node', v: 1, nodeId, quote: '' }));return file; };
- const session = (env: Record<string, string>) => {
+ const session = (env: Record<string, string>, extra: { as?: string; ps?: () => never } = {}) => {
   const printed: unknown[] = [];
-  const options = { env: { ...shared, ...env }, fetcher, retryDelays: [], deliver: async (line: unknown) => { printed.push(line); } };
-  const run = (sub: string, values: Record<string, unknown>) => commentCommand({ sub, values, positionals: [doc.id] }, options);
+  const options = { env: { ...shared, ...env }, fetcher, retryDelays: [], ps: extra.ps, deliver: async (line: unknown) => { printed.push(line); } };
+  const run = (sub: string, values: Record<string, unknown>) => commentCommand({ sub, values: extra.as ? { as: extra.as, ...values } : values, positionals: [doc.id] }, options);
   /** One watch --next call; what it printed: others' comments as their bodies, then its own lines. */
   const watch = async () => { printed.length = 0;await run('watch', { next: true });return printed.map(v => typeof v === 'string' ? v : (({ event }) => event.body ?? `${event.type}:${event.change}`)(v as { event: { body?: string; type: string; change?: string } })); };
   return { run, watch };
  };
- return { doc, anchor, a: session({ CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'claude-session-a' }), b: session({ CODEX_THREAD_ID: 'codex-thread-b' }) };
+ return { doc, anchor, session, a: session({ CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'claude-session-a' }), b: session({ CODEX_THREAD_ID: 'codex-thread-b' }) };
 }
+
+it('two Pi agents whose process tree cannot be read are told apart by the names they pass with --as', async () => {
+ const { anchor, session } = await twoAgents();
+ const blocked = (): never => { throw new Error('Operation not permitted'); };
+ const teal = session({ PI_CODING_AGENT: 'true' }, { as: 'Pi Teal', ps: blocked });
+ const rose = session({ PI_CODING_AGENT: 'true' }, { as: 'Pi Rose', ps: blocked });
+ const asked = await teal.run('add', { anchor: await anchor('intro'), body: 'Teal asks: is the intro right?' });
+ expect(asked.agent).toBe('Pi Teal');
+ // Rose's watch prints Teal's question; Rose's answer reaches Teal's watch, and Teal never sees its own.
+ expect((await rose.watch()).filter(line => !line.startsWith('next:'))).toEqual(['Teal asks: is the intro right?']);
+ await rose.run('reply', { thread: asked.thread.id, body: 'Rose replies: yes' });
+ const seen = await teal.watch();
+ expect(seen.filter(line => !line.startsWith('next:'))).toEqual(['Rose replies: yes']);
+ expect(seen.join('\n')).not.toContain('Teal asks');
+}, 60_000);
 
 it('each comment carries its session\'s name, and a watch prints the other agent\'s comments, never its own', async () => {
  const { doc, anchor, a, b } = await twoAgents();
