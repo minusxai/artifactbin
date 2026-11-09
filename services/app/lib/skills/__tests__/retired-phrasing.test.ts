@@ -128,7 +128,7 @@ const RETIRED: Retired[] = [
   {pattern: /owner steps that expect a refusal/, scopes: AGENT_TEXT,
     reason: 'P2: permissions.md states only that owners and editors always have full access'},
   {pattern: /Republish only|never for polish|no-steps smoke|export every slide|every slide to test/i, scopes: AGENT_TEXT,
-    reason: 'P3: no cost steering; check and export help say what they do'},
+    reason: 'P3: no cost steering; check and export help say what they do (the owner-approved exception is SKILL.md Known failure modes, each note under 50 words)'},
   {pattern: /Original Chart defaults|old compact default|Previously downloaded|Mermaid\.js `initialize`|KEPT FOR EXISTING/,
     scopes: AGENT_TEXT, reason: 'P4: no legacy or migration notes in agent text (no backward-compat prose)'},
   {pattern: /no connected databases|no raw TCP|out of reach/, scopes: AGENT_TEXT,

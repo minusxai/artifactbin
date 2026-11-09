@@ -168,6 +168,13 @@ script. Groups: `node scripts/groups.mjs list`
   `-theme-color`, `-background-color` and `-icon` metas in `<head>`; autofix explains invalid
   values.
 
+## Known failure modes
+
+1. **Polishing after a clean check.** A clean check plus one look at the screenshots is enough.
+   Fix only what breaks a requirement, such as overlapping, unreadable or missing content, then
+   republish once and reply. Too many iterations of visual fixes lead to a bad user experience:
+   the user waits, and sometimes never gets the link.
+
 ## Optional HTML components
 
 Components are hosted modules, like the libraries: `import '@afbin/input';` registers its elements
