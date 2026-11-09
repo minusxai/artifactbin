@@ -40,9 +40,27 @@ it('a session whose process tree cannot be read stays one identity across comman
  const first = agent.agentIdentity({env: {PI_CODING_AGENT: 'true'}, root, ps: noPs, ppid: 4001, save: true});
  const second = agent.agentIdentity({env: {PI_CODING_AGENT: 'true'}, root, ps: noPs, ppid: 4002});
  expect(first.session).toBeNull();
- expect(second).toMatchObject({name: first.name, session: null, source: 'saved'});
+ expect(second).toMatchObject({name: first.name, session: null, source: 'derived'});
  expect(first.name).toMatch(/^Pi [A-Z][a-z]+$/);
  expect(agent.agentHeaders(first)).toEqual({'Artifactbin-Agent': first.name});
+});
+
+it('an unidentifiable session named with --as is told apart by that name: one key per name, never saved for another session', async () => {
+ const root = await home();
+ const noPs = () => { throw new Error('Operation not permitted'); };
+ const pi = (as: string | undefined, ppid: number) =>
+  agent.agentIdentity({env: {PI_CODING_AGENT: 'true'}, root, ps: noPs, ppid, as, save: true});
+ const tealFirst = pi('Pi Teal', 5001), tealAgain = pi('Pi Teal', 5002), rose = pi('Pi Rose', 5003);
+ expect(tealFirst.session).toMatch(/^[0-9a-f]{32}$/);
+ expect(tealAgain.session).toBe(tealFirst.session);
+ expect(rose.session).not.toBe(tealFirst.session);
+ expect(agent.agentHeaders(rose)).toEqual({'Artifactbin-Agent': 'Pi Rose', 'Artifactbin-Session': rose.session});
+ // Another Pi session on this computer, unnamed, never inherits a name one of them chose.
+ const unnamed = pi(undefined, 5004);
+ expect(unnamed).toMatchObject({session: null, source: 'derived'});
+ expect(['Pi Teal', 'Pi Rose']).not.toContain(unnamed.name);
+ expect(agent.nameNote(unnamed)).toMatch(/cannot be told apart.*same --as "Pi [A-Z][a-z]+" on every comment\.mjs command, watch included/);
+ expect(agent.nameNote(tealAgain)).toMatch(/same --as "Pi Teal" on every comment\.mjs command, watch included/);
 });
 
 it('derives "<product> <colour>" deterministically per session, an animal for an unknown harness, never "Agent"', () => {

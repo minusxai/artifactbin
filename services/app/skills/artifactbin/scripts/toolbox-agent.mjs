@@ -5,10 +5,12 @@
  * on the computer shares the sign-in. The session is the harness's own session ID (Claude Code,
  * Codex, OpenCode); else the nearest ancestor process that is not a shell or wrapper, with its
  * start time (Pi, unknown agents), read from /proc or ps. Where neither can be read (ps refused
- * in a sandbox) the session is unidentified: no key is sent, so the feed keeps the credential
- * rule and the session's own comments stay its own (never the shell's pid: it changes with every
- * command). The name is --as NAME (kept for the session), else ARTIFACTBIN_AGENT_NAME, else the
- * kept one, else derived: the harness name plus a colour picked from the session (an unknown
+ * in a sandbox) the session is unidentified (never the shell's pid: it changes with every
+ * command): named with --as or ARTIFACTBIN_AGENT_NAME, that name is its key, so two agents with
+ * different names see each other's comments; unnamed, no key is sent and the feed keeps the
+ * credential rule. An unidentified session's name is never saved: another session would take it.
+ * The name is --as NAME (kept for the session), else ARTIFACTBIN_AGENT_NAME, else the kept one,
+ * else derived: the harness name plus a colour picked from the session (an unknown
  * harness: a colour and an animal), skipping colours other sessions in this sign-in folder use.
  * Names live in <sign-in folder>/agents/<session>.json.
  * Used by: toolbox-client.mjs (request headers), toolbox-watch-state.mjs (per-session watch log),
@@ -106,23 +108,35 @@ export function derivedName(session,taken=new Set()){
 /** This session's identity: {name, session, source, harness}; source is as|env|saved|derived. A
  * comment write saves --as and a derived name (save); every other request only reads them. */
 export function agentIdentity({env=process.env,root,as,ps,ppid,save=false}={}){
- const session=detectSession(env,{ps,ppid}),id=sessionId(session),others=savedNames(root),
-  file=id??`unidentified-${session.harness??'agent'}`;
- const mine=others.get(file);others.delete(file);
+ const session=detectSession(env,{ps,ppid}),id=sessionId(session),others=savedNames(root);
+ const mine=id?others.get(id):undefined;if(id)others.delete(id);
  let name,source;
- if(as!==undefined){name=agentName(as);source='as';if(save&&name!==mine)keep(root,file,name);}
+ if(as!==undefined){name=agentName(as);source='as';if(id&&save&&name!==mine)keep(root,id,name);}
  else if(env.ARTIFACTBIN_AGENT_NAME){name=agentName(env.ARTIFACTBIN_AGENT_NAME,
   'ARTIFACTBIN_AGENT_NAME');source='env';}
  else if(mine){name=mine;source='saved';}
  else{name=derivedName(session,new Set(others.values()));source='derived';
-  if(save)keep(root,file,name);}
- return {name,session:id,source,harness:session.harness};
+  if(id&&save)keep(root,id,name);}
+ // Unidentified but named: the name tells this agent apart from the others on this computer.
+ const nameKey=!id&&(source==='as'||source==='env')?createHash('sha256').update(
+  `artifactbin-named-session\0${session.harness??''}\0${name}`).digest('hex').slice(0,32):null;
+ return {name,session:id??nameKey,source,harness:session.harness,product:session.label,
+  unidentified:!id};
 }
 /** The request headers that carry the identity (both self-reported: attribution, never access). */
 export const agentHeaders=identity=>({'Artifactbin-Agent':identity.name,
   ...(identity.session?{'Artifactbin-Session':identity.session}:{})});
 /** What a write prints about the name it carried, and how to choose another. */
 export function nameNote(identity){
+ if(identity.unidentified){
+  // Unnamed: suggest a random colour, so two agents given this note pick different names.
+  const product=identity.product??'<your product>',suggest=identity.source===
+   'as'||identity.source==='env'?identity.name:`${product} ${COLOURS[Math.floor(Math.random()*
+   COLOURS.length)]}`;
+  return `Comments show you as "${identity.name}". This agent session cannot be told apart from `+
+   `other agents on this computer, so pass the same --as "${suggest}" on every comment.mjs `+
+   'command, watch included; otherwise your comments and theirs look like one agent\'s.';
+ }
  const how=identity.harness?'pass --as "NAME" (kept for this session)':
   'name yourself: pass --as "<your product> <Colour>", such as --as "Cursor Red"';
  return `Comments show you as "${identity.name}". To use another name, ${how}.`;
