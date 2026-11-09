@@ -81,6 +81,24 @@ export function stampInputs(files) {
   })), sources: sourceList() };
 }
 
+/**
+ * The stamp plus every input of the component receipt the build just wrote. A first build has no earlier receipt,
+ * so its pre-build stamp misses the contracts/utils files the components import; without this, an edit to one of
+ * them later reads as "inputs unchanged" (main after #1180). Inputs already stamped keep their pre-build stamp; a
+ * newly discovered one takes the hash the receipt recorded for what the build read.
+ */
+export function withComponentGraph(stamp, receipt) {
+  const inputs = { ...stamp.inputs };
+  for (const { path: file, sha256 } of receipt?.inputs ?? []) {
+    if (typeof file !== 'string' || file.startsWith('../') || path.isAbsolute(file) || inputs[file]) continue;
+    const full = path.join(REPO, file);
+    if (!existsSync(full)) continue;
+    const stat = statSync(full);
+    inputs[file] = [stat.size, stat.mtimeMs, sha256];
+  }
+  return { ...stamp, inputs: Object.fromEntries(Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b))) };
+}
+
 export function recordServerReader(stamp, outputs) {
   recordMarker(MARKER, stamp, outputs);
 }
