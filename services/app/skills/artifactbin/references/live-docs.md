@@ -15,8 +15,9 @@ node scripts/doc.mjs read ID --output doc.md   # saves people's typing first, th
 node scripts/doc.mjs write doc.md              # edit doc.md in place, then write it
 ```
 
-`doc.md.af.json` beside the file remembers the page, the region and the version read; write
-rewrites both files with the merged, saved text, so keep editing the same file. Send the whole
+The first line of doc.md, `<!-- af-doc:… -->`, records the page, the region and the version
+read: keep it, and edit below it. write sends the text below it and rewrites doc.md with the
+merged, saved text, so keep editing the same file. Send the whole
 region back: text you remove is removed, text you leave alone is kept as it is (including what
 others typed meanwhile). Change only what the request asks for.
 

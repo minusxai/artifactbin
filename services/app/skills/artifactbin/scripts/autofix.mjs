@@ -42,7 +42,7 @@ export function localExists(file, root, mapped = () => false) {
   };
 }
 // Run the autofix rules over one HTML source; `exists` lets a rule tell a real local file from a
-// missing one, and `newPage` (no companion yet) drops hand-written data-af-ids.
+// missing one, and `newPage` (a file publish creates as a new page) drops hand-written data-af-ids.
 export function autofixSource(source, {file, root, mapped, newPage = false}) {
   const exists = localExists(file, root ?? path.dirname(file), mapped);
   return autofixHtml(source, {exists, newPage});

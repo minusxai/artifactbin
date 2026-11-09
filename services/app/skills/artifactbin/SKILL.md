@@ -90,12 +90,12 @@ script. Groups: `node scripts/groups.mjs list`
   `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items behind a
   key, grouped with totals, with notes signed-in readers share);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
-  dashboard, report or chart; it publishes the dataset and writes a DATA block over its columns,
-  and `--artifact ID` rebuilds an existing page); `node scripts/new-codebase-report.mjs --repo DIR
-  --title "NAME"` (a report analysing the codebase you work in, DIR its repository: hotspots, who
-  works where, how its areas import each other, how it changes; it publishes the git history as
-  datasets and prints the facts to write the findings from); `cp examples/report.html index.html`
-  (a report without data). Other data
+  dashboard, report or chart; it links the CSV by its path and writes a DATA block over its
+  columns, and `--artifact ID` rebuilds an existing page);
+  `node scripts/new-codebase-report.mjs --repo DIR --title "NAME"` (a report analysing the
+  codebase you work in, DIR its repository: hotspots, who works where, how its areas import each
+  other, how it changes; it writes the git history as CSVs the page links and prints the facts to
+  write the findings from); `cp examples/report.html index.html` (a report without data). Other data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
@@ -126,10 +126,11 @@ script. Groups: `node scripts/groups.mjs list`
     authenticated account identity, never a name typed into a form, to authorize actions.
 - **Change an existing page.** A request to turn the page into a deck, dashboard, report or app is
   a rebuild: copy that starter as under New page, then publish it over the page with `node
-  scripts/publish.mjs index.html --artifact ID` instead of the starter's plain publish. Any other
+  scripts/publish.mjs index.html --artifact ID` instead of the starter's first publish. Any other
   change (wording, numbers, a section) is an edit: `node scripts/read.mjs ID --output page.html`,
   edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing that same
-  file and never regenerate the page from scratch. A "document" at a link is such a page. Only text
+  file, keep its last line (the af-authoring marker naming the page) and never regenerate the
+  page from scratch. A "document" at a link is such a page. Only text
   inside a `data-af-editable` region (a doc) is the exception, since people may be typing in
   it: `node scripts/doc.mjs read ID --output doc.md`, edit doc.md, then `node scripts/doc.mjs
   write doc.md`, which merges your edit with their
@@ -137,7 +138,8 @@ script. Groups: `node scripts/groups.mjs list`
 - **Check.** A starter's Usage names its steps files and check command; add a step for each
   requested value they don't check. Without a starter, write one short steps file of
   `step('label', …)` checks (wait for your data, check the requested values and behaviour), then
-  `node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs`.
+  `node scripts/publish.mjs index.html --create && node scripts/check.mjs index.html --steps
+  steps.mjs` (`--create` only the first time: publish adds the page's marker to the file).
   Always check before replying, even while a resolver secret is unset. Publish autofixes the page
   and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` for a file you aren't
   publishing). Never rerun an unchanged check that failed a step or the page:
@@ -148,8 +150,9 @@ script. Groups: `node scripts/groups.mjs list`
   `node scripts/comment.mjs reply ID --thread T --body
   TEXT`. Your comments show your agent name, such as "Claude Code Red"; `--as NAME` on any
   `comment.mjs` command chooses your own.
-- **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
-  ([datasets](references/datasets.md)). A page that shows a dataset links it (`<link
+- **Data, apps, exports.** A page built from a CSV links it by its path: publishing the page
+  creates the dataset and updates it when the CSV changes ([datasets](references/datasets.md)).
+  A page that shows a dataset links it (`<link
   rel="af-dataset">`), reads rows with GraphQL and computes every number (counts, totals, group
   by, joins) with read-only SQL, `_sql`
   ([datasets](references/datasets.md#totals-group-by-and-joins-_sql)), never by summing rows in
@@ -221,7 +224,8 @@ read-only copy ([groups](references/groups.md#public-view-receipts)).
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group
-  design_crit --yes`. `publish.mjs page.html --group design_crit` creates new group-owned work.
+  design_crit --yes`. `publish.mjs page.html --create --group design_crit` creates new
+  group-owned work.
 - Group administration needs the user's consent in this conversation
   ([groups](references/groups.md)).
 - "Let readers submit something": a readable page grants no writes; give the dataset rules for

@@ -1,8 +1,9 @@
 /**
  * scripts/new-codebase-report.mjs against a fake server and a fixture repository: one call reads
- * the repository into three CSVs outside it, publishes them as the datasets commits, files and
- * imports, and fills the starter and its steps file with their ids, the title and the commit; a
- * rerun publishes the new rows over the same datasets and keeps the page's edits.
+ * the repository into three CSVs outside it, which the starter links by path (so the page's publish
+ * creates the datasets commits, files and imports), and fills the starter and its steps file with the
+ * title and the commit; a rerun rewrites the CSVs (the next publish updates the same datasets) and keeps
+ * the page's edits. Nothing is sent to the server.
  */
 import {afterAll, beforeAll, expect, it} from 'vitest';
 import {execFileSync} from 'node:child_process';
@@ -61,43 +62,40 @@ const run = async (values: Record<string, unknown>, options: object) => {
 it('reads the repository it runs in into three datasets and fills the starter outside it', async () => {
   const {calls, options} = fake(), project = path.join(root, 'report');
   const result: any = await run({title: 'How the shop changes', dir: project}, options);
-  expect(calls.map(call => `${call.method} ${call.path} ${call.body.name} ${call.body.title}`)).toEqual([
-    'POST /api/artifacts commits How the shop changes: commits', 'POST /api/artifacts files How the shop changes: files',
-    'POST /api/artifacts imports How the shop changes: imports']);
+  expect(calls).toEqual([]);
   const head = git(['rev-parse', '--short', 'HEAD']).trim();
-  expect(calls[0]!.body.dataset).toMatch(new RegExp(`^commit,date,author,area,files,added,deleted\\n${head}[0-9a-f]*,2026-03-02,Ada,`));
-  expect(calls[2]!.body.dataset).toBe('source,target,source_area,target_area\nweb/app.ts,lib/cart.ts,web,lib\n');
-  expect((await readdir(project)).filter(name => !name.endsWith('.af.json')).sort())
-    .toEqual(['commits.csv', 'files.csv', 'imports.csv', 'index.html', 'steps.mjs']);
+  expect(await readFile(path.join(project, 'commits.csv'), 'utf8')).toMatch(new RegExp(`^commit,date,author,area,files,added,deleted\\n${head}[0-9a-f]*,2026-03-02,Ada,`));
+  expect(await readFile(path.join(project, 'imports.csv'), 'utf8')).toBe('source,target,source_area,target_area\nweb/app.ts,lib/cart.ts,web,lib\n');
+  expect((await readdir(project)).sort()).toEqual(['commits.csv', 'files.csv', 'imports.csv', 'index.html', 'steps.mjs']);
   expect(result).toMatchObject({project, repo: realpathSync(repo), head, since: '1 year ago', created: ['index.html', 'steps.mjs'], kept: [],
-    areas: ['lib', 'web'], truncated: [], datasets: {commits: {id: 'DATA0001', rows: 1, reused: false},
-      files: {id: 'DATA0002', rows: 2, reused: false}, imports: {id: 'DATA0003', rows: 1, reused: false}}});
+    areas: ['lib', 'web'], truncated: [], datasets: {commits: {file: 'commits.csv', rows: 1},
+      files: {file: 'files.csv', rows: 2}, imports: {file: 'imports.csv', rows: 1}}});
   expect(result.facts).toEqual(['hotspots: lib/cart.ts (1 commits, 1 lines); web/app.ts (1 commits, 1 lines)',
     'commits by author: Ada 1 of 1', 'commits by area: lib 1', 'file imports between areas: web -> lib 1']);
   const html = await readFile(path.join(project, 'index.html'), 'utf8');
   const starter = await readFile(new URL('../../../skills/artifactbin/examples/codebase-report.html', import.meta.url), 'utf8');
   expect(html).toContain('<title>How the shop changes</title>');
-  for (const [name, id] of [['commits', 'DATA0001'], ['files', 'DATA0002'], ['imports', 'DATA0003']])
-    expect(html).toContain(`data-af-name="${name}" href="ref:${id}"`);
+  for (const name of ['commits', 'files', 'imports'])
+    expect(html).toContain(`data-af-name="${name}" href="./${name}.csv"`);
   expect(html).toContain(`  source: {repo: '${name}', head: '${head}', since: '1 year ago'},`);
   // Nothing else of the starter changes: DATA's queries, findings and charts are the agent's to write.
-  const strip = (text: string) => text.replace(/<title>.*<\/title>|ref:\w+|^ {2}source: .*$/gm, '');
+  const strip = (text: string) => text.replace(/<title>.*<\/title>|^ {2}source: .*$/gm, '');
   expect(strip(html)).toBe(strip(starter));
   expect(await readFile(path.join(project, 'steps.mjs'), 'utf8')).toBe(await readFile(
     new URL('../../../skills/artifactbin/examples/codebase-report-steps.mjs', import.meta.url), 'utf8'));
   expect(result.next).toBe(`Next: in ${project}/index.html edit only DATA: write the lead, each finding (what the reader ` +
     'should do, with the number that shows it) and each chart title from the facts above, removing every [bracket]; then ' +
-    `node scripts/publish.mjs ${project}/index.html && node scripts/check.mjs ${project}/index.html --steps ${project}/steps.mjs`);
+    `node scripts/publish.mjs ${project}/index.html --create && node scripts/check.mjs ${project}/index.html --steps ${project}/steps.mjs`);
 
-  // A rerun after a new commit: the same datasets get the new rows, the edited page is kept and
-  // only its source line follows the repository.
+  // A rerun after a new commit: the CSVs get the new rows (the next publish sends them over the same
+  // datasets), the edited page is kept and only its source line follows the repository.
   await writeFile(path.join(project, 'index.html'), html.replace('[Who works where]', 'Ada owns both areas'));
   await commit('2026-03-09', {'lib/cart.ts': 'export const total = 2;\n'});
   const again: any = await run({title: 'How the shop changes', dir: project, artifact: 'PAGE01'}, options);
-  expect(calls.slice(3).map(call => `${call.method} ${call.path}`)).toEqual(['PUT /api/artifacts/DATA0001',
-    'PUT /api/artifacts/DATA0002', 'PUT /api/artifacts/DATA0003']);
-  expect(calls[3]!.body.dataset.split('\n')).toHaveLength(4);
-  expect(again).toMatchObject({created: [], kept: ['index.html', 'steps.mjs'], datasets: {commits: {id: 'DATA0001', rows: 2, reused: true}}});
+  expect(calls).toEqual([]);
+  expect((await readFile(path.join(project, 'commits.csv'), 'utf8')).split('\n')).toHaveLength(4);
+  expect(again).toMatchObject({created: [], kept: ['index.html', 'steps.mjs'], datasets: {commits: {file: 'commits.csv', rows: 2}}});
+  expect((await readdir(project)).filter(file => file.endsWith('.af.json'))).toEqual([]);
   const edited = await readFile(path.join(project, 'index.html'), 'utf8'), newHead = git(['rev-parse', '--short', 'HEAD']).trim();
   expect(edited).toContain('Ada owns both areas');
   expect(edited).toContain(`  source: {repo: '${name}', head: '${newHead}', since: '1 year ago'},`);
@@ -109,7 +107,7 @@ it('puts the project in the system temp directory by default, never in the repos
   const result: any = await run({title: 'Shop'}, options);
   try {
     expect(result.project).toBe(path.join(tmpdir(), 'artifactbin', name + '-report'));
-    expect(calls).toHaveLength(3);
+    expect(calls).toEqual([]);
     expect(git(['status', '--porcelain'])).toBe('');
   } finally { await rm(result.project, {recursive: true, force: true}); }
 });

@@ -4,25 +4,28 @@ description: "Read before a page shows or writes dataset rows: CSV and JSON data
 ---
 ## Read first
 
-A dataset is stored CSV or JSON rows. Create it, link it from a page, then query its generated
-GraphQL API (Hasura's shape). `node scripts/publish.mjs rows.csv --type dataset --title T` creates one
-(`.json`: a bare array of row objects); save the returned `id`. Direct HTTP: `POST [[ base ]]/api/artifacts`
-with a durable `Idempotency-Key` and an origin-bound bearer, never from page HTML:
+A dataset is stored CSV or JSON rows; a page links it and queries its generated GraphQL API
+(Hasura's shape):
+
+```html
+<link rel="af-dataset" data-af-name="orders" href="./orders.csv">
+```
+
+Publishing the page makes a CSV linked by path a dataset named by the file, updated as it
+changes; link a published one as `ref:ID`. `data-af-name` is unique per page. Live is the
+default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
+`node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
+`POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
+from page HTML:
 
 ```json
 {"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n","title":"Repair bench sample","visibility":"unlisted"}
 ```
 
-A dataset needs at least one data row. New datasets are readable by anyone who can
+New datasets are readable by anyone who can
 open them; only the owner and editors change rows. To let readers add or edit rows,
 set rules: [permissions](permissions.md). To read your own Postgres or MySQL database, use a
 resolver ([`caps.db`](resolvers.md#capsdb-your-own-database)).
-
-```html
-<link rel="af-dataset" data-af-name="orders" href="ref:DATASET_ID">
-```
-
-`data-af-name` is unique per page. Live is the default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version and is read-only.
 
 ## Contents
 

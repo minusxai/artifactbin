@@ -1,7 +1,8 @@
 /**
- * Internal: the publish command (publishCommand): classify the file, autofix and bundle a page,
- * journal the write, send it and save the canonical pair (toolbox-publish-finish.mjs); a publish
- * counts as activity in the page's comment watch (toolbox-watch-state.mjs).
+ * Internal: the publish command (publishCommand): classify the file, settle what it replaces from
+ * its af-authoring marker (or --artifact, or --create), autofix and bundle a page, journal the
+ * write, send it and save the canonical source (toolbox-publish-finish.mjs); a publish counts as
+ * activity in the page's comment watch (toolbox-watch-state.mjs).
  * Used by: publish.mjs, author-toolbox.test.ts, skill-examples.test.ts.
  */
 import path from 'node:path';
@@ -9,12 +10,12 @@ import {readFile,realpath} from 'node:fs/promises';
 import {prepareBundle} from './toolbox-publication-bundle.mjs';
 import {finishPublication} from './toolbox-publish-finish.mjs';
 export {finishPublication};
-import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,
-  hash,platform,journalIntent,createJournal,resumeJournal,within,resolveTarget} from
+import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,hash,
+  platform,journalIntent,createJournal,resumeJournal,within,resolveTarget} from
   './toolbox-client.mjs';
-import {refuseEmpty,placeholderProblems,headBaseline,dataBaseline,emptyTable} from
-  './toolbox-publish-guard.mjs';
-import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
+import {refuseEmpty,placeholderProblems,headBaseline,markedBaseline,unmarked,emptyTable,
+  updateNext} from './toolbox-publish-guard.mjs';
+import {markerOf,stripMarker} from './toolbox-source.mjs';
 import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
 import {TEMPLATES,applyTemplate,routineChanges} from './toolbox-publish-dataset.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
@@ -48,40 +49,40 @@ if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='d
    'For an existing dataset use policy.mjs template and set.');
 if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_dataset',
    '--name sets a new dataset\'s GraphQL root name.',2);
- let baseline=null,source=bytes.toString('utf8'),replaced=null;
- const sidecar=await optionalFile(file+'.af.json'),target=values.artifact?resolveTarget(
-  values.artifact,server).id:null;
- // The companion is the baseline; --artifact ID replaces that page over its current head when
- // the companion is missing, broken or belongs to another page.
- if(!values.create&&sidecar)try{baseline=type==='html'?(await loadPair(file,server)).baseline:
-  dataBaseline(sidecar,file,server);}catch(error){if(!target||!/baseline/.test(error.code))
+ let baseline=null,source=bytes.toString('utf8'),replaced=null,marker=null;
+ const target=values.artifact?resolveTarget(values.artifact,server).id:null,name=path.basename(
+  file);
+ // The marker is the baseline; --artifact ID replaces that page over its current head when the
+ // marker is missing, broken or names another page; --create makes a new page of a file that
+ // carries no marker of this server.
+ if(type==='html')try{marker=markerOf(file,source,server);}catch(error){if(!target&&!values.create)
   throw error;}
- if(target&&baseline?.id!==target&&!values.create){if(values.group!==undefined||values.personal)
-  throw new ToolError('destination_not_for_update','--group and --personal place a new page; '+
-  '--artifact replaces an existing one.',2,'Drop --group/--personal.');baseline=await
-  headBaseline(client,target,type);replaced=`${path.basename(file)} replaced page ${target} `+
-  `(its version ${baseline.version} was the baseline).`;}
- const identity=!baseline&&!values.create&&type==='html'?sourceIdentity(source):null;
- if(identity?.id)throw new ToolError('baseline_missing',`${path.basename(file)} came from page `+
-  `${identity.id} but its companion ${path.basename(file)}.af.json is missing.`,2,UNPAIRED(
-  path.basename(file),identity.id));
- const exported=/data-af\s*=\s*["'](?:portable|runtime|offline-source)/i;
- if(!baseline&&!values.create&&type==='html'&&exported.test(source))throw new ToolError(
-  'exported_source','This HTML is an exported page, '+
-  'not authoring source.',2,'Publish it as a new page with --create, or over a page with '+
-  '--artifact ID.');
-if(values.template&&baseline)throw new ToolError('template_not_for_update',
+ if(values.create&&marker)throw new ToolError('already_published',`${name} is already page `+
+  `${marker.id}.`,2,`To update page ${marker.id}: node scripts/publish.mjs ${name}. For a second `+
+  'page from it, delete its last line (the af-authoring marker) first.');
+ // An update keeps its owner, permissions and GraphQL name: refused before anything is read.
+ const updating=!values.create&&Boolean(target||marker);
+ for(const flag of ['group','personal'])if(updating&&values[flag]!==undefined)throw new ToolError(
+  flag+'_not_for_update',`--${flag} places a new page; it never moves an existing one.`,2,
+  `Drop --${flag} (updates keep their owner) or use --create for a new page.`);
+if(updating&&values.template)throw new ToolError('template_not_for_update',
    '--template applies only when a dataset is created.',2,
    'Use policy.mjs template ID and policy.mjs set ID for an existing dataset.');
-if(values.name!==undefined&&baseline)throw new ToolError('name_not_for_update',
+if(updating&&values.name!==undefined)throw new ToolError('name_not_for_update',
    '--name applies only when a dataset is created; its GraphQL name never changes.',2,
    'Drop --name, or publish a new dataset with --create.');
+ if(target&&marker?.id!==target&&!values.create){baseline=await headBaseline(client,target,type);
+  replaced=`${name} replaced page ${target} (its version ${baseline.version} was the baseline).`;}
+ else if(marker&&!values.create)baseline=await markedBaseline(client,marker,name,source);
+ if(type==='html'&&!baseline&&!values.create)unmarked(source,name);
 if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=
-   recoverPortableSource(source)??source;}source=source.replace(
-   /<!-- af-authoring:[A-Za-z0-9_-]+ -->/g,'');baseline=null;}
-const root=await realpath(values.root??baseline?.root??path.dirname(file));if(!within(root,
-   file))throw new ToolError('source_outside_root','Source is outside the selected project root.',
-   2);
+   stripMarker(recoverPortableSource(source)??source);}baseline=null;}
+ // The page's receipts are relative to the root it was published from: the marker's entryPath
+ // says how far above the file that is.
+ const up=baseline&&marker?.id===baseline.id?marker.entryPath.split('/').length-1:0;
+ const root=await realpath(values.root??path.resolve(path.dirname(file),...Array(up).fill('..')));
+ if(!within(root,file))throw new ToolError('source_outside_root',
+  'Source is outside the selected project root.',2);
  const entryPath=path.relative(root,file).split(path.sep).join('/');let body,fixed=null;
  const log=options.log??(text=>process.stderr.write(text));
  if(type==='html'){
@@ -106,7 +107,7 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
 const extra=values.manifest?await jsonFile(values.manifest):{};if(Object.keys(extra).some(key=>
     key!=='manifest')||extra.manifest!==undefined&&!Array.isArray(
     extra.manifest))throw new ToolError('invalid_manifest',
-    'Manifest JSON supports only {manifest:[paths]}. Receipts belong in the baseline.',2);
+    'Manifest JSON supports only {manifest:[paths]}. Receipts come from the page.',2);
 const mappings=Object.fromEntries((baseline?.dependencyReceipts??[]).map(({path,...receipt})=>[path,
     receipt]));
 const prepared=await prepareBundle({root,entry:entryPath,entryHtml:source,server,manifest:
@@ -137,17 +138,10 @@ if(values.visibility)body.visibility=enumValue(values.visibility,['private','unl
   .replace(/^_+|_+$/g,''),named=/^(?!dataset|true$|false$|null$)[a-z][a-z0-9_]{0,40}$/;
  if(values.name!==undefined)body.name=values.name;
  else if(type==='dataset'&&!baseline&&named.test(stem))body.name=stem;
- if(values.personal){
-  if(baseline)throw new ToolError('personal_not_for_update',
-    '--personal places a new page; it never moves an existing one.',2,
-    'Drop --personal (updates keep their owner) or use --create for a new page.');
-  body.destination={type:'personal'};}
+ if(values.personal)body.destination={type:'personal'};
  // --group HANDLE: create the page directly in a group you can edit. The server refuses a
  // destination that conflicts with the parent's owner.
  if(values.group!==undefined){
-if(baseline)throw new ToolError('group_not_for_update',
-    '--group places a new page; it never moves an existing one.',2,
-    'Drop --group (updates keep their owner) or use --create for a new page.');
   const detail=await client.request('/api/groups/'+encodeURIComponent(
     values.group.replace(/^@/,'')));
 if(detail.group?.role!=='editor')throw new ToolError('group_not_editor',
@@ -175,7 +169,7 @@ intent.source.output=path.join(path.dirname(file),path.basename(file,
   'publish')),options);
  // A page's author ends by replying and watching for comments: say so as the last line printed.
  const done={...published,...(replaced?{note:[replaced,published.note].filter(Boolean).join(' ')}:
-  {}),...(type==='html'?{next:watchNext(published.id)}:{})};
+  {}),next:type==='html'?watchNext(published.id):updateNext(name,published.id,type)};
  if(type==='dataset'&&values.template)return {...done,permissions:await applyTemplate(client,
   done.id,values.template,values['owner-column'])};
  if(!fixed)return done;

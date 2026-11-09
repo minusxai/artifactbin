@@ -1,13 +1,14 @@
 /** Publish the actual installed native examples; resolver execution has separate real-runner coverage. */
 import {describe,expect,it,vi} from 'vitest';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
-import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm,realpath,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as read,PUT as update} from '@/app/api/artifacts/[id]/route';
+import {GET as readPolicy} from '@/app/api/artifacts/[id]/policy/route';
 import {GET as listComments,POST as addComment} from '@/app/api/artifacts/[id]/annotations/route';
 import {POST as replyComment,PATCH as editComment} from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
@@ -18,6 +19,8 @@ vi.mock('@/lib/page-operations',async original=>({...await original<typeof impor
 // (examples/csv-dashboard.mjs) is a real-sized bundle dependency, so these publish under the product default.
 vi.mock('@/lib/platform/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/platform/config')>(),MAX_FILE_BYTES:50_000_000}));
 useAppHarness();
+/** No flow ever leaves a file beside the source. */
+const noCompanions=async(dir:string)=>expect((await readdir(dir,{recursive:true})).filter(name=>String(name).endsWith('.af.json'))).toEqual([]);
 describe('installed native author examples',()=>{
  it('publishes report HTML with canonical data-af identities',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-example-'));
@@ -29,14 +32,50 @@ describe('installed native author examples',()=>{
    const owner=await mintAccountToken('sample-report');const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:saved.body}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();expect(page.format).toBe('html');expect(page.html).toContain('data-af-id=');
   }finally{await rm(dir,{recursive:true,force:true});}
  });
- it('publishes the CSV separately and binds its real identity in the dashboard bundle',async()=>{
+ it('publishes a dashboard whose CSVs are linked by path: one dataset per file, named by it, updated in place when it changes',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-dashboard-'));
   try{
    const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
-   const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
-   const owner=await mintAccountToken('sample-dashboard');const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-deliveries.mjs')],{stdio:['ignore','pipe','ignore']}).toString()}}));expect(dataset.status).toBe(201);const data=await dataset.json();
-   const source=await readFile(path.join(installed,'examples/csv-dashboard.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/csv-dashboard.html',entryHtml:source.replaceAll('DATASET_ID',data.id).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});
-   const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:saved.body}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();expect(page.html).toContain('ref:'+data.id);expect(page.html).not.toContain('DATASET_ID');
+   const installed=path.join(dir,'artifactbin'),project=path.join(dir,'project');await (await import('node:fs/promises')).mkdir(project);
+   const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href);
+   const owner=await mintAccountToken('sample-dashboard'),server='http://localhost:3000';
+   const options={log:()=>{},env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:owner.token,ARTIFACTBIN_HOME:path.join(dir,'private')},fetcher:async(input:any,init:any)=>{
+    const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
+    const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
+    return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
+   }};
+   const get=async(id:string)=>(await read(request('/api/artifacts/'+id,{token:owner.token}),{params:Promise.resolve({id})})).json();
+   // The starter as new-page writes it: the CSV beside it, linked by its path; a header-only CSV is an empty table.
+   const source=path.join(project,'index.html'),csv=execFileSync(process.execPath,[path.join(installed,'examples/gen-deliveries.mjs')],{stdio:['ignore','pipe','ignore']}).toString();
+   await writeFile(path.join(project,'deliveries.csv'),csv);await writeFile(path.join(project,'notes.csv'),'note,created_by\n');
+   const starter=(await readFile(path.join(installed,'examples/csv-dashboard.html'),'utf8')).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">');
+   expect(starter).toContain('data-af-name="deliveries" href="./deliveries.csv"');
+   await writeFile(path.join(project,'csv-dashboard.mjs'),await readFile(path.join(installed,'examples/csv-dashboard.mjs')));
+   const {starterTexts}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish-guard.mjs')).href);
+   const filled=[...starterTexts()].reduce((text:string,placeholder:string)=>text.replaceAll(placeholder,placeholder.slice(1,-1)),starter);
+   await writeFile(source,filled.replace('</head>','<link rel="af-dataset" data-af-name="notes" href="./notes.csv">\n</head>'));
+   const first=await publishCommand({values:{server,create:true},positionals:[source]},options);
+   const page=await get(first.id),byPath=Object.fromEntries(page.dependencyReceipts.map((r:any)=>[r.path,r]));
+   expect(byPath['deliveries.csv']).toMatchObject({kind:'dataset',revision:'1'});expect(byPath['notes.csv']).toMatchObject({kind:'dataset',revision:'1'});
+   expect(page.html).toContain('ref:'+byPath['deliveries.csv'].id);
+   // Each dataset is named by its file: the GraphQL root its page links it by, and its title.
+   for(const [file,name] of [['deliveries.csv','deliveries'],['notes.csv','notes']]){
+    const id=byPath[file].id,dataset=await get(id);expect(dataset.title).toBe(file);
+    const policy=await (await readPolicy(request(`/api/artifacts/${id}/policy`,{token:owner.token}),{params:Promise.resolve({id})})).json();
+    expect(policy.policy.tables[0].configuration).toEqual({custom_name:name});
+   }
+   expect((await get(byPath['notes.csv'].id)).columns.map((c:any)=>c.name)).toEqual(['note','created_by']);
+   // The author's file keeps the path, so a changed CSV updates that same dataset; nothing is duplicated.
+   expect(await readFile(source,'utf8')).toContain('href="./deliveries.csv"');
+   await writeFile(path.join(project,'deliveries.csv'),csv.split('\n').slice(0,4).join('\n')+'\n');
+   const second=await publishCommand({values:{server},positionals:[source]},options);expect(second).toMatchObject({id:first.id,version:2});
+   const after=Object.fromEntries((await get(first.id)).dependencyReceipts.map((r:any)=>[r.path,r]));
+   expect(after['deliveries.csv']).toMatchObject({id:byPath['deliveries.csv'].id,revision:'2'});expect(after['notes.csv']).toEqual(byPath['notes.csv']);
+   expect((await get(byPath['deliveries.csv'].id)).rowCount).toBe(3);
+   // Unchanged, the next publish reuses both as recorded.
+   await publishCommand({values:{server},positionals:[source]},options);
+   expect((await get(first.id)).dependencyReceipts.find((r:any)=>r.path==='deliveries.csv')).toMatchObject({revision:'2'});
+   await noCompanions(project);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('creates and conditionally updates a project through installed helpers with durable dependency receipts',async()=>{
@@ -72,6 +111,7 @@ describe('installed native author examples',()=>{
   try{
    const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin'),project=path.join(installed,'project');await (await import('node:fs/promises')).mkdir(project);
+   const {sourceIdentity,stripMarker}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-source.mjs')).href);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href),{readCommand}=await import(pathToFileURL(path.join(installed,'scripts/read.mjs')).href),{commentCommand}=await import(pathToFileURL(path.join(installed,'scripts/comment.mjs')).href);
    const owner=await mintAccountToken('toolbox-canonical'),server='http://localhost:3000';let loseResponse=false;
    const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:owner.token,ARTIFACTBIN_HOME:path.join(dir,'private')},fetcher:async(input:any,init:any)=>{
@@ -82,16 +122,17 @@ describe('installed native author examples',()=>{
     if(loseResponse&&method==='PUT'){loseResponse=false;throw Error('connection lost after commit');}return response;
    }};
    const source=path.join(project,'index.html');await writeFile(source,'<link rel="stylesheet" href="./theme.css"><h1>One</h1>');await writeFile(path.join(project,'theme.css'),'body{color:red}');
-   const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.version).toBe(1);
-   // An unchanged input becomes the canonical pair in place; no sibling copies.
-   expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first.baseline).toBe(first.source+'.af.json');
+   const first=await publishCommand({values:{server,create:true},positionals:[source]},options);expect(first.version).toBe(1);
+   // An unchanged input becomes the canonical source in place, carrying its marker; nothing beside it.
+   expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first).not.toHaveProperty('baseline');
+   const receiptsOf=async(id:string)=>(await (await read(request('/api/artifacts/'+id,{token:owner.token}),{params:Promise.resolve({id})})).json()).dependencyReceipts;
    // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
    expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
    // A page publish ends on the next step: reply to the user and keep the comment watch running.
    const timeout="Claude Code: start it with the Bash tool's run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: in one turn, say your reply to the user (the page link first; a reply form the user set, such as just the link, is what you say), then call the watch: the words before a tool call are your reply, and nothing after the call may be read, since the session can end while it waits. Run it in the foreground with its default wait and a shell timeout of at least 300000 ms. It returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching is part of every task, however short the reply.";
    const next=`Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. ${timeout}\n  node scripts/comment.mjs watch ${first.id} --next`;
    expect(first.next).toBe(next);
-   const canonical=await readFile(first.source,'utf8'),baseline=JSON.parse(await readFile(first.baseline,'utf8'));expect(canonical).toContain('href="./theme.css"');expect(baseline.dependencyReceipts).toHaveLength(1);
+   const canonical=await readFile(first.source,'utf8'),receipts=await receiptsOf(first.id);expect(canonical).toContain('href="./theme.css"');expect(receipts).toHaveLength(1);
    const nodeId=/data-af-id="([^"]+)"[^>]*>One/.exec(canonical)?.[1];expect(nodeId).toBeTruthy();
    const anchor=path.join(dir,'anchor.json'),bodyFile=path.join(dir,'comment.txt');await writeFile(anchor,JSON.stringify({kind:'html-node',v:1,revision:'1',nodeId,quote:'One'}));await writeFile(bodyFile,'Review this heading');
    const comment=await commentCommand({sub:'add',values:{server,anchor,'body-file':bodyFile},positionals:[first.id]},options);
@@ -108,25 +149,28 @@ describe('installed native author examples',()=>{
    const changed=await publishCommand({values:{server,resume:journal},positionals:[]},options);expect(changed.id).toBe(first.id);expect(changed.version).toBe(2);
    expect(changed.updatedInPlace).toBeUndefined();expect(changed.source).not.toBe(first.source);expect(changed.note).toContain('input changed');
    expect(await readFile(changed.source,'utf8')).toContain('>Two<');expect(await readFile(first.source,'utf8')).toContain('Unsaved later edit');
-   expect(JSON.parse(await readFile(changed.baseline,'utf8')).dependencyReceipts[0]).toMatchObject({id:baseline.dependencyReceipts[0].id,revision:'2'});
-   await expect(publishCommand({values:{server},positionals:[first.source]},options)).rejects.toMatchObject({exit:4});
-   const downloaded=await readCommand({values:{server,output:path.join(project,'read.html')},positionals:[first.id]},options);expect(JSON.parse(await readFile(downloaded.baseline,'utf8')).dependencyReceipts).toHaveLength(1);
-   // Repeated edit → publish cycles keep one file and advance its companion.
+   expect((await receiptsOf(first.id))[0]).toMatchObject({id:receipts[0].id,revision:'2'});
+   // The kept input's marker saw version 1: publishing it would overwrite version 2, so it is refused.
+   await expect(publishCommand({values:{server},positionals:[first.source]},options)).rejects.toMatchObject({code:'version_conflict',exit:4});
+   const downloaded=await readCommand({values:{server,output:path.join(project,'read.html')},positionals:[first.id]},options);
+   // Repeated edit → publish cycles keep one file and advance its marker.
    const pairSource=await realpath(downloaded.source);
    for(const [text,version] of [['Three',3],['Four',4]] as const){
     await writeFile(downloaded.source,(await readFile(downloaded.source,'utf8')).replace(/>(Two|Three)</,`>${text}<`));
     const next=await publishCommand({values:{server},positionals:[downloaded.source]},options);
-    expect(next).toMatchObject({version,updatedInPlace:true,source:pairSource,baseline:pairSource+'.af.json'});
-    expect(JSON.parse(await readFile(downloaded.baseline,'utf8')).version).toBe(version);
+    expect(next).toMatchObject({version,updatedInPlace:true,source:pairSource});
+    expect(sourceIdentity(await readFile(downloaded.source,'utf8')).version).toBe(version);
    }
-   await (await import('node:fs/promises')).unlink(downloaded.baseline);
-   await expect(publishCommand({values:{server},positionals:[downloaded.source]},options)).rejects.toMatchObject({code:'baseline_missing',recovery:expect.stringContaining(`node scripts/publish.mjs read.html --artifact ${first.id}`)});
+   // Rewritten whole, the file loses its marker: publish refuses rather than make a second page.
+   await writeFile(downloaded.source,stripMarker(await readFile(downloaded.source,'utf8')));
+   await expect(publishCommand({values:{server},positionals:[downloaded.source]},options)).rejects.toMatchObject({code:'unmarked_source',recovery:expect.stringContaining('node scripts/publish.mjs read.html --artifact ID')});
    // The named recovery works against the real server: the current head is the baseline (H7).
    const recovered=await publishCommand({values:{server,artifact:first.id},positionals:[downloaded.source]},options);
    expect(recovered).toMatchObject({id:first.id,version:5,updatedInPlace:true});
    // Only markup carries page identity: a new page whose script selects [data-af-id="..."] publishes as new.
    const scripted=path.join(project,'scripted.html');await writeFile(scripted,'<h1>New</h1><script type="module">document.querySelector(`[data-af-id="row-1"]`)</script>');
-   expect((await publishCommand({values:{server},positionals:[scripted]},options)).version).toBe(1);
+   expect((await publishCommand({values:{server,create:true},positionals:[scripted]},options)).version).toBe(1);
+   await noCompanions(dir);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('keeps a published backend href in the author source so later backend edits are sent',async()=>{
@@ -147,7 +191,7 @@ describe('installed native author examples',()=>{
    const filled=[...starterTexts()].reduce((text:string,placeholder:string)=>text.replaceAll(placeholder,placeholder.slice(1,-1)),await readFile(path.join(installed,'examples/tracker.html'),'utf8'));
    const html=filled.replaceAll('DATASET_ID',datasetId).replaceAll('TARGETS_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">');
    const source=path.join(project,'index.html'),backend=path.join(project,'tracker.ts');await writeFile(source,html);await writeFile(backend,await readFile(path.join(installed,'examples/tracker.ts'),'utf8'));
-   const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.updatedInPlace).toBe(true);
+   const first=await publishCommand({values:{server,create:true},positionals:[source]},options);expect(first.updatedInPlace).toBe(true);
     // Copied example headers are fine to keep: publish no longer warns about them.
     expect(first.headers).toBeUndefined();
    // The canonical page binds the backend by name only; the author's working copy keeps its local source path.
@@ -187,12 +231,12 @@ describe('installed native author examples',()=>{
    const draft=`<!doctype html>\n<html>\n<head><title>Plan</title></head>\n<body>\n${body}<script defer src="/af/core.js"></script>\n</body>\n</html>\n`;
    // Refusals stop before anything is sent or written.
    await writeFile(source,draft.replace('</ul>','</ul><img src="./missing.png">'));
-   await expect(publishCommand({values:{server},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_refused',exit:2});
+   await expect(publishCommand({values:{server,create:true},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_refused',exit:2});
    expect(logs.at(-1)).toMatch(/^autofix: .*nothing published or written/);expect(logs.at(-1)).toMatch(/index\.html:\d+:\d+ local file not found/);
    await writeFile(source,draft);
-   await expect(publishCommand({values:{server,strict:true},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_strict'});
+   await expect(publishCommand({values:{server,strict:true,create:true},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_strict'});
    expect(await readFile(source,'utf8')).toBe(draft);
-   const first=await publishCommand({values:{server},positionals:[source]},options);
+   const first=await publishCommand({values:{server,create:true},positionals:[source]},options);
    expect(first.updatedInPlace).toBe(true);expect(first.autofix.fixes.map((fix:any)=>fix.rule)).toEqual(['core-script','charset','viewport']);
    expect(logs.at(-1)).toMatch(/^autofix: 3 fixed — also written to index\.html/);expect(logs.at(-1)).toMatch(/routine: added \d+ data-af-id/);
    const canonical=await readFile(source,'utf8');expect(canonical).toMatch(/<meta charset="utf-8"/);expect(canonical).toContain('name="viewport"');expect(canonical.match(/core\.js/g)).toHaveLength(1);

@@ -1,10 +1,11 @@
 /** Command: a page computed from a CSV (examples/csv-dashboard.html) set up in one call. */
 export const DESCRIPTION = `Set up a page computed from a CSV in one call: a dashboard, report or
-chart page. Copies the CSV into the project and publishes it as a dataset; copies
-examples/csv-dashboard.html as index.html, its renderer csv-dashboard.mjs and its steps file as
-steps.mjs; links the dataset and
-writes a DATA block whose _sql queries read this CSV's columns (labels, a total per number
-column, a chart per number column by the first text column), with [bracketed] text for you to write.
+chart page. Copies the CSV into the project as NAME.csv; copies examples/csv-dashboard.html as
+index.html, its renderer csv-dashboard.mjs and its steps file as steps.mjs; links the CSV by its
+path (the page's first publish creates the NAME dataset from it, and a publish after the CSV
+changes updates that dataset) and writes a DATA block whose _sql queries read this CSV's columns
+(labels, a total per number column, a chart per number column by the first text column), with
+[bracketed] text for you to write. Nothing is sent to the server.
 Usage: node scripts/new-page.mjs --data FILE.csv --title NAME [--artifact ID] [--dir DIR]
 Flags: --data FILE.csv the rows (a header line, then one row per line); --title NAME the page's
   name, for <title>; --artifact ID an existing page this one replaces (a rebuild: the printed
@@ -13,19 +14,18 @@ Flags: --data FILE.csv the rows (a header line, then one row per line); --title 
 Examples:
   node scripts/new-page.mjs --data sales.csv --title "Revenue by region"
   node scripts/new-page.mjs --data coffee.csv --title "Coffee at a small startup" --artifact Ab12Cd
-Gotchas: a rerun is safe: existing files are kept, never overwritten, and the dataset its
-  companion (FILE.csv.af.json) records is reused. The output names what DATA draws and how to
-  change it with your columns; steps.mjs needs no edits.
-Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
-  rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
-  Results never contain credentials.`;
+Gotchas: a rerun is safe: the page, renderer and steps file are kept, never overwritten; only
+  the CSV copy takes the rows passed (updated), which the next publish sends over the same
+  dataset. NAME is the file's name made a GraphQL name (Q1 sales.csv → q1_sales). The output
+  names what DATA draws and how to change it with your columns; steps.mjs needs no edits.
+Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed). Results never contain
+  credentials.`;
 
 import path from 'node:path';
 import {homedir} from 'node:os';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
-import {runTool,ToolError,selectedServer,serverOrigin,optionalFile} from './toolbox-client.mjs';
-import {publishCommand} from './toolbox-publish.mjs';
-import {dataBaseline} from './toolbox-publish-guard.mjs';
+import {runTool,ToolError,optionalFile} from './toolbox-client.mjs';
+import {publishStep} from './toolbox-source.mjs';
 
 const EXAMPLES = new URL('../examples/', import.meta.url);
 const USAGE = 'node scripts/new-page.mjs --data FILE.csv --title NAME';
@@ -95,13 +95,13 @@ function dataBlock(name, columns, numbers) {
       "from these ${h.one('totals').row_count} rows.]`},",
     '  ],', '};'].join('\n');
 }
-/** The starter with this CSV's dataset, DATA block and title in place of the sample's. */
-function fill(starter, {title, id, name, columns, numbers}) {
+/** The starter with this CSV's link, DATA block and title in place of the sample's. */
+function fill(starter, {title, name, columns, numbers}) {
   const start = starter.indexOf('window.DATA = {'), end = starter.indexOf('\n};', start) + 3;
   const sample = /data-af-name="(\w+)"/.exec(starter)?.[1];
   return (starter.slice(0, start) + dataBlock(name, columns, numbers) + starter.slice(end))
-    .replace(`data-af-name="${sample}" href="ref:DATASET_ID"`, `data-af-name="${name}" ` +
-      `href="ref:${id}"`)
+    .replace(`data-af-name="${sample}" href="./${sample}.csv"`, `data-af-name="${name}" ` +
+      `href="./${name}.csv"`)
     .replace(/<title>\[[^\]<]+\]<\/title>/, `<title>${htmlText(title)}</title>`);
 }
 /** What the written DATA shows, in this CSV's names: what the agent keeps or changes. */
@@ -147,8 +147,7 @@ export async function newPageCommand({values, positionals}, options = {}) {
   if (values.data === undefined) throw new ToolError('missing_data', 'The page needs its rows.',
     2, 'Pass the CSV: ' + USAGE);
   const base = options.cwd ?? process.cwd(), dir = resolve(base, values.dir ?? '.');
-  const server = serverOrigin(selectedServer(values, options.env));
-  const source = resolve(base, values.data), file = path.basename(source);
+  const source = resolve(base, values.data), name = nameOf(source), file = name + '.csv';
   const csv = await readFile(source, 'utf8').catch(error => {
     if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error;
     throw new ToolError('data_not_found', `No CSV file at ${values.data}.`, 2,
@@ -161,29 +160,25 @@ export async function newPageCommand({values, positionals}, options = {}) {
     Number.isFinite(Number(row[i]))) && rows.some(row => row[i] !== ''));
   const measures = numbers.filter(column => !COORDINATE.test(column));
   await mkdir(dir, {recursive: true});
-  const at = name => path.join(dir, name), created = [], kept = [];
-  const companion = await optionalFile(at(file) + '.af.json');
-  const name = nameOf(file);
-  const dataset = companion ? {id: dataBaseline(companion, at(file), server).id, reused: true}
-    : null;
+  const at = name => path.join(dir, name), created = [], kept = [], updated = [];
   const starter = await readFile(new URL('csv-dashboard.html', EXAMPLES), 'utf8');
   const steps = await readFile(new URL('csv-dashboard-steps.mjs', EXAMPLES));
   const renderer = await readFile(new URL('csv-dashboard.mjs', EXAMPLES));
-  const copied = path.resolve(at(file)) === source || await create(at(file), csv);
-  const published = dataset ?? {id: (await publishCommand({values: {server, title:
-    `${title} data`, name}, positionals: [at(file)]}, options)).id, reused: false};
-  for (const [file2, bytes] of [['index.html', fill(starter, {title, id: published.id, name,
-    columns, numbers: measures})], ['csv-dashboard.mjs', renderer], ['steps.mjs', steps]]) {
+  for (const [file2, bytes] of [['index.html', fill(starter, {title, name, columns,
+    numbers: measures})], ['csv-dashboard.mjs', renderer], ['steps.mjs', steps]]) {
     (await create(at(file2), bytes) ? created : kept).push(file2);
   }
-  (copied === true && !companion ? created : kept).push(file);
-  const publish = 'node scripts/publish.mjs index.html' +
-    (values.artifact ? ` --artifact ${values.artifact}` : '');
-  return {project: dir, title, created, kept,
-    dataset: {id: published.id, name, rows: rows.length, columns, numbers,
-      reused: published.reused},
-    note: `${name} ${published.id} (${rows.length} rows${published.reused ? ', reused' : ''}); ` +
-      `index.html links it as ${name} and is titled ${JSON.stringify(title)}.`,
+  // The copy is the dataset's source: it always takes the rows passed.
+  const copy = await optionalFile(at(file));
+  if (!copy) { await writeFile(at(file), csv); created.push(file); }
+  else if (copy.toString('utf8') !== csv) { await writeFile(at(file), csv); updated.push(file); }
+  else kept.push(file);
+  const publish = await publishStep(at('index.html'), 'index.html', values.artifact);
+  return {project: dir, title, created, kept, updated,
+    dataset: {file, name, rows: rows.length, columns, numbers},
+    note: `index.html links ${file} (${rows.length} rows) as ${name} and is titled ` +
+      `${JSON.stringify(title)}; its first publish creates the ${name} dataset, and a later ` +
+      `publish after ${file} changes updates that same dataset.`,
     draws: draws(columns, measures, rows), next: 'Next: in index.html edit only DATA (its ' +
       '[bracketed] text, and the stats, charts and sections the request needs); it can do the ' +
       `layout asked for: ${variations(columns, measures, rows)}; then ${publish} && ` +

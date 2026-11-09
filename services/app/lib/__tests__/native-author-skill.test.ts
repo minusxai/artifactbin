@@ -112,6 +112,8 @@ describe('one installable native HTML author skill',()=>{
    // The removed sample flags are refused as invocation errors.
    try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare','report','--server',BASE,'--output',path.join(dir,'report.json')],{cwd:installed,stdio:'pipe'});throw Error('Expected --prepare refusal');}catch(error){expect((error as {status:number}).status).toBe(2);}
    const {prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
+   // The dashboard links its CSV by path, as new-page writes it: the sample rows beside it.
+   writeFileSync(path.join(installed,'examples/deliveries.csv'),execFileSync(process.execPath,[path.join(installed,'examples/gen-deliveries.mjs')]));
    for(const sample of ['report','csv-dashboard','tracker']){
     const source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
     const saved=await prepareBundle({root:installed,entry:`examples/${sample}.html`,server:BASE,entryHtml:source.replaceAll('ref:DATASET_ID','ref:REALDATA123').replaceAll('ref:TARGETS_ID','ref:REALDATA123')});
@@ -122,7 +124,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.some(dep=>dep.contentType==='font/woff2'||/design-systems\//.test(dep.path)),sample).toBe(false);
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
-    if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
+    if(sample==='csv-dashboard'){expect(plan.dependencies.find(dep=>dep.path==='examples/deliveries.csv')).toMatchObject({kind:'dataset'});expect(saved.body.html).not.toContain('DATASET_ID');}
     if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}

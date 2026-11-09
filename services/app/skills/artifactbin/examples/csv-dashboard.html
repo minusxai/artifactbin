@@ -6,13 +6,14 @@ filter each other. Usage: and Gotchas: are above DATA; keep this line. -->
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="phosphor">
 <title>[Courier deliveries, December to May]</title>
-<link rel="af-dataset" data-af-name="deliveries" href="ref:DATASET_ID">
+<link rel="af-dataset" data-af-name="deliveries" href="./deliveries.csv">
 <script type="module" id="page-data">
-// Usage: node scripts/new-page.mjs --data FILE.csv --title NAME publishes the CSV, links it and
-//   copies this page with a simple DATA for that CSV, its renderer csv-dashboard.mjs (leave it as
-//   is) and its steps file (sample: node examples/gen-deliveries.mjs > deliveries.csv). Copy chart
-//   kinds and linked filters from this DATA. Edit only DATA and <title>; then
-//   node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+// Usage: node scripts/new-page.mjs --data FILE.csv --title NAME copies the CSV beside this page,
+//   links it by its path (publishing the page creates its dataset, and updates it when the CSV
+//   changes) and copies this page with a simple DATA for that CSV, its renderer csv-dashboard.mjs
+//   (leave it as is) and its steps file (sample: node examples/gen-deliveries.mjs >
+//   deliveries.csv). Copy chart kinds and linked filters from this DATA. Edit only DATA and
+//   <title>; then the publish and check commands new-page printed (a first publish: --create).
 // Gotchas: pick the chart for the question, one chart per question asked: change over time: line;
 //   a breakdown by category: bar; a distribution: bar over bins made in SQL; two numbers per row:
 //   point (table:false, and say the relationship in a text); two categories or day by hour: rect

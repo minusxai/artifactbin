@@ -30,7 +30,7 @@ Examples:
   node scripts/new-app.mjs --kind api --url https://api.example.com/v1/orders --title "Orders"
 Gotchas: an unknown feature, or one whose requirement you drop, is refused (exit 2) with the fix.
   A rerun is safe: an existing file is kept (and listed as kept), never overwritten, and the
-  dataset its .af.json companion records is reused, so nothing is created twice. The steps,
+  dataset the kept index.html links (its ref:) is reused, so nothing is created twice. The steps,
   guest and cleanup files, tracker.ts and api.ts need no reading or editing. Who may do what
   lives in the dataset's rules (node scripts/policy.mjs explain ID); the page only follows the
   server's _can. The API's key never goes on the command line or into a file: only the page
@@ -42,7 +42,7 @@ Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (s
 import path from 'node:path';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {runTool,ToolError,makeClient,selectedServer,serverOrigin} from './toolbox-client.mjs';
-import {EXAMPLES,CHECK,resolve,create,dataset,fill,apiUrl,ownRowsApp} from
+import {EXAMPLES,check,resolve,create,dataset,fill,apiUrl,ownRowsApp} from
   './toolbox-new-app.mjs';
 import {trackerFeatures,trackerFiles} from './toolbox-tracker.mjs';
 import {FEATURES,columns,rules,template} from '../examples/tracker-features.mjs';
@@ -91,8 +91,8 @@ async function trackerApp(kind, values, {title, dir, at, server, options}) {
     (await create(at(name), text) ? created : kept).push(name);
   const owned = template(keep) === 'own-rows' ? {template: 'own-rows', 'owner-column':
     'created_by'} : {};
-  const entries = await dataset(at('entries.csv'), `${title} entries`, server, options,
-    {name: 'entries', ...owned});
+  const entries = await dataset(at('index.html'), at('entries.csv'), `${title} entries`, server,
+    options, {name: 'entries', ...owned});
   const rulesSet = keep.has('team') || keep.has('collab') ?
     await applyRules(makeClient(server, options), entries.id, keep) : false;
   const starter = await readFile(new URL('tracker.html', EXAMPLES), 'utf8');
@@ -116,7 +116,7 @@ async function trackerApp(kind, values, {title, dir, at, server, options}) {
     datasets: {entries: {id: entries.id, rows: 0, reused: entries.reused}},
     ...limit === undefined ? {} : {limit}, rules: rulesText, note,
     next: `Next: in index.html edit only APP: its [bracketed] text and groups (${groups}); ` +
-      `then ${CHECK}`};
+      `then ${await check(at('index.html'))}`};
 }
 export async function newAppCommand({values, positionals}, options = {}) {
   const title = String(values.title ?? positionals.join(' ')).trim()

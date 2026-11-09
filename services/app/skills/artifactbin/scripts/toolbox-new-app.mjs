@@ -1,6 +1,7 @@
 /**
  * Internal: what new-app.mjs's starters share (files copied without overwriting, a dataset
- * published once and reused through its companion, the page's placeholders filled) and the
+ * published once and reused through the ref: the kept page links it by, the page's placeholders
+ * filled, the publish step) and the
  * --kind api starter whole (an HTTP API's items with shared notes, read by a resolver whose key
  * only the page owner sets). The tracker's trimming is toolbox-tracker.mjs.
  * Used by: new-app.mjs.
@@ -10,11 +11,13 @@ import {homedir} from 'node:os';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {ToolError,optionalFile} from './toolbox-client.mjs';
 import {publishCommand} from './toolbox-publish.mjs';
-import {dataBaseline} from './toolbox-publish-guard.mjs';
+import {publishStep} from './toolbox-source.mjs';
 
 export const EXAMPLES = new URL('../examples/', import.meta.url);
-export const CHECK = 'node scripts/publish.mjs index.html && node scripts/check.mjs index.html ' +
-  '--steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
+/** Publish (a first publish creates the page), then check with the starter's steps files. */
+export const check = async page => `${await publishStep(page, 'index.html')} && node ` +
+  'scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps ' +
+  'cleanup.mjs';
 export const resolve = (base, file) => path.resolve(base, String(file)
   .replace(/^~(?=$|[\\/])/, homedir()));
 const htmlText = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -34,10 +37,16 @@ export async function create(file, bytes) {
     throw error;
   }
 }
-/** The dataset FILE's companion records, or a new one published from it (extra: publish flags). */
-export async function dataset(file, title, server, options, extra = {}) {
-  const companion = await optionalFile(file + '.af.json');
-  if (companion) return {id: dataBaseline(companion, file, server).id, reused: true};
+/** The dataset the page links as `extra.name` (its ref:, kept from an earlier run), or a new one
+ * published from FILE (extra: publish flags). People write its rows, so it is linked by id, never
+ * by path: a page publish must not replace them. */
+export async function dataset(page, file, title, server, options, extra) {
+  const html = String(await optionalFile(page) ?? '');
+  for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
+    const id = /\shref\s*=\s*["']ref:([A-Za-z0-9]{6,12})["']/i.exec(tag)?.[1];
+    if (id && new RegExp(`\\sdata-af-name\\s*=\\s*["']${extra.name}["']`, 'i').test(tag))
+      return {id, reused: true};
+  }
   const done = await publishCommand({values: {server, title, ...extra}, positionals: [file]},
     options);
   return {id: done.id, reused: false};
@@ -79,8 +88,8 @@ export async function ownRowsApp(kind, {title, dir, at, server, options, url}) {
     .replace(/^(const HOST = )'[^']*';/m, (_, start) => start + quoted(url.hostname))
     .replace(/^(const PATH = )'[^']*';/m, (_, start) => start + quoted(url.pathname + url.search));
   for (const [name, bytes] of outputs) (await create(at(name), bytes) ? created : kept).push(name);
-  const own = await dataset(at(spec.table + '.csv'), `${title} ${spec.table}`, server, options,
-    {name: spec.table, template: 'own-rows', 'owner-column': 'created_by'});
+  const own = await dataset(at('index.html'), at(spec.table + '.csv'), `${title} ${spec.table}`,
+    server, options, {name: spec.table, template: 'own-rows', 'owner-column': 'created_by'});
   const page = await readFile(at('index.html'), 'utf8'), filledPage = fill(page, starter,
     {title, ids: {own: own.id}});
   if (filledPage !== page) await writeFile(at('index.html'), filledPage);
@@ -96,5 +105,5 @@ export async function ownRowsApp(kind, {title, dir, at, server, options, url}) {
     "Test connection (it lists the API's field names); never read the key or write it anywhere.";
   return {project: dir, title, kind, created, kept, datasets: {[spec.table]: {id: own.id, rows: 0,
     reused: own.reused}}, rules, note, next: `Next: in index.html edit only APP: ${spec.edit}; ` +
-    `then ${CHECK}${key}`};
+    `then ${await check(at('index.html'))}${key}`};
 }

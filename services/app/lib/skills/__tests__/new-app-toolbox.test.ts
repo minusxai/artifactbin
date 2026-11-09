@@ -3,7 +3,7 @@
  * the chosen features (a preset minus --without), publishes the empty entries dataset with the template its features
  * start from, applies the rules they add and fills the page; --limit writes one number into the page and resolver;
  * unknown features, missing requirements and a limit without limits are refused before anything is written; a rerun
- * reuses the dataset its companion records and changes nothing.
+ * reuses the dataset the kept index.html links (its ref:) and changes nothing; no file is written beside another.
  */
 import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
@@ -49,10 +49,11 @@ async function project(){
  const fake=fakeServer();
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher:fake.fetcher,cwd:root,log:()=>{}};
  const run=(values:Record<string,unknown>,positionals:string[]=[])=>newAppCommand({values:{server,...values},positionals},options);
- const files=async()=>(await readdir(dir)).filter(name=>!name.endsWith('.af.json')).sort();
+ // Every file the starter writes; never a companion beside one.
+ const files=async()=>{const names=(await readdir(dir)).sort();expect(names.filter(name=>name.endsWith('.af.json'))).toEqual([]);return names;};
  return {root,dir,run,files,calls:fake.calls,policies:fake.policies,done:()=>rm(root,{recursive:true,force:true})};
 }
-const CHECK='node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
+const CHECK='node scripts/publish.mjs index.html --create && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
 
 it('sets up the team task tracker in one call: every feature, its dataset, rules, resolver and the filled page',async()=>{
  const p=await project();
@@ -151,6 +152,14 @@ it('keeps a file that already exists and says so, and reuses the dataset and rul
   // No create and no rules write: the feature rules already hold.
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['GET /api/artifacts/DATA0001/policy']);
   expect(await readFile(path.join(p.dir,'index.html'),'utf8')).toBe(before);
+  // Once the page is published (its marker is in index.html) the dataset is still the one it links, and the
+  // next step publishes it plainly.
+  const {stampSource}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
+  await writeFile(path.join(p.dir,'index.html'),stampSource(before,{server,id:'PAGE01',version:2,state:'a'.repeat(64),sha256:'b'.repeat(64),entryPath:'index.html'}));
+  const published=await p.run({dir:'app',title:'Launch tasks'});
+  expect(published.datasets).toMatchObject({entries:{id:'DATA0001',reused:true}});
+  expect(published.next).toContain('then node scripts/publish.mjs index.html && node scripts/check.mjs');
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
  }finally{await p.done();}
 });
 
@@ -160,7 +169,7 @@ it('sets up the API starter: the resolver aimed at --url, an empty notes dataset
   // A key file beside the project is never read: nothing the starter writes carries its value.
   await writeFile(path.join(p.dir,'pipeline-key.txt'),'sk-live-never-copied\n');
   const result=await p.run({dir:'app',kind:'api',title:'Open deals',url:'https://crm.example.com/v1/deals?status=open'});
-  expect((await readdir(p.dir)).filter(name=>!name.endsWith('.af.json')).sort()).toEqual(['api.ts','cleanup.mjs','guest.mjs','index.html','notes.csv','pipeline-key.txt','steps.mjs']);
+  expect(await p.files()).toEqual(['api.ts','cleanup.mjs','guest.mjs','index.html','notes.csv','pipeline-key.txt','steps.mjs']);
   expect(result.created).toEqual(['index.html','api.ts','steps.mjs','guest.mjs','cleanup.mjs','notes.csv']);
   expect(result.datasets).toEqual({notes:{id:'DATA0001',rows:0,reused:false}});
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
@@ -177,7 +186,7 @@ it('sets up the API starter: the resolver aimed at --url, an empty notes dataset
   expect(result.rules).toBe('notes: everyone reads; signed-in people add notes and change or remove only their own');
   // The next step: edit APP, publish and check, and send the owner to Resolvers for the key.
   expect(result.next).toMatch(/^Next: in index\.html edit only APP: fields \(the API's field names\)/);
-  expect(result.next).toContain('node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs');
+  expect(result.next).toContain(CHECK);
   expect(result.next).toMatch(/API_KEY[^.]*Resolvers/);expect(result.next).toContain('Not tested');
   // A rerun keeps every file and the dataset, and writes nothing.
   p.calls.length=0;

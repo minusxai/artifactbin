@@ -5,11 +5,12 @@ typing, appears in their open page live and is saved as a new version.
 Usage: node scripts/doc.mjs read ID|URL --output doc.md [--region R] [--html]
        node scripts/doc.mjs write doc.md
 Flags: read first saves everyone's unsaved typing (when you may edit), then writes the text to
-  FILE and FILE.af.json (page, region, version read); --region R names a data-af-editable
-  region's data-af-id (default _doc: the page's one rich region; a refusal lists the regions);
-  --html reads and writes the region's HTML instead. write sends the edited FILE from the version
-  it was read at, then rewrites FILE and FILE.af.json with the merged, saved text: keep editing
-  the same file. Common: --server, --json, --help.
+  FILE under a first line, <!-- af-doc:… -->, that records the page, region and version read;
+  --region R names a data-af-editable region's data-af-id (default _doc: the page's one rich
+  region; a refusal lists the regions); --html reads and writes the region's HTML instead. write
+  sends the edited text below that line (never the line) from the version it was read at, then
+  rewrites FILE with the merged, saved text: keep editing the same file and keep its first line.
+  Common: --server, --json, --help.
 Examples:
   node scripts/doc.mjs read ID --output doc.md   # edit doc.md, then
   node scripts/doc.mjs write doc.md
@@ -31,7 +32,6 @@ import {
   selectedServer,
   makeClient,
   positional,
-  jsonFile,
   exclusive,
   createJournal,
   journalIntent,
@@ -43,7 +43,7 @@ import {
 import {watchNext} from './toolbox-watch-state.mjs';
 
 const REGION = /^(?:_doc|[A-Za-z][A-Za-z0-9_-]{0,127})$/;
-const baselineOf = file => file + '.af.json';
+const MARKER = /^<!-- af-doc:([A-Za-z0-9_-]*) -->\r?\n/;
 const withNewline = text => (text && !text.endsWith('\n') ? text + '\n' : text);
 
 /** A refusal said in this command's terms (the shared client's 409 hint is about publishing). */
@@ -77,15 +77,23 @@ async function readRegion(client, id, region, format) {
   }
 }
 
-/** The FILE.af.json pair a read wrote (or a write updated). */
-async function baseline(file) {
-  const pair = await jsonFile(baselineOf(file));
-  if (pair?.kind !== 'region-baseline' || pair.schema !== 1 || !/^[A-Za-z0-9]{6,12}$/.test(
-    pair.id) || !REGION.test(pair.regionId) || !['markdown', 'html'].includes(pair.format) ||
-    !Number.isSafeInteger(pair.version))
-    throw new ToolError('invalid_baseline', 'FILE.af.json is not a doc.mjs read baseline.', 2,
-      'Run doc.mjs read ID --output FILE first.');
-  return pair;
+/** A doc file: the marker line (page, region, version read, a pending write) and the text.
+ * @typedef {import('../../../lib/skills/author-toolbox-contract').DocMarker} DocMarker */
+/** @param {DocMarker} marker */
+const stamp = (marker, text) => `<!-- af-doc:${Buffer.from(JSON.stringify(marker))
+  .toString('base64url')} -->\n${withNewline(text)}`;
+async function docFile(file) {
+  const bytes = await readFile(file, 'utf8'), found = MARKER.exec(bytes);
+  let marker = null;
+  try { marker = found && JSON.parse(Buffer.from(found[1], 'base64url').toString()); } catch {}
+  if (typeof marker?.server !== 'string' || !/^[A-Za-z0-9]{6,12}$/.test(marker.id) ||
+    !REGION.test(marker.regionId) || !['markdown', 'html'].includes(marker.format) ||
+    !Number.isSafeInteger(marker.version))
+    throw new ToolError('invalid_doc_marker', `${path.basename(file)} does not start with the ` +
+      'marker line doc.mjs read wrote, so write cannot tell which doc it edits.', 2, 'Read it ' +
+      'again: node scripts/doc.mjs read ID --output fresh.md, reapply your edit there (below its ' +
+      'first line) and write that file.');
+  return {marker, text: bytes.slice(found[0].length)};
 }
 
 export async function docCommand({sub, values, positionals}, options = {}) {
@@ -100,26 +108,25 @@ export async function docCommand({sub, values, positionals}, options = {}) {
     const format = values.html ? 'html' : 'markdown';
     const reply = await readRegion(client, id, region, format);
     if (!values.output) return reply;
-    await exclusive(values.output, withNewline(reply[format]));
-    const pair = {kind: 'region-baseline', schema: 1, server: client.server, id,
-      regionId: reply.regionId, regionKind: reply.kind, format, version: reply.version};
-    await exclusive(baselineOf(values.output), JSON.stringify(pair, null, 2) + '\n');
+    await exclusive(values.output, stamp({server: client.server, id, regionId: reply.regionId,
+      regionKind: reply.kind, format, version: reply.version}, reply[format]));
     return {id, regionId: reply.regionId, version: reply.version,
-      file: path.resolve(values.output), baseline: path.resolve(baselineOf(values.output)),
-      outputOwned: true};
+      file: path.resolve(values.output), outputOwned: true};
   }
   const file = positional(positionals);
-  const pair = await baseline(file);
+  const {marker: pair, text} = await docFile(file);
   const client = makeClient(serverOrigin(selectedServer(values, options.env) ?? pair.server),
     options);
   if (client.server !== pair.server)
-    throw new ToolError('baseline_origin_mismatch', 'FILE.af.json belongs to another server.', 2);
-  const save = value => atomicWrite(baselineOf(file), JSON.stringify(value, null, 2) + '\n');
-  // A write whose outcome is unknown stays pending in the baseline: the next write resumes it
+    throw new ToolError('marker_origin_mismatch', `${path.basename(file)} was read from ` +
+      `${pair.server}, not ${client.server}.`, 2, `Write it with --server ${pair.server}.`);
+  // Only the marker line changes until the server answers: the text stays as edited.
+  const save = ({pending, ...value}) => atomicWrite(file, stamp(pending ? {...value, pending} :
+    value, text));
+  // A write whose outcome is unknown stays pending in the marker: the next write resumes it
   // with the same Idempotency-Key, so it can never apply twice.
   let journal = pair.pending;
   if (!journal) {
-    const text = await readFile(file, 'utf8');
     journal = await createJournal(journalIntent({server: pair.server, method: 'PUT',
       path: `/api/artifacts/${pair.id}/regions/${pair.regionId}`,
       body: {[pair.format]: text, base_version: pair.version}, operation: 'doc'}),
@@ -133,8 +140,8 @@ export async function docCommand({sub, values, positionals}, options = {}) {
     if (error.exit !== 5) await save({...pair, pending: undefined});
     throw explained(error);
   }
-  await atomicWrite(file, withNewline(receipt[pair.format] ?? ''));
-  await save({...pair, version: receipt.version, pending: undefined});
+  const {pending: _done, ...read} = pair;
+  await atomicWrite(file, stamp({...read, version: receipt.version}, receipt[pair.format] ?? ''));
   return {id: pair.id, regionId: receipt.regionId, version: receipt.version,
     file: path.resolve(file), ...(pair.pending ? {resumed: true} : {}), journal,
     next: watchNext(pair.id)};

@@ -12,7 +12,7 @@
  *          design-system-meta  (D2) data-af-design-system / data-af-dark on <html> → the artifactbin:design-system meta
  *          design-system-link  a copied <link data-af="design-system"> → removed; the platform stylesheet carries every system
  *          duplicate-data-af-id a later static element repeating an identity → its data-af-id dropped, so the server mints a new one
- *  ROUTINE hand-written ids     with `newPage` (no companion): every static data-af-id dropped; the platform assigns them
+ *  ROUTINE hand-written ids     with `newPage` (a new page): every static data-af-id dropped; the platform assigns them
  *  REFUSED script-syntax        an inline script or JSON block that does not parse, at its HTML-file line
  *          duplicate-data-af-id a repeated identity inside a <template> (copies would collide; nothing to renumber)
  *          missing-asset        a relative local reference with no file behind it (checked only when `exists` is given)
