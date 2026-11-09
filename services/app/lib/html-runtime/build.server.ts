@@ -1,5 +1,6 @@
 import {buildPortableChrome} from './build-portable-chrome.server';
 import {build} from 'esbuild';
+import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import type {HtmlRuntimeAssets} from './contract';
@@ -25,7 +26,15 @@ async function compile():Promise<HtmlRuntimeAssets>{
  // The live morph (./live-morph) loads only when a new version reaches an open framed page.
  const morphBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./live-morph.ts',import.meta.url))],format:'esm'});
  // The region editor (./region-editor: ProseMirror and Yjs) loads only when the parent opens a region session for an editor.
- const regionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'}});
+ const regionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:[{
+  name:'pure-lib0-dom-schemas',
+  setup(builder){builder.onLoad({filter:/[/\\]lib0[/\\]dom\.js$/},async({path})=>({
+   // lib0 0.2.119's four unused DOM schemas otherwise retain its entire schema library via Yjs logging.
+   // $custom only allocates a schema (its constructor stores the predicate); annotate those allocations,
+   // preserving any schema that is actually used and all logging/editor behavior. No dependency source is changed.
+   contents:(await readFile(path,'utf8')).replaceAll('= $.$custom(', '= /* @__PURE__ */ $.$custom('),loader:'js',
+  }));},
+ }]});
  // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
  const collabBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./collab.ts',import.meta.url))],format:'esm',plugins:[{name:'shared-reader',setup(builder){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}}]});
  const chrome=await buildPortableChrome();
