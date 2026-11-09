@@ -48,6 +48,9 @@ const REGION_EDITOR_CSS = [
   `${ROOT}>[data-quote]{--af-quote:40px;margin-right:40px}`,
   `${ROOT}>[data-list],${ROOT}>[data-quote]{margin-left:calc(var(--af-quote,0px) + var(--af-list,0px))}`,
   listRules(),
+  `${ROOT}>[data-task]::before{content:none}`,
+  `${ROOT}>[data-task]>input[type=checkbox]{position:absolute;right:100%;margin-right:.5em;top:.25em;cursor:pointer}`,
+
 ].join('\n');
 
 /** Installs the stylesheet once per document. */

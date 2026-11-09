@@ -18,7 +18,7 @@ export type Attrs = Record<string, string | number | boolean>;
 export interface Unit { ch: string; attrs: Attrs }
 
 const CHAR_KEYS = ['bold', 'italic', 'code', 'link'] as const;
-const BLOCK_KEYS = ['level', 'list', 'depth', 'quote', 'codeBlock', 'codeContinues', 'rule', ...ID_ATTRS] as const;
+const BLOCK_KEYS = ['checked', 'level', 'list', 'depth', 'quote', 'codeBlock', 'codeContinues', 'rule', ...ID_ATTRS] as const;
 /** The attribute keys a unit of this character owns: block keys on a "\n", marks on anything else. */
 export const keysOf = (ch: string): readonly string[] => (ch === '\n' ? BLOCK_KEYS : CHAR_KEYS);
 
@@ -31,6 +31,7 @@ function charAttrs(marks: readonly Mark[]): Attrs {
 function structure(node: PMNode): Attrs {
   const attrs: Attrs = {};
   if (node.attrs.list) { attrs.list = node.attrs.list; attrs.depth = node.attrs.depth; }
+  if (node.type.name === "textblock" && node.attrs.list === "bullet" && typeof node.attrs.checked === "boolean") attrs.checked = node.attrs.checked;
   if (node.attrs.quote) attrs.quote = true;
   return attrs;
 }
@@ -192,7 +193,7 @@ function linesToDoc(kind: RegionKind, lines: readonly Line[]): PMNode {
       blocks.push(nodes.code_block!.create({ ...structureOf(attrs), ...idAttrs(last.attrs) }, text ? schema.text(text) : null));
       continue;
     }
-    blocks.push(nodes.textblock!.create({ level: asInt(attrs.level, 0, 6, 0), ...structureOf(attrs), ...idAttrs(attrs) }, inline(line)));
+    blocks.push(nodes.textblock!.create({ checked: attrs.list === "bullet" && typeof attrs.checked === "boolean" ? attrs.checked : null, level: asInt(attrs.level, 0, 6, 0), ...structureOf(attrs), ...idAttrs(attrs) }, inline(line)));
   }
   return nodes.doc!.create(null, blocks);
 }

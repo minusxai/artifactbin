@@ -357,6 +357,39 @@ try {
     check(kept.every((value) => value === 'kept'), `neither open page reloaded (${JSON.stringify(kept)})`);
   });
 
+  await section('task checkbox typing, peer toggle, undo and saved readonly semantics', async () => {
+    const read = await api('/regions/_doc?format=markdown');
+    await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-task-${stamp}` }, body: JSON.stringify({ markdown: `${read.markdown}\n\n- [ ] Task work`, base_version: read.version }) });
+    const task = (frame) => frame.locator(`${REGION} input[aria-label="Task completed"]`);
+    await task(a).waitFor(); await task(b).waitFor();
+    const blockId = await task(a).evaluate((node) => node.parentElement.getAttribute('data-af-id'));
+    await task(a).check();
+    check(await until(() => task(b).isChecked(), Boolean) === true, 'a real checkbox click reaches the other editor');
+    await caretAtEnd(b, B, `[data-af-id="${blockId}"]`);
+    await B.keyboard.type(' remote');
+    await both([a, b], 'Task work remote');
+    // Undo belongs to A even while B types; focus A without changing its history.
+    await caretAtEnd(a, A, `[data-af-id="${blockId}"]`);
+    await A.keyboard.press('ControlOrMeta+z');
+    check(await until(() => task(a).isChecked(), (value) => value === false) === false, 'undo after peer typing restores the checkbox');
+    check(await until(() => task(b).isChecked(), (value) => value === false) === false, 'checkbox undo converges at the peer');
+    check((await textOf(a)).includes('Task work remote'), 'undo keeps the peer text');
+    await A.keyboard.press('ControlOrMeta+Shift+z');
+    check(await until(() => task(b).isChecked(), Boolean) === true, 'redo reaches the peer');
+    check(await task(a).evaluate((node) => node.parentElement.getAttribute('data-af-id')) === blockId, 'toggle and undo preserve the task block id');
+    const saved = await api('/regions/_doc?format=markdown');
+    check(saved.markdown.includes('[x] Task work remote'), 'saved Markdown retains the checked task and peer text');
+    await C.reload({ waitUntil: 'load' });
+    c = await documentFrame(C);
+    const readonly = c.locator(`${REGION} li[role="checkbox"]`);
+    await readonly.waitFor();
+    check(await readonly.getAttribute('aria-checked') === 'true' && await readonly.getAttribute('aria-disabled') === 'true', 'the viewer gets checked, disabled saved semantics');
+    check(await c.locator(`${REGION} input`).count() === 0, 'the viewer has no interactive checkbox');
+    // Remove this fixture so the existing canonical-shape checks keep their original coverage.
+    await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-task-clean-${stamp}` }, body: JSON.stringify({ markdown: saved.markdown.replace(/\n*[-*+] \[x\] Task work remote\s*$/, ''), base_version: saved.version }) });
+    await until(() => task(a).count(), (count) => count === 0);
+  });
+
   await section('a comment inside the region after typing anchors to the saved version', async () => {
     await caretAtEnd(b, B, '[data-af-id="p2"]');
     await B.keyboard.type(' commentword');
