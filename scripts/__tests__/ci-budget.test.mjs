@@ -215,7 +215,7 @@ it('enrolls existing node-project guard tests that the full suite also runs, onc
  expect(guards).toEqual([...new Set(guards)].sort());
  for(const file of guards){
   expect(readFileSync(new URL(`../../${file}`,import.meta.url),'utf8').length,file).toBeGreaterThan(0);
-  expect(file).toMatch(/^(?:scripts\/(?:.+\/)?__tests__\/[^/]+\.test\.mjs|services\/app\/lib\/.+\/__tests__\/[^/]+(?<!\.ui)\.test\.ts)$/);
+  expect(file).toMatch(/^(?:scripts\/(?:.+\/)?__tests__\/[^/]+\.test\.mjs|services\/app\/lib\/(?:.+\/)?__tests__\/[^/]+(?<!\.ui)\.test\.ts)$/);
   expect(fast).not.toContain(file);
  }
 });
