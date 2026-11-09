@@ -31,9 +31,8 @@ type FunctionKind='query'|'mutation';
 export interface PageFunctionSource {namespace:string;fileId:string;version:string;typeDefs:string;functions:FunctionRoles|null}
 
 /**
- * The manifest a typeDefs-free file publishes: every function its default export names (from the runner), with the
- * role its `roles` declaration gives it — read from the source text (./roles-source `declaredRoles`), never from the
- * evaluated export. Every name and role is checked here, at publish.
+ * The manifest a typeDefs-free file publishes: every callable name and the role its `roles` declaration gives it,
+ * both read from the source text (./function-source `staticSurface`), never from the evaluated module. Every name and role is checked here, at publish.
  */
 export function functionManifest(exported:unknown,roles:ReadonlyArray<readonly [string,string]>|null):Record<string,DatasetRole>{
  if(!Array.isArray(exported)||!exported.length)throw Error('invalid_backend_exports: a backend without typeDefs needs a default export of functions');
@@ -116,6 +115,7 @@ export async function callPageFunction(call:FunctionCall):Promise<FunctionAnswer
   const safe=typeof code==='string'&&FIELD_ERROR_CODE.test(code)?code:'function_failed';
   const ownerDetail=owner?boundedDetail(detail):undefined;
   const extra:Record<string,string>=ownerDetail?{detail:ownerDetail}:{};
+  if(name==='FieldNotExecuted'&&safe==='unknown_function')return refuse(404,'unknown_function',`This page has no function ${call.name}`);
   if(name==='FieldNotExecuted'){
    if(safe==='retryable')return {status:503,body:{error:safe,message:'Backend busy; nothing ran, so retrying is safe',...extra},headers:{'Retry-After':'1'}};
    return {status:500,body:{error:safe,message:'The function was refused before it ran',...extra}};

@@ -27,12 +27,17 @@ caller exactly as the GraphQL door does and runs the function through the same i
   400 `revision_conflict`. Neither: the head. The parent drops a frame's own `revision` parameter, and a read-only
   (archived) shell relays GET only (403 `read_only` for POST, no request made).
 - Who: a typeDefs-free file exports `roles = {name: 'owner'|'editor'|'viewer'|'signed_in'|'anonymous'}`, checked at
-  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). `roles` is
-  read from the SOURCE at publish and never evaluated (`roles-source.ts`): `export const roles = {…}` (or a top-level
-  `const` exported as `roles`) must be an object literal whose keys are identifiers or string literals and whose values
-  are string-literal role names. A computed or `__proto__` key, a spread, getter, method or shorthand, any other value,
-  `let`/`var`, an unknown role or a key that is not an exported function fails publish with `invalid_roles`, as does
-  a `roles` export only the running module has (assigned at run time). A legacy
+  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). The whole
+  callable surface of a typeDefs-free file is read from its SOURCE at publish, never from the evaluated module
+  (`function-source.ts`). Callable names are the keys of an object-literal `export default {…}` and the file's named
+  exported functions; only those may be invoked (any other name is 404, whatever the module object exposes; a declared
+  name whose run-time value is not a function is 404 too). A default export that is not an object literal (a Proxy,
+  call or class) or is reassigned, spreads, computed or accessor keys, `export *`/`export … from`, `import()`, and any
+  use of `module`, `exports`, `require` or `eval` fail publish with `invalid_functions`. `roles`: `export const roles =
+  {…}` (or a top-level `const` exported as `roles`) must be an object literal whose keys are identifiers or string
+  literals and whose values are string-literal role names; a computed or `__proto__` key, a spread, getter, method or
+  shorthand, any other value, `let`/`var`, an unknown role or a key that is not a callable name fails publish with
+  `invalid_roles`. A legacy
   file's Query and Mutation fields are callable too, each under its `@auth`; GraphQL still serves it. A
   typeDefs-free file mounts nothing on GraphQL. A name two linked files offer is 409.
 - Kind: a legacy field's root; otherwise GET reads (`query`) and POST may write (`mutation`, so `caps.query`

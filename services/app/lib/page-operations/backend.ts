@@ -4,7 +4,7 @@ import { DATASET_ROLES, isResolverDatabaseKind, RESOLVER_DATABASE_OPERATION, RES
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
 import { functionManifest, type FunctionRoles } from './functions';
-import { declaredRoles } from './roles-source';
+import { staticSurface } from './function-source';
 import {readPinnedBackendSecret,secretHostMap} from '@/lib/html-backend-secrets';
 import {redactedLine,resolverFailureDetail} from './redaction';
 import { FieldFailed, FieldNotExecuted } from './contracts';
@@ -40,8 +40,10 @@ async function backendProgram(source:string):Promise<string>{
  return `const __afPlatform=new WeakSet();const G=(f)=>async(...a)=>{try{return await f(...a);}catch(e){if(e!==null&&typeof e==='object')__afPlatform.add(e);throw e;}};
 const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
- if(input.kind==='schema'){const d=Backend.default;if(Backend.typeDefs!==undefined&&typeof Backend.typeDefs!=='string'||!d||typeof d!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs??null,functions:Object.keys(d).filter(k=>typeof d[k]==='function'),hasRoles:Object.prototype.hasOwnProperty.call(Backend,'roles'),secrets:Backend.secrets};}
- const fn=Object.prototype.hasOwnProperty.call(Backend.default,input.field)?Backend.default[input.field]:undefined;if(typeof fn!=='function')throw Error('missing_resolver');
+ if(input.kind==='schema'){const t=Backend.typeDefs;if(t!==undefined&&typeof t!=='string'||typeof t==='string'&&(!Backend.default||typeof Backend.default!=='object'))throw Error('invalid_backend_exports');return {typeDefs:t??null,secrets:Backend.secrets};}
+ // Only a name the host admitted from the static surface (./function-source) or the SDL arrives here; it runs only if it is a function.
+ const own=(o,k)=>o!==null&&typeof o==='object'&&Object.prototype.hasOwnProperty.call(o,k);
+ const fn=own(Backend.default,input.field)?Backend.default[input.field]:typeof Backend.typeDefs!=='string'&&!['default','roles','secrets','typeDefs'].includes(input.field)&&own(Backend,input.field)?Backend[input.field]:undefined;if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
  ${CALL}
  const caps=${CAPS};
@@ -114,18 +116,19 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
 }
 export function createBackendCompiler(runner:RunnerService){return async(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>=>{
  const compiled=await backendProgram(source);
- // Roles come from the source text, read before anything runs and never from the evaluated export (./roles-source).
- const roles=await declaredRoles(source);
+ // The callable names and their roles come from the source text, read before anything runs and never from the
+ // evaluated module (./function-source).
+ const surface=await staticSurface(source);
  const result=await run(runner,{requestId:randomUUID(),userId:'page-backend-compiler',artifactId:'page-backend-compiler',artifactVersion:'compile',document:{source:compiled,editId:'compile'},program:{source:compiled,language:'javascript'},input:{kind:'schema'},limits},signal);
  if(!result||typeof result!=='object'||Array.isArray(result))throw Error('invalid_backend_exports');
  const secretHosts=secretHostMap(result.secrets);
  const secrets={secretBindings:Object.keys(secretHosts),secretHosts};
  if(typeof result.typeDefs==='string'){
-  if(roles||result.hasRoles===true)throw Error('A backend with typeDefs guards fields with @auth; export roles only from a backend without typeDefs');
+  if(surface.roles)throw Error('A backend with typeDefs guards fields with @auth; export roles only from a backend without typeDefs');
   return {compiled,typeDefs:result.typeDefs,functions:null,...secrets,test:resolverTestField(boundedBackendSchema(result.typeDefs))};
  }
- if(!roles&&result.hasRoles===true)throw Error("invalid_roles: roles is exported in a way publish cannot read; declare export const roles = {name: 'owner', …} as an object literal");
- const functions=functionManifest(result.functions,roles);
+ if(surface.typeDefs)throw Error('invalid_backend_exports: typeDefs must be a string');
+ const functions=functionManifest(surface.functions,surface.roles);
  // Test connection: an owner-only `test` function, as a legacy file's `test: String! @auth(role: owner)`.
  if(Object.hasOwn(functions,'test')&&functions.test!=='owner')throw Error("invalid_test_field: give test the owner role (roles = {test: 'owner'})");
  return {compiled,typeDefs:'',functions,...secrets,test:Object.hasOwn(functions,'test')};
@@ -148,6 +151,8 @@ export function createBackendInvoker(runner:RunnerService,load:(fileId:string,ve
   if(!(error instanceof RunFailed))throw error;
   const reason=error.receipt?.reason;
   if(!reason)throw new FieldFailed('backend_failed');
+  // The wrapper's own refusal (no function under that name at run time): nothing ran. A resolver's own throw is prefixed (RESOLVER_THREW).
+  if(reason==='missing_resolver')throw new FieldNotExecuted('No such function','unknown_function');
   const secrets=await pinnedValues(backend,options.readSecret??readPinnedBackendSecret),thrown=reason.startsWith(RESOLVER_THREW);
   const receipt=thrown?{...error.receipt!,reason:reason.slice(RESOLVER_THREW.length)}:error.receipt;
   throw new FieldFailed('backend_failed',resolverFailureDetail(receipt,secrets),thrown?redactedLine(receipt!.reason!,secrets):undefined);

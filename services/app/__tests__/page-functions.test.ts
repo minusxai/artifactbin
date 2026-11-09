@@ -204,12 +204,12 @@ it('honors exported roles aliases despite a shadowed local roles name; a compute
   visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',
   resolverSources:{api},
  }}));
- const response=await tryPublish(`const guards={sensitive:'owner'};export {guards as roles};function local(){const roles={sensitive:'anonymous'};return roles}export default {['__proto__'](){return 1},sensitive(){return local()}}`);
+ const response=await tryPublish(`const guards={sensitive:'owner'};export {guards as roles};function local(){const roles={sensitive:'anonymous'};return roles}export default {sensitive(){return local()}}`);
  expect(response.status).toBe(201);
  const {id}=await response.json();
  expect((await call(id,'sensitive',null,{method:'GET'})).status).toBe(403);
  for(const roles of [`{['__proto__']:'owner',sensitive:'owner'}`,`{'__proto__':'owner',sensitive:'owner'}`]){
-  const refused=await tryPublish(`const guards=${roles};export {guards as roles};export default {['__proto__'](){return 1},sensitive(){return 2}}`);
+  const refused=await tryPublish(`const guards=${roles};export {guards as roles};export default {sensitive(){return 2}}`);
   expect(refused.status,roles).toBe(400);expect(await refused.text(),roles).toContain('invalid_roles');
  }
 });
@@ -251,7 +251,7 @@ it('reads roles from the source: only an object literal of string-literal roles 
  }
  for(const decl of ['export let roles=','export var roles='])expect((await tryRoles("{a:'owner'}",decl)).status,decl).toBe(400);
  // A roles export publish cannot read from the text (assigned at run time) is refused, not ignored.
- const runtime=await tryRoles("{a:'owner'}",'module.exports.roles=');expect(runtime.status).toBe(400);expect(await runtime.text()).toContain('invalid_roles');
+ const runtime=await tryRoles("{a:'owner'}",'module.exports.roles=');expect(runtime.status).toBe(400);expect(await runtime.text()).toContain('invalid_functions');
  // esbuild folds string-literal concatenation ('vie'+'wer') to the literal before the read: text, not evaluation.
  const ok=await tryRoles("{a:'owner','b':'vie'+'wer'} as const");expect(ok.status).toBe(201);
  const {id}=await ok.json();
@@ -276,4 +276,64 @@ it.each([
  expect(response.status,await response.clone().text()).toBe(201);
  const {id}=await response.json();
  expect((await call(id,'a',null,{method:'GET'})).status).toBe(403);
+});
+
+it.each([
+ ['inherited namespace roles', `module.exports=Object.assign(Object.create({roles:{a:'owner'}}),{default:{a(){return 'sensitive'}}});`],
+ ['proxy namespace roles', `module.exports=new Proxy({roles:{a:'owner'},default:{a(){return 'sensitive'}}},{getOwnPropertyDescriptor(t,k){if(k==='roles')return undefined;return Reflect.getOwnPropertyDescriptor(t,k)}});`],
+])('re-review 2: %s must not publish owner functions as anonymous',async(_label,api)=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html:'<link rel="af-resolver" data-af-name="api" href="./api.ts">',resolverSources:{api}}}));
+ // The module object never decides anything: a file that writes module.exports fails publish.
+ expect(response.status,await response.clone().text()).toBe(400);
+ expect(await response.text()).toContain('invalid_functions');
+});
+
+describe('the callable surface is the source text, never the evaluated module',()=>{
+ const html='<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>';
+ const tryApi=async(api:string)=>{const w=world();const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html,resolverSources:{api}}}));return {status:response.status,text:await response.text()};};
+ const id=(published:{text:string})=>JSON.parse(published.text).id as string;
+ it.each([
+  ['a Proxy default export',`export default new Proxy({},{get:()=>()=>'sensitive'})`],
+  ['a call as the default export',`const make=()=>({a(){return 1}});export default make()`],
+  ['a reassigned default binding',`let api={a(){return 1}};api=new Proxy(api,{});export default api`],
+  ['a spread default export',`const base={a(){return 1}};export default {...base}`],
+  ['a computed default key',`export default {['a'](){return 1}}`],
+  ['a getter in the default export',`export default {get a(){return ()=>1}}`],
+  ['exports assignment',`exports.a=()=>1;export default {b(){return 2}}`],
+  ['module.exports assignment',`export default {b(){return 2}};module.exports.default={b:()=>3}`],
+  ['require',`const x=require('fs');export default {b(){return 2}}`],
+  ['eval',`export default {b(){return eval('2')}}`],
+  ['a dynamic import',`export default {async b(){return import('x')}}`],
+  ['export *',`export * from 'fast-text-encoding';export default {b(){return 2}}`],
+  ['a name exported twice',`export function b(){return 1};export default {b(){return 2}}`],
+ ])('%s fails publish with invalid_functions',async(_label,api)=>{
+  const published=await tryApi(api);
+  expect(published.status,published.text).toBe(400);expect(published.text).toContain('invalid_functions');
+ });
+ it('a function added at run time (default[x] = …) is never callable',async()=>{
+  const published=await tryApi(`const api={a(){return 1}};api['b']=()=>'added';(api as any).c=()=>'added';export default api`);
+  expect(published.status,published.text).toBe(201);
+  const page=id(published);
+  expect(await call(page,'a',null,{method:'GET'})).toMatchObject({status:200,body:1});
+  for(const name of ['b','c'])expect(await call(page,name,null,{method:'GET'}),name).toMatchObject({status:404,body:{error:'unknown_function'}});
+ });
+ it('a static name whose run-time value is not a function answers 404; a non-function named export is not callable',async()=>{
+  const published=await tryApi(`const helper=5;export const LIMIT=3;export default {a:helper,b(){return 2}}`);
+  expect(published.status,published.text).toBe(201);
+  const page=id(published);
+  expect(await call(page,'a',null,{method:'GET'})).toMatchObject({status:404,body:{error:'unknown_function'}});
+  expect(await call(page,'LIMIT',null,{method:'GET'})).toMatchObject({status:404,body:{error:'unknown_function'}});
+  expect(await call(page,'b',null,{method:'GET'})).toMatchObject({status:200,body:2});
+ });
+ it('named exported functions are callable under their roles',async()=>{
+  const w=world();
+  const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html,resolverSources:{api:`export const roles={hi:'owner'};export function hi(){return 'hi'};export const yo=async()=>'yo';const x=1;export {x}`}}}));
+  expect(response.status,await response.clone().text()).toBe(201);
+  const page=(await response.json()).id;
+  expect((await call(page,'hi',null,{method:'GET'})).status).toBe(403);
+  expect(await call(page,'hi',w.owner,{method:'GET'})).toMatchObject({status:200,body:'hi'});
+  expect(await call(page,'yo',null,{method:'GET'})).toMatchObject({status:200,body:'yo'});
+  expect((await call(page,'x',null,{method:'GET'})).status).toBe(404);
+ });
 });
