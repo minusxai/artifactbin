@@ -14,6 +14,8 @@ let installedDir,prepareBundle;
 /** A documented HTML sample as a saved publication request, its dataset links pointing at `datasetId`. */
 const prepareSample=async(name,datasetId='abc123')=>{
  const root=path.join(installedDir,'artifactbin'),entry=`examples/${name}.html`;
+ // The dashboard links its CSV by path; the skill ships the generator, so write the sample beside the page.
+ if(name==='csv-dashboard')await writeFile(path.join(root,'examples/deliveries.csv'),execFileSync(process.execPath,[path.join(root,'examples/gen-deliveries.mjs')],{stdio:['ignore','pipe','ignore']}));
  const html=(await readFile(path.join(root,entry),'utf8')).replaceAll('ref:DATASET_ID',`ref:${datasetId}`).replaceAll('ref:TARGETS_ID',`ref:${datasetId}`);
  return prepareBundle({root,entry,server:BASE,entryHtml:html});
 };
@@ -37,7 +39,7 @@ describe('native author resources',()=>{
    if(name==='csv-dashboard')expect(saved.body.html).toContain('<script type="module" src="./csv-dashboard.mjs"');
    expect(script).toContain("from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
-   if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
+   if(name==='csv-dashboard')expect(saved.body.publicationBundle.files.map(file=>file.path)).toContain('examples/deliveries.csv');
    if(name==='tracker'){const resolver=saved.body.publicationBundle.files.find(file=>file.path==='examples/tracker.ts');expect(Buffer.from(resolver.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
   }
  });

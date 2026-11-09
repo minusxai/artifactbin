@@ -15,8 +15,10 @@ export interface AuthorMarker {
  sharingRevision?:number;
 }
 /** The doc.mjs marker: the first line of a doc file, `<!-- af-doc:BASE64URL(JSON) -->`, stripped before sending. */
+/** The syntax a region's text was read in (`--html` or the default); a region's syntax, never an artifact format. */
+type RegionSyntax='html'|'markdown';
 export interface DocMarker {
- server:string; id:string; regionId:string; regionKind:string; format:'markdown'|'html'; version:number;
+ server:string; id:string; regionId:string; regionKind:string; format:RegionSyntax; version:number;
  /** The journal of a write whose outcome is unknown: the next write resumes it, never writing twice. */
  pending?:string;
 }
