@@ -55,3 +55,14 @@ export function declaredAgentSlug(value: unknown): DeclaredAgentSlug | null {
   const slug = value.trim().toLowerCase().replace(/[\s_]+/g, '-');
   return (DECLARED_AGENT_SLUGS as readonly string[]).includes(slug) ? (slug as DeclaredAgentSlug) : null;
 }
+
+/**
+ * The product a session name starts with: "Claude Code Red" → claude-code, "Codex Rose" → codex. Whole words only
+ * ("Pine Fox" is no Pi), longest product first. Attribution keeps the full name; this only says which harness it is.
+ */
+export function declaredAgentProduct(value: unknown): DeclaredAgentSlug | null {
+  if (typeof value !== 'string') return null;
+  const slug = value.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const products = [...DECLARED_AGENT_SLUGS].sort((a, b) => b.length - a.length);
+  return products.find(product => slug === product || slug.startsWith(product + '-')) ?? null;
+}
