@@ -7,6 +7,7 @@ import {mintToken,createUser,setUsername} from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {createAppServer} from '../app';
+import {DOMAIN_HOME_CSP} from '@/lib/user-pages';
 useAppHarness();
 const app=()=>createAppServer({indexHtml:async()=>'<html><head><link rel="stylesheet" href="/shell.css"></head><body>APP</body></html>'});
 const base='https://alice.u.example.test';
@@ -32,6 +33,34 @@ it('lists only public HTML, serves unlisted by ID with privacy headers, and hide
  const home=await server.request(`${base}/`);expect(home.status).toBe(200);const html=await home.text();expect(html).toContain(pub.id);expect(html).not.toContain(quiet.id);expect(html).not.toContain(secret.id);
  for(const path of [`/${quiet.id}`,`/${quiet.id}-wrong`]){const res=await server.request(base+path);expect(res.headers.get('x-robots-tag')).toContain('noindex');expect(res.headers.get('referrer-policy')).toBe('no-referrer');}
  for(const host of [base,'https://other.u.example.test'])expect((await server.request(`${host}/${secret.id}-wrong`)).status).toBe(404);
+});
+it('serves the earliest page titled index (any case) in place at the root, and the listing when there is none',async()=>{
+ const user=await owner(),db=await getDb(),server=app();
+ const other=await page(user.token,'public',{title:'Index of things'});
+ let res=await server.request(`${base}/`);expect(res.status).toBe(200);expect(res.headers.get('content-security-policy')).toBe(DOMAIN_HOME_CSP);expect(await res.text()).toContain(other.id);
+ await page(user.token,'public',{title:'index',html:'<h1>Later index</h1>'});const first=await page(user.token,'public',{title:'INDEX.',html:'<h1>First index</h1>'});
+ await db.query("UPDATE artifacts SET created_at=now()-interval '1 day' WHERE id=$1",[first.id]);
+ res=await server.request(`${base}/`,{headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret'}});expect(res.status).toBe(200);
+ const html=await res.text();expect(html).toContain('First index');expect(html).not.toContain('Later index');expect(html).toContain('https://app.example.test/@alice/');
+ expect(res.headers.get('content-security-policy')).toContain('sandbox allow-scripts');expect(res.headers.has('set-cookie')).toBe(false);expect(res.headers.has('x-robots-tag')).toBe(false);
+ const head=await server.request(`${base}/`,{method:'HEAD'});expect(head.status).toBe(200);expect(await head.text()).toBe('');
+ // Its own reads still work from the root, as from its post address.
+ expect((await server.request(`${base}/a/${first.id}/events/frame`)).status).toBe(200);
+ // Deleted, the next earliest takes the root.
+ await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[first.id]);expect(await (await server.request(`${base}/`)).text()).toContain('Later index');
+ // The earliest decides: a private or unlisted earliest "index" leaves the listing, never a later public one.
+ for(const visibility of ['private','unlisted']){
+  await db.query("UPDATE artifacts SET deleted_at=NULL,visibility=$2 WHERE id=$1",[first.id,visibility]);
+  res=await server.request(`${base}/`);expect(res.headers.get('content-security-policy'),visibility).toBe(DOMAIN_HOME_CSP);const listing=await res.text();expect(listing).not.toContain('Later index');expect(listing).not.toContain('First index');
+ }
+});
+it('serves a group host its own index page',async()=>{
+ const user=await owner(),post=await page(user.token,'public',{title:'Index',html:'<h1>Team index</h1>'}),db=await getDb();
+ await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_idx','team_idx','Team','',$1)",[user.id]);
+ const server=app();expect(await (await server.request(`${base}/`)).text()).toContain('Team index');
+ await db.query("UPDATE artifacts SET group_id='grp_idx' WHERE id=$1",[post.id]);
+ expect(await (await server.request('https://team-idx.u.example.test/')).text()).toContain('Team index');
+ expect(await (await server.request(`${base}/`)).text()).not.toContain('Team index');
 });
 it('redirects directly to the live true owner after rename, reclaim and transfer',async()=>{
  const user=await owner(),post=await page(user.token),server=app();

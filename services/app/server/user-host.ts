@@ -5,7 +5,7 @@ import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { isBuildAssetPath } from '@artifactbin/utils';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
-import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
+import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
 import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
 import { PayloadTooLarge, baseUrl, json, readBody } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -88,8 +88,20 @@ const parseJson = (bytes: Uint8Array): Record<string, unknown> | null => {
 const call = (handler: Handler, request: Request, id: string) =>
   runWithRequest(request, async () => handler(request, { params: Promise.resolve({ id }) }));
 
-/** A public-only listing, read from the actual owner rather than creator attribution. */
+/** The owner's served page, as a guest, through the app's own raw handler; the app stays canonical (lib/document-serving). */
+async function servePage(request: Request, id: string, hostname: string, owner: UserPagesOwner): Promise<Response> {
+  const guest = await asGuest(request);
+  const domain = { hostname, owner };
+  return runWithRequest(guest, async () => (request.method === 'HEAD' ? rawHead : rawGet)(guest, { params: Promise.resolve({ id }), domain }));
+}
+
+/**
+ * The root: the owner's "index" page in place, at `/` (serving homePageId), else a public-only listing,
+ * read from the actual owner rather than creator attribution.
+ */
 async function home(request: Request, hostname: string, owner: UserPagesOwner, stylesheets: (url: string) => Promise<string[]>): Promise<Response> {
+ const index = await homePageId(owner);
+ if (index) return privacy(await servePage(request, index, hostname, owner), false);
  const [files, styles, user] = await Promise.all([publicHomeFiles(owner), stylesheets(request.url), owner.kind === 'user' ? getUserById(owner.id) : null]);
  const app=PUBLIC_BASE_URL.replace(/\/+$/,'');
  const profile:ProfileListingData={handle:owner.handle,files,...(owner.kind==='user'?{owner:{id:owner.id,image:user && 'image' in user && user.image?`/api/users/${owner.id}/avatar`:null}}:{})};
@@ -113,9 +125,7 @@ async function post(request: Request, segment: string, hostname: string): Promis
   if (decoded !== id && `/${decoded}` !== canonical) {
     return privacy(new Response(null, { status: 302, headers: { location: canonical + new URL(request.url).search, 'cache-control': 'no-store' } }),row.visibility==='unlisted');
   }
-  const guest = await asGuest(request);
-  const domain = { hostname, owner: actual };
-  return privacy(await runWithRequest(guest, async () => (request.method === 'HEAD' ? rawHead : rawGet)(guest, { params: Promise.resolve({ id }), domain })),row.visibility==='unlisted');
+  return privacy(await servePage(request, id, hostname, actual),row.visibility==='unlisted');
 }
 
 /** A served document's own read-side routes, on the same methods the app answers them with. */
