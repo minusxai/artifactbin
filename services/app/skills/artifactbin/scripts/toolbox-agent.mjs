@@ -2,7 +2,8 @@
  * Internal: who this agent session is. Every request carries its display name (Artifactbin-Agent,
  * e.g. "Claude Code Red") and an opaque session key (Artifactbin-Session), so comments show the
  * name and the comment feed marks only this session's own writes `you`, even when another agent
- * on the computer shares the sign-in. The session is the harness's own session ID (Claude Code,
+ * on the computer shares the sign-in. The session is AGENT_SESSION_ID when the harness sets it
+ * (any harness may: one ID per agent session), else the harness's own session ID (Claude Code,
  * Codex, OpenCode); else the nearest ancestor process that is not a shell or wrapper, with its
  * start time (Pi, unknown agents), read from /proc or ps. Where neither can be read (ps refused
  * in a sandbox) the session is unidentified (never the shell's pid: it changes with every
@@ -64,7 +65,7 @@ export function ancestorKey(start=process.ppid,ps=psProcess){
 /** The harness this script runs under and its session key (never sent raw: see sessionId). */
 export function detectSession(env=process.env,{ps=psProcess,ppid=process.ppid}={}){
  const found=HARNESSES.find(h=>h.on(env));
- const key=found?.key(env)||ancestorKey(ppid,ps);
+ const key=env.AGENT_SESSION_ID||found?.key(env)||ancestorKey(ppid,ps);
  return {harness:found?.harness??null,label:found?.label??null,key};
 }
 const seed=session=>createHash('sha256').update(
