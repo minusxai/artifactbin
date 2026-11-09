@@ -91,11 +91,11 @@ script. Groups: `node scripts/groups.mjs list`
   key, grouped with totals, with notes signed-in readers share);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it links the CSV by its path and writes a DATA block over its
-  columns, and `--artifact ID` rebuilds an existing page); `node
-  scripts/new-codebase-report.mjs --repo DIR --title "NAME"` (a report analysing the codebase you
-  work in, DIR its repository: hotspots, who works where, how its areas import each other, how it
-  changes; it writes the git history as CSVs the page links and prints the facts to write the
-  findings from); `cp examples/report.html index.html` (a report without data). Other data
+  columns, and `--artifact ID` rebuilds an existing page);
+  `node scripts/new-codebase-report.mjs --repo DIR --title "NAME"` (a report analysing the
+  codebase you work in, DIR its repository: hotspots, who works where, how its areas import each
+  other, how it changes; it writes the git history as CSVs the page links and prints the facts to
+  write the findings from); `cp examples/report.html index.html` (a report without data). Other data
   from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
   read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
