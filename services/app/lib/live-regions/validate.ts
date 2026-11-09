@@ -32,6 +32,7 @@ const BLOCK_KEYS = new Set(keysOf('\n'));
 
 const isInteger = (value: unknown, min: number, max: number) => Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
 const FORMAT_VALUES: Record<string, (value: unknown) => boolean> = {
+  checked: (value) => typeof value === "boolean",
   bold: (value) => value === true,
   italic: (value) => value === true,
   code: (value) => value === true,

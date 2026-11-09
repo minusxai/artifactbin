@@ -44,6 +44,7 @@ const editingAttrs = (node: PMNode): Record<string, string> => {
   if (node.attrs.afId) out['data-af-id'] = node.attrs.afId;
   if (node.attrs.list) { out['data-list'] = node.attrs.list; out['data-depth'] = String(node.attrs.depth); }
   if (node.attrs.quote) out['data-quote'] = '';
+  if (node.attrs.list === 'bullet' && typeof node.attrs.checked === 'boolean') out['data-task'] = '';
   return out;
 };
 
@@ -52,7 +53,7 @@ const richNodes: Record<string, NodeSpec> = {
   textblock: {
     group: 'block',
     content: 'inline*',
-    attrs: { level: { default: 0, validate: (value: unknown) => { if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 6) throw new RangeError('invalid level'); } }, ...structure },
+    attrs: { checked: { default: null, validate: (value: unknown) => { if (value !== null && typeof value !== "boolean") throw new RangeError("invalid checked"); } }, level: { default: 0, validate: (value: unknown) => { if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 6) throw new RangeError('invalid level'); } }, ...structure },
     parseDOM: [
       { tag: 'p', getAttrs: (el) => ({ level: 0, afId: idOf(el) }) },
       ...[1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, getAttrs: (el: HTMLElement) => ({ level, afId: idOf(el) }) })),

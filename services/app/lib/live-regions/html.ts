@@ -34,7 +34,7 @@ interface Holder { id: string | null }
 interface Context {
   quote: boolean; quoteHolder: Holder | null;
   list: ListType | null; depth: number; listHolder: Holder | null;
-  itemHolder: Holder | null; item: { blocks: number } | null;
+  itemHolder: Holder | null; item: { blocks: number } | null; checked?: boolean | null;
 }
 const take = (holder: Holder | null): string | null => { if (!holder) return null; const id = holder.id; holder.id = null; return id; };
 const ownId = (element: SourceElement): string | null => { const id = element.attr('data-af-id'); return isNodeId(id) ? id : null; };
@@ -150,14 +150,14 @@ class Reader {
   private list(element: SourceElement, context: Context): void {
     const deeper = context.depth < MAX_DEPTH;
     if (!deeper && !this.unsupported(`lists nested deeper than ${MAX_DEPTH}`)) return;
-    const itemContext: Context = { ...context, list: element.tag === 'ul' ? 'bullet' : 'ordered', depth: deeper ? context.depth + 1 : context.depth, listHolder: { id: ownId(element) } };
+    const itemContext: Context = { ...context, checked: null, list: element.tag === 'ul' ? 'bullet' : 'ordered', depth: deeper ? context.depth + 1 : context.depth, listHolder: { id: ownId(element) } };
     for (const child of element.children) {
       if (isText(child)) {
         if (!child.text.trim()) continue;
         if (this.unsupported(`text directly in <${element.tag}>`)) this.item([child], null, itemContext);
         continue;
       }
-      if (child.tag === 'li') { this.item(child.children, ownId(child), itemContext); continue; }
+      if (child.tag === 'li') { this.item(child.children, ownId(child), { ...itemContext, checked: itemContext.list === 'bullet' && child.attr('role') === 'checkbox' && ['true', 'false'].includes(child.attr('aria-checked') ?? '') ? child.attr('aria-checked') === 'true' : null }); continue; }
       if (OPAQUE.has(child.tag)) { this.unsupported(`<${child.tag}>`); continue; }
       if (this.unsupported(`<${child.tag}> directly in <${element.tag}>`)) this.item([child], null, itemContext);
     }
@@ -180,7 +180,7 @@ class Reader {
     if (implicit && raw.every((segment) => !/[^ \t\n\r\f]/.test(segment.text))) return;
     const segments = collapse(raw, this.preserveWhitespace);
     const content = segments.map((segment) => this.schema.text(segment.text, segment.marks));
-    this.blocks.push(this.schema.nodes.textblock!.create({ level, afId, ...this.structure(context) }, content));
+    this.blocks.push(this.schema.nodes.textblock!.create({ level, afId, ...this.structure(context), checked: context.checked ?? null }, content));
   }
 
   private codeBlock(element: SourceElement, context: Context): void {
@@ -273,15 +273,16 @@ export function writeRegion(kind: RegionKind, doc: PMNode): string {
     const list = rule ? null : asList(attrs.list);
     const depth = list ? asInt(attrs.depth, 1, MAX_DEPTH, 1) : 0;
     const quote = attrs.quote === true;
+    const task = block.type.name === 'textblock' && list === 'bullet' && typeof attrs.checked === 'boolean' ? ` role="checkbox" aria-checked="${attrs.checked}" aria-disabled="true"` : '';
     if (quote !== quoted) { closeTo(0); out += quoted ? '</blockquote>' : `<blockquote${id(attrs.quoteId)}>`; quoted = quote; }
     if (open.length > depth) closeTo(depth);
     if (list && open.length === depth) {
-      if (open[depth - 1] === list) out += `</li><li${id(attrs.itemId)}>`;
+      if (open[depth - 1] === list) out += `</li><li${id(attrs.itemId)}${task}>`;
       else closeTo(depth - 1);
     }
     while (list && open.length < depth) {
       const own = open.length + 1 === depth;
-      out += `<${listTag(list)}${own ? id(attrs.listId) : ''}><li${own ? id(attrs.itemId) : ''}>`;
+      out += `<${listTag(list)}${own ? id(attrs.listId) : ''}><li${own ? id(attrs.itemId) + task : ''}>`;
       open.push(list);
     }
     if (rule) out += `<hr${id(attrs.afId)}>`;

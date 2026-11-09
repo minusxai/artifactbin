@@ -7,12 +7,14 @@
  * Markdown has no empty paragraph: an empty block is not written, and Markdown sent back without it removes it.
  * Server-side only (it reads the saved HTML through parse5).
  */
-import { defaultMarkdownSerializer, schema as markdown } from 'prosemirror-markdown';
-import type { Mark, Node as PMNode } from 'prosemirror-model';
+import { defaultMarkdownSerializer, MarkdownSerializer, schema as baseMarkdown } from 'prosemirror-markdown';
+import { Schema, type Mark, type Node as PMNode } from 'prosemirror-model';
 import { readRegion } from './html';
 import { MAX_DEPTH, type RegionKind } from './schema';
 import { htmlSource } from './source-html';
 
+const markdown = new Schema({ nodes: baseMarkdown.spec.nodes.update('list_item', { ...baseMarkdown.nodes.list_item!.spec, attrs: { checked: { default: null } } }), marks: baseMarkdown.spec.marks });
+const serializer = new MarkdownSerializer({ ...defaultMarkdownSerializer.nodes, list_item(state, node) { if (typeof node.attrs.checked === 'boolean') state.write(node.attrs.checked ? '[x] ' : '[ ] '); state.renderContent(node); } }, defaultMarkdownSerializer.marks);
 const listOf = (block: PMNode): 'bullet' | 'ordered' | null => (block.type.name !== 'rule' && (block.attrs.list === 'bullet' || block.attrs.list === 'ordered') ? block.attrs.list : null);
 const depthOf = (block: PMNode): number => (listOf(block) ? Math.min(MAX_DEPTH, Math.max(1, Number(block.attrs.depth) || 1)) : 0);
 
@@ -48,7 +50,7 @@ function list(blocks: readonly PMNode[], start: number, depth: number): [PMNode,
       content.push(nested);
       at = next;
     }
-    items.push(markdown.nodes.list_item!.create(null, content));
+    items.push(markdown.nodes.list_item!.create({ checked: type === "bullet" ? block.attrs.checked : null }, content));
   }
   const node = type === 'ordered' ? markdown.nodes.ordered_list!.create({ order: 1, tight: true }, items) : markdown.nodes.bullet_list!.create({ tight: true }, items);
   return [node, at];
@@ -74,7 +76,7 @@ function structured(blocks: readonly PMNode[]): PMNode[] {
 /** The region's saved HTML (its normal form, as stored in the page) as Markdown. */
 export function regionMarkdown(kind: RegionKind, html: string): string {
   const doc = readRegion(kind, htmlSource(html), 'strip');
-  if (kind === 'text') return defaultMarkdownSerializer.serialize(markdown.nodes.doc!.create(null, markdown.nodes.paragraph!.create(null, doc.textContent ? markdown.text(doc.textContent) : null)));
+  if (kind === 'text') return serializer.serialize(markdown.nodes.doc!.create(null, markdown.nodes.paragraph!.create(null, doc.textContent ? markdown.text(doc.textContent) : null)));
   const blocks: PMNode[] = [];
   doc.forEach((block) => { blocks.push(block); });
   const out: PMNode[] = [];
@@ -87,5 +89,5 @@ export function regionMarkdown(kind: RegionKind, html: string): string {
     else out.push(...inner);
     at = end;
   }
-  return out.length ? defaultMarkdownSerializer.serialize(markdown.nodes.doc!.create(null, out)) : '';
+  return out.length ? serializer.serialize(markdown.nodes.doc!.create(null, out)) : '';
 }

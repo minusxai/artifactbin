@@ -93,5 +93,6 @@
   "services/app/lib/live-regions/__tests__/cells.property.test.ts",
   "services/app/lib/html-components/__tests__/markdown-code-sizes.test.ts",
   "services/app/lib/dataset-graphql/__tests__/hasura-schema.test.ts",
-  "services/app/lib/dataset-graphql/__tests__/hasura-read.test.ts"
+  "services/app/lib/dataset-graphql/__tests__/hasura-read.test.ts",
+  "services/app/lib/live-regions/__tests__/tasks.test.ts"
 ]

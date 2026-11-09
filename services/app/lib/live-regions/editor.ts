@@ -10,6 +10,7 @@ import { keymap } from 'prosemirror-keymap';
 import { DOMParser, DOMSerializer, Fragment, Slice, type Node as PMNode, type Schema } from 'prosemirror-model';
 import { EditorState, Plugin, PluginKey, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import type * as Y from 'yjs';
+import { Decoration, DecorationSet } from 'prosemirror-view';
 import { bindingPlugin, redo, undo } from './binding';
 import { readRegion, writeRegion, type SourceNode } from './html';
 import { readText } from './lines';
@@ -140,7 +141,7 @@ export function regionCommands(kind: RegionKind): RegionCommands {
   const schema = regionSchema(kind);
   const rich = kind === 'rich';
   const none: Command = () => false;
-  const outdentAttrs = (node: PMNode) => (node.attrs.list ? (node.attrs.depth > 1 ? { depth: node.attrs.depth - 1 } : { list: null, depth: 0 }) : null);
+  const outdentAttrs = (node: PMNode) => (node.attrs.list ? (node.attrs.depth > 1 ? { depth: node.attrs.depth - 1 } : { list: null, depth: 0, checked: null }) : null);
   const outdent = rich ? bind((state) => withAttrs(state, outdentAttrs)) : none;
   /** Enter: at a block's start an empty block goes before it; at its end an empty block goes after it; in the middle
    * the text after the cursor keeps the block's ids and the text before becomes a new block with the same structure.
@@ -163,7 +164,7 @@ export function regionCommands(kind: RegionKind): RegionCommands {
     if (!dispatch) return true;
     const tr = state.tr.deleteSelection();
     const $at = tr.selection.$from;
-    const empty = { ...node.attrs, level: 0, afId: null, itemId: null, listId: null, quoteId: null };
+    const empty = { ...node.attrs, checked: typeof node.attrs.checked === "boolean" ? false : null, level: 0, afId: null, itemId: null, listId: null, quoteId: null };
     if ($at.parentOffset === 0 && $at.parent.content.size) {
       tr.insert($at.before(1), schema.nodes.textblock!.create(empty));
     } else {
@@ -195,8 +196,8 @@ export function regionCommands(kind: RegionKind): RegionCommands {
     const previous = index > 0 ? state.doc.child(index - 1) : null;
     return previous?.attrs.list && previous.attrs.depth >= node.attrs.depth ? { depth: node.attrs.depth + 1 } : null;
   })) : none;
-  const heading = (level: number): Command => (rich ? bind((state) => withAttrs(state, (node) => (node.type.name === 'textblock' ? { level } : null))) : none);
-  const list = (type: ListType | null): Command => (rich ? bind((state) => withAttrs(state, (node) => (type ? { list: type, depth: Math.max(1, node.attrs.depth) } : { list: null, depth: 0 }))) : none);
+  const heading = (level: number): Command => (rich ? bind((state) => withAttrs(state, (node) => (node.type.name === 'textblock' ? { level, checked: null } : null))) : none);
+  const list = (type: ListType | null): Command => (rich ? bind((state) => withAttrs(state, (node) => (type ? { list: type, depth: Math.max(1, node.attrs.depth), checked: null } : { list: null, depth: 0, checked: null }))) : none);
   const quote = (on: boolean): Command => (rich ? bind((state) => withAttrs(state, () => ({ quote: on }))) : none);
   /** Converting to or from a code block reformats the block's lines; nobody's concurrent typing is touched. */
   const codeBlock = (on: boolean): Command => (rich ? (state, dispatch) => {
@@ -205,7 +206,7 @@ export function regionCommands(kind: RegionKind): RegionCommands {
     if (!block || block.node.type === type) return false;
     const { level: _level, ...structure } = block.node.attrs;
     void _level;
-    dispatch?.(state.tr.setBlockType(block.pos, block.pos + block.node.nodeSize, type, on ? structure : { ...structure, level: 0 }));
+    dispatch?.(state.tr.setBlockType(block.pos, block.pos + block.node.nodeSize, type, on ? { ...structure, checked: null } : { ...structure, level: 0 }));
     return true;
   } : none);
   const mark = (name: string): Command => (rich ? toggleMark(schema.marks[name]!) : none);
@@ -234,9 +235,10 @@ function markdownRules(kind: RegionKind): Plugin {
       return state.tr.delete(start, end).setNodeMarkup($start.before(1), undefined, { ...$start.parent.attrs, ...next });
     });
   const rules = [
-    block(/^(#{1,6})\s$/, (found) => ({ level: found[1]!.length })),
-    block(/^\s*[-*]\s$/, (_found, node) => ({ list: 'bullet', depth: Math.max(1, node.attrs.depth) })),
-    block(/^\d+\.\s$/, (_found, node) => ({ list: 'ordered', depth: Math.max(1, node.attrs.depth) })),
+    block(/^\[([ xX])\]\s$/, (found, node) => !node.attrs.level && (!node.attrs.list || node.attrs.list === "bullet") ? { list: "bullet", depth: Math.max(1, node.attrs.depth), checked: found[1]!.toLowerCase() === "x" } : null),
+    block(/^(#{1,6})\s$/, (found) => ({ level: found[1]!.length, checked: null })),
+    block(/^\s*[-*]\s$/, (_found, node) => ({ list: 'bullet', depth: Math.max(1, node.attrs.depth), checked: null })),
+    block(/^\d+\.\s$/, (_found, node) => ({ list: 'ordered', depth: Math.max(1, node.attrs.depth), checked: null })),
     block(/^\s*>\s$/, () => ({ quote: true })),
     new InputRule(/^```$/, (state, _found, start, end) => {
       const $start = state.doc.resolve(start);
@@ -244,7 +246,7 @@ function markdownRules(kind: RegionKind): Plugin {
       const { level: _level, ...structure } = $start.parent.attrs;
       void _level;
       const tr = state.tr.delete(start, end);
-      return tr.setBlockType($start.before(1), $start.before(1) + 1, schema.nodes.code_block!, structure);
+      return tr.setBlockType($start.before(1), $start.before(1) + 1, schema.nodes.code_block!, { ...structure, checked: null });
     }),
     new InputRule(/^---$/, (state, _found, start, end) => {
       const $start = state.doc.resolve(start);
@@ -306,6 +308,30 @@ function editorPlugins(kind: RegionKind, text: Y.Text, terminated: boolean): Plu
   return [
     bindingPlugin(kind, text, terminated),
     idDedupe(),
+    new Plugin({ props: {
+      decorations(state) {
+        const widgets: Decoration[] = [];
+        state.doc.forEach((node, pos) => {
+          if (kind !== 'rich' || node.type.name !== 'textblock' || node.attrs.list !== 'bullet' || typeof node.attrs.checked !== 'boolean') return;
+          widgets.push(Decoration.widget(pos + 1, (view, getPos) => {
+            const control = view.dom.ownerDocument.createElement('input');
+            control.type = 'checkbox'; control.setAttribute('role', 'checkbox');
+            control.setAttribute('aria-label', 'Task completed');
+            control.checked = node.attrs.checked; control.disabled = !view.editable;
+            control.contentEditable = 'false';
+            control.addEventListener('mousedown', (event) => event.preventDefault());
+            control.addEventListener('change', () => {
+              const at = getPos();
+              if (!view.editable || at === undefined) return;
+              const block = view.state.doc.nodeAt(at - 1);
+              if (block?.type.name === 'textblock' && typeof block.attrs.checked === 'boolean') view.dispatch(view.state.tr.setNodeMarkup(at - 1, undefined, { ...block.attrs, checked: !block.attrs.checked }));
+            });
+            return control;
+          }, { side: -1, key: `task-${pos}-${node.attrs.checked}` }));
+        });
+        return DecorationSet.create(state.doc, widgets);
+      },
+    } }),
     lineBreaks(),
     markShortcuts(kind),
     markdownRules(kind),
@@ -324,6 +350,27 @@ function editorPlugins(kind: RegionKind, text: Y.Text, terminated: boolean): Plu
     keymap(baseKeymap),
     new Plugin({
       props: {
+        handlePaste(view, _event, slice) {
+          if (kind !== 'rich' || !slice.content.firstChild || typeof slice.content.firstChild.attrs.checked !== 'boolean') return false;
+          const { $from, $to } = view.state.selection;
+          const tr = $from.sameParent($to) && !$from.parent.content.size
+            ? view.state.tr.replaceWith($from.before(1), $from.after(1), slice.content)
+            : view.state.tr.replaceSelection(new Slice(slice.content, 0, 0));
+          view.dispatch(tr.scrollIntoView()); return true;
+        },
+        clipboardTextParser(text, $context, plain, view) {
+          const lines = text.split(/\r?\n/);
+          if (kind !== 'rich' || $context.parent.type.spec.code || !lines.some((line) => /^- \[[ xX]\] /.test(line))) {
+            const dom = view.dom.ownerDocument.createElement('div');
+            for (const line of lines) { const p = dom.appendChild(view.dom.ownerDocument.createElement('p')); p.textContent = line; }
+            return Slice.maxOpen(new RegionClipboardParser(schema, kind).parse(dom, { preserveWhitespace: plain }).content);
+          }
+          return new Slice(Fragment.fromArray(lines.map((line) => {
+            const task = /^- \[([ xX])\] (.*)$/.exec(line);
+            const value = task ? task[2]! : line;
+            return schema.nodes.textblock!.create(task ? { list: 'bullet', depth: 1, checked: task[1]!.toLowerCase() === 'x' } : null, value ? schema.text(value) : null);
+          })), 0, 0);
+        },
         clipboardParser: new RegionClipboardParser(schema, kind),
         clipboardSerializer: new RegionClipboardSerializer(schema, kind),
         // A copy from a region names its open depths; any wrapping context would bypass the sanitizer, so only
