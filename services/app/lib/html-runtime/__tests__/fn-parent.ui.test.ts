@@ -111,3 +111,28 @@ it('ignores header and query attempts to override method, authority or revision'
  expect(w.requests[0]!.init).toMatchObject({method:'POST',headers:{'content-type':'application/json','x-page-revision':'7'}});
  expect(Object.keys(w.requests[0]!.init.headers!)).toHaveLength(2);
 });
+
+it.each(['HEAD','PUT','POST'])('review: readonly shell refuses %s',async(method)=>{
+ const w=world({revision:'7',readOnly:true});
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items',method,headers:{},body:null});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);expect(w.results()[0].status).toBe(403);
+});
+it.each(['?revision=1&revision=2','?%72evision=1&revision=2','?revision[]=1&revision=2','?revision=%32'])('review: parent pins revision with %s',async(search)=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items'+search,method:'GET',headers:{},body:null});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ const sent=w.requests[0]!;
+ expect(new URL(sent.path,location.href).searchParams.getAll('revision')).toEqual([]);
+ expect(new Headers(sent.init.headers).get('x-page-revision')).toBe('7');
+});
+
+it('review: cancellation while receiving a response body aborts transport and suppresses reply',async()=>{
+ const w=world();let finish!:(body:string)=>void;
+ w.setReply(async()=>({status:200,headers:new Headers(),text:()=>new Promise<string>(resolve=>{finish=resolve;})}) as Response);
+ w.send({kind:'fetch',call:5,path:'/api/artifacts/Page123/fn/items',method:'GET',headers:{},body:null});
+ await vi.waitFor(()=>expect(finish).toBeDefined());
+ w.send({kind:'fetch-cancel',call:5});
+ expect(w.requests[0]!.init.signal!.aborted).toBe(true);
+ finish('{}');await new Promise(resolve=>setTimeout(resolve,0));expect(w.results()).toHaveLength(0);
+});

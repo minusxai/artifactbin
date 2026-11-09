@@ -15,6 +15,7 @@ import { getUserById } from '@/lib/accounts';
 import { pageOperationKind } from '@/lib/page-operations';
 import { DOMAIN_READ_ONLY_MESSAGE } from '@artifactbin/contracts/domain-footer';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
+import { GET as functionRoute } from '@/app/api/artifacts/[id]/fn/[name]/route';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { GET as eventsGet } from '@/app/a/[id]/events/route';
 import { GET as eventsFrameGet } from '@/app/a/[id]/events/frame/route';
@@ -233,6 +234,23 @@ async function pageReads(request: Request, id: string, owner: UserPagesOwner): P
 }
 const PAGE_READS_ROUTE = /^\/api\/artifacts\/([^/]+)\/graphql$/;
 
+/**
+ * A served page's function calls (html-runtime/fn-fetch → domain-reads, lib/page-graphql `pageFunction`): GET or POST,
+ * the owner's served page only, as a guest. The request reaches the app as an opaque origin's (`Origin: null`, every
+ * credential dropped) whatever it claimed, so the app's own door reads it as nobody and runs reads only, as here.
+ */
+async function pageFunctionReads(request: Request, id: string, name: string, owner: UserPagesOwner): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'POST') return notFound();
+  const row = ID_RE.test(id) ? await getArtifactById(id) : null;
+  if (!row || !servesDocument(owner, row)) return notFound();
+  const guest = await asGuest(request);
+  const headers = new Headers(guest.headers);
+  headers.set('origin', 'null');
+  const opaque = new Request(guest.url, { method: guest.method, headers, ...(guest.method === 'POST' ? { body: await guest.arrayBuffer() } : {}) });
+  return withReadCors(await runWithRequest(opaque, async () => functionRoute(opaque, { params: Promise.resolve({ id, name }) })));
+}
+const PAGE_FUNCTION_ROUTE = /^\/api\/artifacts\/([^/]+)\/fn\/([^/]+)$/;
+
 const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(events|events\/frame|resolve|assets)$/;
 
 /**
@@ -277,6 +295,11 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
     const reads = PAGE_READS_ROUTE.exec(path);
     if (reads && owner) {
       try { return privacy(await pageReads(request, reads[1]!, owner)); }
+      catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
+    }
+    const fn = PAGE_FUNCTION_ROUTE.exec(path);
+    if (fn && owner) {
+      try { return privacy(await pageFunctionReads(request, fn[1]!, fn[2]!, owner)); }
       catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
     }
     const document = DOCUMENT_ROUTE.exec(path);

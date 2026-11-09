@@ -4,6 +4,7 @@ import { DATASET_ROLES, isResolverDatabaseKind, RESOLVER_DATABASE_OPERATION, RES
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
 import { functionManifest, type FunctionRoles } from './functions';
+import { declaredRoles } from './roles-source';
 import {readPinnedBackendSecret,secretHostMap} from '@/lib/html-backend-secrets';
 import {redactedLine,resolverFailureDetail} from './redaction';
 import { FieldFailed, FieldNotExecuted } from './contracts';
@@ -37,10 +38,9 @@ async function backendProgram(source:string):Promise<string>{
  const transformed=await transform(source,{loader:'ts',format:'cjs',target:'es2022'});
  // G marks every error a capability raises, so only the resolver's own throws carry RESOLVER_THREW.
  return `const __afPlatform=new WeakSet();const G=(f)=>async(...a)=>{try{return await f(...a);}catch(e){if(e!==null&&typeof e==='object')__afPlatform.add(e);throw e;}};
-const R=(r)=>{if(r===undefined||r===null)return null;const p=typeof r==='object'&&!Array.isArray(r)?Object.getPrototypeOf(r):undefined;if(p!==Object.prototype&&p!==null)return {problem:'prototype'};return {entries:Object.entries(r)};};
 const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
- if(input.kind==='schema'){const d=Backend.default;if(Backend.typeDefs!==undefined&&typeof Backend.typeDefs!=='string'||!d||typeof d!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs??null,functions:Object.keys(d).filter(k=>typeof d[k]==='function'),roles:R(Backend.roles),secrets:Backend.secrets};}
+ if(input.kind==='schema'){const d=Backend.default;if(Backend.typeDefs!==undefined&&typeof Backend.typeDefs!=='string'||!d||typeof d!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs??null,functions:Object.keys(d).filter(k=>typeof d[k]==='function'),hasRoles:Object.prototype.hasOwnProperty.call(Backend,'roles'),secrets:Backend.secrets};}
  const fn=Object.prototype.hasOwnProperty.call(Backend.default,input.field)?Backend.default[input.field]:undefined;if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
  ${CALL}
@@ -114,15 +114,18 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
 }
 export function createBackendCompiler(runner:RunnerService){return async(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>=>{
  const compiled=await backendProgram(source);
+ // Roles come from the source text, read before anything runs and never from the evaluated export (./roles-source).
+ const roles=await declaredRoles(source);
  const result=await run(runner,{requestId:randomUUID(),userId:'page-backend-compiler',artifactId:'page-backend-compiler',artifactVersion:'compile',document:{source:compiled,editId:'compile'},program:{source:compiled,language:'javascript'},input:{kind:'schema'},limits},signal);
  if(!result||typeof result!=='object'||Array.isArray(result))throw Error('invalid_backend_exports');
  const secretHosts=secretHostMap(result.secrets);
  const secrets={secretBindings:Object.keys(secretHosts),secretHosts};
  if(typeof result.typeDefs==='string'){
-  if(result.roles!==null&&result.roles!==undefined)throw Error('A backend with typeDefs guards fields with @auth; export roles only from a backend without typeDefs');
+  if(roles||result.hasRoles===true)throw Error('A backend with typeDefs guards fields with @auth; export roles only from a backend without typeDefs');
   return {compiled,typeDefs:result.typeDefs,functions:null,...secrets,test:resolverTestField(boundedBackendSchema(result.typeDefs))};
  }
- const functions=functionManifest(result.functions,result.roles);
+ if(!roles&&result.hasRoles===true)throw Error("invalid_roles: roles is exported in a way publish cannot read; declare export const roles = {name: 'owner', …} as an object literal");
+ const functions=functionManifest(result.functions,roles);
  // Test connection: an owner-only `test` function, as a legacy file's `test: String! @auth(role: owner)`.
  if(Object.hasOwn(functions,'test')&&functions.test!=='owner')throw Error("invalid_test_field: give test the owner role (roles = {test: 'owner'})");
  return {compiled,typeDefs:'',functions,...secrets,test:Object.hasOwn(functions,'test')};

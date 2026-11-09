@@ -48,3 +48,21 @@ it('pins an unframed archived page function to its served revision',async()=>{
  const [url,init]=send.mock.calls[0] as unknown as [URL,RequestInit];
  expect(new Headers(init.headers).get('x-page-revision')??url.searchParams.get('revision')).toBe('1');
 });
+
+it.each(['?revision=2&revision=3','?%72evision=2','?revision[]=2&revision=3','?revision=%32'])('review: unframed transport replaces %s',async(search)=>{
+ const send=vi.fn(async()=>new Response('{}'));
+ await createDomainFunctionCall({pageId:'Page123',revision:'1'},{href:'https://page.example/report'},send)({name:'items',method:'GET',search,body:null,contentType:null},null);
+ const [url]=send.mock.calls[0] as unknown as [URL];
+ expect(url.searchParams.getAll('revision')).toEqual(['1']);
+});
+
+it('review: simultaneous framed and unframed requests keep separate transports',async()=>{
+ const messages:FrameBridgeFramePayload[]=[];
+ const relay=createFunctionRelay(payload=>messages.push(payload),()=>1,'Page123');
+ const framed=relay.call({name:'items',method:'GET',search:'',body:null,contentType:null},null);
+ const send=vi.fn(async()=>new Response('{}'));
+ await createDomainFunctionCall({pageId:'Page123',revision:'1'},{href:'https://page.example/report'},send)({name:'items',method:'GET',search:'?revision=2',body:null,contentType:null},null);
+ expect(messages).toHaveLength(1);expect(messages[0]).toMatchObject({path:'/api/artifacts/Page123/fn/items'});
+ const [url]=send.mock.calls[0] as unknown as [URL];expect(url.searchParams.getAll('revision')).toEqual(['1']);
+ relay.receive({kind:'fetch-result',call:1,status:200,headers:{},body:'{}'});await framed;
+});

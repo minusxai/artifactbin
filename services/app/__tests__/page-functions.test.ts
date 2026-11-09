@@ -198,15 +198,20 @@ it('adds nullable function_roles idempotently without changing legacy rows',asyn
  }finally{await db.query('DROP TABLE review_backend_versions');}
 });
 
-it('honors exported roles aliases despite a shadowed local roles name and own prototype keys',async()=>{
+it('honors exported roles aliases despite a shadowed local roles name; a computed or __proto__ key fails publish',async()=>{
  const w=world();
- const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+ const tryPublish=(api:string)=>publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
   visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',
-  resolverSources:{api:`const guards={['__proto__']:'owner',sensitive:'owner'};export {guards as roles};function local(){const roles={sensitive:'anonymous'};return roles}export default {['__proto__'](){return 1},sensitive(){return local()}}`},
+  resolverSources:{api},
  }}));
+ const response=await tryPublish(`const guards={sensitive:'owner'};export {guards as roles};function local(){const roles={sensitive:'anonymous'};return roles}export default {['__proto__'](){return 1},sensitive(){return local()}}`);
  expect(response.status).toBe(201);
  const {id}=await response.json();
- for(const name of ['sensitive','__proto__'])expect((await call(id,name,null,{method:'GET'})).status).toBe(403);
+ expect((await call(id,'sensitive',null,{method:'GET'})).status).toBe(403);
+ for(const roles of [`{['__proto__']:'owner',sensitive:'owner'}`,`{'__proto__':'owner',sensitive:'owner'}`]){
+  const refused=await tryPublish(`const guards=${roles};export {guards as roles};export default {['__proto__'](){return 1},sensitive(){return 2}}`);
+  expect(refused.status,roles).toBe(400);expect(await refused.text(),roles).toContain('invalid_roles');
+ }
 });
 
 it('refuses oversized backend output instead of returning it through the bridge',async()=>{
@@ -231,13 +236,44 @@ it('an unframed call runs the served revision\'s backend, named by ?revision= (n
  expect(put.status,await put.clone().text()).toBeLessThan(300);
  expect((await call(id,'v',null,{method:'GET',origin:'null',search:'?revision=1&q=a'})).body).toEqual({n:1,args:{q:'a'}});
  expect((await call(id,'v',null,{method:'GET',origin:'null'})).body.n).toBe(2);
+ for(const search of ['?revision=1&revision=2','?%72evision=%31','?revision=1&revision[]=2'])expect((await call(id,'v',null,{method:'GET',origin:'null',search})).body.n,search).toBe(1);
+ for(const search of ['?revision=1,2','?revision=%5B1%2C2%5D'])expect((await call(id,'v',null,{method:'GET',origin:'null',search})).status,search).toBe(404);
+
  expect((await call(id,'v',null,{method:'GET',search:'?revision=2',headers:{'x-page-revision':'2'}})).body.n).toBe(2);
  expect(await call(id,'v',null,{method:'GET',search:'?revision=2',headers:{'x-page-revision':'1'}})).toMatchObject({status:400,body:{error:'revision_conflict'}});
 });
 
-it('refuses roles that are not a plain object literal',async()=>{
+it('reads roles from the source: only an object literal of string-literal roles publishes, never an evaluated value',async()=>{
  const w=world();
- const tryRoles=async(roles:string)=>(await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',resolverSources:{api:`export const roles=${roles};export default {a(){return 1}}`}}})));
- for(const roles of ['[]',"Object.create({a:'owner'})",'new (class R{})()']){const response=await tryRoles(roles);expect(response.status,roles).toBe(400);expect(await response.text(),roles).toContain('invalid_roles');}
- expect((await tryRoles("Object.assign(Object.create(null),{a:'owner'})")).status).toBe(201);
+ const tryRoles=async(roles:string,decl='export const roles=')=>(await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',resolverSources:{api:`${decl}${roles};export default {a(){return 1},b(){return 2}}`}}})));
+ for(const roles of ['[]',"Object.create({a:'owner'})",'new (class R{})()',"Object.assign(Object.create(null),{a:'owner'})","{...{a:'owner'}}","{['a']:'owner'}","{get a(){return 'owner'}}","{a(){return 'owner'}}","{a:'admin'}","{a:'ad'+'min'}","{a:`owner`}","{a:String('owner')}","{a:R}","{c:'owner'}","{a:'owner',a:'viewer'}"]){
+  const response=await tryRoles(roles);expect(response.status,roles).toBe(400);expect(await response.text(),roles).toContain('invalid_roles');
+ }
+ for(const decl of ['export let roles=','export var roles='])expect((await tryRoles("{a:'owner'}",decl)).status,decl).toBe(400);
+ // A roles export publish cannot read from the text (assigned at run time) is refused, not ignored.
+ const runtime=await tryRoles("{a:'owner'}",'module.exports.roles=');expect(runtime.status).toBe(400);expect(await runtime.text()).toContain('invalid_roles');
+ // esbuild folds string-literal concatenation ('vie'+'wer') to the literal before the read: text, not evaluation.
+ const ok=await tryRoles("{a:'owner','b':'vie'+'wer'} as const");expect(ok.status).toBe(201);
+ const {id}=await ok.json();
+ expect((await call(id,'a',null,{method:'GET'})).status).toBe(403);
+ expect((await call(id,'b',w.stranger,{method:'GET'})).status).toBe(403);
+});
+
+// Re-review: accepted role objects must never silently weaken a declared owner role.
+it.each([
+ ["frozen", "Object.freeze({a:'owner'})"],
+ ["getter", "{get a(){return 'owner'}}"],
+ ["transparent Proxy", "new Proxy({a:'owner'},{})"],
+ ["nonenumerable", "Object.defineProperty({},'a',{value:'owner'})"],
+ ["nonenumerable getter", "Object.defineProperty({},'a',{get(){return 'owner'}})"],
+ ["spoofed prototype Proxy", "new Proxy(Object.create({a:'owner'}),{getPrototypeOf(){return Object.prototype}})"],
+ ["symbol key", "{a:'owner',[Symbol('extra')]:'owner'}"],
+ ["frozen null prototype", "Object.freeze(Object.assign(Object.create(null),{a:'owner'}))"],
+])('review: %s roles enforce owner or fail publish',async(_label,roles)=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',resolverSources:{api:`export const roles=${roles};export default {a(){return 'sensitive'}}`}}}));
+ if(response.status===400)return;
+ expect(response.status,await response.clone().text()).toBe(201);
+ const {id}=await response.json();
+ expect((await call(id,'a',null,{method:'GET'})).status).toBe(403);
 });

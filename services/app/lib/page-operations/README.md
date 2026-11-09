@@ -27,10 +27,12 @@ caller exactly as the GraphQL door does and runs the function through the same i
   400 `revision_conflict`. Neither: the head. The parent drops a frame's own `revision` parameter, and a read-only
   (archived) shell relays GET only (403 `read_only` for POST, no request made).
 - Who: a typeDefs-free file exports `roles = {name: 'owner'|'editor'|'viewer'|'signed_in'|'anonymous'}`, checked at
-  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). The runner
-  reads `roles` in the file's own realm before serializing it: only a plain object literal (or a null-prototype
-  object) is accepted; a `__proto__: {…}` prototype, class instance or array fails publish (`invalid_roles`) rather than
-  have its inherited entries silently dropped. A legacy
+  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). `roles` is
+  read from the SOURCE at publish and never evaluated (`roles-source.ts`): `export const roles = {…}` (or a top-level
+  `const` exported as `roles`) must be an object literal whose keys are identifiers or string literals and whose values
+  are string-literal role names. A computed or `__proto__` key, a spread, getter, method or shorthand, any other value,
+  `let`/`var`, an unknown role or a key that is not an exported function fails publish with `invalid_roles`, as does
+  a `roles` export only the running module has (assigned at run time). A legacy
   file's Query and Mutation fields are callable too, each under its `@auth`; GraphQL still serves it. A
   typeDefs-free file mounts nothing on GraphQL. A name two linked files offer is 409.
 - Kind: a legacy field's root; otherwise GET reads (`query`) and POST may write (`mutation`, so `caps.query`
@@ -40,7 +42,9 @@ caller exactly as the GraphQL door does and runs the function through the same i
   409, 413, 500 `backend_failed` with the function's own thrown message (the owner also gets `detail`), 503
   `retryable`, 504 `deadline`. A call rejects only as fetch does: `AbortError` on its signal (the parent aborts the
   request; it settles at once even while the reader loads or the bridge attaches), `TypeError` with no page connection (an offline copy, a frame that never attached within 3 s).
-- An unframed page (owner host, export capture) calls the route directly as nobody (reads only).
+- An unframed page (owner host, export capture) calls the route directly as nobody (reads only): its CSP
+  `connect-src` names the page's `/api/artifacts/:id/fn/` prefix, and the owner-host boundary (`server/user-host.ts`)
+  admits that path for the owner's served page only, as a guest forced to `Origin: null`, with read CORS.
 
 ## Field authorization: `@auth`
 

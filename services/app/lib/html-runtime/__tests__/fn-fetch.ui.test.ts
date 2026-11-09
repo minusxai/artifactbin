@@ -150,3 +150,46 @@ it('a fetch captured before installation remains native and has no bridge author
  await (native as unknown as typeof fetch)('/fn/items');
  expect(calls).toHaveLength(0);
 });
+
+// Re-review: abort between consuming the POST body and starting the reader.
+it('review: abort between stages must settle even when the next stage never resolves',async()=>{
+ uninstall();
+ uninstall=installFunctionFetch(window,()=>new Promise(()=>{}));
+ const controller=new AbortController();
+ let finish!:(text:string)=>void;
+ const text=vi.spyOn(Request.prototype,'text').mockImplementationOnce(()=>new Promise<string>(resolve=>{finish=resolve;}));
+ try{
+  const pending=window.fetch('/fn/items',{method:'POST',body:'{}',signal:controller.signal});
+  const outcome=pending.then(()=> 'response',()=> 'aborted');
+  finish('{}');
+  queueMicrotask(()=>controller.abort());
+  expect(await Promise.race([outcome,new Promise(resolve=>setTimeout(()=>resolve('hung'),40))])).toBe('aborted');
+ }finally{text.mockRestore();}
+});
+
+it.each(['loading','calling'])('review: abort during %s settles',async(stage)=>{
+ uninstall();
+ let entered!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;});
+ const never=()=>{entered();return new Promise<never>(()=>{});};
+ uninstall=installFunctionFetch(window,stage==='loading'?never:async()=>({callFunction:never}));
+ const controller=new AbortController();
+ const pending=window.fetch('/fn/items',{signal:controller.signal});
+ const outcome=pending.catch(error=>error.name);
+ await started;controller.abort();expect(await outcome).toBe('AbortError');
+});
+
+it('review: abort while a streaming POST body is loading settles',async()=>{
+ const controller=new AbortController();
+ const body=new ReadableStream({start(){}});
+ const pending=window.fetch('/fn/items',{method:'POST',body,duplex:'half',signal:controller.signal} as RequestInit);
+ const outcome=pending.catch(error=>error.name);controller.abort();
+ expect(await outcome).toBe('AbortError');expect(calls).toHaveLength(0);
+});
+
+it('review: proxy input failures reject asynchronously like native fetch',async()=>{
+ const {proxy,revoke}=Proxy.revocable({},{});revoke();
+ let result:Promise<Response>|undefined;
+ expect(()=>{result=window.fetch(proxy as unknown as string);}).not.toThrow();
+ await expect(result).rejects.toBeInstanceOf(TypeError);
+});
+
