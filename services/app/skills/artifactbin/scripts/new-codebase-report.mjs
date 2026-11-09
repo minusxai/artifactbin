@@ -2,10 +2,11 @@
 export const DESCRIPTION = `Set up a report on a codebase in one call, from its own repository:
 how it changes, its hotspots, who works where and how its areas import each other. Reads the
 commits since --since (no merges), the tracked text files and their JS/TS and Python imports into
-commits.csv, files.csv and imports.csv in a project directory outside the repository; publishes
-each as a dataset (commits, files, imports); copies examples/codebase-report.html as index.html
-and its steps file as steps.mjs with those datasets, the title and the commit filled in; prints
-the facts to write the findings from.
+commits.csv, files.csv and imports.csv in a project directory outside the repository; copies
+examples/codebase-report.html as index.html, which links them by path (the page's first publish
+creates the datasets commits, files and imports from them), and its steps file as steps.mjs, with
+the title and the commit filled in; prints the facts to write the findings from. Nothing is sent
+to the server.
 Usage: node scripts/new-codebase-report.mjs --title NAME [--repo DIR] [--since WHEN]
   [--areas N] [--dir DIR] [--artifact ID]
 Flags: --title NAME the page's name, for <title>; --repo DIR the repository (default: the one
@@ -17,24 +18,23 @@ Flags: --title NAME the page's name, for <title>; --repo DIR the repository (def
 Examples:
   node scripts/new-codebase-report.mjs --title "How the API changes"
   node scripts/new-codebase-report.mjs --repo ~/src/shop --since "6 months ago" --title "Shop"
-Gotchas: a rerun reads the repository again and publishes the new rows over the same datasets
-  (each CSV's companion records its dataset); index.html and steps.mjs are kept, only DATA.source
-  is brought up to date. A table keeps at most 10,000 rows (the newest commits, the most changed
+Gotchas: a rerun reads the repository again into the same CSVs (the next publish sends the new
+  rows over the same datasets); index.html and steps.mjs are kept, only DATA.source is brought
+  up to date. A table keeps at most 10,000 rows (the newest commits, the most changed
   files); truncated names what was cut, and a shorter --since keeps the window whole. Authors
   are git's names: a .mailmap merges one person's identities. Lockfiles and binary files are
   left out, and tests from imports; areas are the top directories, the largest split into its
   biggest subdirectories (--areas caps them).
-Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
-  rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
-  Results never contain credentials.`;
+Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed). Results never contain
+  credentials.`;
 
 import path from 'node:path';
 import {homedir, tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {realpathSync} from 'node:fs';
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
-import {runTool, ToolError, selectedServer, serverOrigin, optionalFile} from './toolbox-client.mjs';
-import {publishCommand} from './toolbox-publish.mjs';
+import {runTool, ToolError} from './toolbox-client.mjs';
+import {publishStep} from './toolbox-source.mjs';
 import {gatherCodebase} from './toolbox-codebase.mjs';
 
 const EXAMPLES = new URL('../examples/', import.meta.url);
@@ -102,20 +102,15 @@ export async function newCodebaseReportCommand({values, positionals}, options = 
     `${repo} has no ${gathered.commits.length ? 'tracked text files' : 'commits since ' + since}.`,
     2, `Pass a longer window: ${USAGE} --since "3 years ago"`);
   await mkdir(dir, {recursive: true});
-  const server = serverOrigin(selectedServer(values, options.env)), datasets = {};
+  // The page links each CSV by path: its publish creates the dataset, or updates the one recorded.
+  const datasets = {};
   for (const table of TABLES) {
-    const file = path.join(dir, table + '.csv'), companion = await optionalFile(file + '.af.json');
-    await writeFile(file, gathered.tables[table]);
-    // A first run names the dataset; a rerun publishes over the one its companion records.
-    const saved = await publishCommand({values: {server, ...companion ? {} : {name: table,
-      title: `${title}: ${table}`}}, positionals: [file]}, options);
-    datasets[table] = {id: saved.id, rows: gathered[table].length, reused: Boolean(companion)};
+    await writeFile(path.join(dir, table + '.csv'), gathered.tables[table]);
+    datasets[table] = {file: table + '.csv', rows: gathered[table].length};
   }
   const source = `  source: {repo: ${quote(name)}, head: ${quote(gathered.head)}, ` +
     `since: ${quote(since)}},`, created = [], kept = [];
   const html = (await readFile(new URL('codebase-report.html', EXAMPLES), 'utf8'))
-    .replace(/ref:(COMMITS|FILES|IMPORTS)_ID/g, (_, table) => 'ref:' +
-      datasets[table.toLowerCase()].id)
     .replace(/<title>\[[^\]<]+\]<\/title>/, `<title>${htmlText(title)}</title>`)
     .replace(/^ {2}source: \{.*\},$/m, () => source);
   const steps = await readFile(new URL('codebase-report-steps.mjs', EXAMPLES));
@@ -126,12 +121,12 @@ export async function newCodebaseReportCommand({values, positionals}, options = 
     await writeFile(page, old.replace(/^ {2}source: \{.*\},$/m, () => source));
   }
   const at = file => shell(dir === base ? file : path.join(dir, file));
-  const publish = `node scripts/publish.mjs ${at('index.html')}` + (values.artifact ?
-    ` --artifact ${values.artifact}` : '');
+  const publish = await publishStep(path.join(dir, 'index.html'), at('index.html'),
+    values.artifact);
   return {project: dir, title, repo, head: gathered.head, since, created, kept, datasets,
     areas: gathered.areas, truncated: gathered.truncated, facts: facts(gathered),
-    note: `Read ${name} at ${gathered.head}: ${TABLES.map(table => `${table} ` +
-      `${datasets[table].id} (${datasets[table].rows} rows)`).join(', ')}` +
+    note: `Read ${name} at ${gathered.head}: ${TABLES.map(table => `${table}.csv ` +
+      `(${datasets[table].rows} rows)`).join(', ')}` +
       (gathered.truncated.length ? `; truncated: ${gathered.truncated.join(', ')}` : '') + '.',
     next: `Next: in ${at('index.html')} edit only DATA: write the lead, each finding (what ` +
       'the reader should do, with the number that shows it) and each chart title from the ' +

@@ -6,15 +6,15 @@ number computed by read-only SQL (_sql). Usage: and Gotchas: are above DATA; kee
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="drafting">
 <title>[How this codebase changes]</title>
-<link rel="af-dataset" data-af-name="commits" href="ref:COMMITS_ID">
-<link rel="af-dataset" data-af-name="files" href="ref:FILES_ID">
-<link rel="af-dataset" data-af-name="imports" href="ref:IMPORTS_ID">
+<link rel="af-dataset" data-af-name="commits" href="./commits.csv">
+<link rel="af-dataset" data-af-name="files" href="./files.csv">
+<link rel="af-dataset" data-af-name="imports" href="./imports.csv">
 <script type="module" id="page-data">
-// Usage: node scripts/new-codebase-report.mjs --repo DIR --title "NAME" (DIR the repository;
-//   it publishes commits, files and imports as datasets and fills this page and steps.mjs in a
-//   project directory outside the repository); read the facts it prints, then edit only DATA:
+// Usage: node scripts/new-codebase-report.mjs --repo DIR --title "NAME" (DIR the repository; it
+//   writes commits.csv, files.csv and imports.csv, which this page links by path, and fills this
+//   page and steps.mjs outside the repository); read the facts it prints, then edit only DATA:
 //   rewrite each [bracketed] text as what the reader should do, with the numbers that show it;
-//   then node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+//   then run the publish and check it printed (that publish creates or updates the datasets).
 // Gotchas: findings first, evidence after. Every number is a DATA query: one read-only SQLite
 //   SELECT over the linked tables commits, files and imports, run through _sql (never summed in
 //   script). A text is a function of h: h.one(name) a query's first row, h.rows(name) its rows,

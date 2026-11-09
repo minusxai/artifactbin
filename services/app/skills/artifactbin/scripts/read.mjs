@@ -2,20 +2,21 @@
 export const DESCRIPTION = `Read an artifact as JSON, or save its editable source with --output.
 Usage: node scripts/read.mjs ID|URL [--version N] [--output FILE]
        node scripts/read.mjs list [--limit N] [--cursor CURSOR]
-Flags: --version N reads a saved version (historical pairs cannot be published back); --output
-  FILE saves the canonical source plus FILE.af.json baseline (even with --json); list takes
-  --limit 1-100 (default 20) and --cursor (read.mjs list shows your artifacts).
+Flags: --version N reads a saved version (a page read from one cannot be published back);
+  --output FILE saves the editable source (even with --json): a page with its af-authoring
+  marker as the last line, which publish reads; list takes --limit 1-100 (default 20) and
+  --cursor (read.mjs list shows your artifacts).
   Common: --server ORIGIN, --json, --help.
 Examples:
   node scripts/read.mjs ID --output page.html  # edit page.html, then
                                                #   node scripts/publish.mjs page.html
   node scripts/read.mjs ID --json              # record with html, version and state
   node scripts/read.mjs list --limit 50
-Gotchas: --output onto a file still unchanged since its read refreshes it and its companion in
-  place; a file with edits of its own is kept and the read goes to FILE.fresh.html beside it
-  (the result's note names it). HTML pages save as source carrying their
-  data-af-ids; datasets save as .json rows; images, files and PDFs save raw bytes. The .af.json
-  companion is credential-free; never copy or hand-edit it.
+Gotchas: --output onto a page file still unchanged since its read or publish refreshes it in
+  place; a file with edits of its own (or no marker) is kept and the read goes to
+  FILE.fresh.html beside it (the result's note names it). HTML pages save as source carrying
+  their data-af-ids; keep the marker line. Datasets save as .json rows, images, files and PDFs
+  as raw bytes; nothing is written beside them: the result's next names the update command.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
@@ -28,13 +29,13 @@ import {
   integer,
   positional,
   exclusive,
-  hash,
   platform,
   ToolError
 } from './toolbox-client.mjs';
-import {saveAuthoringPair, readTarget} from './toolbox-source.mjs';
-// read list pages through your artifacts; read ID returns the record, or saves source + baseline
-// with --output.
+import {saveSource, readTarget} from './toolbox-source.mjs';
+import {updateNext} from './toolbox-publish-guard.mjs';
+// read list pages through your artifacts; read ID returns the record, or saves the editable
+// source with --output.
 export async function readCommand({sub = undefined, values, positionals}, options = {}) {
   if (sub === 'list') {
     positional(positionals, 0);
@@ -53,17 +54,16 @@ export async function readCommand({sub = undefined, values, positionals}, option
     await client.request('/api/artifacts/' + id + (version ? '/versions/' + version : ''));
   if (!values.output) return {record};
   const {output, replace, note} = await readTarget(values.output);
-  // HTML: saveAuthoringPair writes the source (with its data-af-ids) and the FILE.af.json baseline
-  // publish needs.
+  // HTML: saveSource writes the source (with its data-af-ids) and the marker publish reads.
   if (record.format === 'html' || typeof record.html === 'string') {
-    const pair = await saveAuthoringPair({
+    const saved = await saveSource({
       record: {...record, id},
       server,
       output,
       replace,
       historical: !!version
     });
-    return {...pair, ...(note ? {note} : {}), outputOwned: true};
+    return {...saved, ...(note ? {note} : {}), outputOwned: true};
   }
   // Non-HTML: datasets save as .json rows, images/files/PDFs as raw bytes; anything else has no
   // editable file.
@@ -94,31 +94,15 @@ export async function readCommand({sub = undefined, values, positionals}, option
       2,
       'Read its canonical JSON without --output.'
     );
-  // Non-HTML sources retain identity in a credential-free sidecar; no synthetic HTML marker.
-  const pair = {
-    kind: 'data-baseline',
-    schema: 1,
-    server,
-    id,
-    version: record.version,
-    state: record.state,
-    format: record.format,
-    ...(record.contentType ? {contentType: record.contentType} : {}),
-    ...(record.filename ? {filename: record.filename} : {}),
-    sourceFile: path.basename(output),
-    historical: !!version,
-    sha256: hash(bytes)
-  };
-  const write = replace ? (await platform()).atomicWrite : exclusive;
-  await write(output, bytes);
-  await write(output + '.af.json', JSON.stringify(pair, null, 2) + '\n');
+  // Non-HTML: only the bytes; the id travels in the printed update command.
+  await (replace ? (await platform()).atomicWrite : exclusive)(output, bytes);
   return {
     id,
     version: record.version,
     source: path.resolve(output),
-    baseline: path.resolve(output + '.af.json'),
     ...(note ? {note} : {}),
-    outputOwned: true
+    outputOwned: true,
+    next: updateNext(path.basename(output), id, record.format === 'dataset' ? 'dataset' : 'asset')
   };
 }
 await runTool('read', import.meta.url, readCommand);

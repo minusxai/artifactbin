@@ -18,6 +18,7 @@ import {
 } from './toolbox-client.mjs';
 import {checkTarget, loadChromium, stepsBody, summarizeCheck} from './toolbox-check-script.mjs';
 import {checkHosted} from './toolbox-check-hosted.mjs';
+import {sourceIdentity} from './toolbox-source.mjs';
 import {checkLocal} from './toolbox-check-local.mjs';
 import {explainGraphql} from './toolbox-check-resolvers.mjs';
 import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts, unreadDatasets}
@@ -27,21 +28,18 @@ import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts, unreadDa
 // smoke failed.
 export async function checkCommand({values, positionals}, options = {}) {
   let input = positional(positionals),
-    paired = null;
-  // A published file stands for its page: index.html reads the id and server from
-  // index.html.af.json.
+    marker = null;
+  // A published file stands for its page: its af-authoring marker names the page and server.
   if (/\.html?$/i.test(input) && !/^https?:\/\//i.test(input)) {
-    try {
-      paired = JSON.parse(await readFile(input + '.af.json', 'utf8'));
-    } catch {}
-    if (!/^[A-Za-z0-9]{6,12}$/.test(paired?.id ?? ''))
+    marker = sourceIdentity(await readFile(input, 'utf8').catch(() => ''));
+    if (!/^[A-Za-z0-9]{6,12}$/.test(marker?.id ?? ''))
       throw new ToolError(
         'unpublished_file',
-        `No published page is paired with ${input}.`,
+        `${input} names no published page (it has no af-authoring marker).`,
         2,
-        `Publish it first: node scripts/publish.mjs ${input}`
+        `Publish it first: node scripts/publish.mjs ${input} --create`
       );
-    input = paired.id;
+    input = marker.id;
   }
   if ((values.viewport?.length ?? 0) > 8)
     throw new ToolError('viewport_limit', 'At most eight viewports are supported.', 2);
@@ -96,7 +94,7 @@ export async function checkCommand({values, positionals}, options = {}) {
       throw new ToolError('hosted_browser', 'Hosted checks use server browser sessions.', 2);
     const {server, id} = resolveTarget(
         input,
-        paired?.server && !values.server ? paired.server : selectedServer(values, options.env)
+        marker?.server && !values.server ? marker.server : selectedServer(values, options.env)
       ),
       client = makeClient(server, options);
     const viewer = values.viewer ? enumValue(values.viewer, ['self', 'guest'], 'viewer') : 'self';

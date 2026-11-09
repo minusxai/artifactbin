@@ -1,11 +1,31 @@
-/** Installed author toolbox wire/storage contracts. Metadata is an observed baseline, never authority. */
+/** Installed author toolbox wire/storage contracts. Local state is an observed baseline, never authority. */
+/**
+ * The af-authoring marker: the last line of an HTML source, `<!-- af-authoring:BASE64URL(JSON) -->`, and the only
+ * local record of the page the file publishes over. Nothing beside the file is written or read.
+ */
+export interface AuthorMarker {
+ server:string; id:string; version:number; state:string;
+ /** sha256 of the source without its marker: read --output refreshes a file still unchanged since then in place. */
+ sha256:string;
+ /** The file's path in its publication root (the page's dependency receipts are relative to that root). */
+ entryPath:string;
+ /** Read from a saved version: publishing it would replace the newer page, so publish refuses. */
+ historical?:true;
+ /** The sharing revision seen with this version: a visibility change on update names it. */
+ sharingRevision?:number;
+}
+/** The doc.mjs marker: the first line of a doc file, `<!-- af-doc:BASE64URL(JSON) -->`, stripped before sending. */
+export interface DocMarker {
+ server:string; id:string; regionId:string; regionKind:string; format:'markdown'|'html'; version:number;
+ /** The journal of a write whose outcome is unknown: the next write resumes it, never writing twice. */
+ pending?:string;
+}
+/** What a publish replaces: the marker's (or, with --artifact, the head's) version and state, and the page's
+ * dependency receipts as the server recorded them. */
 export interface AuthorBaseline {
- kind:'author-baseline'; schema:1; server:string; id:string; version:number; state:string; format:string;
- sourceFile:string; pair:string; historical:boolean;
- root:string; entryPath:string; dependencyReceipts:ReadonlyArray<{path:string;kind:'asset'|'dataset';id:string;revision:string;state?:string;sha256?:string}>;
+ id:string; version:number; state:string; sharingRevision?:number;
+ dependencyReceipts:ReadonlyArray<{path:string;kind:'asset'|'dataset';id:string;revision:string;state?:string;sha256?:string}>;
  retainedBackends:ReadonlyArray<{name:string;href:string}>;
- /** The saved source's hash (read --output refreshes an unchanged file in place) and the sharing revision seen with it. */
- sha256?:string; sharingRevision?:number;
 }
 export interface AuthorJournal {
  kind:'author-request'; schema:1; server:string; method:'POST'|'PUT'|'PATCH'; path:string; key:string;

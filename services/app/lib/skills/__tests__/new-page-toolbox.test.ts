@@ -1,7 +1,8 @@
 /**
- * scripts/new-page.mjs: a page computed from a CSV set up in one call, against a fake server: it
- * publishes the CSV as a named dataset, copies examples/csv-dashboard.html, its renderer and its steps file, and
- * writes a DATA block that reads only this CSV's columns; a rerun reuses the dataset and keeps edits.
+ * scripts/new-page.mjs: a page computed from a CSV set up in one call, with no server call: it copies the CSV into
+ * the project, copies examples/csv-dashboard.html (linking the CSV by its path, so the page's publish creates and
+ * later updates its one dataset), its renderer and its steps file, and writes a DATA block that reads only this
+ * CSV's columns; a rerun keeps edits and brings the copied CSV up to date.
  */
 import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
@@ -30,15 +31,16 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
  const p=await project();
  try{
   const result:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region'});
-  expect((await readdir(p.dir)).filter(n=>!n.endsWith('.af.json')).sort()).toEqual(['csv-dashboard.mjs','index.html','sales.csv','steps.mjs']);
+  expect((await readdir(p.dir)).sort()).toEqual(['csv-dashboard.mjs','index.html','sales.csv','steps.mjs']);
   // The renderer is copied byte for byte, beside the page that loads it.
   expect(await readFile(path.join(p.dir,'csv-dashboard.mjs'),'utf8')).toBe(await readFile(new URL('../../../skills/artifactbin/examples/csv-dashboard.mjs',import.meta.url),'utf8'));
-  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts']);
-  expect(p.calls[0].body).toMatchObject({title:'Revenue by region data',dataset:CSV});
-  expect(result.dataset).toEqual({id:'DATA0001',name:'sales',rows:3,columns:['month','region','revenue','orders'],numbers:['revenue','orders'],reused:false});
+  // Nothing is published yet: the page's first publish creates the dataset from the linked file.
+  expect(p.calls).toEqual([]);
+  expect(result.dataset).toEqual({file:'sales.csv',name:'sales',rows:3,columns:['month','region','revenue','orders'],numbers:['revenue','orders']});
+  expect(result.note).toBe('index.html links sales.csv (3 rows) as sales and is titled "Revenue by region"; its first publish creates the sales dataset, and a later publish after sales.csv changes updates that same dataset.');
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
   expect(html).toContain('<title>Revenue by region</title>');
-  expect(html).toContain('data-af-name="sales" href="ref:DATA0001"');
+  expect(html).toContain('data-af-name="sales" href="./sales.csv"');expect(html).not.toContain('ref:');
   expect(html).toContain("totals: 'select count(*) as row_count, sum(revenue) as revenue, sum(orders) as orders from sales'");
   expect(html).toContain("by_month: 'select month, sum(revenue) as revenue, sum(orders) as orders from sales group by month order by month'");
   expect(html).toContain("labels: {month:'Month', region:'Region', revenue:'Revenue', orders:'Orders'}");
@@ -56,12 +58,27 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
    // The deeper ones, as the starter draws them, in this CSV's names: no map without coordinates.
    "and, as examples/csv-dashboard.html draws them: a small panel per region: series:'region', multiples:true, a heatmap of month by region: mark:'rect', series:'region', charts that filter each other: filters:{region:'Region'}, filter:'region' on a chart with x:'region', and where ($region is null or region = $region) in the other queries, the spread of revenue: bars of count(*) per bin, cast(revenue / 10 as int) * 10, grouped in SQL, orders against revenue: mark:'point', x:'orders', a row per record, table:false"])expect(result.next).toContain(variation);
   expect(result.next).not.toContain("mark:'map'");
-  expect(result.next).toContain('node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs');
+  expect(result.next).toContain('node scripts/publish.mjs index.html --create && node scripts/check.mjs index.html --steps steps.mjs');
   // A rebuild of an existing page publishes over it.
   const again:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region',artifact:'PAGE01'});
-  expect(again.dataset.reused).toBe(true);expect(p.calls.length).toBe(1);
-  expect(again.kept).toEqual(['index.html','csv-dashboard.mjs','steps.mjs','sales.csv']);
+  expect(again).toMatchObject({created:[],kept:['index.html','csv-dashboard.mjs','steps.mjs','sales.csv'],updated:[]});
   expect(again.next).toContain('node scripts/publish.mjs index.html --artifact PAGE01 && node scripts/check.mjs');
+  // Once published (its marker is in index.html) a rerun says to publish it plainly; changed rows replace the copy,
+  // which that publish sends over the same dataset.
+  const {stampSource}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
+  await writeFile(path.join(p.dir,'index.html'),stampSource(html,{server,id:'PAGE01',version:1,state:'a'.repeat(64),sha256:'b'.repeat(64),entryPath:'index.html'}));
+  await writeFile(path.join(p.root,'sales.csv'),CSV+'2026-02,South,30000,190\n');
+  const changed:any=await p.run({dir:'page',data:'sales.csv',title:'Revenue by region'});
+  expect(changed).toMatchObject({updated:['sales.csv'],kept:['index.html','csv-dashboard.mjs','steps.mjs']});
+  expect(await readFile(path.join(p.dir,'sales.csv'),'utf8')).toBe(CSV+'2026-02,South,30000,190\n');
+  expect(changed.next).toContain('then node scripts/publish.mjs index.html && node scripts/check.mjs');
+  expect(p.calls).toEqual([]);
+  // A file name that is no plain name is copied under the dataset name it links.
+  await writeFile(path.join(p.root,'Q1 sales.csv'),CSV);
+  const spaced:any=await p.run({dir:'page2',data:'Q1 sales.csv',title:'Q1'});
+  expect(spaced.dataset).toMatchObject({file:'q1_sales.csv',name:'q1_sales'});
+  expect(await readFile(path.join(p.root,'page2','index.html'),'utf8')).toContain('data-af-name="q1_sales" href="./q1_sales.csv"');
+  expect((await readdir(path.join(p.root,'page2'))).filter(n=>n.endsWith('.af.json'))).toEqual([]);
  }finally{await p.done();}
 });
 

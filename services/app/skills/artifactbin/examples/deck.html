@@ -7,10 +7,10 @@
 <script type="module" id="slides-data">
 // Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit <title>
 //   (the deck's name for the tab and link previews), DATA and SLIDES, and restyle in <style> when
-//   the request asks for a look (keep the JS); then node scripts/publish.mjs index.html && node
-//   scripts/check.mjs index.html --steps steps.mjs. Charts from a dataset: publish the CSV (--type
-//   dataset), add <link rel="af-dataset" data-af-name="NAME" href="ref:ID"> after <title>, set
-//   DATA.dataset to NAME and give those chart slides x and y columns instead of data.
+//   the request asks for a look (keep the JS); then node scripts/publish.mjs index.html --create
+//   && node scripts/check.mjs index.html --steps steps.mjs (later publishes drop --create). A
+//   chart from a CSV: put it beside the page, add <link rel="af-dataset" data-af-name="NAME"
+//   href="./NAME.csv"> after <title>, set DATA.dataset to NAME, give its slides x and y columns.
 // Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
 //   traction, business model, competition, ask); N topics means N slides. Types: cover is the
 //   problem slide {label "Problem · Company", title ≤40 characters (default: the <title>), text one

@@ -6,8 +6,8 @@ a CSV or dataset starts from examples/csv-dashboard.html; one on a git repositor
 scripts/new-codebase-report.mjs.
 Usage: cp examples/report.html index.html; replace every [bracketed] part and the sample
   sections' text with yours (keep the CSS, JS and layout); write steps.mjs for the requested
-  content and controls; then node scripts/publish.mjs index.html && node scripts/check.mjs
-  index.html --steps steps.mjs
+  content and controls; then node scripts/publish.mjs index.html --create && node
+  scripts/check.mjs index.html --steps steps.mjs (later publishes of the file drop --create)
 Gotchas: the route drawing is an illustration, not a chart: figures from data belong in a page
   started from csv-dashboard.html. Check desktop and 390px widths and every control by keyboard.
 Built with: one HTML page in semantic HTML and CSS; an inline SVG illustration; a disclosure
