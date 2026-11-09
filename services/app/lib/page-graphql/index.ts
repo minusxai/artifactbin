@@ -7,7 +7,7 @@ import { getArtifactById, getArtifactHeaderById, accessMoved, editablePage, read
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,createResolverSql,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
-import {executeLinkedDatasetGraphql, loadPageDatasets, readLinkedDatasetTables, type PageDatasets} from '@/lib/dataset-graphql';
+import {executeLinkedDatasetGraphql, loadPageDatasets, planLinkedDatasetTables, type PageDatasets} from '@/lib/dataset-graphql';
 import {getDb,runWithRequest,services} from '@/lib/platform';
 import {people} from '@/lib/datasets';
 import {json,readJson} from '@/lib/http';
@@ -61,7 +61,7 @@ const headDatasetLinks=async(pageId:string)=>{const row=await getArtifactById(pa
  */
 export const resolverDatasets:ResolverDatasets={
  query:createResolverQuery({links:headDatasetLinks,execute:executeLinkedDatasetGraphql}),
- sql:createResolverSql({links:headDatasetLinks,read:readLinkedDatasetTables,run:input=>services().sql.run(input)}),
+ sql:createResolverSql({links:headDatasetLinks,plan:planLinkedDatasetTables,run:input=>services().sql.run(input)}),
 };
 const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Original request identity and ACLs guard both SDL and executions. */

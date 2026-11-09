@@ -93,7 +93,7 @@ it('reads as the reader: the rule\'s rows (filter and limit) and columns, a hidd
   const hidden = await sql(f.page, f.viewer, 'select sum(salary) as s from staff');
   expect(hidden.body.data?._sql ?? null).toBeNull();
   expect(codeOf(hidden)).toBe('validation_failed');
-  expect(hidden.body.errors?.[0]?.message).toMatch(/salary/);
+  expect(hidden.body.errors?.[0]?.message).toBe('SQL statement could not be prepared');
 });
 
 it('refuses a role whose rule lacks allow_aggregations; owner and editor always run SQL', async () => {

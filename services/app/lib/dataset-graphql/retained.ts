@@ -1,6 +1,6 @@
 import type {ArtifactRow} from '@/lib/artifacts';
 import {catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
-import type {DatasetGraphqlPort} from './types';
+import type {DatasetGraphqlPort,DatasetSnapshot} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
 import {canRunSql,datasetView,viewCatalog} from '@/lib/dataset-permissions';
@@ -10,6 +10,8 @@ import type {AccessActor} from '@/lib/accounts';
 const unavailable=()=>new Error('dataset_not_found');
 /** Original dataset object store, executor and grants. */
 interface RetainedReadOptions {
+ /** SQL planning retains visible metadata without opening stored row objects. Only selected execution hydrates IDs. */
+ deferRowIds?:boolean;
  retainReadFence?:(verify:()=>Promise<void>)=>void;
  /** The dataset's own GraphQL endpoint: the dataset's sharing alone decides the role (no page audience). */
  direct?:boolean;
@@ -33,6 +35,7 @@ async function readIdentity(actor:AccessActor,id:string,options:RetainedReadOpti
 /** A fence asks afresh: the head and the caller's facts as they are now, never the request's memo. */
 const freshIdentity=(actor:AccessActor,id:string,options:RetainedReadOptions)=>readIdentity(actor,id,options,memoAccessFacts(liveAccessFacts(actor)));
 export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):DatasetGraphqlPort {
+ const hydrate = new WeakMap<DatasetSnapshot, (signal:AbortSignal) => Promise<void>>();
  return {
   async snapshot(actor,binding,signal){
    signal.throwIfAborted();
@@ -49,20 +52,29 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
    options.retainReadFence?.(verify);
    const rowIds:Record<string,readonly string[]>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
+   const loadIds=async(readSignal:AbortSignal)=>{
    for(const table of catalog.tables){
+    readSignal.throwIfAborted();
     // Row IDs are positions in the stored object (execution decorates before the view filters). Its key is its
     // content hash, so the count remembered for the key is this object's.
     const tableId=tableIdentity(table),count=await storedRowCount(table.objectKey!),prior=saved?.[tableId];
     rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey!,count,prior);
    }
+   };
+   if(!options.deferRowIds)await loadIds(signal);
    // Schema metadata a caller does not fence has no later check: recheck readership after object loads.
    if(!options.fenced)await verify();
    const runsSql=Object.fromEntries(catalog.tables.map(table=>[tableIdentity(table),canRunSql(decision,table)]));
    // Generated names come from every declared table and column, so they never depend on the role.
    const names=hasuraNames(declared.tables,{title:row.title,configuration:storedConfiguration(row.dataset_policy)});
-   return {id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,view,runsSql,role:decision.role,head,names:Object.fromEntries(declared.tables.map((table,i)=>[tableIdentity(table),names[i]!]))};
+   const snapshot:DatasetSnapshot={id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,view,runsSql,role:decision.role,head,names:Object.fromEntries(declared.tables.map((table,i)=>[tableIdentity(table),names[i]!]))};
+   if(options.deferRowIds){let pending:Promise<void>|undefined;hydrate.set(snapshot,(readSignal)=>pending??=loadIds(readSignal));}
+   return snapshot;
   },
   async execute(actor,snapshot,tableId,statement,window,signal){
+   signal.throwIfAborted();
+   await hydrate.get(snapshot)?.(signal);
+   signal.throwIfAborted();
    const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===tableId);if(!table?.objectKey)throw unavailable();
    if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
