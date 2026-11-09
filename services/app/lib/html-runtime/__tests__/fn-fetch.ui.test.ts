@@ -115,3 +115,38 @@ describe('cancellation and an absent connection',()=>{
   uninstall=()=>{};
  });
 });
+
+// Adversarial review: cancellation must also work before the lazy reader loads.
+it('aborts promptly while loading the reader',async()=>{
+ uninstall();
+ uninstall=installFunctionFetch(window,()=>new Promise(()=>{}));
+ const controller=new AbortController();
+ const pending=window.fetch('/fn/items',{signal:controller.signal});
+ let settled=false;
+ void pending.catch(()=>{settled=true;});
+ controller.abort();
+ await new Promise(resolve=>setTimeout(resolve,20));
+ expect(settled).toBe(true);
+});
+
+it('does not coerce a non-function fetch input twice',async()=>{
+ let coercions=0;
+ const input={toString(){coercions++;return 'https://api.example.com/data';}};
+ native.mockImplementationOnce(async(value:unknown)=>{String(value);return new Response('native');});
+ await window.fetch(input as unknown as string);
+ expect(coercions).toBe(1);
+});
+
+it.each([
+ {credentials:'include' as const,mode:'cors' as const,redirect:'follow' as const},
+ {credentials:'omit' as const,mode:'same-origin' as const,redirect:'error' as const},
+ {credentials:'same-origin' as const,mode:'no-cors' as const,redirect:'manual' as const},
+])('Request options carry no credentials or transport options into the bridge: %j',async(options)=>{
+ await window.fetch(new Request(new URL('/fn/items',location.href),{...options,headers:{authorization:'Bearer forged','x-http-method-override':'DELETE'}}));
+ expect(calls[0]!.request).toEqual({name:'items',method:'GET',search:'',body:null,contentType:null});
+});
+
+it('a fetch captured before installation remains native and has no bridge authority',async()=>{
+ await (native as unknown as typeof fetch)('/fn/items');
+ expect(calls).toHaveLength(0);
+});

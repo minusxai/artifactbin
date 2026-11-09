@@ -167,13 +167,22 @@ async function answer(request:Request,pageId:string,reader?:AccessActor):Promise
  }catch{return json({error:'page_operation_unavailable'},404);}
 }
 
-/** The header the reader's frame bridge pins a function call's revision with (html-reader/frame-bridge/parent); absent: the head. */
-const FUNCTION_REVISION_HEADER='x-page-revision';
+/**
+ * A function call's revision: the header the reader's frame bridge pins it with (html-reader/frame-bridge/parent), or
+ * the `revision` query parameter an unframed page sends (html-runtime/domain-reads: a header would need a preflight
+ * an opaque origin cannot pass). Both absent: the head. Both present and different: refused. Never part of the input.
+ */
+const FUNCTION_REVISION_HEADER='x-page-revision',FUNCTION_REVISION_PARAM='revision';
+function functionRevision(request:Request):string|null|Response{
+ const header=request.headers.get(FUNCTION_REVISION_HEADER),param=new URL(request.url).searchParams.get(FUNCTION_REVISION_PARAM);
+ if(header!==null&&param!==null&&header!==param)return json({error:'revision_conflict',message:'The revision header and revision differ'},400);
+ return header??param;
+}
 /** A call's input: GET's query parameters (strings; a repeated name a list), or POST's JSON object body (empty: {}). */
 async function functionInput(request:Request):Promise<HtmlJsonObject|Response>{
  if(request.method==='GET'){
   const input:Record<string,string|string[]>={};
-  for(const [name,value] of new URL(request.url).searchParams){const had=input[name];input[name]=had===undefined?value:Array.isArray(had)?[...had,value]:[had,value];}
+  for(const [name,value] of new URL(request.url).searchParams){if(name===FUNCTION_REVISION_PARAM)continue;const had=input[name];input[name]=had===undefined?value:Array.isArray(had)?[...had,value]:[had,value];}
   return input;
  }
  let text:string;
@@ -211,13 +220,14 @@ export async function pageFunction(request:Request,pageId:string,name:string):Pr
 async function functionAnswer(request:Request,pageId:string,name:string,opaque:boolean):Promise<Response>{
  const actor=await requestOrSessionActor(request);
  if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
+ const asked=functionRevision(request);
+ if(asked instanceof Response)return asked;
  const input=await functionInput(request);
  if(input instanceof Response)return input;
  const headers={'Cache-Control':'no-store'};
  try{
   const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
   const head=await readHtmlPage(actor,pageId);
-  const asked=request.headers.get(FUNCTION_REVISION_HEADER);
   const page=!asked||asked===head.revision?head:await readHtmlPage(actor,pageId,asked);
   const role=await pageRole(admitted,actor);
   if(!role)throw Error('forbidden');

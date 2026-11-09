@@ -15,6 +15,7 @@ import {PUT as update} from '@/app/api/artifacts/[id]/route';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import {GET as fnGet,POST as fnPost} from '@/app/api/artifacts/[id]/fn/[name]/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
+import {renderedSchema} from './rendered-schema';
 
 const harness=useAppHarness();
 let runner:Awaited<ReturnType<typeof createRunner>>;
@@ -169,4 +170,74 @@ describe('publishing a typeDefs-free file checks its roles',()=>{
   expect(await tryPublish(`export default {}`)).toMatchObject({status:400});
   expect((await tryPublish(`export default {a(){return 1}}`)).status).toBe(201);
  });
+});
+
+it('does not publish a prototype role declaration as anonymous',async()=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+  visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',
+  resolverSources:{api:`export const roles={__proto__:{sensitive:'owner'}};export default {sensitive(){return 'private result'}}`},
+ }}));
+ // Reject malformed role objects, or enforce the declared owner role.
+ if(response.status===400)return;
+ expect(response.status).toBe(201);
+ const {id}=await response.json();
+ expect((await call(id,'sensitive',null,{method:'GET'})).status).toBe(403);
+});
+
+it('adds nullable function_roles idempotently without changing legacy rows',async()=>{
+ const db=await getDb();
+ const statement=renderedSchema().schema.match(/ALTER TABLE app\.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;/)?.[0];
+ expect(statement).toBeDefined();
+ await db.query('CREATE TEMP TABLE review_backend_versions (version TEXT PRIMARY KEY, type_defs TEXT NOT NULL)');
+ try{
+  await db.query("INSERT INTO review_backend_versions VALUES ('legacy', 'type Query { hello: String }')");
+  const migrate=statement!.replace('app.html_backend_versions','review_backend_versions');
+  await db.query(migrate);await db.query(migrate);
+  expect((await db.query('SELECT * FROM review_backend_versions')).rows).toEqual([{version:'legacy',type_defs:'type Query { hello: String }',function_roles:null}]);
+ }finally{await db.query('DROP TABLE review_backend_versions');}
+});
+
+it('honors exported roles aliases despite a shadowed local roles name and own prototype keys',async()=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+  visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',
+  resolverSources:{api:`const guards={['__proto__']:'owner',sensitive:'owner'};export {guards as roles};function local(){const roles={sensitive:'anonymous'};return roles}export default {['__proto__'](){return 1},sensitive(){return local()}}`},
+ }}));
+ expect(response.status).toBe(201);
+ const {id}=await response.json();
+ for(const name of ['sensitive','__proto__'])expect((await call(id,name,null,{method:'GET'})).status).toBe(403);
+});
+
+it('refuses oversized backend output instead of returning it through the bridge',async()=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+  visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',
+  resolverSources:{api:`export default {huge(){return 'x'.repeat(4*1024*1024+1)}}`},
+ }}));
+ expect(response.status).toBe(201);
+ const {id}=await response.json();
+ expect((await call(id,'huge',null,{method:'GET'})).status).toBe(500);
+});
+
+it('an unframed call runs the served revision\'s backend, named by ?revision= (never part of the input)',async()=>{
+ const w=world();
+ const html='<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>v</body></html>';
+ const source=(n:number)=>`export default {v(args){return {n:${n},args}}}`;
+ const created=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html,resolverSources:{api:source(1)}}}));
+ const {id}=await created.json();
+ const head=(await getArtifactById(id))!;
+ const put=await update(request(`/api/artifacts/${id}`,{method:'PUT',token:w.owner.token,json:{expectedVersion:head.version,expectedState:artifactState(head),html:html.replace('>v<','>v2<'),resolverSources:{api:source(2)}}}),{params:Promise.resolve({id})});
+ expect(put.status,await put.clone().text()).toBeLessThan(300);
+ expect((await call(id,'v',null,{method:'GET',origin:'null',search:'?revision=1&q=a'})).body).toEqual({n:1,args:{q:'a'}});
+ expect((await call(id,'v',null,{method:'GET',origin:'null'})).body.n).toBe(2);
+ expect((await call(id,'v',null,{method:'GET',search:'?revision=2',headers:{'x-page-revision':'2'}})).body.n).toBe(2);
+ expect(await call(id,'v',null,{method:'GET',search:'?revision=2',headers:{'x-page-revision':'1'}})).toMatchObject({status:400,body:{error:'revision_conflict'}});
+});
+
+it('refuses roles that are not a plain object literal',async()=>{
+ const w=world();
+ const tryRoles=async(roles:string)=>(await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{visibility:'public',html:'<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>x</body></html>',resolverSources:{api:`export const roles=${roles};export default {a(){return 1}}`}}})));
+ for(const roles of ['[]',"Object.create({a:'owner'})",'new (class R{})()']){const response=await tryRoles(roles);expect(response.status,roles).toBe(400);expect(await response.text(),roles).toContain('invalid_roles');}
+ expect((await tryRoles("Object.assign(Object.create(null),{a:'owner'})")).status).toBe(201);
 });

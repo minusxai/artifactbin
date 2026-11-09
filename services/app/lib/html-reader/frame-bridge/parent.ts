@@ -168,11 +168,15 @@ function relayedFunctionRequest(win: Window, id: string, request: { path: unknow
   if (url.origin !== win.location.origin || !url.pathname.startsWith(prefix)) return null;
   if (!FUNCTION_NAME.test(url.pathname.slice(prefix.length)) || url.hash) return refusal(404, 'unknown_function');
   if (!htmlContext?.revision) return refusal(403, 'not_permitted');
+  // A read-only shell (an archived view) relays reads only, as its GraphQL and uploads do.
+  if (htmlContext.readOnly && request.method !== 'GET') return refusal(403, 'read_only');
   if (request.method === 'GET' ? request.body !== null && request.body !== undefined : request.method !== 'POST' || (request.body !== null && typeof request.body !== 'string')) return refusal(400, 'invalid_request');
   if (typeof request.body === 'string' && request.body.length > MAX_RELAYED_BODY) return refusal(413, 'payload_too_large');
   const headers: Record<string, string> = { [FUNCTION_REVISION_HEADER]: htmlContext.revision };
   const type = request.headers && typeof request.headers === 'object' ? (request.headers as Record<string, unknown>)['content-type'] : undefined;
   if (typeof type === 'string') headers['content-type'] = type;
+  // The pinned header is the revision: a frame's own `revision` parameter is dropped (the server refuses a mismatch).
+  url.searchParams.delete('revision');
   return { path: url.pathname + url.search, init: { method: request.method as 'GET' | 'POST', headers, ...(typeof request.body === 'string' ? { body: request.body } : {}) } };
 }
 

@@ -19,7 +19,7 @@ function world(context:{revision:string;readOnly:boolean}|null={revision:'7',rea
  const send=(payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key:messages[0].key,payload},origin:'https://runner.example',source:frame.contentWindow}));
  send({kind:'ready',nonce:'n'});
  const results=()=>messages.filter(message=>message.payload.kind==='fetch-result').map(message=>message.payload);
- return {send,requests,results,setReply:(next:typeof reply)=>{reply=next;}};
+ return {send,requests,results,frame,messages,setReply:(next:typeof reply)=>{reply=next;}};
 }
 
 it('relays POST and GET with the session, the shell revision and only content-type',async()=>{
@@ -69,4 +69,45 @@ it('fetch-cancel aborts the request and nothing is answered for it',async()=>{
  expect(seen!.aborted).toBe(true);
  await new Promise(resolve=>setTimeout(resolve,0));
  expect(w.results()).toHaveLength(0);
+});
+
+it('refuses POST in a read-only shell before making a credentialed request',async()=>{
+ const w=world({revision:'7',readOnly:true});
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items',method:'POST',headers:{},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);
+ expect(w.results()[0].status).toBe(403);
+});
+
+it('rejects a sibling, nested frame, wrong origin and wrong session key',async()=>{
+ const w=world();
+ const other=document.createElement('iframe');document.body.append(other);
+ const nested=document.createElement('iframe');w.frame.contentDocument!.body.append(nested);
+ const payload={kind:'fetch',call:42,path:'/api/artifacts/Page123/fn/items',method:'POST',headers:{},body:'{}'};
+ try{
+  for(const source of [window,other.contentWindow,nested.contentWindow])window.dispatchEvent(new MessageEvent('message',{
+   data:{type:'mx:frame-bridge',key:w.messages[0].key,payload},origin:'https://runner.example',source,
+  }));
+  for(const [origin,key] of [['https://evil.example',w.messages[0].key],['https://runner.example','wrong']])window.dispatchEvent(new MessageEvent('message',{
+   data:{type:'mx:frame-bridge',key,payload},origin,source:w.frame.contentWindow,
+  }));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  expect(w.requests).toHaveLength(0);
+ }finally{other.remove();}
+});
+
+it.each(['%2e%2e','fn%2F','é','%E2%84%AA','a%252Fb'])('refuses encoded or Unicode name %s',async(name)=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/'+name,method:'POST',headers:{},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);
+});
+
+it('ignores header and query attempts to override method, authority or revision',async()=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items?_method=DELETE&revision=1',method:'POST',
+ headers:{'x-http-method-override':'DELETE','Authorization':'Bearer forged','Cookie':'forged','X-Page-Revision':'1','content-type':'application/json'},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests[0]!.init).toMatchObject({method:'POST',headers:{'content-type':'application/json','x-page-revision':'7'}});
+ expect(Object.keys(w.requests[0]!.init.headers!)).toHaveLength(2);
 });

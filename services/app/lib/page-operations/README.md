@@ -20,9 +20,17 @@ revision pinned in `x-page-revision`, no other frame header. The route (lib/page
 caller exactly as the GraphQL door does and runs the function through the same invoker.
 
 - Input: POST's JSON object body (empty: `{}`; any content type; at most 64 KiB, else 413), or GET's query parameters
-  as strings (a repeated name is a list). It is `args`; the principal is derived, never read from it.
+  as strings (a repeated name is a list; `revision` is reserved, below). It is `args`; the principal is derived, never
+  read from it.
+- Revision: the bridge pins the reader's revision in `x-page-revision`; an unframed page (whose opaque origin cannot
+  send a custom header without a preflight) sends its served revision as `?revision=`. Both present and different:
+  400 `revision_conflict`. Neither: the head. The parent drops a frame's own `revision` parameter, and a read-only
+  (archived) shell relays GET only (403 `read_only` for POST, no request made).
 - Who: a typeDefs-free file exports `roles = {name: 'owner'|'editor'|'viewer'|'signed_in'|'anonymous'}`, checked at
-  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). A legacy
+  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). The runner
+  reads `roles` in the file's own realm before serializing it: only a plain object literal (or a null-prototype
+  object) is accepted; a `__proto__: {…}` prototype, class instance or array fails publish (`invalid_roles`) rather than
+  have its inherited entries silently dropped. A legacy
   file's Query and Mutation fields are callable too, each under its `@auth`; GraphQL still serves it. A
   typeDefs-free file mounts nothing on GraphQL. A name two linked files offer is 409.
 - Kind: a legacy field's root; otherwise GET reads (`query`) and POST may write (`mutation`, so `caps.query`
@@ -31,7 +39,7 @@ caller exactly as the GraphQL door does and runs the function through the same i
   `archived_page_readonly`/`read_only`, 404 `not_found` (cannot read the page, uniform) or `unknown_function`, 405,
   409, 413, 500 `backend_failed` with the function's own thrown message (the owner also gets `detail`), 503
   `retryable`, 504 `deadline`. A call rejects only as fetch does: `AbortError` on its signal (the parent aborts the
-  request), `TypeError` with no page connection (an offline copy, a frame that never attached within 3 s).
+  request; it settles at once even while the reader loads or the bridge attaches), `TypeError` with no page connection (an offline copy, a frame that never attached within 3 s).
 - An unframed page (owner host, export capture) calls the route directly as nobody (reads only).
 
 ## Field authorization: `@auth`

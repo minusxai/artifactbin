@@ -37,9 +37,10 @@ async function backendProgram(source:string):Promise<string>{
  const transformed=await transform(source,{loader:'ts',format:'cjs',target:'es2022'});
  // G marks every error a capability raises, so only the resolver's own throws carry RESOLVER_THREW.
  return `const __afPlatform=new WeakSet();const G=(f)=>async(...a)=>{try{return await f(...a);}catch(e){if(e!==null&&typeof e==='object')__afPlatform.add(e);throw e;}};
+const R=(r)=>{if(r===undefined||r===null)return null;const p=typeof r==='object'&&!Array.isArray(r)?Object.getPrototypeOf(r):undefined;if(p!==Object.prototype&&p!==null)return {problem:'prototype'};return {entries:Object.entries(r)};};
 const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
- if(input.kind==='schema'){const d=Backend.default;if(Backend.typeDefs!==undefined&&typeof Backend.typeDefs!=='string'||!d||typeof d!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs??null,functions:Object.keys(d).filter(k=>typeof d[k]==='function'),roles:Backend.roles??null,secrets:Backend.secrets};}
+ if(input.kind==='schema'){const d=Backend.default;if(Backend.typeDefs!==undefined&&typeof Backend.typeDefs!=='string'||!d||typeof d!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs??null,functions:Object.keys(d).filter(k=>typeof d[k]==='function'),roles:R(Backend.roles),secrets:Backend.secrets};}
  const fn=Object.prototype.hasOwnProperty.call(Backend.default,input.field)?Backend.default[input.field]:undefined;if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
  ${CALL}

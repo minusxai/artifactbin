@@ -29,10 +29,17 @@ export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:F
  // A host without fetch (a test's bare window) has nothing to intercept.
  if(typeof native!=='function'||typeof Req!=='function'||typeof Res!=='function'||typeof U!=='function')return ()=>{};
  const local=(status:number,error:string)=>new Res(JSON.stringify({error}),{status,headers:{'content-type':'application/json'}});
- const target=(input:unknown):URL|null=>{
-  try{return new U(typeof input==='string'?input:input instanceof U?input.href:input instanceof Req?input.url:String(input),doc.baseURI);}catch{return null;}
+ const target=(input:string|URL|Request):URL|null=>{
+  try{return new U(typeof input==='string'?input:input instanceof Req?input.url:input.href,doc.baseURI);}catch{return null;}
  };
- async function call(url:URL,input:RequestInfo|URL,init:RequestInit|undefined):Promise<Response>{
+ // `work`, or the signal's reason the moment it aborts (loading the reader, the bridge attaching, a body read); the
+ // listener goes when it settles.
+ const until=<T,>(work:Promise<T>,signal:AbortSignal):Promise<T>=>new Promise<T>((resolve,reject)=>{
+  const stop=()=>reject(signal.reason);
+  signal.addEventListener('abort',stop,{once:true});
+  void work.then(resolve,reject).finally(()=>signal.removeEventListener('abort',stop));
+ });
+ async function call(url:URL,input:string|URL|Request,init:RequestInit|undefined):Promise<Response>{
   // The browser's own reading of (input, init): a GET with a body, a bad header and the like reject as fetch would.
   const request=new Req(input instanceof Req?input:url.href,init);
   const signal=request.signal;
@@ -40,17 +47,23 @@ export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:F
   const name=url.pathname.slice(PREFIX.length);
   if(!NAME.test(name))return local(404,'unknown_function');
   if(request.method!=='GET'&&request.method!=='POST')return local(405,'method_not_allowed');
-  const body=request.method==='POST'?await request.text():null;
-  const {callFunction}=await load();
-  if(signal.aborted)throw signal.reason;
-  const reply=await callFunction({name,method:request.method,search:url.search,body,contentType:request.headers.get('content-type')},signal);
+  const body=request.method==='POST'?await until(request.text(),signal):null;
+  const {callFunction}=await until(load(),signal);
+  const reply=await until(callFunction({name,method:request.method,search:url.search,body,contentType:request.headers.get('content-type')},signal),signal);
   if(!Number.isInteger(reply.status)||reply.status<200||reply.status>599)throw new TypeError('Failed to fetch: invalid page function answer');
   return new Res(NULL_BODY.has(reply.status)?null:reply.body,{status:reply.status,headers:reply.headers});
  }
  const fetch=function fetch(...args:Parameters<typeof globalThis.fetch>):Promise<Response>{
-  const url=target(args[0]);
-  if(!url||url.origin!==new U(location.href).origin||!url.pathname.startsWith(PREFIX))return apply(native,win,args);
-  return call(url,args[0],args[1]);
+  if(!args.length)return apply(native,win,args);
+  // Convert a URL-like input ONCE, as fetch's own string conversion would (a template literal: a Symbol throws, as
+  // there), and hand that same value on: a stateful toString never runs twice, and its error is fetch's rejection.
+  let input:string|URL|Request;
+  const given:unknown=args[0];
+  if(typeof given==='string'||given instanceof U||given instanceof Req)input=given;
+  else try{input=`${given as string}`;}catch(error){return Promise.reject(error);}
+  const url=target(input);
+  if(!url||url.origin!==new U(location.href).origin||!url.pathname.startsWith(PREFIX))return apply(native,win,[input,...args.slice(1)]);
+  return call(url,input,args[1]);
  };
  win.fetch=fetch;
  return ()=>{if(win.fetch===fetch)win.fetch=native;};

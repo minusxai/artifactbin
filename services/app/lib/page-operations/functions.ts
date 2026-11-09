@@ -32,7 +32,10 @@ export interface PageFunctionSource {namespace:string;fileId:string;version:stri
 
 /**
  * The manifest a typeDefs-free file publishes: every function its default export names, with its `roles` entry.
- * `exported` and `roles` come from the runner (author code), so every value is checked here, at publish.
+ * `exported` and `roles` come from the runner (author code), so every value is checked here, at publish. The runner
+ * reads `roles` in the file's own realm (backend.ts `R`) before anything is serialized: a plain object's OWN entries
+ * as `{entries}`, or `{problem:'prototype'}` when it is not a plain object (an array, a class instance, or a literal
+ * with `__proto__: {…}`), whose inherited declarations JSON would silently drop — so publish refuses it instead.
  */
 export function functionManifest(exported:unknown,roles:unknown):Record<string,DatasetRole>{
  if(!Array.isArray(exported)||!exported.length)throw Error('invalid_backend_exports: a backend without typeDefs needs a default export of functions');
@@ -43,8 +46,11 @@ export function functionManifest(exported:unknown,roles:unknown):Record<string,D
   manifest[name]='anonymous';
  }
  if(roles!==undefined&&roles!==null){
-  if(typeof roles!=='object'||Array.isArray(roles))throw Error('roles must be an object of function names to roles');
-  for(const [name,role] of Object.entries(roles)){
+  const read=roles as {problem?:unknown;entries?:unknown};
+  if(typeof roles!=='object'||read.problem!==undefined||!Array.isArray(read.entries))throw Error('invalid_roles: export roles as a plain object literal of function names to roles ({items: \'viewer\'}); a prototype (__proto__: {…}), class instance or array is refused, since its inherited entries would not be enforced');
+  for(const entry of read.entries as unknown[]){
+   if(!Array.isArray(entry)||entry.length!==2||typeof entry[0]!=='string')throw Error('invalid_roles: roles must map function names to roles');
+   const [name,role]=entry as [string,unknown];
    if(!Object.hasOwn(manifest,name))throw Error(`roles names ${name}, which the default export does not offer`);
    if(typeof role!=='string'||!(DATASET_ROLES as readonly string[]).includes(role))throw Error(`roles.${name} is ${JSON.stringify(role)}; use one of ${DATASET_ROLES.join(', ')}`);
    manifest[name]=role as DatasetRole;

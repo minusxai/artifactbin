@@ -28,9 +28,11 @@ export function createDomainReadTransport(page:{pageId:string;revision:string},l
  * host, credentials omitted, a POST body as text/plain (no preflight). The host reads as nobody and runs reads only
  * (lib/page-graphql `pageFunction`); an export capture's key is not carried, so a private page answers 404.
  */
-export function createDomainFunctionCall(page:{pageId:string},location:Pick<Location,'href'>,send:typeof fetch):FunctionCaller{
+export function createDomainFunctionCall(page:{pageId:string;revision:string},location:Pick<Location,'href'>,send:typeof fetch):FunctionCaller{
  return async(request,signal)=>{
   const url=new URL(`/api/artifacts/${encodeURIComponent(page.pageId)}/fn/${request.name}${request.search}`,location.href);
+  // The served revision, as a query parameter (no preflight): an archived copy never runs newer backend code.
+  url.searchParams.set('revision',page.revision);
   const response=await send(url,{method:request.method,credentials:'omit',redirect:'error',cache:'no-store',...(signal?{signal}:{}),...(request.method==='POST'?{headers:{'content-type':'text/plain;charset=UTF-8'},body:request.body??''}:{})});
   const headers:Record<string,string>={};const type=response.headers.get('content-type');if(type)headers['content-type']=type;
   return {status:response.status,headers,body:await response.text()};

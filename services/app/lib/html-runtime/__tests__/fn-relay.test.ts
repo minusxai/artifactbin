@@ -2,7 +2,8 @@
  * The reader's half of a function call (./fn-relay): one bridge `fetch` per call to this page's function path,
  * its raw answer back, a `fetch-cancel` on abort, and a TypeError when the connection goes.
  */
-import {describe,expect,it} from 'vitest';
+import {describe,expect,it,vi} from 'vitest';
+import {createDomainFunctionCall} from '../domain-reads';
 import {createFunctionRelay} from '../fn-relay';
 import type {FrameBridgeFramePayload} from '../../html-reader/contract';
 
@@ -37,4 +38,13 @@ describe('the reader relays a function call over the bridge',()=>{
   relay.dispose();
   await expect(pending).rejects.toBeInstanceOf(TypeError);
  });
+});
+
+it('pins an unframed archived page function to its served revision',async()=>{
+ const page={pageId:'Page123',revision:'1'};
+ const send=vi.fn(async()=>new Response('{}'));
+ await createDomainFunctionCall(page,{href:'https://page.example/report'},send)(
+  {name:'items',method:'GET',search:'',body:null,contentType:null},null);
+ const [url,init]=send.mock.calls[0] as unknown as [URL,RequestInit];
+ expect(new Headers(init.headers).get('x-page-revision')??url.searchParams.get('revision')).toBe('1');
 });
