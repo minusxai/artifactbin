@@ -117,6 +117,7 @@ const columnsOf = (table: DatasetTable, names: HasuraTableNames, collaborative: 
 
 /** How a load reaches the dataset: directly (its own sharing decides), or through a page (the page audience rule). */
 interface LoadMode {
+  deferRowIds?: boolean;
   direct: boolean;
   /** The caller checks the load's fences before anything read leaves: the load's one authorization holds until then. */
   fenced: boolean;
@@ -138,7 +139,7 @@ interface LoadMode {
 async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortSignal, mode: LoadMode): Promise<Loaded> {
   const fences: Array<() => Promise<void>> = [];
   const facts = mode.facts ?? memoAccessFacts(liveAccessFacts(actor));
-  const port = retainedDatasetGraphqlPort({ direct: mode.direct, fenced: mode.fenced, facts, ...(mode.pageId ? { pageId: mode.pageId } : {}), retainReadFence: (verify) => { fences.push(verify); mode.retainReadFence?.(verify); } });
+  const port = retainedDatasetGraphqlPort({ direct: mode.direct, fenced: mode.fenced, deferRowIds: mode.deferRowIds, facts, ...(mode.pageId ? { pageId: mode.pageId } : {}), retainReadFence: (verify) => { fences.push(verify); mode.retainReadFence?.(verify); } });
   if (binding.mode === 'pinned') {
     // A pinned link: reads only, exactly the tables of the snapshot its recorded revision resolves.
     const read = await port.snapshot(actor, binding, signal);
@@ -296,7 +297,7 @@ interface PageScope {
  * dataset the role can neither read nor write is absent, as if unlinked. Two links generating one name refuse the
  * page (`graphql_root_collision`; publishing refuses it first).
  */
-export async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { fenced: boolean }, signal: AbortSignal): Promise<Loaded[]> {
+export async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { fenced: boolean; deferRowIds?: boolean }, signal: AbortSignal): Promise<Loaded[]> {
   const loaded: Loaded[] = [];
   // One authorization per request: every link's decisions read the caller's facts once.
   const facts = memoAccessFacts(liveAccessFacts(actor));

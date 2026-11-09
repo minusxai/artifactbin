@@ -17,6 +17,7 @@
  */
 import { RESOLVER_LIMITS, SQL_READ_LIMITS as limits, type ColumnType, type DatasetColumn, type HtmlDatasetLink, type QueryOutcome, type Row, type RunInput, type RunnerCaller, type RunnerJson, type Scalar } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { selectSqlLinks } from '@/lib/datasets';
 import { ResolverQueryError } from './query';
 
 interface ResolverSqlInput {
@@ -28,7 +29,7 @@ interface ResolverSqlInput {
 }
 export type ResolverSql = (input: ResolverSqlInput) => Promise<RunnerJson>;
 
-/** One mounted dataset table as the caller reads it (lib/dataset-graphql `readLinkedDatasetTables`). */
+/** One mounted dataset table as the caller reads it (lib/dataset-graphql `planLinkedDatasetTables`). */
 export interface ResolverSqlTable {
   link: string;
   /** null: a single-table dataset, mounted as `<link>`; otherwise `<link>.<table>`. */
@@ -41,8 +42,8 @@ export interface ResolverSqlTable {
 export interface ResolverSqlPorts {
   /** The datasets the page links now (its head), live and pinned: a resolver run names no page revision. */
   links(pageId: string): Promise<readonly HtmlDatasetLink[]>;
-  /** The caller's tables of these links, at most `maxRows` rows together (more throws `sql_input_limit`). */
-  read(actor: AccessActor, links: readonly HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal): Promise<readonly ResolverSqlTable[]>;
+  /** Visible shapes without rows, plus a retained read of selected links bounded by `maxRows` (more throws `sql_input_limit`). */
+  plan(actor: AccessActor, links: readonly HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal): Promise<{ tables: readonly Omit<ResolverSqlTable, 'rows'>[]; read(selected: ReadonlySet<string>): Promise<readonly ResolverSqlTable[]> }>;
   /** The SQL service's read door. */
   run(input: RunInput, signal: AbortSignal): Promise<Record<string, QueryOutcome>>;
   /** Test seam for the call's wall time. */
@@ -131,8 +132,6 @@ function prepare(args: RunnerJson): Prepared {
   return { single, queries: checked, params, paramTypes, tables, answered };
 }
 
-/** Could this SQL name the link? SQLite folds ASCII identifiers, so a name absent from the text is never read. */
-const mentions = (sql: string, link: string) => sql.toLowerCase().includes(link.toLowerCase());
 
 const CODES: Record<string, string> = { dataset_changed: 'conflict', dataset_not_found: 'unavailable' };
 
@@ -145,6 +144,7 @@ export function createResolverSql(ports: ResolverSqlPorts): ResolverSql {
     signal?.addEventListener('abort', forward, { once: true });
     if (signal?.aborted) forward();
     let expired = false;
+    const deadline = performance.now() + limits.wallMs;
     const cancelDeadline = (ports.scheduleDeadline ?? ((ms, expire) => { const timer = setTimeout(expire, ms); return () => clearTimeout(timer); }))(limits.wallMs, () => { expired = true; controller.abort(Error('sql_deadline')); });
     const active = controller.signal;
     // Every wait gives up at the deadline; the engine's own interrupt (timeoutMs) bounds each statement.
@@ -157,14 +157,28 @@ export function createResolverSql(ports: ResolverSqlPorts): ResolverSql {
     try {
       const inlineRows = Object.values(call.tables).reduce((n, t) => n + t.rows.length, 0);
       if (inlineRows > limits.rows) tooLarge(`a call reads at most ${limits.rows} rows`);
-      const linked = (await bounded(ports.links(pageId))).filter((link) => call.queries.some((q) => mentions(q.sql, link.name)));
-      for (const link of linked) if (Object.keys(call.tables).some((name) => name.toLowerCase() === link.name.toLowerCase()) || call.queries.some((q) => q.name.toLowerCase() === link.name.toLowerCase()))
-        refuse(`${link.name} names a linked dataset`);
+      const linked = await bounded(ports.links(pageId));
       let mounted: readonly ResolverSqlTable[] = [];
+      let planningErrors: Record<string, { error: string; timedOut?: boolean }> = {};
       if (linked.length) {
         try {
           // The caller's account, nothing more: no token, email or host grant reaches the dataset decision.
-          mounted = await bounded(ports.read(identityForUser(caller.subject), linked, { pageId, maxRows: limits.rows - inlineRows }, active));
+          const plan = await bounded(ports.plan(identityForUser(caller.subject), linked, { pageId, maxRows: limits.rows - inlineRows }, active));
+          let selected: Set<string>;
+          try {
+            const selection = await bounded(selectSqlLinks(plan.tables.map((t) => ({ link: t.link, schema: t.table === null ? 'main' : t.link, table: t.table ?? t.link, columns: t.columns })), { tables: call.tables, queries: call.queries, paramNames: Object.keys(call.params), paramTypes: call.paramTypes }, { signal: active, deadline }));
+            selected = selection.selected;
+            planningErrors = selection.errors;
+          } catch (e) {
+            if (performance.now() >= deadline) { expired = true; controller.abort(Error('sql_deadline')); }
+            if (active.aborted) throw e;
+            return refuse('SQL statement could not be prepared');
+          }
+          for (const link of linked) if (selected.has(link.name) && (Object.keys(call.tables).some((name) => name.toLowerCase() === link.name.toLowerCase()) || call.queries.some((q) => q.name.toLowerCase() === link.name.toLowerCase())))
+            refuse(`${link.name} names a linked dataset`);
+          const refused = plan.tables.find((t) => selected.has(t.link) && !t.runsSql);
+          if (refused) throw new ResolverQueryError('permission_denied', `caps.sql: your role's rule for ${refused.link} does not allow SQL (allow_aggregations); read its rows through caps.query instead`);
+          if (selected.size) mounted = await bounded(plan.read(selected));
         } catch (e) {
           if (e instanceof ResolverQueryError || expired) throw e;
           if (e instanceof Error && e.message === 'sql_input_limit') tooLarge(`a call reads at most ${limits.rows} rows`);
@@ -185,7 +199,7 @@ export function createResolverSql(ports: ResolverSqlPorts): ResolverSql {
       if (tables.reduce((n, t) => n + t.rows.length, 0) > limits.rows || tables.reduce((n, t) => n + t.rows.length * t.columns.length, 0) > limits.cells) tooLarge(`a call reads at most ${limits.rows} rows and ${limits.cells} cells`);
       if (bytes(input) > limits.inputBytes) tooLarge(`a call reads at most ${limits.inputBytes} bytes`);
       let outcomes: Record<string, QueryOutcome>;
-      try { outcomes = await bounded(ports.run(input, active)); } catch (e) {
+      try { outcomes = { ...(input.queries.some((q) => !Object.hasOwn(planningErrors, q.name)) ? await bounded(ports.run({ ...input, queries: input.queries.filter((q) => !Object.hasOwn(planningErrors, q.name)) }, active)) : {}), ...planningErrors }; } catch (e) {
         if (expired) throw e;
         throw new ResolverQueryError('unavailable');
       }

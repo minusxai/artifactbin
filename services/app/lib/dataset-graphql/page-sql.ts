@@ -17,7 +17,7 @@
  */
 import { GraphQLError } from 'graphql';
 import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts';
-import { CatalogQueryFailure, executeMounted, type CatalogMount } from '@/lib/datasets';
+import { CatalogQueryFailure, executeMounted, selectSqlLinks, type CatalogMount } from '@/lib/datasets';
 import { sqlRefusalMessage } from '@/lib/dataset-permissions';
 import { ID_COLUMN, tableIdentity } from './model';
 import type { DatasetSnapshot } from './types';
@@ -28,20 +28,18 @@ export interface PageSqlCall { sql: string; params: Readonly<Record<string, Scal
 export interface PageSqlAnswer { columns: Array<{ name: string; type: ColumnType }>; rows: Array<Record<string, unknown>> }
 
 const refuse = (code: string, message: string): never => { throw new GraphQLError(message, { extensions: { code } }); };
-/** Could this SQL name the link? SQLite folds ASCII identifiers, so a name absent from the text is never read. */
-const mentions = (sql: string, link: string) => sql.toLowerCase().includes(link.toLowerCase());
 
 /** The reader's tables of the links the statement names, refused whole when one may not run SQL. */
-function pageSqlMounts(loaded: readonly SqlLinkedDataset[], sql: string): CatalogMount[] {
+function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: ReadonlySet<string>, authorize = true): CatalogMount[] {
   const mounts: CatalogMount[] = [];
   for (const l of loaded) {
     const snapshot = l.snapshot;
-    if (!snapshot || !mentions(sql, l.link)) continue;
+    if (!snapshot || !selected.has(l.link)) continue;
     const single = Object.keys(snapshot.names ?? {}).length <= 1;
     for (const { tableId, selectable } of l.tables) {
       const visible = selectable ? snapshot.catalog.tables.find((t) => tableIdentity(t) === tableId) : undefined;
       if (!visible || visible.sql !== undefined) continue;
-      if (!snapshot.runsSql?.[tableId]) refuse('permission_denied', `_sql: ${sqlRefusalMessage(l.link)}`);
+      if (authorize && !snapshot.runsSql?.[tableId]) refuse('permission_denied', `_sql: ${sqlRefusalMessage(l.link)}`);
       const id = !visible.columns.some((c) => c.name.toLowerCase() === '_id');
       const columns: DatasetColumn[] = [...(id ? [{ name: '_id', type: 'string' as const }] : []), ...visible.columns.map((c) => ({ name: c.name, type: c.type }))];
       mounts.push({
@@ -54,10 +52,24 @@ function pageSqlMounts(loaded: readonly SqlLinkedDataset[], sql: string): Catalo
 }
 
 export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal): Promise<PageSqlAnswer> {
-  const mounts = pageSqlMounts(loaded, call.sql);
   let result;
+  const deadline = performance.now() + SQL_READ_LIMITS.timeoutMs;
   try {
-    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: SQL_READ_LIMITS.timeoutMs, signal });
+    const relations = loaded.flatMap((l) => pageSqlMounts([l], new Set([l.link]), false).map((m) => ({ link: l.link, schema: m.schema, table: m.name, columns: m.columns })));
+    let selected: Set<string>;
+    try { const plan = await selectSqlLinks(relations, { tables: {}, queries: [{ name: 'result', sql: call.sql }], paramNames: Object.keys(call.params) }, { signal, deadline });
+      if (plan.errors.result?.timedOut) throw new CatalogQueryFailure('SQL statement timed out', true);
+      if (Object.keys(plan.errors).length) return refuse('validation_failed', 'SQL statement could not be prepared');
+      selected = plan.selected; }
+    catch (e) {
+      if (e instanceof CatalogQueryFailure) throw e;
+      signal.throwIfAborted();
+      if (performance.now() >= deadline) return refuse('timeout', `a statement runs at most ${SQL_READ_LIMITS.timeoutMs} ms`);
+      return refuse('validation_failed', 'SQL statement could not be prepared');
+    }
+    signal.throwIfAborted();
+    const mounts = pageSqlMounts(loaded, selected);
+    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: Math.max(1, deadline - performance.now()), signal });
   } catch (e) {
     if (e instanceof CatalogQueryFailure) return refuse(e.timedOut ? 'timeout' : 'validation_failed', e.timedOut ? `a statement runs at most ${SQL_READ_LIMITS.timeoutMs} ms` : e.message);
     if (e instanceof Error && e.message.startsWith('Dataset SQL: ')) return refuse('validation_failed', e.message);

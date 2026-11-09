@@ -14,10 +14,10 @@ const STAFF: ResolverSqlTable = { link: 'staff', table: null, columns: [{ name: 
 const ORDERS: ResolverSqlTable = { link: 'shop', table: 'orders', columns: [{ name: '_id', type: 'string' }, { name: 'total', type: 'number' }], rows: [{ _id: 'o1', total: 5 }], runsSql: true };
 const ok = (rows: Record<string, unknown>[] = [{ n: 1 }]): QueryOutcome => ({ columns: [{ name: 'n', type: 'number', choices: [1] }], rows });
 
-function port(options: { tables?: readonly ResolverSqlTable[]; read?: ResolverSqlPorts['read']; run?: (input: RunInput) => Record<string, QueryOutcome> | Promise<Record<string, QueryOutcome>>; scheduleDeadline?: ResolverSqlPorts['scheduleDeadline'] } = {}) {
-  const read = vi.fn<ResolverSqlPorts['read']>(options.read ?? (async (_actor, named) => (options.tables ?? [STAFF, ORDERS]).filter((t) => named.some((l) => l.name === t.link))));
+function port(options: { tables?: readonly ResolverSqlTable[]; read?: (actor: import('@/lib/accounts').AccessActor, named: readonly import('@artifactbin/contracts').HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal) => Promise<readonly ResolverSqlTable[]>; run?: (input: RunInput) => Record<string, QueryOutcome> | Promise<Record<string, QueryOutcome>>; scheduleDeadline?: ResolverSqlPorts['scheduleDeadline'] } = {}) {
+  const read = vi.fn<(actor: import('@/lib/accounts').AccessActor, named: readonly import('@artifactbin/contracts').HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal) => Promise<readonly ResolverSqlTable[]>>(options.read ?? (async (_actor, named) => (options.tables ?? [STAFF, ORDERS]).filter((t) => named.some((l) => l.name === t.link))));
   const run = vi.fn<ResolverSqlPorts['run']>(async (input) => (options.run ?? ((i: RunInput) => Object.fromEntries(i.queries.map((q) => [q.name, ok()]))))(input));
-  const sql = createResolverSql({ links: async (pageId) => (pageId === 'page1' ? links : []), read, run, ...(options.scheduleDeadline ? { scheduleDeadline: options.scheduleDeadline } : {}) });
+  const sql = createResolverSql({ links: async (pageId) => (pageId === 'page1' ? links : []), plan: async (actor, named, settings, signal) => ({ tables: options.tables ?? [STAFF, ORDERS], read: (selected) => read(actor, named.filter((l) => selected.has(l.name)), settings, signal) }), run, ...(options.scheduleDeadline ? { scheduleDeadline: options.scheduleDeadline } : {}) });
   return { read, run, sql };
 }
 const viewer = { subject: 'u1', role: 'viewer' as const };
@@ -36,11 +36,11 @@ describe('createResolverSql', () => {
   it('the batched form mirrors RunInput: multi-table links as schemas, inline typed tables, every result by name', async () => {
     const { run, sql } = port({ run: () => ({ a: ok(), b: { error: 'no such column: x' } }) });
     const answer = await sql(call({
-      queries: [{ name: 'a', sql: 'SELECT * FROM staff JOIN shop.orders ON 1 JOIN goals USING (name)' }, { name: 'b', sql: 'SELECT x FROM a' }],
+      queries: [{ name: 'a', sql: 'SELECT staff.name, shop.orders.total, goals.target FROM staff JOIN shop.orders ON 1 JOIN goals USING (name)' }, { name: 'b', sql: 'SELECT x FROM a' }],
       params: { d: '2026-01-01' }, paramTypes: { d: 'date' },
       tables: { goals: { columns: [{ name: 'name', type: 'string' }, { name: 'target', type: 'number' }], rows: [{ name: 'ada', target: 3, extra: 'dropped' }, { name: 'bo' }] } },
     }));
-    expect(answer).toEqual({ a: { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] }, b: { error: 'no such column: x' } });
+    expect(answer).toEqual({ a: { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] }, b: { error: 'SQL statement could not be prepared' } });
     expect(run.mock.calls[0]![0]).toMatchObject({
       tables: { goals: { rows: [{ name: 'ada', target: 3 }, { name: 'bo', target: null }] }, staff: { rows: STAFF.rows } },
       imports: { shop: { orders: { columns: ORDERS.columns, rows: ORDERS.rows } } },
