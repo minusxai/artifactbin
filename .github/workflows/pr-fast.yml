@@ -213,7 +213,10 @@ jobs:
         run: |
           # A pinned executable preserves the same workflow/shell checks without a Docker pull/start.
           archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl --max-time 15 --retry 3 --retry-all-errors --retry-delay 1 -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"
+          # The release redirect can return persistent 504s; the immutable asset API is a bounded fallback.
+          if ! curl --max-time 10 -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"; then
+            curl --max-time 15 -fsSL -H 'Accept: application/octet-stream' -o "$RUNNER_TEMP/$archive" https://api.github.com/repos/rhysd/actionlint/releases/assets/384924896
+          fi
           printf '%s  %s\n' "$ACTIONLINT_SHA256" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
           tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/$archive" actionlint
           "$RUNNER_TEMP/actionlint" -color & lint=$!

@@ -32,6 +32,8 @@
   "services/app/lib/html-page/__tests__/pwa.test.ts",
   "services/app/lib/html-presence/__tests__/model.test.ts",
   "services/app/lib/html-presence/__tests__/preferences.test.ts",
+  "services/app/lib/html-presence/__tests__/publish.test.ts",
+  "services/app/lib/html-presence/__tests__/message.test.ts",
   "services/app/lib/html-presence/__tests__/reader-session.test.ts",
   "services/app/lib/html-presence/__tests__/room.test.ts",
   "services/app/lib/html-publication-bundle/__tests__/bundle.test.ts",

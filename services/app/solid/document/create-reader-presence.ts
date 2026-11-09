@@ -1,3 +1,4 @@
+import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {ArtifactBackend} from '@/lib/artifact-backend';
 import {createEffect,createSignal,on,onCleanup,type Accessor} from 'solid-js';
 import type {startReaderPresence} from './reader-presence-engine';
@@ -9,6 +10,8 @@ export type ReaderPresenceLoader=()=>Promise<{startReaderPresence:typeof startRe
 const loadReaderPresence:ReaderPresenceLoader=()=>import('./reader-presence-engine');
 /** Platform-origin transport and private settings; frame messages enter through the original validated controller. */
 export function createReaderPresence(options:{id:string;revision:string|Accessor<string>;enabled:Accessor<boolean>;nonce:Accessor<string|null>;runtimeRef:DocumentRuntimeRef;backend:Pick<ArtifactBackend,'publishPresence'>|null},load:ReaderPresenceLoader=loadReaderPresence){
+ // One private tab identity survives revision and bridge reconnect lifecycles. Other tabs remain distinct.
+ const session=runtimeId();
  const settings=readerPreferences((()=>{try{return window.localStorage;}catch{return null;}})());
  const [preferences,setPreferences]=createSignal(settings.read()),[viewers,setViewers]=createSignal<PresenceViewer[]>([]),[total,setTotal]=createSignal(0);
  let update=()=>{},receivePeers=(_frame:PresenceFrame)=>{};
@@ -23,7 +26,7 @@ export function createReaderPresence(options:{id:string;revision:string|Accessor
   window.addEventListener('pagehide',leave);window.addEventListener('pageshow',restore);
   const start=()=>{void load().then(({startReaderPresence})=>{
    stopPending();if(disposed)return;
-   const engine=startReaderPresence({revision,nonce,controller,backend:options.backend!,preferences,changed:(shown,others)=>{setViewers(shown);setTotal(others);},active});
+   const engine=startReaderPresence({session,revision,nonce,controller,backend:options.backend!,preferences,changed:(shown,others)=>{setViewers(shown);setTotal(others);},active});
    receivePeers=engine.receive;receivePeers(latestPeers);update=engine.update;
    dispose=()=>{update=()=>{};receivePeers=()=>{};engine.dispose();};
   }).catch(()=>{stopPending();/* Optional presence can recover when the bridge reconnects. */});};

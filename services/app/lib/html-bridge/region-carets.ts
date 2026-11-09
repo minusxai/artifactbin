@@ -14,7 +14,7 @@ import type { RegionCaret, RegionFrameMessage } from '@artifactbin/contracts';
 import { absolutePosition, relativePosition } from '../live-regions/browser';
 
 /** A collaborator's caret as the parent paints it (contracts `region-paint`). */
-export type RegionCaretPaint = RegionCaret & { id: string; label: string };
+export type RegionCaretPaint = RegionCaret & { id: string; colorId?: string; label: string };
 type CaretMessage = Extract<RegionFrameMessage, { kind: 'region-caret' }>;
 
 /** The contract's bound on one encoded position. */
@@ -107,7 +107,7 @@ export function createRegionCaretPainter(view: EditorView, regionId: string): Re
         mark = { caret: element, flag };
         marks.set(caret.id, mark);
       }
-      const colour = colourOf(caret.id);
+      const colour = colourOf(caret.colorId ?? caret.id);
       Object.assign(mark.caret.style, { position: 'absolute', left: `${box.left + win.scrollX}px`, top: `${box.top + win.scrollY}px`, height: `${Math.max(box.bottom - box.top, 1)}px`, width: '0', borderLeft: `2px solid ${colour}`, marginLeft: '-1px' });
       Object.assign(mark.flag.style, { position: 'absolute', left: '-2px', bottom: '100%', whiteSpace: 'nowrap', font: '600 11px/1.4 system-ui, sans-serif', color: '#fff', background: colour, borderRadius: '3px 3px 3px 0', padding: '0 4px' });
       if (mark.flag.textContent !== caret.label) mark.flag.textContent = caret.label;

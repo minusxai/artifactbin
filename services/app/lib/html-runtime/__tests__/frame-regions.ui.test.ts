@@ -317,6 +317,13 @@ describe('a region session in the page frame', () => {
     expect(caret()!.style.left).toBe('80px');
     // The same position this editor would encode.
     expect(encodePosition(editor.view.state, 8)).toBeTypeOf('string');
+    const paintIdentity = (id: string, colorId: string, label: string) => {
+      h.receive({ kind: 'region-paint', carets: [{ regionId: 'r1', anchor: at(4), head: at(4), id, colorId, label }] });
+      return document.querySelector<HTMLElement>('[data-af-region-caret]')!.firstElementChild as HTMLElement;
+    };
+    const originalColor = paintIdentity('session-one', 'a'.repeat(64), 'Reader').style.background;
+    expect(paintIdentity('session-two', 'a'.repeat(64), 'Renamed').style.background).toBe(originalColor);
+    expect(paintIdentity('session-three', 'b'.repeat(64), 'Renamed').style.background).not.toBe(originalColor);
     h.receive({ kind: 'region-paint', carets: [] });
     expect(caret()).toBeNull();
   });

@@ -56,3 +56,13 @@ it('publishes the frame\'s region caret beside its geometry, as a cursor the rea
  expect(sent.at(-1)?.region).toBeUndefined();
  session.dispose();
 });
+
+it('does not expose any unresolved own identity through the roster before publication returns',async()=>{
+ let incoming=(_frame:PresenceFrame)=>{},resolve!:(id:string)=>void;
+ const shown:string[][]=[];
+ const session=createReaderPresenceSession({session:'tab',revision:'1',nonce:'n',readPreferences:()=>readerDefaults,active:()=>true,publish:()=>new Promise(r=>{resolve=r;}),connect:receive=>{incoming=receive;return()=>{};},paint:()=>{},changed:viewers=>shown.push(viewers.map(v=>v.id)),clock:{now:()=>0,setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>2,clearTimeout:()=>{}}});
+ const peer=(id:string)=>({id,label:'Same label',revision:'1',seen:0,cursor:null,selection:null});
+ incoming({viewers:[peer('own'),peer('other')],total:2});
+ expect(shown.at(-1)).toEqual([]);
+ resolve('own');await Promise.resolve();expect(shown.at(-1)).toEqual(['other']);session.dispose();
+});

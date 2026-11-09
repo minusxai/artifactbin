@@ -149,7 +149,7 @@ export type RegionParentMessage =
    */
   | { kind: 'region-ack'; regionId: string; seq: number; settled?: number }
   | { kind: 'region-closed'; regionId: string; reason: string }
-  | { kind: 'region-paint'; carets: (RegionCaret & { id: string; label: string })[] }
+  | { kind: 'region-paint'; carets: (RegionCaret & { id: string; colorId?: string; label: string })[] }
   | { kind: 'region-command'; regionId: string; name: string; args?: Record<string, unknown> };
 
 /** Page frame → parent. */

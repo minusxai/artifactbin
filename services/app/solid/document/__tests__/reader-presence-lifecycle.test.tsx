@@ -121,13 +121,13 @@ it('publishes the frame\'s region caret and paints collaborators\' region carets
  await waitFor(()=>expect(published).toHaveLength(1));
  regionListener({kind:'region-caret',regionId:'af-6',anchor:'AQID',head:'BAUG',marks:[],block:'paragraph'});
  await waitFor(()=>expect(published.at(-1)?.region).toEqual({regionId:'af-6',anchor:'AQID',head:'BAUG'}),{timeout:1000});
- const peer={id:'peer',label:'Ada',revision:'1',seen:Date.now(),cursor:null,selection:null,region:{regionId:'af-6',anchor:'AQID',head:'AQID'}};
+ const peer={id:'peer',colorId:'a'.repeat(64),label:'Ada',revision:'1',seen:Date.now(),cursor:null,selection:null,region:{regionId:'af-6',anchor:'AQID',head:'AQID'}};
  engine.receive({viewers:[peer],total:2});
  expect(sentRegion).toEqual([]);
  expect(painted.at(-1)).toMatchObject({type:'mx:presence',viewers:[{id:'peer',label:'Ada'}]});
  expect((painted.at(-1) as {viewers:Array<Record<string,unknown>>}).viewers[0]).not.toHaveProperty('region');
  enabled=true;engine.receive({viewers:[peer],total:2});
- expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[{regionId:'af-6',anchor:'AQID',head:'AQID',id:'peer',label:'Ada'}]});
+ expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[{regionId:'af-6',anchor:'AQID',head:'AQID',id:'peer',colorId:'a'.repeat(64),label:'Ada'}]});
  prefs.showCursors=false;engine.update();
  expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[]});
  regionListener({kind:'region-blur'});
@@ -144,4 +144,24 @@ it('a presence session started again (a new revision) publishes the region caret
  const engine=startReaderPresence({revision:'2',nonce:'n',active:true,controller,backend:{publishPresence:async input=>{published.push(input as unknown as Record<string,unknown>);return 'own';}},preferences:()=>prefs,changed:()=>{}});
  await waitFor(()=>expect(published.at(-1)?.region).toEqual(caret),{timeout:1000});
  engine.dispose();
+});
+
+it('retains tab identity across revision and readiness restarts, including a delayed disposed publication',async()=>{
+ const [revision,setRevision]=createSignal('1'),[enabled,setEnabled]=createSignal(true);
+ const publications:Array<{session:string;visible:boolean}>=[];
+ let presence!:ReturnType<typeof createReaderPresence>;
+ let finish!:()=>void;
+ const controller={send:vi.fn(),subscribe:()=>()=>{}} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const view=render(()=>{presence=createReaderPresence({id:'p',revision,nonce:()=> 'n',enabled,runtimeRef:{current:controller},backend:{publishPresence:async input=>{publications.push(input);if(publications.length===1)await new Promise<void>(resolve=>{finish=resolve;});return input.session;}}});return <div/>;});
+ await waitFor(()=>expect(publications).toHaveLength(1));
+ setEnabled(false);setEnabled(true);await waitFor(()=>expect(publications.length).toBeGreaterThan(1));
+ const peer=(id:string)=>({id,label:'Reader',revision:'1',seen:Date.now(),cursor:null,selection:null});
+ presence.receive({viewers:[peer(publications[0]!.session),peer('collaborator')],total:2});
+ await waitFor(()=>expect(presence.viewers().map(v=>v.id)).toEqual(['collaborator']));
+ finish();await Promise.resolve();
+ presence.receive({viewers:[peer(publications[0]!.session),peer('collaborator')],total:2});
+ expect(presence.viewers().map(v=>v.id)).toEqual(['collaborator']);
+ setRevision('2');await waitFor(()=>expect(publications.filter(p=>p.visible).length).toBeGreaterThan(2));
+ expect(new Set(publications.map(p=>p.session)).size).toBe(1);
+ view.unmount();
 });
