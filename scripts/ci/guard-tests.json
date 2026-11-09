@@ -9,6 +9,7 @@
   "scripts/__tests__/render-schema-runs.test.mjs",
   "scripts/__tests__/residual-name-guard.test.mjs",
   "scripts/__tests__/script-paths.test.mjs",
+  "scripts/__tests__/server-reader-cache.test.mjs",
   "scripts/__tests__/stored-shape-pins.test.mjs",
   "scripts/__tests__/v3-ci.test.mjs",
   "scripts/__tests__/workflows.test.mjs",

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { librariesFresh, recordLibraries, recordServerReader, repoRelative, serverReaderFresh, stampInputs } from './server-reader-cache.mjs';
+import { librariesFresh, recordLibraries, recordServerReader, repoRelative, serverReaderFresh, stampInputs, withComponentGraph } from './server-reader-cache.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'lib/build-assets');
@@ -52,7 +52,9 @@ fs.writeFileSync(path.join(output, 'maplibre-gl-worker.mjs'), worker.replace(/\n
 // Older checkouts copied MapLibre v5's CSP worker here.
 fs.rmSync(path.join(output, 'maplibre-gl-csp-worker.js'), { force: true });
 
-recordServerReader(stamped, [
+// The receipt this build just wrote names every file the components read, including ones the last receipt lacked.
+const receipt = JSON.parse(fs.readFileSync(path.join(output, 'html-components-receipt.json'), 'utf8'));
+recordServerReader(withComponentGraph(stamped, receipt), [
   ...['maplibre-gl-worker.mjs'].map((file) => repoRelative(path.join(output, file))),
   ...libraryOutputs,
   ...components.map((name) => repoRelative(path.join(output, 'components', `${name}.js`))),
