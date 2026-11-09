@@ -26,6 +26,11 @@ it('detects each harness and the session key it exposes', () => {
  };
  expect(agent.detectSession({PI_CODING_AGENT: 'true'}, {ps: (pid: number) => tree[pid] ?? null, ppid: 10}))
   .toEqual({harness: 'pi', label: 'Pi', key: '8@Mon Nov  9 09:00:00 2026'});
+ // AGENT_SESSION_ID: any harness may name its session; it wins over the harness's own ID and the process walk.
+ expect(agent.detectSession({PI_CODING_AGENT: 'true', AGENT_SESSION_ID: 's9'}, {ps: noPs})).toEqual({harness: 'pi', label: 'Pi', key: 's9'});
+ expect(agent.detectSession({CODEX_THREAD_ID: 't1', AGENT_SESSION_ID: 's9'}, {ps: noPs})).toEqual({harness: 'codex', label: 'Codex', key: 's9'});
+ expect(agent.detectSession({AGENT_SESSION_ID: 's9'}, {ps: noPs})).toEqual({harness: null, label: null, key: 's9'});
+ expect(agent.agentIdentity({env: {AGENT_SESSION_ID: 's9'}, ps: noPs})).toMatchObject({unidentified: false});
  expect(agent.detectSession({}, {ps: (pid: number) => tree[pid] ?? null, ppid: 10})).toEqual({harness: null, label: null, key: '8@Mon Nov  9 09:00:00 2026'});
  // The same agent process is the same session on every call; ps failing still yields a key.
  expect(agent.ancestorKey(10, (pid: number) => tree[pid] ?? null)).toBe(agent.ancestorKey(10, (pid: number) => tree[pid] ?? null));
