@@ -42,7 +42,8 @@ export function ProfileAliasRoute(): JSX.Element {
   // A one-segment slug the server has not answered on this load may be a title slug, which only the server resolves:
   // a miss at it crosses there, once (an address the server already answered is never sent back).
   const resolvable = createMemo(() => segments().length === 1 && titleSlug(segments()[0]) === segments()[0]!.toLowerCase() && !served() && !servedAt(location.pathname));
-  const cross = () => replaceDocument(window.location.pathname + window.location.search + window.location.hash);
+  // The ROUTER's address: a client navigation renders this route before the address bar moves.
+  const cross = () => replaceDocument(location.pathname + location.search + location.hash);
   createEffect(() => { if (!id() && resolvable()) cross(); });
   return <Show when={!bare()} fallback={<ProfilePage />}>
     <Show when={id()} fallback={<Show when={!resolvable()}><NotFoundPage /></Show>}>
