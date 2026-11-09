@@ -1,7 +1,7 @@
 import {type ArtifactRow,canReadArtifact} from '@/lib/artifacts';
 import {LIVE_ARTIFACT_SQL} from '@/lib/artifact-access';
 import {ANONYMOUS_ACTOR,ownerUsername} from '@/lib/accounts';
-import {getDb,PUBLIC_BASE_URL,USER_PAGES_HOST} from '@/lib/platform';
+import {getDb,PUBLIC_BASE_URL,TITLE_SLUG_SQL,USER_PAGES_HOST} from '@/lib/platform';
 import {canonicalArtifactPath,domainPostPath} from '@/lib/http';
 import {documentOwner,userPagesOrigin,type UserPagesOwner} from './hosts';
 type ServedRow={user_id:string|null;group_id?:string|null;visibility:string;format:string;deleted_at?:unknown};
@@ -12,6 +12,17 @@ export function servesDocument(owner:UserPagesOwner,row:ServedRow):boolean {
 const ownerSql=(owner:UserPagesOwner)=>owner.kind==='group'?'group_id = $1':'group_id IS NULL AND user_id = $1';
 export async function publicHomeFiles(owner:UserPagesOwner){
  return (await (await getDb()).query<{id:string;format:string;title:string|null;version:number;updated_at:string}>(`SELECT id,format,title,version,updated_at FROM artifacts WHERE ${ownerSql(owner)} AND visibility='public' AND format='html' AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC,id`,[owner.id])).rows;
+}
+/**
+ * The page the host's root serves in place of the listing: the owner's EARLIEST live page titled "index" (any case;
+ * by its title slug, as `/@handle/index` names it on the app, lib/artifacts/slug-address). The earliest decides, as it
+ * does there: when it is not a public HTML page the root is the listing, never a later "index". One indexed probe
+ * (lib/platform/schema idx_artifacts_user_slug / idx_artifacts_group_slug).
+ */
+export async function homePageId(owner:UserPagesOwner):Promise<string|null>{
+ const scope=owner.kind==='group'?'group_id = $1 AND group_id IS NOT NULL':'user_id = $1 AND group_id IS NULL';
+ const row=(await (await getDb()).query<{id:string;visibility:string;format:string}>(`SELECT id,visibility,format FROM artifacts WHERE ${scope} AND deleted_at IS NULL AND title IS NOT NULL AND ${TITLE_SLUG_SQL} = 'index' ORDER BY created_at,id LIMIT 1`,[owner.id])).rows[0];
+ return row&&row.visibility==='public'&&row.format==='html'?row.id:null;
 }
 const embeddedFormats=new Set(['image','file','pdf']);
 export async function servesEmbeddedArtifact(owner:UserPagesOwner,row:ArtifactRow):Promise<boolean>{

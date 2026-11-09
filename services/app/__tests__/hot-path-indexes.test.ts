@@ -78,6 +78,11 @@ it('chooses the launch indexes and the snapshot GIN index', async () => {
     .toContain('idx_artifacts_user_slug');
   expect(await plan(`SELECT id FROM artifacts WHERE group_id = $1 AND group_id IS NOT NULL AND deleted_at IS NULL AND title IS NOT NULL AND ${TITLE_SLUG_SQL} = $2 ORDER BY created_at, id LIMIT 20`, ['group7', 'notes']))
     .toContain('idx_artifacts_group_slug');
+  // An owner host's root page (lib/user-pages homePageId): the earliest page titled "index".
+  expect(await plan(`SELECT id, visibility, format FROM artifacts WHERE user_id = $1 AND group_id IS NULL AND deleted_at IS NULL AND title IS NOT NULL AND ${TITLE_SLUG_SQL} = 'index' ORDER BY created_at, id LIMIT 1`, ['user5']))
+    .toContain('idx_artifacts_user_slug');
+  expect(await plan(`SELECT id, visibility, format FROM artifacts WHERE group_id = $1 AND group_id IS NOT NULL AND deleted_at IS NULL AND title IS NOT NULL AND ${TITLE_SLUG_SQL} = 'index' ORDER BY created_at, id LIMIT 1`, ['group7']))
+    .toContain('idx_artifacts_group_slug');
   // A thread's notifications (lib/notifications/write).
   expect(await plan('SELECT id, recipient_id, revision FROM member_notifications WHERE artifact_id = $1 AND source = $2', ['a7', 'comment:t7']))
     .toContain('idx_member_notifications_source');
