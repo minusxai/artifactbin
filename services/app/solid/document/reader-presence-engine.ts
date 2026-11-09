@@ -9,9 +9,9 @@ import type {PresencePaint} from '@/lib/html-presence';
 type RegionChannel=Pick<FrameBridgeParent,'subscribeRegion'|'sendRegion'|'regionsEnabled'>;
 const regionChannel=(controller:object):RegionChannel|null=>'subscribeRegion' in controller&&'sendRegion' in controller&&'regionsEnabled' in controller?controller as RegionChannel:null;
 /** Collaborators' region carets for the frame's editor (contract `region-paint`): only those a reader chose to see. */
-const regionCarets=(input:PresencePaint)=>input.preferences.showCursors?input.viewers.flatMap(viewer=>viewer.region?[{...viewer.region,id:viewer.id,label:viewer.label}]:[]):[];
+const regionCarets=(input:PresencePaint)=>input.preferences.showCursors?input.viewers.flatMap(viewer=>viewer.region?[{...viewer.region,id:viewer.id,label:viewer.label,...(viewer.colorId?{colorId:viewer.colorId}:{})}]:[]):[];
 export interface ReaderPresenceEngineOptions {
- revision:string; nonce:string; active:boolean;
+ session?:string; revision:string; nonce:string; active:boolean;
  controller:NonNullable<DocumentRuntimeRef['current']>;
  backend:Pick<ArtifactBackend,'publishPresence'>;
  preferences:()=>ReaderPreferences;
@@ -21,7 +21,7 @@ export interface ReaderPresenceEngineOptions {
 export function startReaderPresence(options:ReaderPresenceEngineOptions){
  let active=options.active,receivePeers=(_frame:PresenceFrame)=>{};
  const regions=regionChannel(options.controller);
- const session=createReaderPresenceSession({session:runtimeId(),revision:options.revision,nonce:options.nonce,readPreferences:options.preferences,active:()=>active,
+ const session=createReaderPresenceSession({session:options.session??runtimeId(),revision:options.revision,nonce:options.nonce,readPreferences:options.preferences,active:()=>active,
   publish:input=>options.backend.publishPresence(input),
   connect:receive=>{receivePeers=receive;return()=>{receivePeers=()=>{};};},
   // Region carets go to the frame's editor on the region channel, and only into a frame with regions enabled.

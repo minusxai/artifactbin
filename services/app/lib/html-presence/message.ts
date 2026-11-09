@@ -12,5 +12,6 @@ export function decodePresenceMessage(payload:string,revision:string):PresenceVi
  if(typeof entry.id!=='string'||!/^[a-f0-9]{64}$/.test(entry.id))return null;
  if(entry.gone===true)return {id:entry.id,gone:true};
  if(entry.revision!==revision||typeof entry.label!=='string'||entry.label.length>100||typeof entry.seen!=='number'||!Number.isFinite(entry.seen))return null;
- return {id:entry.id,label:entry.label,revision,seen:entry.seen,...presenceGeometry(entry)};
+ if(entry.colorId!==undefined&&(typeof entry.colorId!=='string'||! /^[a-f0-9]{64}$/.test(entry.colorId)))return null;
+ return {id:entry.id,...(entry.colorId?{colorId:entry.colorId}:{}),label:entry.label,revision,seen:entry.seen,...presenceGeometry(entry)};
 }

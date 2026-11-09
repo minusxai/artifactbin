@@ -26,7 +26,8 @@ export async function publishPresence(actor:PresenceAuthor,row:{version:number},
  const id=createHash('sha256').update(`${actor.userId??actor.tokenId??'guest'}:${raw.session}`).digest('hex');
  if(behind)return {id};
  if(raw.visible===false){await ports.notify(encodePresenceMessage({id,gone:true}));return {id};}
- const entry:PresenceViewer={id,label:await ports.label(actor.userId)??PRESENCE_GUEST_LABEL,revision,seen:ports.now(),...presenceGeometry(raw)};
+ const colorId=actor.userId?createHash('sha256').update(`presence-color:account:${actor.userId}`).digest('hex'):id;
+ const entry:PresenceViewer={id,colorId,label:await ports.label(actor.userId)??PRESENCE_GUEST_LABEL,revision,seen:ports.now(),...presenceGeometry(raw)};
  await ports.notify(encodePresenceMessage(entry));
  return {id};
 }

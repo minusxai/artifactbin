@@ -15,3 +15,9 @@ it('refuses another revision, foreign ids, oversized labels, unbounded geometry 
  expect(decodePresenceMessage(JSON.stringify({...viewer,cursor:{nodeId:'p',x:9,y:0},extra:'secret'}),'3')).toEqual({...viewer,cursor:null});
  expect(decodePresenceMessage('{',  '3')).toBeNull();expect(decodePresenceMessage('null','3')).toBeNull();
 });
+
+it('preserves only bounded opaque server color identities across the notification wire',()=>{
+ const viewer={id,colorId:'a'.repeat(64),label:'Reader',revision:'3',seen:10,cursor:null,selection:null};
+ expect(decodePresenceMessage(encodePresenceMessage(viewer),'3')).toEqual(viewer);
+ expect(decodePresenceMessage(JSON.stringify({...viewer,colorId:'untrusted'}),'3')).toBeNull();
+});

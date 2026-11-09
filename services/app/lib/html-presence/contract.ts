@@ -9,7 +9,7 @@ export interface PresenceGeometry {
 }
 export interface ReaderPreferences { visible: boolean; shareCursor: boolean; shareSelection: boolean; showCursors: boolean; showSelections: boolean }
 export const readerDefaults: ReaderPreferences = { visible: true, shareCursor: true, shareSelection: true, showCursors: true, showSelections: true };
-export interface PresenceViewer extends PresenceGeometry { id: string; label: string; revision: string; seen: number }
+export interface PresenceViewer extends PresenceGeometry { id: string; /** Opaque server-derived color identity; never a session secret or display label. */ colorId?: string; label: string; revision: string; seen: number }
 export interface PresencePublication extends PresenceGeometry { session: string; revision: string; visible: boolean }
 /** One roster frame: at most PRESENCE_ROSTER_CAP viewers, and how many live readers the room holds in all (this tab included while it is visible). */
 export interface PresenceFrame { viewers: PresenceViewer[]; total: number }
