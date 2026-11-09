@@ -24,5 +24,6 @@
   "services/app/lib/skills/__tests__/skill-description.test.ts",
   "services/app/lib/skills/__tests__/skill-public-budget.test.ts",
   "services/app/lib/skills/__tests__/skill-tree.test.ts",
-  "services/app/lib/skills/__tests__/tracker-combos.test.ts"
+  "services/app/lib/skills/__tests__/tracker-combos.test.ts",
+  "services/app/lib/html-runtime/__tests__/region-editor-budget.test.ts"
 ]
