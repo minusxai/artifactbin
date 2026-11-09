@@ -115,6 +115,8 @@ describe('the additive DDL is replay-safe', () => {
       'edited_at',
       // The latest edit's position in the comment feed (lib/annotations/changes), and the credential that made it.
       'change_seq', 'change_token_id',
+      // The agent session behind the row and its latest edit: per-session `you` in the feed.
+      'author_session', 'change_session',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is

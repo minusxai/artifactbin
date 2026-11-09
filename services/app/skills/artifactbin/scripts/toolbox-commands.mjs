@@ -133,6 +133,8 @@ const commands = {
       artifact: flag()}
   }
 };
+// --as NAME: the name this agent session's comments show (toolbox-agent), on every comment verb.
+for (const flags of Object.values(commands.comment.sub)) flags.as = flag();
 export const COMMANDS = Object.freeze(commands);
 
 export function parseCommand(name, args) {

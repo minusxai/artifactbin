@@ -16,6 +16,11 @@ export interface AnnotationAuthor {
    * stored rows still carry, and the rail renders its own chip for it.
    */
   transport: 'browser' | 'http' | 'mcp' | 'unknown';
+  /**
+   * The agent session that wrote it (the `Artifactbin-Session` key), stored beside the row so the comment feed marks
+   * only that session's writes `you`. Written, never read back onto the wire.
+   */
+  writerSession?: string;
 }
 
 /**

@@ -425,6 +425,11 @@ const ANNOTATIONS: Table = {
     { name: 'change_seq', type: 'BIGINT' },
     // The credential behind the latest edit, beside its position: the feed marks a watcher's own rewrite `you`.
     { name: 'change_token_id', type: 'TEXT' },
+    // The agent session that wrote the row and made its latest edit: the opaque `Artifactbin-Session` value, beside the
+    // credential. Self-reported, never authorization: the feed's `you` is the credential AND, when both sides name one,
+    // the session, so two agents sharing one sign-in each see the other's comments (lib/annotations/changes).
+    { name: 'author_session', type: 'TEXT' },
+    { name: 'change_session', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }, { name: 'idx_annotations_artifact_change_seq', columns: ['artifact_id', 'change_seq'] }],
@@ -464,6 +469,7 @@ const COMMENT_REACTION_EVENTS: Table = {
     {name:'count',type:'INTEGER',notNull:true},
     {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
     {name:'token_id',type:'TEXT'}, // the credential that reacted: the feed marks a watcher's own reaction `you`
+    {name:'session',type:'TEXT'}, // the agent session that reacted (annotations.author_session); never authorization
   ],
   primaryKey: ['seq'],
   indexes: [{name:'idx_comment_reaction_events_artifact_seq',columns:['artifact_id','seq']}],

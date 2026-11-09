@@ -117,9 +117,11 @@ export async function respondToAnnotationEdit(
   id: string,
   commentId: string,
   receipt?: MutationReceipt,
+  writerSession?: string,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const edit = parseAnnotationEdit(body);
+  const parsed = parseAnnotationEdit(body);
+  const edit = parsed && writerSession ? { ...parsed, writerSession } : parsed;
   if (!edit) return json({ error: 'invalid_annotation_edit', hint: 'Send the new text as a non-empty `body`; `expected_revision` is the thread revision you read.' }, 400);
   let result;
   try { result = await editAnnotationCommentFor(actor, id, commentId, edit, receipt); }
@@ -137,7 +139,7 @@ export async function respondToAnnotationEdit(
  * Both account doors use the same desired-state protocol; unknown kinds fail closed until supported. `reactor` is
  * the door's attribution, as for a reply: the browser door names the person, the bearer door the agent.
  */
-export async function respondToCommentReaction(body:Record<string,unknown>|null,actor:AccessActor,id:string,commentId:string,reactor:Pick<AnnotationAuthor,'kind'|'label'>):Promise<Response>{
+export async function respondToCommentReaction(body:Record<string,unknown>|null,actor:AccessActor,id:string,commentId:string,reactor:Pick<AnnotationAuthor,'kind'|'label'|'writerSession'>):Promise<Response>{
  if(!actor.userId)return json({error:'account_required',hint:'Sign in to react to comments.'},403);
  if(!body || body.kind!=='thumbs_up' || typeof body.active!=='boolean')return json({error:'invalid_comment_reaction'},400);
  const wire=await setCommentReactionFor(actor,id,commentId,{kind:body.kind,active:body.active},reactor);

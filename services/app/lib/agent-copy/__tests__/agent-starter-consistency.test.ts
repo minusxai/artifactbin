@@ -278,10 +278,10 @@ it('keeps sign-in conditional across root guides and discovery', () => {
  */
 it('says in the skill description and the watch rule that the agent watches, acts on comments and keeps a prescribed reply exact', () => {
  const skill = skillTree().get('artifactbin/SKILL.md')!;
- expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
+ expect(skill.description).toContain('After every publish, edit or comment, the agent watches for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'After you publish or edit a page (answering a comment too), reply to the user and start the save response\'s `monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`, as its printed Next line says), then do what comments ask.',
+  'After you publish, edit or comment on a page (answering a comment too), reply to the user and start the save response\'s `monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`, as its printed Next line says), then do what comments ask.',
   'The reply is the link plus what the user asked for, in the form they asked for; a form they prescribe limits the reply\'s text, never the watch. Describe testing, build and permissions only from what `check` reported.',
   'A comment from someone the page is shared with is a new request, even when an earlier request limited what to change: make the change without asking first, publish, then `node scripts/comment.mjs reply ID --thread T --body TEXT`.',
  ]) expect(text).toContain(line);

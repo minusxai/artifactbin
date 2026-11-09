@@ -8,12 +8,11 @@
  */
 import {ToolError,serverOrigin,requestUrl,originRequest} from './toolbox-transport.mjs';
 export {ToolError,serverOrigin,originRequest} from './toolbox-transport.mjs';
-import {beforeCommand} from './toolbox-update.mjs';
-import {homedir} from 'node:os';import path from 'node:path';
+import {beforeCommand} from './toolbox-update.mjs';import {createHash} from 'node:crypto';
+import {homedir} from 'node:os';import path from 'node:path';import {realpathSync} from 'node:fs';
 import {readFile,writeFile,realpath,lstat} from 'node:fs/promises';
-import {realpathSync} from 'node:fs';import {fileURLToPath} from 'node:url';
-import {createHash} from 'node:crypto';
-import configuredServer from './toolbox-config.mjs';
+import {fileURLToPath} from 'node:url';import configuredServer from './toolbox-config.mjs';
+import {agentIdentity,agentHeaders} from './toolbox-agent.mjs';
 import {parseCommand} from './toolbox-commands.mjs';
 import {commandHelp} from './toolbox-description.mjs';
 import {checkDigest} from './toolbox-check-digest.mjs';export {checkDigest};
@@ -59,8 +58,8 @@ export async function safeParent(file){const parent=await realpath(path.dirname(
   file)));return path.join(parent,path.basename(file));}
 export function within(root,file){const relative=path.relative(root,file);return relative===''||
   relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);}
-export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays=undefined}={}){
- server=serverOrigin(server);const root=credentialRoot(env);
+export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays,identity}={}){
+ server=serverOrigin(server);const root=credentialRoot(env);let who=identity;
  async function grant(){
 if(env.ARTIFACTBIN_TOKEN){if(env.ARTIFACTBIN_URL!==server)throw new ToolError(
     'credential_origin_mismatch','Environment grant belongs to another origin.',3);return {server,
@@ -87,7 +86,8 @@ requestUrl(server,route);
 try{response=(await (await platform()).retryFetch(()=>originRequest(server,route,{method,body,
      signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):
       AbortSignal.timeout(timeoutMs),
-     headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{
+     headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...agentHeaders(who??=
+     agentIdentity({env,root})),...(connection?{
      Authorization:'Bearer '+connection.token}:{}),...headers}},fetcher),{
      method,idempotencyKey:headers['Idempotency-Key'],safeToRepeat,signal,policy:retryDelays?{
      delaysMs:retryDelays}:undefined})).response;}
@@ -113,7 +113,7 @@ throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,4
      'Inspect access and request inputs.'),refusal);
   }
  }
- return {server,root,request,grant,fetcher};
+ return {server,root,request,grant,fetcher,identity:()=>who??=agentIdentity({env,root})};
 }
 /** A version_conflict names what moved since the read (the server's `changed`) and the one step. */
 const CHANGED={content:'A newer version was published',details:'The title, description or '+

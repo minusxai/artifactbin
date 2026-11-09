@@ -126,6 +126,8 @@ export interface AnnotationAction {
 export interface AnnotationEdit {
   body: string;
   expectedRevision?: number;
+  /** The editing agent session (AnnotationAuthor.writerSession); none for a person in the browser. */
+  writerSession?: string;
 }
 
 /** What an edit answers: the thread as it now reads, the edited comment, and the text it replaced (null when unchanged). */
@@ -283,11 +285,12 @@ export async function createAnnotationFor(
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15)`,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor, author_session)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
       anchorKey, row.version, snippet,
-      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null],
+      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null,
+      author.writerSession ?? null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
@@ -501,9 +504,9 @@ export async function actOnAnnotationFor(
       }
       await tx.query(
         `INSERT INTO annotations
-           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
-        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null],
+           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote, author_session)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10, $11)`,
+        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null,author.writerSession ?? null],
       );
     }
     if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
@@ -591,9 +594,9 @@ export async function editAnnotationCommentFor(
     if (changed) {
       // Every edit, a person's or an agent's, takes a new feed position from seq's own sequence, under the artifact
       // lock already held, so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
-      // The editing credential is kept beside it: the feed marks the watcher's own rewrite `you`.
-      await tx.query("UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')), change_token_id = $3 WHERE id = $1",
-        [comment.id, edit.body, actor.tokenId]);
+      // The editing credential and agent session are kept beside it: the feed marks the watcher's own rewrite `you`.
+      await tx.query("UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')), change_token_id = $3, change_session = $4 WHERE id = $1",
+        [comment.id, edit.body, actor.tokenId, edit.writerSession ?? null]);
       await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1', [root.id]);
       await recordEvent(tx, actorSubject(actor), 'annotation_edited', { kind: 'artifact', id: artifactId }, {
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
@@ -704,7 +707,7 @@ export async function countOpenAnnotations(artifactId: string): Promise<number> 
  * log strictly alternates added/removed, which is what lets the feed net out a toggle since a checkpoint.
  * `reactor` is decided at the door, as a comment's author is: a browser session is the person, a bearer an agent.
  */
-export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput,reactor:Pick<AnnotationAuthor,'kind'|'label'>):Promise<AnnotationWire|null>{
+export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput,reactor:Pick<AnnotationAuthor,'kind'|'label'|'writerSession'>):Promise<AnnotationWire|null>{
   if(!actor.userId)return null;
   const db=await getDb();
   return db.transaction(async tx=>{
@@ -720,10 +723,10 @@ export async function setCommentReactionFor(actor:AccessActor,artifactId:string,
       :await tx.query('DELETE FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3 RETURNING comment_id',[commentId,actor.userId,input.kind]);
     if(result.rows.length){
       await tx.query(
-        `INSERT INTO comment_reaction_events (seq,artifact_id,comment_id,user_id,kind,active,reactor_kind,reactor_label,count,token_id)
+        `INSERT INTO comment_reaction_events (seq,artifact_id,comment_id,user_id,kind,active,reactor_kind,reactor_label,count,token_id,session)
          VALUES (nextval(pg_get_serial_sequence('annotations','seq')),$1,$2,$3,$4,$5,$6,$7,
-           (SELECT count(*) FROM comment_reactions WHERE comment_id=$2 AND kind=$4),$8)`,
-        [artifactId,commentId,actor.userId,input.kind,input.active,reactor.kind,reactor.label,actor.tokenId]);
+           (SELECT count(*) FROM comment_reactions WHERE comment_id=$2 AND kind=$4),$8,$9)`,
+        [artifactId,commentId,actor.userId,input.kind,input.active,reactor.kind,reactor.label,actor.tokenId,reactor.writerSession??null]);
       await notify(tx,artifactId,rootId);
     }
     const fresh=(await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id=$1`,[rootId])).rows;
