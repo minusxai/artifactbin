@@ -1,7 +1,7 @@
 import { withTokenAuth } from '@/lib/authentication';
 import { CommentWaitCapacityError, InvalidCommentCursor, readCommentChangesFor } from '@/lib/annotations';
 import { json } from '@/lib/http';
-import { COMMENT_CHANGES_MAX_WAIT_SECONDS } from '@artifactbin/contracts';
+import { AGENT_SESSION_HEADER, COMMENT_CHANGES_MAX_WAIT_SECONDS, agentSessionKey } from '@artifactbin/contracts';
 
 /** Auth/query translation only; the annotations module owns replay and waits. */
 export const GET = withTokenAuth(async (request, { actor, params }) => {
@@ -14,6 +14,7 @@ export const GET = withTokenAuth(async (request, { actor, params }) => {
   try {
     const result = await readCommentChangesFor(actor, params.id, {
       after, waitSeconds: Number(waitRaw), limit: Number(limitRaw), signal: request.signal,
+      session: agentSessionKey(request.headers.get(AGENT_SESSION_HEADER)),
     });
     return result ? json(result, 200, {'Cache-Control': 'no-store'}) : json({error: 'not_found'}, 404);
   } catch (error) {

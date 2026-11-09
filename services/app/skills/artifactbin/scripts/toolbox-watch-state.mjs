@@ -1,26 +1,31 @@
 /**
- * Internal: the state a watch --next keeps beside its log: where the log lives, the watching
- * window (opened, activity, closed records), the threads printed and not yet answered, the
- * one-watch-at-a-time lock (<log>.lock holding the watch's pid, a token and when it started; a
- * later watch takes it over) and the Next lines that send the agent back to the watch.
+ * Internal: the state a watch --next keeps beside its log: where the log lives (one per page and
+ * agent session, so two agents sharing a sign-in never share a log or take over each other's
+ * watch), the watching window (opened, activity, closed records), the threads printed and not yet
+ * answered, the one-watch-at-a-time lock (<log>.lock holding the watch's pid, a token and when it
+ * started; a later watch of the same session takes it over) and the Next lines that send the agent
+ * back to the watch.
  * Used by: toolbox-comments.mjs (watch --next), toolbox-publish.mjs (activity), and the
  * comment-reactions-toolbox tests.
  */
-import {readFile,writeFile,unlink,stat,utimes,appendFile,truncate,link,rename} from
+import {readFile,writeFile,unlink,stat,utimes,appendFile,truncate,link,rename,readdir} from
   'node:fs/promises';
-import {existsSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {hash} from './toolbox-client.mjs';
 export const STREAM='comments';
 const stream=STREAM;
-/** The default --next log: beside the saved sign-in, never in the working directory. */
-export const watchLogPath=(root,server,id)=>path.join(root,'watch',hash(server).slice(0,16),
-  `${id}.ndjson`);
-/** Records activity (a publish) in an existing --next log, so the quiet stop counts from it. */
+/** The default --next log of one agent session (toolbox-agent sessionId): beside the saved
+ * sign-in, never in the working directory. */
+export const watchLogPath=(root,server,id,session)=>path.join(root,'watch',hash(server).slice(0,
+  16),id,`${session}.ndjson`);
+/** Records activity (a publish, by anyone) in every existing --next log of the page, so each
+ * watch's quiet stop counts from it. */
 export async function noteWatchActivity(root,server,id,now=Date.now){
- const file=watchLogPath(root,server,id);if(!existsSync(file))return;
- await appendFile(file,JSON.stringify({kind:'activity',server,artifact:id,stream,at:now()})+'\n');
+ const dir=path.dirname(watchLogPath(root,server,id,'-')),record=JSON.stringify({kind:'activity',
+  server,artifact:id,stream,at:now()})+'\n';
+ for(const file of await readdir(dir).catch(()=>[]))if(file.endsWith('.ndjson'))await appendFile(
+  path.join(dir,file),record);
 }
 /** The watching window a --next log holds: opened, last activity and closed records, in order. */
 export function windowOf(records){

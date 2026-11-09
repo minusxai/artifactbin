@@ -1,6 +1,6 @@
 /** HTTP display attribution from an explicit harness header or User-Agent. Never authorization. */
 
-import { AGENT_HEADER, declaredAgentSlug, type DeclaredAgentSlug } from '@artifactbin/contracts';
+import { AGENT_HEADER, declaredAgentProduct, type DeclaredAgentSlug } from '@artifactbin/contracts';
 
 export type Harness =
   | 'chatgpt'
@@ -92,7 +92,7 @@ export const ARTIFACTBIN_AGENT_HEADER = AGENT_HEADER;
 function declaredAgentHarness(value: unknown): Harness | null {
   const declared = str(value);
   if (!declared) return null;
-  const slug = declaredAgentSlug(declared);
+  const slug = declaredAgentProduct(declared);
   return slug ? DECLARED_AGENT_HARNESSES[slug] : null;
 }
 

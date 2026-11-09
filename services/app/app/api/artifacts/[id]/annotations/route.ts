@@ -18,7 +18,8 @@ import { type AccessActor } from '@/lib/accounts';
 import { withTokenAuth } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
-import { json, readJson } from '@/lib/http';
+import { baseUrl, json, readJson } from '@/lib/http';
+import { monitoringGuidance } from '@/lib/artifact-wire';
 
 const STATUSES = new Set(['open', 'resolved', 'all']);
 
@@ -73,7 +74,8 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   if ('refused' in made && made.refused === 'invalid_annotation_revision') return json({error: made.refused, field: 'anchor.revision', hint: 'anchor.revision is the page version number as a string (read.mjs shows it as version), not the state hash or an edit ID.'}, 400);
   if ('refused' in made && made.refused === 'stale') return json({error: 'stale', current_revision: String(made.head.version), hint: 'The page changed since this anchor was taken: read it again and use anchor.revision = its current version.'}, 409);
   if ('refused' in made) return json({error: made.refused, hint: 'Read the current page again, then supply an HTML anchor with its revision, stable nodeId and quote.'}, 400);
-  return json(made, 201);
+  // A script-less agent that comments is told to watch for the answers, as a publish tells it.
+  return json({...made, ...monitoringGuidance(baseUrl(request), params.id, 'html', 'comment')}, 201);
   };
   if(!key)return work();
   const access=await readableArtifact(actor,params.id);if(!access||!canAnnotate(access.role))return json({error:'not_found',admission_refused:true},404);

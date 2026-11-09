@@ -67,3 +67,16 @@ describe('logging', () => {
     expect(describeClient(identifyClient({ userAgent: 'openai-mcp/1.0.0' }))).toBe('chatgpt (openai-mcp/1.0.0, via user-agent)');
   });
 });
+
+describe('a session name that starts with a product', () => {
+  it('names the harness behind "Claude Code Red", "Codex Rose" and "OpenCode Teal"', () => {
+    expect(identifyClient({ agentHeader: 'Claude Code Red' })).toMatchObject({ harness: 'claude-code', label: 'Claude Code Red', source: 'agent-header' });
+    expect(identifyClient({ agentHeader: 'Codex Rose' }).harness).toBe('codex');
+    expect(identifyClient({ agentHeader: 'OpenCode Teal' }).harness).toBe('opencode');
+    expect(identifyClient({ agentHeader: 'Pi Amber' }).harness).toBe('pi');
+  });
+  it('never guesses from a word that only begins like a product', () => {
+    expect(identifyClient({ agentHeader: 'Pine Fox' }).harness).toBe('unknown');
+    expect(identifyClient({ agentHeader: 'Red Fox' }).source).not.toBe('agent-header');
+  });
+});

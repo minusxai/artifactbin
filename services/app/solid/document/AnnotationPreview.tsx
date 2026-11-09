@@ -53,10 +53,13 @@ export const previewText = (body: string) => plainText(parseMarkdownLite(body));
 export const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
 
 const authorLabel = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
-/** Prefer connected-session identity; legacy named authors still get their known logo. */
+/** Prefer connected-session identity; legacy named authors still get their known logo, and a session's own name
+ * ("Claude Code Red") the logo of the product it starts with. */
 const agentProgram = (author: Author): string => {
   const names: Record<string,string> = {claude:'Claude Code','claude-code':'Claude Code','claude code':'Claude Code','claude-web':'Claude',codex:'Codex',pi:'Pi',opencode:'OpenCode',chatgpt:'ChatGPT'};
-  return names[(author.harness ?? author.label ?? '').toLowerCase()] ?? 'Agent';
+  const key = (author.harness ?? author.label ?? '').toLowerCase();
+  const product = Object.keys(names).filter(name => key === name || key.startsWith(`${name} `)).sort((a, b) => b.length - a.length)[0];
+  return product ? names[product]! : 'Agent';
 };
 const authorKey = (author: Author) => `${author.kind}:${authorLabel(author).toLowerCase()}`;
 
@@ -114,7 +117,8 @@ export function AuthorIdentity(props: { author: Author }): JSX.Element {
       <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-2xs font-semibold"
         style={{ color: agentNameColor(label()) }}>@{label()}</a>
     )}</Show>
-    <Show when={props.author.kind === 'agent'}>
+    {/* A session's own name that already starts with its product ("Claude Code Red") says the type itself. */}
+    <Show when={props.author.kind === 'agent' && !label().toLowerCase().startsWith(`${agentProgram(props.author).toLowerCase()} `)}>
       <span aria-label={`Agent type ${agentProgram(props.author)}`} class="shrink-0 font-sans text-micro text-faint">· {agentProgram(props.author)}</span>
     </Show>
   </span>;

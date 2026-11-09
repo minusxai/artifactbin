@@ -97,7 +97,7 @@ describe('installed native author examples',()=>{
    const comment=await commentCommand({sub:'add',values:{server,anchor,'body-file':bodyFile},positionals:[first.id]},options);
    const comments=await commentCommand({sub:'list',values:{server,status:'all'},positionals:[first.id]},options);expect(comments.annotations).toHaveLength(1);
    const thread=comments.annotations[0];await writeFile(bodyFile,'Checked the source');
-   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(`Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. ${timeout}\n  node scripts/comment.mjs watch ${first.id} --next`);expect(comment.next).toBeUndefined();
+   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(`Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. ${timeout}\n  node scripts/comment.mjs watch ${first.id} --next`);expect(comment.next).toBe(replied.next);
    expect((await commentCommand({sub:'reply',values:{server,resume:replied.journal},positionals:[]},options)).thread.revision).toBe(replied.thread.revision);
    expect(comment.journal).toBeTruthy();
    await writeFile(first.source,canonical.replace('>One<','>Two<'));await writeFile(path.join(project,'theme.css'),'body{color:blue}');

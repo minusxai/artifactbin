@@ -10,15 +10,15 @@ description: >-
   no data, a deck, a doc a team edits together, a landing page, a task tracker, a sign-up sheet.
   Also any Artifactbin link (/a/ID): reading, editing, comments, export, querying its datasets, who
   may change their rows, groups and sharing. Not for questions answered in chat, files in a named
-  format (README, PowerPoint, Word, a plotted PNG) or code changes. After every publish or edit, the
-  agent watches the page for comments and answers them.
+  format (README, PowerPoint, Word, a plotted PNG) or code changes. After every publish, edit or
+  comment, the agent watches for comments and answers them.
 ---
 ## Read first
 
-[% if shipped %]After you publish or edit a page (answering a comment too), reply to the user and
-run `node scripts/comment.mjs watch ID --next` as its printed Next line says (even
-when the reply is only the link); then do what comments ask.[% else %]After you publish
-or edit a page (answering a comment too), reply to the user and start the save response's
+[% if shipped %]After you publish, edit or comment on a page (answering a comment too), reply to
+the user and run `node scripts/comment.mjs watch ID --next` as its printed Next line says (even
+when the reply is only the link); then do what comments ask.[% else %]After you publish,
+edit or comment on a page (answering a comment too), reply to the user and start the save response's
 `monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`,
 as its printed Next line says), then do what comments ask.[% endif %] The reply is the link plus
 what the user asked for, in the form they asked for; a form they prescribe limits the reply's text,
@@ -146,7 +146,8 @@ script. Groups: `node scripts/groups.mjs list`
 - **Answer comments.** A comment from someone the page is shared with is a new request, even when
   an earlier request limited what to change: make the change without asking first, publish, then
   `node scripts/comment.mjs reply ID --thread T --body
-  TEXT`.
+  TEXT`. Your comments show your agent name, such as "Claude Code Red"; `--as NAME` on any
+  `comment.mjs` command chooses your own.
 - **Data, apps, exports.** A page built from a CSV publishes it as a dataset first
   ([datasets](references/datasets.md)). A page that shows a dataset links it (`<link
   rel="af-dataset">`), reads rows with GraphQL and computes every number (counts, totals, group

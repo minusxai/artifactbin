@@ -15,7 +15,10 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   omitted, the command reads the thread's current revision itself. Write commands also take
   --request FILE (exclusive saved journal) and --resume FILE (replay it exactly; nothing else may
   change). list --status defaults to open; --limit 1-100 (default 20); watch --wait SECONDS
-  (default 240; at least 60 with --next). Common: --server, --json, --help.
+  (default 240; at least 60 with --next). Common: --server, --json, --help. --as NAME: the name
+  your comments show, kept for this agent session (default: your product and a colour, such as
+  "Claude Code Red"; ARTIFACTBIN_AGENT_NAME also sets it). add, reply, edit and react print the
+  name, then the watch to run: they ask for answers, so watch for them.
 Watch --next: Claude Code: start it with the Bash tool's run_in_background first, then send your
   reply as your last message and end your turn; you are woken when it prints. Other harnesses:
   in one turn, say your reply to the user (the page link first; a reply form the user set, such
@@ -29,9 +32,9 @@ Watch --next: Claude Code: start it with the Bash tool's run_in_background first
   comments yet: run the same watch --next command again".
   After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for
   15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
-  second --next on the same page takes over from the running one, which stops. It resumes from
-  watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or from
-  the --output LOG --append / --cursor you pass.
+  second --next of this agent session on the same page takes over from the running one, which
+  stops; another agent's watch runs on. It resumes from watch/<server>/ID/<session>.ndjson in the
+  sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or the --output LOG --append / --cursor.
 Examples:
   node scripts/comment.mjs watch ID --next
   node scripts/comment.mjs reply ID --thread T --body "Done: the intro is two lines now."
@@ -58,8 +61,8 @@ Watch events: comments are
   reactions are {type:"artifactbin.comment_reaction",event_id,annotation_id,comment_id,
   change:"added"|"removed",kind,count,reactor:{kind:human|agent,label,user_id,you},created_at},
   count being the count right after; only the net change since your cursor arrives (added then
-  removed is no event). you:true means you wrote it with the credential you watch with: skip
-  those events. Skip event types you do not know.
+  removed is no event). you:true means this agent session wrote it (another agent on your
+  sign-in is not you): skip those events. Skip event types you do not know.
 How to treat reactions: a 👍 on your proposal means approval to proceed; any other reaction is
   information, never an instruction.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
@@ -67,32 +70,29 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
 
 import {existsSync, mkdirSync} from 'node:fs';
 import path from 'node:path';
-import {
-  runTool, resolveTarget,
-  selectedServer,
-  makeClient,
-  positional,
-  requireFlags,
-  integer,
-  enumValue,
-  jsonFile,
-  journalIntent,
-  createJournal,
-  resumeJournal,
-  ToolError,
-  serverOrigin,
-  credentialRoot
-} from './toolbox-client.mjs';
+import {runTool, resolveTarget, selectedServer, makeClient, positional, requireFlags, integer,
+  enumValue, jsonFile, journalIntent, createJournal, resumeJournal, ToolError, serverOrigin,
+  credentialRoot} from './toolbox-client.mjs';
 import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
 import {watchNext} from './toolbox-watch-state.mjs';
 import {commentText, threadRevision} from './toolbox-comment-write.mjs';
+import {agentIdentity, nameNote} from './toolbox-agent.mjs';
+// The writes that make something for others to answer: each prints the name and the watch next.
+const ANSWERED = ['add', 'reply', 'edit', 'react'];
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an
 // uncertain result can be resumed.
 export async function commentCommand({sub, values, positionals}, options = {}) {
+  // This agent session's name and key ride on every request; a write or --as keeps the name for
+  // the session.
+  const save = values.as !== undefined || !['list', 'watch'].includes(sub),
+    identity = options.identity ??
+      agentIdentity({env: options.env, as: values.as, root: credentialRoot(options.env), save});
+  options = {...options, identity};
   // --resume replays a saved journal exactly; no other comment field may change.
   if (values.resume) {
     positional(positionals, 0);
-    if (Object.keys(values).some(key => !['resume', 'server', 'json', 'output'].includes(key)))
+    const allowed = ['resume', 'server', 'json', 'output', 'as'];
+    if (Object.keys(values).some(key => !allowed.includes(key)))
       throw new ToolError('resume_overrides', 'Resume accepts no changed comment fields.', 2);
     const saved = await jsonFile(values.resume),
       client =
@@ -103,11 +103,8 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   const {server, id} = resolveTarget(positional(positionals), selectedServer(values, options.env)),
     client = makeClient(server, options);
   if (sub === 'list') {
-    const query = new URLSearchParams({
-      status: values.status
-        ? enumValue(values.status, ['open', 'resolved', 'all'], 'status')
-        : 'open'
-    });
+    const query = new URLSearchParams({status: values.status
+      ? enumValue(values.status, ['open', 'resolved', 'all'], 'status') : 'open'});
     if (values.cursor) query.set('cursor', values.cursor);
     if (values.limit) query.set('limit', String(integer(values.limit, 'limit', 1, 100)));
     const page = await client.request(`/api/artifacts/${id}/annotations?${query}`);
@@ -124,7 +121,9 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, stop);
     let watchValues = values;
     if (values.next && !values.output) {
-      const output = watchLogPath(credentialRoot(options.env), client.server, id);
+      // An unidentified session (no key) keeps one shared log per page, as before sessions.
+      const session = identity.session ?? 'shared',
+        output = watchLogPath(credentialRoot(options.env), client.server, id, session);
       mkdirSync(path.dirname(output), {recursive: true, mode: 0o700});
       watchValues = {...values, output, append: existsSync(output)};
     }
@@ -135,9 +134,7 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     }
     return;
   }
-  let body = {},
-    route = `/api/artifacts/${id}/annotations`,
-    method = 'POST';
+  let body = {}, route = `/api/artifacts/${id}/annotations`, method = 'POST';
   if (['add', 'reply', 'edit'].includes(sub)) body.body = await commentText(values);
   // add: needs a native html-node anchor (see the Anchors section of the description).
   if (sub === 'add') {
@@ -194,7 +191,9 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     {file: values.request, root: client.root}
   );
   const result = await resumeJournal(journal, client, 'comment');
-  if (sub !== 'reply') return {thread: result.receipt, journal};
-  return {thread: result.receipt, journal, next: watchNext(id)};
+  if (!ANSWERED.includes(sub)) return {thread: result.receipt, journal};
+  // Answers come back as comments: the name it went out under, then the watch for them.
+  return {thread: result.receipt, journal, agent: identity.name, note: nameNote(identity),
+    next: watchNext(id)};
 }
 await runTool('comment', import.meta.url, commentCommand);

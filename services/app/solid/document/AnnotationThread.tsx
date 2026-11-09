@@ -245,7 +245,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 }}
                 class={`flex min-w-0 flex-1 items-center gap-2 rounded-chip ${props.open ? 'cursor-pointer' : ''}`}>
                 <AuthorIdentity author={c().author} />
-                <CommentTimestamp iso={c().created_at} class="ml-auto shrink-0 font-mono text-micro text-faint" />
+                {/* Only the room the name leaves: the time gives way first (an owner's header also holds resolve and actions). */}
+                <CommentTimestamp iso={c().created_at} class="min-w-0 flex-[1_1_0%] truncate text-right font-mono text-micro text-faint" />
               </span>
               <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               <Show when={index() === 0 && props.resolved}>

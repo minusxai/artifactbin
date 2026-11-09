@@ -272,4 +272,14 @@ describe('annotationAuthorForRequest', () => {
     expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'codex', 'user-agent': 'claude-cli/1.0' })).toEqual({ kind: 'agent', label: 'Codex', transport: 'http' });
     expect(author({ [ARTIFACTBIN_AGENT_HEADER]: '   ', 'user-agent': 'node' }, 'cursor')).toEqual({ kind: 'agent', label: 'Cursor', transport: 'http' });
   });
+
+  it('keeps a session\'s full name, printable and bounded, and the session that wrote it', () => {
+    expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'Claude Code Red' })).toEqual({ kind: 'agent', label: 'Claude Code Red', transport: 'http' });
+    expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'Pi Teal', 'Artifactbin-Session': '0123456789abcdef0123456789abcdef' }))
+      .toEqual({ kind: 'agent', label: 'Pi Teal', transport: 'http', writerSession: '0123456789abcdef0123456789abcdef' });
+    expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'Codex\tBlue   Night' }).label).toBe('Codex Blue Night');
+    expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'x'.repeat(200) }).label).toBe('x'.repeat(64));
+    // A session key outside its alphabet is no session: the credential rule decides `you`.
+    expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'Codex Blue', 'Artifactbin-Session': 'short' })).not.toHaveProperty('writerSession');
+  });
 });

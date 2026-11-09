@@ -1296,6 +1296,8 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   edited_at TIMESTAMPTZ,
   change_seq BIGINT,
   change_token_id TEXT,
+  author_session TEXT,
+  change_session TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1351,6 +1353,10 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_seq BIGINT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_token_id TEXT;
 
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_session TEXT;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_session TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
@@ -1389,6 +1395,7 @@ CREATE TABLE IF NOT EXISTS app.comment_reaction_events (
   count INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   token_id TEXT,
+  session TEXT,
   PRIMARY KEY (seq)
 );
 
@@ -1413,6 +1420,8 @@ ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS count INTEGER N
 ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS token_id TEXT;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS session TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_comment_reaction_events_artifact_seq ON app.comment_reaction_events (artifact_id, seq);
 

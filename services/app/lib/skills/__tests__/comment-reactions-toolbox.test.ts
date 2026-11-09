@@ -51,7 +51,10 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'watch-next-')),server='https://example.test';
- const {createHash}=await import('node:crypto'),log=path.join(root,'watch',createHash('sha256').update(server).digest('hex').slice(0,16),'PAGE12.ndjson');
+ // The default log is this agent session's own: watch/<server hash>/PAGE12/<session>.ndjson.
+ const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'watch-next-session'};
+ const {sessionId,detectSession}=await import('../../../skills/artifactbin/scripts/toolbox-agent.mjs');
+ const {createHash}=await import('node:crypto'),log=path.join(root,'watch',createHash('sha256').update(server).digest('hex').slice(0,16),'PAGE12',sessionId(detectSession(env))+'.ndjson');
  const mine={type:'artifactbin.comment',event_id:'e_mine',author:{kind:'agent',you:true},body:'Done'};
  const theirs={type:'artifactbin.comment',event_id:'e_theirs',author:{kind:'human',you:false},body:'Make it blue'};
  const later={type:'artifactbin.comment_reaction',event_id:'e_later',reactor:{kind:'human',you:false}};
@@ -60,7 +63,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
  const calls:{after:string,wait:string}[]=[];let inflight=0,maxInflight=0,n=0;
  const fetcher=async(url:any)=>{inflight++;maxInflight=Math.max(maxInflight,inflight);const q=new URL(String(url)).searchParams;calls.push({after:q.get('after')!,wait:q.get('wait')!});
   await new Promise(r=>setTimeout(r,1));const batch=batches[n]??{events:[]};n++;inflight--;return Response.json({...batch,next_cursor:'c'+n,has_more:false});};
- const printed:any[]=[];const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,cwd:path.join(root,'elsewhere'),deliver:async(v:any)=>{printed.push(v);}};
+ const printed:any[]=[];const options={env,fetcher,cwd:path.join(root,'elsewhere'),deliver:async(v:any)=>{printed.push(v);}};
  try{
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);
   // One after=now baseline, then long polls from each checkpoint; the own event is logged but not printed.
@@ -143,7 +146,7 @@ async function quietHarness(feed:(n:number)=>any[]){
  const fetcher=async(url:any)=>{const at=new URL(String(url));
   if(at.pathname.endsWith('/annotations')){state.listings++;return Response.json({annotations:[...state.threads].filter(t=>!state.gone.has(t)).map(id=>({id,status:'open'})),next_cursor:null});}
   const wait=Number(at.searchParams.get('wait'));state.n++;state.clock+=wait*1000;const events=feed(state.n);events.forEach((e:any)=>e.annotation_id&&state.threads.add(e.annotation_id));return Response.json({events,next_cursor:'c'+state.n,has_more:false});};
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,now:()=>state.clock,deliver:async(v:any)=>{state.printed.push(v);}};
+ const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'quiet-session'},fetcher,now:()=>state.clock,deliver:async(v:any)=>{state.printed.push(v);}};
  /** One watch --next call: its printed lines, others' events as their IDs. */
  const watch=async()=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
  return {root,server,state,watch};
@@ -159,8 +162,8 @@ it('watch --next stops itself after 15 quiet minutes, closes its window and open
   expect(state.clock).toBe(705000);
   expect(await watch()).toEqual([STOP]);
   const {readdir}=await import('node:fs/promises'),path=await import('node:path');
-  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!);
-  const windows=()=>readFile(path.join(dir,'PAGE12.ndjson'),'utf8').then(text=>text.trim().split('\n').map(line=>JSON.parse(line)).filter(r=>r.kind==='window'));
+  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!,'PAGE12'),log=path.join(dir,(await readdir(dir)).find(f=>f.endsWith('.ndjson'))!);
+  const windows=()=>readFile(log,'utf8').then(text=>text.trim().split('\n').map(line=>JSON.parse(line)).filter(r=>r.kind==='window'));
   expect(await windows()).toEqual([expect.objectContaining({opened:0}),expect.objectContaining({closed:940000})]);
   // "Watch again": the next call opens a new window and waits a full 15 minutes before stopping again.
   expect(await watch()).toEqual([YET]);
@@ -408,7 +411,7 @@ it('a watch log whose last line was torn by a kill keeps working; damage elsewhe
  const {root,watch}=await quietHarness(()=>[]);
  try{
   expect(await watch()).toEqual([YET]);
-  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!),log=path.join(dir,'PAGE12.ndjson');
+  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!,'PAGE12'),log=path.join(dir,(await readdir(dir)).find(f=>f.endsWith('.ndjson'))!);
   await appendFile(log,'{"kind":"event","server":"https://exa');
   expect(await watch()).toEqual([YET]);
   const text=await readFile(log,'utf8');
@@ -464,7 +467,7 @@ it('documents the watch mode once, by harness, as every printed watch line state
  const {DESCRIPTION}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const {WATCH_MODE}=await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
  expect(DESCRIPTION.replace(/\n\s+/g,' ')).toContain(WATCH_MODE);
- expect(DESCRIPTION).toContain('second --next on the same page takes over from the running one');
+ expect(DESCRIPTION.replace(/\n\s+/g,' ')).toContain('second --next of this agent session on the same page takes over from the running one, which stops; another agent\'s watch runs on');
  expect(DESCRIPTION).toContain('How to treat reactions: a 👍 on your proposal means approval to proceed');
  for(const retired of ['another watch is already running','<<'])expect(DESCRIPTION).not.toContain(retired);
 });
