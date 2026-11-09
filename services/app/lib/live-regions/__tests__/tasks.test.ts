@@ -62,4 +62,64 @@ it('refuses interactive toggling in a readonly editor', () => {
   expect(a.state.doc.firstChild!.attrs.checked).toBe(false);
 });
 
-it.todo('undo a toggle after concurrent line-format normalization restores its prior value');
+it('undo a toggle after concurrent line-format normalization restores its prior value', () => {
+  const [, a, b] = open('<ul><li role="checkbox" aria-checked="false"><p>work</p></li></ul>');
+  const ids = a.state.doc.firstChild!.attrs;
+  (a.view.dom.querySelector('input') as HTMLInputElement).click();
+  b.select(b.blockStart(0, true)).type(' now');
+  room.sync().invariants();
+  a.undo(); room.sync();
+  expect(a.state.doc.firstChild!.attrs).toMatchObject({ checked: false, afId: ids.afId, itemId: ids.itemId });
+  expect(a.state.doc.textContent).toBe('work now');
+  room.invariants();
+  a.redo(); room.sync();
+  expect(a.state.doc.firstChild!.attrs.checked).toBe(true);
+  room.invariants();
+});
+it.each(['- [ ]', '- [x]'])('roundtrips empty task %s', (markdown) => {
+  const [, a] = open();
+  room.agent(markdown).sync();
+  expect(a.state.doc.firstChild!.attrs.checked).toBe(markdown.includes('x'));
+  const saved = regionMarkdown('rich', room.html());
+  room.agent(saved).sync();
+  expect(a.state.doc.firstChild!.attrs.checked).toBe(markdown.includes('x'));
+  room.invariants();
+});
+it.each(['- **[x]** work', '- `[x]` work', '- **[x] work**', '- `[x] work`'])('keeps marked marker literal: %s', (markdown) => {
+  const [, a] = open();
+  room.agent(markdown).sync();
+  expect(a.state.doc.firstChild!.attrs.checked).toBe(null);
+  expect(a.state.doc.textContent).toBe('[x] work');
+});
+it('updates checkbox disabled state when editability changes without document edits', () => {
+  const [, a] = open('<ul><li role="checkbox" aria-checked="false"><p>work</p></li></ul>');
+  let checked = false;
+  for (const editable of [false, true, false]) {
+    a.view.setProps({ editable: () => editable });
+    const control = a.view.dom.querySelector('input')!;
+    expect(control.disabled).toBe(!editable);
+    control.click();
+    if (editable) checked = !checked;
+    expect(a.state.doc.firstChild!.attrs.checked).toBe(checked);
+  }
+});
+
+it('keeps checkbox history grouped with text and does not resurrect a remotely deleted task', () => {
+  const [, a, b] = open('<ul><li role="checkbox" aria-checked="false"><p>work</p></li></ul><p>tail</p>');
+  (a.view.dom.querySelector('input') as HTMLInputElement).click();
+  a.select(a.blockStart(0, true)).type(' local');
+  b.select(b.blockStart(0, true)).type(' remote');
+  room.sync();
+  a.undo(); room.sync();
+  expect(a.state.doc.textContent).toBe('work remotetail');
+  expect(a.state.doc.firstChild!.attrs.checked).toBe(false);
+  room.invariants();
+  a.redo(); room.sync();
+  expect(a.state.doc.textContent).toBe('work local remotetail');
+  expect(a.state.doc.firstChild!.attrs.checked).toBe(true);
+  room.invariants();
+  b.delete(0, b.state.doc.firstChild!.nodeSize); room.sync();
+  a.undo(); room.sync();
+  expect(a.state.doc.textContent).toBe('tail');
+  room.invariants();
+});

@@ -308,7 +308,11 @@ function editorPlugins(kind: RegionKind, text: Y.Text, terminated: boolean): Plu
   return [
     bindingPlugin(kind, text, terminated),
     idDedupe(),
-    new Plugin({ props: {
+    new Plugin({
+      view: (view) => ({ update: () => {
+        for (const control of view.dom.querySelectorAll<HTMLInputElement>('input[role="checkbox"]')) control.disabled = !view.editable;
+      } }),
+      props: {
       decorations(state) {
         const widgets: Decoration[] = [];
         state.doc.forEach((node, pos) => {
@@ -359,7 +363,7 @@ function editorPlugins(kind: RegionKind, text: Y.Text, terminated: boolean): Plu
           view.dispatch(tr.scrollIntoView()); return true;
         },
         clipboardTextParser(text, $context, plain, view) {
-          const lines = text.split(/\r?\n/);
+          const lines = text.split(/(?:\r\n?|\n)+/);
           if (kind !== 'rich' || $context.parent.type.spec.code || !lines.some((line) => /^- \[[ xX]\] /.test(line))) {
             const dom = view.dom.ownerDocument.createElement('div');
             for (const line of lines) { const p = dom.appendChild(view.dom.ownerDocument.createElement('p')); p.textContent = line; }

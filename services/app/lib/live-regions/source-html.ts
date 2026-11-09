@@ -36,8 +36,8 @@ function fromMarkdownNode(node: PMNode): SourceNode {
   let checked: boolean | null = null;
   if (node.type.name === "list_item") {
     const first = node.firstChild;
-    const marker = first?.type.name === "paragraph" ? /^\[([ xX])\]\s/.exec(first.textContent) : null;
-    if (marker && first?.firstChild?.isText && first.firstChild.text!.startsWith(marker[0])) {
+    const marker = first?.type.name === "paragraph" ? /^\[([ xX])\](?:\s|$)/.exec(first.textContent) : null;
+    if (marker && first?.firstChild?.isText && !first.firstChild.marks.length && first.firstChild.text!.startsWith(marker[0])) {
       checked = marker[1]!.toLowerCase() === "x";
       node = node.copy(node.content.replaceChild(0, first.copy(first.content.cut(marker[0].length))));
     }

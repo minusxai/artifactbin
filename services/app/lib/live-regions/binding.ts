@@ -131,6 +131,9 @@ function writeRange(text: Y.Text, old: Linear, next: Linear, oldFrom: number, ol
   }
 }
 
+interface CheckedEdit { id: string; before: boolean; after: boolean }
+const checkedHistory = Symbol('checked-history');
+
 class Binding {
   /** The origin of this editor's own edits: the only one its undo manager tracks. */
   readonly local = { name: 'live-region-editor' };
@@ -141,13 +144,56 @@ class Binding {
   view: EditorView | null = null;
   terminated: boolean;
   private writing = false;
+  private checkedEdits: CheckedEdit[] = [];
+  private restoring: CheckedEdit[] | null = null;
   private selection: { anchor: Y.RelativePosition; head: Y.RelativePosition } | null = null;
 
   constructor(readonly kind: RegionKind, readonly text: Y.Text, terminated: boolean) {
     this.terminated = terminated;
     this.undoManager = new Y.UndoManager(text, { trackedOrigins: new Set([this.local]) });
+    // Formatting normalization can replace Y.Text markers owned by an undo item. Keep the
+    // semantic checkbox inverse on that same item, guarded by stable block identity and value.
+    const remember = ({ stackItem }: { stackItem: { meta: Map<unknown, unknown> } }) => {
+      const edits = (stackItem.meta.get(checkedHistory) ?? []) as CheckedEdit[];
+      for (const edit of this.checkedEdits) {
+        const prior = edits.find((value) => value.id === edit.id);
+        if (prior) prior.after = edit.after;
+        else edits.push({ ...edit });
+      }
+      stackItem.meta.set(checkedHistory, edits);
+    };
+    this.undoManager.on('stack-item-added', remember);
+    this.undoManager.on('stack-item-updated', remember);
+    text.doc!.on('beforeTransaction', this.restoreChecked);
     text.doc!.on('beforeAllTransactions', this.capture);
     text.observe(this.receive);
+  }
+
+  private restoreChecked = (transaction: Y.Transaction) => {
+    if (transaction.origin !== this.undoManager || !this.restoring) return;
+    const linear = new Linear(this.kind, readText(this.kind, this.text).doc);
+    for (let offset = 0; offset < linear.length; offset++) {
+      const unit = linear.units(offset, offset + 1)[0]!;
+      if (unit.ch !== '\n') continue;
+      const edit = this.restoring.find((value) => value.id === unit.attrs.afId);
+      if (edit && typeof unit.attrs.checked === 'boolean') this.text.format(offset, 1, { checked: edit.before });
+    }
+  };
+
+  history(redo: boolean): boolean {
+    const stack = redo ? this.undoManager.redoStack : this.undoManager.undoStack;
+    const item = stack.at(-1);
+    if (!item) return false;
+    const edits = (item.meta.get(checkedHistory) ?? []) as CheckedEdit[];
+    const current = readText(this.kind, this.text).doc;
+    this.restoring = edits.filter((edit) => {
+      let matches = false;
+      current.forEach((node) => { if (node.attrs.afId === edit.id && node.attrs.checked === edit.after) matches = true; });
+      return matches;
+    });
+    this.checkedEdits = this.restoring.map((edit) => ({ id: edit.id, before: edit.after, after: edit.before }));
+    try { return (redo ? this.undoManager.redo() : this.undoManager.undo()) !== null || this.restoring.length > 0; }
+    finally { this.restoring = null; this.checkedEdits = []; }
   }
 
   private get doc(): Y.Doc { return this.text.doc!; }
@@ -247,10 +293,18 @@ class Binding {
       let end = start + 1;
       while (end < changes.length && (changes[end]!.getMeta('addToHistory') !== false) === tracked) end++;
       const group = changes.slice(start, end);
+      const before = new Map<string, boolean>();
+      group[0]!.before.forEach((node) => { if (typeof node.attrs.checked === 'boolean') before.set(node.attrs.afId, node.attrs.checked); });
+      group.at(-1)!.doc.forEach((node) => {
+        const previous = before.get(node.attrs.afId);
+        if (tracked && previous !== undefined && typeof node.attrs.checked === 'boolean' && previous !== node.attrs.checked)
+          this.checkedEdits.push({ id: node.attrs.afId, before: previous, after: node.attrs.checked });
+      });
       this.write(tracked ? this.local : this.silent, () => {
         if (!this.terminated) { this.text.insert(this.text.length, '\n', {}); this.terminated = true; }
         for (const tr of group) tr.steps.forEach((step, index) => writeStep(this.text, this.kind, step, tr.docs[index]!, index + 1 < tr.docs.length ? tr.docs[index + 1]! : tr.doc));
       });
+      this.checkedEdits = [];
       start = end;
     }
   }
@@ -258,6 +312,7 @@ class Binding {
   destroy(): void {
     this.text.unobserve(this.receive);
     this.doc.off('beforeAllTransactions', this.capture);
+    this.doc.off('beforeTransaction', this.restoreChecked);
     this.undoManager.destroy();
     this.view = null;
   }
@@ -283,8 +338,8 @@ export function bindingPlugin(kind: RegionKind, text: Y.Text, terminated: boolea
 }
 
 const bindingOf = (state: EditorState) => bindingKey.getState(state)?.binding;
-export const undo: Command = (state) => { const binding = bindingOf(state); return !!binding && binding.undoManager.undo() !== null; };
-export const redo: Command = (state) => { const binding = bindingOf(state); return !!binding && binding.undoManager.redo() !== null; };
+export const undo: Command = (state) => { const binding = bindingOf(state); return !!binding && binding.history(false); };
+export const redo: Command = (state) => { const binding = bindingOf(state); return !!binding && binding.history(true); };
 /** Ends the current undo step: the next edit starts a new one. */
 export function stopCapturing(state: EditorState): void { bindingOf(state)?.undoManager.stopCapturing(); }
 
