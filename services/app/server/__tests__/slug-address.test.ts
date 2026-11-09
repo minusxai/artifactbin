@@ -82,11 +82,12 @@ describe('a title-slug address', () => {
     }
   });
 
-  it('skips a page the viewer may not resolve for the next one that slugs the same', async () => {
+  it('lets the earliest page decide for everyone: a stranger gets the 404, never a later public twin', async () => {
     const w = await world();
-    await w.mk('Roadmap', 'unlisted');
-    const pub = await w.mk('Roadmap', 'public');
-    expect(JSON.stringify(payloadOf(await (await app.request(`/@${w.owner.username}/roadmap`, { headers: w.stranger })).text()).artifact)).toContain(pub);
+    const hidden = await w.mk('Roadmap', 'unlisted');
+    await w.mk('Roadmap', 'public');
+    expect((await app.request(`/@${w.owner.username}/roadmap`, { headers: w.stranger })).status).toBe(404);
+    expect(JSON.stringify(payloadOf(await (await app.request(`/@${w.owner.username}/Roadmap`, { headers: w.ownerHeaders })).text()).artifact)).toContain(hidden);
   });
 
   it('lets a real id win, and answers 404 when nothing slugs to the address', async () => {

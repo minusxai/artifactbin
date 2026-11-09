@@ -39,9 +39,24 @@ it('renders the folder for an id-shaped rest path', async () => {
   await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports'));
 });
 
-it('is the uniform 404 when the rest path names no id — nesting is not in the address', async () => {
-  await at('/@bob/not-an-artifact');
+it('is the uniform 404 when the rest path names no id and cannot be a title slug — nesting is not in the address', async () => {
+  await at('/@bob/reports/not-an-artifact');
   expect(screen.getByLabelText('Not found')).toBeInTheDocument();
+  expect(replaceDocument).not.toHaveBeenCalled();
+});
+
+it('crosses a title slug a client navigation found to the server, which alone resolves it', async () => {
+  await at('/@bob/my-notes');
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/@bob/my-notes'));
+  expect(screen.queryByLabelText('Not found')).toBeNull();
+});
+
+it('crosses an id-shaped title slug to the server once its id names nothing', async () => {
+  vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'not_found' }, { status: 404 })));
+  await at('/@bob/quarterly-report');
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/@bob/quarterly-report'));
+  expect(screen.queryByLabelText('Not found')).toBeNull();
 });
 
 it('renders a data tier here: an image alias is the data page, not a crossing', async () => {
@@ -74,7 +89,7 @@ it('sends the /edit alias to the dataset editor, not the folder view', async () 
 it('shows the not-found page, not a retry, when the alias answers 404', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'not_found' }, { status: 404 })));
-  await at('/@bob/doc002-private');
+  await at('/@bob/old-folder/doc002-private');
   await waitFor(() => expect(screen.getByLabelText('Not found')).toBeInTheDocument());
   expect(screen.queryByRole('button', { name: 'Retry artifact' })).toBeNull();
 });

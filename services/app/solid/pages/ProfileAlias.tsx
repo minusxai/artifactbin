@@ -39,13 +39,14 @@ export function ProfileAliasRoute(): JSX.Element {
   // A title-slug address (`/@user/<title-slug>`, lib/artifacts/slug-address) names its page by the server's answer.
   const served = createMemo(() => servedArtifactId(location.pathname));
   const id = createMemo(() => served() ?? parsePrettyPath(segments())?.id ?? null);
-  // Reached by a client navigation, a one-segment slug is the server's to resolve: cross to it. An address the server
-  // already answered is never sent back.
-  const crossing = createMemo(() => segments().length === 1 && titleSlug(segments()[0]) === segments()[0] && !served() && !servedAt(location.pathname));
-  createEffect(() => { if (crossing()) replaceDocument(window.location.pathname + window.location.search + window.location.hash); });
+  // A one-segment slug the server has not answered on this load may be a title slug, which only the server resolves:
+  // a miss at it crosses there, once (an address the server already answered is never sent back).
+  const resolvable = createMemo(() => segments().length === 1 && titleSlug(segments()[0]) === segments()[0]!.toLowerCase() && !served() && !servedAt(location.pathname));
+  const cross = () => replaceDocument(window.location.pathname + window.location.search + window.location.hash);
+  createEffect(() => { if (!id() && resolvable()) cross(); });
   return <Show when={!bare()} fallback={<ProfilePage />}>
-    <Show when={!crossing() && id()} fallback={<Show when={!crossing()}><NotFoundPage /></Show>}>
-      {resolvedId => <Show when={servedDocumentFrame()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} />}><DocumentPage /></Show>}
+    <Show when={id()} fallback={<Show when={!resolvable()}><NotFoundPage /></Show>}>
+      {resolvedId => <Show when={servedDocumentFrame()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} onMissing={resolvable() ? cross : undefined} />}><DocumentPage /></Show>}
     </Show>
   </Show>;
 }
