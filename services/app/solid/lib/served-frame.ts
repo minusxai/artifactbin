@@ -30,6 +30,9 @@ export function claimServedPath(pathname: string): boolean {
   return served;
 }
 
+/** Whether this document load was served at `pathname` (the server already answered it), claimed or not. */
+export function servedAt(pathname: string): boolean { return servedPath !== '' && pathname === servedPath; }
+
 /** The served frame's host, while no page has taken it. */
 export function servedDocumentFrame(): HTMLElement | null { return servedFrame; }
 

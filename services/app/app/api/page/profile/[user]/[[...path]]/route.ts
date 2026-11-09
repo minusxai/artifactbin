@@ -9,7 +9,7 @@
  * NESTING IS NOT IN THE ADDRESS. A folder is an artifact with its own page,
  * so a trailing path that does not identify an artifact is a uniform 404.
  */
-import { canReadArtifact, getArtifactById, type ArtifactSummary } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, slugAddressTarget, type ArtifactSummary } from '@/lib/artifacts';
 import { avatarUrl } from '@/lib/avatars';
 import { getUserByUsername, ownerUsername } from '@/lib/accounts';
 import { json } from '@/lib/http';
@@ -39,6 +39,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
       if (requested !== canonical) return json({ kind: 'redirect', to: canonical });
       return json({ kind: 'artifact', id: artifact.id });
     }
+  }
+
+  // An id that named nothing readable may be a title slug instead (lib/artifacts/slug-address): the address stays.
+  if (path.length === 1) {
+    const id = await slugAddressTarget(request, `/@${handle}/${path[0]}`, actor);
+    const artifact = id ? await getArtifactById(id) : null;
+    if (artifact && (await canReadArtifact(artifact, actor))) return json({ kind: 'artifact', id: artifact.id });
   }
 
   // Anything left after the id parse is decoration that named nothing. There

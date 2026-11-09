@@ -22,6 +22,6 @@ export { enqueueEvent, enqueueEvents, recordEvent, setEventProjection, startEven
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
 export { currentHeaders, currentRequest, overrideRequestHeaders, runWithRequest } from './request-context';
 export { measureQueries } from './query-stats';
-export { SCHEMA_STATEMENTS, TABLES } from './schema';
+export { SCHEMA_STATEMENTS, TABLES, TITLE_SLUG_SQL } from './schema';
 export { services, setServices } from './services';
 export type { Services } from './services';

@@ -12,6 +12,12 @@ import {RUN_TABLES} from '@artifactbin/runner/schema';
 import type { Table } from '@artifactbin/contracts';
 import { renderDroppedTables, renderSchema } from '@artifactbin/utils';
 
+/**
+ * titleSlug (@artifactbin/utils artifact-reference) in SQL, for the title-slug indexes: lowercase, every run of
+ * characters outside [a-z0-9] one dash, no dash at either end, 60 characters, no dash left at the cut.
+ */
+export const TITLE_SLUG_SQL = "(rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-'))";
+
 const USERS: Table = {
   name: 'users',
   columns: [
@@ -201,6 +207,10 @@ const ARTIFACTS: Table = {
     { name: 'idx_artifacts_group_updated', columns: ['group_id', 'updated_at DESC'], where: 'deleted_at IS NULL' },
     // An account's own live documents newest first (lib/workspace/listings): the personal counterpart of the above.
     { name: 'idx_artifacts_user_updated', columns: ['user_id', 'updated_at DESC'], where: 'deleted_at IS NULL AND group_id IS NULL' },
+    // A title-slug address (`/@handle/<title-slug>`, lib/artifacts/slug-address): an owner's or a group's live
+    // pages carrying that slug, earliest first. The slug is the SQL twin of titleSlug, so nothing stores it.
+    { name: 'idx_artifacts_user_slug', columns: [TITLE_SLUG_SQL, 'user_id', 'created_at'], where: 'deleted_at IS NULL AND group_id IS NULL AND title IS NOT NULL' },
+    { name: 'idx_artifacts_group_slug', columns: [TITLE_SLUG_SQL, 'group_id', 'created_at'], where: 'deleted_at IS NULL AND group_id IS NOT NULL AND title IS NOT NULL' },
     // An owner host's `/assets/<hash>` (lib/user-pages servesWebAsset): the pages naming that web image,
     // `meta->'webAssets' ? $hash`, without reading any page's source (lib/artifacts web-assets).
     { name: 'idx_artifacts_web_assets', columns: ["(meta->'webAssets')"], using: 'gin' },

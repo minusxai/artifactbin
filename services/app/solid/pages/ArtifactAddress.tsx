@@ -47,7 +47,7 @@ interface ArtifactAnswer {
 
 const isData = (answer: ArtifactAnswer | null | undefined) => !!answer?.surface && (DATA_FORMATS as readonly string[]).includes(answer.surface.format);
 
-export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }): JSX.Element {
+export function ArtifactAddressRoute(props: { id?: string; editing?: boolean; /** A 404 here is not final: the address may name a page another way (a title slug, solid/pages/ProfileAlias). */ onMissing?: (() => void) | undefined }): JSX.Element {
   const params = useParams<{ id: string }>();
   const location = useLocation();
   const id = () => props.id ?? params.id;
@@ -81,10 +81,11 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
     if (crossing() || (compiledDocument() && !serverAddress())) replaceDocument(window.location.pathname + window.location.search + window.location.hash);
   });
   const failure = () => (kind.error() ?? page.error()) as (Error & { status?: number }) | null;
+  createEffect(() => { if (failure()?.status === 404) props.onMissing?.(); });
   return <Switch fallback={<main aria-label="Loading artifact" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={failure()} fallback="Loading artifact…"><Button variant="secondary" size="sm" aria-label="Retry artifact" onClick={() => void (kind.error() ? kind : page).refresh(true)}>Could not load artifact. Retry</Button></Show></main>}>
     {/* The page door answers a uniform 404 for a missing artifact and a private one alike (canReadArtifact): that
         is the not-found page, not a load failure to retry. */}
-    <Match when={failure()?.status === 404}><NotFoundPage /></Match>
+    <Match when={failure()?.status === 404}><Show when={!props.onMissing}><NotFoundPage /></Show></Match>
     <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}</Match>
 
     <Match when={page.data()?.surface?.starter}><StarterPage answer={page.data() as unknown as import('./Starter').StarterAnswer} /></Match>

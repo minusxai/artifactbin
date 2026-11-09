@@ -1052,6 +1052,10 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_group_updated ON app.artifacts (group_i
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_user_updated ON app.artifacts (user_id, updated_at DESC) WHERE deleted_at IS NULL AND group_id IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_artifacts_user_slug ON app.artifacts ((rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-')), user_id, created_at) WHERE deleted_at IS NULL AND group_id IS NULL AND title IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_group_slug ON app.artifacts ((rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-')), group_id, created_at) WHERE deleted_at IS NULL AND group_id IS NOT NULL AND title IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_web_assets ON app.artifacts USING gin ((meta->'webAssets'));
 
 CREATE TABLE IF NOT EXISTS app.artifact_versions (

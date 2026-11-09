@@ -1,8 +1,10 @@
 /* @jsxImportSource solid-js */
-import { createMemo, lazy, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, lazy, Show, type JSX } from 'solid-js';
 import { useLocation, useParams } from '@solidjs/router';
-import { artifactViewPath, parsePrettyPath } from '@/lib/http/urls';
-import { servedDocumentFrame } from '@/solid/lib/served-frame';
+import { artifactViewPath, parsePrettyPath, titleSlug } from '@/lib/http/urls';
+import { servedArtifactId } from '@/solid/lib/bootstrap';
+import { replaceDocument } from '@/solid/lib/document-navigation';
+import { servedAt, servedDocumentFrame } from '@/solid/lib/served-frame';
 
 // Artifact aliases are a small route entry: reading a document must not load profile UI.
 // Each destination stays a lazy browser chunk, including the trailing-slash profile fallback.
@@ -33,10 +35,19 @@ export function ProfileAliasRoute(): JSX.Element {
   // A trailing slash (`/@user/`) is the bare handle, same as `/@user` — not a rest path.
   const bare = createMemo(() => !(params.rest ?? '').split('/').filter(Boolean).length);
   const editing = createMemo(() => /\/edit\/?$/.test(location.pathname));
-  const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
+  const segments = createMemo(() => artifactViewPath(params.rest ?? '').split('/').filter(Boolean));
+  // A title-slug address (`/@user/<title-slug>`, lib/artifacts/slug-address) names its page by the server's answer.
+  const served = createMemo(() => servedArtifactId(location.pathname));
+  const id = createMemo(() => served() ?? parsePrettyPath(segments())?.id ?? null);
+  // A one-segment slug the server has not answered on this load may be a title slug, which only the server resolves:
+  // a miss at it crosses there, once (an address the server already answered is never sent back).
+  const resolvable = createMemo(() => params.user.startsWith('@') && segments().length === 1 && titleSlug(segments()[0]) === segments()[0]!.toLowerCase() && !served() && !servedAt(location.pathname));
+  // The ROUTER's address: a client navigation renders this route before the address bar moves.
+  const cross = () => replaceDocument(location.pathname + location.search + location.hash);
+  createEffect(() => { if (!id() && resolvable()) cross(); });
   return <Show when={!bare()} fallback={<ProfilePage />}>
-    <Show when={id()} fallback={<NotFoundPage />}>
-      {resolvedId => <Show when={servedDocumentFrame()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} />}><DocumentPage /></Show>}
+    <Show when={id()} fallback={<Show when={!resolvable()}><NotFoundPage /></Show>}>
+      {resolvedId => <Show when={servedDocumentFrame()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} onMissing={resolvable() ? cross : undefined} />}><DocumentPage /></Show>}
     </Show>
   </Show>;
 }
