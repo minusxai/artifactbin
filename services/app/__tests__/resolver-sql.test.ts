@@ -115,7 +115,7 @@ it('the batched form: inline typed tables, a later query reading an earlier one,
     tables: { goals: { columns: [{ name: 'team', type: 'string' }, { name: 'goal', type: 'number' }, { name: 'since', type: 'date' }], rows: [{ team: 'red', goal: 50, since: '2026-01-01' }, { team: 'blue', goal: 10, since: '2026-01-01' }] } },
   });
   expect(answer.vsGoal.rows).toEqual([{ team: 'blue', total: 20, goal: 10, met: 1 }, { team: 'red', total: 40, goal: 50, met: 0 }]);
-  expect(answer.broken).toEqual({ error: expect.stringMatching(/nope/) });
+  expect(answer.broken).toEqual({ error: 'SQL statement could not be prepared' });
 });
 
 it('works with zero linked datasets: pure expressions and inline tables', async () => {
@@ -133,7 +133,7 @@ it('reads the caller\'s role view: filtered rows and hidden columns are absent f
   expect(all.columns.map((c: { name: string }) => c.name)).toEqual(['_id', 'name', 'team', 'hired']);
   // Not even a count of what the rule filters out, nor any way to name the hidden column.
   expect((await sql(f, viewer, { sql: 'SELECT count(*) AS n FROM staff' })).rows).toEqual([{ n: 2 }]);
-  expect(await refusal(sql(f, viewer, { sql: 'SELECT sum(salary) FROM staff' }))).toMatch(/^validation_failed: .*salary/);
+  expect(await refusal(sql(f, viewer, { sql: 'SELECT sum(salary) FROM staff' }))).toBe('validation_failed: SQL statement could not be prepared');
   // The page role never picks the dataset role: a viewer claiming owner still reads as the dataset decides.
   expect((await sql(f, { subject: f.viewer.userId, role: 'owner' }, { sql: 'SELECT name FROM staff ORDER BY name' })).rows).toEqual([{ name: 'ada' }, { name: 'cy' }]);
 });
