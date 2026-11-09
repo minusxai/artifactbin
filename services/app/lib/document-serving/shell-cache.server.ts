@@ -26,6 +26,8 @@ interface ShellRequest {
   encoding: string | null;
   /** The build the page is. */
   build: string | null;
+  /** The document an anonymous reader's address names when `id` admits nothing (a title-slug address). */
+  fallbackId?: () => Promise<string | null>;
 }
 
 const respond = (entry: CachedRender): Response => new Response(entry.body, {status: entry.status, headers: new Headers(entry.headers as Array<[string, string]>)});
@@ -37,13 +39,16 @@ function cookieFree(request: Request): boolean {
   return cookie.split(';').every(part => { const name = part.split('=')[0]!.trim(); return !name || name === THEME_KEY; });
 }
 
-export async function cachedShell({request, id, encoding, build}: ShellRequest, render: () => Promise<Response>): Promise<Response> {
+export async function cachedShell({request, id, encoding, build, fallbackId}: ShellRequest, render: () => Promise<Response>): Promise<Response> {
   const url = new URL(request.url);
-  if (request.method !== 'GET' || !id || url.search || url.pathname.endsWith('/edit') || request.headers.has('authorization') || !cookieFree(request)) return render();
+  if (request.method !== 'GET' || (!id && !fallbackId) || url.search || url.pathname.endsWith('/edit') || request.headers.has('authorization') || !cookieFree(request)) return render();
   const row = await runWithRequest(request, async () => {
     const actor = await sessionActor(request).catch(() => null);
     if (!actor || !anonymousReader(actor)) return null;
-    return (await readableArtifactIdentity(ANONYMOUS_ACTOR, id))?.row ?? null;
+    const named = id ? (await readableArtifactIdentity(ANONYMOUS_ACTOR, id))?.row ?? null : null;
+    if (named || !fallbackId) return named;
+    const fallback = await fallbackId();
+    return fallback && fallback !== id ? (await readableArtifactIdentity(ANONYMOUS_ACTOR, fallback))?.row ?? null : null;
   });
   // Not admitted (or not anonymous): the uncached path answers, including its own 404.
   if (!row) return render();

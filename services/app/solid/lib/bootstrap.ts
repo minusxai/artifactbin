@@ -49,3 +49,12 @@ export function takeBootstrap<T>(path: string, which: 'profile' | 'artifact'): T
 export function canonicalAddress(): string | null {
   return typeof payload?.address === 'string' ? payload.address : null;
 }
+
+/**
+ * The artifact the server resolved `path` to (its inlined profile answer), without taking it: a title-slug address
+ * (lib/artifacts/slug-address) names its page by this answer, not by its path.
+ */
+export function servedArtifactId(path: string): string | null {
+  const profile = payload?.path === path ? payload.profile as { kind?: string; id?: string } | undefined : undefined;
+  return profile?.kind === 'artifact' && typeof profile.id === 'string' ? profile.id : null;
+}

@@ -1,6 +1,6 @@
 import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
-import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, UnservableDocument } from '@/lib/artifacts';
+import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
@@ -281,7 +281,7 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 };
 
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
-interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision'] }
+interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision']; /** The title-slug address it was resolved from, served there as is. */ servedPath?: string }
 /** The document page's reader header (docs/phase2-architecture.md §6): which renderer answered. */
 const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { ['x-mx-reader']: reader.mode } : {});
 
@@ -468,7 +468,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
        * resolution is the profile route's own answer for it (`{ kind: 'artifact', id }`), without a
        * second fetch of the row or a second admission.
        */
-      const own = admitted?.canonicalPath !== undefined && `/${segments.join('/')}` === admitted.canonicalPath;
+      const own = admitted !== undefined && [admitted.canonicalPath, admitted.servedPath].includes(`/${segments.join('/')}`);
       const res = own || !profileData ? null : await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) }));
       const profile = own ? { kind: 'artifact', id: admitted!.row.id } : res?.ok ? await res.json() as { kind?: string; id?: string } : null;
       if (!profile) return null;
@@ -497,25 +497,35 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted }> => {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
-    if (!found) return { status: 200 };
-    // The row and its live revision in one statement (lib/artifacts readPageRow), for the page's answer below.
-    const read = await readPageRow(found.id);
-    if (!read) return { status: 404 };
-    const { row, revision } = read;
-    // A key skips canonical healing, but only a valid key admits the page.
-    const key = url.searchParams.get('key');
-    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row, revision } };
+    const slugged = slugAddress(url.pathname) !== null;
+    if (!found && !slugged) return { status: 200 };
     const actor = await sessionActor(request).catch(() => null);
-    // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
-    const facts = actor ? requestAccessFacts(request, actor) : undefined;
-    const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
-    if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
-    if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
-    // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
-    if (url.searchParams.has('key')) return { status: 200, admitted: { row, revision } };
-    const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
-    const canonical = canonicalPath + (editingDataset ? '/edit' : '');
-    return { status: 200, admitted: { row, canonicalPath, revision }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
+    const admit = async (id: string, bySlug: boolean): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted }> => {
+      // The row and its live revision in one statement (lib/artifacts readPageRow), for the page's answer below.
+      const read = await readPageRow(id);
+      if (!read) return { status: 404 };
+      const { row, revision } = read;
+      // A key skips canonical healing, but only a valid key admits the page.
+      const key = url.searchParams.get('key');
+      if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row, revision } };
+      // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
+      const facts = actor ? requestAccessFacts(request, actor) : undefined;
+      const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
+      if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
+      if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
+      // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
+      if (url.searchParams.has('key')) return { status: 200, admitted: { row, revision } };
+      const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
+      const canonical = canonicalPath + (editingDataset ? '/edit' : '');
+      // A title-slug address stays in the address bar: it is the address the person chose to share.
+      const servedPath = bySlug ? artifactViewPath(url.pathname) : undefined;
+      return { status: 200, admitted: { row, canonicalPath, revision, ...(servedPath ? { servedPath } : {}) }, canonical: await canonicalDocumentUrl(row), ...(!bySlug && canonical !== url.pathname ? { address: canonical } : {}) };
+    };
+    const byId = found ? await admit(found.id, false) : { status: 404 as const };
+    if (byId.status === 200 || !slugged) return byId;
+    // The id named nothing this viewer reads: the address may be a title slug (lib/artifacts/slug-address).
+    const id = await slugAddressTarget(request, url.pathname, actor ?? ANONYMOUS_ACTOR);
+    return id && id !== found?.id ? admit(id, true) : byId;
   };
 
   // Static: content-addressed trees are immutable, version-addressed libraries a day; everything else is served plainly.
@@ -589,6 +599,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // An anonymous reader's page is the same for everyone: lib/document-serving/shell-cache answers it after admission.
     return cachedShell({
       request: c.req.raw, id: candidateDocument(new URL(c.req.url).pathname)?.id ?? null, build: build ?? null,
+      // A title-slug address (lib/artifacts/slug-address) is cached as the page it names for an anonymous reader.
+      fallbackId: () => slugAddressTarget(c.req.raw, new URL(c.req.url).pathname, ANONYMOUS_ACTOR),
       encoding: negotiateEncoding(c.req.raw.headers.get('accept-encoding'), ['br']),
     }, async () => {
       const { status, address, canonical, admitted } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
