@@ -1040,6 +1040,8 @@ const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
  {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
  // Resolver contract: name->host bindings of the secrets map.
  {name:'secret_hosts',type:'JSONB',notNull:true,default:"'{}'::jsonb"},
+ // A typeDefs-free file's functions and the role each needs (page-operations/functions); null for a legacy (typeDefs) file.
+ {name:'function_roles',type:'JSONB'},
 ],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}],
  // `api` marked the removed resolver format (1 = caps.store/secrets.get); dead data.
  dropped:['api']};

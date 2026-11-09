@@ -10,3 +10,4 @@ export {createResolverSql} from './sql';
 export {pageDocumentProblems,type PageDocumentCheck} from './document-check';
 export type {ResolverDatasets} from './backend';
 export { FIELD_ERROR_CODE } from './contracts';
+export {callPageFunction,FUNCTION_INPUT_BYTES,type PageFunctionSource} from './functions';

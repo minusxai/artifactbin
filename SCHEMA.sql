@@ -219,6 +219,7 @@ CREATE TABLE IF NOT EXISTS app.html_backend_versions (
   owner_id TEXT NOT NULL,
   secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
   secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb,
+  function_roles JSONB,
   PRIMARY KEY (backend_id, version)
 );
 
@@ -241,6 +242,8 @@ ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS owner_id TEXT NOT
 ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;
 
 ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;
 

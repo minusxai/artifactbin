@@ -6,7 +6,9 @@ import {createFileUploader} from './upload';
 import {createUploadRelay} from './upload-relay';
 import {createQueryReadiness} from './query-readiness';
 import { createLocalDatasetTransport } from './browser-local-datasets';
-import { createDomainReadTransport } from './domain-reads';
+import { createDomainFunctionCall, createDomainReadTransport } from './domain-reads';
+import { createFunctionRelay } from './fn-relay';
+import type { FunctionCaller } from './fn-fetch';
 import { createHtmlSelectionActions } from './selection-actions';
 import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session';
 import type {HtmlCommentViewCommand} from '../html-bridge';
@@ -69,6 +71,8 @@ import {startSourceAnnotationReadiness} from '../html-bridge/imported-observatio
 import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
+/** The attached frame's page function relay (./fn-relay); null until the parent attaches and after it detaches. */
+let functionRelay: ReturnType<typeof createFunctionRelay> | null = null;
 const relayWaiters = new Set<() => void>();
 const uploadContext=createUploadContext(config.offline===true);
 export const watchUploadContext=uploadContext.watch;
@@ -93,18 +97,33 @@ export function bindFileUpload(control:PlatformUploadControl,options:{disabled?:
  }},watchUploadContext,options);
 }
 export type {FileUploadOptions} from './upload-contract';
+/** Settles when the frame bridge attaches, or after 3 s (the caller then finds no relay). */
+const attached = () => new Promise<void>((resolve) => {
+  const ready = () => { clearTimeout(timer); relayWaiters.delete(ready); resolve(); };
+  const timer = setTimeout(ready, 3000);
+  relayWaiters.add(ready);
+});
 let connectedBefore=false;
 remote.execute = async (request) => {
   if(portableReadiness.online())return portableReadiness.execute(request);
   if(preview?.online())return preview.execute(request);
   if(domain)return domain.execute(request);
-  if (!relay) await new Promise<void>((resolve, reject) => {
-    const ready = () => { clearTimeout(timer); relayWaiters.delete(ready); resolve(); };
-    const timer = setTimeout(() => { relayWaiters.delete(ready); reject(new RemoteUnreachable('Page connection did not attach')); }, 3000);
-    relayWaiters.add(ready);
-  });
-  if (!relay) throw new RemoteUnreachable();
+  if (!relay) await attached();
+  if (!relay) throw new RemoteUnreachable('Page connection did not attach');
   return relay(request);
+};
+
+/**
+ * A page function call from core's fetch (./fn-fetch): through the attached frame bridge (waiting for it as a
+ * GraphQL read does), straight to the page's host as nobody on an owner host or export capture (./domain-reads), and
+ * a TypeError, as a fetch with no network gives, in an offline copy or a frame that never attached.
+ */
+export const callFunction: FunctionCaller = async (request, signal) => {
+  if (domain) return createDomainFunctionCall(config, location, fetch.bind(window))(request, signal);
+  if (config.offline) throw new TypeError('Failed to fetch: offline copy');
+  if (!functionRelay) await attached();
+  if (!functionRelay) throw new TypeError('Failed to fetch: no page connection');
+  return functionRelay.call(request, signal);
 };
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
@@ -159,6 +178,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     const {idempotencyKey,...body}=request;
     post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json', ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}) }, body: JSON.stringify(body) });
   });
+  const functions = createFunctionRelay(post, () => ++call, config.pageId);
+  functionRelay = functions;
   for (const ready of [...relayWaiters]) ready();
   const attachedRelay=relay;
   if(connectedBefore)void Promise.resolve().then(()=>{if(relay===attachedRelay)for(const listener of invalidationListeners)try{listener([...config.backends]);}catch{/* Independent subscriptions. */}});
@@ -203,6 +224,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       if (cells.receive(payload) || regions.receive(payload)) return;
       if(payload.kind==='upload-context'){updateUploadContext(payload.context);return;}
       if (uploadSession.receive(payload))return;
+      if (functions.receive(payload)) return;
       if (payload.kind === 'fetch-result') {
         const current = pending.get(payload.call);
         if (!current) return;
@@ -230,6 +252,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       stopFileNavigation();
       uploadSession.dispose();if(uploads===uploadSession){uploads=undefined;uploadContext.update({state:'unavailable',scope:nonce+':closed'});}
       relay = null;
+      if (functionRelay === functions) functionRelay = null;
+      functions.dispose();
       observation.dispose();
       annotationObservation?.dispose();
       readiness?.dispose();

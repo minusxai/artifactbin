@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { DATASET_ROLES, isResolverDatabaseKind, RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type DatasetRole, type HtmlJson, type PageResolverFieldCall, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson, type RunSnapshot } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
+import { functionManifest, type FunctionRoles } from './functions';
 import {readPinnedBackendSecret,secretHostMap} from '@/lib/html-backend-secrets';
 import {redactedLine,resolverFailureDetail} from './redaction';
 import { FieldFailed, FieldNotExecuted } from './contracts';
@@ -13,7 +14,8 @@ import {connectionPassword,resolverDatabaseConnection} from './database';
 /** The page's datasets for resolver code, as the caller: `caps.query` (GraphQL) and `caps.sql` (read-only SQL). */
 export interface ResolverDatasets {query?:ResolverQuery;sql?:ResolverSql}
 /** `secretBindings` lists every declared secret name; `secretHosts` binds each to its one host. */
-export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[];secretHosts?:ResolverSecretHosts;test?:boolean}
+/** `typeDefs` is '' for a typeDefs-free file, whose callable functions and their roles are `functions` (./functions); null for a legacy file. */
+export interface CompiledPageBackend {typeDefs:string;functions?:FunctionRoles|null;compiled:string;secretBindings?:string[];secretHosts?:ResolverSecretHosts;test?:boolean}
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}
 const limits={timeoutMs:RESOLVER_LIMITS.wallMs,cpuMs:200,memoryMiB:64,maxRequests:RESOLVER_LIMITS.maxRequests,maxOutputBytes:RESOLVER_LIMITS.outputBytes};
 /**
@@ -37,8 +39,8 @@ async function backendProgram(source:string):Promise<string>{
  return `const __afPlatform=new WeakSet();const G=(f)=>async(...a)=>{try{return await f(...a);}catch(e){if(e!==null&&typeof e==='object')__afPlatform.add(e);throw e;}};
 const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
- if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs,secrets:Backend.secrets};}
- const fn=Backend.default[input.field];if(typeof fn!=='function')throw Error('missing_resolver');
+ if(input.kind==='schema'){const d=Backend.default;if(Backend.typeDefs!==undefined&&typeof Backend.typeDefs!=='string'||!d||typeof d!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs??null,functions:Object.keys(d).filter(k=>typeof d[k]==='function'),roles:Backend.roles??null,secrets:Backend.secrets};}
+ const fn=Object.prototype.hasOwnProperty.call(Backend.default,input.field)?Backend.default[input.field]:undefined;if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
  ${CALL}
  const caps=${CAPS};
@@ -112,10 +114,17 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
 export function createBackendCompiler(runner:RunnerService){return async(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>=>{
  const compiled=await backendProgram(source);
  const result=await run(runner,{requestId:randomUUID(),userId:'page-backend-compiler',artifactId:'page-backend-compiler',artifactVersion:'compile',document:{source:compiled,editId:'compile'},program:{source:compiled,language:'javascript'},input:{kind:'schema'},limits},signal);
- if(!result||typeof result!=='object'||Array.isArray(result)||typeof result.typeDefs!=='string')throw Error('invalid_backend_exports');
- const test=resolverTestField(boundedBackendSchema(result.typeDefs));
+ if(!result||typeof result!=='object'||Array.isArray(result))throw Error('invalid_backend_exports');
  const secretHosts=secretHostMap(result.secrets);
- return {compiled,typeDefs:result.typeDefs,secretBindings:Object.keys(secretHosts),secretHosts,test};
+ const secrets={secretBindings:Object.keys(secretHosts),secretHosts};
+ if(typeof result.typeDefs==='string'){
+  if(result.roles!==null&&result.roles!==undefined)throw Error('A backend with typeDefs guards fields with @auth; export roles only from a backend without typeDefs');
+  return {compiled,typeDefs:result.typeDefs,functions:null,...secrets,test:resolverTestField(boundedBackendSchema(result.typeDefs))};
+ }
+ const functions=functionManifest(result.functions,result.roles);
+ // Test connection: an owner-only `test` function, as a legacy file's `test: String! @auth(role: owner)`.
+ if(Object.hasOwn(functions,'test')&&functions.test!=='owner')throw Error("invalid_test_field: give test the owner role (roles = {test: 'owner'})");
+ return {compiled,typeDefs:'',functions,...secrets,test:Object.hasOwn(functions,'test')};
 };}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
 /** Every pinned secret value that can still be read, and each connection's password; a missing or transferred one cannot be in the reason. */

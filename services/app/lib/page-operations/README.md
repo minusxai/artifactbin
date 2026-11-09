@@ -8,6 +8,32 @@ cannot grant identity or authority. A remote runner calls back with that caller 
 its signed pin (`Actor.runner.caller`, from the admitted request), and the app
 rebuilds the principal from the pin, never from resolver arguments.
 
+## Page functions: `fetch('/fn/<name>')` (`functions.ts`)
+
+A page calls a backend function by name with a plain `fetch`: `fetch('/fn/items', {method: 'POST', body:
+JSON.stringify({limit: 50})})` answers a real `Response` whose JSON is the function's return value. Core
+(`html-runtime/fn-fetch.ts`) intercepts only a `/fn/` path on the page's own origin, after URL resolution (so
+`/fn/../graphql` is not one); every other fetch reaches the browser's fetch untouched (CSP and CORS as before). The
+reader relays the call over the frame bridge (`html-runtime/fn-relay.ts` → `html-reader/frame-bridge/parent.ts`),
+and the parent makes it with the reader's own session as `GET|POST /api/artifacts/:id/fn/:name`, the shell's
+revision pinned in `x-page-revision`, no other frame header. The route (lib/page-graphql `pageFunction`) admits the
+caller exactly as the GraphQL door does and runs the function through the same invoker.
+
+- Input: POST's JSON object body (empty: `{}`; any content type; at most 64 KiB, else 413), or GET's query parameters
+  as strings (a repeated name is a list). It is `args`; the principal is derived, never read from it.
+- Who: a typeDefs-free file exports `roles = {name: 'owner'|'editor'|'viewer'|'signed_in'|'anonymous'}`, checked at
+  publish against the default export's functions (default anonymous, "at least", `resolverFieldRefusal`). A legacy
+  file's Query and Mutation fields are callable too, each under its `@auth`; GraphQL still serves it. A
+  typeDefs-free file mounts nothing on GraphQL. A name two linked files offer is 409.
+- Kind: a legacy field's root; otherwise GET reads (`query`) and POST may write (`mutation`, so `caps.query`
+  mutations work). Writes are refused on an archived revision and from an opaque origin; a GET never runs a Mutation.
+- Answers: 200 with the JSON; 400 `invalid_json`/`input_not_object`, 403 `sign_in_required`/`forbidden`/
+  `archived_page_readonly`/`read_only`, 404 `not_found` (cannot read the page, uniform) or `unknown_function`, 405,
+  409, 413, 500 `backend_failed` with the function's own thrown message (the owner also gets `detail`), 503
+  `retryable`, 504 `deadline`. A call rejects only as fetch does: `AbortError` on its signal (the parent aborts the
+  request), `TypeError` with no page connection (an offline copy, a frame that never attached within 3 s).
+- An unframed page (owner host, export capture) calls the route directly as nobody (reads only).
+
 ## Field authorization: `@auth`
 
 The caller's page role is the same derivation datasets use (`datasetRoleFrom` in

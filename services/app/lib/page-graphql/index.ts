@@ -6,11 +6,11 @@ import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonOb
 import { getArtifactById, getArtifactHeaderById, accessMoved, editablePage, readableArtifactHeader } from '@/lib/artifacts';
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
-import {createPageOperations,createBackendInvoker,createResolverQuery,createResolverSql,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
+import {createPageOperations,createBackendInvoker,createResolverQuery,createResolverSql,pageOperationKind,callPageFunction,FUNCTION_INPUT_BYTES,type PageFunctionSource,type ResolverDatasets} from '@/lib/page-operations';
 import {executeLinkedDatasetGraphql, loadPageDatasets, planLinkedDatasetTables, type PageDatasets} from '@/lib/dataset-graphql';
 import {getDb,runWithRequest,services} from '@/lib/platform';
 import {people} from '@/lib/datasets';
-import {json,readJson} from '@/lib/http';
+import {json,readBody,readJson,PayloadTooLarge} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 import {ACTOR_HEADER} from '@artifactbin/contracts';
 import {DOMAIN_READ_ONLY_MESSAGE} from '@artifactbin/contracts/domain-footer';
@@ -101,6 +101,22 @@ async function opaqueOriginRead(request:Request,pageId:string):Promise<Response>
  cors.set('access-control-allow-origin','*');cors.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:cors});
 }
+type ArtifactHeader=NonNullable<Awaited<ReturnType<typeof getArtifactHeaderById>>>;
+/**
+ * After a read: the reader is still who they were, may still read the page, and its head (access, edit, version,
+ * links) did not move since `admitted`; otherwise the answer is withheld (`page_unavailable`).
+ */
+function pageVerifier(request:Request,pageId:string,actor:AccessActor,reader:AccessActor|undefined,admitted:ArtifactHeader){
+ return async(revision:string)=>{
+  const currentActor:AccessActor=reader??await requestOrSessionActor(request,{revalidate:true});
+  if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
+  // One header read decides both: the head did not move, and this reader may still read it.
+  const readable=await readableArtifactHeader(currentActor,pageId),current=readable?.row;
+  if(!current||current.format!=='html'||accessMoved(admitted,current)||current.edit_id!==admitted.edit_id||current.version!==admitted.version||JSON.stringify(current.meta.htmlLinks)!==JSON.stringify(admitted.meta.htmlLinks))throw Error('page_unavailable');
+  // An archived revision is immutable; its own row is checked only when it is not the head just read.
+  if(revision!==String(current.version))await readHtmlPage(currentActor,pageId,revision);
+ };
+}
 /** `reader`: an export capture's requester (opaqueOriginRead), read as given; otherwise the request's own credential. */
 async function answer(request:Request,pageId:string,reader?:AccessActor):Promise<Response>{
  const requested=reader?null:await requestOrSessionActor(request);
@@ -109,15 +125,7 @@ async function answer(request:Request,pageId:string,reader?:AccessActor):Promise
  const actor:AccessActor=reader??requested!;
  try{
   const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
-  const verifyPage=async(revision:string)=>{
-   const currentActor:AccessActor=reader??await requestOrSessionActor(request,{revalidate:true});
-   if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
-   // One header read decides both: the head did not move, and this reader may still read it.
-   const readable=await readableArtifactHeader(currentActor,pageId),current=readable?.row;
-   if(!current||current.format!=='html'||accessMoved(admitted,current)||current.edit_id!==admitted.edit_id||current.version!==admitted.version||JSON.stringify(current.meta.htmlLinks)!==JSON.stringify(admitted.meta.htmlLinks))throw Error('page_unavailable');
-   // An archived revision is immutable; its own row is checked only when it is not the head just read.
-   if(revision!==String(current.version))await readHtmlPage(currentActor,pageId,revision);
-  };
+  const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   const readHeaders={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
   if(request.method==='GET'){
    const revision=new URL(request.url).searchParams.get('revision')??undefined;
@@ -157,4 +165,69 @@ async function answer(request:Request,pageId:string,reader?:AccessActor):Promise
    }
   }
  }catch{return json({error:'page_operation_unavailable'},404);}
+}
+
+/** The header the reader's frame bridge pins a function call's revision with (html-reader/frame-bridge/parent); absent: the head. */
+const FUNCTION_REVISION_HEADER='x-page-revision';
+/** A call's input: GET's query parameters (strings; a repeated name a list), or POST's JSON object body (empty: {}). */
+async function functionInput(request:Request):Promise<HtmlJsonObject|Response>{
+ if(request.method==='GET'){
+  const input:Record<string,string|string[]>={};
+  for(const [name,value] of new URL(request.url).searchParams){const had=input[name];input[name]=had===undefined?value:Array.isArray(had)?[...had,value]:[had,value];}
+  return input;
+ }
+ let text:string;
+ try{text=await readBody(request,{limit:FUNCTION_INPUT_BYTES,as:'text'});}catch(error){if(error instanceof PayloadTooLarge)return error.response();throw error;}
+ if(!text.trim())return {};
+ let input:unknown;try{input=JSON.parse(text);}catch{return json({error:'invalid_json',message:'The body is not JSON'},400);}
+ return input&&typeof input==='object'&&!Array.isArray(input)?input as HtmlJsonObject:json({error:'input_not_object',message:'The body must be a JSON object'},400);
+}
+/** The page's backend links as functions: each pinned version's typeDefs and manifest. */
+async function functionSources(page:HtmlPageVersion):Promise<PageFunctionSource[]>{
+ return Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
+  const backend=await getHtmlBackendVersion(link.backendId,link.version);
+  if(!backend||backend.pageId!==page.pageId)throw Error('backend_link_mismatch');
+  return {namespace:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs,functions:backend.functions??null};
+ }));
+}
+/**
+ * A PAGE FUNCTION CALL (`/api/artifacts/:id/fn/:name`, lib/page-operations `callPageFunction`): the caller is exactly
+ * the GraphQL door's — the request's own credential, the same cross-site guard, `pageRole` for the role, the same
+ * after-read verification — so a function sees the principal a resolver field sees. A reader who cannot read the
+ * page gets the GraphQL door's uniform 404. An opaque origin (an unframed sandboxed copy) is read as nobody, every
+ * credential dropped, reads only, with open CORS, as `opaqueOriginRead`.
+ */
+export async function pageFunction(request:Request,pageId:string,name:string):Promise<Response>{
+ if(request.method!=='GET'&&request.method!=='POST')return json({error:'method_not_allowed'},405,{Allow:'GET, POST'});
+ if(request.headers.get('origin')!=='null')return functionAnswer(request,pageId,name,false);
+ const headers=new Headers(request.headers);
+ for(const header of CREDENTIAL_HEADERS)headers.delete(header);
+ const guest=new Request(request.url,{method:request.method,headers,...(request.method==='POST'?{body:await request.arrayBuffer()}:{}),signal:request.signal});
+ const answered=await runWithRequest(guest,()=>functionAnswer(guest,pageId,name,true));
+ const cors=new Headers(answered.headers);
+ cors.set('access-control-allow-origin','*');cors.delete('access-control-allow-credentials');
+ return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:cors});
+}
+async function functionAnswer(request:Request,pageId:string,name:string,opaque:boolean):Promise<Response>{
+ const actor=await requestOrSessionActor(request);
+ if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
+ const input=await functionInput(request);
+ if(input instanceof Response)return input;
+ const headers={'Cache-Control':'no-store'};
+ try{
+  const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
+  const head=await readHtmlPage(actor,pageId);
+  const asked=request.headers.get(FUNCTION_REVISION_HEADER);
+  const page=!asked||asked===head.revision?head:await readHtmlPage(actor,pageId,asked);
+  const role=await pageRole(admitted,actor);
+  if(!role)throw Error('forbidden');
+  const answer=await callPageFunction({
+   sources:await functionSources(page),name,method:request.method as 'GET'|'POST',input,
+   caller:{pageId,subject:actor.userId,role},archived:page.revision!==head.revision,readOnly:opaque,
+   invoke:createBackendInvoker(services().runner,getHtmlBackendVersion),signal:request.signal,
+  });
+  // A read's answer is withheld when the reader or the page moved while it ran, as a GraphQL read's is.
+  if(answer.kind==='query')await pageVerifier(request,pageId,actor,undefined,admitted)(page.revision);
+  return json(answer.body,answer.status,{...headers,...answer.headers});
+ }catch{return json({error:'not_found'},404,headers);}
 }
