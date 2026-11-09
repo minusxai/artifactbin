@@ -166,3 +166,120 @@ it('splits the cache key by audience and leaves the anonymous key where it was',
   expect(exportCacheKey(artifact, 'png', 'full', 0, '', null, { userId: null, tokenId: 't1' })).not.toBe(ada);
   expect(ada).not.toContain('u_ada');
 });
+
+async function emailFixture(suffix: string, claimOnly: boolean) {
+  const owner = await account('scope_email_owner_' + suffix), reader = await account('scope_email_reader_' + suffix);
+  const { page, staff } = await deck(owner, 'unlisted');
+  const db = await getDb();
+  const current = (await db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [reader.actor.userId])).rows[0]!.email;
+  const email = claimOnly ? 'scope_claim_' + suffix + '@example.test' : current;
+  await db.query("UPDATE artifacts SET visibility='private',dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1", [staff, JSON.stringify({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'viewer', permission: { columns: '*', filter: {} } }] }] })]);
+  await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'viewer')", [staff, email]);
+  setSession({ user: { id: reader.actor.userId!, email } });
+  const ordinary = async () => await (await graphql(request(`/api/artifacts/${page}/graphql`, { method: 'POST', json: { query: QUERY, revision: '1' } }), params(page))).json() as Reply;
+  return { page, staff, reader, email, current, db, ordinary };
+}
+it('unresolved account-email share matches capture and cache, then revocation invalidates', async () => {
+  const f = await emailFixture('account', false);
+  // Export first: neither an earlier ordinary read nor another surface has resolved the invitation.
+  expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
+  expect((await f.ordinary()).data?.staff).toEqual(STAFF);
+  expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
+  expect(renders).toHaveLength(1);
+  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  expect((await f.ordinary()).data?.staff).toBeUndefined();
+  expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
+  expect(renders).toHaveLength(2);
+});
+it('credential-only email share survives capture and revocation invalidates cache', async () => {
+  const f = await emailFixture('claim', true);
+  expect(f.email).not.toBe(f.current);
+  expect((await f.ordinary()).data?.staff).toEqual(STAFF);
+  expect((await f.db.query('SELECT user_id FROM artifact_shares WHERE artifact_id=$1', [f.staff])).rows).toEqual([{ user_id: null }]);
+  expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
+  expect(renders).toHaveLength(1);
+  expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
+  expect(renders).toHaveLength(1);
+  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  expect((await f.ordinary()).data?.staff).toBeUndefined();
+  expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
+  expect(renders).toHaveLength(2);
+});
+
+for (const mode of ['session', 'bearer'] as const) {
+  it(`proxy ${mode} synchronizes changed email and preserves export parity`, async () => {
+    const f = await emailFixture('proxy_' + mode, true);
+    setSession(null);
+    const actor = { credential: mode, userId: f.reader.actor.userId!, email: f.email, emailVerified: true, ...(mode === 'bearer' ? { tokenId: f.reader.actor.tokenId } : {}) };
+    const auth = { actor, ...(mode === 'bearer' ? { headers: { authorization: 'Bearer ' + f.reader.token } } : {}) };
+    const read = async () => await (await graphql(request(`/api/artifacts/${f.page}/graphql`, { ...auth, method: 'POST', json: { query: QUERY, revision: '1' } }), params(f.page))).json() as Reply;
+    const capture = async () => {
+      const res = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
+      expect(res.status).toBe(200);
+      const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata(); return [meta.width, meta.height];
+    };
+    expect(await capture()).toEqual([3, 2]);
+    expect((await f.db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [f.reader.actor.userId])).rows[0]?.email).toBe(f.email);
+    expect((await read()).data?.staff).toEqual(STAFF);
+    await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+    expect((await read()).data?.staff).toBeUndefined();
+    expect(await capture()).toEqual([1, 1]);
+    expect(renders).toHaveLength(2);
+  });
+}
+it('explicit bearer duplicate-profile fallback preserves ordinary claim in export', async () => {
+  const f = await emailFixture('duplicate_bearer', true);
+  setSession(null);
+  const holder = await account('mxmx_test_claim_holder');
+  await f.db.query('UPDATE users SET email=$2 WHERE id=$1', [holder.actor.userId, f.email]);
+  const auth = { headers: { authorization: 'Bearer ' + f.reader.token }, actor: { credential: 'bearer' as const, userId: f.reader.actor.userId!, tokenId: f.reader.actor.tokenId, email: f.email, emailVerified: true } };
+  const read = await (await graphql(request(`/api/artifacts/${f.page}/graphql`, { ...auth, method: 'POST', json: { query: QUERY, revision: '1' } }), params(f.page))).json() as Reply;
+  expect(read.data?.staff).toEqual(STAFF);
+  expect((await f.db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [f.reader.actor.userId])).rows[0]?.email).toBe(f.current);
+  const res = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
+  expect(res.status).toBe(200);
+  const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  expect([meta.width, meta.height]).toEqual([3, 2]);
+  const key = new URL(renders[0]!.url).searchParams.get('key')!;
+  expect(exportKeyReader(f.page, key)).toMatchObject({ userId: f.reader.actor.userId, email: f.email, documentEditor: false });
+  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).data?.staff).toBeUndefined();
+  const revoked = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
+  expect(revoked.status).toBe(200);
+  const after = await sharp(Buffer.from(await revoked.arrayBuffer())).metadata();
+  expect([after.width, after.height]).toEqual([1, 1]);
+  expect(renders).toHaveLength(2);
+});
+
+it('isolates same-account claim audiences and never stores or transports an exposed address', async () => {
+  const f = await emailFixture('cache_claim', true);
+  expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
+  setSession({ user: { id: f.reader.actor.userId!, email: f.current } });
+  expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
+  expect(renders).toHaveLength(2);
+  setSession({ user: { id: f.reader.actor.userId!, email: f.email } });
+  expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
+  expect(renders).toHaveLength(2);
+  const key = new URL(renders[0]!.url).searchParams.get('key')!;
+  expect(exportKeyReader(f.page, key)).toMatchObject({ email: f.email, documentEditor: false });
+  const cacheKeys = (await f.db.query<{ cache_key: string }>('SELECT cache_key FROM export_image_cache')).rows;
+  expect(cacheKeys).toHaveLength(2);
+  for (const value of [renders[0]!.url, key, Buffer.from(key.split('.')[1]!, 'base64url').toString('utf8'), ...cacheKeys.map(row => row.cache_key)]) {
+    expect(value).not.toContain(f.email);
+    expect(value).not.toContain(Buffer.from(f.email).toString('base64url'));
+  }
+  // A key minted before revocation rechecks access, and the old cached pixels are no longer served.
+  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).data?.staff).toBeUndefined();
+  expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
+  expect(renders).toHaveLength(3);
+});
+
+it('seals the admitted email without inheriting the host document-editor grant', () => {
+  const actor = { userId: 'u_ada', tokenId: 't_1', email: 'mxmx_test_claim@example.test', documentEditor: true };
+  const key = mintExportKey('abc123', undefined, undefined, actor);
+  expect(exportKeyReader('abc123', key)).toEqual({ ...actor, documentEditor: false });
+  expect(mintExportKey('abc123', undefined, undefined, actor)).not.toBe(key);
+  const cache = (email: string) => exportCacheKey({ id: 'abc123', version: 1 }, 'png', 'full', 0, '', null, { ...actor, email });
+  expect(cache(actor.email)).not.toBe(cache('mxmx_test_other@example.test'));
+});

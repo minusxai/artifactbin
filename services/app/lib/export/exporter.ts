@@ -7,10 +7,10 @@ import {loadImage} from '../object-store';
 import {referencedArtifactForRow} from '../document-data';
 import {Readable} from 'node:stream';
 import type {RenderRequest} from '@artifactbin/contracts';
-import { getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platform';
+import { AUTH_SECRET, getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platform';
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
-import { createHash } from 'node:crypto';
+import { createHmac, createHash } from 'node:crypto';
 import { ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, getVersionFor, VERSION_PARAM } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
@@ -22,7 +22,7 @@ import {
 } from '../document';
 import { scriptRenderAllowance } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
-import { mintExportKey, type ExportReader } from './read-key';
+import { exportReaderActor, mintExportKey, type ExportReader } from './read-key';
 import { json } from '../http';
 import { objectStore } from '../object-store/index';
 
@@ -108,12 +108,12 @@ function exportRevision(artifact: ExportIdentity): string {
 /**
  * WHOSE PICTURE IT IS, as an ADDITIVE segment — absent, byte for byte, for the anonymous audience, whose render any
  * reader of the page may be served. A requester's render read the page's data with THEIR access, so it is kept under
- * their account (or bare token), hashed: never served to another audience, and never naming the account in a key.
+ * their account (or bare token) AND admitted email claim, keyed-hashed: neither identity nor address appears in a cache key.
  */
 function audienceSegment(audience: ExportReader | null): string {
   if (!audience || (!audience.userId && !audience.tokenId)) return '';
-  const who = audience.userId ? `u:${audience.userId}` : `t:${audience.tokenId}`;
-  return `-a${createHash('sha256').update(who).digest('hex').slice(0, 16)}`;
+  const who = JSON.stringify([audience.userId ? `u:${audience.userId}` : `t:${audience.tokenId}`, audience.email ?? null]);
+  return `-a${createHmac('sha256', AUTH_SECRET).update('export-audience/v1\0').update(who).digest('hex').slice(0, 16)}`;
 }
 
 /** Stable output identity; revision freshness is tracked separately in the DB. */
@@ -146,7 +146,7 @@ async function exportAudience(artifact: Pick<ArtifactRow, 'id' | 'format'> & Par
     const header = await getArtifactHeaderById(artifact.id);
     if (header && await canReadArtifact(header, ANONYMOUS_ACTOR)) return null;
   }
-  return { userId: reader.userId, tokenId: reader.tokenId };
+  return exportReaderActor(reader);
 }
 
 /**
@@ -158,7 +158,7 @@ async function exportAudience(artifact: Pick<ArtifactRow, 'id' | 'format'> & Par
 async function datasetAccessRevision(artifact: Pick<ArtifactRow, 'id'> & Partial<Pick<ArtifactRow, 'meta'>>, audience: ExportReader | null): Promise<string> {
   const links = pageLinksOf(artifact).filter((link) => link.kind === 'dataset');
   if (!links.length) return '';
-  const actor: AccessActor = audience ? { ...ANONYMOUS_ACTOR, ...audience } : ANONYMOUS_ACTOR;
+  const actor: AccessActor = audience ? exportReaderActor(audience) : ANONYMOUS_ACTOR;
   const views = await Promise.all(links.map(async (link) => {
     const row = await getArtifactHeaderById(link.datasetId);
     if (!row || row.format !== 'dataset') return [link.datasetId, null];
