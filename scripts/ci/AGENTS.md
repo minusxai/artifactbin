@@ -34,6 +34,8 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
   A file sits in at most one list; enrollment only narrows the lane and the full suite still runs every file.
 - `test-timings.json` packs the shards by measured time: refresh it from a CI run's logs with
   `node scripts/ci/test-timings.mjs --run <id>`; files a log does not mention keep their recorded time.
+- The timing observer reads main's workflow: a PR may add `fast (…)` jobs, but one that drops or renames a job
+  main expects is refused (`completedFastAttempt`).
 - Merge a PR into `main` only with `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the completed fast
   attempt, its timing status and the exact head, then squash-merges.
 

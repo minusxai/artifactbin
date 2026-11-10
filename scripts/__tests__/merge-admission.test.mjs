@@ -9,6 +9,13 @@ it('uses completed job time: historical 58s clock hides 61s; inclusive 60s, excl
 it('refuses incomplete, stale, ambiguous, wrong attempt and unsuccessful evidence',()=>{
  for(const mutate of [f=>f.run.status='in_progress',f=>f.run.head_sha='b'.repeat(40),f=>f.run.event='push',f=>f.run.repository.full_name='other/repo',f=>f.run.path='other.yml',f=>f.jobs.jobs[0].head_sha='old',f=>f.jobs.jobs[0].run_id=9,f=>f.jobs.jobs[0].status='queued',f=>f.run.workflow_id=4,f=>f.run.run_attempt=2,f=>f.jobs.total_count=2,f=>f.jobs.jobs.push(f.jobs.jobs[0]),f=>f.jobs.jobs[0].completed_at=null,f=>f.jobs.jobs[0].run_attempt=2,f=>f.jobs.jobs[0].name='other',...['failure','skipped','cancelled','timed_out',null].map(c=>f=>f.jobs.jobs[0].conclusion=c)]){const f=fixture();mutate(f);expect(()=>check(f)).toThrow();}
 });
+it('admits jobs a pull request adds to the lane and times them, but never a lane missing a job main expects',()=>{
+ // The observer reads main's workflow, so `expected` is main's job set: a head that adds runners has more jobs.
+ const added=(seconds=40)=>{const f=fixture(40);f.jobs.jobs.push({...f.jobs.jobs[0],id:4,name:'fast (node-1)',completed_at:new Date(Date.parse('2026-11-07T09:41:56Z')+seconds*1000).toISOString()});f.jobs.total_count=2;return f;};
+ expect(check(added()).status).toBe('normal');
+ expect(check(added(61)).status).toBe('failed');
+ for(const mutate of [f=>f.jobs.jobs[1].conclusion='failure',f=>f.jobs.jobs[1].status='in_progress',f=>f.jobs.jobs[1].name='deploy',f=>f.jobs.jobs[1].name='fast (guards)',f=>f.jobs.jobs[0].name='fast (renamed)',f=>f.jobs.jobs[1].head_sha='old']){const f=added();mutate(f);expect(()=>check(f)).toThrow();}
+});
 
 import {readFileSync} from 'node:fs';
 import yaml from 'yaml';
