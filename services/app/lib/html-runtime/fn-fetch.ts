@@ -6,7 +6,7 @@
  * `/graphql` and is not one), is a call; every other fetch goes to the browser's own fetch with the arguments it was
  * given, untouched, so CSP, CORS and credentials behave exactly as before. A call never touches the network from
  * the page: the reader (`callFunction`, ./browser-reader) relays it through the frame bridge to the app, which runs
- * it with the reader's sign-in (lib/page-graphql `pageFunction`).
+ * it with the reader's sign-in (lib/page-doors `pageFunction`).
  *
  * A call answers a real Response: the function's JSON with 200, or its refusal as a status (400, 403, 404, 405,
  * 409, 413, 500, 503) with `{error, message}`. It rejects only as fetch does: TypeError when the page has no

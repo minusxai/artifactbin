@@ -9,7 +9,9 @@ import { assertStorable } from './apollo/storable';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 import type { HtmlAssemblyInput } from './contract';
 export type { HtmlAssemblyInput, HtmlRuntimeConfig } from './contract';
-export { createClient, createLocalStore, gql, assertStorable, decodeState, encodeState, readStateFragment, stateUrl } from './apollo/client';
+export { createLocalStore } from './apollo/local-store';
+export { assertStorable } from './apollo/storable';
+export { decodeState, encodeState, readStateFragment, stateUrl } from './apollo/state-url';
 export type { AfClient, StatePort, RemotePort } from './apollo/apollo-contracts';
 
 /** Native HTML only: no JSX compilation, component evaluation, or author code execution. */

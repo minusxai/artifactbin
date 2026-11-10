@@ -4,7 +4,7 @@ import { setDatasetPolicy } from '.';
 
 /**
  * Set a dataset's stored policy (version 3 or null) with revision compare-and-swap. The policy API
- * (lib/dataset-graphql `writeDatasetPermissions`) answers v3 bodies itself and saves null through here; version 1
+ * (lib/dataset-access `writeDatasetPermissions`) answers v3 bodies itself and saves null through here; version 1
  * and 2 bodies are refused (LEGACY_POLICY_REFUSED).
  */
 export async function writeDatasetPolicy(

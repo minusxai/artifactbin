@@ -1,6 +1,12 @@
 {
   "$comment": "Written by node scripts/ci/module-graph.mjs --write-allowed-tests. White-box tests (an unexported helper, a namespace to spy on) and the test harness and setup, which keep deep platform paths so a test file's vi.mock of them reaches the index: test file -> other modules' internal files it imports. The list only shrinks.",
   "testImports": {
+    "scripts/__tests__/native-surface-fixture.test.mjs": [
+      "../../services/app/lib/html-runtime/apollo/graphql-compat.ts"
+    ],
+    "scripts/__tests__/page-speed-compiled.test.mjs": [
+      "../../services/app/lib/html-runtime/apollo/graphql-compat.ts"
+    ],
     "scripts/__tests__/reserved-ids-postgres-proof.ts": [
       "@/lib/artifacts/identities"
     ],
@@ -27,6 +33,9 @@
     ],
     "services/app/__tests__/live-events-open-race.test.ts": [
       "@/lib/authentication/request-identity"
+    ],
+    "services/app/__tests__/local-state-routes.test.ts": [
+      "@/lib/html-runtime/apollo/graphql-compat"
     ],
     "services/app/__tests__/mutate-edges.test.ts": [
       "@/lib/publish/realtime/live"

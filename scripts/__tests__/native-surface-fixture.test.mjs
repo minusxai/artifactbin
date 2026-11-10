@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {JSDOM} from 'jsdom';
-import {createClient,createLocalStore,gql} from '../../services/app/lib/html-runtime/index.ts';
+import {createLocalStore} from '../../services/app/lib/html-runtime/index.ts';
+import {createClient,gql} from '../../services/app/lib/html-runtime/apollo/graphql-compat.ts';
 import {nativeHtml,nativeChoiceScript} from '../gates/lib/native-surface.mjs';
 describe('native retained journey fixtures',()=>{
  it('produces a complete HTML document with one canonical core and viewer-local initial state',()=>{

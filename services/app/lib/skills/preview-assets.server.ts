@@ -29,7 +29,7 @@ let datasets:Promise<string>|undefined;
 /** Same immutable-source lifetime as buildHtmlAssets; no account/platform server entry. It also carries the GraphQL
  * functions toolbox-platform.mjs re-exports, so the archive holds one copy of graphql. */
 export function buildPreviewDatasets():Promise<string>{
- const entry=fileURLToPath(new URL('../dataset-graphql/local-preview.ts',import.meta.url));
+ const entry=fileURLToPath(new URL('../graphql-compat/dataset/local-preview.ts',import.meta.url));
  return datasets??=build({stdin:{contents:`export * from ${JSON.stringify(entry)};export {parse,getOperationAST,validate,buildSchema} from 'graphql';`,resolveDir:path.dirname(entry),loader:'ts'},bundle:true,write:false,minify:true,legalComments:'none',format:'esm',platform:'node',target:'node22',
   // graphql's ESM build tree-shakes to what local datasets and validation use (~170 KB, against ~250 KB for its CommonJS main).
   mainFields:['module','main']}).then(result=>{

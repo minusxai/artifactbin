@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE APP'S DATASET PERMISSIONS EDITOR (version 3, Hasura's metadata shape). It speaks the agent policy API
- * (`/api/artifacts/:id/policy`, lib/dataset-graphql `policy`) through the browser session, so the app and agents
+ * (`/api/artifacts/:id/policy`, lib/dataset-access `policy`) through the browser session, so the app and agents
  * read, check and save the same document: a per-table grid of rule roles × operations, the three server-built
  * templates, the server's dry-run read-back and errors by path, a save at the loaded revision, and a notice when
  * the stored policy cannot be read (saving replaces it). Owner and editors always have full access and take no

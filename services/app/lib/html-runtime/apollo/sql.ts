@@ -1,6 +1,6 @@
 /**
  * `sql` IN THE PAGE RUNTIME (`import {sql} from '@afbin/apollo'`): a tagged template over the page SQL door
- * (POST /api/artifacts/<page>/sql through the frame relay, lib/page-graphql `pageSqlDoor`).
+ * (POST /api/artifacts/<page>/sql through the frame relay, lib/page-doors `pageSqlDoor`).
  *
  *   const rows = await sql`select region, sum(amount) as total from sales where year = ${year} group by region`;
  *   const { affected, returning } = await sql`insert into tasks (title) values (${title})`;

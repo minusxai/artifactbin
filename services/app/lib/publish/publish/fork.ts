@@ -1,6 +1,6 @@
 import {planHtmlClone} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
-import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';

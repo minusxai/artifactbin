@@ -124,7 +124,7 @@ describe('cross-site writes', () => {
     const doc=await bind(t.token,ds,'public'); // public
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });
-    // An opaque origin only reads (lib/page-graphql opaqueOriginRead): a mutation is refused before it runs.
+    // An opaque origin only reads (lib/graphql-compat opaqueOriginRead): a mutation is refused before it runs.
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.data ?? null).toBeNull();

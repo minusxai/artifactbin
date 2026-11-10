@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createLocalStore } from '../apollo/client';
+import { createLocalStore } from '../apollo/local-store';
 import { createHtmlCommentView } from '../comment-view';
 const setup = () => {
  const state = createLocalStore({ screen: 'home', draft: 'private', token: 'secret' });

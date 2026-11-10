@@ -11,7 +11,7 @@
  * query: the statements one warm request issues (lib/platform `measureQueries`), wall time p50 / p95 over `--runs`
  * sequential requests after `--warmup`, and the process's peak RSS sampled every 10 ms while they ran.
  *
- * The budget test pins the statements (services/app/lib/dataset-graphql/__tests__/dataset-graphql-budget.test.ts);
+ * The budget test pins the statements (services/app/lib/graphql-compat/__tests__/dataset-graphql-budget.test.ts);
  * this script measures what they and the engine cost. Results: docs/resolver-latency.md, "Dataset GraphQL".
  *
  * `--page-sql`: a page's `_sql` under live load through the real page route. `--readers` signed-in link holders (each

@@ -1,5 +1,5 @@
 /**
- * `@afbin/apollo` (owner: brief A). Implementation: src/apollo/client.ts
+ * `@afbin/apollo` (owner: brief A). Implementation: ./graphql-compat.ts (client, gql), ./local-store.ts, ./sql.ts
  * (pure: graphql-js parse/validate only; no DOM, network, timers or storage).
  * The core (src/browser/core/) builds one client per page with the real
  * ports and exposes it as the module `@afbin/apollo`: `export { gql, client }`.

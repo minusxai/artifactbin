@@ -6,7 +6,7 @@ import { getArtifactHeaderById } from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {isCrossSiteRequest,json,readJson,baseUrl} from '@/lib/http';
 import {pageOperationKind} from '@/lib/page-operations';
-import {pageGraphql} from '@/lib/page-graphql';
+import {pageGraphql} from '@/lib/graphql-compat';
 import { currentRequest, runWithRequest } from '@/lib/platform';
 import {rejectLocalMutation} from './read-only-operation';
 import {createConnectionRegistry,validLinkedDocument} from './registry';

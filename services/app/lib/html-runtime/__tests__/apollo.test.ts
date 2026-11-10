@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createClient, createLocalStore, gql } from '../apollo/client';
+import { createClient, gql } from '../apollo/graphql-compat';
+import { createLocalStore } from '../apollo/local-store';
 import { RemoteUnreachable, type RemotePort } from '../apollo/apollo-contracts';
 
 describe('HTML page client', () => {

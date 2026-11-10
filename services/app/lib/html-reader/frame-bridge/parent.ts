@@ -152,7 +152,7 @@ export function relayedRequest(win: Window, id: string, request: { path: unknown
   return { path: url.pathname + url.search, init: { method: request.method, headers, ...(body !== undefined ? { body } : {}) } };
 }
 
-/** lib/page-operations FUNCTION_NAME and lib/page-graphql FUNCTION_REVISION_HEADER, restated (the parent chunk carries no server value). */
+/** lib/page-operations FUNCTION_NAME and lib/page-doors FUNCTION_REVISION_HEADER, restated (the parent chunk carries no server value). */
 const FUNCTION_NAME = /^[_A-Za-z][_0-9A-Za-z]{0,63}$/;
 const FUNCTION_REVISION_HEADER = 'x-page-revision';
 const MAX_RELAYED_BODY = 1_000_000;
@@ -190,7 +190,7 @@ function sqlBody(body: unknown): boolean {
 }
 
 /**
- * The page SQL door (lib/page-graphql `pageSqlDoor`): `{sql, params}` only, the trusted revision and read-only state
+ * The page SQL door (lib/page-doors `pageSqlDoor`): `{sql, params}` only, the trusted revision and read-only state
  * bound here (the server refuses a read-only page's writes; the parent cannot tell a read from a write). Any statement
  * may write, so its well-formed Idempotency-Key is always relayed.
  */

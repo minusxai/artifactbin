@@ -11,7 +11,7 @@
  * exception: its roots mount flat on Query/Mutation with
  * `@dataset(link, file, version, table, field)`, its types keep their names
  * (the shared prelude once), and they execute through the request's dataset
- * port (lib/dataset-graphql `loadPageDatasets`), a mutation whole.
+ * port (lib/graphql-compat `loadPageDatasets`), a mutation whole.
  *
  * Every page also answers the built-in `viewer` (contracts `PAGE_VIEWER_ROOT`) from the caller alone, and a page
  * that links a dataset the read-only `_sql` (contracts `PAGE_SQL_ROOT`) through the request's dataset port; no link

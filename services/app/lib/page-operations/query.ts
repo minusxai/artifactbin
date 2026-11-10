@@ -35,11 +35,11 @@ export interface ResolverQueryPorts {
   /** The datasets the page links now (its head), live and pinned. */
   links(pageId: string): Promise<readonly HtmlDatasetLink[]>;
   /**
-   * The page head as one read: its dataset links and the guard its writes commit under (lib/page-graphql: that head,
+   * The page head as one read: its dataset links and the guard its writes commit under (lib/page-doors: that head,
    * those links and the caller's access, decided again inside the write's transaction). Mutations use it when given.
    */
   page?(pageId: string, actor: AccessActor): Promise<{ links: readonly HtmlDatasetLink[]; commitGuard: (tx: Queryable) => Promise<void> }>;
-  /** lib/dataset-graphql `executeLinkedDatasetGraphql`: the page audience rule over each dataset's own sharing. */
+  /** lib/graphql-compat `executeLinkedDatasetGraphql`: the page audience rule over each dataset's own sharing. */
   execute(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: { operation: 'query' | 'mutation' | undefined; resultBytes: number; pageId: string; commitGuard?: (tx: Queryable) => Promise<void> }, signal: AbortSignal): Promise<DatasetGraphqlReply>;
 }
 

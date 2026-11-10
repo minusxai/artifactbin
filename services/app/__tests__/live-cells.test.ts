@@ -12,7 +12,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { cellValue, openRegionDoc } from '@/lib/live-regions';
 import { createRegionSessions } from '@/lib/region-sessions';
-import { locateDatasetCell, writeDatasetCells } from '@/lib/dataset-graphql';
+import { locateDatasetCell, writeDatasetCells } from '@/lib/dataset-access';
 import { getDb, runWithRequest } from '@/lib/platform';
 import { attachActor } from '@artifactbin/utils';
 import { POST as publishRoute } from '@/app/api/artifacts/route';
@@ -34,8 +34,8 @@ useAppHarness();
  * (no transaction open there), so a test can type or write the dataset while the save is in flight.
  */
 const seam = vi.hoisted(() => ({ beforeWrite: null as null | (() => Promise<void>) }));
-vi.mock('@/lib/dataset-graphql', async (original) => {
-  const actual = await original<typeof import('@/lib/dataset-graphql')>();
+vi.mock('@/lib/dataset-access', async (original) => {
+  const actual = await original<typeof import('@/lib/dataset-access')>();
   return {
     ...actual,
     writeDatasetCells: async (...args: Parameters<typeof actual.writeDatasetCells>) => {

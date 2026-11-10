@@ -11,7 +11,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, getArtifactById, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
 import { loadDatasetRows } from '@/lib/datasets';
-import { resolverDatasets } from '@/lib/page-graphql';
+import { resolverDatasets } from '@/lib/graphql-compat';
 import { createGroup, deleteGroup, removeGroupMember } from '@/lib/groups';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';

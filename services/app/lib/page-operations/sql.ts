@@ -12,7 +12,7 @@
  * same load `caps.query` uses (`read` port), so a call never shows more than the caller reads through GraphQL. A call
  * mounts only the linked datasets its SQL names. A mounted table whose rule for the caller does not allow SQL
  * (`allow_aggregations`) refuses the call. It reads the page HEAD's links: a resolver run names a page, not a
- * revision (a page's own `_sql`, lib/dataset-graphql page-sql, reads the revision the reader has open). Limits are the registered page queries' (contracts
+ * revision (a page's own `_sql`, lib/dataset-access page-sql, reads the revision the reader has open). Limits are the registered page queries' (contracts
  * `SQL_READ_LIMITS`); the answer counts against `RESOLVER_LIMITS.queryResultBytes`.
  */
 import { RESOLVER_LIMITS, SQL_READ_LIMITS as limits, type ColumnType, type DatasetColumn, type HtmlDatasetLink, type QueryOutcome, type Row, type RunInput, type RunnerCaller, type RunnerJson, type Scalar } from '@artifactbin/contracts';
@@ -29,7 +29,7 @@ interface ResolverSqlInput {
 }
 export type ResolverSql = (input: ResolverSqlInput) => Promise<RunnerJson>;
 
-/** One mounted dataset table as the caller reads it (lib/dataset-graphql `planLinkedDatasetTables`). */
+/** One mounted dataset table as the caller reads it (lib/dataset-access `planLinkedDatasetTables`). */
 export interface ResolverSqlTable {
   link: string;
   /** null: a single-table dataset, mounted as `<link>`; otherwise `<link>.<table>`. */

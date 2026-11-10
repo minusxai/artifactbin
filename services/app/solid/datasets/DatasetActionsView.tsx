@@ -5,7 +5,7 @@ import { SectionHeading } from '../ui/PageHeader';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 
-/** The parts of the policy API's GET (`/api/artifacts/:id/policy`, lib/dataset-graphql `policy`) this view reads. */
+/** The parts of the policy API's GET (`/api/artifacts/:id/policy`, lib/dataset-access `policy`) this view reads. */
 type Actions = {
   source: 'v3' | 'none' | 'unreadable';
   report: Array<{ code: string; message: string }>;
