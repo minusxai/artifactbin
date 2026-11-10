@@ -10,7 +10,7 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
-import { assertScheduleCapacity } from './schedule-capacity';
+import { assertScheduleCapacity, schedulesBefore } from './schedule-capacity';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import {
@@ -401,6 +401,8 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
      * actor in the same statement. A live-region save is a text edit, not a publication: it keeps the publisher.
      */
     async publish(content: ArtifactInput, options: { publisher?: boolean } = {}): Promise<ArtifactRow> {
+      // What the head schedules before this write: a publication may keep those, never add one MinusX owns (./schedule-capacity).
+      const scheduled = options.publisher === true ? await schedulesBefore(tx, [id]) : new Set<string>();
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -418,7 +420,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
           ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document, options.publisher === true],
       )).rows[0];
       // A publication or revert makes the actor the publisher of the head's schedules: its capacity, in this transaction.
-      if (options.publisher === true && updated && updated.format === 'html') await assertScheduleCapacity(tx, [id]);
+      if (options.publisher === true && updated && updated.format === 'html') await assertScheduleCapacity(tx, [id], scheduled);
       if (content.ancestor_ids && current.format === 'folder') {
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);

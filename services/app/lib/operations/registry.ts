@@ -1,6 +1,6 @@
 import {documentOwner} from '@/lib/user-pages';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
-import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, ScheduleLimitError, transferArtifact } from '@/lib/artifacts';
+import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, ScheduleRefusal, transferArtifact } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
@@ -172,6 +172,7 @@ const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "
 
 /** The shared write refusals, stated once and spread into each writer's table. */
 const SCHEDULE_LIMIT: OperationError = { status: 400, code: 'schedule_limit', fix: 'the page would give its publishing account more than 20 active scheduled functions: remove a schedule from it or another page that account published first' };
+const SCHEDULES_OWNED: OperationError = { status: 409, code: 'schedules_owned_by_minusx', fix: 'MinusX schedules recurring work on this installation: use a version or a page without the schedule export' };
 const CONTENT_ERRORS: OperationError[] = [
   {status:400,code:'native_html_required',fix:'Use the html field with a complete HTML document; markup, JSX and document_update publication inputs are retired.'},
   {status:400,code:'invalid_html',fix:'Fix the named HTML identities or declaration problem and resubmit the complete source.'},
@@ -188,6 +189,7 @@ const CONTENT_ERRORS: OperationError[] = [
   INVALID_PARENT,
   FOLDER_RETIRED,
   SCHEDULE_LIMIT,
+  SCHEDULES_OWNED,
 ];
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
@@ -435,6 +437,7 @@ const revertArtifactOp: Operation = {
     { status: 400, code: 'version_required', fix: 'version must be a positive integer from list_versions' },
     POLICY_LOCKED,
     SCHEDULE_LIMIT,
+    SCHEDULES_OWNED,
   ],
   async run(ctx, input) {
     if (typeof input.version !== 'number' || !Number.isInteger(input.version) || input.version < 1) {
@@ -444,7 +447,7 @@ const revertArtifactOp: Operation = {
     if (expected instanceof Response) return fromResponse(expected);
     let row: Awaited<ReturnType<typeof revertArtifactFor>>;
     try { row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected); }
-    catch (error) { if (error instanceof ScheduleLimitError) return reply({ error: error.code, details: [error.message] }, error.status); throw error; }
+    catch (error) { if (error instanceof ScheduleRefusal) return reply({ error: error.code, details: error.details }, error.status); throw error; }
     // Distinct from not_found: the artifact is yours, that checkpoint just was
     // never archived (save-less edits coalesce). list_versions has the real ones.
     if (isVersionNotArchived(row)) {
@@ -500,11 +503,12 @@ const restoreArtifactOp: Operation = {
     // tell a stranger whether the id exists.
     NOT_FOUND,
     SCHEDULE_LIMIT,
+    SCHEDULES_OWNED,
   ],
   async run(ctx, input) {
     let restored: Awaited<ReturnType<typeof restoreArtifactFor>>;
     try { restored = await restoreArtifactFor(ctx.actor, String(input.id)); }
-    catch (error) { if (error instanceof ScheduleLimitError) return reply({ error: error.code, details: [error.message] }, error.status); throw error; }
+    catch (error) { if (error instanceof ScheduleRefusal) return reply({ error: error.code, details: error.details }, error.status); throw error; }
     if (!restored) return reply({ error: 'not_found' }, 404);
     return reply({ id: restored.id, url: `${ctx.base}/a/${restored.id}`, parent_id: restored.ancestor_ids.at(-1) ?? null, ancestor_ids: restored.ancestor_ids });
   },
