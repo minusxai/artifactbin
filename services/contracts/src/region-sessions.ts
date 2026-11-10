@@ -13,6 +13,9 @@
  * - Binary Yjs payloads travel base64 over HTTP/SSE and as Uint8Array over postMessage.
  */
 
+/** Named editor-only channel on an authenticated document stream. */
+export const REGION_STREAM_EVENT = 'regions';
+
 export type RegionKind = 'rich' | 'text' | 'rich-native-v1';
 
 /** Postgres NOTIFY channel waking a page's region streams (wakeups say "go look", never carry content). */

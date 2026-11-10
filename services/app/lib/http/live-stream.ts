@@ -53,6 +53,8 @@ export interface LiveStreamOptions {
   url: string | (() => string);
   /** The default (unnamed) `message` frame's data. */
   onMessage?: (data: string) => void;
+  /** Preserve the delivered SSE cursor when a consumer changes channel subscriptions. */
+  onCursor?: (cursor: string) => void;
   /** Named frames, by event name. */
   events?: Record<string, (data: string) => void>;
   /** The page came back while the stream still looks alive: check the current head out of band. */
@@ -127,7 +129,7 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
     lastEvent = Date.now();
     attempt = 0;
     armWatchdog();
-    if (event?.lastEventId) cursor = event.lastEventId;
+    if (event?.lastEventId) { cursor = event.lastEventId; options.onCursor?.(cursor); }
     if (broken) { broken = false; options.onReconnect?.(); }
   };
 

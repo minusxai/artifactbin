@@ -40,7 +40,7 @@ export interface RegionSessionDeps extends Pick<RegionStreamOptions, 'db' | 'sub
 export interface RegionSessions extends RegionStore {
   /** Live dataset text cells (./cells): the same rows, core and stream, a dataset's authority and save. */
   cells: CellStore;
-  stream(actor: AccessActor, artifactId: string, after: string | null, signal?: AbortSignal): Promise<RegionStreamAnswer>;
+  stream(actor: AccessActor, artifactId: string, after: string | null, signal?: AbortSignal, eventName?: 'regions'): Promise<RegionStreamAnswer>;
   /** Resolves once the background saves started so far have finished. */
   settle(): Promise<void>;
   dispose(): void;

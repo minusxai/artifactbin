@@ -141,7 +141,7 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions, 
     }, options.leaveGraceMs);
   }
 
-  async function open(actor: AccessActor, artifactId: string, after: string | null, signal?: AbortSignal): Promise<RegionStreamAnswer> {
+  async function open(actor: AccessActor, artifactId: string, after: string | null, signal?: AbortSignal, eventName?: 'regions'): Promise<RegionStreamAnswer> {
     if (!ID_RE.test(artifactId)) return { status: 'not_found' };
     const cursors = parseCursors(after);
     if (!cursors) return { status: 'invalid' };
@@ -160,7 +160,7 @@ export function regionStreams(store: RegionStore, options: RegionStreamOptions, 
     const writer = writable.getWriter();
     let closed = false;
     const write = (text: string) => writer.write(encoder.encode(text)).catch(() => void close());
-    const send = (frame: RegionStreamFrame) => write(`data: ${JSON.stringify(frame)}\n\n`);
+    const send = (frame: RegionStreamFrame) => write(`${eventName?`event: ${eventName}\n`:''}data: ${JSON.stringify(frame)}\n\n`);
 
     const unsubscribes: (() => Promise<void>)[] = [];
     const member = { actor };
