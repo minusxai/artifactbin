@@ -60,9 +60,17 @@ async function newDoc(label: string) {
 async function typeAtStart(live: RegionSessions, owner: AccessActor, id: string, regionId: string, text: string) {
   const opened = await live.open(owner, id, regionId);
   if (opened.status !== 200) throw new Error(`open ${opened.status}`);
-  const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { gc: true, clientId: opened.body.clientId });
+  const kind = editableRegions((await getArtifactById(id))!.source!).find(region => region.id === regionId)!.kind;
+  const doc = openRegionDoc(Buffer.from(opened.body.state, 'base64'), { kind, gc: true, clientId: opened.body.clientId });
   const before = Y.encodeStateVector(doc);
-  regionText(doc).insert(0, text, {});
+  if (kind === 'rich-native-v1') {
+    const heading = doc.getXmlFragment('native-v1').get(0) as Y.XmlElement;
+    expect(heading.nodeName).toBe('heading');
+    doc.transact(() => {
+      if (!heading.length) heading.insert(0, [new Y.XmlText()]);
+      (heading.get(0) as Y.XmlText).insert(0, text);
+    });
+  } else regionText(doc).insert(0, text, {});
   expect((await live.update(owner, id, regionId, { clientId: opened.body.clientId, update: Y.encodeStateAsUpdate(doc, before) })).status).toBe(200);
 }
 const flush = async (live: RegionSessions, owner: AccessActor, id: string) => {
@@ -81,9 +89,9 @@ describe('a new doc', () => {
     expect(titleTag(row.source)).toBe('Untitled document');
     expect(row.source).toMatch(/<meta name="artifactbin:design-system" content="meridian"[^>]*>/);
     const regions = editableRegions(row.source!);
-    expect(regions).toEqual([expect.objectContaining({ kind: 'rich' })]);
+    expect(regions).toEqual([expect.objectContaining({ kind: 'rich-native-v1' })]);
     const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(row.source!)?.[1] ?? '';
-    expect(body).toMatch(/^<main data-af-id="[^"]+"><article data-af-editable="rich" class="af-markdown-body" data-af-id="[^"]+"><h1 data-af-id="[^"]+"><\/h1><p data-af-id="[^"]+"><\/p><\/article><\/main>$/);
+    expect(body).toMatch(/^<main data-af-id="[^"]+"><article data-af-editable="rich-native-v1" class="af-markdown-body" data-af-id="[^"]+"><h1 data-af-id="[^"]+"><\/h1><p data-af-id="[^"]+"><\/p><\/article><\/main>$/);
   });
 
   it('carries no Markdown typography of its own: the platform serves the one Markdown stylesheet for it', () => {
@@ -96,7 +104,7 @@ describe('a new doc', () => {
     }
     for (const rule of MARKDOWN_CSS.split('}').map((block) => block.trim()).filter(Boolean)) expect(html).not.toContain(rule);
     // Its article is the root the shared sheet styles, and a served doc links the sheet that carries it.
-    expect(html).toContain(`<article data-af-editable="rich" class="${MARKDOWN_ROOT.slice(1)}">`);
+    expect(html).toContain(`<article data-af-editable="rich-native-v1" class="${MARKDOWN_ROOT.slice(1)}">`);
     const served = assembleHtmlPage({ html, core: 'core()', config: { pageId: 'doc', revision: '1', backends: [] }, systemsHref: PLATFORM_STYLES_PATH });
     expect(served).toContain(`<link rel="stylesheet" data-af="platform-styles" href="${PLATFORM_STYLES_PATH}">`);
     expect(htmlSystemsCss()).toContain(MARKDOWN_CSS);
@@ -147,7 +155,7 @@ describe('a new doc', () => {
     expect(titleTag(saved.source)).toBe('Q3 plan');
     expect(saved.source).toMatch(/<h1 data-af-id="[^"]+">Q3 plan<\/h1>/);
     // The article keeps the Markdown root through region saves: the region is its content, not the element.
-    expect(saved.source).toMatch(/<article data-af-editable="rich" class="af-markdown-body" data-af-id="[^"]+">/);
+    expect(saved.source).toMatch(/<article data-af-editable="rich-native-v1" class="af-markdown-body" data-af-id="[^"]+">/);
 
     await typeAtStart(live, owner, id, regionId, 'Draft: ');
     expect(await flush(live, owner, id)).toBe(3);
