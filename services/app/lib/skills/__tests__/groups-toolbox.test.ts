@@ -73,7 +73,7 @@ it('show ends on how to change its members and invitations: proposed to the user
  const options=(body:any)=>({env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body)});
  const shown=await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options(detail));
  expect(shown).toMatchObject(detail);
- expect(shown.next).toBe('Next: a change to these members or invitations is proposed to the user before it is made: name each member by handle and role (with the address the user gave for them) and each invitation by its email, with the action for each (remove, change role, cancel the invitation); make it only after they agree.');
+ expect(shown.next).toBe('Next: members show handles, not email addresses. A change to these members or invitations is proposed to the user before it is made: name each member by handle and role (for a person the user named by address, the member you take them to be, or the members you cannot tell apart; an address missing here does not mean they are not a member) and each invitation by its email, with the action for each (remove, change role, cancel the invitation); make it only after they agree.');
  // A group with no members or invitations listed has nothing to propose.
  expect((await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options({group:detail.group,members:[]}))).next).toBeUndefined();
 });

@@ -45,10 +45,12 @@ import {confirmation,groupReference,resolveGroup,resolveMember,resolveInvitation
  invitationEmail,segment,withDatasets} from './toolbox-groups.mjs';
 
 /** The step after a listing of members or invitations (show). */
-const PROPOSE='Next: a change to these members or invitations is proposed to the user before it '+
- 'is made: name each member by handle and role (with the address the user gave for them) and each '+
- 'invitation by its email, with the action for each (remove, change role, cancel the '+
- 'invitation); make it only after they agree.';
+const PROPOSE='Next: members show handles, not email addresses. A change to these members or '+
+ 'invitations is proposed to the user before it is made: name each member by handle and role (for '+
+ 'a person the user named by address, the member you take them to be, or the members you cannot '+
+ 'tell apart; an address missing here does not mean they are not a member) and each invitation '+
+ 'by its email, with the action for each (remove, change role, cancel the invitation); make it '+
+ 'only after they agree.';
 export async function groupsCommand({sub,values,positionals},options={}){
  // These checks precede even identity lookup HTTP, so refusal cannot accidentally mutate.
  confirmation(sub,values);
