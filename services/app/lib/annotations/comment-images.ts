@@ -5,7 +5,7 @@ import { annotationScope } from '@/lib/artifact-access';
 import { readableArtifact, assetByteQuotaLimit } from '@/lib/artifacts';
 import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import { getDb, type Queryable, generateInternalId } from '../platform';
-import {objectStore} from '../object-store/index';
+import {objectStore,ObjectUnavailable} from '../object-store/index';
 import {json} from '../http';
 
 interface ImageRow {id:string;artifact_id:string;annotation_id:string|null;token_id:string;user_id:string|null;metadata:CommentImageMetadata;bytes:number;ready:boolean;expires_at:string}
@@ -100,8 +100,10 @@ export async function expireCommentImagesFor(tx:Queryable,userId:string,artifact
  await tx.query('UPDATE comment_images SET annotation_id=NULL,ready=false,expires_at=now() WHERE user_id=$1 OR artifact_id=ANY($2::text[])',[userId,artifactIds]);
 }
 
-/** Both HTTP doors use identical image bytes, visibility checks and private caching. */
+/** Both HTTP doors use identical image bytes, visibility checks and private caching. A row whose bytes the store will not give is 503, never a thrown 500. */
 export async function commentImageResponse(actor:AccessActor,artifactId:string,imageId:string,variant:string):Promise<Response>{
- const result=await readCommentImage(actor,artifactId,imageId,variant);
+ let result:{buffer:Buffer}|null;
+ try{result=await readCommentImage(actor,artifactId,imageId,variant);}
+ catch(error){if(error instanceof ObjectUnavailable)return json({error:'image_unavailable'},503,{'Cache-Control':'no-store'});throw error;}
  return result?new Response(new Uint8Array(result.buffer),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}}):json({error:'not_found'},404);
 }
