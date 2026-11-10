@@ -6,6 +6,7 @@ async function harness(sub:string,positionals:string[],values:Record<string,unkn
  const result=await groupsCommand({sub,positionals,values},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
   const path=new URL(String(url)).pathname;const method=init.method;const body=init.body?JSON.parse(init.body):undefined;calls.push({path,method,body});
   if(fail&&path.includes(fail))return Response.json({error:'forbidden'},{status:403});
+  if(path==='/a/PAGE12/raw')return new Response('<link rel="af-dataset" data-af-name="entries" href="ref:DATA01"><link rel="af-dataset" href="ref:DATA02">',{headers:{'Content-Type':'text/html'}});
   if(path.endsWith('/members'))return Response.json({members:[{user_id:'usr_member',username:'teammate',name:'Team Mate'}]});
   if(path.endsWith('/invitations')&&method==='GET')return Response.json({invitations:[{id:'gin_pending',email:'pending@example.test'}]});
   if(method==='GET'&&path.startsWith('/api/groups/'))return Response.json({group:{id:path.endsWith('/other')?'grp_other':'grp_stable',handle:'design_crit'},members:[]});
@@ -35,6 +36,24 @@ it.each([
 ] as const)('%s sends its documented stable-ID protocol',async(sub,args,values,path,method,body)=>{
  const {calls}=await harness(sub,[...args],values);expect(calls.at(-1)).toEqual({path,method,body});
  if(!['list','create','show','link','unlink'].includes(sub))expect(calls.filter(c=>c.path==='/api/groups/design_crit')).toHaveLength(1);
+});
+it('share --datasets reads the page first, then shares it at its role and each linked dataset at viewer',async()=>{
+ const {result,calls}=await harness('share',['PAGE12'],{group:'design_crit',role:'commenter',datasets:true});
+ expect(calls.filter(c=>c.method!=='GET')).toEqual([
+  {path:'/api/artifacts/PAGE12/group-shares/grp_stable',method:'PUT',body:{role:'commenter'}},
+  {path:'/api/artifacts/DATA01/group-shares/grp_stable',method:'PUT',body:{role:'viewer'}},
+  {path:'/api/artifacts/DATA02/group-shares/grp_stable',method:'PUT',body:{role:'viewer'}}]);
+ expect(calls.findIndex(c=>c.path==='/a/PAGE12/raw')).toBeLessThan(calls.findIndex(c=>c.method==='PUT'));
+ expect(result).toMatchObject({ok:true,code:'completed',page:{id:'PAGE12',role:'commenter',changed:true},datasets:[{id:'DATA01',name:'entries',role:'viewer',ok:true},{id:'DATA02',name:'DATA02',role:'viewer',ok:true}]});
+ const undone=await harness('unshare',['PAGE12'],{group:'design_crit',datasets:true,yes:true});
+ expect(undone.calls.filter(c=>c.method!=='GET').map(c=>c.method+' '+c.path)).toEqual(['DELETE /api/artifacts/PAGE12/group-shares/grp_stable','DELETE /api/artifacts/DATA01/group-shares/grp_stable','DELETE /api/artifacts/DATA02/group-shares/grp_stable']);
+ expect(undone.result).toMatchObject({ok:true,page:{id:'PAGE12'},datasets:[{id:'DATA01',ok:true},{id:'DATA02',ok:true}]});
+});
+it('share --datasets reports a dataset refusal without hiding the shares that succeeded, and refuses editor before HTTP',async()=>{
+ const {result}=await harness('share',['PAGE12'],{group:'design_crit',datasets:true},'/DATA01/');
+ expect(result).toMatchObject({ok:false,code:'partial_failure',exit:3,page:{id:'PAGE12',role:'viewer',changed:true},datasets:[{id:'DATA01',ok:false,code:'forbidden'},{id:'DATA02',ok:true}]});
+ const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
+ await expect(groupsCommand({sub:'share',positionals:['PAGE12'],values:{group:'design_crit',role:'editor',datasets:true,yes:true}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({code:'datasets_editor',exit:2});expect(calls).toBe(0);
 });
 it('reports multiple invitations individually, including partial failure',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let n=0;
@@ -101,7 +120,7 @@ it('runs every verb through the installed CLI JSON envelope and refuses output o
  const script=path.join(installed,'scripts/groups.mjs');
  const run=(args:string[])=>promisify(execFile)(process.execPath,[script,...args,'--server',origin,'--json','--no-update'],{env:{...process.env,ARTIFACTBIN_URL:origin,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root}});
  try{
-  const invocations=[['list'],['show','design_crit'],['create','design_crit','--name','Design Crit'],['update','design_crit','--name','New'],['invite','design_crit','a@example.test'],['uninvite','design_crit','pending@example.test','--yes'],['role','design_crit','teammate','--role','viewer'],['remove','design_crit','teammate','--yes'],['leave','design_crit','--yes'],['share','PAGE12','--group','design_crit'],['unshare','PAGE12','--group','design_crit','--yes'],['move','PAGE12','--group','design_crit','--yes'],['link','design_crit','other'],['unlink','design_crit','other','--yes'],['delete','design_crit','--handle','design_crit','--yes']];
+  const invocations=[['list'],['show','design_crit'],['create','design_crit','--name','Design Crit'],['update','design_crit','--name','New'],['invite','design_crit','a@example.test'],['uninvite','design_crit','pending@example.test','--yes'],['role','design_crit','teammate','--role','viewer'],['remove','design_crit','teammate','--yes'],['leave','design_crit','--yes'],['share','PAGE12','--group','design_crit'],['share','PAGE12','--group','design_crit','--datasets'],['unshare','PAGE12','--group','design_crit','--yes'],['unshare','PAGE12','--group','design_crit','--datasets','--yes'],['move','PAGE12','--group','design_crit','--yes'],['link','design_crit','other'],['unlink','design_crit','other','--yes'],['delete','design_crit','--handle','design_crit','--yes']];
   for(const args of invocations){const output=await run(args);expect(JSON.parse(output.stdout),args[0]).toMatchObject({ok:true,code:'completed'});}
   const output=path.join(root,'receipt.json');await run(['list','--output',output]);expect(JSON.parse(await readFile(output,'utf8'))).toMatchObject({ok:true});
   await writeFile(output,'keep');const before=requests;

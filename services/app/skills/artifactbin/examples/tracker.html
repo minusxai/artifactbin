@@ -14,7 +14,7 @@
 // Built with: one HTML page; an entries dataset read and written with sql; tracker.ts functions.
 // Features (to drop one, delete its lines ending "@only NAME" and its @feature…@end blocks):
 // - own-rows: signed-in people add entries and change or remove only theirs. // @only own-rows
-// - team: people it is shared with (viewers) change and remove every entry. // @only team
+// - team: a group it is shared with (groups.mjs share --datasets) edits every entry. // @only team
 // - collab: an entry's description is typed in together, live (@afbin/collab). // @only collab
 // - table: a sortable table view of every entry (af-data-table). // @only table
 // - limits: each group holds at most APP.limit entries; tracker.ts enforces it. // @only limits
@@ -89,7 +89,7 @@ const full=()=>['owner','editor'].includes(me.role); // var: the template declar
 var canAdd=()=>full(),canChange=()=>full(); // @only !own-rows
 var canAdd=()=>full()||me.signedIn; // @only own-rows
 var canChange=row=>full()||me.signedIn&&row.created_by===me.id // @only own-rows
-  ||me.role==='viewer'; // @only team
+  ||['viewer','commenter'].includes(me.role); // @only team
 // Script-made nodes take data-af-ids from the entry's _id or the group, stable across renders.
 const node=(tag,id,props={})=>{const n=Object.assign(document.createElement(tag),props);
   if(id)n.dataset.afId=id;return n;};

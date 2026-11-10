@@ -10,7 +10,8 @@ export const FEATURES = {
   'own-rows': {requires: [],
     summary: 'signed-in people add entries and change or remove only their own'},
   team: {requires: ['own-rows'],
-    summary: 'people the page is shared with change and remove every entry'},
+    summary: 'a group the page is shared with by groups.mjs share --datasets changes and ' +
+      'removes every entry'},
   collab: {requires: [], columns: ['description'],
     summary: 'descriptions are typed in together, live'},
   table: {requires: [], summary: 'a sortable table view of every entry'},

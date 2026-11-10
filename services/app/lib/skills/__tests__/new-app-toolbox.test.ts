@@ -75,8 +75,8 @@ it('sets up the team task tracker in one call: every feature, its dataset, rules
   expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<title>Launch tasks</title>');
   expect(html).not.toMatch(/ref:DATASET_ID|\[Tracker name\]|@(?:feature|only|end) !/);
   expect(html).toContain('<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">');
-  expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own; people the page is shared with change and remove every entry; descriptions are typed in together, live; each group holds at most 5 entries');
-  expect(result.next).toBe(`Next: in index.html edit only APP: its [bracketed] text and groups (the stages entries move through); then ${CHECK}`);
+  expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own; a group the page is shared with by groups.mjs share --datasets changes and removes every entry; descriptions are typed in together, live; each group holds at most 5 entries');
+  expect(result.next).toBe(`Next: in index.html edit only APP: its [bracketed] text and groups (the stages entries move through); then ${CHECK}; for a team to edit every entry: node scripts/groups.mjs share PAGE --group GROUP --datasets`);
  }finally{await p.done();}
 });
 
