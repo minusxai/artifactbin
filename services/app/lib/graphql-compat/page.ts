@@ -11,7 +11,7 @@ import { getArtifactById, getArtifactHeaderById, editablePage } from '@/lib/arti
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
-import {CREDENTIAL_HEADERS,datasetLinks,headDatasetLinks,IDEMPOTENCY_KEY,pageCommitGuard,pageVerifier,RACED_READ_ATTEMPTS,resolverSql} from '@/lib/page-doors';
+import {admittedCommitGuard,CREDENTIAL_HEADERS,datasetLinks,headDatasetLinks,IDEMPOTENCY_KEY,pageCommitGuard,pageVerifier,RACED_READ_ATTEMPTS,resolverPorts} from '@/lib/page-doors';
 import {executeLinkedDatasetGraphql,loadPageDatasets,type PageCommitGuard,type PageDatasets} from './dataset/hasura';
 import {DatasetError,people} from '@/lib/datasets';
 import {getDb,runWithRequest,services} from '@/lib/platform';
@@ -59,13 +59,15 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
  */
 export const resolverDatasets:ResolverDatasets={
  query:createResolverQuery({links:headDatasetLinks,execute:executeLinkedDatasetGraphql,
-  // A resolver's write goes through the page head it read the links from: the same guard as every page write.
-  page:async(pageId,actor)=>{
+  // A resolver's write goes through the page head it read the links from: the same guard as every page write. A page
+  // function call's write (SECURITY FIX, README "Fixes, not features") commits under its admission instead, decided
+  // inside the commit exactly as a caps.sql write's is (lib/page-doors `admittedCommitGuard`).
+  page:async(pageId,actor,admission)=>{
    const row=await getArtifactById(pageId);
    const links=!row||row.format!=='html'?[]:((row.meta as {htmlLinks?:HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
-   return {links,commitGuard:row?pageCommitGuard(pageId,actor,row):async()=>{throw new DatasetError('The page is unavailable; nothing was written.',404);}};
+   return {links,commitGuard:admission?admittedCommitGuard(admission,actor):row?pageCommitGuard(pageId,actor,row):async()=>{throw new DatasetError('The page is unavailable; nothing was written.',404);}};
   }}),
- sql:resolverSql,
+ ...resolverPorts,
 };
 /** Original request identity and ACLs guard both SDL and executions. */
 export async function pageGraphql(request:Request,pageId:string):Promise<Response>{

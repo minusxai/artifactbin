@@ -220,6 +220,7 @@ CREATE TABLE IF NOT EXISTS app.html_backend_versions (
   secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
   secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb,
   function_roles JSONB,
+  function_schedules JSONB,
   PRIMARY KEY (backend_id, version)
 );
 
@@ -245,9 +246,64 @@ ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_hosts JSON
 
 ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;
 
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_schedules JSONB;
+
 ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;
 
 CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
+
+CREATE INDEX IF NOT EXISTS idx_html_backend_scheduled ON app.html_backend_versions (page_id) WHERE function_schedules IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.page_function_schedules (
+  page_id TEXT NOT NULL,
+  link TEXT NOT NULL,
+  function TEXT NOT NULL,
+  every_ms BIGINT NOT NULL,
+  next_run_at TIMESTAMPTZ NOT NULL,
+  lease_until TIMESTAMPTZ,
+  claim_token TEXT,
+  claim_epoch BIGINT NOT NULL DEFAULT 0,
+  failures INTEGER NOT NULL DEFAULT 0,
+  last_started_at TIMESTAMPTZ,
+  last_finished_at TIMESTAMPTZ,
+  last_status TEXT,
+  last_error TEXT,
+  last_message TEXT,
+  last_detail TEXT,
+  PRIMARY KEY (page_id, link, function)
+);
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS link TEXT NOT NULL;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS function TEXT NOT NULL;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS every_ms BIGINT NOT NULL;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS next_run_at TIMESTAMPTZ NOT NULL;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS claim_token TEXT;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS claim_epoch BIGINT NOT NULL DEFAULT 0;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS failures INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_started_at TIMESTAMPTZ;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_finished_at TIMESTAMPTZ;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_status TEXT;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_error TEXT;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_message TEXT;
+
+ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_detail TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_page_function_schedules_due ON app.page_function_schedules (next_run_at);
 
 CREATE TABLE IF NOT EXISTS app.groups (
   id TEXT NOT NULL,
@@ -965,6 +1021,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   edit_id TEXT NOT NULL DEFAULT md5(random()::text),
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   forked_from TEXT,
@@ -1017,6 +1074,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS edit_id TEXT NOT NULL DEFAULT
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 

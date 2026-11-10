@@ -1,7 +1,7 @@
 // One process, one run. No native objects cross into the isolate.
 import ivm from "isolated-vm";
 import readline from "node:readline";
-import { createDatabaseHost, DATABASE_OPERATION } from "./worker-database.mjs";
+import { createDatabaseHost, DATABASE_CHECK_OPERATION, DATABASE_OPERATION } from "./worker-database.mjs";
 // stdout is the controller link: nothing may print to it (a driver's console default included).
 for (const level of ["log", "info", "warn", "error", "debug", "trace"]) console[level] = () => {};
 const pending = new Map();
@@ -13,9 +13,9 @@ const invoke = (operation, args) => new Promise((resolve, reject) => {
     send({ type: "call", id, operation, args });
 });
 const database = createDatabaseHost({ send, call: invoke });
-/** Resolver code may name any host operation except the one that answers connection settings. */
+/** Resolver code may name any host operation except the worker's own: connection settings and the per-query check. */
 const isolateInvoke = (operation, args) => {
-    if (operation !== DATABASE_OPERATION) return invoke(operation, args);
+    if (operation !== DATABASE_OPERATION && operation !== DATABASE_CHECK_OPERATION) return invoke(operation, args);
     // Marked handled here: isolated-vm attaches its own handler after this returns.
     const refused = Promise.reject(Error("backend_capability_forbidden"));
     refused.catch(() => {});

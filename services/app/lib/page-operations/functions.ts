@@ -14,7 +14,7 @@
  * a GET never runs a Mutation field.
  */
 import {getDirectiveValues} from 'graphql';
-import {DATASET_ROLES,type DatasetRole,type HtmlJson,type HtmlJsonObject,type PageCaller,type PageResolverFieldCall} from '@artifactbin/contracts';
+import {DATASET_ROLES,type DatasetRole,type HtmlJson,type HtmlJsonObject,type PageCaller,type PageResolverFieldCall,type RunnerAdmission} from '@artifactbin/contracts';
 import {boundedBackendSchema} from './execution-policy';
 import {resolverFieldRefusal} from './namespaces';
 import {FIELD_ERROR_CODE,PAGE_OPERATION_RESULT_BYTES,boundedDetail} from './contracts';
@@ -67,6 +67,16 @@ function legacyFields(typeDefs:string){
  legacy.set(typeDefs,fields);
  return fields;
 }
+/**
+ * Who may call `name` in one backend version: its manifest role (a typeDefs-free file) or its field's `@auth` (a legacy
+ * file), as `resolverFieldRefusal` reads it; null when the version offers no such function. Every capability a call
+ * reaches re-decides the caller against it (./backend `pageBackendCapability`).
+ */
+export function functionRule(source:{typeDefs:string;functions?:FunctionRoles|null},name:string):{role?:unknown;signedIn?:unknown}|null{
+ if(!FUNCTION_NAME.test(name))return null;
+ if(source.functions)return Object.hasOwn(source.functions,name)?{role:source.functions[name]}:null;
+ return source.typeDefs?legacyFields(source.typeDefs).get(name)?.rule??null:null;
+}
 function resolve(sources:readonly PageFunctionSource[],name:string):Resolved|'ambiguous'|null{
  if(!FUNCTION_NAME.test(name))return null;
  const found:Resolved[]=[];
@@ -89,6 +99,8 @@ export interface FunctionCall {
  /** An opaque origin's call (no credentials, an unframed copy): reads only. */
  readOnly:boolean;
  invoke(call:PageResolverFieldCall):Promise<HtmlJson>;
+ /** What the call was admitted on (the page head, and a scheduled run's claim): every capability re-decides it. */
+ admission?:Omit<RunnerAdmission,'function'>;
  signal:AbortSignal;
 }
 export interface FunctionAnswer {status:number;body:HtmlJson;headers?:Record<string,string>;kind?:FunctionKind}
@@ -109,7 +121,7 @@ export async function callPageFunction(call:FunctionCall):Promise<FunctionAnswer
  const owner=call.caller.role==='owner';
  let value:HtmlJson;
  try{
-  value=await call.invoke({namespace:found.namespace,fileId:found.fileId,version:found.version,operation:kind,field:call.name,args:call.input,principal:{tenant:call.caller.pageId,subject:call.caller.subject,role:call.caller.role},signal:call.signal});
+  value=await call.invoke({namespace:found.namespace,fileId:found.fileId,version:found.version,operation:kind,field:call.name,args:call.input,principal:{tenant:call.caller.pageId,subject:call.caller.subject,role:call.caller.role},signal:call.signal,...(call.admission?{admission:{...call.admission,function:call.name}}:{})});
  }catch(error){
   const {name,code,detail,shown}=(error??{}) as {name?:unknown;code?:unknown;detail?:unknown;shown?:unknown};
   const safe=typeof code==='string'&&FIELD_ERROR_CODE.test(code)?code:'function_failed';

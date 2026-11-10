@@ -94,7 +94,7 @@ export async function snapshotHeadFor(actor:AccessActor,id:string){
 export function snapshotForReader(wire:Record<string,unknown>,row:ArtifactRow,role:ArtifactRole){
  const editable=canEdit(role);
  if(!editable){
-  for(const field of ['shares','dataset_policy','policy_revision','sharing_revision','actor_user_id','actor_token_id'])delete wire[field];
+  for(const field of ['shares','dataset_policy','policy_revision','sharing_revision','actor_user_id','actor_token_id','content_publisher_user_id'])delete wire[field];
   if(row.format==='dataset'){
    wire.markup=null;
    wire.meta={catalog:publicCatalogOf(row)};

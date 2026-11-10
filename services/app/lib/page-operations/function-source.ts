@@ -11,6 +11,8 @@
  *  · ROLES: `export const roles = { items: 'viewer', 'save': 'owner' }` — an object literal of plain `key: 'role'`
  *    properties, keys identifiers or string literals (never computed, never `__proto__`, never repeated), values
  *    string literals.
+ *  · SCHEDULE: `export const schedule = { refresh: 'every 1 hour' }` — the same static form as roles, its values
+ *    intervals (./schedule `scheduleManifest` checks the grammar, the minimum and that every key is a callable name).
  *
  * Nothing may rewrite the module behind the text's back: a typeDefs-free file that names `module`, `exports`,
  * `require` or `eval`, imports dynamically, or re-exports (`export *`, `export … from`) fails publish
@@ -21,14 +23,16 @@
  */
 import { parse } from 'acorn';
 import { transform } from 'esbuild';
+import { SCHEDULE_FORM } from './schedule';
 
 type Node = { type: string; [key: string]: unknown };
 const ROLES_FORM = "declare export const roles = {name: 'owner' | 'editor' | 'viewer' | 'signed_in' | 'anonymous', …} as an object literal";
 const FUNCTIONS_FORM = 'export your functions as export default {name(args, principal, caps) {…}, …} (an object literal) or as export function name(…) {…}';
 const refuseRoles = (why: string): never => { throw Error(`invalid_roles: ${why}; ${ROLES_FORM}`); };
+const refuseSchedule = (why: string): never => { throw Error(`invalid_schedule: ${why}; ${SCHEDULE_FORM}`); };
 const refuseFunctions = (why: string): never => { throw Error(`invalid_functions: ${why}; ${FUNCTIONS_FORM}`); };
 /** Exports that are configuration, never callable. */
-const RESERVED = new Set(['default', 'roles', 'secrets', 'typeDefs']);
+const RESERVED = new Set(['default', 'roles', 'schedule', 'secrets', 'typeDefs']);
 const NAME = /^[_A-Za-z][_0-9A-Za-z]{0,63}$/;
 /** Free names through which a module could replace or extend its exports at run time. */
 const MODULE_HANDLES = new Set(['module', 'exports', 'require', 'eval']);
@@ -40,6 +44,8 @@ export interface FunctionSurface {
   functions: string[];
   /** The declared `[name, role]` pairs, or null when the file exports no `roles`. */
   roles: Array<[string, string]> | null;
+  /** The declared `[name, interval]` pairs, or null when the file exports no `schedule` (./schedule checks them). */
+  schedule: Array<[string, string]> | null;
 }
 
 /** The names a destructuring pattern binds. */
@@ -85,7 +91,7 @@ export async function staticSurface(source: string): Promise<FunctionSurface> {
       for (const item of declaration.declarations as Node[]) {
         const id = item.id as Node;
         if (id.type !== 'Identifier') {
-          if (exporting) for (const name of boundNames(id)) { if (name === 'roles') refuseRoles('roles is destructured'); exported.set(name, { node: null, kind: 'pattern' }); }
+          if (exporting) for (const name of boundNames(id)) { if (name === 'roles') refuseRoles('roles is destructured'); if (name === 'schedule') refuseSchedule('schedule is destructured'); exported.set(name, { node: null, kind: 'pattern' }); }
           continue;
         }
         const entry = { kind: String(declaration.kind), init: (item.init as Node | null) ?? null };
@@ -100,7 +106,7 @@ export async function staticSurface(source: string): Promise<FunctionSurface> {
     if (exporting && !statement.declaration)
       for (const specifier of (statement.specifiers as Node[]) ?? []) {
         const out = specifier.exported as Node, name = String(out.type === 'Identifier' ? out.name : out.value);
-        if (statement.source) { if (name === 'roles') refuseRoles('roles is re-exported from another module'); problems.push(`${name} is re-exported from another module`); continue; }
+        if (statement.source) { if (name === 'roles') refuseRoles('roles is re-exported from another module'); if (name === 'schedule') refuseSchedule('schedule is re-exported from another module'); problems.push(`${name} is re-exported from another module`); continue; }
         exported.set(name, { local: String((specifier.local as Node).name) });
       }
     if (statement.type === 'ExportAllDeclaration') problems.push('export * re-exports another module');
@@ -113,31 +119,34 @@ export async function staticSurface(source: string): Promise<FunctionSurface> {
     if (entry.local !== undefined) return bindings.get(entry.local) ?? { kind: 'unknown', init: null };
     return { kind: entry.kind ?? 'unknown', init: entry.node ?? null };
   };
-
-  // ROLES.
-  let roles: Array<[string, string]> | null = null;
-  if (exported.has('roles')) {
-    const binding = resolve('roles')!;
-    if (binding.kind !== 'const') refuseRoles('roles must be a top-level const of this file');
+  /** `roles` and `schedule`: a top-level const object literal of plain `key: 'string'` properties, or null when not exported. */
+  const stringLiterals = (name: 'roles' | 'schedule', refuse: (why: string) => never): Array<[string, string]> | null => {
+    if (!exported.has(name)) return null;
+    const binding = resolve(name)!;
+    if (binding.kind !== 'const') refuse(`${name} must be a top-level const of this file`);
     const literal = binding.init;
-    if (literal?.type !== 'ObjectExpression') refuseRoles('roles must be an object literal, not a computed value');
-    roles = [];
+    if (literal?.type !== 'ObjectExpression') refuse(`${name} must be an object literal, not a computed value`);
+    const pairs: Array<[string, string]> = [];
     const seen = new Set<string>();
     for (const property of literal!.properties as Node[]) {
-      if (property.type !== 'Property') refuseRoles('roles may not spread another object');
-      if (property.kind !== 'init' || property.method) refuseRoles('roles may not use getters, setters or methods');
-      if (property.computed) refuseRoles('roles keys may not be computed ([…])');
-      if (property.shorthand) refuseRoles('roles values must be written out as string literals');
-      const name = keyName(property) ?? refuseRoles('roles keys must be identifiers or string literals');
-      if (name === '__proto__') refuseRoles('__proto__ is not a function name roles may name');
-      if (seen.has(name)) refuseRoles(`roles names ${name} twice`);
-      seen.add(name);
+      if (property.type !== 'Property') refuse(`${name} may not spread another object`);
+      if (property.kind !== 'init' || property.method) refuse(`${name} may not use getters, setters or methods`);
+      if (property.computed) refuse(`${name} keys may not be computed ([…])`);
+      if (property.shorthand) refuse(`${name} values must be written out as string literals`);
+      const key = keyName(property) ?? refuse(`${name} keys must be identifiers or string literals`);
+      if (key === '__proto__') refuse(`__proto__ is not a function name ${name} may name`);
+      if (seen.has(key)) refuse(`${name} names ${key} twice`);
+      seen.add(key);
       const value = property.value as Node;
-      if (value.type !== 'Literal' || typeof value.value !== 'string') refuseRoles(`roles.${name} must be a string literal role name`);
-      roles.push([name, value.value as string]);
+      if (value.type !== 'Literal' || typeof value.value !== 'string') refuse(`${name}.${key} must be a string literal${name === 'roles' ? ' role name' : ''}`);
+      pairs.push([key, value.value as string]);
     }
-  }
-  if (exported.has('typeDefs')) return { typeDefs: true, functions: [], roles };
+    return pairs;
+  };
+
+  const roles = stringLiterals('roles', refuseRoles);
+  const schedule = stringLiterals('schedule', refuseSchedule);
+  if (exported.has('typeDefs')) return { typeDefs: true, functions: [], roles, schedule };
 
   // THE MODULE STAYS WHAT ITS TEXT SAYS.
   if (problems.length) refuseFunctions(problems[0]!);
@@ -189,5 +198,5 @@ export async function staticSurface(source: string): Promise<FunctionSurface> {
     const callable = binding?.kind === 'function' || (binding?.kind === 'const' && isFunction(binding.init));
     if (callable) add(name);
   }
-  return { typeDefs: false, functions, roles };
+  return { typeDefs: false, functions, roles, schedule };
 }

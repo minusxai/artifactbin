@@ -15,6 +15,10 @@
  * CA certificate (PEM) for providers that sign with their own authority (RDS, Cloud SQL, Supabase), checked as the
  * contracts check it (`databaseConnection`) and sent only when filled. Advanced opens by itself when a CA is the likely
  * fix: the host is an RDS or Supabase name, or Test connection answered `tls_untrusted_certificate`.
+ *
+ * A resolver that schedules functions (`export const schedule`, lib/function-schedules) lists each with its interval,
+ * its last outcome and its next run; a failed run shows its code, the function's message and the owner-only detail,
+ * as Test connection does.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import { isResolverDatabaseKind, type ResolverDatabaseKind } from '@artifactbin/contracts';
@@ -26,7 +30,8 @@ import { ListRow, Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
-interface PageResolver { name: string; backendId: string; version: string; test: boolean; secrets: Record<string, string>; set: string[] }
+interface FunctionSchedule { name: string; every: string; nextRunAt: string; running: boolean; failures: number; lastRunAt: string | null; lastStatus: 'ok' | 'failed' | null; lastError: string | null; lastMessage: string | null; lastDetail: string | null }
+interface PageResolver { name: string; backendId: string; version: string; test: boolean; secrets: Record<string, string>; set: string[]; schedules?: FunctionSchedule[] }
 interface PageResolvers { revision: string; resolvers: PageResolver[] }
 type TestOutcome = { ok: true; text: string } | { ok: false; text: string };
 
@@ -150,6 +155,30 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
   </ListRow>;
 }
 
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+function ScheduleRow(props: { schedule: FunctionSchedule }): JSX.Element {
+  const s = () => props.schedule;
+  const outcome = (): { text: string; tone: 'accent' | 'danger' | 'dim' | 'default' } => s().running ? { text: 'Running', tone: 'default' }
+    : s().lastStatus === 'failed' ? { text: s().failures === 1 ? 'Failed once' : `Failed ${s().failures} times`, tone: 'danger' }
+    : s().lastStatus === 'ok' ? { text: 'Last run succeeded', tone: 'accent' } : { text: 'Not run yet', tone: 'dim' };
+  return <ListRow>
+    <div class="grid min-w-40 flex-1 gap-1">
+      <span class="font-mono text-sm text-fg">{s().name}</span>
+      <span class="font-sans text-xs text-muted">{s().every}</span>
+    </div>
+    <div class="grid justify-items-end gap-1">
+      <Badge tone={outcome().tone}>{outcome().text}</Badge>
+      <span class="font-sans text-xs text-muted">Next run {when(s().nextRunAt)}</span>
+    </div>
+    <Show when={s().lastStatus === 'failed'}>
+      <StatusMessage kind="error" class="w-full">
+        {[s().lastError, s().lastMessage].filter(Boolean).join(': ')}
+        <Show when={s().lastDetail}>{(detail) => <span class="block font-mono text-xs">{detail()}</span>}</Show>
+      </StatusMessage>
+    </Show>
+  </ListRow>;
+}
+
 function ResolverSection(props: { id: string; revision: string; resolver: PageResolver; outboundIps: string[] }): JSX.Element {
   const [set, setSet] = createSignal(props.resolver.set);
   const [testing, setTesting] = createSignal(false);
@@ -177,6 +206,9 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
           : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
       }}
       </For></ul>
+    </Show>
+    <Show when={props.resolver.schedules?.length}>
+      <ul class="m-0 mt-3 list-none p-0" aria-label="Scheduled functions"><For each={props.resolver.schedules}>{(schedule) => <ScheduleRow schedule={schedule} />}</For></ul>
     </Show>
     <Show when={testing()}><StatusMessage kind="loading">Testing the connection…</StatusMessage></Show>
     <Show when={outcome()}>{(result) => <div class="mt-3"><Show when={result().ok} fallback={<StatusMessage kind="error">{result().text}</StatusMessage>}><StatusMessage kind="notice">{result().text}</StatusMessage></Show></div>}</Show>

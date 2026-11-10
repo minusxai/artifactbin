@@ -7,7 +7,7 @@
  * same" HMAC is how a proxy signs something the app rejects.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ACTOR_TTL_SECONDS, CREDENTIALS, DATASET_ROLES, type Actor, type Credential, type RunnerCaller } from '@artifactbin/contracts';
+import { ACTOR_TTL_SECONDS, CREDENTIALS, DATASET_ROLES, runnerAdmissionOf, type Actor, type Credential, type RunnerCaller } from '@artifactbin/contracts';
 
 /** Tolerated clock difference between proxy and app. */
 const SKEW_SECONDS = 30;
@@ -73,7 +73,10 @@ export function verifyActor(header: string | null | undefined, secret: string, o
       if (!(c.subject === null || typeof c.subject === 'string' && c.subject.length > 0) || !(DATASET_ROLES as readonly unknown[]).includes(c.role)) return null;
       caller = { subject: c.subject as string | null, role: c.role as RunnerCaller['role'] };
     }
-    actor.runner = {pageBackendOperation:r.pageBackendOperation,runId:r.runId,artifactId:r.artifactId,version:r.version,editId:r.editId,sourceHash:r.sourceHash,callId:r.callId,...(caller ? { caller } : {})};
+    // An admission is optional (a run that is not a page function call has none), but one that is present must be exact.
+    const admission = r.admission === undefined ? undefined : runnerAdmissionOf(r.admission);
+    if (admission === null) return null;
+    actor.runner = {pageBackendOperation:r.pageBackendOperation,runId:r.runId,artifactId:r.artifactId,version:r.version,editId:r.editId,sourceHash:r.sourceHash,callId:r.callId,...(caller ? { caller } : {}),...(admission ? { admission } : {})};
   }
   return actor;
 }

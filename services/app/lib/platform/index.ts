@@ -11,7 +11,7 @@ export {
   EVENTS_SCHEMA, EVENTS_SERVICE_URL, EXPORT_INTERNAL_ORIGIN, INTERNAL_SERVICE_SECRET, IS_DEV, LOCAL_OBJECT_DIR,
   MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_QUERY_ROWS, MAX_ROWS_LIMIT, OUTBOUND_IPS, PUBLIC_BASE_URL, QUERY_TIMEOUT_MS, RUNNER_SERVICE_URL,
   S3_URL, SQL_SERVICE_URL, TEST_DOMAIN, TRUSTED_PROXY_HOPS, WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_MAX_PER_HOUR, WEB_INGEST_TIMEOUT_MS,
-  deploymentConfig, env, envNamesRead, parseUserPagesHost, requirePagesHost,
+  deploymentConfig, env, envNamesRead, functionScheduleMinimumMinutes, parseUserPagesHost, requirePagesHost,
   resolveHmrPort, unknownEnvNames,
 } from './config';
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb } from './db';

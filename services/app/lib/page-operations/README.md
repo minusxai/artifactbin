@@ -40,8 +40,8 @@ caller exactly as the GraphQL door does and runs the function through the same i
   `invalid_roles`. A legacy
   file's Query and Mutation fields are callable too, each under its `@auth`; GraphQL still serves it. A
   typeDefs-free file mounts nothing on GraphQL. A name two linked files offer is 409.
-- Kind: a legacy field's root; otherwise GET reads (`query`) and POST may write (`mutation`, so `caps.query`
-  mutations work). Writes are refused on an archived revision and from an opaque origin; a GET never runs a Mutation.
+- Kind: a legacy field's root; otherwise GET reads (`query`) and POST may write (`mutation`, so `caps.sql`
+  writes and `caps.query` mutations work). Writes are refused on an archived revision and from an opaque origin; a GET never runs a Mutation.
 - Answers: 200 with the JSON; 400 `invalid_json`/`input_not_object`, 403 `sign_in_required`/`forbidden`/
   `archived_page_readonly`/`read_only`, 404 `not_found` (cannot read the page, uniform) or `unknown_function`, 405,
   409, 413, 500 `backend_failed` with the function's own thrown message (the owner also gets `detail`), 503
@@ -50,6 +50,15 @@ caller exactly as the GraphQL door does and runs the function through the same i
 - An unframed page (owner host, export capture) calls the route directly as nobody (reads only): its CSP
   `connect-src` names the page's `/api/artifacts/:id/fn/` prefix, and the owner-host boundary (`server/user-host.ts`)
   admits that path for the owner's served page only, as a guest forced to `Origin: null`, with read CORS.
+
+## Scheduled functions: `export const schedule` (`schedule.ts`)
+
+A typeDefs-free file may export `schedule = {name: 'every N minutes|hours|days'}`. It is read statically like
+`roles` (`function-source.ts`) and checked by `scheduleManifest`: every key must be a declared function, and every
+interval must be in the grammar and at least `FUNCTION_SCHEDULE_MIN_MINUTES` (15). Otherwise publish fails with
+`invalid_schedule`. lib/function-schedules runs each scheduled function as the page's current owner, through
+`callPageFunction`, the same path an owner's POST takes. Its README explains the grammar choice (an interval, not
+cron) and the run rules.
 
 ## Field authorization: `@auth`
 
@@ -142,9 +151,12 @@ resolver's live revision is a hash of the page's linked live dataset revisions
 `await caps.sql(sql, params?)` answers `{columns, rows}`; `caps.sql({queries, params, paramTypes, tables, only})`
 mirrors the SQL service's `RunInput` (queries in order, a later one reading an earlier result by name, inline
 author-typed `tables`) and answers `{[name]: {columns, rows} | {error}}` (`sql.ts`), for the `only` names when
-given: the other queries run as dependencies and their rows neither come back nor count against the answer cap. It is READ-ONLY: it runs on
-the SQL service's `run` door, the one registered page queries use, which admits reads only; data changes only
-through `caps.query` mutations. A call mounts the linked datasets its SQL names (SQLite folds ASCII identifiers,
+given: the other queries run as dependencies and their rows neither come back nor count against the answer cap. Reads run on the SQL service's
+`run` door, the one registered page queries use. It is also the page runtime's tag:
+`` await caps.sql`insert into items (title) values (${title})` `` binds each `${…}` as `$p0`, `$p1`… A single
+`insert`/`update`/`delete` in a call that may write (POST, or a scheduled run) is the page SQL door's guarded write
+(lib/page-doors `resolverSql` → lib/dataset-access `executePageSql` with `pageCommitGuard`) and answers
+`{affected, returning}`; in a GET call it is refused (`read_only`). A call mounts the linked datasets its SQL names (SQLite folds ASCII identifiers,
 so a link name absent from the text cannot be read): a single-table dataset is the table `<link>`, a multi-table
 one `<link>.<table>` (an attached schema, as the service mounts imports), each with `_id`, the row's
 generated-API id. Rows come from the same load `caps.query` uses (`lib/dataset-access` `planLinkedDatasetTables`

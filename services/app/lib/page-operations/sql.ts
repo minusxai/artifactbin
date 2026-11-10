@@ -1,8 +1,13 @@
 /**
- * `caps.sql` for resolvers, on the host: READ-ONLY SQL over the datasets the page links, as the caller, on the SQL
- * service (`run`: the read-only door registered page queries use). Data changes only through `caps.query`
- * mutations.
+ * `caps.sql` for resolvers, on the host: SQL over the datasets the page links, as the caller, on the SQL service
+ * (`run`: the read-only door registered page queries use).
  *
+ * WRITES: in a call that may write (a POST `/fn` call or a scheduled run: operation `mutation`), a single
+ * `insert`/`update`/`delete` statement goes to the `write` port, the page SQL door's guarded write (lib/page-doors:
+ * the page head and the caller's access re-decided inside the commit, under the lock order) and answers
+ * `{affected, returning}`. In a read call (GET, `query`) a write statement is refused (`read_only`).
+ *
+ *   caps.sql`insert into items (title) values (${title})`     → {affected, returning}   (the page runtime's tag)
  *   caps.sql(sql, params?)                                   → {columns, rows}
  *   caps.sql({queries:[{name, sql}], params?, paramTypes?, tables?, only?}) → {[name]: {columns, rows} | {error}}
  *
@@ -19,6 +24,7 @@ import { RESOLVER_LIMITS, SQL_READ_LIMITS as limits, type ColumnType, type Datas
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { selectSqlLinks } from '@/lib/datasets';
 import { ResolverQueryError } from './query';
+import type { AdmissionCheck } from './admission';
 
 interface ResolverSqlInput {
   pageId: string;
@@ -26,6 +32,8 @@ interface ResolverSqlInput {
   operation: 'query' | 'mutation' | undefined;
   args: RunnerJson;
   signal?: AbortSignal;
+  /** A page function call's admission (./admission): a write decides it again inside its commit. */
+  admission?: AdmissionCheck;
 }
 export type ResolverSql = (input: ResolverSqlInput) => Promise<RunnerJson>;
 
@@ -46,6 +54,8 @@ export interface ResolverSqlPorts {
   plan(actor: AccessActor, links: readonly HtmlDatasetLink[], options: { pageId: string; maxRows: number }, signal: AbortSignal): Promise<{ tables: readonly Omit<ResolverSqlTable, 'rows'>[]; read(selected: ReadonlySet<string>): Promise<readonly ResolverSqlTable[]> }>;
   /** The SQL service's read door. */
   run(input: RunInput, signal: AbortSignal): Promise<Record<string, QueryOutcome>>;
+  /** The guarded write (lib/page-doors `resolverSqlWrite`): a 2xx answer is the write's reply, any other refuses. */
+  write?(input: { actor: AccessActor; pageId: string; sql: string; params: Record<string, Scalar>; admission?: AdmissionCheck }, signal: AbortSignal): Promise<{ status: number; body: Record<string, unknown> }>;
   /** Test seam for the call's wall time. */
   scheduleDeadline?(ms: number, expire: () => void): () => void;
 }
@@ -135,10 +145,19 @@ function prepare(args: RunnerJson): Prepared {
 
 const CODES: Record<string, string> = { dataset_changed: 'conflict', dataset_not_found: 'unavailable' };
 
+/** A statement that changes rows, by its first keyword (leading comments skipped); the door's own analysis decides the rest. */
+const WRITE_STATEMENT = /^(?:\s|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*(?:insert|update|delete|replace|upsert)\b/i;
+
 export function createResolverSql(ports: ResolverSqlPorts): ResolverSql {
-  return async ({ pageId, caller, args, signal }) => {
+  return async ({ pageId, caller, operation, args, signal, admission }) => {
     if (!caller) throw new ResolverQueryError('caller_unavailable', 'the run does not attest who called');
     const call = prepare(args);
+    if (call.single && WRITE_STATEMENT.test(call.queries[0]!.sql)) {
+      if (operation !== 'mutation' || !ports.write) throw new ResolverQueryError('read_only', 'caps.sql writes only in a call that may write: call the function with POST');
+      const reply = await ports.write({ actor: identityForUser(caller.subject), pageId, sql: call.queries[0]!.sql, params: call.params, ...(admission ? { admission } : {}) }, signal ?? new AbortController().signal);
+      if (reply.status >= 200 && reply.status < 300) return reply.body as RunnerJson;
+      throw new ResolverQueryError(typeof reply.body.error === 'string' ? reply.body.error : 'write_failed', typeof reply.body.message === 'string' ? reply.body.message : undefined);
+    }
     const controller = new AbortController();
     const forward = () => controller.abort(signal?.reason);
     signal?.addEventListener('abort', forward, { once: true });

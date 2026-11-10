@@ -373,6 +373,18 @@ export let EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
  */
 export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
 
+/**
+ * A SHORTER FUNCTION SCHEDULE for local checks: whole minutes (at least 1) that a development or test process allows
+ * below the product minimum (lib/page-operations FUNCTION_SCHEDULE_MIN_MINUTES). Any other process ignores it, so a
+ * production deployment cannot lower the minimum. Read at each publish (a test's `overrideConfig` environment applies).
+ */
+env('SCHEDULES', 'MIN_INTERVAL_MINUTES');
+export function functionScheduleMinimumMinutes(): number | undefined {
+  if (!IS_DEV && !IS_TEST) return undefined;
+  const minutes = Number(env('SCHEDULES', 'MIN_INTERVAL_MINUTES'));
+  return Number.isInteger(minutes) && minutes >= 1 ? minutes : undefined;
+}
+
 /** Optional runner HTTP boundary; otherwise the composition root registers a local runner. */
 export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
 export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');

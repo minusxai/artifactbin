@@ -25,3 +25,12 @@ describe('runnerIdentity caller', () => {
     expect(seen[0]?.runner?.caller).toEqual({ subject: 'viewer1', role: 'viewer' });
   });
 });
+
+describe('runnerIdentity admission', () => {
+  const admission = { page: 'page1', head: 'a'.repeat(64), function: 'refresh', claim: { link: 'api', token: 't1', epoch: 2 } };
+  it('signs the admission the app put in the run input, and none that is malformed or absent', () => {
+    expect(runnerIdentity(context({ kind: 'invoke', field: 'refresh', principal: { tenant: 'page1', subject: 'u', role: 'owner' }, admission })).runner?.admission).toEqual(admission);
+    for (const input of [{ kind: 'invoke', principal: { tenant: 'page1', subject: 'u', role: 'owner' } }, { kind: 'invoke', principal: { tenant: 'page1', subject: 'u', role: 'owner' }, admission: { ...admission, head: 'x' } }] as RunnerJson[])
+      expect('admission' in (runnerIdentity(context(input)).runner ?? {}), JSON.stringify(input)).toBe(false);
+  });
+});

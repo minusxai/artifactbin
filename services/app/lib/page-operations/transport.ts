@@ -25,7 +25,7 @@ export async function pageBackendOperation(request:Request,operation:string,inpu
  try{
   const backend=await getHtmlBackendVersion(pin.artifactId,pin.version);
   if(!backend||backend.ownerId!==identity.userId||backend.compiled!==documentSource)return json({error:'backend_capability_forbidden'},403);
-  return json(await localPageBackendCapability({requestId:pin.runId,pageBackendOperation:pin.pageBackendOperation,userId:identity.userId,artifactId:pin.artifactId,artifactVersion:pin.version,program:{source:documentSource,language:'javascript'},input:{kind:'invoke',principal:pinnedPrincipal(backend.pageId,pin.caller)}},'artifactbin.'+operation,input,request.signal,datasets));
+  return json(await localPageBackendCapability({requestId:pin.runId,pageBackendOperation:pin.pageBackendOperation,userId:identity.userId,artifactId:pin.artifactId,artifactVersion:pin.version,program:{source:documentSource,language:'javascript'},input:{kind:'invoke',principal:pinnedPrincipal(backend.pageId,pin.caller),...(pin.admission?{admission:{...pin.admission}}:{})}},'artifactbin.'+operation,input,request.signal,datasets));
  }catch(error){
   // A resolver fetch refusal carries only a code and a fixed detail: the remote runner hands it to the resolver as the in-process host does.
   if(error instanceof ResolverFetchError||error instanceof ResolverQueryError)return json({error:error.message},400);

@@ -56,6 +56,7 @@ describe('artifactSummaryToWire', () => {
       'user_id',
       'actor_user_id',
       'actor_token_id',
+      'content_publisher_user_id',
     ]) {
       expect(wire).not.toHaveProperty(forbidden);
     }

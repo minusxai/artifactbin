@@ -1,3 +1,4 @@
+import type { RunnerAdmission } from './actor';
 import type { DatasetRole } from './dataset-permissions';
 import type { HtmlJson, HtmlJsonObject } from './html-page';
 export type PageMutationOutcome = 'committed' | 'rejected' | 'unknown' | 'offline';
@@ -16,6 +17,8 @@ interface PageResolverPrincipal { readonly tenant:string; readonly subject:strin
 export interface PageResolverFieldCall {
   namespace:string; fileId:string; version:string; operation:'query'|'mutation';
   field:string; args:HtmlJsonObject; principal:PageResolverPrincipal; signal:AbortSignal;
+  /** A page function call's admission (contracts `RunnerAdmission`): every capability it reaches is re-decided against it. */
+  admission?:RunnerAdmission;
   /** Trusted adapter receipt outcome; never serialized to author code or inferred from arbitrary result JSON. */
   reportOutcome?(outcome:Exclude<PageMutationOutcome,'offline'>):void;
 }
