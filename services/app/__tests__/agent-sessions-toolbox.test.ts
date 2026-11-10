@@ -82,7 +82,9 @@ it('each comment carries its session\'s name, and a watch prints the other agent
 it('one agent starting its watch never stops the other agent\'s watch on the same page', async () => {
  const { anchor, a, b } = await twoAgents();
  const thread = (await a.run('add', { anchor: await anchor('intro'), body: 'A asks first' })).thread;
- // A's first watch replays the page (only its own question) and waits for the next comment.
+ // A's first watch after its own comment returns at once (the reply checkpoint: nobody else has commented, so a reply
+ // not sent yet goes out first); its next one waits for the next comment.
+ expect((await a.watch()).filter(line => !line.startsWith('next:')).join('\n')).toMatch(/^nobody has commented yet/);
  const waiting = a.watch();
  await new Promise(resolve => setTimeout(resolve, 300));
  // B's first watch replays the page (A's question) and returns; A's watch keeps waiting.

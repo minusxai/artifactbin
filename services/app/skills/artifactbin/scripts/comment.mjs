@@ -19,21 +19,19 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   your comments show, kept for this agent session (default: your product and a colour, such as
   "Claude Code Red"; ARTIFACTBIN_AGENT_NAME also sets it). add, reply, edit and react print the
   name, then the watch to run: they ask for answers, so watch for them.
-Watch --next: Nothing may hold back your reply, and a watch may never return: the reply is every
-  link the user asked for, in the form they asked for (a page's public view is its receipt's
-  user_page_url), plus what they asked; a message that only says you will watch is not a reply.
+Watch --next: Nothing may hold back your reply: it is every link the user asked for, in the form
+  they asked for (a page's public view is its receipt's user_page_url), plus what they asked.
   Claude Code: start the watch, one per page, with the Bash tool's run_in_background first, then
   send your reply as your last message and end your turn; you are woken when it prints. Other
-  harnesses: in one turn, say your reply to the user, then call the watch: the words before a tool
-  call are your reply, and nothing after the call may be read, since the session can end while it
-  waits. Several pages: that one call runs every page's watch and waits for all (node
-  scripts/comment.mjs watch A --next & node scripts/comment.mjs watch B --next & wait). Run it in
-  the foreground with its default wait and a shell timeout of at least 300000 ms. It returns as
-  soon as someone comments, and on its own within 4 minutes: handle what it printed and run it
-  again until it says to stop watching. Watching follows every task, however short the reply. It
-  prints the next comments from someone else (one JSON line each; a first call also prints threads
-  still waiting for your answer) and exits 0. After 4 minutes it prints "no new comments yet: run
-  the same watch --next command again".
+  harnesses: say your reply to the user, then call the watch in the foreground with its default
+  wait and a shell timeout of at least 300000 ms; several pages share that one call (node
+  scripts/comment.mjs watch A --next & node scripts/comment.mjs watch B --next & wait). Its first
+  call after you publish, edit or comment returns at once, to send a reply not sent yet. Then it
+  returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and
+  run it again until it says to stop watching. Watching follows every task, however short the
+  reply. It prints the next comments from someone else (one JSON line each; a first call also
+  prints threads still waiting for your answer) and exits 0. After 4 minutes it prints "no new
+  comments yet: run the same watch --next command again".
   After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for
   15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
   second --next of this agent session on the same page takes over from the running one, which
@@ -78,7 +76,7 @@ import {runTool, resolveTarget, selectedServer, makeClient, positional, requireF
   enumValue, jsonFile, journalIntent, createJournal, resumeJournal, ToolError, serverOrigin,
   credentialRoot} from './toolbox-client.mjs';
 import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
-import {watchNext} from './toolbox-watch-state.mjs';
+import {noteWatchActivity, watchNext} from './toolbox-watch-state.mjs';
 import {commentText, threadRevision} from './toolbox-comment-write.mjs';
 import {agentIdentity, nameNote} from './toolbox-agent.mjs';
 // The writes that make something for others to answer: each prints the name and the watch next.
@@ -133,7 +131,8 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
       watchValues = {...values, output, append: existsSync(output)};
     }
     try {
-      await watchComments(client, id, watchValues, {signal: controller.signal, ...options});
+      await watchComments(client, id, watchValues, {signal: controller.signal, replyFirst: true,
+        ...options});
     } finally {
       for (const signal of ['SIGINT', 'SIGTERM']) process.off(signal, stop);
     }
@@ -193,6 +192,7 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   const result = await resumeJournal(journal, client, 'comment');
   if (!ANSWERED.includes(sub)) return {thread: result.receipt, journal};
   // Answers come back as comments: the name it went out under, then the watch for them.
+  await noteWatchActivity(client.root, client.server, id).catch(() => {});
   return {thread: result.receipt, journal, agent: identity.name, note: nameNote(identity),
     next: watchNext(id)};
 }
