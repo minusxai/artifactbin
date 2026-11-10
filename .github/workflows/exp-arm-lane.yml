@@ -1,0 +1,270 @@
+name: exp arm lane
+# Experiment only (branch exp/ci-overhead, never merged): pr fast exactly, on ubuntu-24.04-arm.
+
+# PULL REQUEST CI BUDGET, A HARD RULE: aim for 40s; the limit is 60s. Each job's last step measures
+# the run from its start (queue, setup and install included) and FAILS the pull request past 60s
+# (scripts/lib/ci-elapsed.mjs --pr). Do not raise the budget: fix the critical path instead.
+#
+# This is the required pull request check. It runs validate (type check, knip, module graph, name and
+# UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
+# (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json), the contract tests
+# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts), all at
+# once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
+# (#1138, #1141: each a red main, and production held for a whole extra merge), so every pull request runs them. The guard tests read
+# the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
+# the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
+# server's native acceptance) through the real handlers, which the audit refuses too. Each guards a contract whose
+# break once reached main. WHEN MAIN GOES RED, find why this lane missed it and add a
+# deterministic guard here (either list, or a contract test) within the budget. The root type
+# check uses TypeScript 7's native compiler (scripts/lib/type-check.mjs): about 7s cold on a runner where tsc 5
+# took 30s, and longer still from stale build info, so no diff size can push it past the limit. It starts from
+# the newest incremental build info any run uploaded.
+# The full suite stays in ci.yml: it runs on every push to main (and on demand) and gates deploys there; it does
+# not run on pull requests. page-speed.yml is informational.
+#
+# No workflow-level `concurrency` group: cancel-in-progress holds a new run pending until the old one
+# stops (ci.yml's header has the measurements), which alone would cost more than this lane's budget.
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: fast (${{ matrix.part }})
+    runs-on: ubuntu-24.04-arm
+    # A job that reaches two minutes is already twice over the limit.
+    timeout-minutes: 6
+    # Reading this run's own attempt (the clock below) needs `actions: read`; a job-level block replaces
+    # the workflow's, so `contents: read` is restated.
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [ types, lint, tests, guards, guards-2 ]
+        # The guard and contract tests were one 35-59s Vitest step, ~100s of worker CPU on the runner's 4 vCPUs (the
+        # contracts boot a database and real resolver runners per file). Two jobs split them by measured time
+        # (vitest.guard.config.ts's timed sequencer), each file once.
+        include:
+          - part: guards
+            shard: 1/2
+          - part: guards-2
+            shard: 2/2
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 20 runners, its ui and
+          # islands projects on 4, the same files ci.yml's api and ui jobs run after the merge, each group packed
+          # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
+          # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
+          # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
+          # runner provisions a browser. Add a runner when a group's load nears the clock; never move a file out.
+          - part: api-1
+            projects: --project=api --project=api-isolated
+            suite: 1/22
+          - part: api-2
+            projects: --project=api --project=api-isolated
+            suite: 2/22
+          - part: api-3
+            projects: --project=api --project=api-isolated
+            suite: 3/22
+          - part: api-4
+            projects: --project=api --project=api-isolated
+            suite: 4/22
+          - part: api-5
+            projects: --project=api --project=api-isolated
+            suite: 5/22
+          - part: api-6
+            projects: --project=api --project=api-isolated
+            suite: 6/22
+          - part: api-7
+            projects: --project=api --project=api-isolated
+            suite: 7/22
+          - part: api-8
+            projects: --project=api --project=api-isolated
+            suite: 8/22
+          - part: api-9
+            projects: --project=api --project=api-isolated
+            suite: 9/22
+          - part: api-10
+            projects: --project=api --project=api-isolated
+            suite: 10/22
+          - part: api-11
+            projects: --project=api --project=api-isolated
+            suite: 11/22
+          - part: api-12
+            projects: --project=api --project=api-isolated
+            suite: 12/22
+          - part: api-13
+            projects: --project=api --project=api-isolated
+            suite: 13/22
+          - part: api-14
+            projects: --project=api --project=api-isolated
+            suite: 14/22
+          - part: api-15
+            projects: --project=api --project=api-isolated
+            suite: 15/22
+          - part: api-16
+            projects: --project=api --project=api-isolated
+            suite: 16/22
+          - part: api-17
+            projects: --project=api --project=api-isolated
+            suite: 17/22
+          - part: api-18
+            projects: --project=api --project=api-isolated
+            suite: 18/22
+          - part: api-19
+            projects: --project=api --project=api-isolated
+            suite: 19/22
+          - part: api-20
+            projects: --project=api --project=api-isolated
+            suite: 20/22
+          - part: api-21
+            projects: --project=api --project=api-isolated
+            suite: 21/22
+          - part: api-22
+            projects: --project=api --project=api-isolated
+            suite: 22/22
+          - part: ui-1
+            projects: --project=ui --project=islands
+            suite: 1/5
+          - part: ui-2
+            projects: --project=ui --project=islands
+            suite: 2/5
+          - part: ui-3
+            projects: --project=ui --project=islands
+            suite: 3/5
+          - part: ui-4
+            projects: --project=ui --project=islands
+            suite: 4/5
+          - part: ui-5
+            projects: --project=ui --project=islands
+            suite: 5/5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
+      # `warm-caches` and every ci.yml miss save it; this lane only restores.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      # A PULL REQUEST THAT CHANGES THE LOCK MISSES THAT KEY ON EVERY PUSH: only main saves it, after the merge.
+      # A cold `npm ci` was 14-24s of #1018's 47s and 55s runs. So on a miss, restore the newest whole install
+      # (this branch's, else main's; restore only, so no stale tree is ever saved) and let `npm install`
+      # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
+      # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
+      # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
+      - if: steps.install.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: near-install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
+      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != ''
+        name: Reconcile the nearest install to this lock
+        run: |
+          npm install --no-audit --no-fund
+          if git diff --quiet -- package-lock.json package.json 'services/*/package.json'; then
+            node services/app/scripts/copy-assets.mjs
+          else
+            git checkout -- package-lock.json package.json 'services/*/package.json'
+            npm ci --no-audit --no-fund
+          fi
+      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''
+        run: npm ci --no-audit --no-fund
+      - if: matrix.part == 'api-1' && steps.install.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      # The root type check is incremental: start from the newest native build info any run of this repository
+      # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
+      - if: matrix.part == 'types'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/ci.mjs type-info
+      - if: matrix.part == 'types'
+        run: node scripts/ci/check-local.mjs validate --part=types
+      - if: matrix.part == 'types'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tsgo-buildinfo
+          path: node_modules/.cache/tsgo/root.tsbuildinfo
+          # Kept as long as tested-tree evidence: a quiet stretch must not leave the next PR a cold type check.
+          retention-days: 14
+          if-no-files-found: ignore
+      # actionlint reads every workflow and shellchecks every `run:` block; it runs beside the lint half.
+      - if: matrix.part == 'lint'
+        name: Lint the workflows and validate the rest
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # A pinned executable preserves the same workflow/shell checks without a Docker pull/start.
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          # The release redirect can return persistent 504s; the immutable asset API is a bounded fallback.
+          if ! curl --max-time 10 -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"; then
+            curl --max-time 15 -fsSL -H 'Accept: application/octet-stream' -o "$RUNNER_TEMP/$archive" https://api.github.com/repos/rhysd/actionlint/releases/assets/384924896
+          fi
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/$archive" actionlint
+          "$RUNNER_TEMP/actionlint" -color & lint=$!
+          rc=0
+          node scripts/ci/check-local.mjs validate --part=lint || rc=1
+          wait "$lint" || rc=1
+          exit "$rc"
+      - if: matrix.part == 'tests'
+        run: node scripts/ci/fast-check.mjs
+      - if: matrix.shard
+        run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
+      # The test global setup's server reader and hosted libraries (build-runtime.global.ts), keyed by what they are
+      # built from (scripts/ci/ci.mjs `test-builds-key`); main's warm-caches writes the entry. A pull request that
+      # changes those inputs rebuilds them (~10s) and its first runner saves the result, so its next push restores it.
+      - if: matrix.suite
+        id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - if: matrix.suite
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - if: matrix.suite
+        run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
+      - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+      - name: PR CI clock (warns at 40s; fails over 60s)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$RUNNER_TEMP/pr-attempt.json"
+          node scripts/lib/ci-elapsed.mjs --pr "$RUNNER_TEMP/pr-attempt.json" "$GITHUB_STEP_SUMMARY"
