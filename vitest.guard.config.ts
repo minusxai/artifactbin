@@ -32,7 +32,10 @@ export default defineConfig({
           setupFiles: ['./services/app/test/setup/guard.setup.ts'],
           env: { APP_PACKAGE_ROOT: new URL('./services/app', import.meta.url).pathname, DATABASE_URL: suiteEnv(import.meta.dirname).DATABASE_URL },
           testTimeout: 5000,
-          hookTimeout: 5000,
+          // A hook here may boot the app harness's database, and a worker's first file pays the cold boot: on a loaded
+          // runner that took over 5s and failed html-backends/store.test.ts in `beforeAll` (run 42819140233). Hooks get
+          // the contract project's 20s; tests keep 5s, and the lane's own 60s clock still fails a slow run.
+          hookTimeout: 20000,
         },
       },
       {
