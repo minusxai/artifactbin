@@ -15,8 +15,8 @@
  * own each fact: the share menu's invite and role rows → solid/document/__tests__/sharing.test.tsx; what an editor
  * and a commenter are drawn → solid/__tests__/document-chrome.test.tsx; the commenter's thread and refused edits →
  * services/app/__tests__/roles.test.ts ("the commenter role, through the routes"); the editor's sharing door → its
- * "what an editor may do with sharing"; an editor's write and a demotion that takes effect on the next write → its
- * "editors through every door"; concurrent edits landing → edits.test.ts, roles.test.ts ("the browser edit answer")
+ * "what an editor may do with sharing"; an editor's write and a demotion that takes effect on the next write →
+ * roles-doors.test.ts ("editors through every door"); concurrent edits landing → edits.test.ts, roles.test.ts ("the browser edit answer")
  * and gate-inplace-edit's remote-edit section; the
  * shared-with-you role → home-progressive.test.ts and solid/components/__tests__/browse-extras.test.tsx.
  *
