@@ -26,8 +26,10 @@ function ready(nonce='reader-nonce',role='viewer'){
 }
 const command=(mode:'light'|'dark')=>({kind:'frame',payload:{kind:'send',command:{type:STORY_READER_MODE_MESSAGE,mode}}});
 
+// The controls sit behind a lazy import that this first test loads cold: on a slow runner that took over the default
+// 1 s wait (run 42868198102), so the wait for them is given the test's own time.
 it('keeps platform comment reading but sends every account action to the original',async()=>{
- const open=vi.spyOn(window,'open').mockReturnValue(null);mount();ready();expect(await screen.findByRole('button',{name:'Open original'})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Open original'}));expect(open).toHaveBeenCalledWith('https://platform.example/a/p','_blank','noopener');expect(screen.queryByRole('button',{name:'Sign in'})).toBeNull();expect(screen.queryByRole('button',{name:'Open menu'})).toBeNull();expect(screen.queryByRole('button',{name:'Connect this file'})).toBeNull();expect(await screen.findByRole('button',{name:'Save linked HTML'})).toBeTruthy();await waitFor(()=>expect(annotation.canCreate).toBe(false));
+ const open=vi.spyOn(window,'open').mockReturnValue(null);mount();ready();expect(await screen.findByRole('button',{name:'Open original'})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Open original'}));expect(open).toHaveBeenCalledWith('https://platform.example/a/p','_blank','noopener');expect(screen.queryByRole('button',{name:'Sign in'})).toBeNull();expect(screen.queryByRole('button',{name:'Open menu'})).toBeNull();expect(screen.queryByRole('button',{name:'Connect this file'})).toBeNull();expect(await screen.findByRole('button',{name:'Save linked HTML'},{timeout:4000})).toBeTruthy();await waitFor(()=>expect(annotation.canCreate).toBe(false));
 });
 
 it('shows the app appearance while preserving the author mode until the reader chooses',async()=>{
