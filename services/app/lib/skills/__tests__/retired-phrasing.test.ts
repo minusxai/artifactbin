@@ -154,6 +154,10 @@ const RETIRED: Retired[] = [
     reason: 'Q1: a page computes with the sql tag (sql`…`), not the _sql GraphQL field'},
   {pattern: /\bGraphQL\b|\bApollo (?:state|client|value)/i, scopes: DOCS,
     reason: 'Q1: no GraphQL teaching for new pages (graphql.mjs --help covers older pages)'},
+  // The 2026-11-11 reply order (W): agents holding every link announced the watch instead of replying, and the watch
+  // never returned.
+  {pattern: /part of every task/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'W1: watching follows the reply (WATCH_MODE); "part of every task" let the reply wait for the watch'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -186,6 +190,7 @@ describe('retired skill phrasing', () => {
       'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
       'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
       'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
+      'W1:': 'Watching is part of every task, however short the reply.',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;
@@ -210,9 +215,9 @@ describe('retired skill phrasing', () => {
   });
   it('states the reply rule once, in SKILL.md Read first', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
-    expect(skill).toContain('The reply is the link plus what the user asked for, in the form they asked for; ' +
-      "a form they prescribe limits the reply's text, never the watch. " +
+    expect(skill).toContain('The reply never waits on a watch: every link the user asked for plus what they asked, in the ' +
+      'form they asked for; a form they prescribe limits its text, never the watch. ' +
       'Describe testing, build and permissions only from what `check` reported.');
-    expect(skill.match(/The reply is/g)).toHaveLength(1);
+    expect(skill.match(/The reply (?:is|never)/g)).toHaveLength(1);
   });
 });

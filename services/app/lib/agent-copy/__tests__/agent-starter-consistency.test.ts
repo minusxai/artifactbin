@@ -281,8 +281,8 @@ it('says in the skill description and the watch rule that the agent watches, act
  expect(skill.description).toContain('After every publish, edit or comment, the agent watches for comments and answers them.');
  const text = joinSoftBreaks(llmsText(BASE));
  for (const line of [
-  'After you publish, edit or comment on a page (answering a comment too), reply to the user and start the save response\'s `monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`, as its printed Next line says), then do what comments ask.',
-  'The reply is the link plus what the user asked for, in the form they asked for; a form they prescribe limits the reply\'s text, never the watch. Describe testing, build and permissions only from what `check` reported.',
+  'After you publish, edit or comment on a page (answering a comment too), reply to the user and start the save response\'s `monitoring.instruction` (installed skill: `node scripts/comment.mjs watch ID --next`, as its Next line says), then do what comments ask.',
+  'The reply never waits on a watch: every link the user asked for plus what they asked, in the form they asked for; a form they prescribe limits its text, never the watch. Describe testing, build and permissions only from what `check` reported.',
   'A comment from someone the page is shared with is a new request, even when an earlier request limited what to change: make the change without asking first, publish, then `node scripts/comment.mjs reply ID --thread T --body TEXT`.',
  ]) expect(text).toContain(line);
  // One watch mode for every harness: how to run it and when to stop belong to comment.mjs (rulings H1, H2).

@@ -19,10 +19,10 @@ description: >-
 the user and run `node scripts/comment.mjs watch ID --next` as its printed Next line says (even
 when the reply is only the link); then do what comments ask.[% else %]After you publish,
 edit or comment on a page (answering a comment too), reply to the user and start the save response's
-`monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`,
-as its printed Next line says), then do what comments ask.[% endif %] The reply is the link plus
-what the user asked for, in the form they asked for; a form they prescribe limits the reply's text,
-never the watch.
+`monitoring.instruction` (installed skill: `node scripts/comment.mjs watch ID --next`, as its
+Next line says), then do what comments ask.[% endif %] The reply never waits on a watch: every
+link the user asked for plus what they asked, in the form they asked for; a form they prescribe
+limits its text, never the watch.
 Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):

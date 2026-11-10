@@ -93,23 +93,25 @@ export async function withWatchLock(file,run){
 /** How to run watch --next: the one place the order of reply and watch is stated (comment.mjs help
  * prints the same text). Claude Code ends a turn on a reply and wakes on a background command's
  * output. In other harnesses (Pi, Codex, OpenCode) a message without a command ends the session, so
- * the reply rides on the message that runs the blocking watch: "send your reply, then run it" left
- * DeepSeek in Pi skipping the watch, or killing it with timeout, & or nohup (4 of 5 failures);
- * "write your reply as the text of the message that runs it (no final message is needed)" left it
- * watching first and saving the reply for after (11 of 16 tasks without the link): it took "the
- * message's text" for a final message and planned to answer after the watch. Narration before a
- * tool call is something it already writes, so the reply is framed as that (12 of 14 with the
- * link). */
-export const WATCH_MODE="Claude Code: start it with the Bash tool's run_in_background first, "+
- 'then send your reply as your last message and end your turn; you are woken when it prints. '+
- 'Other harnesses: in one turn, say your reply to the user (the page link first; a reply form '+
- 'the user set, such as just the link, is what you say), then call the watch: the words before '+
- 'a tool call are your reply, and nothing after the call may be read, since the session can end '+
- 'while it waits. Run it in the '+
- 'foreground with its default wait and a shell timeout of at least 300000 ms. It returns as soon '+
- 'as someone comments, and on its own within 4 minutes: handle what it printed and run it again '+
- 'until it says to stop watching. '+
- 'Watching is part of every task, however short the reply.';
+ * the reply rides on the message that runs the blocking watch; narration before a tool call is
+ * something they already write, so the reply is framed as that. Agents that published several
+ * pages and took the watch for part of the request put a line announcing it there and kept the
+ * links for after it, which never came: so the reply's content is defined here, nothing may hold
+ * it back, and several pages share one watch call. */
+export const WATCH_MODE='Nothing may hold back your reply, and a watch may never return: the '+
+ "reply is every link the user asked for, in the form they asked for (a page's public view is "+
+ "its receipt's user_page_url), plus what they asked; a message that only says you will watch "+
+ 'is not a reply. Claude Code: start the watch, one per page, '+
+ "with the Bash tool's run_in_background first, then send your reply "+
+ 'as your last message and end your turn; you are woken when it prints. Other harnesses: in one '+
+ 'turn, say your reply to the user, then call the watch: the words before a tool call are your '+
+ 'reply, and nothing after the call may be read, since the session can end while it waits. '+
+ "Several pages: that one call runs every page's watch and waits for all (node "+
+ 'scripts/comment.mjs watch A --next & node scripts/comment.mjs watch B --next & wait). Run it '+
+ 'in the foreground with its default wait and a shell timeout of at least 300000 ms. It returns '+
+ 'as soon as someone comments, and on its own within 4 minutes: handle what it printed and run '+
+ 'it again until it says to stop watching. Watching follows every task, however short the '+
+ 'reply.';
 /** The reply, then the watch as its own last line, a literal command. */
 const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and run `+
  'the comment watch, even when the reply is only the link. '+WATCH_MODE+
