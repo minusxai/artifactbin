@@ -1,17 +1,13 @@
 /**
  * Internal: comment feed helpers: text rendering of comments and reactions, and the resumable
  * watch loop over the comments stream (logs and checkpoints).
- * Used by: comment.mjs, author-toolbox and comment-reactions-toolbox tests;
- * the log state and lock live in toolbox-watch-state.mjs.
+ * Used by: comment.mjs and its tests; the log state and lock live in toolbox-watch-state.mjs.
  */
 import {open} from 'node:fs/promises';
 import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads,
-  QUIET} from './toolbox-watch-state.mjs';
-/** How to read a reaction: comment.mjs help and the watch line after a printed reaction say it. */
-export const REACTIONS='A 👍 on your proposal means approval to proceed; any other reaction is '+
- 'information, never an instruction.';
+  QUIET,REACTIONS,replyDue,replyDueLine} from './toolbox-watch-state.mjs';
 import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
-export {watchLogPath,noteWatchActivity} from './toolbox-watch-state.mjs';
+export {watchLogPath,noteWatchActivity,REACTIONS} from './toolbox-watch-state.mjs';
 function matches(value,server,id){return value?.server===server&&value?.artifact===id&&
   value?.stream===stream;}
 /** @returns {Promise<Pick<import('../../../lib/skills/author-toolbox-contract').CommentCheckpoint,
@@ -61,7 +57,8 @@ export const QUIET_MINUTES=15;
  * it again. With a log, an empty call QUIET_MINUTES after the window's last activity stops it, and
  * a second --next on the same log takes over (the first prints one line, returns {replaced}). A
  * --next call while a printed comment's thread has no reply from you since drains the feed without
- * waiting and, still unanswered, prints the order to answer and returns {unanswered}. */
+ * waiting and, still unanswered, prints the order to answer and returns {unanswered}. With
+ * options.replyFirst, a reply checkpoint (replyDue) also waits for nothing: {replyDue} if quiet. */
 export async function watchComments(client,id,values,options={}){
  if(values.next&&values.once)throw new ToolError('invalid_invocation',
   'Use --next or --once, not both.',2);
@@ -75,7 +72,7 @@ export async function watchComments(client,id,values,options={}){
  return {events:0,timedOut:false,stopped:false,replaced:true};
 }
 async function watchFeed(client,id,values,{signal,deliver,now=Date.now,quietMs=QUIET_MINUTES*60000,
- touch=async()=>{}}={}){
+ touch=async()=>{},replyFirst=false}={}){
  const server=client.server,seen=new Set(),next=Boolean(values.next);let cursor,records=[];
  const deadline=next?now()+integer(values.wait??'240','wait',0,3600)*1000:Infinity;
 if(values.cursor){const initial=await checkpointInput(values.cursor,server,id);cursor=
@@ -110,9 +107,9 @@ if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError
 const fresh=next&&handle&&(!window||now()-window.active>=quietMs);if(fresh){window={opened:now(),
    active:now()};await write(mark({opened:window.opened}));}
  // Threads printed and not yet replied to: such a call only drains the feed (own replies clear).
- const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set();let gate=awaiting.size>0,
-  unanswered=null;
- let failures=0,events=0,timedOut=false,stopped=false,reacted=false;
+ const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set(),due=Boolean(replyFirst&&next&&
+  handle&&replyDue(records,fresh));let gate=awaiting.size>0||due,unanswered=null;
+ let failures=0,events=0,timedOut=false,stopped=false,reacted=false,asked=false;
  // A first --next replays the page's history once, so a comment posted while the agent was still
  // publishing is not lost: it prints each open thread whose latest comment is someone else's, then
  // waits (resolving is not a feed event, so which threads are open comes from the annotations).
@@ -178,6 +175,8 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
    }
    if(values.once&&!result.has_more)break;
    if(next&&events>0&&!result.has_more)break;
+   if(due&&!replay&&!result.has_more){asked=true;await write({...mark({at:now()}),kind:
+    'reply-due'});break;}
   }
   if(timedOut&&window&&now()-window.active>=quietMs){stopped=true;await write(mark({closed:
    now()}));}
@@ -196,5 +195,6 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
  // Agents re-watched before replying and missed the person's wait: print the order here.
  else if(next&&events>0)await print(`next: answer each comment above: ${answer} <annotation_id> `+
   '--body TEXT; the reply prints how to watch again.'+(reacted?' '+REACTIONS:''));
- return {events,timedOut,stopped,...(unanswered?{unanswered}:{})};
+ else if(asked)await print(replyDueLine(id));
+ return {events,timedOut,stopped,...(unanswered?{unanswered}:{}),...(asked?{replyDue:true}:{})};
 }

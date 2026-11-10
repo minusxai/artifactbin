@@ -40,7 +40,7 @@ import {
   serverOrigin,
   ToolError
 } from './toolbox-client.mjs';
-import {watchNext} from './toolbox-watch-state.mjs';
+import {noteWatchActivity, watchNext} from './toolbox-watch-state.mjs';
 
 const REGION = /^(?:_doc|[A-Za-z][A-Za-z0-9_-]{0,127})$/;
 const MARKER = /^<!-- af-doc:([A-Za-z0-9_-]*) -->\r?\n/;
@@ -140,6 +140,8 @@ export async function docCommand({sub, values, positionals}, options = {}) {
     if (error.exit !== 5) await save({...pair, pending: undefined});
     throw explained(error);
   }
+  // A save: the page's comment watches restart their quiet time and their reply checkpoint.
+  await noteWatchActivity(client.root, client.server, pair.id).catch(() => {});
   const {pending: _done, ...read} = pair;
   await atomicWrite(file, stamp({...read, version: receipt.version}, receipt[pair.format] ?? ''));
   return {id: pair.id, regionId: receipt.regionId, version: receipt.version,
