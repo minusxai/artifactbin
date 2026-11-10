@@ -148,6 +148,26 @@ describe('code scanning runs after merge, not on every pull request', () => {
   });
 });
 
+describe('CodeQL leaves one overlay database in the cache, not one per merge', () => {
+  // Each push scan saves a ~405 MB overlay base database under a key naming its revision; only the newest is ever
+  // restored. Nineteen of them filled 7.5 GB of the repository's 10 GB on 2026-11-10, where GitHub starts evicting
+  // the least recently used entries, the install cache among them.
+  it('prunes every older database after the scan, keeping the newest per language', () => {
+    const prune = workflow('v3-codeql.yml').jobs['prune-caches'];
+    expect(prune.needs).toEqual(['analyze']);
+    expect(prune.if).toBe('always()');
+    expect(prune.permissions).toEqual({ actions: 'write' });
+    // Deployment admission reads this workflow's result: housekeeping never fails it.
+    expect(prune['continue-on-error']).toBe(true);
+    const script = prune.steps.map((step) => step.run ?? '').join('\n');
+    expect(script).toContain('--key codeql-overlay-base-database-');
+    expect(script).toContain('--ref refs/heads/main');
+    expect(script).toMatch(/group_by\(.*lang\)/);
+    expect(script).toContain('.[1:]');
+    expect(script).toContain('gh cache delete');
+  });
+});
+
 describe('CodeQL scans every merged revision without narrowing analysis',()=>{
  // Every merged revision is a deployment candidate that needs its own scan: cancelling a superseded push scan left
  // ci-green 6e581b2eb, 08f6b19d9, 55b153ff0 and fb1c96116 unadmittable, and the replacing run sat pending 30-40 s
