@@ -17,7 +17,7 @@
 // - team: a group it is shared with (groups.mjs share --datasets) edits every entry. // @only team
 // - collab: an entry's description is typed in together, live (@afbin/collab). // @only collab
 // - table: a sortable table view of every entry (af-data-table). // @only table
-// - limits: each group holds at most APP.limit entries; tracker.ts enforces it. // @only limits
+// - limits: each group holds at most APP.limit entries; tracker.ts holds it. // @only limits
 // The only part to edit. Each entry is a name, one of groups and an optional note.
 window.APP = {
   kicker: '[Team · quarter]', summary: '[What we are working on, and who has it.]',
@@ -47,8 +47,7 @@ button.primary{background:var(--primary);color:var(--primary-foreground);border-
 .views{display:flex;gap:8px;margin:12px 0} /* @only table */
 .views button[aria-pressed=true]{background:var(--muted)} /* @only table */
 @media(max-width:720px){.fields{grid-template-columns:1fr}}
-</style>
-</head><body><main>
+</style></head><body><main>
 <p id="kicker" class="muted"></p><h1 id="title" class="t-display-l"></h1><p id="summary"></p>
 <form id="add" hidden><div class="fields">
 <label><span id="name-label"></span><input id="add-name" required maxlength="80"></label>
@@ -113,8 +112,7 @@ function editForm(row,key){
   text.on('status',shown);shown();text.on('error',({message})=>{status.textContent=message;});
   // @end collab
   form.onsubmit=event=>{event.preventDefault();void write(`Saved ${name.value.trim()}.`,
-    ()=>sql`update entries set name = ${name.value.trim()}, grp = ${grp.value},
-      note = ${note.value.trim()} where _id = ${row._id}`);};
+    ()=>save(row,{name:name.value.trim(),grp:grp.value,note:note.value.trim()}));};
   return form;
 }
 function rowView(row){
@@ -174,20 +172,23 @@ table.addEventListener('af-edit-intent',event=>{const row=rows.find(r=>r._id===e
 // @end table
 const show=list=>{rows=list;total=list[0]?.total??0;sizes=new Map(list.map(r=>[APP.groups
   .includes(r.grp)?r.grp:'',r.size]));if(!rows.some(r=>r._id===editing)){editing=null;render();}};
-const read=async()=>show(await listQuery);
-// One add: an insert, or tracker.ts's add (limits). One write, then a fresh read; a write the
-// rules refuse changes nothing: affected is 0.
+// One add or save (an edit or a move): a statement, or tracker.ts's add or save (limits: a full
+// group refuses first, here). One write, then a fresh read; a refused write has affected 0.
 var add=o=>sql`insert into entries (name, grp, note) /* @only !limits */
   values (${o.name}, ${o.grp}, ${o.note})`; // @only !limits
-var add=o=>call('add',o); // @only limits
+var save=(row,o)=>sql`update entries set name = ${o.name}, grp = ${o.grp}, /* @only !limits */
+  note = ${o.note} where _id = ${row._id}`; // @only !limits
+const room=(grp,from)=>{if(grp!==from&&(sizes.get(grp)??0)>=APP.limit) // @only limits
+  throw Error(`${grp} is full.`);}; // @only limits
+var add=o=>(room(o.grp),call('add',o)); // @only limits
+var save=(row,o)=>(room(o.grp,row.grp),call('save',{id:row._id,...o})); // @only limits
 async function write(message,run){status.textContent='Saving…';
   try{const {affected}=await run();
     if(!affected)throw Error('Nothing changed: you may not change that entry, or it was removed.');
-    editing=null;await read();status.textContent=message;return true;}
+    editing=null;show(await listQuery);status.textContent=message;return true;}
   catch(error){status.textContent=error.message||'Could not save.';return false;}}
 $('#add').onsubmit=async event=>{event.preventDefault();const name=$('#add-name').value.trim(),
   grp=$('#add-group').value,note=$('#add-note').value.trim();if(!name)return;
-  if((sizes.get(grp)??0)>=APP.limit)return void(status.textContent=`${grp} is full.`);//@only limits
   if(await write(`Added ${name} to ${grp}.`,()=>add({name,grp,note})))
     $('#add-name').value=$('#add-note').value='';};
 // Signing in or out re-asks who reads; a refusal (access removed) clears the rows and controls.
@@ -196,5 +197,4 @@ const who=async()=>{me=await call('me');};onResolverChange(names=>{
   if(names.includes('viewer'))void who().then(render,refused);});
 try{await who();await new Promise((ok,fail)=>sql.watch(listQuery,list=>{show(list);ok();},
   e=>{fail(e);refused(e);}));status.textContent=`${total} so far.`;}catch(e){refused(e);}
-</script>
-</body></html>
+</script></body></html>
