@@ -160,8 +160,9 @@ export async function readEventsFor(actor: AccessActor, query: EventFeedQuery, o
     (await db.query(`SELECT 1 FROM artifacts WHERE id=$1 AND ${monitor.where('$2')}`, [query.artifactId, monitor.val])).rows.length > 0;
   signal.throwIfAborted();
   if (!await authorized()) return null;
-  if (!await feedPresent()) return { events: [], next: encode(scope, 0n) };
+  // Publish first: on a database whose events table does not exist yet, the first publish creates it.
   await publishEventOutbox(db);
+  if (!await feedPresent()) return { events: [], next: encode(scope, 0n) };
   const head = async () => BigInt((await db.query<{ p: string }>(`SELECT coalesce(max(position), 0)::text AS p FROM ${EVENTS}`)).rows[0]!.p);
   let position: bigint;
   if (query.after === 'now') position = await head();
