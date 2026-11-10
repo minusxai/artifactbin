@@ -75,14 +75,15 @@ it('unsafe HTML links are dropped by the supported native schema',()=>{
  expect(e.view.state.doc.textContent).toBe('unsafe');expect(e.view.dom.querySelector('a')).toBeNull();
 });
 
-it('first list item fallback indentation reverses without losing list structure',()=>{
- const e=single('<ul><li><p>First</p></li><li><p>Second</p></li></ul>');
- e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,3)));
- e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
- expect(e.view.state.doc.firstChild?.firstChild?.textContent).toBe('  First');
- e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
- expect(e.view.state.doc.firstChild?.type.name).toBe('bulletList');
- expect(e.view.state.doc.firstChild?.firstChild?.textContent).toBe('First');
+it('Tab on a selected parent and nested list never inserts indentation spaces',()=>{
+ const e=single('<ul><li><p>First</p><ul><li><p>Nested</p></li></ul></li></ul>');
+ const positions:number[]=[];
+ e.view.state.doc.descendants((node,pos)=>{if(node.isText)positions.push(pos);});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,positions[0]!,positions[1]!+6)));
+ const before=e.view.state.doc.toJSON();
+ for(let i=0;i<3;i++)e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.textContent).toBe('FirstNested');
+ expect(e.view.state.doc.toJSON()).toEqual(before);
 });
 it('multi-paragraph indentation is undoable and redoable',()=>{
  const e=single('<p>One</p><p>Two</p>');
@@ -113,4 +114,29 @@ it('mixed native Markdown paste validates at the authenticated update boundary',
  const parsed=e.view.state.schema.nodeFromJSON(json);
  e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,parsed.content));e.flush();
  expect(refused).toBeUndefined();
+});
+
+it.each(['ul','ol'])('selected sibling range in %s sinks and lifts with its nested child',tag=>{
+ const e=single(`<${tag}><li><p>Before</p></li><li><p>Parent</p><${tag}><li><p>Child</p></li></${tag}></li><li><p>Sibling</p></li></${tag}>`);
+ const positions:number[]=[];e.view.state.doc.descendants((node,pos)=>{if(node.isText)positions.push(pos);});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,positions[1]!,positions[3]!+7)));
+ const before=e.view.state.doc.toJSON();
+ e.command('indent');
+ expect(e.view.state.doc.firstChild?.childCount).toBe(1);
+ expect(e.view.state.doc.textContent).toBe('BeforeParentChildSibling');
+ e.command('outdent');
+ expect(e.view.state.doc.toJSON()).toEqual(before);
+});
+
+it.each([false,true])('task list selected range nests structurally, reverse=%s',reverse=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Before</p></li><li data-type="taskItem" data-checked="true"><p>Parent</p><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Child</p></li></ul></li><li data-type="taskItem" data-checked="false"><p>Sibling</p></li></ul>');
+ const positions:number[]=[];e.view.state.doc.descendants((node,pos)=>{if(node.isText)positions.push(pos);});
+ const from=positions[1]!,to=positions[3]!+7;
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,reverse?to:from,reverse?from:to)));
+ const before=e.view.state.doc.toJSON();
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.firstChild?.childCount).toBe(1);
+ expect(e.view.state.doc.textContent).toBe('BeforeParentChildSibling');
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.toJSON()).toEqual(before);
 });

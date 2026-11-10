@@ -42,9 +42,10 @@ async function openThread() {
 describe('the rail renders the comment whole', () => {
   it('a fenced block and a list come out as <pre> and <li>, not as one mono paragraph', async () => {
     const thread = await openThread();
+    await waitFor(()=>expect(thread.querySelector('pre')).not.toBeNull());
     const pre = thread.querySelector('pre')!;
     expect(pre.textContent).toBe('const MAX = 10;');
-    expect(pre.className).toContain('overflow-x-auto');
+    expect(pre.querySelector('code')).not.toBeNull();
     const body = thread.querySelectorAll('[data-markdown]')[1]!;
     expect(body.querySelectorAll('li')).toHaveLength(2);
     expect(body.querySelectorAll('li')[0]!.textContent).toBe('bumped the cap');
@@ -58,7 +59,7 @@ describe('the rail renders the comment whole', () => {
     expect(code.tagName).toBe('CODE');
     expect(code.className).toContain('font-mono');
     expect(code.className).toContain('break-all');
-    expect(within(thread).getByText('10').tagName).toBe('STRONG');
+    expect(within(thread).getByText('10',{selector:'strong'}).tagName).toBe('STRONG');
     expect(thread.querySelector('[data-markdown]')?.className).toContain('font-sans');
   });
 
@@ -223,14 +224,13 @@ it('renders saved agent badges using the same name color as the editor', () => {
   expect(badge).toHaveClass('comment-agent-mention');
 });
 
-it('highlights saved code only in opted-in comments while retaining inert source text', async()=>{
- const {TiptapComments}=await import('../comment-editor-trial');
+it('highlights saved code in all comments while retaining inert source text', async()=>{
  const source='```js\nconst tag = "<img src=x onerror=alert(1)>";\n```';
- const view=render(()=> <TiptapComments.Provider value={()=>true}><CommentMarkdown text={source} label="Highlighted comment"/></TiptapComments.Provider>);
+ const view=render(()=> <CommentMarkdown text={source} label="Highlighted comment"/>);
  await waitFor(()=>expect(screen.getByLabelText('Highlighted comment').querySelector('.mx-code-token-keyword')?.textContent).toBe('const'));
  expect(screen.getByLabelText('Highlighted comment').querySelector('code')?.textContent).toBe('const tag = "<img src=x onerror=alert(1)>";');
  expect(screen.getByLabelText('Highlighted comment').querySelector('img')).toBeNull();
  view.unmount();
  render(()=> <CommentMarkdown text={source} label="Legacy comment"/>);
- expect(screen.getByLabelText('Legacy comment').querySelector('.mx-code-token-keyword')).toBeNull();
+ await waitFor(()=>expect(screen.getByLabelText('Legacy comment').querySelector('.mx-code-token-keyword')?.textContent).toBe('const'));
 });

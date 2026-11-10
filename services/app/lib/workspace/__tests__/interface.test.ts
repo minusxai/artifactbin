@@ -146,6 +146,7 @@ describe('the like readout', () => {
 describe('the pure leaves', () => {
   it('starts a doc unlisted and every other template private, titled for its kind and placed under its parent', () => {
     expect(ARTIFACT_STARTERS.map(s => s.template)).toContain('doc');
+    expect(artifactStarter('doc').html).toContain('data-af-editable="rich-native-v1"');
     expect(artifactStarter('doc')).toMatchObject({ visibility: 'unlisted', parent_id: null, html: expect.stringContaining('<title>Untitled document</title>') });
     expect(artifactStarter('deck', 'fold_1')).toMatchObject({ visibility: 'private', parent_id: 'fold_1', html: expect.stringContaining('<h1>Untitled presentation</h1>') });
     expect(artifactStarter('nonexistent' as never).html).toContain('Untitled document');

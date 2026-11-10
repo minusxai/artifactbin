@@ -1,7 +1,7 @@
 /** Opt-in native editor chunk. Credentials and HTTP remain exclusively in the trusted parent. */
 import { Editor } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
-import { NativeIndentation, freshClipboard, indentText } from './native-editing-behavior';
+import { NativeIndentation, freshClipboard, indentNative } from './native-editing-behavior';
 import { NativeCodePresentation } from './native-code-presentation';
 import { Slice } from 'prosemirror-model';
 import { TextSelection } from 'prosemirror-state';
@@ -56,7 +56,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
    const c=editor.commands;let done=false;
    if(name==='strong')done=c.toggleBold();else if(name==='em')done=c.toggleItalic();else if(name==='code')done=c.toggleCode();else if(name==='undo')done=c.undo();else if(name==='redo')done=c.redo();
    else if(name==='list')done=args.type==='ordered'?c.toggleOrderedList():c.toggleBulletList();
-   else if(name==='indent')done=c.sinkListItem(editor.isActive('taskItem')?'taskItem':'listItem')||indentText(view.state,view.dispatch);else if(name==='outdent')done=indentText(view.state,view.dispatch,true)||c.liftListItem(editor.isActive('taskItem')?'taskItem':'listItem');
+   else if(name==='indent')done=indentNative(editor);else if(name==='outdent')done=indentNative(editor,true);
    else if(name==='heading'&&Number.isInteger(args.level)&&Number(args.level)>=1&&Number(args.level)<=6)done=c.toggleHeading({level:args.level as 1|2|3|4|5|6});
    else if(name==='paragraph')done=c.setParagraph();else if(name==='quote')done=c.toggleBlockquote();else if(name==='codeBlock')done=c.toggleCodeBlock();else if(name==='rule')done=c.setHorizontalRule();
    else if(name==='link')done=args.href===null?c.unsetLink():typeof args.href==='string'&&c.setLink({href:args.href});

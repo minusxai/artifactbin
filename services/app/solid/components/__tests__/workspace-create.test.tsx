@@ -29,7 +29,7 @@ it('creates a doc from the first item of the Create menu: unlisted, marked a doc
   const body = created();
   expect(body).toMatchObject({ visibility: 'unlisted', parent_id: 'folder1', template: 'doc' });
   expect(body.html).toContain('<title>Untitled document</title>');
-  expect(body.html).toContain('<article data-af-editable="rich" class="af-markdown-body"><h1></h1><p></p></article>');
+  expect(body.html).toContain('data-af-editable="rich-native-v1"');
   expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
 });
 
@@ -140,11 +140,12 @@ it('opens HTML intake in the selected folder and group without creating until a 
  expect(screen.getByRole('button', {name:'Upload HTML'})).toBeDisabled();
  expect(fetch).not.toHaveBeenCalled();
 });
-it('offers an explicit native trial while the ordinary Document entry remains legacy',async()=>{
+it('offers one native Document entry',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({id:'trial123'},{status:201})));
  render(()=><WorkspaceCreate onCreated={()=>{}}/>);
  fireEvent.click(screen.getByRole('button',{name:'Create'}));
- fireEvent.click(screen.getByRole('menuitem',{name:'Document (Tiptap trial)'}));
+ expect(screen.queryByRole('menuitem',{name:'Document (Tiptap trial)'})).toBeNull();
+ fireEvent.click(screen.getByRole('menuitem',{name:'Document'}));
  await waitFor(()=>expect(openDocument).toHaveBeenCalledWith('/a/trial123'));
  expect(created().html).toContain('data-af-editable="rich-native-v1"');
 });
