@@ -17,8 +17,8 @@
  *   6. typing before the session arrives (a slowed open) is kept and merged in, not lost or doubled;
  *   7. the generated tracker (new-app.mjs's tasks preset, toolbox-tracker): a signed-in link holder adds an entry and
  *      gets no controls on the owner's (own-rows); owner and author type its description together and the save reaches
- *      a signed-out reader; the table's Edit opens the form with no page or console error; tracker.ts refuses a full
- *      group and the page counts it with `_sql`;
+ *      a signed-out reader; the table's Edit opens the form with no page or console error; tracker.ts's `add`
+ *      (`/fn/add`) refuses a full group in its one capped insert and the page counts the group with SQL;
  *   8. a downloaded copy opened from disk with no network loads the library and shows the field read-only.
  *
  *   node scripts/gates/gate-live-cells.mjs [base]
@@ -219,7 +219,12 @@ try {
     check(saved.saved === true && /Typed live together/.test(saved.readBack), 'the tracker\'s rules are own-rows, team and collab (the read-back says description is typed live)');
     const html = files['index.html'].replaceAll('ref:DATASET_ID', `ref:${entriesId}`).replace(/'\[([^\]']+)\]'/g, "'$1'").replace('[Tracker name]', 'Launch tasks');
     const { id: trackerId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ html, title: 'Launch tasks', visibility: 'public', resolverSources: { tracker: files['tracker.ts'] } }), headers: { 'idempotency-key': randomUUID() } });
-    const trackerGql = (query, variables = {}) => api(`/api/artifacts/${trackerId}/graphql`, { method: 'POST', body: JSON.stringify({ query, variables, revision: '1' }), headers: { 'idempotency-key': randomUUID().replaceAll('-', '') } });
+    // The starter's doors: its backend functions (fetch('/fn/NAME') in the page) and the page's SQL door (sql`…`).
+    const trackerFn = async (name, input) => {
+      const response = await fetch(`${BASE}/api/artifacts/${trackerId}/fn/${name}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(input) });
+      return { status: response.status, body: await response.json().catch(() => null) };
+    };
+    const trackerSql = async (sql, params = {}) => (await api(`/api/artifacts/${trackerId}/sql`, { method: 'POST', body: JSON.stringify({ sql, params, revision: '1' }), headers: { 'idempotency-key': randomUUID().replaceAll('-', '') } })).rows;
     const [TA, TB, TC] = await Promise.all(contexts.map((context) => context.newPage()));
     const errors = [];
     for (const p of [TA, TB]) {
@@ -261,16 +266,20 @@ try {
     check(await ta.locator('[data-af-id$="-name-input"]').isVisible(), 'the table\'s Edit opens the entry\'s form in the grouped view');
     await ta.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-    // limits: tracker.ts refuses a fourth entry in a group on the server, whoever asks.
-    for (const name of ['One', 'Two', 'Three']) check(!(await trackerGql('mutation($n: String!) { tracker { add(name: $n, grp: "Done") { _id } } }', { n: name })).errors?.length, `"${name}" fits in Done`);
-    const refused = await trackerGql('mutation { tracker { add(name: "Four", grp: "Done") { _id } } }');
-    check(/Done is full \(3 entries\)/.test(refused.errors?.[0]?.message ?? ''), `the fourth entry is refused by the server (${JSON.stringify(refused.errors?.[0]?.message)})`);
-    check(await until(() => tb.locator('[data-af-id="group-done-count"]').textContent(), (text) => text === '3 of 3', 10_000) === '3 of 3', 'the page counts the group with _sql: 3 of 3');
+    // limits: tracker.ts's add refuses a fourth entry in a group on the server, whoever asks (one capped insert).
+    for (const name of ['One', 'Two', 'Three']) {
+      const added = await trackerFn('add', { name, grp: 'Done' });
+      check(added.status === 200 && added.body?.affected === 1, `"${name}" fits in Done (${added.status} ${JSON.stringify(added.body)})`);
+    }
+    const refused = await trackerFn('add', { name: 'Four', grp: 'Done' });
+    check(refused.status === 500 && /Done is full \(3 entries\)/.test(refused.body?.message ?? ''), `the fourth entry is refused by the server (${refused.status} ${JSON.stringify(refused.body?.message)})`);
+    const inDone = await trackerSql("select count(*) as n from entries where grp = 'Done'");
+    check(Number(inDone?.[0]?.n) === 3, `the refused entry wrote nothing: Done holds 3 (${JSON.stringify(inDone)})`);
+    check(await until(() => tb.locator('[data-af-id="group-done-count"]').textContent(), (text) => text === '3 of 3', 10_000) === '3 of 3', 'the page counts the group with SQL: 3 of 3');
     check(errors.length === 0, `no page or console error, the table included (${errors.join(' | ') || 'none'})`);
     // Typing is saved as one dataset version about 5 s after its last editor leaves the page.
     await Promise.all([TA, TB].map((p) => p.close({ runBeforeUnload: true })));
-    const bo = (await trackerGql('{ entries(where: {name: {_eq: "Bo task"}}) { _id description } }')).data.entries[0];
-    const savedText = await until(async () => (await trackerGql('query($id: ID!) { entries_by_pk(_id: $id) { description } }', { id: bo._id })).data.entries_by_pk.description, (text) => text === typed[0], 20_000);
+    const savedText = await until(async () => (await trackerSql('select description from entries where name = $name', { name: 'Bo task' }))[0]?.description, (text) => text === typed[0], 20_000);
     check(savedText === typed[0], 'both leaving saves the typing to the entry');
     await TC.reload({ waitUntil: 'load' });
     const tc2 = await documentFrame(TC);
