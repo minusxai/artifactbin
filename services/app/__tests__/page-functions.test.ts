@@ -7,7 +7,8 @@
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {createRunner} from '@artifactbin/runner/local';
 import {setServices} from '@/lib/platform';
-import {getDb} from '@/lib/platform';
+import {getDb,TABLES} from '@/lib/platform';
+import {renderSchema} from '@artifactbin/utils';
 import {getArtifactById,artifactState} from '@/lib/artifacts';
 import {localPageBackendCapability} from '@/lib/page-operations';
 import {POST as publish} from '@/app/api/artifacts/route';
@@ -15,7 +16,6 @@ import {PUT as update} from '@/app/api/artifacts/[id]/route';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import {GET as fnGet,POST as fnPost} from '@/app/api/artifacts/[id]/fn/[name]/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
-import {renderedSchema} from './rendered-schema';
 
 const harness=useAppHarness();
 let runner:Awaited<ReturnType<typeof createRunner>>;
@@ -187,7 +187,9 @@ it('does not publish a prototype role declaration as anonymous',async()=>{
 
 it('adds nullable function_roles idempotently without changing legacy rows',async()=>{
  const db=await getDb();
- const statement=renderedSchema().schema.match(/ALTER TABLE app\.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;/)?.[0];
+ // The app side of SCHEMA.sql, rendered in process by the renderer `npm run render:schema` runs over the same declarations
+ // (renderSchema(TABLES, { schema: 'app' })), instead of spawning the script for one statement (~1s locally).
+ const statement=renderSchema(TABLES,{schema:'app'}).map((s)=>`${s};`).join('\n').match(/ALTER TABLE app\.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;/)?.[0];
  expect(statement).toBeDefined();
  await db.query('CREATE TEMP TABLE review_backend_versions (version TEXT PRIMARY KEY, type_defs TEXT NOT NULL)');
  try{

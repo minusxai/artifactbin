@@ -24,7 +24,7 @@ import {
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
-import { trackEvent } from '@/lib/analytics';
+import { flushViews, trackEvent } from '@/lib/analytics';
 import { mintExportKey } from '@/lib/export';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -78,18 +78,23 @@ async function eventRows(artifactId?: string): Promise<{ event: string; artifact
   return r.rows;
 }
 
-/** Events are fired unawaited — poll until the expected row lands. */
+/**
+ * Events are fired unawaited — poll until the expected row lands. Views are buffered and written in batches (every 2s,
+ * lib/analytics VIEW_FLUSH_MS), so each poll writes the buffer now rather than waiting out the timer.
+ */
 async function expectEvent(artifactId: string, event: string): Promise<{ user_id: string | null; client: string | null }> {
   let match: { user_id: string | null; client: string | null } | undefined;
   await vi.waitFor(async () => {
+    if (event === 'view') await flushViews();
     match = (await eventRows(artifactId)).find((r) => r.event === event);
     expect(match).toBeDefined();
   }, { timeout: 3000 });
   return match!;
 }
 
-/** Give any stray unawaited insert time to land before asserting absence. */
-const settle = () => new Promise((r) => setTimeout(r, 150));
+/** Give any stray unawaited insert time to land before asserting absence, then write any buffered view: a view the
+ * 2s batch has not written yet would otherwise pass an absence check. */
+const settle = async () => { await new Promise((r) => setTimeout(r, 150)); await flushViews(); };
 
 beforeEach(() => {
   sessionUser.id = '';

@@ -6,7 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { admitGroupMember, mintAccountToken, request, setSession, useAppHarness } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
-import { getDb, services, TransactionConflict } from '@/lib/platform';
+import { getDb, MAX_QUERY_ROWS, services, setServices, TransactionConflict } from '@/lib/platform';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, getArtifactById, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
@@ -177,8 +178,15 @@ it('refuses a statement over the byte cap and an effect over the row cap', async
   const f = await fixture();
   await refused(f, sql(f.page, f.owner, `insert into staff (name) values ('${'x'.repeat(70_000)}')`), 'input_too_large');
   await refused(f, sql(f.page, f.owner, "with recursive r(i) as (select 1 union all select i + 1 from r where i < 101) insert into staff (name) select 'n' || i from r"), 'too_many_rows');
-  // A runaway read inside a write stops at the deadline.
-  await refused(f, sql(f.page, f.owner, "with recursive r(i) as (select 1 union all select i + 1 from r) insert into staff (name) select 'n' from r where i = 100000000"), /timeout|validation_failed/);
+  // A runaway read inside a write stops at the deadline. The suite's engine (test/setup/vitest.setup.ts) carries the
+  // real 5s statement deadline, which this would wait out; the same engine with a 250ms one stops it the same way.
+  const engine = services().sql;
+  setServices({ sql: createSqliteSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: 250 }) });
+  try {
+    await refused(f, sql(f.page, f.owner, "with recursive r(i) as (select 1 union all select i + 1 from r) insert into staff (name) select 'n' from r where i = 100000000"), /timeout|validation_failed/);
+  } finally {
+    setServices({ sql: engine });
+  }
 });
 
 /* ---------------------------------------------------------------------------------------- hidden data attacks */
