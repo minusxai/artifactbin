@@ -15,6 +15,7 @@ import type { ResolverFetcher } from './public-fetch';
 import type { ResolverQuery } from './query';
 import type { ResolverSql } from './sql';
 import {connectionPassword,resolverDatabaseConnection} from './database';
+import {GovernedRefusal,governedConnection} from '@/lib/minusx';
 /** The page's datasets for resolver code, as the caller: `caps.query` (GraphQL) and `caps.sql` (SQL; ./sql). */
 export interface ResolverDatasets {query?:ResolverQuery;sql?:ResolverSql;
  /** Re-decides a page function call's admission before each capability (./admission); a call that carries one is refused without it. */
@@ -160,6 +161,7 @@ export async function functionFileSurface(source:string):Promise<{functions:Func
  return checkedFunctions(surface);
 }
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
+const GOVERNED_REFUSAL=/^(?:Error: )?((?:data_access_denied|data_unavailable): [A-Z][A-Z0-9_]{0,63})$/;
 /** Every pinned secret value that can still be read, and each connection's password; a missing or transferred one cannot be in the reason. */
 async function pinnedValues(backend:PageBackendRecord,read:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<string[]>{
  const values=await Promise.all((backend.secretBindings??[]).map(name=>read(backend,name).then(value=>isResolverDatabaseKind(backend.secretHosts?.[name])?[value,connectionPassword(value)??'']:[value],()=>[])));
@@ -184,7 +186,10 @@ export function createBackendInvoker(runner:RunnerService,load:(fileId:string,ve
   if(!reason)throw new FieldFailed('backend_failed');
   const secrets=await pinnedValues(backend,options.readSecret??readPinnedBackendSecret),thrown=reason.startsWith(RESOLVER_THREW);
   const receipt=thrown?{...error.receipt!,reason:reason.slice(RESOLVER_THREW.length)}:error.receipt;
-  throw new FieldFailed('backend_failed',resolverFailureDetail(receipt,secrets),thrown?redactedLine(receipt!.reason!,secrets):undefined);
+  // A governed connection's refusal (lib/minusx: no data access for this caller, or MinusX unavailable) is a fixed
+  // code and a connection name, nothing secret: every caller sees it, so a viewer without data access is told so.
+  const governed=GOVERNED_REFUSAL.exec(reason)?.[1];
+  throw new FieldFailed('backend_failed',resolverFailureDetail(receipt,secrets),thrown?redactedLine(receipt!.reason!,secrets):governed);
  }
  function runBackend(backend:PageBackendRecord){return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal},...(call.admission?{admission:{...call.admission,...(call.admission.claim?{claim:{...call.admission.claim}}:{})}}:{})},limits},call.signal,options.startRetryDelaysMs);}
 };}
@@ -239,7 +244,12 @@ export async function pageBackendCapability(request:RunStart,operation:string,ar
  }
  if(operation===RESOLVER_DATABASE_OPERATION){
   if(!secretReader)throw Error('backend_capability_forbidden');
-  return resolverDatabaseConnection(args,{hosts:backend.secretHosts??{},read:name=>secretReader(backend,name)});
+  return resolverDatabaseConnection(args,{hosts:backend.secretHosts??{},read:name=>secretReader(backend,name),governed:async binding=>{
+   // A governed connection is the CALLER's: the admitted principal's subject, under the binding's pinned group. A
+   // scheduled run has no viewer, and never borrows its publisher's data access (MinusX owns recurring work).
+   if(check?.admission.claim)throw new GovernedRefusal('data_access_denied');
+   return governedConnection({subject:caller?.subject??null,binding,pageId:backend.pageId,...(signal?{signal}:{})});
+  }});
  }
  if(operation!=='artifactbin.pageBackend.fetch'||!resolverFetch||!secretReader)throw Error('backend_capability_forbidden');
  return {...await resolverFetch(args,{owner:backend.ownerId,resolver:backend.backendId,hosts:backend.secretHosts??{},read:name=>secretReader(backend,name)})} as unknown as RunnerJson;

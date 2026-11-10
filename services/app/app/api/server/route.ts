@@ -12,11 +12,15 @@
  * whichever hostname a client happened to use declare itself canonical, which
  * is the whole thing this document exists to settle.
  */
-import { ALIAS_ORIGINS, PUBLIC_BASE_URL } from '@/lib/platform';
+import { ALIAS_ORIGINS, PUBLIC_BASE_URL, minusxSettings } from '@/lib/platform';
 import { normalizeOrigin, type ServerIdentityDocument } from '@artifactbin/contracts';
 
 export async function GET(_request: Request): Promise<Response> {
   const origin = normalizeOrigin(PUBLIC_BASE_URL) ?? new URL(PUBLIC_BASE_URL).origin;
-  const document: ServerIdentityDocument = { origin, aliases: ALIAS_ORIGINS.filter((alias) => alias !== origin) };
+  const minusx = minusxSettings();
+  const document: ServerIdentityDocument = {
+    origin, aliases: ALIAS_ORIGINS.filter((alias) => alias !== origin),
+    ...(minusx ? { installation_id: minusx.installationId, minusx: { base_url: minusx.baseUrl } } : {}),
+  };
   return Response.json(document, { headers: { 'Cache-Control': 'public, max-age=300' } });
 }

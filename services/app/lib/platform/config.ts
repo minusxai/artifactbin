@@ -1,3 +1,4 @@
+import {createPrivateKey} from 'node:crypto';
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
@@ -430,4 +431,50 @@ export function deploymentConfig():{mode:'public'|'company';ownerEmail:string|un
  const ownerEmail=env('APP','DEPLOYMENT_OWNER_EMAIL')?.trim().toLowerCase();
  if(mode==='company'&&(!ownerEmail||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)))throw new Error('Company deployment requires APP__DEPLOYMENT_OWNER_EMAIL.');
  return {mode,ownerEmail};
+}
+
+/**
+ * COMBINED MODE: this installation also runs the MinusX data service (the cross-repository contract, §1). It is on
+ * exactly when `MINUSX__BASE_URL` (the MinusX control API origin) is set, and then `INSTALLATION__ID` (this
+ * installation's stable id, in every delegation it mints), `MINUSX__DELEGATION_PRIVATE_KEY` (an Ed25519 PKCS#8 PEM;
+ * a `\n` escape stands for a newline, as one-line .env values write it) and `MINUSX__DELEGATION_KEY_ID` (its `kid`)
+ * are required: an incomplete or malformed set refuses the boot (lib/deployment `validateDeploymentConfiguration`)
+ * naming the setting, never echoing the key. Read at each use, so a test's `overrideConfig` environment applies.
+ * Unset, nothing here changes standalone Artifactbin.
+ */
+env('MINUSX', 'BASE_URL'); env('INSTALLATION', 'ID'); env('MINUSX', 'DELEGATION_PRIVATE_KEY'); env('MINUSX', 'DELEGATION_KEY_ID');
+export interface MinusxSettings { baseUrl: string; installationId: string; delegationPrivateKey: string; delegationKeyId: string }
+let checkedKey: string | undefined;
+export function minusxSettings(): MinusxSettings | null {
+  const base = env('MINUSX', 'BASE_URL')?.trim();
+  if (!base) return null;
+  let url: URL;
+  try { url = new URL(base); } catch { throw new Error('MINUSX__BASE_URL must be an absolute http(s) URL, the MinusX control API origin.'); }
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('MINUSX__BASE_URL must be an absolute http(s) URL without credentials, query or fragment.');
+  const installationId = env('INSTALLATION', 'ID')?.trim();
+  if (!installationId || !/^[A-Za-z0-9_.:-]{1,128}$/.test(installationId)) throw new Error('INSTALLATION__ID is required when MINUSX__BASE_URL is set: this installation\'s stable id (letters, digits, _ . : -).');
+  const keyId = env('MINUSX', 'DELEGATION_KEY_ID')?.trim();
+  if (!keyId || keyId.length > 256) throw new Error('MINUSX__DELEGATION_KEY_ID is required when MINUSX__BASE_URL is set: the kid MinusX knows the delegation key by.');
+  const pem = env('MINUSX', 'DELEGATION_PRIVATE_KEY')?.replace(/\\n/g, '\n').trim();
+  if (!pem) throw new Error('MINUSX__DELEGATION_PRIVATE_KEY is required when MINUSX__BASE_URL is set: an Ed25519 private key, PKCS#8 PEM.');
+  if (checkedKey !== pem) {
+    let type: string | undefined;
+    try { type = createPrivateKey({ key: pem, format: 'pem' }).asymmetricKeyType; } catch { type = undefined; }
+    if (type !== 'ed25519') throw new Error('MINUSX__DELEGATION_PRIVATE_KEY must be an Ed25519 private key in PKCS#8 PEM.');
+    checkedKey = pem;
+  }
+  return { baseUrl: url.href.replace(/\/+$/, ''), installationId, delegationPrivateKey: pem, delegationKeyId: keyId };
+}
+
+/**
+ * WHO OWNS RECURRING WORK (contract §7): `artifactbin` (unset, the default) runs the page-function scheduler as
+ * today; `minusx` does not start it and refuses a save that declares a new page schedule (`schedules_owned_by_minusx`),
+ * leaving on-demand functions and every other background task as they are. Any other value refuses the boot.
+ */
+env('SCHEDULES', 'OWNER');
+export type SchedulesOwner = 'artifactbin' | 'minusx';
+export function schedulesOwner(): SchedulesOwner {
+  const owner = env('SCHEDULES', 'OWNER')?.trim() || 'artifactbin';
+  if (owner !== 'artifactbin' && owner !== 'minusx') throw new Error('SCHEDULES__OWNER must be artifactbin (the default) or minusx.');
+  return owner;
 }

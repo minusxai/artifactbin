@@ -8,12 +8,13 @@
 export {
   ALIAS_ORIGINS, ALLOW_PUBLIC_VISIBILITY, ANALYTICS_SECRET, APP_HMR_PORT_SETTING, ARTIFACT_QUOTA_PER_TOKEN, ASSETS_MAX_BYTES_PER_TOKEN,
   ASSETS_ORIGIN, AUTH_SERVICE_URL, AUTH_SECRET, BROWSER_SERVICE_URL, USER_PAGES_HOST, DATABASE_URL,
-  EVENTS_SCHEMA, EVENTS_SERVICE_URL, EXPORT_INTERNAL_ORIGIN, INTERNAL_SERVICE_SECRET, IS_DEV, LOCAL_OBJECT_DIR,
+  EVENTS_SCHEMA, EVENTS_SERVICE_URL, EXPORT_INTERNAL_ORIGIN, INTERNAL_SERVICE_SECRET, IS_DEV, IS_TEST, LOCAL_OBJECT_DIR,
   MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_QUERY_ROWS, MAX_ROWS_LIMIT, OUTBOUND_IPS, PUBLIC_BASE_URL, QUERY_TIMEOUT_MS, RUNNER_SERVICE_URL,
   S3_URL, SQL_SERVICE_URL, TEST_DOMAIN, TRUSTED_PROXY_HOPS, WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_MAX_PER_HOUR, WEB_INGEST_TIMEOUT_MS,
   deploymentConfig, env, envNamesRead, functionScheduleMinimumMinutes, parseUserPagesHost, requirePagesHost,
-  resolveHmrPort, unknownEnvNames,
+  resolveHmrPort, unknownEnvNames, minusxSettings, schedulesOwner,
 } from './config';
+export type { MinusxSettings, SchedulesOwner } from './config';
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb, schemaImageInputs, schemaImageKey } from './db';
 export type { Db, Queryable, SchemaImageInputs } from './db';
 export { actorSubject, emit, envelope } from './events';

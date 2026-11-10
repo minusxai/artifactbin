@@ -9,6 +9,7 @@ export * from './browser-sessions';
 export * from './testusers';
 export * from './test-domain';
 export * from './mx';
+export * from './minusx';
 export * from './events';
 export * from './relations';
 export * from './agent';
