@@ -158,9 +158,9 @@ const RETIRED: Retired[] = [
   // never returned.
   {pattern: /part of every task/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'W1: watching follows the reply (WATCH_MODE); "part of every task" let the reply wait for the watch'},
-  // The 2026-11-11 visibility facts (V): an agent left the product when the only stricter setting was off-limits.
+  // The 2026-11-11 visibility facts (V): an agent left the product over link sharing when private was allowed only on the word "private".
   {pattern: /team can view"? needs\s+nothing more|only when the user says\s+"public" or "private"|Everyone with the link reads the notes/,
-    scopes: AGENT_TEXT, reason: 'V1: keyed or internal data may be published private unasked; who reads is stated once, in SKILL.md Sharing'},
+    scopes: AGENT_TEXT, reason: 'V1: who reads a page at each visibility is stated once, in SKILL.md Sharing; private also fits data the user calls confidential'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */

@@ -231,11 +231,12 @@ read-only copy ([groups](references/groups.md#public-view-receipts)).
   shows, its functions' answers included (a `signed_in` role still admits any signed-in link
   holder). `--visibility private`: only the owner and the people and groups it is shared with,
   never anyone signed out. `--visibility public` also lists it on the owner's profile: only when
-  the user says "public". Unlisted fits most pages, "my team can view" included. Data from behind
-  a key, or that the user calls internal: publish private, share it with their team's group
-  (below) or have the owner invite people in the page's Share dialog, and check without
-  `--guest-steps` (it runs signed out, which a private page answers with not found). Say in the
-  reply which visibility the page has and who can open it.
+  the user says "public". Unlisted fits a page passed on by its link ("my team can view", "send
+  me the link"). Publish private when the user says "private", calls the data confidential or
+  internal, or names who may see it: share it with their group (below) or have the owner invite
+  people in the page's Share dialog, and check without `--guest-steps` (it runs signed out, which
+  a private page answers with not found). Say in the reply which visibility the page has and who
+  can open it.
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
   When they change its rows (a team tracker), add `--datasets`: a page share alone never lets
