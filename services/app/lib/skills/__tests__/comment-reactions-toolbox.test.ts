@@ -148,7 +148,7 @@ async function quietHarness(feed:(n:number)=>any[],replyFirst=false){
   const wait=Number(at.searchParams.get('wait'));state.n++;state.clock+=wait*1000;const events=feed(state.n);events.forEach((e:any)=>e.annotation_id&&state.threads.add(e.annotation_id));return Response.json({events,next_cursor:'c'+state.n,has_more:false});};
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'quiet-session'},fetcher,now:()=>state.clock,replyFirst,deliver:async(v:any)=>{state.printed.push(v);}};
  /** One watch --next call: its printed lines, others' events as their IDs. */
- const watch=async()=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
+ const watch=async(values:Record<string,unknown>={})=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true,...values},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
  return {root,server,state,watch};
 }
 const YET='no new comments yet: run the same watch --next command again';
@@ -205,34 +205,43 @@ it('the agent\'s own replies and publishes reset the quiet time, as others\' com
   expect(state.clock-answered).toBe(940000);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-const DUE='nobody has commented yet, and the user has no link until you reply: if you have not sent your reply yet (every link they asked for, plus what they asked), send it now; then run the watch again to keep watching: node scripts/comment.mjs watch PAGE12 --next';
-it('a watch\'s first call after a publish, edit or comment waits for nothing and says to send the reply now, in every harness',async()=>{
+const DUE='not watching: nobody has commented yet, and your reply to the user comes first. If it is not sent yet, send it now: every link they asked for (this page: https://example.test/a/PAGE12; its public view is the receipt\'s user_page_url) plus what they asked. Until a call says it was sent, every watch call returns at once with this line; once it is sent: node scripts/comment.mjs watch PAGE12 --next --replied';
+it('after a publish, edit or comment a watch waits only once a call after the reply line says the reply was sent (--replied), in every harness',async()=>{
  const {rm}=await import('node:fs/promises');
  const {noteWatchActivity}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const theirs={type:'artifactbin.comment',event_id:'e_theirs',annotation_id:'T',author:{kind:'human',you:false},body:'Bigger title'};
  const mine={type:'artifactbin.comment',event_id:'e_mine',annotation_id:'T',author:{kind:'agent',you:true},body:'Done'};
+ const replied={replied:true};
  let at:Record<number,any[]>={};
  // Claude Code, which may run the watch in the foreground before replying, gets the checkpoint like every harness.
  const {root,server,state,watch}=await quietHarness(n=>at[n]??[],true);
  try{
   // The first call opens the window: one history read that waits 0 s, then the reply line; the clock never moves.
   expect(await watch()).toEqual([DUE]);expect([state.n,state.clock]).toEqual([1,0]);
-  // The next call waits as before.
-  expect(await watch()).toEqual([YET]);expect(state.clock).toBe(235000);
-  // A write that prints the watch line (publish.mjs, doc.mjs write) arms it again; someone else's comment does not.
+  // The same call again and again (the agent never replied): one 0 s read each, the same line, never a wait.
+  for(let i=0;i<3;i++)expect(await watch()).toEqual([DUE]);
+  expect([state.n,state.clock]).toEqual([4,0]);
+  // Said after the reply line, --replied waits as before; later calls wait without it.
+  expect(await watch(replied)).toEqual([YET]);expect(state.clock).toBe(235000);
+  expect(await watch()).toEqual([YET]);expect(state.clock).toBe(470000);
+  // A write that prints the watch line (publish.mjs, doc.mjs write) arms it again; a --replied before its reply line
+  // (copied from an earlier one) is no answer to it: the line comes first.
   await noteWatchActivity(root,server,'PAGE12',()=>state.clock);
-  expect(await watch()).toEqual([DUE]);expect(state.clock).toBe(235000);
-  at={[state.n+2]:[theirs]};
+  expect(await watch(replied)).toEqual([DUE]);expect(state.clock).toBe(470000);
+  expect(await watch(replied)).toEqual([YET]);expect(state.clock).toBe(705000);
+  // Someone else's comment is printed even while the reply is owed; the agent's answer arms the line again.
+  await noteWatchActivity(root,server,'PAGE12',()=>state.clock);
+  at={[state.n+1]:[theirs]};
   expect((await watch())[0]).toBe('e_theirs');
   at={[state.n+1]:[mine]};
-  expect(await watch()).toEqual([YET]);
-  // A comment printed by the first call after a write comes first; the reply line follows once it is answered.
+  expect(await watch(replied)).toEqual([DUE]);
+  expect(await watch(replied)).toEqual([YET]);
+  // A reply line answered more than the quiet time later still counts: --replied waits, and so does the call after.
   await noteWatchActivity(root,server,'PAGE12',()=>state.clock);
-  at={[state.n+1]:[{...theirs,event_id:'e_again'}]};
-  expect((await watch())[0]).toBe('e_again');
-  at={[state.n+1]:[{...mine,event_id:'e_mine2'}]};
   expect(await watch()).toEqual([DUE]);
+  state.clock+=16*60000;const late=state.clock;
+  expect(await watch(replied)).toEqual([YET]);expect(state.clock).toBe(late+235000);
   expect(await watch()).toEqual([YET]);
   // A comment write (add, reply, edit, react) arms it too.
   const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'quiet-session'};
@@ -485,7 +494,7 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
  try{
   const replied=await commentCommand({sub:'reply',values:{thread:'T1',body:'Done: shorter intro.',resolve:true},positionals:['PAGE12']},options);
   expect(sent.at(-1)).toEqual({method:'POST',path:'/api/artifacts/PAGE12/annotations/T1',body:{reply:'Done: shorter intro.',resolve:true,expected_revision:7}});
-  expect(replied.next).toBe('Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. Nothing may hold back your reply: it is every link the user asked for, in the form they asked for (a page\'s public view is its receipt\'s user_page_url), plus what they asked. Claude Code: start the watch, one per page, with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; you are woken when it prints. Other harnesses: say your reply to the user, then call the watch in the foreground with its default wait and a shell timeout of at least 300000 ms; several pages share that one call (node scripts/comment.mjs watch A --next & node scripts/comment.mjs watch B --next & wait). Its first call after you publish, edit or comment returns at once, to send a reply not sent yet. Then it returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching follows every task, however short the reply.\n  node scripts/comment.mjs watch PAGE12 --next');
+  expect(replied.next).toBe('Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. Nothing may hold back your reply: it is every link the user asked for, in the form they asked for (a page\'s public view is its receipt\'s user_page_url), plus what they asked. The watch waits only once that reply is sent: its first call after you publish, edit or comment returns at once, and so does every call until one adds --replied, which you add only after sending the reply. Claude Code: start the watch, one per page, with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; when that first call wakes you, start it again with --replied the same way. Other harnesses: say your reply to the user, then call the watch in the foreground with its default wait and a shell timeout of at least 300000 ms, then once more with --replied; several pages share each call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching follows every task, however short the reply.\n  node scripts/comment.mjs watch PAGE12 --next');
   for(const sub of ['resolve','reopen'] as const){await commentCommand({sub,values:{thread:'T1'},positionals:['PAGE12']},options);expect(sent.at(-1).body).toEqual({[sub]:true,expected_revision:7});}
   // An edit of a reply finds the thread that holds it.
   await commentCommand({sub:'edit',values:{comment:'R1',body:'Fixed typo'},positionals:['PAGE12']},options);

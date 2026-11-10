@@ -1,7 +1,7 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Comment threads: list, add, reply, edit, react, resolve, reopen, watch.
 Watch is the comment feed: every comment, reply, edit and reaction, from people and agents alike.
-Usage: node scripts/comment.mjs watch ID --next
+Usage: node scripts/comment.mjs watch ID --next [--replied]
        node scripts/comment.mjs reply ID --thread T --body TEXT [--resolve]
        node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
        node scripts/comment.mjs add ID --anchor ANCHOR.json --body TEXT
@@ -20,18 +20,20 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   "Claude Code Red"; ARTIFACTBIN_AGENT_NAME also sets it). add, reply, edit and react print the
   name, then the watch to run: they ask for answers, so watch for them.
 Watch --next: Nothing may hold back your reply: it is every link the user asked for, in the form
-  they asked for (a page's public view is its receipt's user_page_url), plus what they asked.
-  Claude Code: start the watch, one per page, with the Bash tool's run_in_background first, then
-  send your reply as your last message and end your turn; you are woken when it prints. Other
-  harnesses: say your reply to the user, then call the watch in the foreground with its default
-  wait and a shell timeout of at least 300000 ms; several pages share that one call (node
-  scripts/comment.mjs watch A --next & node scripts/comment.mjs watch B --next & wait). Its first
-  call after you publish, edit or comment returns at once, to send a reply not sent yet. Then it
-  returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and
-  run it again until it says to stop watching. Watching follows every task, however short the
-  reply. It prints the next comments from someone else (one JSON line each; a first call also
-  prints threads still waiting for your answer) and exits 0. After 4 minutes it prints "no new
-  comments yet: run the same watch --next command again".
+  they asked for (a page's public view is its receipt's user_page_url), plus what they asked. The
+  watch waits only once that reply is sent: its first call after you publish, edit or comment
+  returns at once, and so does every call until one adds --replied, which you add only after sending
+  the reply. Claude Code: start the watch, one per page,
+  with the Bash tool's run_in_background first, then send your reply as your last message and end
+  your turn; when that first call wakes you, start it again with --replied the same way. Other
+  harnesses: say your reply to the user, then call the watch in the foreground with its default wait
+  and a shell timeout of at least 300000 ms, then once more with --replied; several pages share each
+  call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B --next
+  --replied & wait). Once waiting, it returns as soon as someone comments, and on its own within 4
+  minutes: handle what it printed and run it again until it says to stop watching. Watching follows
+  every task, however short the reply. It prints the next comments from someone else (one JSON line
+  each; a first call also prints threads still waiting for your answer) and exits 0. After 4 minutes
+  it prints "no new comments yet: run the same watch --next command again".
   After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for
   15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
   second --next of this agent session on the same page takes over from the running one, which
@@ -81,8 +83,7 @@ import {commentText, threadRevision} from './toolbox-comment-write.mjs';
 import {agentIdentity, nameNote} from './toolbox-agent.mjs';
 // The writes that make something for others to answer: each prints the name and the watch next.
 const ANSWERED = ['add', 'reply', 'edit', 'react'];
-// Reads (list, watch) call the API directly; every write goes through a saved journal so an
-// uncertain result can be resumed.
+// Reads (list, watch) call the API directly; writes go through a journal, resumable.
 export async function commentCommand({sub, values, positionals}, options = {}) {
   // This agent session's name and key ride on every request; a write or --as keeps the name for
   // the session.

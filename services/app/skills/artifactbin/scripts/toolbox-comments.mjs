@@ -5,7 +5,7 @@
  */
 import {open} from 'node:fs/promises';
 import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads,
-  QUIET,REACTIONS,replyDue,replyDueLine} from './toolbox-watch-state.mjs';
+  QUIET,REACTIONS,replyState,replyDueLine} from './toolbox-watch-state.mjs';
 import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
 export {watchLogPath,noteWatchActivity,REACTIONS} from './toolbox-watch-state.mjs';
 function matches(value,server,id){return value?.server===server&&value?.artifact===id&&
@@ -51,14 +51,12 @@ return {...page,annotations:page.annotations.map(annotation=>({...annotation,thr
 export const QUIET_MINUTES=15;
 /** Streams the feed into a log, stdout or deliver. With values.next it stops after the first batch
  * holding someone else's event (own events are logged, never printed) or when values.wait seconds
- * pass (the last poll ends 5 s early, so a shell timeout of --wait never cuts it off; a first call
- * replays history and prints unanswered threads), and returns {events,timedOut,stopped}; requests
- * never overlap. A --next batch is printed before it is logged, so a call killed mid-batch prints
- * it again. With a log, an empty call QUIET_MINUTES after the window's last activity stops it, and
- * a second --next on the same log takes over (the first prints one line, returns {replaced}). A
- * --next call while a printed comment's thread has no reply from you since drains the feed without
- * waiting and, still unanswered, prints the order to answer and returns {unanswered}. With
- * options.replyFirst (comment.mjs), a reply checkpoint (replyDue) waits for nothing too. */
+ * pass (the last poll ends 5 s early; a first call replays history and prints unanswered
+ * threads), returns {events,timedOut,stopped}, never overlaps requests and prints a batch before
+ * logging it (a killed call prints it again). With a log, an empty call QUIET_MINUTES after the
+ * window's last activity stops it; a second --next on the log takes over ({replaced}); a call
+ * while a printed thread has no reply from you drains the feed without waiting ({unanswered}),
+ * and with options.replyFirst (comment.mjs) so does one while the reply is owed (replyState). */
 export async function watchComments(client,id,values,options={}){
  if(values.next&&values.once)throw new ToolError('invalid_invocation',
   'Use --next or --once, not both.',2);
@@ -107,8 +105,10 @@ if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError
 const fresh=next&&handle&&(!window||now()-window.active>=quietMs);if(fresh){window={opened:now(),
    active:now()};await write(mark({opened:window.opened}));}
  // Threads printed and not yet replied to: such a call only drains the feed (own replies clear).
- const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set(),due=Boolean(replyFirst&&next&&
-  handle&&replyDue(records,fresh));let gate=awaiting.size>0||due,unanswered=null;
+ const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set(),owed=replyFirst&&next&&handle?
+  replyState(records,fresh):null,due=Boolean(owed)&&!(values.replied&&owed==='shown');
+ if(owed&&!due)await write({...mark({at:now()}),kind:'replied'});
+ let gate=awaiting.size>0||due,unanswered=null;
  let failures=0,events=0,timedOut=false,stopped=false,reacted=false,asked=false;
  // A first --next replays the page's history once, so a comment posted while the agent was still
  // publishing is not lost: it prints each open thread whose latest comment is someone else's, then
@@ -175,8 +175,8 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
    }
    if(values.once&&!result.has_more)break;
    if(next&&events>0&&!result.has_more)break;
-   if(due&&!replay&&!result.has_more){asked=true;await write({...mark({at:now()}),kind:
-    'reply-due'});break;}
+   if(due&&!replay&&!result.has_more){asked=true;if(owed==='owed'||fresh)await write({...mark({
+    at:now()}),kind:'reply-due'});break;}
   }
   if(timedOut&&window&&now()-window.active>=quietMs){stopped=true;await write(mark({closed:
    now()}));}
@@ -195,6 +195,6 @@ if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filt
  // Agents re-watched before replying and missed the person's wait: print the order here.
  else if(next&&events>0)await print(`next: answer each comment above: ${answer} <annotation_id> `+
   '--body TEXT; the reply prints how to watch again.'+(reacted?' '+REACTIONS:''));
- else if(asked)await print(replyDueLine(id));
+ else if(asked)await print(replyDueLine(server,id));
  return {events,timedOut,stopped,...(unanswered?{unanswered}:{}),...(asked?{replyDue:true}:{})};
 }

@@ -52,21 +52,24 @@ export async function readWatchLog(file){
   Buffer.byteLength(lines.join('\n')+'\n'));}
  return records.includes(undefined)?null:records;
 }
-/** The reply checkpoint: whether this --next call is the first since a watching window opened or
- * a write that owes the user a reply, and none since has said to send it ('reply-due'). Such a call
- * waits for nothing. Agents that write progress notes before tool calls and keep the reply for
- * their last message (Codex; Claude Code running the watch in the foreground) otherwise hold every
- * link behind a blocking watch, which nobody can end by commenting without the link. Returning at
- * once releases that reply; an agent that already replied (Pi, a background watch) runs it again,
- * and nothing is lost: the cursor is kept and the next call prints what came meanwhile. */
-export function replyDue(records,fresh){
- let due=false;for(const r of records)if(r.kind==='window'&&r.opened||r.kind==='activity'&&
-  r.owesReply)due=true;else if(r.kind==='reply-due')due=false;return fresh||due;
+/** The reply checkpoint: 'owed' once a watching window opens (fresh: this call opens one) or a
+ * write owes the user a reply, 'shown' once a call printed replyDueLine for it, null once a call
+ * after that line said the reply was sent (--replied, a 'replied' record). Until then no call
+ * waits, whatever it is told: an agent that writes progress notes and keeps the reply for its last
+ * message (Codex; Claude Code in the foreground) would otherwise hold every link behind a blocking
+ * watch, which nobody can end by commenting without the link. A --replied before the line (copied
+ * from an earlier one) answers nothing; one after it counts even past the quiet time. */
+export function replyState(records,fresh){
+ let state=null;for(const r of records)if(r.kind==='window'&&'opened' in r||r.kind==='activity'&&
+  r.owesReply)state='owed';else if(r.kind==='reply-due'&&state)state='shown';else if(r.kind===
+  'replied')state=null;return fresh&&!state?'owed':state;
 }
-/** What the reply checkpoint prints when nobody else has commented. */
-export const replyDueLine=id=>'nobody has commented yet, and the user has no link until you reply:'+
- ' if you have not sent your reply yet (every link they asked for, plus what they asked), send it '+
- `now; then run the watch again to keep watching: node scripts/comment.mjs watch ${id} --next`;
+/** What every call prints while the reply is owed and nobody else has commented. */
+export const replyDueLine=(server,id)=>'not watching: nobody has commented yet, and your reply to '+
+ 'the user comes first. If it is not sent yet, send it now: every link they asked for (this page: '+
+ `${server}/a/${id}; its public view is the receipt's user_page_url) plus what they asked. `+
+ 'Until a call says it was sent, every watch call returns at once with this line; once it is '+
+ `sent: node scripts/comment.mjs watch ${id} --next --replied`;
 /** Of these awaited threads, the ones no longer open (deleted or resolved): one list call per
  * page. A failed or unreadable listing drops none. */
 export async function openThreads(client,id,threads,signal){
@@ -109,21 +112,21 @@ export async function withWatchLock(file,run){
 /** How to run watch --next: the one place the order of reply and watch is stated (comment.mjs help
  * prints the same text). Claude Code ends a turn on a reply and wakes on a background command's
  * output. In other harnesses (Pi, Codex, OpenCode) a message without a command ends the session, so
- * the reply comes before the blocking watch; an agent that keeps it for its final message, in any
- * harness, gets it out when the first call returns at once (replyDue). Several pages share one
- * watch call. */
+ * the reply comes before the blocking watch. In every harness the watch waits only once a call
+ * after the reply line says the reply was sent (replyState). Several pages share one watch call. */
 export const WATCH_MODE="Nothing may hold back your reply: it is every link the user asked "+
  "for, in the form they asked for (a page's public view is its receipt's user_page_url), plus "+
- "what they asked. Claude Code: start the watch, one per page, "+
+ "what they asked. The watch waits only once that reply is sent: its first call after you "+
+ "publish, edit or comment returns at once, and so does every call until one adds --replied, "+
+ "which you add only after sending the reply. Claude Code: start the watch, one per page, "+
  "with the Bash tool's run_in_background first, then send your reply as your last message and "+
- "end your turn; you are woken when it prints. Other harnesses: say your reply to the user, "+
- "then call the watch in the foreground with its default wait and a shell timeout of at least "+
- "300000 ms; several pages share that one call (node scripts/comment.mjs watch A --next & node "+
- "scripts/comment.mjs watch B --next & wait). Its first call after you publish, edit or comment "+
- "returns at once, to send a reply not sent yet. Then it returns as soon as someone comments, "+
- "and on its own within 4 minutes: handle what it printed and run it again until it says to stop "+
- "watching. "+
- "Watching follows every task, however short the reply.";
+ "end your turn; when that first call wakes you, start it again with --replied the same way. "+
+ "Other harnesses: say your reply to the user, then call the watch in the foreground with its "+
+ "default wait and a shell timeout of at least 300000 ms, then once more with --replied; "+
+ "several pages share each call (node scripts/comment.mjs watch A --next --replied & node "+
+ "scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as "+
+ "someone comments, and on its own within 4 minutes: handle what it printed and run it again "+
+ "until it says to stop watching. Watching follows every task, however short the reply.";
 /** The reply, then the watch as its own last line, a literal command. */
 const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and run `+
  'the comment watch, even when the reply is only the link. '+WATCH_MODE+

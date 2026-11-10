@@ -36,7 +36,7 @@ async function twoAgents() {
   const options = { env: { ...shared, ...env }, fetcher, retryDelays: [], ps: extra.ps, deliver: async (line: unknown) => { printed.push(line); } };
   const run = (sub: string, values: Record<string, unknown>) => commentCommand({ sub, values: extra.as ? { as: extra.as, ...values } : values, positionals: [doc.id] }, options);
   /** One watch --next call; what it printed: others' comments as their bodies, then its own lines. */
-  const watch = async () => { printed.length = 0;await run('watch', { next: true });return printed.map(v => typeof v === 'string' ? v : (({ event }) => event.body ?? `${event.type}:${event.change}`)(v as { event: { body?: string; type: string; change?: string } })); };
+  const watch = async (values: Record<string, unknown> = {}) => { printed.length = 0;await run('watch', { next: true, ...values });return printed.map(v => typeof v === 'string' ? v : (({ event }) => event.body ?? `${event.type}:${event.change}`)(v as { event: { body?: string; type: string; change?: string } })); };
   return { run, watch };
  };
  return { doc, anchor, session, a: session({ CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'claude-session-a' }), b: session({ CODEX_THREAD_ID: 'codex-thread-b' }) };
@@ -82,10 +82,10 @@ it('each comment carries its session\'s name, and a watch prints the other agent
 it('one agent starting its watch never stops the other agent\'s watch on the same page', async () => {
  const { anchor, a, b } = await twoAgents();
  const thread = (await a.run('add', { anchor: await anchor('intro'), body: 'A asks first' })).thread;
- // A's first watch after its own comment returns at once (the reply checkpoint: nobody else has commented, so a reply
- // not sent yet goes out first); its next one waits for the next comment.
- expect((await a.watch()).filter(line => !line.startsWith('next:')).join('\n')).toMatch(/^nobody has commented yet/);
- const waiting = a.watch();
+ // A's first watch after its own comment returns at once (the reply checkpoint: nobody else has commented, so the reply
+ // to the user goes out first); the one that says the reply was sent waits for the next comment.
+ expect((await a.watch()).filter(line => !line.startsWith('next:')).join('\n')).toMatch(/^not watching: nobody has commented yet/);
+ const waiting = a.watch({ replied: true });
  await new Promise(resolve => setTimeout(resolve, 300));
  // B's first watch replays the page (A's question) and returns; A's watch keeps waiting.
  expect((await b.watch()).filter(line => !line.startsWith('next:'))).toEqual(['A asks first']);

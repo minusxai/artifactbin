@@ -117,6 +117,7 @@ const commands = {
         once: flag('boolean'),
         append: flag('boolean'),
         next: flag('boolean'),
+        replied: flag('boolean'),
         wait: flag()
       }
     }
