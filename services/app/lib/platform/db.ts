@@ -14,7 +14,6 @@ import { fileURLToPath } from 'node:url';
 import { DATABASE_URL } from './config';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
-import { rewriteDatasetDefinitions } from './dataset-definitions';
 import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
 
 /**
@@ -448,9 +447,6 @@ const BACKFILLS: readonly string[] = [
  */
 async function applyBackfills(db: Queryable): Promise<void> {
   for (const statement of BACKFILLS) await db.query(statement);
-  // Dataset definitions are JSON; sources still in the retired <Dataset> markup are rewritten once (./dataset-definitions).
-  // A data rewrite, not a statement: it changes nothing in an empty database, so it is no part of the schema image's key.
-  await rewriteDatasetDefinitions(db);
 }
 
 /**
