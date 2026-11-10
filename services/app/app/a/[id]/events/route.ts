@@ -2,7 +2,7 @@
  * GET /a/:id/events — the document's live stream (lib/publish/realtime/document-events), as Server-Sent Events.
  * Anyone who may read the page may watch it change; everyone else gets the uniform 404.
  */
-import { openDocumentEvents } from '@/lib/publish';
+import { documentEventBody } from './composition';
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
@@ -26,9 +26,6 @@ const SSE_HEADERS = {
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const opened = await openDocumentEvents(request, id);
-  if (opened.status === 'not_found') return new Response('not found', { status: 404 });
-  // At capacity: said plainly instead of holding a stream that will never deliver; the page still reads without it.
-  if (opened.status === 'busy') return new Response('too many live documents', { status: 503, headers: { 'Retry-After': '30' } });
-  return new Response(opened.stream, { headers: { ...SSE_HEADERS } });
+  const body = await documentEventBody(request, id);
+  return body instanceof Response ? body : new Response(body, { headers: { ...SSE_HEADERS } });
 }

@@ -4,8 +4,8 @@
  * holds the session and makes every request, on the page's own origin with its own session cookie.
  *
  *  - `open` asks for a region's session (its server-assigned client id, seq and full state) and adds the region to the
- *    page's ONE region stream (`GET …/regions/stream?after=<regionId>:<seq>,…`, recomputed at each reopen; reconnect,
- *    backoff and heartbeat watchdog are lib/http/live-stream's).
+ *    page's shared document stream (editor-only `regions` events, cursors recomputed at each reopen). Dataset cells
+ *    and injected legacy transports retain the standalone region endpoint. Reconnect/backoff/heartbeat are lib/http's.
  *  - `push` queues one local update. Updates pushed within REGION_BATCH_MS go as one merged request; a region has at
  *    most one request in flight, and what arrives meanwhile goes as one request after its reply. A failed request is
  *    retried with the live-stream backoff, and at once when the stream reconnects (updates are idempotent).
@@ -21,9 +21,10 @@
  * Yjs is used without a document (merge and diff of updates only): this module loads lazily, for editors only.
  */
 import * as Y from 'yjs';
+import { openDocumentRegionStream } from './document-stream';
 import type { RegionFlushReply, RegionKind, RegionOpenReply, RegionRefusalBody, RegionStreamFrame, RegionUpdateReply } from '@artifactbin/contracts';
 import { REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
-import { liveBackoffDelay, openLiveStream, type LiveStream, type LiveStreamOptions } from '@/lib/http/live-stream';
+import { liveBackoffDelay, type LiveStream, type LiveStreamOptions } from '@/lib/http/live-stream';
 
 /** Local updates within this window go as one request. */
 export const REGION_BATCH_MS = 50;
@@ -106,7 +107,7 @@ interface Region {
 export function createRegionClient(id: string, events: RegionClientEvents, ports: RegionClientPorts = {}): RegionClient {
   const send = ports.fetch ?? ((path: string, init: RequestInit) => fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' }));
   const request = (path: string, init: RequestInit) => send(path, { credentials: 'same-origin', ...init });
-  const openStream = ports.openStream ?? openLiveStream;
+  const openStream = ports.openStream ?? ((options:LiveStreamOptions)=>openDocumentRegionStream(id,options));
   const base = `/api/artifacts/${encodeURIComponent(id)}/regions`;
   const regions = new Map<string, Region>();
   const idle = new Set<() => void>();

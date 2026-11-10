@@ -16,6 +16,7 @@ import { attachActor } from '@artifactbin/utils';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';
 import { POST as flushRoute } from '@/app/api/artifacts/[id]/regions/flush/route';
+import { GET as documentStreamRoute } from '@/app/a/[id]/events/route';
 import { GET as streamRoute } from '@/app/api/artifacts/[id]/regions/stream/route';
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
@@ -425,4 +426,45 @@ describe('whole-page writes that leave nothing to merge into', () => {
     expect((await getArtifactById(pageId))!.source).not.toContain('typed');
     expect(await rows('region_states')).toEqual([]);
   });
+});
+
+async function multiplex(person: Person | null, after: string, anonymous=false, extra:RequestOptions={}) {
+  const abort=new AbortController();
+  const base=request(`/a/${pageId}/events?regions=${encodeURIComponent(after)}${anonymous?'&anonymous=1':''}`,sessionOpts(null,extra));
+  const signalled=new Request(base,{signal:abort.signal});
+  const req=person?attachActor(signalled,as(person)):signalled;
+  const response=await call(req,()=>documentStreamRoute(req,{params:Promise.resolve({id:pageId})}));
+  if(response.status!==200)return {response,frames:null};
+  const frames=sseStream(response.body!);streams.push({abort,close(){abort.abort();frames.close();}});
+  return {response,frames};
+}
+it('document multiplex refuses readable viewers and anonymous region subscribers',async()=>{
+  for(const person of [viewer,commenter,null]) {
+    const opened=await multiplex(person,`${rich}:0`);
+    expect(opened.response.status).toBe(404);
+  }
+  expect((await multiplex(owner,`${rich}:0`,true)).response.status).toBe(404);
+});
+it('document multiplex delivers ordinary pings and authorized region catchup, then revokes region access',async()=>{
+  const writer=await join(owner);
+  writer.text.insert(0,'Before stream ');expect((await writer.push()).status).toBe(200);
+  const opened=await multiplex(editor,`${rich}:0`);expect(opened.response.status).toBe(200);
+  const caught=(await opened.frames!.named('regions',1,1000))[0]?.data;
+  expect(caught).toMatchObject({type:'updates',regionId:rich,from:1});
+  const follower=openRegionDoc(Buffer.from(writer.reply.state,'base64'));
+  for(const update of caught!.updates as string[])Y.applyUpdate(follower,Buffer.from(update,'base64'));
+  expect(regionText(follower).toString()).toContain('Before stream ');follower.destroy();
+  expect((await opened.frames!.named('message',1,1000))[0]?.data).toHaveProperty('version');
+  // Current ACL, not the original admission, controls every catch-up.
+  await (await harness.db()).query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[pageId,editor.email]);
+  writer.text.insert(0,'After revoke ');expect((await writer.push()).status).toBe(200);
+  expect((await opened.frames!.named('regions',1,1000))[0]?.data).toMatchObject({type:'closed',regionId:rich,reason:'access'});
+});
+
+it('document multiplex retains the browser-only, same-origin and bounded region doors',async()=>{
+ const token=await mintAccountToken('multiplex-agent',owner.id);
+ expect((await multiplex(null,`${rich}:0`,false,{token:token.token})).response.status).toBe(404);
+ expect((await multiplex(owner,`${rich}:0`,false,{origin:'https://elsewhere.example'})).response.status).toBe(403);
+ expect((await multiplex(owner,Array.from({length:65},(_,i)=>`af-${i}:0`).join(','))).response.status).toBe(400);
+ expect((await multiplex(owner,`${rich}:0,${rich}:0`)).response.status).toBe(400);
 });

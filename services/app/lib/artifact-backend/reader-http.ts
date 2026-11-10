@@ -1,7 +1,7 @@
 /** The initial reader's transport. Authoring/comment modules compose this port when opened. */
 import {PRESENCE_EVENT,type PresenceFrame,type PresencePublication} from '@/lib/html-presence/contract';
 import {STORY_ANNOTATIONS_EVENT,STORY_DATA_EVENT,type ArtifactDataEvent,type ArtifactLiveEvent,type ArtifactVersionPing} from '@/lib/html-reader/contract';
-import {openLiveStream} from '@/lib/http/live-stream';
+import {openDocumentStream} from './document-stream';
 import {readAnnotationPages} from '@/lib/annotations/pages';
 import type {ArtifactHead,ReaderArtifactBackend} from './types';
 // The reader's reads ride out a restart without carrying the comment backend's retry listeners (./retrying).
@@ -29,7 +29,7 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
     },
     live(handlers, options) {
       // Reconnecting, with a heartbeat watchdog and a catch-up on wake (lib/live-stream).
-      const stream = openLiveStream({
+      const stream = openDocumentStream(id, {
         url: `/a/${id}/events${credentials==='omit'?'?anonymous=1':''}${options?.since ? `${credentials==='omit'?'&':'?'}since=${encodeURIComponent(options.since)}` : ''}`,
         onMessage: (data) => {
           let ping: ArtifactVersionPing;
@@ -44,7 +44,7 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
           [STORY_ANNOTATIONS_EVENT]: () => handlers.onAnnotations(),
         },
         onWake: handlers.onWake,
-      });
+      }, credentials==='omit');
       return () => stream.close();
     },
     async liveFrame() {
