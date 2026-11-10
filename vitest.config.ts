@@ -3,7 +3,7 @@ import path from 'path';
 import { defineConfig } from 'vitest/config';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
-import { schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
+import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import { chromiumTests } from './scripts/lib/chromium-tests.mjs';
 import { LEAKS_PAST_ITS_FILE } from './scripts/lib/test-isolation.mjs';
 
@@ -86,6 +86,8 @@ export default defineConfig({
     env: suiteEnv(import.meta.dirname),
     // The setup files keep the database schema image here, one file under its key (test/setup/database.ts).
     provide: { schemaImageDir: schemaImageDir(import.meta.dirname) },
+    // Transformed modules kept between runs, keyed by their source (scripts/lib/suite-env.mjs MODULE_CACHE_DIR).
+    experimental: { fsModuleCache: true, fsModuleCachePath: MODULE_CACHE_DIR },
     projects: [
       {
         extends: true,

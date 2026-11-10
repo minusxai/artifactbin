@@ -3,7 +3,7 @@ import path from 'node:path';
 import { defineConfig, type TestProjectInlineConfiguration } from 'vitest/config';
 import full from './vitest.config';
 import { laneFiles, nodeBatchFiles } from './scripts/lib/node-batch.mjs';
-import { schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
+import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { readTimings } from './scripts/lib/timed-sequencer.mjs';
 
@@ -27,6 +27,8 @@ export default defineConfig({
     globalSetup: ['./services/app/test/setup/build-runtime.global.ts'],
     env: suiteEnv(root),
     provide: { schemaImageDir: schemaImageDir(root) },
+    // Transformed modules kept between runs, keyed by their source (scripts/lib/suite-env.mjs MODULE_CACHE_DIR).
+    experimental: { fsModuleCache: true, fsModuleCachePath: MODULE_CACHE_DIR },
     projects: [{
       extends: true,
       test: {

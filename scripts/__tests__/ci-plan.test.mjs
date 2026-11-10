@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
-import { SCHEMA_IMAGE_DIR } from '../lib/suite-env.mjs';
+import { MODULE_CACHE_DIR, SCHEMA_IMAGE_DIR } from '../lib/suite-env.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
@@ -308,6 +308,9 @@ describe('CI avoids duplicate integration setup', () => {
     const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v2-'));
     expect(image).toBeGreaterThan(-1);
     expect(image).toBeLessThan(save);
+    const modules = steps.findIndex(step => /^node node_modules\/vitest\/vitest\.mjs list --project=api --project=api-isolated\b/.test(step.run ?? ''));
+    expect(modules).toBeGreaterThan(-1);
+    expect(modules).toBeLessThan(save);
     expect(readFileSync(path.join(root, 'services/app/__tests__/schema-image.test.ts'), 'utf8')).toContain("inject('schemaImageDir')");
   });
   // The server-reader marker lists the hosted libraries as outputs: an entry without them is a miss on every shard,
@@ -320,7 +323,7 @@ describe('CI avoids duplicate integration setup', () => {
       const caches = jobSteps.filter(step => String(step.with?.key ?? '').startsWith('test-builds-'));
       for (const cache of caches) {
         entries++;
-        expect(cache.with.path.split('\n').filter(Boolean), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR]);
+        expect(cache.with.path.split('\n').filter(Boolean), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
         expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
         if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
         const key = jobSteps.findIndex(step => step.id === 'test-builds-key');

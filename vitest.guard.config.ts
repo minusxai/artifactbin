@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
-import { schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
+import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { LEAKS_PAST_ITS_FILE } from './scripts/lib/test-isolation.mjs';
 
@@ -36,6 +36,8 @@ export default defineConfig({
     sequence: { sequencer: TimedSequencer },
     // Both setup files open the database through test/setup/database.ts, which keeps its schema image here.
     provide: { schemaImageDir: schemaImageDir(import.meta.dirname) },
+    // Transformed modules kept between runs, keyed by their source (scripts/lib/suite-env.mjs MODULE_CACHE_DIR).
+    experimental: { fsModuleCache: true, fsModuleCachePath: MODULE_CACHE_DIR },
     projects: [
       ...byIsolation('pr-guards', 'guard-tests.json', {
         setupFiles: ['./services/app/test/setup/guard.setup.ts'],

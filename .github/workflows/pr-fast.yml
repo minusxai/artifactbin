@@ -257,6 +257,7 @@ jobs:
             services/app/lib/build-assets
             services/app/public/libraries
             tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - if: matrix.shard
@@ -272,6 +273,7 @@ jobs:
             services/app/lib/build-assets
             services/app/public/libraries
             tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
