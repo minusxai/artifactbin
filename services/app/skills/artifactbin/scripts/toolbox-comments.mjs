@@ -58,7 +58,7 @@ export const QUIET_MINUTES=15;
  * a second --next on the same log takes over (the first prints one line, returns {replaced}). A
  * --next call while a printed comment's thread has no reply from you since drains the feed without
  * waiting and, still unanswered, prints the order to answer and returns {unanswered}. With
- * options.replyFirst, a reply checkpoint (replyDue) also waits for nothing: {replyDue} if quiet. */
+ * options.replyFirst (comment.mjs), a reply checkpoint (replyDue) waits for nothing too. */
 export async function watchComments(client,id,values,options={}){
  if(values.next&&values.once)throw new ToolError('invalid_invocation',
   'Use --next or --once, not both.',2);

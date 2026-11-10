@@ -19,11 +19,12 @@ const stream=STREAM;
  * sign-in, never in the working directory. */
 export const watchLogPath=(root,server,id,session)=>path.join(root,'watch',hash(server).slice(0,
   16),id,`${session}.ndjson`);
-/** Records a save of the page (a publish or doc write, by anyone) in every existing --next log of
- * the page: each watch's quiet stop counts from it, and it arms the reply checkpoint. */
+/** Records a write that prints the watch Next line (a publish, doc write or comment write, by
+ * anyone) in every existing --next log of the page: each watch's quiet stop counts from it, and it
+ * arms the reply checkpoint. */
 export async function noteWatchActivity(root,server,id,now=Date.now){
  const dir=path.dirname(watchLogPath(root,server,id,'-')),record=JSON.stringify({kind:'activity',
-  server,artifact:id,stream,at:now(),saved:true})+'\n';
+  server,artifact:id,stream,at:now(),owesReply:true})+'\n';
  for(const file of await readdir(dir).catch(()=>[]))if(file.endsWith('.ndjson'))await appendFile(
   path.join(dir,file),record);
 }
@@ -52,16 +53,15 @@ export async function readWatchLog(file){
  return records.includes(undefined)?null:records;
 }
 /** The reply checkpoint: whether this --next call is the first since a watching window opened or
- * the page was saved, and none since has said to send the reply ('reply-due'). Such a call waits
- * for nothing. An agent whose harness ends a turn on its last message (Codex) writes progress notes
- * before tool calls and holds its reply, every link with it, for the end of the turn: behind a
- * blocking watch, which nobody can end by commenting without the link. Returning at once releases
- * that reply; an agent that already replied just runs the watch again, and nothing is lost, since
- * the cursor is kept and the next call prints what came meanwhile. Not for Claude Code, whose
- * background watch runs beside its reply and would only wake it. */
+ * a write that owes the user a reply, and none since has said to send it ('reply-due'). Such a call
+ * waits for nothing. Agents that write progress notes before tool calls and keep the reply for
+ * their last message (Codex; Claude Code running the watch in the foreground) otherwise hold every
+ * link behind a blocking watch, which nobody can end by commenting without the link. Returning at
+ * once releases that reply; an agent that already replied (Pi, a background watch) runs it again,
+ * and nothing is lost: the cursor is kept and the next call prints what came meanwhile. */
 export function replyDue(records,fresh){
- let due=false;for(const r of records)if(r.kind==='window'&&r.opened||r.kind==='activity'&&r.saved)
-  due=true;else if(r.kind==='reply-due')due=false;return fresh||due;
+ let due=false;for(const r of records)if(r.kind==='window'&&r.opened||r.kind==='activity'&&
+  r.owesReply)due=true;else if(r.kind==='reply-due')due=false;return fresh||due;
 }
 /** What the reply checkpoint prints when nobody else has commented. */
 export const replyDueLine=id=>'nobody has commented yet, and the user has no link until you reply:'+
@@ -109,8 +109,9 @@ export async function withWatchLock(file,run){
 /** How to run watch --next: the one place the order of reply and watch is stated (comment.mjs help
  * prints the same text). Claude Code ends a turn on a reply and wakes on a background command's
  * output. In other harnesses (Pi, Codex, OpenCode) a message without a command ends the session, so
- * the reply comes before the blocking watch; an agent that keeps it for its final message gets it
- * out when the first call returns at once (replyDue). Several pages share one watch call. */
+ * the reply comes before the blocking watch; an agent that keeps it for its final message, in any
+ * harness, gets it out when the first call returns at once (replyDue). Several pages share one
+ * watch call. */
 export const WATCH_MODE="Nothing may hold back your reply: it is every link the user asked "+
  "for, in the form they asked for (a page's public view is its receipt's user_page_url), plus "+
  "what they asked. Claude Code: start the watch, one per page, "+
@@ -118,9 +119,10 @@ export const WATCH_MODE="Nothing may hold back your reply: it is every link the 
  "end your turn; you are woken when it prints. Other harnesses: say your reply to the user, "+
  "then call the watch in the foreground with its default wait and a shell timeout of at least "+
  "300000 ms; several pages share that one call (node scripts/comment.mjs watch A --next & node "+
- "scripts/comment.mjs watch B --next & wait). Its first call after a publish or edit returns at "+
- "once, to send a reply not sent yet. Then it returns as soon as someone comments, and on its "+
- "own within 4 minutes: handle what it printed and run it again until it says to stop watching. "+
+ "scripts/comment.mjs watch B --next & wait). Its first call after you publish, edit or comment "+
+ "returns at once, to send a reply not sent yet. Then it returns as soon as someone comments, "+
+ "and on its own within 4 minutes: handle what it printed and run it again until it says to stop "+
+ "watching. "+
  "Watching follows every task, however short the reply.";
 /** The reply, then the watch as its own last line, a literal command. */
 const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and run `+

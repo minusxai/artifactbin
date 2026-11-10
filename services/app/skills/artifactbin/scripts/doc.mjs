@@ -140,7 +140,7 @@ export async function docCommand({sub, values, positionals}, options = {}) {
     if (error.exit !== 5) await save({...pair, pending: undefined});
     throw explained(error);
   }
-  // A save: the page's comment watches restart their quiet time and their reply checkpoint.
+  // It owes a reply: the page's comment watches restart their quiet time and reply checkpoint.
   await noteWatchActivity(client.root, client.server, pair.id).catch(() => {});
   const {pending: _done, ...read} = pair;
   await atomicWrite(file, stamp({...read, version: receipt.version}, receipt[pair.format] ?? ''));

@@ -189,7 +189,7 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
  return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},report)};
 }
-/** A publish resets the quiet time and the reply checkpoint of the page's comment watches; it never
- * fails the publish. */
+/** A publish restarts the quiet time and the reply checkpoint of the page's comment watches; it
+ * never fails the publish. */
 async function watched(client,done,{now}={}){await noteWatchActivity(client.root,client.server,
   done.id,now).catch(()=>{});return done;}
