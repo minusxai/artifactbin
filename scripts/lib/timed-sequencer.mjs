@@ -97,7 +97,8 @@ export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000, 'n
 /** How a shard's wall is predicted: the CI runner by default; `{ workers: 1, firstFileMs: {} }` is the plain sum. */
 export const CI_RUNNER = Object.freeze({ workers: WORKERS, firstFileMs: SHARED_FIRST_FILE_MS });
 
-const isolated = (project) => project !== undefined && Object.hasOwn(ISOLATED_FILE_MS, project);
+// An isolated project: the two the full suite weighs, and any `<name>-isolated` (the guard config's split projects).
+const isolated = (project) => project !== undefined && (Object.hasOwn(ISOLATED_FILE_MS, project) || /-isolated$/.test(project));
 const byKey = (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
 /**

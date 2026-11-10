@@ -118,6 +118,8 @@ describe('a shard\'s wall time', () => {
     // iso-big 8 | iso-small 2 | shared-big 9 + its import 5 = 14, then shared-small to the freest worker: 2 + 1 + 5 = 8.
     expect(shardWall(items, runner)).toBe(14);
     expect(shardWall([file('x', 8, 'api-isolated'), file('y', 8, 'api-isolated')], runner)).toBe(8);
+    // The guard config's split projects (`pr-guards-isolated`) start before its shared ones too.
+    expect(runOrder([file('g', 9, 'pr-guards'), file('gi', 1, 'pr-guards-isolated')]).map((item) => item.key)).toEqual(['gi', 'g']);
   });
 
   it('packs each file where the predicted wall grows least: small files go to the shards that finish them sooner', () => {
