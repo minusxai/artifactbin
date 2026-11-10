@@ -31,7 +31,8 @@ it.concurrent.each(['AUTH__SECRET', 'CONTRACT__ACTOR_SECRET'])('app-only startup
   child.stderr.on('data', chunk => { logs += chunk; });
   try {
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Boot timed out: ${logs}`)), 30000);
+      // A boot is ~10s alone on a CI runner and has taken 25s beside other process-spawning files: wait well past both.
+      const timer = setTimeout(() => reject(new Error(`Boot timed out: ${logs}`)), 60000);
       child.once('exit', code => { clearTimeout(timer); reject(new Error(`Boot exited ${code}: ${logs}`)); });
       child.stdout.on('data', chunk => {
         logs += chunk;
@@ -60,4 +61,4 @@ it.concurrent.each(['AUTH__SECRET', 'CONTRACT__ACTOR_SECRET'])('app-only startup
       await exited;
     }
   }
-}, 45000);
+}, 75000);

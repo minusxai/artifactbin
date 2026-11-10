@@ -7,8 +7,9 @@
  *   node scripts/ci/test-timings.mjs <log file> ...      # or saved job logs
  *   node scripts/ci/test-timings.mjs --sums              # print each shard's packed load and predicted wall
  *
- * Files a log does not mention keep their recorded time. No shard carries work outside Vitest (the integration
- * project is a job of its own), so the table holds file times and nothing else.
+ * Files a log does not mention keep their recorded time. No shard carries work outside Vitest, so the table holds file
+ * times and nothing else. The integration project is a job of its own, never sharded; its times are here only so its
+ * files start longest first (scripts/__tests__/timed-sequencer.test.mjs says why).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
