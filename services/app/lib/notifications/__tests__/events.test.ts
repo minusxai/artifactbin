@@ -89,7 +89,7 @@ it('notifies a conversation on replies, resolution and reopening, coalescing an 
   ('ann_root','doc',NULL,'Question','human','bob',1),('ann_reply','doc','ann_root','Answer','human','carol',1)`);
  await emit('carol','annotated',{kind:'artifact',id:'doc'},{annotation_id:'ann_root'});
  expect(await inbox()).toEqual([]);
- await emit('carol','annotated',{kind:'artifact',id:'doc'},{annotation_id:'ann_root',reply_id:'ann_reply'});
+ await emit('carol','annotation_replied',{kind:'artifact',id:'doc'},{annotation_id:'ann_root',reply_id:'ann_reply'});
  expect((await inbox()).map(n=>[n.id,n.kind,n.source])).toEqual([['thread:ann_root:bob','reply','comment:ann_root']]);
  await db.query("UPDATE annotations SET revision=2 WHERE id='ann_root'");
  await emit('carol','annotation_resolved',{kind:'artifact',id:'doc'},{annotation_id:'ann_root'});
@@ -100,14 +100,14 @@ it('notifies a conversation on replies, resolution and reopening, coalescing an 
  expect((await db.query('SELECT kind,revision,read_at FROM member_notifications')).rows).toEqual([{kind:'reopened',revision:3,read_at:null}]);
  // An agent reply reaches its own account; a human never notifies themselves.
  await db.query("INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id) VALUES('ann_agent','doc','ann_root','Done','agent','alice')");
- await emit('alice','annotated',{kind:'artifact',id:'doc'},{annotation_id:'ann_root',reply_id:'ann_agent',agent:true});
+ await emit('alice','annotation_replied',{kind:'artifact',id:'doc'},{annotation_id:'ann_root',reply_id:'ann_agent',agent:true});
  expect((await db.query<{recipient_id:string;agent_label:string|null}>('SELECT recipient_id,agent_label FROM member_notifications ORDER BY recipient_id')).rows)
   .toEqual([{recipient_id:'alice',agent_label:'Agent'},{recipient_id:'bob',agent_label:'Agent'},{recipient_id:'carol',agent_label:'Agent'}]);
 });
 
 it('removes a deleted conversation from every inbox through removal events, with no actor needed',async()=>{
  await db.query("INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id) VALUES('ann_root','doc',NULL,'Q','human','bob'),('ann_reply','doc','ann_root','A','human','carol')");
- await emit('carol','annotated',{kind:'artifact',id:'doc'},{annotation_id:'ann_root',reply_id:'ann_reply'});
+ await emit('carol','annotation_replied',{kind:'artifact',id:'doc'},{annotation_id:'ann_root',reply_id:'ann_reply'});
  await emit('alice','mentioned',{kind:'artifact',id:'doc'},{user_id:'dave',revision:1,mention_ref:'comment:ann_root'});
  await emit(null,'annotation_deleted',{kind:'artifact',id:'doc'},{annotation_id:'ann_root'});
  expect((await changes('removed')).map(c=>c.id).sort()).toEqual(['thread:ann_root:bob','thread:ann_root:dave']);

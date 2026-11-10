@@ -19,7 +19,7 @@ import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as events} from '@/app/a/[id]/events/route';
 import {GET as exportImage} from '@/app/api/artifacts/[id]/export/route';
 import {GET as list} from '@/app/api/artifacts/route';
-import {GET as changes} from '@/app/api/artifacts/[id]/annotations/changes/route';
+import {GET as feed} from '@/app/api/events/route';
 import {GET as commentImage} from '@/app/api/artifacts/[id]/comment-images/[imageId]/route';
 import {GET as myArtifact} from '@/app/api/my/artifacts/[id]/route';
 import {POST as myComment} from '@/app/api/my/artifacts/[id]/annotations/route';
@@ -66,7 +66,7 @@ beforeEach(async()=>{
  app.get('/api/artifacts/:id/versions/:version',routed(version));
  app.get('/api/artifacts',c=>list(c.req.raw));
  app.get('/api/artifacts/:id/export',routed(exportImage));
- app.get('/api/artifacts/:id/annotations/changes',routed(changes));
+ app.get('/api/events',c=>feed(c.req.raw));
  app.get('/api/artifacts/:id/comment-images/:imageId',routed(commentImage));
  app.get('/a/:id/raw',routed(raw));
  app.post('/a/:id/mutate',routed(mutate));
@@ -132,7 +132,7 @@ it('refuses an admin a private document at every other bearer door, and lists it
  const doors=(doc:Doc):Array<[string,()=>Promise<Response>]>=>[
   ['raw',async()=>bearer(`/a/${doc.id}/raw`)],
   ['export',async()=>bearer(`/api/artifacts/${doc.id}/export`)],
-  ['annotation changes',async()=>bearer(`/api/artifacts/${doc.id}/annotations/changes`)],
+  ['events feed',async()=>bearer(`/api/events?artifact_id=${doc.id}`)],
   ['comment image',async()=>bearer(`/api/artifacts/${doc.id}/comment-images/${images[doc.id]}`)],
  ];
  for(const [door,ask] of doors(PRIVATE)){

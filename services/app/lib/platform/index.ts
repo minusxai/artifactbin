@@ -18,7 +18,7 @@ export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb,
 export type { Db, Queryable, SchemaImageInputs } from './db';
 export { actorSubject, emit, envelope } from './events';
 export type { EventSubject } from './events';
-export { enqueueEvent, enqueueEvents, recordEvent, setEventProjection, startEventPublisher } from './event-outbox';
+export { enqueueEvent, enqueueEvents, publishEventOutbox, recordEvent, setEventProjection, startEventPublisher } from './event-outbox';
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
 export { currentHeaders, currentRequest, overrideRequestHeaders, runWithRequest } from './request-context';
 export { measureQueries } from './query-stats';

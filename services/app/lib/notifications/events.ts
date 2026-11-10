@@ -43,9 +43,8 @@ export async function projectNotifications(tx:Queryable,event:EventEnvelope):Pro
   return;
  }
  if(!sender)return;
- if(event.object_kind==='artifact'&&['annotated','annotation_resolved','annotation_reopened'].includes(event.verb)){
-  // A new root has no earlier conversation to update. Explicit mentions are their own facts.
-  if(event.verb==='annotated'&&!payload.reply_id)return;
+ if(event.object_kind==='artifact'&&['annotation_replied','annotation_resolved','annotation_reopened'].includes(event.verb)){
+  // A new root (`annotated`) has no earlier conversation to update. Explicit mentions are their own facts.
   const kind=event.verb==='annotation_reopened'?'reopened':event.verb==='annotation_resolved'?'resolved':payload.resolved?'reply_resolved':'reply';
   await notifyThread(tx,objectId,String(payload.annotation_id),sender,kind,payload.agent===true,String(payload.reply_id??payload.annotation_id),event.id);
   return;

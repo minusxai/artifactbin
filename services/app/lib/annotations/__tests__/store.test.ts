@@ -5,8 +5,8 @@ import { ANONYMOUS_ACTOR, ARTIFACTBIN_AGENT_HEADER, identityForUser } from '@/li
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import {
-  CommentWaitCapacityError, InvalidCommentCursor, actOnAnnotationFor, annotationAuthorForRequest, artifactToWireWithAnnotations, artifactWireFor,
-  countOpenAnnotations, createAnnotationFor, deleteAnnotationFor, listAnnotationPageFor, listAnnotationsFor, readArtifactSnapshot, readCommentChangesFor,
+  actOnAnnotationFor, annotationAuthorForRequest, artifactToWireWithAnnotations, artifactWireFor,
+  countOpenAnnotations, createAnnotationFor, deleteAnnotationFor, listAnnotationPageFor, listAnnotationsFor, readArtifactSnapshot,
   respondToAnnotationAction, respondToAnnotationEdit, respondToCommentReaction,
 } from '..';
 
@@ -202,60 +202,6 @@ describe('the artifact wire with annotations', () => {
     expect(reader).not.toHaveProperty('shares');
     const hidden = await fixture('private');
     expect(await readArtifactSnapshot(await stranger(), hidden.doc.id, BASE)).toBeNull();
-  });
-});
-
-describe('readCommentChangesFor', () => {
-  const read = (actor: Parameters<typeof readCommentChangesFor>[0], id: string, after: string, extra: Partial<Parameters<typeof readCommentChangesFor>[2]> = {}) =>
-    readCommentChangesFor(actor, id, { after, limit: 10, waitSeconds: 0, signal: new AbortController().signal, ...extra });
-
-  it('replays from start, resumes from a cursor, and reports writes made with the reading credential as yours', async () => {
-    const f = await fixture();
-    await f.comment('Before');
-    const start = (await read(f.owner, f.doc.id, 'start'))!;
-    expect(start.events.map(e => (e as { body?: string }).body)).toEqual(['Before']);
-    const now = (await read(f.owner, f.doc.id, 'now'))!;
-    expect(now.events).toEqual([]);
-    await f.comment('After', 'intro', f.owner, agent);
-    const next = (await read(f.owner, f.doc.id, now.next_cursor))!;
-    expect(next.events).toHaveLength(1);
-    expect(next.events[0]).toMatchObject({ body: 'After', author: { kind: 'agent', you: true } });
-    expect(start.events[0]).toMatchObject({ author: { kind: 'human', you: true } });
-    expect((await read(f.owner, f.doc.id, next.next_cursor))!.events).toEqual([]);
-  });
-
-  it('refuses a cursor from another reader or document, or a malformed one', async () => {
-    const f = await fixture('public'), other = await fixture('public');
-    const cursor = (await read(f.owner, f.doc.id, 'now'))!.next_cursor;
-    await expect(read(f.owner, other.doc.id, cursor)).rejects.toBeInstanceOf(InvalidCommentCursor);
-    await expect(read(await stranger(), f.doc.id, cursor)).rejects.toBeInstanceOf(InvalidCommentCursor);
-    for (const bad of ['', 'not a cursor!', 'x'.repeat(1025), Buffer.from('{"v":2}').toString('base64url')])
-      await expect(read(f.owner, f.doc.id, bad)).rejects.toBeInstanceOf(InvalidCommentCursor);
-  });
-
-  it('answers null to a reader without access and pages with has_more', async () => {
-    const f = await fixture();
-    expect(await read(await stranger(), f.doc.id, 'start')).toBeNull();
-    for (const body of ['a', 'b', 'c']) await f.comment(body);
-    const page = (await read(f.owner, f.doc.id, 'start', { limit: 2 }))!;
-    expect(page.events).toHaveLength(2);
-    expect(page.has_more).toBe(true);
-  });
-
-  it('caps concurrent waits per account with CommentWaitCapacityError, freeing a slot when a wait ends', async () => {
-    const f = await fixture();
-    const cursor = (await read(f.owner, f.doc.id, 'now'))!.next_cursor;
-    const controllers = Array.from({ length: 4 }, () => new AbortController());
-    const waits = controllers.map(c => read(f.owner, f.doc.id, cursor, { waitSeconds: 30, signal: c.signal }).catch((error: unknown) => error));
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await expect(read(f.owner, f.doc.id, cursor, { waitSeconds: 30 })).rejects.toBeInstanceOf(CommentWaitCapacityError);
-    controllers.forEach(c => c.abort(new Error('done')));
-    await Promise.all(waits);
-    const freed = new AbortController();
-    const again = read(f.owner, f.doc.id, cursor, { waitSeconds: 30, signal: freed.signal }).catch((error: unknown) => error);
-    await new Promise(resolve => setTimeout(resolve, 50));
-    freed.abort(new Error('done'));
-    expect(await again).toEqual(new Error('done'));
   });
 });
 
