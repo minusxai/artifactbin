@@ -86,14 +86,14 @@ it('sets up the list preset (--kind list): own-rows only, tracker.ts with me alo
   const result=await p.run({dir:'app',kind:'list',title:'Riverside cleanup'});
   expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
   const functions=await readFile(path.join(p.dir,'tracker.ts'),'utf8');
-  expect(functions.slice(functions.indexOf('*/'))).not.toMatch(/LIMIT|async add|roles/);
+  expect(functions.slice(functions.indexOf('*/'))).not.toMatch(/LIMIT|async add|async save|roles/);
   expect(result).toMatchObject({kind:'list',preset:'list',features:['own-rows'],datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
   expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',name:'entries',dataset:'name,grp,note,created_by\n',columns:[{name:'name'},{name:'grp'},{name:'note'},{name:'created_by'}]});
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
   expect(html).toContain("kicker: '[Event · dates]'");expect(html).toContain("groups: ['[First choice]', '[Second choice]', '[Third choice]']");
   expect(html).toContain('<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">');
-  expect(html).not.toMatch(/call\('add'|@afbin\/collab|@afbin\/data-table|@(?:feature|only) (?:team|collab|table|limits)\b/);
+  expect(html).not.toMatch(/call\('(?:add|save)'|@afbin\/collab|@afbin\/data-table|@(?:feature|only) (?:team|collab|table|limits)\b/);
   expect(html).toMatch(/<p id="signin" hidden>/);
   expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).not.toMatch(/full group|description|table view/);
   expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own');

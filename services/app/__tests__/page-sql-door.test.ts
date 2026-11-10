@@ -218,3 +218,24 @@ it('a capped insert (the tracker\'s limit) holds under concurrency: the count an
   expect((await capped('one more')).body.affected).toBe(0);
   expect((await stored(f.staff)).filter((row) => row.team === 'red')).toHaveLength(LIMIT);
 });
+
+it('a capped move (the tracker\'s save) holds under concurrency, as the rule-bound caller: never past the limit', async () => {
+  const f = await fixture();
+  // examples/tracker.ts save: the room check is part of the update, so a move that lost the head re-counts on the winner.
+  for (let i = 0; i < 6; i++) expect((await sql(f.page, f.other, "insert into staff (name, team) values ($p0, 'green')", { p0: 'm' + i })).status).toBe(200);
+  const LIMIT = 3, move = (name: string) => sql(f.page, f.other,
+    'update staff set team = $to where name = $name and (team = $to or (select count(*) from staff where team = $to) < $limit)',
+    { name, to: 'red', limit: LIMIT });
+  const replies = await Promise.all(Array.from({ length: 6 }, (_, i) => move('m' + i)));
+  for (const reply of replies) expect([200, 409], JSON.stringify(reply.body)).toContain(reply.status);
+  const moved = replies.filter((r) => r.status === 200).reduce((sum, r) => sum + (r.body.affected ?? 0), 0);
+  const red = () => stored(f.staff).then((rows) => rows.filter((row) => row.team === 'red'));
+  expect((await red()).length).toBeLessThanOrEqual(LIMIT);
+  expect(await red()).toHaveLength(1 + moved);
+  // Once full, a further move changes nothing; a row already there still saves in place.
+  while ((await red()).length < LIMIT) expect((await move((await stored(f.staff)).find((row) => row.team === 'green')!.name as string)).status).toBe(200);
+  expect((await move((await stored(f.staff)).find((row) => row.team === 'green')!.name as string)).body.affected).toBe(0);
+  const inRed = (await red()).find((row) => row.by === f.other.userId)!.name as string;
+  expect((await move(inRed)).body.affected).toBe(1);
+  expect(await red()).toHaveLength(LIMIT);
+});
