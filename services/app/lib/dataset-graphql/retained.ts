@@ -3,7 +3,8 @@ import {catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
 import type {DatasetGraphqlPort,DatasetSnapshot} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
-import {canRunSql,datasetView,viewCatalog} from '@/lib/dataset-permissions';
+import {canRunSql,datasetReadAccess,datasetView,viewCatalog} from '@/lib/dataset-permissions';
+import type {Queryable} from '@artifactbin/contracts';
 import {hasuraNames,storedConfiguration} from './hasura-names';
 import {liveAccessFacts,memoAccessFacts,type AccessFacts} from '@/lib/artifact-access';
 import type {AccessActor} from '@/lib/accounts';
@@ -34,6 +35,17 @@ async function readIdentity(actor:AccessActor,id:string,options:RetainedReadOpti
 }
 /** A fence asks afresh: the head and the caller's facts as they are now, never the request's memo. */
 const freshIdentity=(actor:AccessActor,id:string,options:RetainedReadOptions)=>readIdentity(actor,id,options,memoAccessFacts(liveAccessFacts(actor)));
+/**
+ * A read's authorization identity decided again INSIDE `tx` (the page SQL door's guarded commit): the dataset row
+ * locked against change, the reader's role through the page re-read on `tx` alone. Equal to the snapshot's
+ * `policyIdentity` while nothing the read was authorized on moved; null when the reader no longer reads it.
+ */
+export async function readIdentityIn(tx:Queryable,actor:AccessActor,datasetId:string,pageId:string):Promise<string|null>{
+ const row=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR SHARE',[datasetId])).rows[0];
+ if(!row||row.format!=='dataset')return null;
+ const decision=await datasetReadAccess(row,actor,{throughPage:true,pageId,tx});
+ return decision.allowed?JSON.stringify([authorityIdentity(row),decision.identity]):null;
+}
 export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):DatasetGraphqlPort {
  const hydrate = new WeakMap<DatasetSnapshot, (signal:AbortSignal) => Promise<void>>();
  return {

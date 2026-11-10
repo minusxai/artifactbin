@@ -5,9 +5,9 @@ Every method is one `POST` with a JSON body; a `Set` anywhere in a body is sent 
 
 | Method | Route | Body | Answer |
 |---|---|---|---|
-| `run` | `POST /run` | `RunInput` — `tables` (rows travel here, in `main`), `imports` (a schema per imported artifact: `bookings.rows`), `queries` in dependency order, `params`, `paramTypes?`, `limit?`, `timeoutMs?`, `page?` | `{ results: { [name]: TableResult \| QueryFailure } }` |
+| `run` | `POST /run` | `RunInput` — `tables` (rows travel here, in `main`), `imports` (a schema per imported artifact: `bookings.rows`), `queries` in dependency order, `params`, `paramTypes?`, `limit?`, `timeoutMs?`, `outputBytes?` (a result past it fails `tooLarge`, collected no further), `page?` | `{ results: { [name]: TableResult \| QueryFailure } }` |
 | `runMany` | `POST /run-many` | `RunManyInput` — `imports` (loaded ONCE), `shared?` (a `run` whose results are kept whole for every run), `runs` (each an ordinary `run` without imports: its own tables, queries, params) | `{ results: [{ [name]: TableResult \| QueryFailure }] }` — one map per run, in order, each with `shared`'s outcomes beside its own |
-| `mutate` | `POST /mutate` | `MutationInput` — the one table it writes (`table.schema` names its import), what else it `reads`, one writing statement | `{ result: MutationResult \| QueryFailure }` |
+| `mutate` | `POST /mutate` | `MutationInput` — the one table it writes (`table.schema` names its import), what else it `reads`, one writing statement; or keyed `mounted` tables (the `run` catalog protocol: a miss answers `rowsRequired`, the kept database is written only inside a rolled-back transaction); `answer: 'written'` returns only the written rows | `{ result: MutationResult \| QueryFailure }` |
 | `dryRun` | `POST /dry-run` | `DryRunInput` — column shapes only, `paramNames: string[]` | `DryRunResult` |
 | `dryRunMutations` | `POST /dry-run-mutations` | `DryRunMutationsInput` | `{ errors }` |
 | — | `GET /health` | — | `200 {"ok":true}` — the liveness/readiness probe for whatever orchestrates the service; the one GET, every other route POST-only |

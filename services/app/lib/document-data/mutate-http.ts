@@ -89,7 +89,7 @@ export async function respondToMutate(
     if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return json({error:result.reason,details:[result.detail]},403);
     if (result.reason === 'dataset_full') return json({ error: 'dataset_full', details: [result.detail] }, 409);
     // Contention is retryable, not an author error — never a 400.
-    if (result.reason === 'contended') return json({ error: 'dataset_busy', details: [result.detail] }, 503, { 'Retry-After': '1' });
+    if (result.reason === 'contended' || result.reason === 'conflict') return json({ error: 'dataset_busy', details: [result.detail] }, 503, { 'Retry-After': '1' });
     return json({ error: 'invalid_sql', details: [result.detail] }, 400);
   }
   return json({ id: result.row.id, version: result.row.version, affected: result.affected, rowCount: result.rowCount });

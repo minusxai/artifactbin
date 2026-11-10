@@ -14,7 +14,7 @@
  */
 import type { DatasetBoolExp, DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTableName, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { liveAccessFacts, writerFor, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
+import { liveAccessFacts, lockAuthorization, transactionAccessFacts, writerFor, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
@@ -95,7 +95,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   const db = options.tx ?? await getDb();
   const revision = row.policy_revision ?? 0;
   // Under the commit's lock only that transaction's own facts decide, never a request's memo.
-  const facts = options.tx ? liveAccessFacts(actor, options.tx) : options.facts ?? liveAccessFacts(actor, db);
+  const facts = options.tx ? transactionAccessFacts(actor, options.tx) : options.facts ?? liveAccessFacts(actor, db);
   const role = await datasetRole(row, actor, { facts, throughPage: options.throughPage || !!options.pageId });
   if (row.format !== 'dataset' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
@@ -152,11 +152,13 @@ export function tableMutationPolicy(decision: DatasetWriteDecision, table: { sch
 const decisionKey = (d: DatasetWriteDecision) => JSON.stringify([d.allowed, d.role, d.revision, d.allowed && !d.admin ? d.trusted : null]);
 
 /**
- * Inside the commit transaction: lock the dataset, re-read the head and decide
- * again with this transaction's facts. Anything but the same decision refuses the commit.
+ * Inside the commit transaction: lock the artifacts first, in the one global order (lib/artifact-access
+ * `lockAuthorization`: the page and the documents `plan.documents` names, then the datasets with this one FOR
+ * UPDATE and `plan.reads` FOR SHARE), THEN re-read the head and decide again with this transaction's facts, each of
+ * which locks the rows it reads (`transactionAccessFacts`). Anything but the same decision refuses the commit.
  */
-export async function assertWriteCommit(tx: Queryable, dataset: ArtifactRow, actor: AccessActor, before: DatasetWriteDecision, options: Omit<DatasetWriteOptions, 'tx'> = {}): Promise<void> {
-  await tx.query('SELECT id FROM artifacts WHERE id=$1 FOR UPDATE', [dataset.id]);
+export async function assertWriteCommit(tx: Queryable, dataset: ArtifactRow, actor: AccessActor, before: DatasetWriteDecision, options: Omit<DatasetWriteOptions, 'tx'> = {}, plan: { reads?: readonly string[]; documents?: readonly string[] } = {}): Promise<void> {
+  await lockAuthorization(tx, { page: options.throughPage && options.pageId ? options.pageId : null, documents: plan.documents ?? [], write: dataset.id, read: plan.reads ?? [] });
   const current = (await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL', [dataset.id])).rows[0];
   if (!current || (current.policy_revision ?? 0) !== before.revision) throw new DatasetError('Mutation permission changed', 403);
   const now = await datasetWriteAccess(current, actor, { ...options, tx });

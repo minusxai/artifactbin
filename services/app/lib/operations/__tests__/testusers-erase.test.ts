@@ -13,7 +13,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * the ones nobody deleted, and the BOOT BACKFILL, which is how the throwaway
  * people the old session-minted design left behind are taken out.
  */
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
@@ -188,4 +188,31 @@ it('erasing a test user takes its picture with it, and survives an object that h
   await objectStore().delete(stored.key);
   expect((await eraseTestUser(second.id)).erased).toBe(true);
   expect(await getUserById(second.id)).toBeNull();
+});
+
+/**
+ * A COMPETING WRITER (lib/artifact-access README "Lock order"): the erase locks the account before the shares and
+ * artifacts that name it, against the global order, so a deadlock with a guarded write can abort it. It retries its
+ * whole transaction (lib/platform retryOnConflict) and erases exactly once; exhausted, it refuses and erases nothing.
+ */
+it('retries its whole transaction when Postgres aborts it for a deadlock or a serialization failure', async () => {
+  const owner = await account('eraseretry');
+  const db = await harness.db(), transaction = db.transaction.bind(db);
+  const failing = (failures: number, code: string) => {
+    let left = failures;
+    return vi.spyOn(db, 'transaction').mockImplementation((callback) => {
+      if (left-- > 0) return transaction(async (tx) => { await callback(tx); throw Object.assign(new Error('deadlock detected'), { code }); });
+      return transaction(callback);
+    });
+  };
+  for (const code of ['40P01', '40001']) {
+    const testuser = await testUserOf(owner);
+    const spy = failing(1, code);
+    try { expect((await eraseTestUser(testuser.id)).erased).toBe(true); } finally { spy.mockRestore(); }
+    expect(await getUserById(testuser.id)).toBeNull();
+  }
+  const kept = await testUserOf(owner);
+  const spy = failing(50, '40P01');
+  try { await expect(eraseTestUser(kept.id)).rejects.toMatchObject({ code: 'transaction_conflict' }); } finally { spy.mockRestore(); }
+  expect(await getUserById(kept.id)).not.toBeNull();
 });

@@ -18,7 +18,7 @@ import {
   type Scalar,
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { liveAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
+import { liveAccessFacts, transactionAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
 import { datasetRole, type DatasetRoleRow } from './role';
 import { storedPolicy } from './stored-policy';
@@ -74,7 +74,7 @@ function admitted(row: DatasetReadRow, role: DatasetRole, tables: TableSelect[],
 /** The one read decision. `row` is the dataset head the caller reads (its policy revision is part of the answer). */
 export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor, options: DatasetReadOptions = {}): Promise<DatasetReadDecision> {
   if (row.format !== 'dataset') return { allowed: false, role: null };
-  const facts = options.facts ?? liveAccessFacts(actor, options.tx);
+  const facts = options.facts ?? (options.tx ? transactionAccessFacts(actor, options.tx) : liveAccessFacts(actor));
   const role = await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.pageId });
   if (!role) return { allowed: false, role };
   const all = tablesOf(row).map((t) => ({ ...t, permission: READ_ALL }));

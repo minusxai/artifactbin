@@ -10,12 +10,13 @@
 import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type RunManyInput, type Scalar } from '@artifactbin/contracts';
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
-import { Refused, SqliteDatabase, TimedOut, type Prepared, type TableData } from './database';
+import { Refused, SqliteDatabase, TimedOut, TooLarge, type Prepared, type TableData } from './database';
 import { preparedKey, type PreparedCache } from './prepared';
 import type { Sqlite3 } from './wasm';
 
 /** The bounds of one call, already clamped by the caller to its caps. */
-export interface ReadBounds { limit: number; pageLimit: number; timeoutMs: number }
+/** `outputBytes`: the caller's cap on each result's serialized size (RunInput.outputBytes), checked as rows are collected. */
+export interface ReadBounds { limit: number; pageLimit: number; timeoutMs: number; outputBytes?: number }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e)).split('\n').slice(0, 3).join(' ').trim();
 
@@ -139,7 +140,7 @@ function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadIm
       // A query a later one may read is materialised WHOLE: the cap is what
       // travels, never what a downstream query sees. The last cannot be read.
       const whole = !page && !input.catalog && (keepAll || i < input.queries.length - 1);
-      const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs, whole);
+      const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs, whole, bounds.outputBytes);
       if (isQueryFailure(read)) { out[query.name] = read; continue; }
       const { all, ...result } = read;
       out[query.name] = result;
@@ -157,7 +158,7 @@ function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadIm
 }
 
 /** One query's outcome, and — when asked for WHOLE — every row it produced, for the queries after it. */
-function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<string, Scalar>, types: Record<string, ColumnType>, page: QueryPage | null, limit: number, timeoutMs: number, whole = false): QueryOutcome & { all?: Row[] } {
+function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<string, Scalar>, types: Record<string, ColumnType>, page: QueryPage | null, limit: number, timeoutMs: number, whole = false, outputBytes = Number.POSITIVE_INFINITY): QueryOutcome & { all?: Row[] } {
   const started = performance.now();
   const remaining = () => Math.max(0, timeoutMs - (performance.now() - started));
   const open: Prepared[] = [];
@@ -179,11 +180,11 @@ function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<s
       open.push(run);
     }
     if (whole) {
-      const { rows: all, columns } = run.bind(params, types).rows(Number.POSITIVE_INFINITY, remaining());
+      const { rows: all, columns } = run.bind(params, types).rows(Number.POSITIVE_INFINITY, remaining(), outputBytes);
       if (all.length <= limit) return { rows: all, columns };
       return { rows: all.slice(0, limit), columns, truncated: true, totalRows: all.length, all };
     }
-    const { rows, columns, more } = run.bind(params, types).rows(limit, remaining());
+    const { rows, columns, more } = run.bind(params, types).rows(limit, remaining(), outputBytes);
     if (!more && !page) return { rows, columns };
     // Cut (or a window): the real count is one aggregate over the same statement.
     const counter = db.prepare(`SELECT count(*) AS n FROM (${text}) AS _q`, 'read');
@@ -191,6 +192,7 @@ function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<s
     const totalRows = Number(counter.bind(params, types).rows(1, remaining()).rows[0]?.n);
     return { rows, columns, ...(totalRows > rows.length ? { truncated: true } : {}), totalRows };
   } catch (e) {
+    if (e instanceof TooLarge) return { error: `<Query name="${name}"> answers more than ${outputBytes} bytes — select fewer rows or columns`, tooLarge: true };
     if (e instanceof TimedOut) return { error: `<Query name="${name}"> ran too long and was stopped (limit ${timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true };
     return { error: message(e) };
   } finally {
@@ -208,7 +210,7 @@ const fail = (reason: string): never => { throw new Error(`Dataset SQL: ${reason
  * created once their dependencies exist; one that never can (a cycle, a bad
  * draft) is simply absent, so only a read that names it fails.
  */
-function mountCatalog(db: SqliteDatabase, input: RunInput): void {
+export function mountCatalog(db: SqliteDatabase, input: RunInput): void {
   const catalog = input.catalog!;
   if (input.queries.length !== 1) fail('a catalog read requires exactly one query');
   if (catalog.tables.length > 1000) fail('catalog is too large');

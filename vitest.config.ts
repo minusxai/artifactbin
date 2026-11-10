@@ -47,10 +47,10 @@ const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
 const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
- * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS: `integration` only,
- * as the Docker proofs are.
+ * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS, and the
+ * authorization lock order across two real Postgres connections: `integration` only, as the Docker proofs are.
  */
-const REAL_DATABASE_RESOLVER_TESTS = ['services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts'];
+const REAL_DATABASE_RESOLVER_TESTS = ['services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 

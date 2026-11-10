@@ -76,6 +76,60 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
 }
 
 /**
+ * FACTS FOR A DECISION INSIDE A WRITE'S TRANSACTION (a commit's re-decision, a page write's guard). Two differences
+ * from `liveAccessFacts`, both so a decision can never be stale and never contend:
+ *  - READ-ONLY: an unresolved invitation is matched by the account's email but never stamped here (the UPDATE
+ *    would upgrade this transaction's share lock and deadlock two readers of one page); ordinary reads stamp it.
+ *  - LOCKED ON READ: each fact locks the rows it reads, FOR SHARE, so nothing it decided on can change before the
+ *    commit, AND the parent row an absent fact's writer would lock: rules match one role exactly, so an INSERT can
+ *    narrow a role as well as widen it (a new membership or named share can turn signed_in into viewer). Named
+ *    shares and group shares are inserted under their artifact's row lock, which the write holds (./locks);
+ *    memberships under their group's row lock, which `groupRole`/`groupShareRole` take for every group that could
+ *    change the role, joined or not. The artifacts themselves are locked first, in the global order (./locks).
+ */
+export function transactionAccessFacts(actor: AccessActor, tx: Queryable): AccessFacts {
+  const account = async () => actor.userId ? (await tx.query<{ email: string | null; kind: string | null }>('SELECT email, kind FROM users WHERE id=$1 FOR SHARE', [actor.userId])).rows[0] ?? null : null;
+  // As liveAccessFacts: `sharedWith` matches the account's id or (unresolved) its email; `namedRole` the session's too.
+  const shares = async (artifactId: string, session: boolean) => {
+    const email = (await account())?.email ?? null;
+    return (await tx.query<{ role: ArtifactRole }>(
+      `SELECT s.role FROM artifact_shares s WHERE s.artifact_id = $1 AND (s.user_id = $2 OR (s.user_id IS NULL AND (s.email = $3 OR s.email = $4))) FOR SHARE OF s`,
+      [artifactId, actor.userId, session ? sessionEmail(actor) : email, email],
+    )).rows;
+  };
+  return {
+    async groupShareRole(artifactId) {
+      if (!actor.userId) return 'none';
+      // ABSENCE TOO: a membership the actor does not hold yet can narrow its role (rules match one role exactly:
+      // joining a group with a viewer share turns signed_in into viewer). Membership writers insert under the group's
+      // row lock (lib/groups, lib/deployment), so every group this artifact's group shares name is locked FOR SHARE
+      // first, joined or not, and a join waits for this commit. The shares themselves are inserted under the
+      // artifact's row lock, which the write already holds.
+      await tx.query('SELECT 1 FROM artifact_group_shares WHERE artifact_id=$1 FOR SHARE', [artifactId]);
+      await tx.query('SELECT id FROM groups WHERE id IN (SELECT group_id FROM artifact_group_shares WHERE artifact_id=$1) ORDER BY id COLLATE "C" FOR SHARE', [artifactId]);
+      const rows = await tx.query<{ role: ArtifactRole }>("SELECT s.role FROM artifact_group_shares s JOIN group_members m ON m.group_id=s.group_id JOIN groups g ON g.id=m.group_id JOIN users u ON u.id=m.user_id WHERE s.artifact_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL AND u.kind='account' FOR SHARE OF s, m, g, u", [artifactId, actor.userId]);
+      return maxRole(...rows.rows.map((row) => row.role));
+    },
+    async groupRole(groupId) {
+      if (!actor.userId) return null;
+      // The owning group, joined or not: a new membership would change the role (viewer, or editor → owner).
+      await tx.query('SELECT id FROM groups WHERE id=$1 FOR SHARE', [groupId]);
+      return (await tx.query<{ role: GroupRole }>('SELECT m.role FROM group_members m JOIN groups g ON g.id=m.group_id WHERE m.group_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL FOR SHARE OF m, g', [groupId, actor.userId])).rows[0]?.role ?? null;
+    },
+    async userKind(userId) {
+      if (!userId) return null;
+      return (await tx.query<{ kind: UserKind }>('SELECT kind FROM users WHERE id=$1 FOR SHARE', [userId])).rows[0]?.kind ?? null;
+    },
+    async sharedWith(artifactId) { return (await shares(artifactId, false)).length > 0; },
+    async namedRole(artifactId) { return maxRole(...(await shares(artifactId, true)).map((x) => x.role)); },
+    async editorGroupIds() {
+      if (!actor.userId) return [];
+      return (await tx.query<{ group_id: string }>(EDITOR_GROUPS_SQL, [actor.userId])).rows.map((r) => r.group_id);
+    },
+  };
+}
+
+/**
  * THE PAGE VIEW'S FACTS, asked once each per request: a page view decides the same row more than once — admission
  * (lib/artifacts canReadArtifact, in server/app documentPreparation and lib/document-serving artifact-page) and the
  * chrome's role (effectiveRole) — and each decision would ask the actor's kind, named shares and group shares again.

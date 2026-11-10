@@ -9,7 +9,7 @@ import { TESTUSER_LIMITS } from '@artifactbin/contracts';
 import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations';
 import { objectStore } from '@/lib/object-store';
-import { getDb, TABLES } from '@/lib/platform';
+import { getDb, retryOnConflict, TABLES } from '@/lib/platform';
 
 /** What an erase removed — what the person was holding at the moment it ran. */
 interface TestUserErased { erased: boolean; artifacts: number; sessions: number }
@@ -56,7 +56,9 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
   await closeTestUserSessions(testUserId);
   const db = await getDb();
   let picture: string | null = null;
-  const erased = await db.transaction(async (tx) => {
+  // It locks the account before the shares and artifacts that name it, against the global lock order
+  // (lib/artifact-access locks.ts): a deadlock with a guarded write aborts one side, and the whole erasure is retried.
+  const erased = await retryOnConflict(() => db.transaction(async (tx) => {
     const user = await tx.query<{ id: string; image_key: string | null }>(
       "SELECT id, image_key FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
     );
@@ -84,7 +86,7 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
     await tx.query('DELETE FROM annotations WHERE author_user_id = $1', [testUserId]);
     await tx.query('DELETE FROM users WHERE id = $1', [testUserId]);
     return { erased: true, artifacts: ids.length, sessions };
-  });
+  }));
   // After the commit, and never able to fail the erase: an object the store has
   // already lost is housekeeping nobody can do, not a reason to keep the row.
   if (picture) await objectStore().delete(picture).catch(() => {});

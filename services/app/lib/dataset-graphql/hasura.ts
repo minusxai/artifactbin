@@ -37,6 +37,7 @@ import {
   type DatasetGraphqlRequest,
   type DatasetGraphqlSchemaReply,
   type HtmlDatasetLink,
+  type Queryable,
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, memoAccessFacts, type AccessFacts } from '@/lib/artifact-access';
@@ -50,6 +51,7 @@ import { CAN_FIELD, hasuraSdl, type HasuraCan, type HasuraColumn, type HasuraRow
 import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraGeneratedNames, hasuraNames, storedConfiguration, type HasuraTableNames } from './hasura-names';
 import { datasetBindingCatalog, DatasetBindingUnsupportedError, resolveDatasetBinding } from './authority';
+import { authorityShape, readAuthorityIn, rowsNow, shownRows, type ReadAuthority, type WrittenOutcome } from './write-reply';
 import { compileRows, HasuraReadError, type HasuraReadArgs } from './hasura-read';
 import { runPageSql, type PageSqlAnswer, type PageSqlCall } from './page-sql';
 import { compileMutation, HasuraWriteError, mutationRoots, type HasuraMutationKind } from './hasura-write';
@@ -76,6 +78,8 @@ interface Loaded {
   port: ReturnType<typeof retainedDatasetGraphqlPort>;
   fences: Array<() => Promise<void>>;
 }
+/** One loaded link, for the page SQL door (./page-sql-door). */
+export type LoadedDataset = Loaded;
 type WriteDecision = Awaited<ReturnType<typeof datasetWriteAccess>>;
 
 const NOTHING: HasuraCan = { insert: false, update: false, delete: false };
@@ -328,6 +332,8 @@ interface LinkedDatasetGraphqlOptions {
   resultBytes: number;
   /** The page whose resolver calls (`X-Hasura-Page-Id`). */
   pageId?: string;
+  /** A mutation commits only while the page holds (lib/page-graphql). */
+  commitGuard?: PageCommitGuard;
 }
 
 /**
@@ -347,16 +353,16 @@ export async function executeLinkedDatasetGraphql(actor: AccessActor, links: rea
     throw e;
   }
   if (!loaded.length) return { errors: [error('no linked dataset is readable', 'dataset_not_found')] };
-  if (kind === 'mutation') return linkedMutation(actor, loaded, parsed.document, request, options.pageId);
+  if (kind === 'mutation') return linkedMutation(actor, loaded, parsed.document, request, options.pageId, options.commitGuard);
   return run(actor, loaded, parsed.document, request, signal, options.resultBytes);
 }
 
 /** A mutation over linked datasets: validated against their joint schema, written as one dataset's step. */
-async function linkedMutation(actor: AccessActor, loaded: readonly Loaded[], document: DocumentNode, request: DatasetGraphqlRequest, pageId: string | undefined): Promise<DatasetGraphqlReply> {
+async function linkedMutation(actor: AccessActor, loaded: readonly Loaded[], document: DocumentNode, request: DatasetGraphqlRequest, pageId: string | undefined, commitGuard?: PageCommitGuard): Promise<DatasetGraphqlReply> {
   const schema = schemaFor(hasuraSdl(loaded.flatMap((l) => l.tables.map((t) => t.model))));
   const invalid = validate(schema, document);
   if (invalid.length) return { errors: invalid.slice(0, 20).map((e) => error(e.message, 'validation_failed')) };
-  return executeMutation(actor, loaded, schema, document, request, pageId);
+  return executeMutation(actor, loaded, schema, document, request, pageId, commitGuard);
 }
 
 /**
@@ -451,7 +457,13 @@ function coded(value: unknown): unknown {
  * select rules, writes through the one mutation path under its insert/update/delete rules, both with the page as
  * `X-Hasura-Page-Id`. A pinned link is read-only (no mutation roots).
  */
-export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { idempotencyKey?: string }, signal: AbortSignal): Promise<PageDatasets> {
+/**
+ * Under the dataset's row lock, inside the write's commit: the page the write goes through still holds (its head,
+ * its links, the reader's access to it). Throws DatasetError when it does not; nothing then commits.
+ */
+export type PageCommitGuard = (tx: Queryable) => Promise<void>;
+
+export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { idempotencyKey?: string; commitGuard?: PageCommitGuard }, signal: AbortSignal): Promise<PageDatasets> {
   // Only a page request that checks its read fences (a query) is fenced; its schema GET and mutations are not.
   const loaded = await loadLinked(actor, links, { ...scope, fenced: !!scope.retainReadFence }, signal);
   const sources = loaded.map((l): PageDatasetSource => {
@@ -481,7 +493,7 @@ export async function loadPageDatasets(actor: AccessActor, links: readonly HtmlD
       const parsed = parsedOperation(request);
       if ('errors' in parsed) return parsed;
       if (parsed.operation.operation !== 'mutation') return { errors: [error('not a mutation', 'validation_failed')] };
-      return linkedMutation(actor, loaded, parsed.document, { ...request, ...(scope.idempotencyKey ? { idempotencyKey: scope.idempotencyKey } : {}) }, scope.pageId);
+      return linkedMutation(actor, loaded, parsed.document, { ...request, ...(scope.idempotencyKey ? { idempotencyKey: scope.idempotencyKey } : {}) }, scope.pageId, scope.commitGuard);
     },
     sql: (call) => runPageSql(loaded.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, signal),
   };
@@ -498,6 +510,9 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 
 interface Call { key: string; field: string; kind: HasuraMutationKind; table: LoadedTable; statement: DatasetStatement | null }
 
+/** A receipt's outcome identity (./write-reply WrittenOutcome[]) and its authority marker; never part of a reply. */
+const OUTCOME = '__afOutcome';
+const READ_SHAPE = '__afReadShape';
 /** One refused write as a GraphQL error: the code says what happened, the message never carries row data. */
 function refusal(result: { reason: string; detail: string }): DatasetGraphqlError {
   switch (result.reason) {
@@ -505,32 +520,39 @@ function refusal(result: { reason: string; detail: string }): DatasetGraphqlErro
     case 'policy_denied': return /failed its check/.test(result.detail) ? error('check constraint of an insert/update permission has failed; nothing was written', 'check_violation') : error(result.detail, 'permission_denied');
     case 'dataset_read_only': return error(result.detail, 'permission_denied');
     case 'contended': return error('the dataset is being written too quickly to apply this change; retry', 'dataset_changed');
+    case 'conflict': return error('the write met concurrent writers and was not applied; retry the same request', 'dataset_changed');
     // A rule naming a session variable this caller lacks (X-Hasura-User-Id for anonymous) denies them.
     default: return /session variable is unavailable/.test(result.detail) ? error('this rule needs a signed-in session', 'permission_denied') : error(result.detail, 'validation_failed');
   }
 }
 
-/** The written rows of one statement as the role's select rule shows them, as GraphQL objects. */
-function returned(loaded: Loaded, table: LoadedTable, kind: HasuraMutationKind, step: MutationStep | undefined): Array<Record<string, unknown>> {
+/** A refused write as the page SQL door answers it: the same code and message as the generated API's. */
+export function sqlRefusal(result: { reason: string; detail: string }): { code: string; message: string } {
+  const e = refusal(result);
+  return { code: e.extensions.code, message: e.message };
+}
+
+/** The written rows of one statement as `authority` shows them, as GraphQL objects. */
+function returned(authority: ReadAuthority | null, table: LoadedTable, kind: HasuraMutationKind, step: MutationStep | undefined): Array<Record<string, unknown>> {
   if (!step?.written.length || table.model.select === false) return [];
   // A deleted row as it was; an inserted or updated one as it is after its presets.
   const all = kind === 'delete' || kind === 'delete_by_pk' ? step.before : step.after;
-  const view = loaded.snapshot?.view;
-  // The role view over the whole table (its limit is a prefix of it), never cached: these rows have no stored object.
-  const { objectKey: _stored, ...shape } = table.declared;
-  const visible = view ? view.rows(shape, all) : all;
-  const byId = new Map(visible.map((r) => [r[ID_COLUMN], r]));
-  return step.written.flatMap((id) => {
-    const row = byId.get(id);
-    return row ? [Object.fromEntries([['_id', id], ...table.model.columns.map((c) => [c.field, row[c.source] ?? null]), [CAN_FIELD, rowCan(table.model, row, filterAdmits)]])] : [];
-  });
+  const visible = authority?.tables.find((t) => tableIdentity(t) === table.tableId);
+  return shownRows(authority, table.declared, all, step.written).map((row) => graphqlRow(table, row, visible ? { columns: visible.columns } : null));
+}
+
+/** One stored-shape row as its GraphQL object: a column the authority hides is null, `_can` as the role's rules say. */
+function graphqlRow(table: LoadedTable, row: Record<string, unknown>, visible: { columns: readonly { name: string }[] } | DatasetSnapshot | null): Record<string, unknown> {
+  const columns = visible && 'catalog' in visible ? visible.catalog.tables.find((t) => tableIdentity(t) === table.tableId)?.columns ?? [] : visible?.columns ?? [];
+  const shown = new Set(columns.map((c) => c.name));
+  return Object.fromEntries([['_id', row[ID_COLUMN]], ...table.model.columns.map((c) => [c.field, shown.has(c.source) ? row[c.source] ?? null : null]), [CAN_FIELD, rowCan(table.model, row, filterAdmits)]]);
 }
 
 /**
  * A mutation operation: record its root fields, compile them, write once (durably, under the idempotency key),
  * and answer the selection from the committed steps.
  */
-async function executeMutation(actor: AccessActor, datasets: readonly Loaded[], schema: GraphQLSchema, document: DocumentNode, request: DatasetGraphqlRequest, pageId?: string): Promise<DatasetGraphqlReply> {
+async function executeMutation(actor: AccessActor, datasets: readonly Loaded[], schema: GraphQLSchema, document: DocumentNode, request: DatasetGraphqlRequest, pageId?: string, commitGuard?: PageCommitGuard): Promise<DatasetGraphqlReply> {
   const roots = mutationRoots(datasets.flatMap((l) => l.tables.map((t) => t.model)));
   const options = { schema, document, variableValues: request.variables ?? {}, ...(request.operationName ? { operationName: request.operationName } : {}) };
   // Pass 1: each root field's coerced arguments, by response key; nothing is written.
@@ -562,22 +584,23 @@ async function executeMutation(actor: AccessActor, datasets: readonly Loaded[], 
   const table = calls[0]!.table;
   if (calls.some((c) => c.table !== table)) return { errors: [error('one mutation writes one table of a dataset', 'validation_failed')] };
 
-  // Pass 2: the selection over each field's committed step, by response key.
-  const answer = async (steps: readonly MutationStep[]): Promise<DatasetGraphqlReply> => {
-    const results = new Map<string, unknown>();
-    let s = 0;
-    for (const call of calls) {
-      const step = call.statement ? steps[s++] : undefined;
-      const rows = returned(loaded, call.table, call.kind, step);
-      results.set(call.key, call.kind === 'insert' || call.kind === 'update' || call.kind === 'delete' ? { affected_rows: step?.affected ?? 0, returning: rows } : rows[0] ?? null);
-    }
+  // Pass 2: the request's own selection (aliases, fragments, every field) over each field's result, by response key.
+  const select = async (result: (call: Call, index: number) => unknown): Promise<DatasetGraphqlReply> => {
+    const results = new Map(calls.map((call, i) => [call.key, result(call, i)]));
     const resolve = (_: unknown, __: unknown, info: GraphQLResolveInfo) => results.get(String(info.path.key));
     return reply(await execute({ ...options, rootValue: Object.fromEntries([...roots.keys()].map((field) => [field, resolve])) }));
   };
+  const multi = (kind: HasuraMutationKind) => kind === 'insert' || kind === 'update' || kind === 'delete';
+  const fieldResult = (call: Call, affected: number, rows: Array<Record<string, unknown>>) => (multi(call.kind) ? { affected_rows: affected, returning: rows } : rows[0] ?? null);
+  /** Each field's outcome identity from the committed steps: what the receipt keeps instead of rows. */
+  const outcomes = (steps: readonly MutationStep[]): WrittenOutcome[] => {
+    let s = 0;
+    return calls.map((call) => { const step = call.statement ? steps[s++] : undefined; return { key: call.key, kind: call.kind, affected: step?.affected ?? 0, ids: (step?.written ?? []).map(String) }; });
+  };
   const statements = calls.flatMap((c) => (c.statement ? [c.statement] : []));
-  if (!statements.length) return answer([]);
+  if (!statements.length) return select((call) => fieldResult(call, 0, []));
 
-  let committed: DatasetGraphqlReply | null = null;
+  let fresh: DatasetGraphqlReply | null = null;
   const payload = { datasetId, ...(pageId ? { pageId } : {}), query: request.query, variables: request.variables ?? null, operationName: request.operationName ?? null };
   const outcome = await durableMutation(actor, 'https://dataset.invalid', seed, payload, async (receipt) => {
     const head = await getArtifactById(datasetId);
@@ -590,21 +613,48 @@ async function executeMutation(actor: AccessActor, datasets: readonly Loaded[], 
       casRetries: DATASET_GRAPHQL_WRITE_LIMITS.casRetries,
       maxAffected: DATASET_GRAPHQL_WRITE_LIMITS.rows,
       trace: true,
+      ...(commitGuard ? { commitCheck: async (tx: Queryable) => { await commitGuard(tx); return true; } } : {}),
       rowIdentity: {
         column: ID_COLUMN,
         tableId: table.tableId,
         ids: (current: ArtifactRow, objectKey: string, count: number) => rowIdsForObject(current.id, table.tableId, objectKey, count, (current.meta as { graphqlRowIds?: Record<string, unknown> }).graphqlRowIds?.[table.tableId]),
       },
-      // The reply is part of the commit: a replay answers exactly it.
+      // Inside the commit: the reply's rows are shown under the read access that holds now, decided on `tx`; the
+      // receipt keeps only the outcome identity, never rows.
       commitEffect: async (tx, applied) => {
-        committed = await answer(applied.steps ?? []);
-        await completeMutationReceipt(tx, receipt, { status: 200, body: committed as Record<string, unknown> });
+        const steps = applied.steps ?? [], authority = await readAuthorityIn(tx, actor, datasetId, pageId);
+        let s = 0;
+        fresh = await select((call) => { const step = call.statement ? steps[s++] : undefined; return fieldResult(call, step?.affected ?? 0, returned(authority, call.table, call.kind, step)); });
+        await completeMutationReceipt(tx, receipt, { status: 200, body: { [OUTCOME]: outcomes(steps), [READ_SHAPE]: authorityShape(authority) } });
       },
     });
-    if (isMutationRefused(result)) return { status: 200, body: { data: null, errors: [refusal(result)] } };
-    return { status: 200, body: (committed ?? await answer(result.steps ?? [])) as Record<string, unknown> };
+    // A refused write (an exhausted conflict retry included) has no reply rows, whatever an aborted attempt built.
+    if (isMutationRefused(result)) { fresh = null; return { status: 200, body: { data: null, errors: [refusal(result)] } }; }
+    return { status: 200, body: { [OUTCOME]: outcomes(result.steps ?? []) } };
   });
-  if (outcome.status === 200) return outcome.body as DatasetGraphqlReply;
+  if (outcome.status === 200 && fresh) return fresh;
+  if (outcome.status === 200) {
+    const body = outcome.body as DatasetGraphqlReply & { [OUTCOME]?: WrittenOutcome[]; [READ_SHAPE]?: string };
+    const recorded = body[OUTCOME];
+    // A refusal's receipt holds no rows: replayed as it was.
+    if (!recorded && !body.data) return body;
+    const byKey = new Map((recorded ?? []).map((o) => [o.key, o]));
+    // A replay is never executed again: its written rows are read now, under the reader's current role view.
+    const signal = new AbortController().signal;
+    const now = new Map<string, Array<Record<string, unknown>>>();
+    for (const call of calls) {
+      const o = byKey.get(call.key);
+      const deleted = call.kind === 'delete' || call.kind === 'delete_by_pk';
+      const rows = o && !deleted && call.table.model.select !== false ? await rowsNow(actor, loaded, call.table.tableId, o.ids, signal) : [];
+      now.set(call.key, rows.map((row) => graphqlRow(call.table, row, loaded.snapshot)));
+    }
+    // The original counts only under the authority they were decided under. After an access change (or from a receipt
+    // that records none, an older format: its rows are never shown) a replay reports only what the reader sees now:
+    // each count is the recorded `_id`s currently visible, with no sign that anything was left out.
+    const same = body[READ_SHAPE] !== undefined && body[READ_SHAPE] === authorityShape(loaded.snapshot ? { role: loaded.snapshot.role ?? null, view: loaded.snapshot.view ?? null } : null);
+    const legacy = !recorded || body[READ_SHAPE] === undefined;
+    return select((call) => fieldResult(call, same ? byKey.get(call.key)?.affected ?? 0 : (now.get(call.key) ?? []).length, legacy ? [] : now.get(call.key) ?? []));
+  }
   const why = (outcome.body as { error?: string }).error;
   if (why === 'idempotency_mismatch') return { errors: [error('this Idempotency-Key was already used for a different request', 'validation_failed')] };
   if (why === 'operation_pending') return { errors: [error('a write with this Idempotency-Key is still running; retry the same request for its reply', 'outcome_unknown')] };

@@ -8,7 +8,7 @@ import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -23,7 +23,7 @@ import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
 import { trackEvent } from '../analytics';
-import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
+import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, retryOnConflict, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { closeLiveRegions, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
 import { docTitleAfterSave } from './doc-title';
@@ -110,7 +110,8 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
  if(document.format!=='html')return;
  const bindings=(document.meta.htmlLinks??[]) as readonly HtmlPageLink[];
  const refs=document.format==='html'?bindings.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live').map(link=>({id:link.datasetId})):(document.meta.refs as Array<{id:string}>|undefined)??[];
- for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
+ // The one multi-artifact lock order (lib/artifact-access lockOrder): the page is held; its datasets by id.
+ for(const ref of [...refs].sort((a,b)=>lockOrder(a.id,b.id))) {
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
   if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
@@ -181,7 +182,9 @@ export async function createArtifact(
   for (let attempt = 0; ; attempt++) {
     const id = atCreation.reservedId ?? generateFileId();
     try {
-      const row = await db.transaction((tx) => insertArtifact(tx, id, tokenId, userId, input, sourceIds, atCreation));
+      // A group-owned publish locks the group before the page and its datasets (against lib/artifact-access's lock
+      // order): a deadlock with a guarded write aborts one side, and the whole creation is retried.
+      const row = await retryOnConflict(() => db.transaction((tx) => insertArtifact(tx, id, tokenId, userId, input, sourceIds, atCreation)));
       await afterCreated(row, userId);
       return row;
     } catch (error) {
@@ -644,7 +647,8 @@ async function replaceScoped(
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   const effects: ReplaceEffects = { moved: null, unchanged: false };
-  const result = await db.transaction((tx) => replaceArtifactInTx(tx, actor, id, input, opts, effects));
+  // Retried whole on a deadlock with a guarded write (lib/platform retryOnConflict); the effects are the last attempt's.
+  const result = await retryOnConflict(() => { effects.moved = null; effects.unchanged = false; return db.transaction((tx) => replaceArtifactInTx(tx, actor, id, input, opts, effects)); });
   const { moved, unchanged } = effects;
   const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
   if (written) { void trackEvent('update', written.id, { userId: written.user_id }); }

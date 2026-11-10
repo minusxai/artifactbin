@@ -39,6 +39,8 @@ export type StatementMode = 'read' | 'write' | 'any';
 export class Refused extends Error {}
 /** The statement ran past its deadline and was interrupted. */
 export class TimedOut extends Error {}
+/** A result outgrew its caller's `outputBytes` while it was collected. */
+export class TooLarge extends Error {}
 
 const STORAGE: Record<ColumnType, string> = { string: 'TEXT', number: 'REAL', boolean: 'INTEGER', date: 'TEXT', timestamp: 'TEXT', user: 'TEXT' };
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
@@ -123,6 +125,35 @@ function jsonValue(value: unknown, type: ColumnType): unknown {
   return value;
 }
 
+/** UTF-8 bytes of a string as it is, already serialized. */
+const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
+/** UTF-8 bytes of `s` as a JSON string literal: its quotes and JSON.stringify's own escapes included. */
+export function jsonStringBytes(s: string): number {
+  let n = 2;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 0x22 || c === 0x5c || c === 0x08 || c === 0x09 || c === 0x0a || c === 0x0c || c === 0x0d) n += 2;
+    else if (c < 0x20) n += 6;
+    else if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d <= 0xdfff) { n += 4; i++; } else n += 6;
+    } else if (c >= 0xdc00 && c <= 0xdfff) n += 6;
+    else n += 3;
+  }
+  return n;
+}
+/** UTF-8 bytes of one cell as the answer serializes it (./jsonValue), `boolean` its declared type when known. */
+function cellBytes(value: unknown, boolean: boolean): number {
+  if (value === null || value === undefined) return 4;
+  if (typeof value === 'bigint') value = Number(value);
+  if (value instanceof Uint8Array) return value.length * 2 + 2;
+  if (boolean) return value !== 0 ? 4 : 5;
+  if (typeof value === 'string') return jsonStringBytes(value);
+  return (JSON.stringify(value) ?? 'null').length;
+}
+
 /** The one timestamp form the engine stores and answers. */
 const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
@@ -149,17 +180,41 @@ export class Prepared {
     }
     return this;
   }
-  /** Step to at most `limit` rows (and one past, to know whether there were more). */
-  rows(limit: number, timeoutMs: number): { rows: Row[]; columns: DatasetColumn[]; more: boolean } {
+  /**
+   * Step to at most `limit` rows (and one past, to know whether there were more). `outputBytes` bounds what is
+   * collected: each row's size is counted as it is read (a lower bound of its JSON: text by length, keys included),
+   * and past the bound collection stops with TooLarge, so one huge value never has to be held whole twice.
+   */
+  rows(limit: number, timeoutMs: number, outputBytes = Number.POSITIVE_INFINITY): { rows: Row[]; columns: DatasetColumn[]; more: boolean } {
     const raw: unknown[][] = [];
     let more = false;
+    const count = this.stmt.columnCount, bounded = outputBytes !== Number.POSITIVE_INFINITY;
+    // The exact UTF-8 size of `{"rows":[…],"columns":[…]}` as JSON.stringify writes it. Rows are counted as they are
+    // stepped: a row object keeps one key per name (a repeated name holds its last value), each key with its quotes and
+    // colon, each cell as the answer serializes it, commas between entries and rows. The column list is not known
+    // until every row is read (an expression's type comes from its values), so stepping checks it at its shortest
+    // and the real list is counted once at the end.
+    const names = Array.from({ length: count }, (_, i) => this.stmt.getColumnName(i));
+    const last = new Map(names.map((name, i) => [name, i]));
+    const kept = [...last.values()];
+    const keys = kept.map((i) => jsonStringBytes(names[i]!) + 1);
+    const booleans = kept.map((i) => this.owner.declaredType(this.stmt, i) === 'boolean');
+    const shortest = utf8Bytes(JSON.stringify([...last.keys()].map((name) => ({ name, type: 'date' }))));
+    let rowBytes = 0;
     this.owner.within(timeoutMs, () => {
       while (this.stmt.step()) {
         if (raw.length === limit) { more = true; break; }
-        raw.push(Array.from({ length: this.stmt.columnCount }, (_, i) => this.stmt.get(i)));
+        const row = Array.from({ length: count }, (_, i) => this.stmt.get(i));
+        if (bounded) {
+          rowBytes += (raw.length ? 1 : 0) + 2 + Math.max(0, kept.length - 1);
+          for (let k = 0; k < kept.length; k++) rowBytes += keys[k]! + cellBytes(row[kept[k]!], booleans[k]!);
+          if (9 + rowBytes + 12 + shortest + 1 > outputBytes) throw new TooLarge('result too large');
+        }
+        raw.push(row);
       }
     });
     const columns = this.analysis.columns.map((c, i) => this.owner.resultColumn(this.stmt, i, c, raw));
+    if (bounded && 9 + rowBytes + 12 + utf8Bytes(JSON.stringify(columns)) + 1 > outputBytes) throw new TooLarge('result too large');
     const rows = raw.map((values) => Object.fromEntries(columns.map((c, i) => [c.name, jsonValue(values[i], c.type)])));
     return { rows, columns, more };
   }
@@ -179,6 +234,8 @@ export class SqliteDatabase {
   readonly #views = new Set<string>();
   /** Names of the engine's own triggers; only events they cause bypass the rules. */
   readonly #internal = new Set<string>();
+  /** The engine's own functions by name, with their arity: what `scratchWrite` removes again. */
+  readonly #functions = new Map<string, number>();
   /** Functions a trusted extension installed on this database (extensionFunction). */
   readonly #extensions = new Set<string>();
   readonly #virtual: ReadonlySet<string>;
@@ -233,6 +290,7 @@ export class SqliteDatabase {
   /** Register an engine-owned function under an unguessable name; returns the name. */
   internalFunction(fn: (...args: Array<string | number | null>) => string | number | null, arity: number, deterministic = false): string {
     const name = this.internalName();
+    this.#functions.set(name, arity);
     this.#db.createFunction({ name, arity, deterministic, innocuous: deterministic, xFunc: (_ctx: number, ...args: Array<string | number | null>) => fn(...args) } as never);
     return name;
   }
@@ -335,6 +393,28 @@ export class SqliteDatabase {
       for (const v of views) this.#views.add(v);
     }
   }
+
+  /**
+   * `scratch` for a write on a database that outlives it (a prepared one, ./prepared): rolled back like any scratch,
+   * and every engine function and trigger name registered meanwhile (the write's effect recorders, its DEFAULT
+   * counters) is removed again, so repeated writes leave the kept database exactly as it was built.
+   */
+  scratchWrite<T>(fn: () => T): T {
+    this.#accepting();
+    const functions = new Set(this.#functions.keys()), internal = new Set(this.#internal);
+    try { return this.scratch(fn); } finally {
+      const { capi } = this.sqlite3;
+      for (const [name, arity] of [...this.#functions]) {
+        if (functions.has(name)) continue;
+        capi.sqlite3_create_function_v2(this.#db.pointer!, name, arity, capi.SQLITE_UTF8, 0, 0, 0, 0, 0);
+        this.#functions.delete(name);
+      }
+      for (const name of [...this.#internal]) if (!internal.has(name)) this.#internal.delete(name);
+    }
+  }
+
+  /** The engine functions registered beyond SQLite's and the library's: what a kept database must not accumulate. */
+  engineFunctions(): number { return this.#functions.size; }
 
   /**
    * A view over loaded relations, exposing only its declared columns. The
@@ -559,6 +639,8 @@ export class SqliteDatabase {
     return found ? { column: found, at: { schema: db, table, column } } : null;
   }
   #origin(stmt: Stmt, i: number): DatasetColumn | null { return this.#originOf(stmt, i)?.column ?? null; }
+  /** The declared type of output column `i` when it is a direct reference to a loaded column, else null. */
+  declaredType(stmt: Stmt, i: number): ColumnType | null { return this.#origin(stmt, i)?.type ?? null; }
 
   /**
    * An output column's type: its origin's declared column (all of it, for
@@ -583,6 +665,7 @@ export class SqliteDatabase {
     this.#deadline = performance.now() + timeoutMs;
     this.#interrupted = false;
     try { fn(); } catch (e) {
+      if (e instanceof TooLarge) throw e;
       if (this.#interrupted) throw new TimedOut('interrupted');
       throw new Error(clean(e));
     } finally { this.#deadline = Infinity; }

@@ -118,17 +118,17 @@ export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:
  if(role!==null&&!['viewer','commenter','editor'].includes(role))throw new GroupError('invalid_role');
  const db=await getDb();
  return db.transaction(async tx=>{
-  const observed=(await tx.query<{group_id:string|null}>('SELECT group_id FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];
+  // The global lock order (lib/artifact-access locks.ts): the artifact, then its group share, then the groups (the
+  // target membership and the governing one), so a page write's guard and this edit never wait on each other.
+  const observed=(await tx.query<{group_id:string|null}>('SELECT group_id FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE NOWAIT',[id])).rows[0];
   if(!observed)return null;
-  // Freeze both target membership and governing membership before locking the artifact.
+  const previous=(await tx.query<{role:string}>('SELECT role FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2 FOR UPDATE',[id,groupId])).rows[0]?.role??null;
   const groups=[...new Set([groupId,...(observed.group_id?[observed.group_id]:[])])].sort();
   const locked=await tx.query('SELECT id FROM groups WHERE id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY id FOR UPDATE NOWAIT',[groups]);
   if(locked.rows.length!==groups.length||!await getGroupRole(actor.userId,groupId,tx))throw new GroupError('share_refused',403);
   const scope=ownerScope(actor);
-  const row=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE NOWAIT`,[id,scope.val])).rows[0];
+  const row=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
   if(!row)return null;
-  if(row.group_id!==observed.group_id)throw new GroupError('share_refused',409);
-  const previous=(await tx.query<{role:string}>('SELECT role FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2',[id,groupId])).rows[0]?.role??null;
   if(previous===role)return {changed:false};
   await groupQuota(tx,actor.userId!,'share');
   if(role===null)await tx.query('DELETE FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2',[id,groupId]);
