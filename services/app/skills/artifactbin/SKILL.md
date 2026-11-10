@@ -227,6 +227,8 @@ read-only copy ([groups](references/groups.md#public-view-receipts)).
   "public" or "private"; a private page opens only for the people it is shared with.
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
+  When they change its rows (a team tracker), add `--datasets`: a page share alone never lets
+  them change rows others added.
 - "Put it in team space": after user confirmation, `node scripts/groups.mjs move PAGE12 --group
   design_crit --yes`. `publish.mjs page.html --create --group design_crit` creates new
   group-owned work.

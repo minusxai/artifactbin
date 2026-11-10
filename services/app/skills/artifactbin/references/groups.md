@@ -31,7 +31,11 @@ explicit ownership move, which also transfers a folder's descendants and can ref
 conflicts. `publish.mjs page.html --create --group design_crit` creates new group-owned work; it does not
 share an existing page. Use `publish.mjs page.html --create --personal` for personal ownership even when
 your default is a group; omitting both flags uses your default destination. Group editors govern group-owned pages; viewers read them. Membership,
-page readability and navigation links never automatically grant dataset writes.
+page readability and navigation links never grant dataset writes: members of a group a page is
+shared with change only the rows its datasets' rules give any signed-in reader. When the group
+should change the page's rows (a team tracker), add `--datasets`: it also shares each dataset the
+page links with the group at viewer (never editor), so the dataset's rules decide; a tracker's
+team rule then lets every member change every entry. `unshare --datasets` takes both back.
 
 ```sh
 node scripts/groups.mjs list
@@ -40,6 +44,7 @@ node scripts/groups.mjs create design_crit --name "Design Crit"
 node scripts/groups.mjs update design_crit --description "Design reviews"
 node scripts/groups.mjs invite design_crit one@example.test two@example.test --role viewer
 node scripts/groups.mjs share PAGE12 --group design_crit --role commenter
+node scripts/groups.mjs share PAGE12 --group design_crit --datasets
 ```
 
 Invitations use verified-email autoaccept; no separate accept/decline step. Multiple emails produce

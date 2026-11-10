@@ -520,6 +520,15 @@ it('shows the tracker\'s add form, and Edit and Remove only on entries the rules
   expect(g.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]').length).toBe(0);
 });
 
+it('team: a reader the page is shared with, as viewer or commenter, gets Edit on every entry; a page reader only on theirs', async () => {
+  const entries = [{id: 'a1', name: 'Ada', grp: 'To do', note: '', by: 'usr_me'}, {id: 'b2', name: 'Bo', grp: 'Doing', note: '', by: 'usr_other'}];
+  for (const [role, edits] of [['viewer', 2], ['commenter', 2], ['signed_in', 1]] as const) {
+    const page = await load(await tracker('tasks'), trackerAnswer(entries), trackerFns({...READER, role}));
+    expect(page.error).toBeUndefined();
+    expect(page.dom.window.document.querySelectorAll('#lists [data-af-id$="-edit"]'), role).toHaveLength(edits);
+  }
+});
+
 it('writes with sql, every value bound, and says so when the rules let a write change nothing', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'}];
   let affected = 1;

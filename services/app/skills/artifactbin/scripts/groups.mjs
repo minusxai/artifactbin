@@ -9,8 +9,9 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs role GROUP USER --role viewer|editor [--yes]
        node scripts/groups.mjs remove GROUP USER --yes
        node scripts/groups.mjs leave GROUP --yes
-       node scripts/groups.mjs share PAGE --group GROUP [--role viewer|commenter|editor] [--yes]
-       node scripts/groups.mjs unshare PAGE --group GROUP --yes
+       node scripts/groups.mjs share PAGE --group GROUP [--role viewer|commenter|editor]
+         [--datasets] [--yes]
+       node scripts/groups.mjs unshare PAGE --group GROUP [--datasets] --yes
        node scripts/groups.mjs move PAGE --group GROUP|--personal --yes
        node scripts/groups.mjs link GROUP OTHER_GROUP
        node scripts/groups.mjs unlink GROUP OTHER_GROUP --yes
@@ -20,6 +21,7 @@ Examples:
   node scripts/groups.mjs create design_crit --name "Design Crit"
   node scripts/groups.mjs invite design_crit one@example.test two@example.test --role viewer
   node scripts/groups.mjs share PAGE12 --group design_crit --role commenter
+  node scripts/groups.mjs share PAGE12 --group design_crit --datasets
   node scripts/groups.mjs show design_crit --pages
 Gotchas: GROUP is an ID, handle or @handle, resolved once; writes use stable IDs. USER must
   resolve uniquely inside that group's current members (ID, handle or exact name); invite by email
@@ -27,6 +29,9 @@ Gotchas: GROUP is an ID, handle or @handle, resolved once; writes use stable IDs
   Multiple invitations return individual successes/failures; a partial failure is not atomic.
   Share preserves personal ownership and host. Move deliberately transfers ownership, including
   folder descendants; publish --group instead creates new group-owned work. Links only navigate.
+  A page share never lets members change a dataset's rows. --datasets also shares each dataset
+  the page links with the group at viewer, never editor, so the dataset's rules decide (a team
+  tracker's members then change every entry); unshare --datasets takes them back too.
   --yes (destructive actions, editor invitations, promotions, page shares) needs the user's
   consent in this conversation (references/groups.md).
   Delete requires an empty group and its exact current handle; deployment defaults are protected.
@@ -37,7 +42,7 @@ Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/acces
 import {runTool,makeClient,selectedServer,resolveTarget,positional,requireFlags,enumValue,
  ToolError,toolFailure,toolExit} from './toolbox-client.mjs';
 import {confirmation,groupReference,resolveGroup,resolveMember,resolveInvitation,
- invitationEmail,segment} from './toolbox-groups.mjs';
+ invitationEmail,segment,withDatasets} from './toolbox-groups.mjs';
 
 export async function groupsCommand({sub,values,positionals},options={}){
  // These checks precede even identity lookup HTTP, so refusal cannot accidentally mutate.
@@ -54,6 +59,9 @@ export async function groupsCommand({sub,values,positionals},options={}){
   role=enumValue(values.role??'viewer',sub==='share'?['viewer','commenter','editor']:['viewer',
   'editor'],'role');
  }
+ if(values.datasets&&role==='editor')throw new ToolError('datasets_editor',
+  '--datasets shares the linked datasets at viewer: a dataset editor bypasses its rules.',2,
+  'Share at viewer or commenter with --datasets; an editor share of a dataset goes by its ID.');
  if(sub==='delete')requireFlags(values,['handle']);
  if(sub==='move'&&Boolean(values.group)===Boolean(values.personal))
   throw new ToolError('invalid_destination','Choose exactly one of --group or --personal.',2);
@@ -114,9 +122,12 @@ export async function groupsCommand({sub,values,positionals},options={}){
   sub==='role'?{role}:undefined);
  }
  if(sub==='leave')return write(base+'/members/me','DELETE');
- if(['share','unshare'].includes(sub))
-  return write('/api/artifacts/'+target.id+'/group-shares/'+segment(group.id),
-  sub==='share'?'PUT':'DELETE',sub==='share'?{role}:undefined);
+ if(['share','unshare'].includes(sub)){
+  const send=(id,as)=>write('/api/artifacts/'+id+'/group-shares/'+segment(group.id),
+   sub==='share'?'PUT':'DELETE',sub==='share'?{role:as}:undefined);
+  return values.datasets?withDatasets(client,target.id,sub==='share'?role:undefined,send):
+   send(target.id,role);
+ }
  if(sub==='move')return write('/api/artifacts/'+target.id+'/transfer','POST',
   {destination:{type:'group',id:group.id}});
  if(['link','unlink'].includes(sub)){

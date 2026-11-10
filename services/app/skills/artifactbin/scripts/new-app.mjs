@@ -9,9 +9,11 @@ export const DESCRIPTION = `Set up a shared-app starter in one call: files, data
   empty notes dataset (item, note, created_by) with own-rows rules.
 All fill the ref: id and title into index.html.
 Tracker features: own-rows (signed-in people add entries and change or remove only their own);
-  team (needs own-rows: people the page is shared with change every entry); collab (an entry's
-  description is typed in together); table (a sortable table view); limits (needs own-rows: at
-  most --limit entries per group, enforced on the server by tracker.ts in one statement).
+  team (needs own-rows: a group the page is shared with by groups.mjs share PAGE --group GROUP
+  --datasets changes every entry; a page share alone lets members change only theirs); collab
+  (an entry's description is typed in together); table (a sortable table view); limits (needs
+  own-rows: at most --limit entries per group, enforced on the server by tracker.ts in one
+  statement).
 Usage: node scripts/new-app.mjs --title NAME [--kind tracker|list|api] [--preset tasks|list]
   [--without FEATURE,…] [--limit N] [--url URL] [--dir DIR]
 Flags: --title NAME the app's name, for <title> (a bare title argument works too);
@@ -116,7 +118,8 @@ async function trackerApp(kind, values, {title, dir, at, server, options}) {
     datasets: {entries: {id: entries.id, rows: 0, reused: entries.reused}},
     ...limit === undefined ? {} : {limit}, rules: rulesText, note,
     next: `Next: in index.html edit only APP: its [bracketed] text and groups (${groups}); ` +
-      `then ${await check(at('index.html'))}`};
+      `then ${await check(at('index.html'))}` + (keep.has('team') ? '; for a team to edit ' +
+      'every entry: node scripts/groups.mjs share PAGE --group GROUP --datasets' : '')};
 }
 export async function newAppCommand({values, positionals}, options = {}) {
   const title = String(values.title ?? positionals.join(' ')).trim()

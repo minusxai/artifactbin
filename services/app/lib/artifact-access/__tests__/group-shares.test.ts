@@ -54,4 +54,20 @@ describe('group principal lattice',()=>{
   await setArtifactGroupShare(owner,row.id,second.id,null);
   expect(await effectiveRole(row,member)).toBe('none');
  });
+ it('makes members the dataset viewer only through a group share of the dataset itself, never of the page',async()=>{
+  const owner=await account('mxmx_test_owner@example.com'),member=await account('mxmx_test_member@example.com');
+  const group=await createGroup(owner.userId,{handle:'tracker_team',name:'Tracker'});
+  await admitGroupMember(owner.userId,group.id,member.userId,'viewer');
+  const data=await dataset(owner,{version:3,tables:[]},{visibility:'unlisted'}),page=await mine(owner);
+  for(const role of ['viewer','commenter','editor'] as const){
+   await setArtifactGroupShare(owner,page.id,group.id,role);
+   expect((await datasetWriteAccess(await head(data.id),member,{throughPage:true})).role).toBe('signed_in');
+  }
+  for(const [role,expected] of [['viewer','viewer'],['commenter','viewer'],['editor','editor']] as const){
+   await setArtifactGroupShare(owner,data.id,group.id,role);
+   expect((await datasetWriteAccess(await head(data.id),member,{throughPage:true})).role).toBe(expected);
+  }
+  await setArtifactGroupShare(owner,data.id,group.id,null);
+  expect((await datasetWriteAccess(await head(data.id),member,{throughPage:true})).role).toBe('signed_in');
+ });
 });
