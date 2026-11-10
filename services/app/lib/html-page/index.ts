@@ -27,6 +27,8 @@ export function repairCoreScript(input:string):{html:string;changed:boolean;remo
 }
 const coreTag=(id?:string|null)=>`<script src="${CORE}"${id?` data-af-id="${escapeSourceAttribute(id)}"`:''}></script>`;
 
+/** Written only into an exported copy (lib/html-runtime offline-sql): its reader's rows and the engine that reads them. */
+const EXPORT_ONLY_BLOCKS=new Set(['offline-data','offline-sql']);
 /** The persisted source is the authoring source. Runtime wrappers never enter it. */
 export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions={}):CanonicalHtmlPage {
  if(typeof input!=='string'||!input.trim())throw new Error('HTML source is required');
@@ -38,6 +40,9 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
  // D2: platform-owned design attributes and copied system stylesheets never enter stored source (lib/html-page/design-system).
  html=normalizeDesignSelection(html).html;
  const document=allElements(html);
+ // An export's rows and engine are never a page's source, wherever they are written (lib/publish reduces an export).
+ const exportOnly=document.all.map(element=>attribute(element,'data-af')).find(value=>value!==null&&EXPORT_ONLY_BLOCKS.has(value));
+ if(exportOnly)throw new Error(`data-af="${exportOnly}" is written only into an exported copy, never into a page's source: publish the original source, or export the page again`);
  const previous=new Set(options.previousHtml?allElements(options.previousHtml).all.map(element=>attribute(element,'data-af-id')).filter((id):id is string=>id!==null):[]);
  const allocated=new Set(options.ledger?.allocatedIds??previous);
  const seen=new Set<string>();

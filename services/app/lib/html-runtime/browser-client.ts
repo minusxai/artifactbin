@@ -2,6 +2,7 @@ import {createClient,gql} from './apollo/graphql-compat';
 import {config,remote,onResolverChange} from './browser-reader';
 import {createSql,SqlError} from './apollo/sql';
 import {RemoteUnreachable} from './apollo/apollo-contracts';
+import {offlineSqlNoData} from './portable-chrome-contract';
 export {startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload} from './browser-reader';
 // Names live pages still call (onResolverChange's old name); isolated with their deletion rule in legacy-page-names.
 export * from './legacy-page-names';
@@ -11,11 +12,19 @@ export {gql};
  * `sql` (./apollo/sql) reaches the page SQL door through the reader's ONE request relay, the one GraphQL uses
  * (`remote.execute`, marked `operation: 'sql'`): the frame-bridge parent routes it to /api/artifacts/<page>/sql with the
  * trusted revision bound (lib/html-reader/frame-bridge parent `relayedSql`). The reader carries no SQL code at all: it
- * sits at its 20 KiB gzip budget (html-runtime build.test). No app frame relays in a downloaded copy, a local preview or
- * an owner host's own reads (the reader builds those transports from this same config), so those refuse at once.
+ * sits at its 20 KiB gzip budget (html-runtime build.test). No app frame relays in a local preview or an owner host's
+ * own reads (the reader builds those transports from this same config), so those refuse at once. A downloaded copy
+ * answers from the rows it carries, in the engine only an export embeds (`@afbin/offline-sql`, ./offline-sql), never
+ * through the app, even when the copy is connected: without that module (no data in the copy) it refuses, and says so
+ * where the reader sees it (offlineSqlNoData).
  */
+const offlineSql=(request:{sql:string;params:Record<string,string|number|boolean|null>})=>{
+  const name='@afbin/offline-sql';
+  return (import(name) as Promise<typeof import('./offline-sql')>).then((engine)=>engine.runOfflineSql(request),offlineSqlNoData);
+};
 export const sql=createSql({
-  run:(request)=>config.offline||config.localPreview||(config.domainReads&&window.parent===window)?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))
+  run:(request)=>config.localPreview||(config.domainReads&&window.parent===window)?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))
+   :config.offline?offlineSql(request) as never
    :remote.execute({...request,operation:'sql'} as never).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','sql runs in a page the app frames'):error;}),
   subscribe:(listener)=>{const subscription=onResolverChange((names,reason)=>listener(reason==='authority'?undefined:names));return()=>subscription.unsubscribe();},
 });

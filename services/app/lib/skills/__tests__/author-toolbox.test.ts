@@ -880,6 +880,27 @@ it('never overwrites a newer version, and refuses an exported page, a saved vers
   await noCompanions(dir);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+it('publishing an exported page sends its page, never the rows or runtime it carries, and says so',async()=>{
+ const {mkdtemp,mkdir,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const {portableScript}=await import('../../html-runtime/portable');
+ const home=await mkdtemp(path.join(tmpdir(),'publish-export-')),dir=path.join(home,'project');await mkdir(dir);
+ const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:'<h1>Old</h1>'});
+ const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ const source='<!doctype html><html><head><title>Report</title><script src="/af/core.js"></script></head><body><h1>Report</h1></body></html>';
+ const exported=source.replace('<head>','<head>'+portableScript({version:1,source})+'<script type="application/json" data-af="offline-data">{"tables":[{"schema":"main","name":"staff","columns":[],"rows":[{"salary":"zebra-7731"}]}]}</script><script type="application/json" data-af="offline-sql">"engine"</script>');
+ try{
+  const file=path.join(dir,'report.html');
+  for(const values of [{artifact:'PAGE12'},{create:true}]){
+   await writeFile(file,exported);sent.length=0;
+   const done=await publishCommand({values,positionals:[file]},options);
+   const html=sent.at(-1).body.html;
+   expect(html).toContain('<h1>Report</h1>');
+   expect(html).not.toMatch(/zebra-7731|data-af="(?:offline-data|offline-sql|portable)"/);
+   expect(done.note).toContain('report.html is an exported copy: published without the rows and runtime it carries.');
+  }
+ }finally{await rm(home,{recursive:true,force:true});}
+});
 it('a file copied into another folder still updates its own page',async()=>{
  const {mkdtemp,mkdir,rm,writeFile,readFile,copyFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');

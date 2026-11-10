@@ -111,7 +111,7 @@ dataset rows into persisted local state; keep selections and filters local.
 
 ## Offline and downloaded pages
 
-A downloaded copy has no app connection: `sql` rejects with `unavailable` and `/fn` calls fail, so show that the data lives in the original page and link to it. Local state works offline. `remoteReadOnly` from `@afbin/apollo` is true in a downloaded copy: disable shared writes when it is. Open the original for sign-in, comments or shared changes. Test downloads.
+A downloaded copy has no app connection: its `sql` reads answer from the rows its downloader could read, carried in the file; writes and `/fn` calls fail, so link to the original for those. Local state works offline. `remoteReadOnly` from `@afbin/apollo` is true in a downloaded copy: disable shared writes when it is. Open the original for sign-in, comments or shared changes. Test downloads.
 
 A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared backend data.
 

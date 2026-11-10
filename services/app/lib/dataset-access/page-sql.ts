@@ -30,7 +30,7 @@ export interface PageSqlAnswer { columns: Array<{ name: string; type: ColumnType
 const refuse = (code: string, message: string): never => { throw new GraphQLError(message, { extensions: { code } }); };
 
 /** The reader's tables of the links the statement names, refused whole when one may not run SQL. */
-function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: ReadonlySet<string>, authorize = true): CatalogMount[] {
+export function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: ReadonlySet<string>, authorize = true): CatalogMount[] {
   const mounts: CatalogMount[] = [];
   for (const l of loaded) {
     const snapshot = l.snapshot;

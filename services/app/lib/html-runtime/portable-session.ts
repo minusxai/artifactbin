@@ -1,7 +1,7 @@
 import { connectLocalDocument } from '../local-connection/browser';
 import type { LocalDocumentConnection } from '../local-connection';
 import type { PortableDocument,PortableIdentity } from './portable-contract';
-import type { PortableChromeHandle,PortableChromeState } from './portable-chrome-contract';
+import { OFFLINE_SQL_NO_DATA,OFFLINE_SQL_NO_DATA_ATTRIBUTE,OFFLINE_SQL_NO_DATA_EVENT,type PortableChromeHandle,type PortableChromeState } from './portable-chrome-contract';
 import {compareSource} from './source-relationship';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import type {HtmlJsonObject} from '@artifactbin/contracts';
@@ -89,6 +89,9 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
  };
  const previewStatus=(event:Event)=>{const detail=(event as CustomEvent<{changed:boolean;connected:boolean;error?:string}>).detail;if(detail)chrome?.update({state,previewStatus:detail});};
  win.addEventListener('af:preview-status',previewStatus);
+ // A copy whose sql has no rows to answer from says so here, whether its sql asked before the controls mounted or after.
+ const noData=()=>chrome?.update({state,notice:OFFLINE_SQL_NO_DATA});
+ win.addEventListener(OFFLINE_SQL_NO_DATA_EVENT,noData);
  let bodyPadding:string|undefined;
  let cancelChromeMount:()=>void=()=>{};
  const mount=async()=>{
@@ -104,9 +107,10 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
   win.document.body.style.paddingTop=`calc(${win.getComputedStyle(win.document.body).paddingTop} + 76px)`;
   win.document.documentElement.setAttribute('data-af-local-chrome-ready','true');
   update();
+  if(win.document.documentElement.hasAttribute(OFFLINE_SQL_NO_DATA_ATTRIBUTE))noData();
  };
  let stayOffline=false;const key=preferenceKey();if(key)try{stayOffline=win.localStorage.getItem(key)==='true';}catch{/* Session only. */}
  if(identity&&!privatePreview&&!stayOffline)connect();else options.online(false);
  void mount().catch(()=>{win.document.documentElement.setAttribute('data-af-connection','unavailable');});
- return ()=>{disposed=true;cancelChromeMount();disconnect();chrome?.dispose();if(bodyPadding!==undefined&&win.document.body)win.document.body.style.paddingTop=bodyPadding;win.document.documentElement.removeAttribute('data-af-local-chrome-ready');win.removeEventListener('af:preview-status',previewStatus);};
+ return ()=>{disposed=true;cancelChromeMount();disconnect();chrome?.dispose();if(bodyPadding!==undefined&&win.document.body)win.document.body.style.paddingTop=bodyPadding;win.document.documentElement.removeAttribute('data-af-local-chrome-ready');win.removeEventListener('af:preview-status',previewStatus);win.removeEventListener(OFFLINE_SQL_NO_DATA_EVENT,noData);};
 }

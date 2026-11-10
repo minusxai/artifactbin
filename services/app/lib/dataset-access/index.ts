@@ -17,6 +17,7 @@ export type {DatasetSnapshot,DatasetStatement} from './types';
 export {runPageSql,type PageSqlAnswer,type PageSqlCall} from './page-sql';
 export {planLinkedDatasetTables} from './sql-read';
 export {executePageSql} from './page-sql-door';
+export {offlinePageSqlData} from './offline-sql';
 export {datasetPermissionTemplates,readDatasetPermissions,writeDatasetPermissions} from './policy';
 export {locateDatasetCell,writeDatasetCells,type DatasetCell} from './cells';
 export type {LocalDatasetTable} from './local-types';

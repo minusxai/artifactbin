@@ -93,6 +93,8 @@ async function loadMount(m:CatalogMount,objects?:Pick<ContentObjects,'get'>):Pro
  if(ids?.as)rows=rows.map(row=>{const {[ids.column]:id,...rest}=row;return {...rest,[ids.as!]:id};});
  return rows as Row[];
 }
+/** A mount's rows exactly as a read over it sees them (the role view applied): what an offline copy carries (lib/dataset-access offline-sql). */
+export const readMountRows=(m:CatalogMount):Promise<Row[]>=>loadMount(m);
 const mountRows=createSharedReads<Row[]>();
 /** A mount's content address: its object, stored and shown columns, row IDs and role view (as `sourceKey`). */
 const mountKey=(m:CatalogMount)=>sha([m.stored.objectKey??null,m.stored.columns,m.columns,m.rowIds?[m.rowIds.column,m.rowIds.as??null,idDigest(m.rowIds.ids)]:null,m.view?.identity??null]);

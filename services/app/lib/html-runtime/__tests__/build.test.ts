@@ -5,6 +5,8 @@ import { expect, it } from 'vitest';
 import { buildHtmlCore,buildHtmlAssets } from '../build.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
 import { PLATFORM_STYLES_PATH } from '../../html-systems';
+/** `@afbin/offline-sql` gzipped: the SQLite engine and its wasm, carried only by an export with rows (594,406 B measured 2026-11-10). */
+const OFFLINE_SQL_GZIP_BUDGET=600*1024;
 it('builds a classic bootstrap and a self-contained downloadable page', async () => {
   const {core,apollo,reader} = await buildHtmlAssets();
   expect(() => new Function(core)).not.toThrow();
@@ -132,6 +134,24 @@ it('ships shared offline chrome within explicit code and style byte budgets',asy
  expect(JSON.parse(/data-af="chrome">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.chrome);
  expect(JSON.parse(/data-af="portable-engine">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.portableEngine);
  expect(assets.core).toContain('@afbin/portable');
+});
+
+it('ships the offline sql engine only inside an export that carries rows, never in a served module or page',async()=>{
+ const assets=await buildHtmlAssets();
+ // The SQLite engine with its wasm inlined: an export's cost, measured, never a hosted page's.
+ expect(gzipSync(assets.offlineSql!).byteLength).toBeLessThanOrEqual(OFFLINE_SQL_GZIP_BUDGET);
+ for(const [name,served] of Object.entries(assets))if(name!=='offlineSql'&&typeof served==='string')expect(served,name).not.toMatch(/sqlite3|__AF_SQLITE_WASM__/);
+ expect(assets.apollo).toContain('@afbin/offline-sql');
+ const offlineData={tables:[{schema:'main',name:'sales',columns:[{name:'region',type:'string'}],rows:[{region:'Northwind-7'}]}]};
+ const page={html:'<html><body>Sales</body></html>',...assets,config:{pageId:'p1',revision:'1',backends:['sales']},offlineData};
+ const hosted=assembleHtmlPage(page);
+ const block=(name:string)=>new RegExp(`<script[^>]*data-af="${name}"`);
+ expect(hosted).not.toMatch(block('offline-sql'));expect(hosted).not.toContain('Northwind-7');
+ const exported=downloadableHtml(page);
+ expect(JSON.parse(/data-af="offline-sql">([^<]*)<\/script>/.exec(exported)![1]!)).toBe(assets.offlineSql);
+ expect(JSON.parse(/data-af="offline-data">([^<]*)<\/script>/.exec(exported)![1]!)).toEqual(offlineData);
+ const empty=downloadableHtml({...page,offlineData:undefined});
+ expect(empty).not.toMatch(block('offline-sql'));expect(empty).not.toMatch(block('offline-data'));
 });
 
 it('installs shared offline modules in the core single import map and preserves portable source',async()=>{

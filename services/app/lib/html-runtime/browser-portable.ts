@@ -26,9 +26,10 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
  const block=parser.parseFromString(portableScript(envelope),'text/html').querySelector('script')!;
  for(const old of target.querySelectorAll('script[data-af="core"],script[src]')) if(old.getAttribute('data-af')==='core'||isRuntimeCoreSrc(old.getAttribute('src'))) old.remove();
  const fragments:Node[]=[];
- for(const name of ['runtime','apollo','state-module','reader','chrome','portable-engine','collab','core']) {
+ // A copy saved from a copy keeps the rows its `sql` reads and their engine (./offline-sql), as it keeps every module.
+ for(const name of ['runtime','apollo','state-module','reader','chrome','portable-engine','collab','offline-data','offline-sql','core']) {
   const source=live.querySelector(`script[data-af="${name}"]`);
-  if(!source&&(name==='chrome'||name==='portable-engine'||name==='collab'||name==='state-module'))continue;
+  if(!source&&(name==='chrome'||name==='portable-engine'||name==='collab'||name==='state-module'||name==='offline-data'||name==='offline-sql'))continue;
   if(!source) throw new Error(`Portable HTML is missing its ${name} module`);
   const copy=target.importNode(source,true);
   // Browsers hide a connected script's nonce content attribute; copy its IDL value.

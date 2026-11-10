@@ -17,8 +17,12 @@ import { ID_RE } from '@/lib/platform';
 import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/document-serving';
+import { offlinePageSqlData } from '@/lib/dataset-access';
+import type { HtmlPageLink, HtmlDatasetLink } from '@artifactbin/contracts';
 
 const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
+/** The most the rows an offline copy's `sql` reads (lib/dataset-access offline-sql) may take; past it the copy carries none. */
+const OFFLINE_SQL_DATA_MAX_BYTES = 16 * 1024 * 1024;
 
 /** A filename every OS accepts, from the document's title. */
 const fileName = (title: string) => `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'artifact'}.html`;
@@ -56,7 +60,13 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     // The platform stylesheet, active system only: its rules inline, its fonts embedded by the packer.
     try{const styled=withOfflineSystemStyle(packed,request.url,designSystemChoice(artifact.meta));packed=styled.html;resources.push(...styled.resources);}catch{return json({error:'offline_dependency_unavailable'},422);}
     if(resources.length){try{packed=(await packOfflineDependencies({html:packed,baseUrl:new URL(request.url).href,resources})).html;}catch{return json({error:'offline_dependency_unavailable'},422);}}
-    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true, designSystem:designSystemChoice(artifact.meta) });
+    // What this reader's `sql` could read through the page, carried so the copy computes its own tables offline.
+    const links=((row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
+    const offlineData=await offlinePageSqlData(actor,links,id,OFFLINE_SQL_DATA_MAX_BYTES,request.signal).catch(()=>null);
+    const render=(data:typeof offlineData)=>nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true, designSystem:designSystemChoice(artifact.meta), ...(data?{offlineData:data}:{}) });
+    let { html } = await render(offlineData);
+    // A copy too large with its data is still the copy it was without it.
+    if (offlineData && Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) ({ html } = await render(null));
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {
