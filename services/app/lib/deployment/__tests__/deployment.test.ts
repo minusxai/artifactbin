@@ -1,7 +1,8 @@
+import {generateKeyPairSync} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb,type Queryable} from '@/lib/platform/db';
-import {overrideConfig} from '@/lib/platform/config';
+import {minusxSettings,overrideConfig,schedulesOwner} from '@/lib/platform/config';
 import {canUseDeploymentIdentity} from '@/lib/accounts';
 import {DeploymentError,admitDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
 useAppHarness();
@@ -124,5 +125,48 @@ describe('deployment configuration and public mode',()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
   for(const id of [null,undefined,'','nobody'])expect(await canUseDeploymentIdentity(id)).toBe(false);
   expect(await getDeploymentState(null)).toMatchObject({mode:'company',setup_complete:false,is_owner:false,default_group:null});
+ });
+});
+
+describe('combined mode (MINUSX__BASE_URL) and SCHEDULES__OWNER at boot',()=>{
+ const ed25519=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'}) as string;
+ const rsa=generateKeyPairSync('rsa',{modulusLength:1024}).privateKey.export({type:'pkcs8',format:'pem'}) as string;
+ const unset={APP__DEPLOYMENT_MODE:'public',AUTH__ALLOWED_EMAIL_PATTERNS:undefined,MINUSX__BASE_URL:undefined,INSTALLATION__ID:undefined,MINUSX__DELEGATION_PRIVATE_KEY:undefined,MINUSX__DELEGATION_KEY_ID:undefined,SCHEDULES__OWNER:undefined};
+ const combined={...unset,MINUSX__BASE_URL:'https://minusx.example.com/',INSTALLATION__ID:'installation_demo',MINUSX__DELEGATION_PRIVATE_KEY:ed25519,MINUSX__DELEGATION_KEY_ID:'key-1'};
+ it('standalone: none of the settings set boots exactly as before, with the scheduler owned here',()=>{
+  overrideConfig({},unset);
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+  expect(minusxSettings()).toBeNull();
+  expect(schedulesOwner()).toBe('artifactbin');
+ });
+ it('combined: the complete set boots, a one-line key with \\n escapes included',()=>{
+  overrideConfig({},combined);
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+  expect(minusxSettings()).toEqual({baseUrl:'https://minusx.example.com',installationId:'installation_demo',delegationPrivateKey:ed25519.trim(),delegationKeyId:'key-1'});
+  overrideConfig({},{...combined,MINUSX__DELEGATION_PRIVATE_KEY:ed25519.trim().replace(/\n/g,'\\n')});
+  expect(minusxSettings()?.delegationPrivateKey).toBe(ed25519.trim());
+ });
+ it('combined without the installation id, the key or its kid, or with a key that is not Ed25519, refuses the boot by name and never echoes the key',()=>{
+  for(const [missing,message] of [
+   [{INSTALLATION__ID:undefined},/INSTALLATION__ID is required/],
+   [{MINUSX__DELEGATION_PRIVATE_KEY:undefined},/MINUSX__DELEGATION_PRIVATE_KEY is required/],
+   [{MINUSX__DELEGATION_KEY_ID:' '},/MINUSX__DELEGATION_KEY_ID is required/],
+   [{MINUSX__DELEGATION_PRIVATE_KEY:rsa},/MINUSX__DELEGATION_PRIVATE_KEY must be an Ed25519 private key/],
+   [{MINUSX__DELEGATION_PRIVATE_KEY:'-----BEGIN PRIVATE KEY-----\nnot a key\n-----END PRIVATE KEY-----'},/must be an Ed25519 private key/],
+   [{MINUSX__BASE_URL:'minusx.example.com'},/MINUSX__BASE_URL must be an absolute/],
+   [{MINUSX__BASE_URL:'https://user:pw@minusx.example.com'},/MINUSX__BASE_URL must be an absolute http\(s\) URL without credentials/],
+  ] as const){
+   overrideConfig({},{...combined,...missing});
+   let thrown='';try{validateDeploymentConfiguration();}catch(error){thrown=(error as Error).message;}
+   expect(thrown,JSON.stringify(missing).slice(0,80)).toMatch(message);
+   expect(thrown).not.toContain('PRIVATE KEY-----\n');
+  }
+ });
+ it('SCHEDULES__OWNER is artifactbin or minusx; anything else refuses the boot',()=>{
+  overrideConfig({},{...unset,SCHEDULES__OWNER:'minusx'});
+  expect(schedulesOwner()).toBe('minusx');
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+  overrideConfig({},{...unset,SCHEDULES__OWNER:'cron'});
+  expect(()=>validateDeploymentConfiguration()).toThrow('SCHEDULES__OWNER must be artifactbin (the default) or minusx.');
  });
 });
