@@ -67,6 +67,16 @@ it.each(['uninvite','unshare','unlink'])('%s also refuses before HTTP without de
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
  await expect(groupsCommand({sub,positionals:['design_crit','other'],values:{group:'design_crit'}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
 });
+it('show ends on how to change its members and invitations: proposed to the user by handle, role and email, made after they agree',async()=>{
+ const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
+ const detail={group:{id:'grp_stable',handle:'design_crit'},members:[{user_id:'usr_a',username:'teammate',role:'editor'}],invitations:[{id:'gin_a',email:'pending@example.test',role:'viewer'}]};
+ const options=(body:any)=>({env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body)});
+ const shown=await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options(detail));
+ expect(shown).toMatchObject(detail);
+ expect(shown.next).toBe('Next: members show handles, not email addresses. A change to these members or invitations is proposed to the user before it is made: name each member by handle and role (for a person the user named by address, the member you take them to be, or the members you cannot tell apart; an address missing here does not mean they are not a member) and each invitation by its email, with the action for each (remove, change role, cancel the invitation); make it only after they agree.');
+ // A group with no members or invitations listed has nothing to propose.
+ expect((await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options({group:detail.group,members:[]}))).next).toBeUndefined();
+});
 it('show --pages binds the stable group ID and cursor while retaining the server page envelope',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');const seen:string[]=[];
  const pages={artifacts:[{id:'PAGE12',owner:{type:'personal',id:'usr_owner'}}],next_cursor:'next'};
