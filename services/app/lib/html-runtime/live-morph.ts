@@ -43,12 +43,12 @@ const runtimeOf=(doc:Document):Runtime=>{try{return JSON.parse(doc.querySelector
 const ID='data-af-id';
 const INTERACTIVE=new Set(['button','input','select','textarea','form','a','details','summary','option','optgroup','datalist','dialog','label','output','iframe','object','embed','video','audio','canvas']);
 const EDITABLE='data-af-editable';
-const REGION_KINDS=new Set(['rich','text']);
+const REGION_KINDS=new Set(['rich','text','rich-native-v1']);
 /** What a region's saved HTML is made of (lib/live-regions html.ts writes only these). */
 const REGION_CONTENT=new Set(['p','h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote','pre','code','hr','a','strong','b','em','i','br']);
 const regionOf=(element:Element)=>{const region=element.closest(`[${EDITABLE}]`);return region&&REGION_KINDS.has(region.getAttribute(EDITABLE)??'')?region:null;};
 /** Plain region content: a content tag inside a region, carrying only its id (and a link its href). */
-const regionContent=(element:Element)=>{const region=element.parentElement&&regionOf(element.parentElement);return !!region&&REGION_CONTENT.has(element.localName)&&[...element.attributes].every(attr=>attr.name===ID||element.localName==='a'&&attr.name==='href');};
+const regionContent=(element:Element)=>{const region=element.parentElement&&regionOf(element.parentElement);return !!region&&REGION_CONTENT.has(element.localName)&&[...element.attributes].every(attr=>attr.name===ID||element.localName==='a'&&attr.name==='href'||region.getAttribute(EDITABLE)==='rich-native-v1'&&((element.localName==='ol'&&attr.name==='start')||(['ul','li'].includes(element.localName)&&attr.name==='data-type')||(element.localName==='li'&&attr.name==='data-checked')));};
 
 /** An element whose behaviour a script, the browser or a component wires: never redrawn under it. */
 export function interactive(element:Element):boolean{

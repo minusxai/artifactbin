@@ -232,3 +232,10 @@ it('lets an owner pick the design system as page metadata: 13 systems or null, a
  expect(cleared.status).toBe(200);expect(await appearance()).toEqual({designSystem:'redline',mode:'light'});
  expect(await etag()).not.toBe(before);
 });
+it('highlights opted-in code for readers without putting presentation spans in stored source',async()=>{
+ const row={id:'native-code',version:1,source:'<!doctype html><html><head><title>Code</title></head><body><article data-af-editable="rich-native-v1"><pre><code class="language-js">const x = 1;</code></pre></article></body></html>',meta:{}};
+ const rendered=await nativeHtml.nativeHtmlDocument({row});
+ const doc=new JSDOM(rendered.html).window.document;
+ expect(doc.querySelector('.mx-code-token-keyword')?.textContent).toBe('const');
+ expect(row.source).not.toContain('mx-code-token');
+});

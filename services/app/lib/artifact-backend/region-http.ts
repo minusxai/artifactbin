@@ -242,7 +242,7 @@ export function createRegionClient(id: string, events: RegionClientEvents, ports
       try { response = await request(`${base}/${encodeURIComponent(regionId)}/open`, { method: 'POST' }); } catch { return null; }
       if (!response.ok || disposed) return null;
       const reply = await response.json().catch(() => null) as RegionOpenReply | null;
-      if (!reply || reply.regionId !== regionId || (reply.kind !== 'rich' && reply.kind !== 'text') || !Number.isSafeInteger(reply.clientId) || !Number.isSafeInteger(reply.seq) || typeof reply.state !== 'string' || !Number.isSafeInteger(reply.savedVersion)) return null;
+      if (!reply || reply.regionId !== regionId || (reply.kind !== 'rich' && reply.kind !== 'text' && reply.kind !== 'rich-native-v1') || !Number.isSafeInteger(reply.clientId) || !Number.isSafeInteger(reply.seq) || typeof reply.state !== 'string' || !Number.isSafeInteger(reply.savedVersion)) return null;
       let state: Uint8Array;
       try { state = decodeBase64(reply.state); } catch { return null; }
       const previous = regions.get(regionId);

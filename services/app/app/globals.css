@@ -558,3 +558,8 @@ body {
 .comment-agent-spinner { width:11px; height:11px; flex:none; border:1.5px solid var(--color-edge-bright); border-top-color:var(--color-accent); border-radius:50%; animation:comment-agent-spin 1s linear infinite; }
 @keyframes comment-agent-spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion:reduce) { .comment-agent-spinner { animation:none; } }
+
+.comment-rich-editor.tiptap :is(ul,ol) { padding-left:28px; }
+.comment-rich-editor.tiptap li { margin-block: 4px; }
+.comment-rich-editor.tiptap li > p { margin: 0; }
+.comment-rich-editor.tiptap li :is(ul, ol) { margin-block: 0; }

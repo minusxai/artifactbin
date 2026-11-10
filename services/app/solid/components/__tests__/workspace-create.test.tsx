@@ -140,3 +140,11 @@ it('opens HTML intake in the selected folder and group without creating until a 
  expect(screen.getByRole('button', {name:'Upload HTML'})).toBeDisabled();
  expect(fetch).not.toHaveBeenCalled();
 });
+it('offers an explicit native trial while the ordinary Document entry remains legacy',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({id:'trial123'},{status:201})));
+ render(()=><WorkspaceCreate onCreated={()=>{}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Create'}));
+ fireEvent.click(screen.getByRole('menuitem',{name:'Document (Tiptap trial)'}));
+ await waitFor(()=>expect(openDocument).toHaveBeenCalledWith('/a/trial123'));
+ expect(created().html).toContain('data-af-editable="rich-native-v1"');
+});

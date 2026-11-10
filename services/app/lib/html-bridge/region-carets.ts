@@ -77,7 +77,7 @@ export interface RegionCaretPainter {
 }
 
 /** Draws other people's carets for one region's editor, in document coordinates (they scroll with the page). */
-export function createRegionCaretPainter(view: EditorView, regionId: string): RegionCaretPainter {
+export function createRegionCaretPainter(view: EditorView, regionId: string, decode = decodePosition): RegionCaretPainter {
   const doc = view.dom.ownerDocument;
   const win = doc.defaultView!;
   const layer = doc.createElement('div');
@@ -92,7 +92,7 @@ export function createRegionCaretPainter(view: EditorView, regionId: string): Re
     const shown = new Set<string>();
     for (const caret of carets) {
       if (caret.regionId !== regionId || shown.has(caret.id)) continue;
-      const pos = decodePosition(view.state, caret.head);
+      const pos = decode(view.state, caret.head);
       if (pos === null) continue;
       let box: { left: number; top: number; bottom: number };
       try { box = view.coordsAtPos(Math.min(pos, view.state.doc.content.size)); } catch { continue; }

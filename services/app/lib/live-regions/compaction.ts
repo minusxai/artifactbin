@@ -3,6 +3,9 @@
  * range of the saved source (every other byte is kept) and the page goes through publish's own
  * canonicalizeHtmlPage, which gives new blocks fresh ids.
  */
+import { nativeDocument, nativeIds } from './native-state';
+import { readNativeHtml, writeNativeHtml } from './native-html';
+import { Fragment } from 'prosemirror-model';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import { applyEdits, attribute, parseSource, type Element } from '../html-page/html-source';
 import type { Node as PMNode } from 'prosemirror-model';
@@ -72,7 +75,26 @@ interface RegionCompaction {
 
 export function compactRegion(input: RegionCompactionInput): RegionCompaction {
   const region = locateRegion(input.savedHtml, input.regionId);
-  const doc = openRegionDoc(input.state);
+  const doc = openRegionDoc(input.state, { kind: region.kind });
+  if (region.kind === 'rich-native-v1') {
+    const seen = new Set<string>();
+    const clean = (node: PMNode): PMNode => {
+      if (node.isText) return node;
+      const attrs = { ...node.attrs };
+      if (attrs.afId) {
+        if (!region.ids.has(attrs.afId) || seen.has(attrs.afId)) attrs.afId = null;
+        else seen.add(attrs.afId);
+      }
+      const children: PMNode[] = []; node.forEach(child => children.push(clean(child)));
+      return node.type.create(attrs, Fragment.fromArray(children), node.marks);
+    };
+    const merged = clean(nativeDocument(doc));
+    const spliced = applyEdits(input.savedHtml, [{start:region.start,end:region.end,text:writeNativeHtml(merged)}]);
+    const page = canonicalizeHtmlPage(spliced,{previousHtml:input.savedHtml,ledger:input.ledger});
+    const saved = readNativeHtml(locateRegion(page.html,input.regionId).inner);
+    const update = nativeIds(doc,saved);
+    return {html:page.html,ledger:page.ledger,update,snapshot:encodeSnapshot(doc)};
+  }
   const merged = keepSavedIds(region.kind, readDocument(region.kind, openRegionDoc(input.state)), region.ids);
   const spliced = applyEdits(input.savedHtml, [{ start: region.start, end: region.end, text: writeRegion(region.kind, merged) }]);
   const page = canonicalizeHtmlPage(spliced, { previousHtml: input.savedHtml, ledger: input.ledger });

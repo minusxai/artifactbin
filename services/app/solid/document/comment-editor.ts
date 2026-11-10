@@ -1,25 +1,14 @@
-/** Comment-only ProseMirror boundary. Markdown is the public value; DOM never crosses the wire. */
+/** Tiptap comment adapter. Markdown is the public value; DOM never crosses the wire. */
 import {
-  Schema,
   type Node as PMNode,
   type Mark,
   Slice,
 } from "prosemirror-model";
 import { EditorState, TextSelection, type Command } from "prosemirror-state";
-import { EditorView } from "prosemirror-view";
-import {
-  baseKeymap,
-  toggleMark,
-  chainCommands,
-  selectAll,
-  splitBlockAs,
-} from "prosemirror-commands";
-import { keymap } from "prosemirror-keymap";
-import {
-  wrapInList,
-  splitListItem,
-  liftListItem,
-} from "prosemirror-schema-list";
+import { Editor, getSchema } from "@tiptap/core";
+import { commentExtensions } from "./editor-presets";
+import { toggleMark } from "prosemirror-commands";
+import { wrapInList } from "prosemirror-schema-list";
 import {
   parseMarkdownLite,
   parseInline,
@@ -30,118 +19,13 @@ import {
 } from "@/lib/annotations/markdown-lite";
 import { isSessionMentionHref } from "@/lib/annotations/session-mentions";
 import { isPersonMentionHref } from "@/lib/document/person-mentions";
-import { agentNameColor } from "../lib/agent-identity";
 
-const commentSchema = new Schema({
-  nodes: {
-    doc: { content: "block+" },
-    paragraph: {
-      content: "inline*",
-      group: "block",
-      parseDOM: [{ tag: "p" }],
-      toDOM: () => ["p", 0],
-    },
-    heading: {content:'inline*',group:'block',defining:true,attrs:{level:{default:2}},parseDOM:[1,2,3,4,5,6].map(level=>({tag:`h${level}`,attrs:{level}})),toDOM:node=>[`h${node.attrs.level}`,0]},
-    text: { group: "inline" },
-    hard_break: {
-      inline: true,
-      group: "inline",
-      selectable: false,
-      parseDOM: [{ tag: "br" }],
-      toDOM: () => ["br"],
-    },
-    mention: {
-      inline: true,
-      group: "inline",
-      atom: true,
-      attrs: { label: {}, href: {} },
-      parseDOM: [
-        {
-          tag: "span[data-comment-mention]",
-          getAttrs: (dom) => {
-            const href = dom.getAttribute("data-mention-href") ?? "";
-            return isSessionMentionHref(href) || isPersonMentionHref(href)
-              ? { label: dom.textContent ?? "", href }
-              : false;
-          },
-        },
-      ],
-      toDOM: (node) => [
-        "span",
-        {
-          "data-comment-mention": "",
-          "data-mention-href": node.attrs.href,
-          contenteditable: "false",
-          style: `--mention-color:${agentNameColor(String(node.attrs.label).replace(/^@/, ""))}`,
-        },
-        node.attrs.label,
-      ],
-    },
-    code_block: {
-      content: "text*",
-      group: "block",
-      code: true,
-      marks: "",
-      attrs: { lang: { default: null } },
-      parseDOM: [{ tag: "pre", preserveWhitespace: "full" }],
-      toDOM: () => ["pre", ["code", 0]],
-    },
-    blockquote: {
-      content: "block+",
-      group: "block",
-      parseDOM: [{ tag: "blockquote" }],
-      toDOM: () => ["blockquote", 0],
-    },
-    bullet_list: {
-      content: "list_item+",
-      group: "block",
-      parseDOM: [{ tag: "ul" }],
-      toDOM: () => ["ul", 0],
-    },
-    ordered_list: {
-      content: "list_item+",
-      group: "block",
-      parseDOM: [{ tag: "ol" }],
-      toDOM: () => ["ol", 0],
-    },
-    list_item: {
-      content: "paragraph block*",
-      parseDOM: [{ tag: "li" }],
-      toDOM: () => ["li", 0],
-    },
-  },
-  marks: {
-    strong: {
-      parseDOM: [{ tag: "strong" }, { tag: "b" }],
-      toDOM: () => ["strong", 0],
-    },
-    em: { parseDOM: [{ tag: "em" }, { tag: "i" }], toDOM: () => ["em", 0] },
-    code: { parseDOM: [{ tag: "code" }], toDOM: () => ["code", 0] },
-    link: {
-      attrs: { href: {} },
-      inclusive: false,
-      parseDOM: [
-        {
-          tag: "a[href]",
-          getAttrs: (dom) => {
-            const href = safeHref(dom.getAttribute("href") ?? "");
-            return href ? { href } : false;
-          },
-        },
-      ],
-      toDOM: (mark) => [
-        "a",
-        { href: mark.attrs.href, rel: "noopener noreferrer" },
-        0,
-      ],
-    },
-  },
-});
+const commentSchema = getSchema(commentExtensions());
 function inlines(nodes: MdInline[], marks: Mark[] = []): PMNode[] {
   return nodes.flatMap((node) => {
     if (node.kind === "text")
       return node.text ? [commentSchema.text(node.text, marks)] : [];
-    if (node.kind === "break") return [commentSchema.node("hard_break")];
+    if (node.kind === "break") return [commentSchema.node("hardBreak")];
     if (node.kind === "code")
       return node.text
         ? [
@@ -163,7 +47,7 @@ function inlines(nodes: MdInline[], marks: Mark[] = []): PMNode[] {
     return inlines(node.children, [
       ...marks,
       commentSchema.mark(
-        node.kind === "strong" ? "strong" : node.kind === "em" ? "em" : "link",
+        node.kind === "strong" ? "strong" : node.kind === "em" ? "italic" : "link",
         node.kind === "link" ? { href: node.href } : undefined,
       ),
     ]);
@@ -175,17 +59,17 @@ function block(node: MdNode): PMNode {
     return commentSchema.node("paragraph", null, inlines(node.children));
   if (node.kind === "code_block")
     return commentSchema.node(
-      "code_block",
-      { lang: node.lang },
+      "codeBlock",
+      { language: node.lang },
       node.text ? commentSchema.text(node.text) : undefined,
     );
   if (node.kind === "quote")
     return commentSchema.node("blockquote", null, node.children.map(block));
   return commentSchema.node(
-    node.ordered ? "ordered_list" : "bullet_list",
+    node.ordered ? "orderedList" : "bulletList",
     null,
     node.items.map((item) =>
-      commentSchema.node("list_item", null, item.children.map(block)),
+      commentSchema.node("listItem", null, item.children.map(block)),
     ),
   );
 }
@@ -243,7 +127,7 @@ function inlineMarkdown(node: PMNode): string {
         result +=
           child.type.name === "mention"
             ? `[${escape(child.attrs.label)}](${child.attrs.href})`
-            : child.type.name === "hard_break"
+            : child.type.name === "hardBreak"
               ? "\n"
               : inCode
                 ? (child.text ?? "")
@@ -260,9 +144,9 @@ export function commentMarkdown(doc: PMNode): string {
   doc.forEach((node) => {
     if (node.type.name === "paragraph") children.push(inlineMarkdown(node));
     else if (node.type.name === 'heading') children.push('#'.repeat(node.attrs.level)+' '+inlineMarkdown(node));
-    else if (node.type.name === "code_block")
+    else if (node.type.name === "codeBlock")
       children.push(
-        "```" + (node.attrs.lang ?? "") + "\n" + node.textContent + "\n```",
+        "```" + (node.attrs.language ?? "") + "\n" + node.textContent + "\n```",
       );
     else if (node.type.name === "blockquote")
       children.push(
@@ -272,13 +156,13 @@ export function commentMarkdown(doc: PMNode): string {
           .join("\n"),
       );
     else if (
-      node.type.name === "bullet_list" ||
-      node.type.name === "ordered_list"
+      node.type.name === "bulletList" ||
+      node.type.name === "orderedList"
     ) {
       const items: string[] = [];
       node.forEach((item, _, index) =>
         items.push(
-          (node.type.name === "ordered_list" ? `${index + 1}. ` : "- ") +
+          (node.type.name === "orderedList" ? `${index + 1}. ` : "- ") +
             commentMarkdown(item).replace(/\n/g, "\n  "),
         ),
       );
@@ -304,9 +188,7 @@ export function mountCommentEditor(
   },
 ) {
   let value = props.value();
-  const undo: EditorState[] = [];
-  const redo: EditorState[] = [];
-  let lastEdit = 0;
+  let plainPaste=false;
   const query = () => {
     const { $from, empty } = view.state.selection;
     const text = $from.parent.textBetween(
@@ -334,46 +216,22 @@ export function mountCommentEditor(
     props.onChange(value);
     query();
   };
-  const history = (back: boolean) => () => {
-    const source = back ? undo : redo,
-      target = back ? redo : undo;
-    const state = source.pop();
-    if (!state) return false;
-    target.push(view.state);
-    view.updateState(state);
-    lastEdit = 0;
-    publish();
-    return true;
-  };
   const initialDoc = commentDocument(value);
-  const view = new EditorView(mount, {
-    state: EditorState.create({
-      schema: commentSchema,
-      doc: initialDoc,
-      selection: TextSelection.atEnd(initialDoc),
-      plugins: [
-        keymap({
-          "Mod-z": history(true),
-          "Mod-Shift-z": history(false),
-          "Ctrl-y": history(false),
-          "Ctrl-a": selectAll,
-          "Meta-a": selectAll,
-          Enter: chainCommands(
-            splitListItem(commentSchema.nodes.list_item),
-            liftListItem(commentSchema.nodes.list_item),
-            splitBlockAs((node, atEnd) => atEnd && node.type.name === 'heading' ? {type:commentSchema.nodes.paragraph} : null),
-            baseKeymap.Enter,
-          ),
-          "Shift-Enter": (state, dispatch) => {
-            dispatch?.(
-              state.tr.replaceSelectionWith(commentSchema.node("hard_break")),
-            );
-            return true;
-          },
-        }),
-        keymap(baseKeymap),
-      ],
-    }),
+  const editor = new Editor({
+    element: mount,
+    // The Markdown codec and mounted editor must share NodeType identities, including
+    // slices pasted into the view. Install the same schema before Tiptap builds state/plugins.
+    onBeforeCreate: ({ editor }) => {
+      editor.extensionManager.schema = commentSchema;
+      editor.schema = commentSchema;
+    },
+    extensions: commentExtensions(),
+    content: initialDoc.toJSON(),
+    onTransaction: ({ transaction }) => {
+      if (transaction.docChanged) publish();
+      else query();
+    },
+    editorProps: {
     attributes: {
       role: "textbox",
       tabindex: "0",
@@ -383,20 +241,7 @@ export function mountCommentEditor(
       "data-placeholder": props.placeholder ?? "",
       class: "comment-rich-editor",
     },
-    dispatchTransaction(tr) {
-      if (tr.docChanged) {
-        const now = Date.now();
-        if (now - lastEdit > 500 || !tr.getMeta("uiEvent")) {
-          undo.push(view.state);
-          if (undo.length > 100) undo.shift();
-        }
-        redo.length = 0;
-        lastEdit = now;
-      }
-      view.updateState(view.state.apply(tr));
-      if (tr.docChanged) publish();
-      else query();
-    },
+    handleDOMEvents:{keydown:(_,event)=>{plainPaste=event.shiftKey;return false;},keyup:()=>{plainPaste=false;return false;}},
     handleKeyDown: (_, event) => props.onKey(event),
     handleClick: (_, __, event) => {
       if ((event.target as Element).closest("a")) return true;
@@ -405,6 +250,8 @@ export function mountCommentEditor(
     handlePaste(view, event) {
       const text = event.clipboardData?.getData("text/plain");
       if (text === undefined) return false;
+      if(plainPaste){view.dispatch(view.state.tr.insertText(text));return true;}
+      if(event.clipboardData?.getData('text/html')||view.state.selection.$from.parent.type.spec.code)return false;
       const doc = commentDocument(text);
       view.dispatch(
         view.state.tr
@@ -451,12 +298,14 @@ export function mountCommentEditor(
       }
       if (text === " " && /^[-*] $/.test(before)) {
         view.dispatch(view.state.tr.delete($from.start(), from));
-        wrapInList(commentSchema.nodes.bullet_list)(view.state, view.dispatch);
+        wrapInList(commentSchema.nodes.bulletList)(view.state, view.dispatch);
         return true;
       }
       return false;
     },
-  });
+  }});
+  const view = editor.view;
+  view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)));
   return {
     view,
     sync(next: string) {
@@ -471,12 +320,11 @@ export function mountCommentEditor(
           plugins: view.state.plugins,
         }),
       );
-      undo.length = redo.length = 0;
     },
     format(marker: MdMarker) {
       const command: Command =
         marker === "list"
-          ? wrapInList(commentSchema.nodes.bullet_list)
+          ? wrapInList(commentSchema.nodes.bulletList)
           : marker === "link"
             ? toggleMark(commentSchema.marks.link, { href: "https://" })
             : toggleMark(
@@ -484,7 +332,7 @@ export function mountCommentEditor(
                   marker === "bold"
                     ? "strong"
                     : marker === "italic"
-                      ? "em"
+                      ? "italic"
                       : "code"
                 ],
               );
@@ -509,7 +357,7 @@ export function mountCommentEditor(
       view.focus();
     },
     destroy() {
-      view.destroy();
+      editor.destroy();
     },
   };
 }

@@ -7,6 +7,8 @@
  * Markdown has no empty paragraph: an empty block is not written, and Markdown sent back without it removes it.
  * Server-side only (it reads the saved HTML through parse5).
  */
+import { readNativeHtml } from './native-html';
+import { writeNativeMarkdown } from './native-markdown';
 import { defaultMarkdownSerializer, MarkdownSerializer, schema as baseMarkdown } from 'prosemirror-markdown';
 import { Schema, type Mark, type Node as PMNode } from 'prosemirror-model';
 import { readRegion } from './html';
@@ -75,6 +77,7 @@ function structured(blocks: readonly PMNode[]): PMNode[] {
 
 /** The region's saved HTML (its normal form, as stored in the page) as Markdown. */
 export function regionMarkdown(kind: RegionKind, html: string): string {
+  if (kind === 'rich-native-v1') return writeNativeMarkdown(readNativeHtml(html));
   const doc = readRegion(kind, htmlSource(html), 'strip');
   if (kind === 'text') return serializer.serialize(markdown.nodes.doc!.create(null, markdown.nodes.paragraph!.create(null, doc.textContent ? markdown.text(doc.textContent) : null)));
   const blocks: PMNode[] = [];

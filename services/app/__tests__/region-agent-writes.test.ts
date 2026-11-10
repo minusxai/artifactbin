@@ -277,3 +277,22 @@ describe('refusals', () => {
     expect(await head()).toBe(1);
   });
 });
+
+it('native agent revisions keep the versioned XML root and remain editable through the authenticated session door',async()=>{
+ const row=await createArtifact(null,owner.id,{format:'html',source:nativeHtml('<article data-af-editable="rich-native-v1"><p>Keep</p><ul><li><p>Nested</p></li></ul></article>'),meta:{},visibility:'private'});
+ const readBack=await read({person:owner},'_doc','',row.id);
+ expect(readBack.status).toBe(200);
+ const written=await write({person:owner},{base_version:readBack.body.version,markdown:'Added\n\nKeep\n\n- Nested'},'_doc',{},row.id);
+ expect(written.status).toBe(200);
+ const regionId=String(written.body.regionId);
+ const req=request(`/api/artifacts/${row.id}/regions/${regionId}/open`,{method:'POST',actor:as(owner),origin:'same'});
+ const response=await call(req,()=>openRoute(req,{params:Promise.resolve({id:row.id,regionId})}));
+ expect(response.status).toBe(200);
+ const reply=await response.json() as {state:string;clientId:number};
+ const doc=openRegionDoc(Buffer.from(reply.state,'base64'),{kind:'rich-native-v1',clientId:reply.clientId});
+ expect([...doc.share.keys()]).toEqual(['native-v1']);
+ const vector=Y.encodeStateVector(doc);
+ ((doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(0) as Y.XmlText).insert(0,'Live ');
+ const sent=request(`/api/artifacts/${row.id}/regions/${regionId}/updates`,{method:'POST',actor:as(owner),origin:'same',json:{clientId:reply.clientId,update:Buffer.from(Y.encodeStateAsUpdate(doc,vector)).toString('base64')}});
+ expect((await call(sent,()=>updatesRoute(sent,{params:Promise.resolve({id:row.id,regionId})}))).status).toBe(200);
+});

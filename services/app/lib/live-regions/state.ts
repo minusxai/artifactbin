@@ -4,6 +4,10 @@
  * kept. Everything here is a pure function of bytes: states, updates and snapshots go in and come out as `Uint8Array`.
  */
 import * as Y from 'yjs';
+import { createNativeState, nativeHtml, nativeDocument, reviseNative } from './native-state';
+import { nativeMarkdownJson } from './native-markdown';
+import { nativeSchema } from './native-schema';
+import { readNativeHtml, writeNativeHtml } from './native-html';
 import type { Node as PMNode } from 'prosemirror-model';
 import { alignPairs, diffHunks, similarity } from './diff';
 import { readRegion, writeRegion } from './html';
@@ -14,10 +18,11 @@ import { ID_ATTRS, regionSchema, type RegionKind } from './schema';
 import { htmlSource, markdownSource } from './source-html';
 
 /** The merged document, read through the schema: always valid, whatever peers wrote. */
-export const readDocument = (kind: RegionKind, doc: Y.Doc): PMNode => readText(kind, regionText(doc)).doc;
+export const readDocument = (kind: RegionKind, doc: Y.Doc): PMNode => kind === 'rich-native-v1' ? nativeDocument(doc) : readText(kind, regionText(doc)).doc;
 
 /** A region's normal form: what publish stores for it. Refuses content the kind cannot hold. */
 export function normalizeRegionHtml(kind: RegionKind, html: string): string {
+  if (kind === 'rich-native-v1') return writeNativeHtml(readNativeHtml(html));
   return writeRegion(kind, readRegion(kind, htmlSource(html), 'refuse'));
 }
 
@@ -27,6 +32,7 @@ export function normalizeRegionHtml(kind: RegionKind, html: string): string {
  * the content would double).
  */
 export function createRegionState(kind: RegionKind, html: string): { state: Uint8Array; snapshot: Uint8Array } {
+  if (kind === 'rich-native-v1') return createNativeState(html);
   const doc = openRegionDoc();
   insertUnits(regionText(doc), 0, documentUnits(kind, readRegion(kind, htmlSource(html), 'refuse')));
   return { state: Y.encodeStateAsUpdate(doc), snapshot: encodeSnapshot(doc) };
@@ -34,6 +40,7 @@ export function createRegionState(kind: RegionKind, html: string): { state: Uint
 
 /** The region HTML of a state, in normal form, sanitized. */
 export function regionHtml(kind: RegionKind, state: Uint8Array): string {
+  if (kind === 'rich-native-v1') return nativeHtml(state);
   return writeRegion(kind, readDocument(kind, openRegionDoc(state)));
 }
 
@@ -225,6 +232,9 @@ interface RegionRevision {
 export function applyRegionRevision(input: RegionRevisionInput): RegionRevision {
   const { kind } = input;
   if ((input.html === undefined) === (input.markdown === undefined)) throw new TypeError('applyRegionRevision takes exactly one of html or markdown');
+  if (kind === 'rich-native-v1') {
+    return reviseNative(input.live, input.savedSnapshot, input.html ?? writeNativeHtml(nativeSchema.nodeFromJSON(nativeMarkdownJson(input.markdown!))));
+  }
   const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!, kind), 'refuse');
   if (!input.savedSnapshot?.length) throw new LiveRegionRefusal('missing_snapshot');
   const live = openRegionDoc(input.live);

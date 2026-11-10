@@ -256,3 +256,17 @@ it('review: a pre-deploy import map can reach the skew guard and reload on a lat
  expect(result.status).toBe(0);
  expect(result.stdout).toContain('reloaded=true');
 });
+
+it('loads the native trial in a separate module without server HTML parsers',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.nativeRegionsPath).toBe('/af/native-regions.js');
+ expect(assets.nativeRegions).toContain('ProseMirror');
+ // Opt-in Tiptap + CommonMark chunk; legacy reader/editor budgets remain unchanged.
+ expect(gzipSync(assets.nativeRegions!).byteLength).toBeLessThanOrEqual(200*1024);
+ expect(gzipSync(assets.nativeMarkdown!).byteLength).toBeLessThanOrEqual(100*1024);
+ expect(assets.nativeMarkdownPath).toBe('/af/native-markdown.js');
+ expect(assets.reader).toContain('@afbin/native-regions');
+ const {build}=await import('esbuild');
+ const graph=await build({entryPoints:[fileURLToPath(new URL('../native-region-editor.ts',import.meta.url))],bundle:true,write:false,minify:true,format:'esm',platform:'browser',conditions:['production'],metafile:true,logLevel:'silent'});
+ expect(Object.keys(graph.metafile.inputs).filter(input=>/parse5|lib\/html-page\/|live-regions\/(?:compaction|native-state|native-html)\.ts/.test(input))).toEqual([]);
+});

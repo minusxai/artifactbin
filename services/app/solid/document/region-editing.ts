@@ -34,10 +34,10 @@ export function regionMembership(html: string): PageRegions {
   for (const element of document.querySelectorAll('[data-af-id]')) known.add(element.getAttribute('data-af-id')!);
   for (const element of document.querySelectorAll('[data-af-editable]')) {
     const kind = element.getAttribute('data-af-editable'), id = element.getAttribute('data-af-id');
-    if ((kind !== 'rich' && kind !== 'text') || !id) continue;
+    if ((kind !== 'rich' && kind !== 'text' && kind !== 'rich-native-v1') || !id) continue;
     // A region inside another region's text is not one of its own (the outer one owns its content).
     const outer = element.parentElement?.closest('[data-af-editable]');
-    if (outer && ['rich', 'text'].includes(outer.getAttribute('data-af-editable') ?? '')) continue;
+    if (outer && ['rich', 'text', 'rich-native-v1'].includes(outer.getAttribute('data-af-editable') ?? '')) continue;
     regions.push({ id, kind });
     inside.add(id);
     for (const child of element.querySelectorAll('[data-af-id]')) inside.add(child.getAttribute('data-af-id')!);

@@ -96,7 +96,9 @@ it('lets a page runner origin load every flat runtime module the core maps, @afb
  const assets=await buildHtmlAssets();
  const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));
  const paths=Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([,value])=>value as string);
- expect(paths).toHaveLength(8);
+ expect(paths).toHaveLength(10);
+ expect(paths).toContain('/af/native-regions.js');
+ expect(paths).toContain('/af/native-markdown.js');
  expect(paths).toContain('/af/state.js');
  for(const pathname of paths)app.get(pathname,()=>new Response('module'));
  for(const pathname of paths)expect((await app.request(origin+pathname)).status,pathname).toBe(200);

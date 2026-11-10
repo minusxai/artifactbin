@@ -13,7 +13,7 @@
  * - Binary Yjs payloads travel base64 over HTTP/SSE and as Uint8Array over postMessage.
  */
 
-export type RegionKind = 'rich' | 'text';
+export type RegionKind = 'rich' | 'text' | 'rich-native-v1';
 
 /** Postgres NOTIFY channel waking a page's region streams (wakeups say "go look", never carry content). */
 export const regionsChannel = (artifactId: string): string => `regions_${artifactId.toLowerCase()}`;
