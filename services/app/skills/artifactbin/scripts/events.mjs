@@ -23,6 +23,8 @@ Comments: node scripts/comment.mjs watch ID --next is this watch with --artifact
 Examples:
   node scripts/events.mjs watch --category jobs --next
   node scripts/events.mjs watch --artifact PAGE12 --types artifact.annotation_resolved --once
+Gotchas: a cursor belongs to its filter: change a filter and the watch starts from now on its
+  own log. Reading the text of what an event names is a second read, checked again.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access. Results never contain credentials.`;
 
 import {existsSync, mkdirSync} from 'node:fs';

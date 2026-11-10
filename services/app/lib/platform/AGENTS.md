@@ -24,7 +24,8 @@ No product rules live here. Server-only.
   `serialize` queue. Never add one that bypasses it, and never serialize `PostgresDb`, whose pool is
   concurrency-safe. Both implement one `Db` interface; keep their behaviour the same.
 - Events leave through the outbox: `recordEvent` and `enqueueEvent` write in the caller's transaction, and
-  `startEventPublisher` sends after commit. Never call the events service inside a transaction.
+  `startEventPublisher` sends after commit (`publishEventOutbox` flushes on demand, for the public events feed).
+  Never call the events service inside a transaction. A type `/api/events` serves is recorded this way, never `emit`.
 - `retryOnConflict` re-runs the whole transaction: wrap only work whose effects stay inside it or are idempotent.
 
 ## Checks
