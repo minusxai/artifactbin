@@ -93,11 +93,13 @@ it('moves the group under a group the editor edits, naming the parent it loaded,
     { ...finance, description: '', parent_id: null },
     { ...retail, description: '', parent_id: 'grp_finance' },
     { id: 'grp_outlet', handle: 'outlet', name: 'Outlet', description: '', role: 'editor', parent_id: 'grp_retail' },
+    // Below Retail through a subgroup this account is not in (so not in this list): still never offered.
+    { id: 'grp_kiosk', handle: 'kiosk', name: 'Kiosk', description: '', role: 'editor', parent_id: 'grp_web' },
     { id: 'grp_ops', handle: 'ops', name: 'Operations', description: '', role: 'editor', parent_id: null },
     { id: 'grp_read', handle: 'read', name: 'Readers', description: '', role: 'viewer', parent_id: null },
   ] }) : Response.json({ changed: true, parent_id: 'grp_ops', hierarchy_revision: 9 }));
   const refresh = vi.fn();
-  render(() => <GroupTreePanel detail={detail({ group: { ...detail().group, parent_id: finance.id }, parent: finance })} refresh={refresh} />);
+  render(() => <GroupTreePanel detail={detail({ group: { ...detail().group, parent_id: finance.id }, parent: finance, subgroups: [{ id: 'grp_web', handle: 'web', name: 'Web', role: null }] })} refresh={refresh} />);
   fireEvent.click(screen.getByRole('button', { name: 'Move group' }));
   const dialog = await screen.findByRole('dialog', { name: 'Move Retail' });
   expect(dialog).toHaveTextContent('Only someone who is an editor of Retail, of its current parent and of the new parent can move it.');

@@ -73,12 +73,11 @@ export function SubgroupAudience(props: { detail: GroupDetail }): JSX.Element {
 
 /** The groups this account could move `self` under: those it edits, minus `self` and anything below it. */
 function parentChoices(self: GroupDetail, groups: GroupSummary[]): GroupSummary[] {
-  const below = new Set([self.group.id]);
+  const below = new Set([self.group.id, ...self.subgroups.map((group) => group.id)]);
   for (let grew = true; grew;) {
     grew = false;
     for (const group of groups) if (group.parent_id && below.has(group.parent_id) && !below.has(group.id)) { below.add(group.id); grew = true; }
   }
-  for (const group of self.subgroups) below.add(group.id);
   return groups.filter((group) => group.role === 'editor' && !below.has(group.id));
 }
 
