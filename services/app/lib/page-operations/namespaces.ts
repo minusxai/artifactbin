@@ -210,6 +210,8 @@ export function composePageSchema(
       throw Error(`Backend ${name} has an invalid file ID`);
     if (typeof source.version !== "string" || !source.version)
       throw Error(`Backend ${name} has no version`);
+    // A typeDefs-free file (./functions) is called by name over HTTP only: its link name is taken, nothing mounts.
+    if (source.typeDefs === "") { names.push(name); continue; }
     let fileSchema: GraphQLSchema;
     try {
       fileSchema = boundedBackendSchema(source.typeDefs);

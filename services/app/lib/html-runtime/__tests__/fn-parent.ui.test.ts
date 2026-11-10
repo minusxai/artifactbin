@@ -1,0 +1,138 @@
+/**
+ * The page (parent) half of a function call: a frame's `fetch` to this page's function path is made with the
+ * reader's own session, pinned to the shell's revision, carrying no header the frame chose but its content type;
+ * a refused one is still an answer (a status), a cancelled one aborts the request.
+ */
+import {afterEach,expect,it,vi} from 'vitest';
+import {createFrameBridgeParent} from '../../html-reader/frame-bridge/parent';
+
+let cleanup:()=>void=()=>{};
+afterEach(()=>{cleanup();vi.restoreAllMocks();});
+function world(context:{revision:string;readOnly:boolean}|null={revision:'7',readOnly:false}){
+ const frame=document.createElement('iframe');document.body.append(frame);const messages:any[]=[];
+ vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(message=>messages.push(message));
+ const requests:Array<{path:string;init:RequestInit}>=[];
+ let reply:(path:string,init:RequestInit)=>Promise<Response>=async()=>new Response('{"ok":1}',{status:200,headers:{'content-type':'application/json','set-cookie':'a=b','x-secret':'s'}});
+ const appFetch=vi.fn((path:string,init:RequestInit)=>{requests.push({path,init});return reply(path,init);});
+ const parent=createFrameBridgeParent({win:window,frame,frameOrigin:'https://runner.example',id:'Page123',editId:()=>'e',source:()=>null,...(context?{htmlContext:()=>context}:{}),appFetch});
+ cleanup=()=>{parent.dispose();frame.remove();};
+ const send=(payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key:messages[0].key,payload},origin:'https://runner.example',source:frame.contentWindow}));
+ send({kind:'ready',nonce:'n'});
+ const results=()=>messages.filter(message=>message.payload.kind==='fetch-result').map(message=>message.payload);
+ return {send,requests,results,frame,messages,setReply:(next:typeof reply)=>{reply=next;}};
+}
+
+it('relays POST and GET with the session, the shell revision and only content-type',async()=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items',method:'POST',headers:{'content-type':'text/plain','authorization':'Bearer forged','x-page-revision':'1','cookie':'c'},body:'{"limit":5}'});
+ w.send({kind:'fetch',call:2,path:'/api/artifacts/Page123/fn/items?limit=5',method:'GET',headers:{},body:null});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(2));
+ expect(w.requests[0]!.path).toBe('/api/artifacts/Page123/fn/items');
+ expect(w.requests[0]!.init).toMatchObject({method:'POST',body:'{"limit":5}',headers:{'content-type':'text/plain','x-page-revision':'7'}});
+ expect(Object.keys(w.requests[0]!.init.headers as object).sort()).toEqual(['content-type','x-page-revision']);
+ expect(w.requests[1]!.path).toBe('/api/artifacts/Page123/fn/items?limit=5');
+ expect(w.requests[1]!.init.body).toBeUndefined();
+ expect(w.results()[0]).toEqual({kind:'fetch-result',call:1,status:200,headers:{'content-type':'application/json'},body:'{"ok":1}'});
+});
+
+it.each([
+ ['another page',{path:'/api/artifacts/Other/fn/items',method:'POST',body:'{}'},'refused'],
+ ['a dot name',{path:'/api/artifacts/Page123/fn/a.b',method:'POST',body:'{}'},404],
+ ['a nested name',{path:'/api/artifacts/Page123/fn/a/b',method:'POST',body:'{}'},404],
+ ['an encoded slash',{path:'/api/artifacts/Page123/fn/a%2Fb',method:'POST',body:'{}'},404],
+ ['a GET with a body',{path:'/api/artifacts/Page123/fn/a',method:'GET',body:'{}'},400],
+ ['an oversized body',{path:'/api/artifacts/Page123/fn/a',method:'POST',body:'x'.repeat(1_000_001)},413],
+ ['another origin',{path:'https://evil.example/api/artifacts/Page123/fn/a',method:'POST',body:'{}'},'refused'],
+])('refuses %s without a request',async(_label,request,outcome)=>{
+ const w=world();
+ w.send({kind:'fetch',call:9,headers:{},...request});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);
+ if(outcome==='refused')expect(w.results()[0]).toMatchObject({call:9,error:'refused'});
+ else expect(w.results()[0]).toMatchObject({call:9,status:outcome,headers:{'content-type':'application/json'}});
+});
+
+it('a reader without an HTML shell context cannot call functions',async()=>{
+ const w=world(null);
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items',method:'POST',headers:{},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);expect(w.results()[0]).toMatchObject({status:403});
+});
+
+it('fetch-cancel aborts the request and nothing is answered for it',async()=>{
+ const w=world();
+ let seen:AbortSignal|undefined;
+ w.setReply((_path,init)=>new Promise((_resolve,reject)=>{seen=init.signal!;init.signal!.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')));}));
+ w.send({kind:'fetch',call:3,path:'/api/artifacts/Page123/fn/slow',method:'POST',headers:{},body:'{}'});
+ await vi.waitFor(()=>expect(seen).toBeDefined());
+ w.send({kind:'fetch-cancel',call:3});
+ expect(seen!.aborted).toBe(true);
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(w.results()).toHaveLength(0);
+});
+
+it('refuses POST in a read-only shell before making a credentialed request',async()=>{
+ const w=world({revision:'7',readOnly:true});
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items',method:'POST',headers:{},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);
+ expect(w.results()[0].status).toBe(403);
+});
+
+it('rejects a sibling, nested frame, wrong origin and wrong session key',async()=>{
+ const w=world();
+ const other=document.createElement('iframe');document.body.append(other);
+ const nested=document.createElement('iframe');w.frame.contentDocument!.body.append(nested);
+ const payload={kind:'fetch',call:42,path:'/api/artifacts/Page123/fn/items',method:'POST',headers:{},body:'{}'};
+ try{
+  for(const source of [window,other.contentWindow,nested.contentWindow])window.dispatchEvent(new MessageEvent('message',{
+   data:{type:'mx:frame-bridge',key:w.messages[0].key,payload},origin:'https://runner.example',source,
+  }));
+  for(const [origin,key] of [['https://evil.example',w.messages[0].key],['https://runner.example','wrong']])window.dispatchEvent(new MessageEvent('message',{
+   data:{type:'mx:frame-bridge',key,payload},origin,source:w.frame.contentWindow,
+  }));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  expect(w.requests).toHaveLength(0);
+ }finally{other.remove();}
+});
+
+it.each(['%2e%2e','fn%2F','é','%E2%84%AA','a%252Fb'])('refuses encoded or Unicode name %s',async(name)=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/'+name,method:'POST',headers:{},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);
+});
+
+it('ignores header and query attempts to override method, authority or revision',async()=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items?_method=DELETE&revision=1',method:'POST',
+ headers:{'x-http-method-override':'DELETE','Authorization':'Bearer forged','Cookie':'forged','X-Page-Revision':'1','content-type':'application/json'},body:'{}'});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests[0]!.init).toMatchObject({method:'POST',headers:{'content-type':'application/json','x-page-revision':'7'}});
+ expect(Object.keys(w.requests[0]!.init.headers!)).toHaveLength(2);
+});
+
+it.each(['HEAD','PUT','POST'])('review: readonly shell refuses %s',async(method)=>{
+ const w=world({revision:'7',readOnly:true});
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items',method,headers:{},body:null});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ expect(w.requests).toHaveLength(0);expect(w.results()[0].status).toBe(403);
+});
+it.each(['?revision=1&revision=2','?%72evision=1&revision=2','?revision[]=1&revision=2','?revision=%32'])('review: parent pins revision with %s',async(search)=>{
+ const w=world();
+ w.send({kind:'fetch',call:1,path:'/api/artifacts/Page123/fn/items'+search,method:'GET',headers:{},body:null});
+ await vi.waitFor(()=>expect(w.results()).toHaveLength(1));
+ const sent=w.requests[0]!;
+ expect(new URL(sent.path,location.href).searchParams.getAll('revision')).toEqual([]);
+ expect(new Headers(sent.init.headers).get('x-page-revision')).toBe('7');
+});
+
+it('review: cancellation while receiving a response body aborts transport and suppresses reply',async()=>{
+ const w=world();let finish!:(body:string)=>void;
+ w.setReply(async()=>({status:200,headers:new Headers(),text:()=>new Promise<string>(resolve=>{finish=resolve;})}) as Response);
+ w.send({kind:'fetch',call:5,path:'/api/artifacts/Page123/fn/items',method:'GET',headers:{},body:null});
+ await vi.waitFor(()=>expect(finish).toBeDefined());
+ w.send({kind:'fetch-cancel',call:5});
+ expect(w.requests[0]!.init.signal!.aborted).toBe(true);
+ finish('{}');await new Promise(resolve=>setTimeout(resolve,0));expect(w.results()).toHaveLength(0);
+});
