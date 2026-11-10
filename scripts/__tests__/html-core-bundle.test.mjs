@@ -1,3 +1,4 @@
+import {FLAT_RUNTIME_ASSET_PATH} from '../lib/runtime-asset-paths.mjs';
 import {afterEach,expect,it} from 'vitest';
 import {build,transform} from 'esbuild';
 import {createServer} from 'node:http';
@@ -47,7 +48,7 @@ it('serves every actual immutable runtime asset after relocating the server bund
  const output=path.join(root,'relocated/server.mjs');await build({entryPoints:[source],bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltHtmlCore(root,()=>assets)]});
  await rm(path.join(root,'services'),{recursive:true,force:true});const {buildHtmlAssets}=await import(pathToFileURL(output).href);const relocated=await buildHtmlAssets();
  expect(relocated).toEqual(assets);expect(relocated.portableEnginePath).toBe('/af/portable.js');
- for(const [key,assetPath] of Object.entries(relocated))if(key.endsWith('Path'))expect(assetPath).toMatch(/^\/af\/[a-z]+\.js$/);
+ for(const [key,assetPath] of Object.entries(relocated))if(key.endsWith('Path'))expect(assetPath).toMatch(FLAT_RUNTIME_ASSET_PATH);
  const installed=path.join(root,'installed'),project=path.join(root,'project'),skillSource=new URL('../../services/app/skills/artifactbin/scripts/',import.meta.url);await mkdir(installed);await mkdir(project);await writeFile(path.join(project,'index.html'),'<h1>Relocated runtime</h1>');
  for(const name of await readdir(skillSource))if(name.endsWith('.mjs'))await copyFile(new URL(name,skillSource),path.join(installed,name));
  await writeFile(path.join(installed,'preview-html.mjs'),await buildPreviewParser(await readFile(new URL('preview-html.mjs',skillSource),'utf8')));

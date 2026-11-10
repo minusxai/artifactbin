@@ -1,11 +1,15 @@
 /* @jsxImportSource solid-js */
-import { For, type JSX } from 'solid-js';
+import { For, lazy, Show, useContext, type JSX } from 'solid-js';
 import { parseMarkdownLite, plainText, type MdInline, type MdNode } from '@/lib/annotations/markdown-lite';
 import { isPersonMentionHref } from '@/lib/document/person-mentions';
 import { isSessionMentionHref } from '@/lib/annotations/session-mentions';
 import { Tooltip } from '../ui/Tooltip';
 import { agentNameColor } from '../lib/agent-identity';
 import { PersonMention } from './PersonMention';
+
+import { TiptapComments } from './comment-editor-trial';
+// Only opted-in fenced comments load Prism; ordinary comment readers keep the lightweight renderer.
+const HighlightedCommentCode = lazy(() => import('./HighlightedCommentCode'));
 
 // Inline code takes the paragraph's size (the mono face already reads smaller beside the sans body).
 const CODE_CLASS = 'break-all rounded-chip bg-raised px-1 py-0.5 font-mono text-fg';
@@ -36,7 +40,7 @@ function block(node: MdNode): JSX.Element {
   switch (node.kind) {
     case 'heading': return <div role="heading" aria-level={node.level} class="comment-heading" data-level={node.level}>{inline(node.children)}</div>;
     case 'paragraph': return <p class="leading-normal">{inline(node.children)}</p>;
-    case 'code_block': return <pre class="min-w-0 max-w-full overflow-x-auto rounded-chip border border-edge bg-raised p-2 font-mono text-2xs leading-snug text-fg"><code>{node.text}</code></pre>;
+    case 'code_block': return <Show when={useContext(TiptapComments)()} fallback={<pre class="min-w-0 max-w-full overflow-x-auto rounded-chip border border-edge bg-raised p-2 font-mono text-2xs leading-snug text-fg"><code>{node.text}</code></pre>}><HighlightedCommentCode text={node.text} language={node.lang}/></Show>;
     case 'list': {
       const items = () => <For each={node.items}>{(item) => <li class="min-w-0 leading-normal"><For each={item.children}>{block}</For></li>}</For>;
       return node.ordered

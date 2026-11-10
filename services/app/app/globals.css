@@ -563,3 +563,18 @@ body {
 .comment-rich-editor.tiptap li { margin-block: 4px; }
 .comment-rich-editor.tiptap li > p { margin: 0; }
 .comment-rich-editor.tiptap li :is(ul, ol) { margin-block: 0; }
+
+/* Opt-in comment code uses the same token vocabulary as document Prism presentation. */
+.comment-code-highlight pre {
+  max-width: 100%; overflow-x: auto; padding: 8px;
+  border: 1px solid var(--color-edge); border-radius: var(--radius-chip);
+  background: var(--color-raised); color: var(--color-fg);
+  font-family: var(--font-mono); font-size: var(--text-2xs); line-height: 1.375;
+}
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-keyword,
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-function,
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-type { color: var(--color-accent); font-weight: 600; }
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-string,
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-number,
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-literal { color: var(--color-caution); }
+:where(.comment-code-highlight,.comment-rich-editor.tiptap) .mx-code-token-comment { color: var(--color-muted); font-style: italic; }
