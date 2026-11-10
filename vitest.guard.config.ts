@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
-import { suiteEnv } from './scripts/lib/suite-env.mjs';
+import { schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 
 const enrolled = (list: string) => JSON.parse(readFileSync(new URL(`./scripts/ci/${list}`, import.meta.url), 'utf8')) as string[];
@@ -23,6 +23,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     sequence: { sequencer: TimedSequencer },
+    // Both setup files open the database through test/setup/database.ts, which keeps its schema image here.
+    provide: { schemaImageDir: schemaImageDir(import.meta.dirname) },
     projects: [
       {
         extends: true,

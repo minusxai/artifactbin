@@ -14,8 +14,8 @@ export {
   deploymentConfig, env, envNamesRead, functionScheduleMinimumMinutes, parseUserPagesHost, requirePagesHost,
   resolveHmrPort, unknownEnvNames,
 } from './config';
-export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb } from './db';
-export type { Db, Queryable } from './db';
+export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb, schemaImageInputs, schemaImageKey } from './db';
+export type { Db, Queryable, SchemaImageInputs } from './db';
 export { actorSubject, emit, envelope } from './events';
 export type { EventSubject } from './events';
 export { enqueueEvent, enqueueEvents, recordEvent, setEventProjection, startEventPublisher } from './event-outbox';

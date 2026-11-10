@@ -3,7 +3,7 @@ import path from 'path';
 import { defineConfig } from 'vitest/config';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
-import { suiteEnv } from './scripts/lib/suite-env.mjs';
+import { schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import { chromiumTests } from './scripts/lib/chromium-tests.mjs';
 
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
@@ -88,6 +88,8 @@ export default defineConfig({
     // Native HTML tests use the hosted components and libraries built by this setup.
     globalSetup: ['./services/app/test/setup/build-runtime.global.ts'],
     env: suiteEnv(import.meta.dirname),
+    // The setup files keep the database schema image here, one file under its key (test/setup/database.ts).
+    provide: { schemaImageDir: schemaImageDir(import.meta.dirname) },
     projects: [
       {
         extends: true,
