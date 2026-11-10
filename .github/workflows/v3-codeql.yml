@@ -48,3 +48,26 @@ jobs:
           # SARIF findings still upload on every scan. Database archives are optional,
           # expensive to bundle, and retained for weekly/manual investigations only.
           upload-database: ${{ github.event_name != 'push' }}
+
+  # Each push scan saves an overlay base database of about 405 MB under a key that names its revision, and only the
+  # newest is ever restored. Left alone they fill the repository's cache (7.5 GB of 10 GB in ten hours on 2026-11-10),
+  # and GitHub then evicts the least recently used entries, the install cache among them. Keep the newest per language.
+  prune-caches:
+    name: keep one overlay database
+    needs: [analyze]
+    if: always()
+    # Housekeeping only: a failed prune must never fail the scan's run, which deployment admission reads.
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh cache list --repo "$GITHUB_REPOSITORY" --key codeql-overlay-base-database- --ref refs/heads/main \
+            --sort created_at --order desc --limit 100 --json id,key \
+            --jq 'group_by(.key | capture("^codeql-overlay-base-database-[0-9]+-[0-9a-f]+-(?<lang>[a-z-]+)-").lang) | map(.[1:][]) | .[].id' \
+            | xargs -r -n 1 gh cache delete --repo "$GITHUB_REPOSITORY"
