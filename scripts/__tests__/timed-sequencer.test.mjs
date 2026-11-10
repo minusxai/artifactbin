@@ -133,8 +133,9 @@ describe('a shard\'s wall time', () => {
   it('never predicts a slower slowest shard than summed packing, on the recorded table and every job', () => {
     const timings = readTimings();
     const weigh = weigher(timings);
-    for (const [job, { projects, count }] of Object.entries(JOBS)) {
-      const items = projects.flatMap((project) => Object.keys(timings.files[project] ?? {}).map((f) => ({ key: `${project}:${f}`, weight: weigh(project, f), project })));
+    for (const [job, { projects, count, files }] of Object.entries(JOBS)) {
+      const items = projects.flatMap((project) => (files?.(timings) ?? Object.keys(timings.files[project] ?? {})).map((f) => ({ key: `${project}:${f}`, weight: weigh(project, f), project })));
+      expect(items.length, job).toBeGreaterThan(10);
       const byKey = new Map(items.map((item) => [item.key, item]));
       const slowest = (shards) => Math.max(...shards.map((keys) => shardWall(keys.map((key) => byKey.get(key)))));
       expect(slowest(pack(items, count, CI_RUNNER)), job).toBeLessThanOrEqual(slowest(pack(items, count)));

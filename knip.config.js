@@ -13,6 +13,8 @@ export default {
         'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
         // pr fast's guard tier: tests that read the repository's files by path (scripts/ci/guard-tests.json).
         'vitest.guard.config.ts',
+        // pr fast's node batch: the full suite's cheap node files in one shared graph (scripts/lib/node-batch.mjs).
+        'vitest.node-batch.config.ts',
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
         // Retained downstream build entry (downstream-script-paths.test.ts).
@@ -64,6 +66,8 @@ export default {
         // Test fixtures run as their own tsx processes by the tests beside them.
         // The setup file of pr fast's guard tier (vitest.guard.config.ts at the root).
         'test/setup/guard.setup.ts',
+        // The shared-graph check of pr fast's node batch (vitest.node-batch.config.ts at the root).
+        'test/setup/shared-graph.setup.ts',
         // The native acceptance scenario minusxai/artifactbin-server's scripts/accept-native-html.mjs imports by path.
         'testing/native-acceptance.mjs',
       ],

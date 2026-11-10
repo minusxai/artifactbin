@@ -47,13 +47,21 @@ function median(values) {
 export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 4000, ui: 2000 });
 
 /**
+ * WHAT EVERY FILE OF A SHARED-GRAPH PROJECT STILL PAYS: its setup files, environment and collection run per file even when
+ * the module graph is shared. Only pr fast's node batch (scripts/lib/node-batch.mjs) has files cheap enough for it to
+ * matter: their recorded times are tens of milliseconds. Measured locally (3 workers, 236 files): ~58ms per file beyond
+ * the file's tests; ~175ms on a CI runner is an ESTIMATE (the local-to-CI factor of ~3 seen on the api shards).
+ */
+const SHARED_FILE_MS = Object.freeze({ 'node-batch': 175 });
+
+/**
  * Weight of one file of `project` (ms): its recorded time plus its project's per-file isolation cost. A file measured
  * under another project (moved between `api` and `api-isolated`) keeps its time; a never-measured one weighs the
  * median of its project, or of every file when its project has none.
  */
 export function weigher(timings) {
   const recorded = recordedWeigher(timings);
-  return (project, file) => recorded(project, file) + (ISOLATED_FILE_MS[project] ?? 0);
+  return (project, file) => recorded(project, file) + (ISOLATED_FILE_MS[project] ?? SHARED_FILE_MS[project] ?? 0);
 }
 
 function recordedWeigher(timings) {
@@ -81,9 +89,10 @@ export const WORKERS = 3;
  * What a worker pays on its first file of a shared-graph project (one module graph per worker, isolate: false), beyond
  * that file's recorded time: the project's import. Measured on pr fast run 42812079087: in job api-3 the first file on
  * each of the three workers ran 3.8s, 4.9s and 6.8s over its recorded time; in job ui-2 the first islands files ran
- * 0.6-1.4s over theirs. Isolated projects pay theirs on every file (`ISOLATED_FILE_MS`, in the file's weight).
+ * 0.6-1.4s over theirs. The node batch's ~1.4s locally per worker (the full suite's setup file and its graph) makes
+ * ~4s on a runner, an ESTIMATE. Isolated projects pay theirs on every file (`ISOLATED_FILE_MS`, in the file's weight).
  */
-export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000 });
+export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000, 'node-batch': 4000 });
 
 /** How a shard's wall is predicted: the CI runner by default; `{ workers: 1, firstFileMs: {} }` is the plain sum. */
 export const CI_RUNNER = Object.freeze({ workers: WORKERS, firstFileMs: SHARED_FIRST_FILE_MS });

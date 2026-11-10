@@ -143,6 +143,24 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  expect(save[0].if).toBe("matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
 });
+// The full suite's cheap node files ran only after the merge. pr fast runs them as one shared-graph batch, sharded by time.
+it('runs the cheap node batch on every pull request: its own runners, its config\'s timed shards, each file once',()=>{
+ const job=workflow('pr-fast.yml').jobs.fast;
+ const batches=job.strategy.matrix.include.filter(entry=>entry.batch);
+ const {count}=JOBS['pr-node'];
+ expect(batches).toEqual(Array.from({length:count},(_,i)=>({part:`node-${i+1}`,batch:`${i+1}/${count}`})));
+ for(const entry of batches)expect(job.strategy.matrix.part).not.toContain(entry.part);
+ const run=job.steps.find(step=>step.if==='matrix.batch');
+ expect(run.run).toBe('node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}');
+ const config=readFileSync(new URL('../../vitest.node-batch.config.ts',import.meta.url),'utf8');
+ expect(config).toContain('sequence: { sequencer: TimedSequencer }');
+ expect(config).toContain('isolate: false');
+ // The batch restores the test builds (its global setup's server reader, and the schema image) before it runs.
+ const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
+ expect(steps[restore].if).toContain('matrix.batch');
+ expect(restore).toBeLessThan(steps.indexOf(run));
+ expect(shardLoads(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8')))['pr-node']).toHaveLength(count);
+});
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
 it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps;

@@ -7,8 +7,8 @@ name: pr fast
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
 # (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json), the contract tests
-# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts), all at
-# once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
+# (scripts/ci/contract-tests.json), EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts) and the
+# full suite's cheap node tests (the `node-*` parts), all at once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
 # (#1138, #1141: each a red main, and production held for a whole extra merge), so every pull request runs them. The guard tests read
 # the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
 # the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
@@ -141,6 +141,16 @@ jobs:
           - part: ui-5
             projects: --project=ui --project=islands
             suite: 5/5
+          # THE NODE BATCH (vitest.node-batch.config.ts, scripts/lib/node-batch.mjs): the full suite's `node` files
+          # recorded under 200ms that no other list here runs, plus the post-merge failures it guards, one shared module
+          # graph per worker; ci.yml's node job still runs every one of them. 236 files: ~4.3s per runner locally on two
+          # runners (3 workers each), so three runners, predicted ~10s each on CI (an estimate: none has run there yet).
+          - part: node-1
+            batch: 1/3
+          - part: node-2
+            batch: 2/3
+          - part: node-3
+            batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -233,10 +243,10 @@ jobs:
       # each Vitest worker restores its first database instead of running initdb and the boot DDL (660ms -> 170ms
       # measured locally). Only the file named by this checkout's schema key loads, so a stale entry is a miss. The
       # guard runners restore it too, for the contract and harness files that open a database.
-      - if: matrix.suite || matrix.shard
+      - if: matrix.suite || matrix.shard || matrix.batch
         id: test-builds-key
         run: node scripts/ci/ci.mjs test-builds-key
-      - if: matrix.suite || matrix.shard
+      - if: matrix.suite || matrix.shard || matrix.batch
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
@@ -250,6 +260,8 @@ jobs:
         run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       - if: matrix.suite
         run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
+      - if: matrix.batch
+        run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
       - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
