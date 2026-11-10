@@ -156,8 +156,14 @@ jobs:
             batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # Node 22, the install cache's (its key says node22; isolated-vm in it is compiled for that major's ABI). The runner's
+      # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
+      # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
+      - id: runner-node
+        run: echo "major=$(node -p 'process.versions.node.split(".")[0]')" | tee -a "$GITHUB_OUTPUT"
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - if: steps.runner-node.outputs.major != '22'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
       # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
