@@ -173,7 +173,9 @@ script. Groups: `node scripts/groups.mjs list`
   `fetch('/fn/NAME')` ([functions](references/functions.md)). `node scripts/sql.mjs schema ID`
   for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
-  scripts/export.mjs ID --format html --output copy.html` for a portable copy.
+  scripts/export.mjs ID --format html --output copy.html` for a portable copy; one chart or
+  section of a page saves as an image with `--format png --element SELECTOR`, so nothing else
+  needs publishing or redrawing.
 - **Network and install.** To call an external API add `<meta name="csp-connect"
   content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
   `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid

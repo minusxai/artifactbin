@@ -6,7 +6,8 @@ import {renderSocialPreviewImage} from './social-preview-image.server';
 import {loadImage} from '../object-store';
 import {referencedArtifactForRow} from '../document-data';
 import {Readable} from 'node:stream';
-import type {RenderRequest} from '@artifactbin/contracts';
+import type {NoElement,RenderRequest,RenderResult as BrowserRenderResult} from '@artifactbin/contracts';
+import {ELEMENT_CAPTURE} from '@artifactbin/contracts';
 import { AUTH_SECRET, getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platform';
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
@@ -74,12 +75,27 @@ export function parseExportSlide(value: string | null): number | null {
 }
 
 /**
+ * `element` value → the CSS selector of the one element to photograph; ABSENT is '' (the whole capture) and anything
+ * else is null (400). One plain spelling: 1 to ELEMENT_CAPTURE.selectorChars characters of what a selector of ids,
+ * classes, attributes, pseudo-classes and combinators is written with — no escapes, no `<`, `/`, braces, `;` or `@`, no
+ * control or non-ASCII characters, no edge spaces — since it travels in a URL, a cache key's hash and a refusal's body.
+ * Untrusted still: the browser matches it with the page's own querySelector, never as code.
+ */
+const ELEMENT_SELECTOR = new RegExp(`^(?! )[A-Za-z0-9_\\-#.:\\[\\]="'^$*|~+>,() ]{1,${ELEMENT_CAPTURE.selectorChars}}(?<! )$`);
+export function parseExportElement(value: string | null): string | null {
+  if (value === null) return '';
+  return ELEMENT_SELECTOR.test(value) ? value : null;
+}
+
+/**
  * What this shot IS, as a cache segment: the card carries its stage size (so
  * resizing the card spec orphans old entries instead of serving them), a slice
  * carries its slide number, and the whole-document shot carries the renderer
  * generation.
  */
-function exportCaptureKey(capture: ExportCapture, slide: number, selection = '', version: number | null = null): string {
+function exportCaptureKey(capture: ExportCapture, slide: number, selection = '', version: number | null = null, element = ''): string {
+  // ONE ELEMENT of the page, by its selector's hash (never its text), ADDITIVE like the version below.
+  const part = element ? `-el${createHash('sha256').update(element).digest('hex').slice(0, 12)}` : '';
   // Only canonical document selections split the cache, never arbitrary query parameters.
   const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
   /*
@@ -90,10 +106,10 @@ function exportCaptureKey(capture: ExportCapture, slide: number, selection = '',
    * cached export it already has and re-renders the lot.
    */
   const at = version === null ? '' : `-v${version}`;
-  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}${at}`;
+  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${part}${pick}${at}`;
   if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-r${CARD_RENDER_GENERATION}-g${EXPORT_RENDER_GENERATION}${pick}${at}`;
   if (capture === 'preview') return `preview-v${SOCIAL_PREVIEW_OVERVIEW_GENERATION}-g${EXPORT_RENDER_GENERATION}${at}`;
-  return `full-g${EXPORT_RENDER_GENERATION}${pick}${at}`;
+  return `full-g${EXPORT_RENDER_GENERATION}${part}${pick}${at}`;
 }
 
 type ExportIdentity = Pick<ArtifactRow, 'id' | 'version'> & Partial<Pick<ArtifactRow, 'edit_id'>>;
@@ -129,8 +145,10 @@ export function exportCacheKey(
   version: number | null = null,
   /** Who the capture read as (see audienceSegment): null for the shared anonymous render. */
   audience: ExportReader | null = null,
+  /** The selector of the one element photographed (parseExportElement), or '' for the whole capture. */
+  element = '',
 ): string {
-  return `${artifact.id}:${exportCaptureKey(capture, slide, selection, version)}${audienceSegment(audience)}:${format}`;
+  return `${artifact.id}:${exportCaptureKey(capture, slide, selection, version, element)}${audienceSegment(audience)}:${format}`;
 }
 
 const pageLinksOf = (artifact: Partial<Pick<ArtifactRow, 'meta'>>) =>
@@ -173,12 +191,22 @@ export type RenderResult =
   | { ok: true; mime: string; bytes: Buffer }
   | { ok: false; reason: 'unavailable' | 'failed' }
   /** The document has fewer slides than were asked for — a 404 that says how many. */
-  | { ok: false; reason: 'no_slide'; slides: number };
+  | { ok: false; reason: 'no_slide'; slides: number }
+  /** The asked-for element was not there to photograph, and why (ELEMENT_CAPTURE). */
+  | NoElement;
 
 let cache:Promise<ReturnType<typeof createExportCache>>|undefined;
 const sharedCache=()=>cache??=(getDb().then(db=>createExportCache(db)));
 class RenderFailure extends Error {
-  constructor(readonly result:Exclude<RenderResult,{ok:true}>){super(result.reason);}
+  /** A missing slide or element is the page's answer, not a fault to back off from (./cache): a corrected page re-renders at once. */
+  readonly backoff:boolean;
+  constructor(readonly result:Exclude<RenderResult,{ok:true}>){super(result.reason);this.backoff=result.reason!=='no_slide'&&result.reason!=='no_element';}
+}
+/** A browser refusal in the app's vocabulary: a missing slide or element as it is, every other failure unavailable or failed. */
+function refusal(result:Exclude<BrowserRenderResult,{ok:true}>):Exclude<RenderResult,{ok:true}>{
+  if(result.reason==='no_slide')return {ok:false,reason:'no_slide',slides:result.slides};
+  if(result.reason==='no_element')return result.why==='too_large'?{ok:false,reason:'no_element',why:'too_large',width:result.width,height:result.height}:{ok:false,reason:'no_element',why:result.why};
+  return {ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'};
 }
 type ResolvedImage = {ok:true;image:ExportImage} | Exclude<RenderResult,{ok:true}>;
 
@@ -203,6 +231,8 @@ type RenderInput = {
    * for a frame that a dataset page never has is a timeout, not a picture.
    */
   target: string;
+  /** One element of that surface to photograph alone (parseExportElement); absent, the whole surface. */
+  element?: string;
   /**
    * A document with a Helmet script: the module hosts its script loads from (./script-origins), admitted for this
    * render, and its component mounts waited for. Absent or empty: nothing beyond the page's own origin loads.
@@ -236,7 +266,8 @@ type Shot =
   | { ok: false; reason: 'unavailable' }
   | { ok: false; reason: 'navigation' }
   | { ok: false; reason: 'failed' }
-  | { ok: false; reason: 'no_slide'; slides: number };
+  | { ok: false; reason: 'no_slide'; slides: number }
+  | NoElement;
 
 function renderRequest(
   input: RenderInput,
@@ -259,7 +290,9 @@ function renderRequest(
     // body (for crawlers), which may itself contain an author's <iframe> —
     // `first()` then measured that frame and cropped every card to its width.
     selector: input.target,
-    capture: slide > 0
+    capture: input.element
+      ? { element: input.element, ...(slide > 0 ? { slide } : {}) }
+      : slide > 0
       ? { slide }
       : (capture === 'card' || capture === 'preview') && crop
         ? { card: crop }
@@ -277,8 +310,12 @@ function renderRequest(
 
 async function renderOnce(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop,timeoutMs=RENDER_TIMEOUT_MS):Promise<Shot>{
   const rendered=await services().browser.render({...renderRequest(input,format,capture,slide,crop),timeoutMs});
-  if (rendered.ok) return { ok: true, mime: rendered.mime, bytes: Buffer.from(rendered.bytes) };
-  if (rendered.reason === 'no_slide') return { ok: false, reason: 'no_slide', slides: rendered.slides };
+  if (rendered.ok) {
+    // A service that predates element capture photographs the whole surface: never taken, nor stored, for the element.
+    if (input.element && !rendered.element) { console.error('[export] render element_unsupported'); return { ok: false, reason: 'unavailable' }; }
+    return { ok: true, mime: rendered.mime, bytes: Buffer.from(rendered.bytes) };
+  }
+  if (rendered.reason === 'no_slide' || rendered.reason === 'no_element') return refusal(rendered) as Shot;
   // Report the verdict without logging signed navigation URLs from service details.
   if (rendered.reason !== 'unavailable') console.error(`[export] render ${rendered.reason}`);
   return { ok: false, reason: rendered.reason };
@@ -286,6 +323,8 @@ async function renderOnce(input:RenderInput,format:ExportFormat,capture:ExportCa
 
 interface ImageOptions {
  pageUrl:()=>string;target:string;scriptOrigins?:string[];capture?:ExportCapture;slide?:number;selection?:string;
+ /** One element of the page to photograph alone (parseExportElement). */
+ element?:string;
  crop?:SocialPreviewCrop;volatile?:boolean;refresh?:boolean;
  /** Answer with an image of this revision only, never a stored one of another (a reader's refresh). */
  current?:boolean;
@@ -315,21 +354,23 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
  const capture=opts.capture??'full',slide=opts.slide??0;
  try {
   const image=await (await sharedCache()).read({
-   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null,opts.audience??null),
+   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null,opts.audience??null,opts.element??''),
    artifactId:artifact.id,revision:`${exportRevision(artifact)}${opts.access??''}`,refresh:opts.refresh,current:capture!=='card'||opts.current===true,stable:capture==='card',
   },async id=>{
-   const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},store=objectStore(),browser=services().browser;
+   const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins,...(opts.element?{element:opts.element}:{})},store=objectStore(),browser=services().browser;
    if(store.signedUpload&&browser.renderAndUpload){
     const object_key=`exports/objects/${id}.${format}`;
     const upload=await store.signedUpload(object_key,EXPORT_MIME[format]);
     const result=await browser.renderAndUpload({render:renderRequest(input,format,capture,slide,opts.crop),upload});
+    // An older service's whole-surface upload for an element is never recorded: the object stays unreferenced.
+    if(result.ok&&input.element&&!result.element)throw new RenderFailure({ok:false,reason:'unavailable'});
     if(result.ok)return {object_key,mime:result.mime,bytes:result.bytes,width:result.width,height:result.height};
-    if(result.reason!=='upload_unavailable')throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});
+    if(result.reason!=='upload_unavailable')throw new RenderFailure(refusal(result));
     // A mixed-version or unconfigured browser retains the original byte
     // transport. Upload failures themselves never silently switch transports.
    }
    const result=await renderWithRetry(input,format,capture,slide,opts.crop);
-   if(!result.ok)throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});
+   if(!result.ok)throw new RenderFailure(result.reason==='navigation'?{ok:false,reason:'failed'}:result);
    return storeBytes(id,result.bytes,format);
   });
   return {ok:true,image};
@@ -338,7 +379,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
 /** Binary adapter used by operations; completed exports are never retained in RAM. */
 export async function renderArtifactImage(artifact:ExportIdentity,format:ExportFormat,opts:ImageOptions):Promise<RenderResult>{
  if(opts.volatile){
-  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},format,opts.capture??'full',opts.slide,opts.crop);
+  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins,...(opts.element?{element:opts.element}:{})},format,opts.capture??'full',opts.slide,opts.crop);
   return !result.ok&&result.reason==='navigation'?{ok:false,reason:'failed'}:result;
  }
  const resolved=await resolveArtifactImage(artifact,format,opts);
@@ -373,7 +414,9 @@ export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
   artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'> & Partial<Pick<ArtifactRow, 'meta'>>,
-  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null;
+  q: { format?: string | null; mode?: string | null; slide?: string | null;
+    /** One element of the page to photograph alone, by CSS selector (parseExportElement). */
+    element?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null;
     /** The caller's reader may EDIT the artifact (the door decided): only then does `refresh` re-render. */
     editor?: boolean;
     /**
@@ -411,6 +454,13 @@ export async function exportImageResponse(
   // One slide of a deck, 1-based. Absent is 0 — the whole document.
   const slide = parseExportSlide(q.slide ?? null);
   if (slide === null) return json({ error: 'unknown_slide', hint: 'slide must be a 1-based slide number, for example ?format=png&slide=2' }, 400);
+  // One chart, tile or section of the page, alone (or within slide N): the full capture's framing, never a card's.
+  const element = parseExportElement(q.element ?? null);
+  if (element === null || (element && capture !== 'full')) {
+    return json({ error: 'unknown_element', hint: element === null
+      ? `element must be a CSS selector of at most ${ELEMENT_CAPTURE.selectorChars} characters naming one element of the page by id, class or attribute, for example ?format=png&element=%23orders-chart`
+      : 'element captures one element of the whole page; drop mode' }, 400);
+  }
   const draftCrop = capture === 'preview' && q.crop ? parseSocialPreviewCrop(q.crop) : null;
   if (capture === 'preview' && q.crop && !draftCrop) {
     return json({ error: 'unknown_crop', hint: 'crop must be x=<px>;y=<px>;width=<px>' }, 400);
@@ -491,6 +541,7 @@ export async function exportImageResponse(
     // BY NAME, not by position: a served document is the page itself.
     target: isDocument ? 'body' : 'main',
     ...(slide > 0 ? { slide } : {}),
+    ...(element ? { element } : {}),
   };
   const rendered=options.volatile||capture==='preview'
     ? await renderArtifactImage(artifact,format,{...options,volatile:true})
@@ -499,6 +550,7 @@ export async function exportImageResponse(
     // A document with fewer slides than asked for is a missing RESOURCE, and
     // the count is the one thing the caller needs to correct itself in one step.
     // None at all is a document whose script drew no slide (it threw, say): named, so it is not mistaken for a render fault.
+    if (rendered.reason === 'no_element') return elementRefusal(element, rendered);
     if (rendered.reason === 'no_slide') return json({ error: 'slide_not_found', slides: rendered.slides, ...(rendered.slides === 0 ? { hint: 'the page drew no data-af-slide element by capture time; check its script for errors (node scripts/check.mjs ID)' } : {}) }, 404);
     const unavailable = rendered.reason === 'unavailable';
     // A failed render is a page that did not load, or never finished drawing (a data read, chart or diagram still
@@ -516,6 +568,19 @@ export async function exportImageResponse(
       'Cache-Control': draftCrop ? 'private, no-store' : 'private, max-age=86400',
     },
   });
+}
+
+/**
+ * WHY THE ELEMENT WAS NOT PHOTOGRAPHED, naming the selector asked for: never a blank image, never a failed render. No
+ * match and a match with no size or not visible are missing resources (404); not CSS is the caller's spelling (400); a
+ * match past the capture's size is unprocessable as asked (422), with its size and the cap.
+ */
+function elementRefusal(element: string, refused: NoElement): Response {
+  if (refused.why === 'invalid') return json({ error: 'unknown_element', element, hint: `${element} is not a CSS selector the page can match; name the element as its stylesheet would, for example #orders-chart or [data-chart="orders"]` }, 400);
+  if (refused.why === 'too_large') return json({ error: 'element_too_large', element, width: refused.width, height: refused.height, max: ELEMENT_CAPTURE.maxCssPx, hint: `${element} is ${refused.width}x${refused.height} CSS px, past the ${ELEMENT_CAPTURE.maxCssPx} px an element capture draws on a side; choose a smaller part of the page, or export the whole page` }, 422);
+  return json({ error: 'element_not_found', element, found: refused.why, hint: refused.why === 'none'
+    ? `no element of the page matches ${element} once it has drawn; check the selector against the page source (node scripts/read.mjs ID)`
+    : `${element} matches an element with no size or that is not visible once the page has drawn; one inside an inactive slide draws with slide=N` }, 404);
 }
 
 /**

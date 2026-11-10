@@ -36,7 +36,8 @@ export function fakeSql(fixtures: Record<string, TableResult>): FakeSql {
 }
 export function fakeBrowser(result: RenderResult = { ok: true, mime: 'image/png', bytes: new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64')) }): BrowserService & { calls: unknown[] } {
   const calls: unknown[] = [];
-  return { calls, render: async (r) => { calls.push(r); return result; } };
+  // A current service: an element capture it answers with an image says it drew the element (RenderResult `element`).
+  return { calls, render: async (r) => { calls.push(r); return result.ok && typeof r.capture === 'object' && 'element' in r.capture ? { ...result, element: true } : result; } };
 }
 
 /** The events noop: nothing leaves the box. Silence IS the documented shape when no service is configured — the log is telemetry. */

@@ -211,6 +211,52 @@ describe('readable = exportable includes BEARER-readable', () => {
 });
 
 /**
+ * One chart, tile or section of a page, as an image: `?element=SELECTOR`. The door is the whole page's door — the same
+ * read ACL, the same keyed page read as the requester — and the selector only says which part of it is photographed.
+ */
+describe('GET /a/:id/export?element=SELECTOR', () => {
+  it('asks the browser for that element of the keyed page, and keeps its image apart from the whole page', async () => {
+    const browser = fakeBrowser({ ok: true, mime: 'image/png', bytes: EXPORT_BYTES });
+    setServices({ browser });
+    const { id } = await create('<section id="orders-chart"><h2>Orders by channel</h2></section><p>other tiles</p>');
+    const chart = await exportImage(request(`/a/${id}/export?format=png&element=${encodeURIComponent('#orders-chart')}`), params({ id }));
+    expect(chart.status).toBe(200);
+    expect(new Uint8Array(await chart.arrayBuffer())).toEqual(EXPORT_BYTES);
+    expect((await exportImage(request(`/a/${id}/export?format=png`), params({ id }))).status).toBe(200);
+    const calls = browser.calls as RenderRequest[];
+    expect(calls.map((call) => call.capture)).toEqual([{ element: '#orders-chart' }, 'full']);
+    expect(calls[0]).toMatchObject({ selector: 'body' });
+    expect(new URL(calls[0]!.url).pathname).toBe(`/a/${id}/raw`);
+  });
+
+  it('refuses a selector outside the plain CSS spelling before any render', async () => {
+    const browser = fakeBrowser();
+    setServices({ browser });
+    const { id } = await create(NO_HEAD);
+    for (const element of ['<script>alert(1)</script>', 'x'.repeat(201), 'xpath=//h1', '#a{}']) {
+      const res = await exportImage(request(`/a/${id}/export?element=${encodeURIComponent(element)}`), params({ id }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('unknown_element');
+    }
+    expect(browser.calls).toEqual([]);
+  });
+
+  it('refuses a signed-out export of a private page with an element exactly as without one, before any render', async () => {
+    const browser = fakeBrowser();
+    setServices({ browser });
+    const { mintToken } = await import('@/lib/accounts/tokens');
+    const { createUser } = await import('@/lib/accounts');
+    const owned = await mintToken('agent', (await createUser({ email: 'element-owner@example.com' })).id);
+    const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owned.token, json: { title: 'p', html: nativeHtml('<div id="chart">secret</div>'), visibility: 'private' } }));
+    const { id } = await created.json();
+    const signedOut = await exportImage(request(`/a/${id}/export?element=%23chart`), params({ id }));
+    expect([signedOut.status, await signedOut.json()]).toEqual([404, { error: 'not_found' }]);
+    expect(browser.calls).toEqual([]);
+    expect((await exportImage(request(`/a/${id}/export?element=%23chart`, { token: owned.token }), params({ id }))).status).toBe(200);
+  });
+});
+
+/**
  * A deck is checked one slide at a time. Measured on the claude-code deck run:
  * with no way to ask for slide N, the agent PUBLISHED a scratch document
  * holding a single slide, exported that, read it, and deleted it — three extra

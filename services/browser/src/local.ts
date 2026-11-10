@@ -14,7 +14,7 @@ import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
 import type { BrowserService, BrowserSessions, HarvestedSvg, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
-import { SVG_HARVEST_LIMITS } from '@artifactbin/contracts';
+import { ELEMENT_CAPTURE, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
 import { internalAssetResponse } from './internal-assets';
 import { BrowserUnavailable, createBrowserHolder } from './browser-holder';
 
@@ -45,6 +45,30 @@ const SLIDE_REVEAL_CSS = '[data-af-slide]{transition:none!important;animation:no
   + '[data-af-slide]:not([data-af-slide-shot]){visibility:hidden!important;opacity:0!important}'
   + '[data-af-slide-shot]{visibility:visible!important;opacity:1!important}';
 class NoSlideError extends Error { constructor(readonly slides: number) { super(`document has ${slides} slides`); } }
+class NoElementError extends Error { constructor(readonly verdict: NoElement) { super(`element ${verdict.why}`); } }
+/** Generated deck chrome stays out of a slide's or an element's picture: hidden, with nothing animating. */
+const DECK_CHROME_HIDDEN = '[data-af-deck-chrome],[data-af-deck-chrome] *,[data-af-deck-chrome]::before,[data-af-deck-chrome]::after,[data-af-deck-chrome] *::before,[data-af-deck-chrome] *::after{visibility:hidden!important;transition:none!important;animation:none!important}';
+/** The mark an element capture puts on its match, so the shot is taken by this name and never by the author's selector. */
+const ELEMENT_SHOT = 'data-af-element-shot';
+
+/**
+ * Serialized into Chromium: the first element under `root` that the author's selector matches, through the document's
+ * own `querySelector` (the selector is an argument, never code, and no Playwright engine reads it), marked to be shot.
+ * Answers why not when there is no match, a match with no size or not visible, a selector that is not CSS, or a match
+ * larger than the capture allows. Self-contained and synchronous.
+ */
+type Marked = { why: 'none' | 'hidden' | 'invalid' } | { why: 'too_large'; width: number; height: number } | { why?: never; width: number; height: number };
+function markElement(root: Element, input: { selector: string; mark: string; max: number }): Marked {
+  let found: Element | null;
+  try { found = root.querySelector(input.selector); } catch { return { why: 'invalid' }; }
+  if (!found) return { why: 'none' };
+  const box = found.getBoundingClientRect();
+  if (box.width < 1 || box.height < 1 || !found.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return { why: 'hidden' };
+  const width = Math.ceil(box.width), height = Math.ceil(box.height);
+  if (width > input.max || height > input.max) return { why: 'too_large', width, height };
+  found.setAttribute(input.mark, '');
+  return { width, height };
+}
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -202,7 +226,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       // A slide capture counts what the page drew. A deck whose script drew no slide leaves an empty body (its fixed
       // chrome takes no height), which never becomes visible: waiting for that spent the whole deadline and answered
       // `failed`, where the answer is no_slide with a count of 0.
-      const slideCapture = 'capture' in req && typeof req.capture === 'object' && req.capture !== null && 'slide' in req.capture;
+      const slideCapture = 'capture' in req && typeof req.capture === 'object' && req.capture !== null && 'slide' in req.capture && !!req.capture.slide;
       await surface.waitFor({ timeout, state: slideCapture ? 'attached' : 'visible' });
       // SSR emits pending diagram markers before hydration. Wait through the
       // lazy engine and image decode; a handled syntax error is also settled.
@@ -256,10 +280,14 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     const cardDensity = requestedCrop
       ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
       : 1;
-    return withReadyPage(req, cardDensity, async ({ page, surface, timeout, waitForCharts }) => {
+    const element = typeof req.capture === 'object' && 'element' in req.capture ? req.capture : null;
+    // An element is drawn at twice its CSS pixels, so a chart dropped into a slide stays sharp (see ELEMENT_CAPTURE).
+    return withReadyPage(req, element ? ELEMENT_CAPTURE.density : cardDensity, async ({ page, surface, timeout, waitForCharts }) => {
       const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
-      if (typeof req.capture === 'object' && 'slide' in req.capture) {
+      const slideNumber = typeof req.capture === 'object' && 'slide' in req.capture ? req.capture.slide ?? 0 : 0;
+      let slide: Locator | null = null;
+      if (slideNumber > 0) {
         // Number the slides the author check counts (toolbox-check-capture.mjs and toolbox-check-slides.mjs, pinned
         // alike by a stacked deck in contract.test.ts and session-pages.test.ts): laid out and outside deck chrome,
         // so the hidden rail miniatures bare readers keep for hydration take no number. A stacked deck hides all but
@@ -269,13 +297,25 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
           const box = el.getBoundingClientRect();
           return !el.closest('[data-af-deck-chrome]') && box.width > 1 && box.height > 1 ? [i] : [];
         }));
-        if (req.capture.slide > laid.length) throw new NoSlideError(laid.length);
-        const one = slides.nth(laid[req.capture.slide - 1]!);
-        await one.evaluate(el => el.setAttribute('data-af-slide-shot', ''));
+        if (slideNumber > laid.length) throw new NoSlideError(laid.length);
+        slide = slides.nth(laid[slideNumber - 1]!);
+        await slide.evaluate(el => el.setAttribute('data-af-slide-shot', ''));
         await page.addStyleTag({ content: SLIDE_REVEAL_CSS });
+        await slide.scrollIntoViewIfNeeded({ timeout });
+      }
+      if (element) {
+        // Matched under the slide when one was asked for, else under the surface; shot by the mark, at 1x past half the cap.
+        const marked = await (slide ?? surface).evaluate(markElement, { selector: element.element, mark: ELEMENT_SHOT, max: ELEMENT_CAPTURE.maxCssPx });
+        if (marked.why) throw new NoElementError({ ok: false, reason: 'no_element', ...marked });
+        const one = page.locator(`[${ELEMENT_SHOT}]`).first();
         await one.scrollIntoViewIfNeeded({ timeout });
         await waitForCharts();
-        return { mime, bytes: new Uint8Array(await one.screenshot({ ...shotOpts, style: '[data-af-deck-chrome],[data-af-deck-chrome] *,[data-af-deck-chrome]::before,[data-af-deck-chrome]::after,[data-af-deck-chrome] *::before,[data-af-deck-chrome] *::after{visibility:hidden!important;transition:none!important;animation:none!important}' })) };
+        const dense = Math.max(marked.width, marked.height) * ELEMENT_CAPTURE.density <= ELEMENT_CAPTURE.maxCssPx;
+        return { mime, bytes: new Uint8Array(await one.screenshot({ ...shotOpts, style: DECK_CHROME_HIDDEN, ...(dense ? {} : { scale: 'css' as const }) })) };
+      }
+      if (slide) {
+        await waitForCharts();
+        return { mime, bytes: new Uint8Array(await slide.screenshot({ ...shotOpts, style: DECK_CHROME_HIDDEN })) };
       }
       if (req.capture === 'full') return { mime, bytes: new Uint8Array(await surface.screenshot(shotOpts)) };
       if (req.capture === 'preview' || typeof req.capture === 'object') {
@@ -384,9 +424,10 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       if(opts.executablePath){try{executablePath=await opts.executablePath();}catch(error){return {ok:false,reason:'unavailable',detail:(error as Error).message};}}
       const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
       const run = chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error("Render timed out in queue");return shoot({...req,timeoutMs:remaining});}).then(
-        (r): RenderResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Render deadline'} : { ok: true, ...r },
+        (r): RenderResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Render deadline'} : { ok: true, ...r, ...(typeof req.capture === 'object' && 'element' in req.capture ? { element: true as const } : {}) },
         (e): RenderResult => {
           if (e instanceof NoSlideError) return { ok: false, reason: 'no_slide', slides: e.slides };
+          if (e instanceof NoElementError) return e.verdict;
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
           if (e instanceof BrowserUnavailable) return { ok: false, reason: 'unavailable', detail: e.message };
           return { ok: false, reason: 'failed', detail: (e as Error).message };
@@ -432,7 +473,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       const result=await service.render(request.render);if(!result.ok)return result;
       const metadata=await sharp(result.bytes).metadata();
       await uploadImage(request.upload,result.bytes,upload,deadline-Date.now());
-      return {ok:true,mime:result.mime,bytes:result.bytes.byteLength,width:metadata.width!,height:metadata.height!};
+      return {ok:true,mime:result.mime,bytes:result.bytes.byteLength,width:metadata.width!,height:metadata.height!,...(result.element?{element:true as const}:{})};
     }catch{return {ok:false,reason:'failed',detail:'Export upload failed'};}
   };
   return service;

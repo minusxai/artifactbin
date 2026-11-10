@@ -6,6 +6,7 @@
  * The wire: `POST /render` with a RenderRequest; the answer is the image
  * (Content-Type image/*) or a JSON verdict — the verdict is the contract as
  * much as the bytes are, because retry and 503-vs-500 depend on it.
+ * An element capture drawn as one says so in the `ELEMENT_CAPTURE_HEADER` header (JSON answers carry `element`).
  * `POST /render-upload` is the same render with the bytes PUT to a signed URL,
  * `POST /harvest` answers the SVG drawings a loaded page drew, as JSON text,
  * and `POST /sessions` is the stateful surface: a BrowserSessionRequest against
@@ -15,7 +16,7 @@
  * older service's 404 to the same verdict, so a mixed-version rollout degrades instead of failing.
  */
 import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest } from '@artifactbin/contracts';
-import { BROWSER_ROUTES } from '@artifactbin/contracts';
+import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts';
 import type { JsonServer } from '@artifactbin/utils';
 import { postServer } from '@artifactbin/utils';
 
@@ -50,7 +51,7 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
         return json(200,await svc.renderAndUpload(input as unknown as RenderUploadRequest));
       }
       const r = await svc.render(input);
-      if (r.ok) { res.writeHead(200, { 'content-type': r.mime, 'content-length': String(r.bytes.byteLength) }); return res.end(Buffer.from(r.bytes)); }
+      if (r.ok) { res.writeHead(200, { 'content-type': r.mime, 'content-length': String(r.bytes.byteLength), ...(r.element ? { [ELEMENT_CAPTURE_HEADER]: '1' } : {}) }); return res.end(Buffer.from(r.bytes)); }
       return json(200, r);
   }, { ...opts, maxBody: opts.maxBody ?? 96 * 1024, health: '/health' });
 }
