@@ -67,9 +67,12 @@ it('shows a minusx name as a governed connection binding, and binds it to one of
   fireEvent.click(row.getByRole('button', { name: 'Save binding' }));
   await waitFor(() => expect(row.getByText('Bound')).toBeTruthy());
   expect(row.getByText('Pinned to Finance warehouse in Finance.')).toBeTruthy();
+  // Looking at another group's connections keeps naming what is bound.
+  await pick(row, 'Group for FIN', 'Retail');
+  expect(await row.findByText('Pinned to Finance warehouse in Finance.')).toBeTruthy();
   expect(calls.find(call => call.method === 'PUT')).toEqual({ url: '/api/my/resolvers/b1/v1/secrets', method: 'PUT', body: { name: 'FIN', binding: { connection_id: 'conn_finance', group_id: 'grp_finance' } } });
-  // The connections were asked for the chosen group only.
-  expect(calls.filter(call => call.url.startsWith('/api/my/minusx/connections')).map(call => call.url)).toEqual(['/api/my/minusx/connections?group_id=grp_finance']);
+  // The connections were asked for each chosen group only.
+  expect(calls.filter(call => call.url.startsWith('/api/my/minusx/connections')).map(call => call.url)).toEqual(['/api/my/minusx/connections?group_id=grp_finance', '/api/my/minusx/connections?group_id=grp_retail']);
   // The group list offered is the author's direct memberships.
   expect(calls.some(call => call.url === '/api/groups')).toBe(true);
 });

@@ -27,7 +27,7 @@
  * its last outcome and its next run; a failed run shows its code, the function's message and the owner-only detail,
  * as Test connection does.
  */
-import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
+import { createEffect, createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import { isResolverDatabaseKind, MINUSX_CONNECTION_KIND, type GroupSummary, type ResolverDatabaseKind } from '@artifactbin/contracts';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
@@ -212,7 +212,10 @@ function MinusxBindingRow(props: { resolver: PageResolver; name: string; set: bo
     return chosen && !options.some((o) => o.value === chosen) ? [{ value: chosen, label: chosen }, ...options] : options;
   };
   const groupName = (id: string) => groupOptions().find((g) => g.value === id)?.label ?? id;
-  const connectionName = (id: string) => listed().find((c) => c.id === id)?.name ?? id;
+  // Names of every connection listed so far: the bound one keeps its name while another group's list is shown.
+  const [seen, setSeen] = createSignal<Record<string, string>>({});
+  createEffect(() => { const more = listed(); if (more.length) setSeen((known) => ({ ...known, ...Object.fromEntries(more.map((c) => [c.id, c.name])) })); });
+  const connectionName = (id: string) => seen()[id] ?? id;
   const listError = () => connections.error ? bindingWords(connections.error instanceof Error ? connections.error.message : 'minusx_unavailable') : '';
   const changed = () => !current() || current()!.group_id !== group() || current()!.connection_id !== connection();
   const ready = () => !!group() && !!connection() && listed().some((c) => c.id === connection()) && changed();
