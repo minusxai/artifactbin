@@ -59,6 +59,17 @@ describe('readCommentImage and commentImageResponse', () => {
     expect(Object.fromEntries(['content-type', 'cache-control', 'x-content-type-options'].map(name => [name, response.headers.get(name)]))).toEqual({ 'content-type': 'image/webp', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' });
   });
 
+  it('answer 503, not a thrown 500, when the store no longer holds an attached image', async () => {
+    const f = await fixture();
+    const staged = await stage(f) as { id: string };
+    await attach(f, staged.id);
+    await objectStore().delete(`comment-images/${staged.id}/preview.webp`);
+    const response = await commentImageResponse(f.actor, f.doc.id, staged.id, 'preview');
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'image_unavailable' });
+    expect((await commentImageResponse(f.actor, f.doc.id, staged.id, 'thumbnail')).status).toBe(200);
+  });
+
   it('answer 404 for an unknown variant, another document, a reader without access or a deleted comment', async () => {
     const f = await fixture();
     const staged = await stage(f) as { id: string };
