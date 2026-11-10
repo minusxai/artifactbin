@@ -122,6 +122,11 @@ const commands = {
       }
     }
   },
+  // The one events watch; comment.mjs watch is its comment alias.
+  events: {sub: {watch: {
+    artifact: flag(), category: flag(), types: flag(), cursor: flag(), once: flag('boolean'),
+    append: flag('boolean'), next: flag('boolean'), wait: flag(), bounded: flag('boolean')
+  }}},
   policy: {sub: {
     get: {}, explain: {}, template: {'owner-column': flag()},
     set: {file: flag(), 'dry-run': flag('boolean'), 'expected-revision': flag()}

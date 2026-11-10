@@ -80,7 +80,8 @@ wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it)
 permissions: `policy.mjs`. Function secrets: only the page owner sets them, in the page's
 Resolvers settings; no script or API takes them, and never ask in chat. ACLs and trash have no
 script. Groups: `node scripts/groups.mjs list`
-([groups](references/groups.md)).
+([groups](references/groups.md)). Events beyond one page's comments (every page you may see, a
+group's job runs): `node scripts/events.mjs watch --help`.
 
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
   index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (a team task tracker:
