@@ -14,6 +14,8 @@
  * sources and fails on any construction outside this file.
  */
 import * as Y from 'yjs';
+import type { RegionKind } from '@artifactbin/contracts';
+const NATIVE_ROOT = 'native-v1';
 
 /** The one root a region's (or a live cell's) state holds. */
 export const REGION_ROOT = 'region';
@@ -24,6 +26,7 @@ export const regionText = (doc: Y.Doc): Y.Text => doc.getText(REGION_ROOT);
 export interface RegionDocOptions {
   /** Garbage collection. Off by default: a live region keeps its history, so saved snapshots can be reopened. */
   gc?: boolean;
+  kind?: RegionKind;
   /** The client id this document writes with (set before any state is applied). */
   clientId?: number;
 }
@@ -32,7 +35,8 @@ export interface RegionDocOptions {
 export function openRegionDoc(state?: Uint8Array, options: RegionDocOptions = {}): Y.Doc {
   const doc = new Y.Doc({ gc: options.gc ?? false });
   if (options.clientId !== undefined) doc.clientID = options.clientId;
-  regionText(doc);
+  if (options.kind === 'rich-native-v1') doc.getXmlFragment(NATIVE_ROOT);
+  else regionText(doc);
   if (state) Y.applyUpdate(doc, state);
   return doc;
 }
@@ -41,4 +45,4 @@ export function openRegionDoc(state?: Uint8Array, options: RegionDocOptions = {}
  * The document `live` (gc off) was at `snapshot`, opened the same way: a fork a revision is written into. It has
  * garbage collection on, like any throwaway document.
  */
-export const forkRegionDoc = (live: Y.Doc, snapshot: Y.Snapshot): Y.Doc => Y.createDocFromSnapshot(live, snapshot, openRegionDoc(undefined, { gc: true }));
+export const forkRegionDoc = (live: Y.Doc, snapshot: Y.Snapshot): Y.Doc => Y.createDocFromSnapshot(live, snapshot, openRegionDoc(undefined, { gc: true, kind: live.share.has(NATIVE_ROOT) ? 'rich-native-v1' : 'rich' }));

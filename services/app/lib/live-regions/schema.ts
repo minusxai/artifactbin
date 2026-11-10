@@ -14,8 +14,10 @@ import { safeHref } from './href';
 
 export { safeHref };
 
-export type RegionKind = 'rich' | 'text';
-export const isRegionKind = (value: unknown): value is RegionKind => value === 'rich' || value === 'text';
+export type { RegionKind } from '@artifactbin/contracts';
+import type { RegionKind } from '@artifactbin/contracts';
+
+export const isRegionKind = (value: unknown): value is RegionKind => value === 'rich' || value === 'text' || value === 'rich-native-v1';
 
 /** Block attributes that hold an element identity (`data-af-id` of the element they stand for). */
 export const ID_ATTRS = ['afId', 'itemId', 'listId', 'quoteId'] as const;
@@ -100,12 +102,13 @@ const textNodes: Record<string, NodeSpec> = {
   text: {},
 };
 
-const SCHEMAS: Record<RegionKind, Schema> = {
+const SCHEMAS: Record<Exclude<RegionKind, 'rich-native-v1'>, Schema> = {
   rich: new Schema({ nodes: richNodes, marks: richMarks }),
   text: new Schema({ nodes: textNodes, marks: {} }),
 };
 
 /** The ProseMirror schema a region of this kind is edited in. One instance per kind. */
 export function regionSchema(kind: RegionKind): Schema {
+  if (kind === 'rich-native-v1') throw new TypeError('Native schema uses the native boundary');
   return SCHEMAS[kind];
 }

@@ -30,7 +30,7 @@ export interface FrameRegionsOptions {
   /** The bridge's post (the door adds the session key); region messages only. */
   post: (message: RegionFrameMessage | { kind: 'error'; message: string }) => void;
   /** Fetches the editor module (`@afbin/regions` in a page; the module itself in tests). */
-  load: () => Promise<RegionEditorModule>;
+  load: (kind?: string) => Promise<RegionEditorModule>;
   /** The page's id: the caret kept across a rebuild (`keepForRebuild`) is this page's alone. */
   pageId?: string;
 }
@@ -65,7 +65,7 @@ function takeKeptCaret(win: Window, pageId: string | undefined, now: number): Ke
   } catch { return null; }
 }
 
-const REGION_KINDS: readonly string[] = ['rich', 'text'];
+const REGION_KINDS: readonly string[] = ['rich', 'text', 'rich-native-v1'];
 const ID = /^[A-Za-z][A-Za-z0-9_-]{0,127}$/;
 const isRegionMessage = (payload: { kind: string }): payload is RegionParentMessage => payload.kind === 'regions-enabled' || payload.kind.startsWith('region-');
 /** The most keys held for one region before its editor mounts. */
@@ -106,14 +106,14 @@ export function startFrameRegions({ win, post, load, pageId }: FrameRegionsOptio
   /** Tab stops this module added to enabled regions (removed again when they are no longer enabled). */
   const focusable = new Set<HTMLElement>();
   let carets: readonly RegionCaretPaint[] = [];
-  let module: Promise<RegionEditorModule> | null = null;
+
   let disposed = false;
   /** A `focus` command for a region whose session has not arrived yet. */
   const early = new Map<string, Pending>();
   /** Keys typed for each region asked for, until its editor mounts. */
   const held = new Map<string, Held>();
   /** The editor module: fetched for the first session, never for a reader (who is never sent one). */
-  const loadEditor = () => (module ??= load().catch((error: unknown) => { module = null; throw error; }));
+  const loadEditor = load;
 
   /** The region element with this id, or null: exactly one element, declaring a known kind. */
   const regionRoot = (id: string): HTMLElement | null => {
@@ -251,11 +251,11 @@ export function startFrameRegions({ win, post, load, pageId }: FrameRegionsOptio
     const session: Session = { root, editor: null, start: message, queue: early.has(id) ? [early.get(id)!] : [], shown: [] };
     early.delete(id);
     sessions.set(id, session);
-    loadEditor().then((editors) => mount(id, session, editors), (error: unknown) => {
+    loadEditor(message.regionKind).then((editors) => mount(id, session, editors), (error: unknown) => {
       if (sessions.get(id) === session) sessions.delete(id);
       asked.delete(id);
       release(id);
-      post({ kind: 'error', message: `the region editor could not load: ${String(error)}`.slice(0, 500) });
+      post({ kind: 'error', message: String(error).slice(0, 500) });
     });
   };
 

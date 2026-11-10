@@ -145,3 +145,36 @@ it('turns ## and a space into a heading and saves Markdown', () => {
   fireEvent.keyDown(editor.view.dom, {key:'Enter'});
   expect(editor.view.state.selection.$from.parent.type.name).toBe('paragraph');
 });
+
+it('indents and outdents every selected code line with standard local undo', () => {
+  const editor = mount('```ts\none\ntwo\n```');
+  editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, 1, 8)));
+  fireEvent.keyDown(editor.view.dom, { key: 'Tab' });
+  expect(editor.view.dom.querySelector('pre')?.textContent).toBe('  one\n  two');
+  fireEvent.keyDown(editor.view.dom, { key: 'Tab', shiftKey: true });
+  expect(editor.view.dom.querySelector('pre')?.textContent).toBe('one\ntwo');
+  editor.view.dispatch(editor.view.state.tr.insertText('changed', 1, 4));
+  fireEvent.keyDown(editor.view.dom, { key: 'z', ctrlKey: true });
+  expect(editor.view.dom.querySelector('pre')?.textContent).toBe('one\ntwo');
+});
+
+it('does not undo into another comment after syncing a new draft', () => {
+  const editor = mount('first draft');
+  editor.view.dispatch(editor.view.state.tr.insertText(' changed'));
+  editor.sync('second draft');
+  fireEvent.keyDown(editor.view.dom, { key: 'z', ctrlKey: true });
+  expect(editor.view.dom.textContent).toBe('second draft');
+});
+it('native comments preserve HTML clipboard formatting and paste literal text into code',()=>{
+ const editor=mount();
+ const html='<p><strong>Copied</strong> <em>format</em></p>';
+ const event=new Event('paste') as ClipboardEvent;
+ Object.defineProperty(event,'clipboardData',{value:{getData:(kind:string)=>kind==='text/html'?html:kind==='text/plain'?'Copied format':''}});
+ editor.view.pasteHTML(html,event);
+ expect(editor.onChange).toHaveBeenLastCalledWith('**Copied** _format_');
+ const code=mount('```js\n\n```');
+ const literal=new Event('paste') as ClipboardEvent;
+ Object.defineProperty(literal,'clipboardData',{value:{getData:(kind:string)=>kind==='text/plain'?'**literal**':''}});
+ code.view.pasteText('**literal**',literal);
+ expect(code.view.state.doc.firstChild?.textContent).toBe('**literal**');
+});

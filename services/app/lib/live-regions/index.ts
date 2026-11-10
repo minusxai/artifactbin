@@ -24,7 +24,7 @@ export { openRegionDoc, regionText } from './region-doc';
 export { applyRegionRevision, createRegionState, normalizeRegionHtml, regionHtml } from './state';
 export { regionMarkdown } from './markdown';
 export { compactRegion } from './compaction';
-export { validateRegionUpdate } from './validate';
+export { validateRegionUpdate, validateRegionState } from './validate';
 export { editableRegions, isRegionId, type PageRegion } from './page-regions';
 export { editorState, regionCommands } from './editor';
 export { absolutePosition, relativePosition } from './binding';

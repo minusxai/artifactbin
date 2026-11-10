@@ -49,7 +49,7 @@ import { compressDynamic } from './content-encoding';
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
 /** Public, content-addressed (or static) bytes any origin may load: the runtime, fonts, boundaries, images. */
-const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|collab|state)\.js$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:apollo|reader)\/[a-f0-9]{64}$|^\/af\/styles\.css$/;
+const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|native-regions|native-markdown|collab|state)\.js$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:apollo|reader)\/[a-f0-9]{64}$|^\/af\/styles\.css$/;
 
 /** STATIC, or the legacy core address existing pages still load (lib/html-page LEGACY_CORE_PATH). */
 const isStatic = (pathname: string): boolean => STATIC.test(pathname) || pathname === LEGACY_CORE_PATH;

@@ -69,8 +69,8 @@ export async function regionUpdatesAfter(q: Queryable, artifactId: string, regio
 }
 
 /** A region's live document: its folded state and every update logged after it. */
-export async function liveRegionDoc(q: Queryable, artifactId: string, row: Pick<RegionRow, 'region_id' | 'state' | 'state_seq' | 'last_seq'>): Promise<Y.Doc> {
-  const doc = openRegionDoc(row.state);
+export async function liveRegionDoc(q: Queryable, artifactId: string, row: Pick<RegionRow, 'region_id' | 'kind' | 'state' | 'state_seq' | 'last_seq'>): Promise<Y.Doc> {
+  const doc = openRegionDoc(row.state, { kind: row.kind });
   if (row.last_seq > row.state_seq) for (const { update } of await regionUpdatesAfter(q, artifactId, row.region_id, row.state_seq, row.last_seq - row.state_seq)) Y.applyUpdate(doc, update);
   return doc;
 }

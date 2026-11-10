@@ -127,7 +127,7 @@ export function RegionToolbar(props: { ui: RegionUi; state: Accessor<RegionToolb
   return <Toolbar label="Formatting" keepFocus class="pointer-events-auto">
     <Command label="Undo" keys="Mod-z" onPress={() => run('undo')}><Undo2 size={16} /></Command>
     <Command label="Redo" keys="Mod-Shift-z" onPress={() => run('redo')}><Redo2 size={16} /></Command>
-    <Show when={state().kind === 'rich'}>
+    <Show when={state().kind !== 'text'}>
       <ToolbarSeparator />
       <Tooltip content={`Text style (${shortcutText('Mod-Alt-0')}–3)`}>
         <Select ariaLabel="Text style" size="sm" class="w-36" options={styles()} value={style()} onChange={pickStyle} />

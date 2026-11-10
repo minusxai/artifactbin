@@ -191,3 +191,9 @@ it('keeps a doc region that carries the Markdown root morphable: a styling hook 
  expect(article.matches(MARKDOWN_ROOT)).toBe(true);
  expect(interactive(article)).toBe(false);
 });
+it('keeps native code language and presentation tokens morphable while retaining a mounted editor',()=>{
+ const region=(text:string)=>V1+`<article data-af-id="native" data-af-editable="rich-native-v1"><pre data-af-id="pre"><code data-af-id="code" class="language-js"><span class="mx-code-token-keyword">const</span> x = ${text};</code></pre></article>`;
+ const before=served(1,region('1'));load(before);const root=document.querySelector('[data-af-id="native"]')!;const child=root.firstChild;
+ expect(()=>morphHtmlVersion(document,before,served(2,region('2')),SCRIPTS,undefined,new Map([['native',root]]))).not.toThrow();
+ expect(root.firstChild).toBe(child);
+});

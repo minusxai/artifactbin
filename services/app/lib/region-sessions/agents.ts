@@ -16,8 +16,8 @@
  * first (so the save never upgrades a lock), then the region row.
  */
 import * as Y from 'yjs';
-import { canEdit, DOC_REGION, REGION_TEXT_MAX_UNITS, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts';
-import { applyRegionRevision, editableRegions, isRegionId, LiveRegionRefusal, regionMarkdown, regionText, type PageRegion } from '@/lib/live-regions';
+import { canEdit, DOC_REGION, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts';
+import { applyRegionRevision, editableRegions, isRegionId, LiveRegionRefusal, regionMarkdown, validateRegionState, type PageRegion } from '@/lib/live-regions';
 import { checkpointLiveRegions, completeMutationReceipt, currentPage, editablePage, liveRegionDoc, logRegionUpdate, notifyRegions, readableArtifact, saveLiveRegionsInTx, type MutationReceipt } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db } from '@/lib/platform';
@@ -43,7 +43,7 @@ const listed = (regions: PageRegion[]) => regions.map((region) => ({ regionId: r
 /** The region a path names among the saved page's, or the refusal (naming the regions there are). */
 function target(regions: PageRegion[], regionId: string): PageRegion | RegionAnswer<never> {
   if (regionId !== DOC_REGION) return regions.find((region) => region.id === regionId) ?? refuse('region_not_found', { regions: listed(regions) });
-  const rich = regions.filter((region) => region.kind === 'rich');
+  const rich = regions.filter((region) => region.kind === 'rich' || region.kind === 'rich-native-v1');
   if (rich.length === 1) return rich[0]!;
   return refuse(rich.length ? 'region_ambiguous' : 'region_not_found', { regions: listed(regions) });
 }
@@ -96,7 +96,7 @@ export function agentRegions(db: () => Promise<Db>, now: () => number): AgentReg
           }
           if (!isEmptyUpdate(update)) {
             Y.applyUpdate(doc, update);
-            if (regionText(doc).length > REGION_TEXT_MAX_UNITS) return refuse('too_large');
+            try { validateRegionState(row.kind,doc); } catch(error) { if(error instanceof LiveRegionRefusal)return refuse(error.code==='too_large'?'too_large':'unsupported_content'); throw error; }
             const seq = row.last_seq + 1;
             const at = new Date(now()).toISOString();
             await logRegionUpdate(tx, artifactId, region.id, seq, Y.decodeUpdate(update).structs[0]?.id.client ?? 0, update, actor);

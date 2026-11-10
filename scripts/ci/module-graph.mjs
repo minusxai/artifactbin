@@ -177,14 +177,14 @@ const BUNDLED_LEAVES = {
   // The page frame's lazily loaded region editor (lib/html-runtime/region-editor) enters through `browser`: the index
   // carries the server's parse5 readers and compaction. The page's link dialog checks a URL through `href` alone.
   // `cells` (a dataset text cell's text, no ProseMirror) is the page library @afbin/collab's door.
-  'lib/live-regions': ['browser', 'cells', 'href'],
+  'lib/live-regions': ['browser', 'native-browser', 'native-markdown', 'cells', 'href'],
   'lib/html-runtime': ['browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',
   ],
   'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
-  'lib/markdown': ['content'],
+  'lib/markdown': ['content', 'code-block'],
   'lib/mermaid-images': ['reader-draw'],
   'lib/page-operations': ['namespaces'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],

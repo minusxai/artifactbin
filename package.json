@@ -35,6 +35,7 @@
     "@artifactbin/auth": "0.1.0",
     "@artifactbin/browser": "0.1.0",
     "@artifactbin/events": "0.1.0",
+    "@artifactbin/runner": "0.1.0",
     "@artifactbin/sql": "0.1.0",
     "@artifactbin/utils": "0.1.0",
     "@electric-sql/pglite": "0.4.6",
@@ -42,8 +43,7 @@
     "better-auth": "1.7.14",
     "hono": "4.13.14",
     "kysely": "0.28.17",
-    "pg": "8.23.0",
-    "@artifactbin/runner": "0.1.0"
+    "pg": "8.23.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
@@ -87,6 +87,8 @@
     "seroval-plugins": "1.7.3",
     "katex": "0.18.2",
     "lodash-es": "4.18.1",
-    "undici": "8.12.3"
+    "undici": "8.12.3",
+    "prosemirror-view": "1.42.6",
+    "prosemirror-model": "1.25.12"
   }
 }

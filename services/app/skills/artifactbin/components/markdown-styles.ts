@@ -17,7 +17,7 @@
  */
 export const MARKDOWN_ROOT = '.af-markdown-body';
 
-const R = `:where(${MARKDOWN_ROOT})`;
+const R = `:where(${MARKDOWN_ROOT},[data-af-editable="rich-native-v1"])`;
 const DARK = `:where(.dark,[data-theme="dark"],[data-af-dark="true"]) ${R},${R}:where(.dark,` +
   `[data-theme="dark"])`;
 const rule = (elements: string, declarations: string): string =>

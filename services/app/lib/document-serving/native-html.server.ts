@@ -1,3 +1,4 @@
+import {nativeCodeHtml} from './native-code-html';
 import {hasImportedSourceObservation} from '../html-bridge';
 import {type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml} from '@/lib/html-runtime';
 import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, buildHtmlAssets} from '@/lib/html-runtime/server';
@@ -57,7 +58,7 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
   const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row);
-  const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state}:{})};
+  const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeHtmlStructuralWrapper(nativeCodeHtml(rendered)),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
@@ -101,7 +102,7 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
 }
 
 /** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/regions.js, /af/collab.js, /af/state.js), always this build's bytes. */
-export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions'|'collab'|'state';
+export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions'|'nativeRegions'|'nativeMarkdown'|'collab'|'state';
 export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
  const source=(await htmlAssets())[module];
  if(!source)return new Response('Not found',{status:404});

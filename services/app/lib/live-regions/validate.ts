@@ -21,6 +21,8 @@
  * An update with no new struct and no new delete is a retry: `duplicate`, nothing applied.
  */
 import * as Y from 'yjs';
+import { validateNativeTree } from './native-state';
+import { NATIVE_ROOT, nativeSchema } from './native-schema';
 import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
 import { keysOf } from './lines';
 import { LiveRegionRefusal } from './refusal';
@@ -71,7 +73,9 @@ export function validateRegionUpdate(kind: RegionKind, state: Uint8Array | Y.Doc
   if (update.byteLength > REGION_UPDATE_MAX_BYTES) throw new LiveRegionRefusal('too_large', [`${update.byteLength} bytes`]);
   let decoded: { structs: (Y.Item | Y.GC | Y.Skip)[]; ds: DeleteSet };
   try { decoded = Y.decodeUpdate(update) as typeof decoded; } catch { throw unsupported('undecodable update'); }
-  const doc = state instanceof Y.Doc ? state : openRegionDoc(state);
+  const doc = state instanceof Y.Doc ? state : openRegionDoc(state, { kind });
+  const expectedRoot = kind === 'rich-native-v1' ? NATIVE_ROOT : REGION_ROOT;
+  if ([...doc.share.keys()].some(root => root !== expectedRoot)) throw new LiveRegionRefusal('outside_region');
   const known = Y.decodeStateVector(Y.encodeStateVector(doc));
   const outOfOrder = (detail: string) => new LiveRegionRefusal('out_of_order', [detail], Y.encodeStateVector(doc));
   const ownBefore = known.get(clientId) ?? 0;
@@ -90,6 +94,17 @@ export function validateRegionUpdate(kind: RegionKind, state: Uint8Array | Y.Doc
     if (struct instanceof Y.GC) continue;
     const item = struct as Y.Item;
     const parent = item.parent as unknown;
+    if (kind === 'rich-native-v1') {
+      if (typeof parent === 'string' && parent !== NATIVE_ROOT) throw new LiveRegionRefusal('outside_region');
+      if (parent instanceof Y.ID && !holds(parent)) throw outOfOrder('unknown native parent');
+      const content = item.content;
+      if (content instanceof Y.ContentType) {
+        const type = content.type;
+        if (!(type instanceof Y.XmlText) && (!(type instanceof Y.XmlElement) || !nativeSchema.nodes[type.nodeName] || ['doc','text'].includes(type.nodeName))) throw unsupported('native type');
+      } else if (!(content instanceof Y.ContentString) && !(content instanceof Y.ContentFormat) && !(content instanceof Y.ContentAny) && !(content instanceof Y.ContentDeleted)) throw unsupported('native content');
+      for (const origin of [item.origin, item.rightOrigin]) if (origin && !holds(origin)) throw outOfOrder('unknown native origin');
+      continue;
+    }
     if (item.parentSub !== null || (parent !== null && parent !== REGION_ROOT)) throw new LiveRegionRefusal('outside_region', [item.parentSub ?? (typeof parent === 'string' ? parent : 'a nested type')]);
     const { content } = item;
     if (content instanceof Y.ContentFormat) formats.push(item);
@@ -117,9 +132,16 @@ export function validateRegionUpdate(kind: RegionKind, state: Uint8Array | Y.Doc
 
   Y.applyUpdate(doc, update, VALIDATED);
   if (doc.store.pendingStructs || doc.store.pendingDs) throw outOfOrder('pending after apply');
+  if (kind === 'rich-native-v1') { validateNativeTree(doc); return { duplicate: false, doc }; }
   if (regionText(doc).length > REGION_TEXT_MAX_UNITS) throw new LiveRegionRefusal('too_large', [`${regionText(doc).length} units`]);
   for (const format of formats) checkBlockFormat(doc, format, clientId, ownBefore, decoded.ds);
   return { duplicate: false, doc };
+}
+
+/** Validate the resulting state after a trusted snapshot revision without assuming a Y.Text root. */
+export function validateRegionState(kind:RegionKind,doc:Y.Doc):void {
+ if(kind==='rich-native-v1')validateNativeTree(doc);
+ else if(regionText(doc).length>REGION_TEXT_MAX_UNITS)throw new LiveRegionRefusal('too_large');
 }
 
 /** The origin an applied update carries, so observers can tell a validated update from their own writes. */
