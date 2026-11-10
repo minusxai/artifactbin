@@ -2,8 +2,8 @@
  * READING A COMPILED DATAFLOW — the pure questions every consumer of
  * `CompiledDataflow` asks: the starting values and inline tables, which
  * queries a run needs, what a statement binds (by SQL name) and how a result
- * is typed. Browser-safe: no engine, no SQL text; the compiler
- * (lib/dataflow/compile-dataflow) has already said what each statement reads.
+ * is typed. Browser-safe: no engine, no SQL text; the record
+ * already says what each statement reads.
  */
 import { paramSqlName, type ColumnType, type DatasetColumn, type MutationInput } from '@artifactbin/contracts';
 import { BUILTIN_TABLES, builtinInput, isBuiltinInput } from './builtins';

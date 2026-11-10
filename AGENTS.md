@@ -12,7 +12,7 @@ area you touch. Keep links plain, never `@` imports.
 | [lib/html-runtime](services/app/lib/html-runtime/AGENTS.md) | page scripts, viewer state, the built runtime, what pages may do |
 | [lib/html-components](services/app/lib/html-components/AGENTS.md) | native components, specs, generated lists, the reader build |
 | [lib/page-operations](services/app/lib/page-operations/AGENTS.md) | the SQL and function doors, schedules, capabilities |
-| [lib/dataflow](services/app/lib/dataflow/AGENTS.md) | the data language: references, compile, browser leaves |
+| [lib/dataflow](services/app/lib/dataflow/AGENTS.md) | the data language: references, evaluation, browser leaves |
 | [lib/graphql-compat](services/app/lib/graphql-compat/AGENTS.md) | anything that touches GraphQL (deprecated, fenced) |
 | [lib/skills](services/app/lib/skills/AGENTS.md) | the author skill (`services/app/skills`), served `/llms` copy, evals |
 | [solid](services/app/solid/AGENTS.md) | any app UI: chrome, controls, overlays, UI tests |

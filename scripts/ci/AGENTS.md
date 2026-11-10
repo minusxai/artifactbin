@@ -19,8 +19,11 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
   numbers. Never raise a budget, skip coverage, subtract queues or rerun unchanged code to hide slowness,
   and never move a file out of the lane: investigate the critical path and repetition.
 - `ci.yml`, page-speed, credential-platform and runner-design run on main or by hand, never on automatic PRs.
-  Never add an unbounded PR workflow or wait for full release checks before merging. The 40/60 policy holds in
-  the application, proxy, evaluator and deployment repositories alike.
+  Never add an unbounded PR workflow or wait for full release checks before merging; a green `pr fast` is
+  never tested-release evidence. The 40/60 policy holds in the application, proxy, evaluator and deployment
+  repositories alike.
+- A test's white-box import of another module is recorded in `module-graph.allowed-test-imports.json`, which
+  only shrinks: shared resets and test seams belong in the harness.
 - Every post-merge failure on main gets a fast-lane guard: find why `pr fast` missed it and add a
   deterministic check that would have caught it, within the budget, to one list:
   - `fast-tests.json`: node tests whose whole import graph passes the capability audit
