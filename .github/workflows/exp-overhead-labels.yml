@@ -1,0 +1,38 @@
+name: exp overhead labels
+# Experiment only (branch exp/ci-overhead, never merged): runner labels other than ubuntu-latest.
+on:
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+jobs:
+  floor:
+    name: floor (${{ matrix.os }} ${{ matrix.i }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 3
+    strategy: { matrix: { os: [ ubuntu-slim, ubuntu-24.04-arm ], i: [ 1, 2, 3 ] } }
+    steps:
+      - run: echo noop; nproc; grep -m1 -iE 'model name|CPU part' /proc/cpuinfo || true; lscpu | grep -iE 'model name|^CPU\(s\)' || true
+  arm:
+    name: arm (${{ matrix.suite }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix: { suite: [ 3/22, 9/22, 16/22 ] }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 22 }
+      - run: npm ci --no-audit --no-fund
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - run: lscpu | grep -iE 'model name|^CPU\(s\)'
+      - run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --shard=${{ matrix.suite }}

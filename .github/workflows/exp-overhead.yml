@@ -1,0 +1,176 @@
+name: exp overhead
+# Experiment only (branch exp/ci-overhead, never merged): measures pr fast's per-job overhead variants.
+on:
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+  actions: read
+env:
+  INSTALL_PATHS: unused
+jobs:
+  floor:
+    name: floor (${{ matrix.i }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    strategy: { matrix: { i: [ 1, 2, 3, 4, 5, 6 ] } }
+    steps:
+      - run: echo noop; nproc; grep -m1 'model name' /proc/cpuinfo
+
+  probe:
+    name: probe (${{ matrix.i }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy: { matrix: { i: [ 1, 2, 3, 4 ] } }
+    steps:
+      - run: echo "preinstalled node $(node -v) at $(command -v node)"; nproc; grep -m1 'model name' /proc/cpuinfo; free -g | head -2; df -h / | tail -1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: sparse checkout probe
+        run: |
+          s=$(date +%s.%N); git clone -q --depth 1 --filter=blob:none --sparse "https://github.com/${GITHUB_REPOSITORY}" "$RUNNER_TEMP/sparse" && git -C "$RUNNER_TEMP/sparse" sparse-checkout set --no-cone '/*' '!/design-systems/' '!/docs/' '!/evals/'; e=$(date +%s.%N)
+          echo "TIMING sparse-clone $(echo "$e - $s" | bc)"; du -sh .git "$RUNNER_TEMP/sparse"
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - name: sizes
+        run: du -sh node_modules; find node_modules -type f | wc -l; du -sk node_modules/* node_modules/@*/* 2>/dev/null | sort -rn | head -25
+      - name: docker pull probe
+        run: |
+          for img in node:22-bookworm-slim node:22-bookworm; do s=$(date +%s.%N); docker pull -q "$img" >/dev/null; e=$(date +%s.%N); echo "TIMING pull $img $(echo "$e - $s" | bc) size $(docker image inspect "$img" --format '{{.Size}}')"; done
+      - name: tar variants
+        run: |
+          s=$(date +%s.%N); tar -cf - node_modules services/app/public/fonts | zstd -T0 -3 -q -o "$RUNNER_TEMP/nm.tzst"; e=$(date +%s.%N); echo "TIMING tar-create $(echo "$e - $s" | bc) $(stat -c %s "$RUNNER_TEMP/nm.tzst")"
+          rm -rf "$RUNNER_TEMP/x" && mkdir "$RUNNER_TEMP/x"; sync; s=$(date +%s.%N); zstd -dc -T0 "$RUNNER_TEMP/nm.tzst" | tar -xf - -C "$RUNNER_TEMP/x"; e=$(date +%s.%N); echo "TIMING extract-pipe $(echo "$e - $s" | bc)"
+          rm -rf "$RUNNER_TEMP/x" && mkdir "$RUNNER_TEMP/x"; s=$(date +%s.%N); tar -xf "$RUNNER_TEMP/nm.tzst" --use-compress-program unzstd -C "$RUNNER_TEMP/x"; e=$(date +%s.%N); echo "TIMING extract-actions-style $(echo "$e - $s" | bc)"
+          rm -rf "$RUNNER_TEMP/x"; s=$(date +%s.%N); tar -cf "$RUNNER_TEMP/nm.tar" node_modules; e=$(date +%s.%N); echo "TIMING tar-plain-create $(echo "$e - $s" | bc) $(stat -c %s "$RUNNER_TEMP/nm.tar")"
+          mkdir "$RUNNER_TEMP/x"; s=$(date +%s.%N); tar -xf "$RUNNER_TEMP/nm.tar" -C "$RUNNER_TEMP/x"; e=$(date +%s.%N); echo "TIMING extract-plain $(echo "$e - $s" | bc)"
+
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - run: tar -cf - node_modules services/*/node_modules services/app/public/fonts services/app/lib/html-systems/font-manifest.json | zstd -T0 -3 -q -o "$RUNNER_TEMP/nm.tzst"; ls -la "$RUNNER_TEMP/nm.tzst"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: nm, path: '${{ runner.temp }}/nm.tzst', retention-days: 1, compression-level: 0 }
+
+  unpack:
+    name: unpack (${{ matrix.i }})
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy: { matrix: { i: [ 1, 2, 3, 4 ] } }
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: nm, path: '${{ runner.temp }}' }
+      - run: s=$(date +%s.%N); tar -xf "$RUNNER_TEMP/nm.tzst" --use-compress-program 'zstd -d -T0' ; e=$(date +%s.%N); echo "TIMING artifact-extract $(echo "$e - $s" | bc)"; du -sh node_modules
+
+  container:
+    name: container (${{ matrix.i }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    container: node:22-bookworm
+    strategy: { matrix: { i: [ 1, 2, 3 ] } }
+    steps:
+      - run: node -v
+
+  api11:
+    name: api11 (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    strategy:
+      fail-fast: false
+      matrix: { suite: [ 1/11, 2/11, 3/11, 4/11, 5/11, 6/11, 7/11, 8/11, 9/11, 10/11, 11/11 ] }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 22 }
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - run: grep -m1 'model name' /proc/cpuinfo
+      - run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --shard=${{ matrix.suite }}
+
+  w4:
+    name: w4 (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    strategy:
+      fail-fast: false
+      matrix: { suite: [ 3/22, 5/22, 9/22, 13/22, 16/22, 20/22 ] }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - run: grep -m1 'model name' /proc/cpuinfo; node -v
+      - run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --shard=${{ matrix.suite }} --maxWorkers=4
+
+  combo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - env: { GH_TOKEN: '${{ github.token }}' }
+        run: node scripts/ci/ci.mjs type-info
+      - name: types, lint and fast tests in one job
+        run: |
+          s=$(date +%s.%N)
+          (node scripts/ci/check-local.mjs validate --part=types > "$RUNNER_TEMP/types.log" 2>&1; echo "TIMING types $(echo "$(date +%s.%N) - $s" | bc) rc=$?") &
+          (node scripts/ci/check-local.mjs validate --part=lint > "$RUNNER_TEMP/lint.log" 2>&1; echo "TIMING lint $(echo "$(date +%s.%N) - $s" | bc) rc=$?") &
+          (node scripts/ci/fast-check.mjs > "$RUNNER_TEMP/fast.log" 2>&1; echo "TIMING tests $(echo "$(date +%s.%N) - $s" | bc) rc=$?") &
+          wait; echo "TIMING combo $(echo "$(date +%s.%N) - $s" | bc)"; tail -3 "$RUNNER_TEMP"/*.log
