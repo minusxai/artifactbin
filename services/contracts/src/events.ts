@@ -183,3 +183,14 @@ export type EventSink = (events: EventEnvelope[]) => Promise<void>;
 
 /** The wire: `emit` (best effort, never rejects) and `publish` (durable, rejects until stored). `serveEvents`/`eventsClient` implement exactly this. */
 export const EVENTS_ROUTES = { emit: '/emit', publish: '/publish' } as const;
+
+/**
+ * MinusX's job events (CONTRACT §6) on the APP's origin: the durable `publish`, service-authenticated
+ * (SERVICE_AUTH_HEADER carrying INTERNAL__SERVICE_SECRET) and narrowed to `source: 'minusx'`, `object_kind: 'job'`.
+ * The auth host serves it in front of its internal boundary, onto whatever events service the process holds, so a
+ * one-process installation (events in process, no `/publish` socket) still has a door MinusX's sink can reach;
+ * a split deployment may point MinusX at the events service's own `EVENTS_ROUTES.publish` instead.
+ */
+export const EVENTS_PUBLISH_PATH = '/api/internal/events/publish';
+/** At most this many envelopes per publish (MinusX drains its outbox in batches of at most 100). */
+export const EVENTS_PUBLISH_MAX_BATCH = 500;

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {HUMAN_SESSION_LIVE_PATH,IDENTITY_PATHS,SERVICE_AUTH_HEADER,type TokenReader,type TokenRecord} from '@artifactbin/contracts';
+import {EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_PATHS,SERVICE_AUTH_HEADER,type EventsService,type TokenReader,type TokenRecord} from '@artifactbin/contracts';
 import {humanSessionClient} from '@artifactbin/utils';
 import {createAuthHost} from '../src/parts';
 
@@ -75,5 +75,43 @@ describe('identity endpoints (contracts IDENTITY_PATHS)',()=>{
   expect((await call(app,IDENTITY_PATHS.resolve,{token_id:7})).status).toBe(400);
   expect(await(await call(app,IDENTITY_PATHS.groups,{user_id:'usr_1'})).json()).toEqual({groups:[]});
   expect(relayed.at(-1)).toEqual({path:IDENTITY_PATHS.groups,body:{user_id:'usr_1'},secret});
+ });
+});
+
+describe('MinusX job events (contracts EVENTS_PUBLISH_PATH)',()=>{
+ const secret='test-service-secret',origin='http://app.test';
+ const job=(id:string,verb='run_started')=>({id,at:'2026-11-11T00:00:00.000Z',source:'minusx',subject_kind:'service',subject_id:'minusx',verb,object_kind:'job',object_id:'sch_1',payload:{schedule_id:'sch_1',occurrence_id:'occ_1',group_id:'grp_finance'}});
+ const host=(events?:EventsService)=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret,APP__PUBLIC_BASE_URL:origin},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},
+  ...(events?{events}:{}),upstream:async()=>new Response('the application must not be reached',{status:500})});
+ const post=(app:ReturnType<typeof host>,body:unknown,key=secret)=>app.request(origin+EVENTS_PUBLISH_PATH,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:key,'content-type':'application/json'},body:typeof body==='string'?body:JSON.stringify(body)});
+ it('stores a batch of job events durably, answering only once stored',async()=>{
+  const stored:unknown[]=[];
+  const app=host({emit:async()=>{throw Error('emit is best effort; a publish never uses it');},publish:async batch=>{stored.push(...batch);}});
+  const response=await post(app,[job('e1'),job('e2','run_succeeded')]);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(await response.json()).toEqual({accepted:2});
+  expect(stored).toEqual([job('e1'),job('e2','run_succeeded')]);
+ });
+ it('refuses without the secret, and anything but a POST of MinusX job envelopes, storing nothing',async()=>{
+  const stored:unknown[]=[];
+  const app=host({emit:async()=>{},publish:async batch=>{stored.push(...batch);}});
+  expect((await post(app,[job('e1')],'wrong')).status).toBe(401);
+  expect((await app.request(origin+EVENTS_PUBLISH_PATH,{method:'POST',body:JSON.stringify([job('e1')])})).status).toBe(401);
+  expect((await app.request(origin+EVENTS_PUBLISH_PATH)).status).toBe(405);
+  for(const bad of [
+   {...job('a'),source:'app'},{...job('b'),object_kind:'artifact',verb:'annotated'},{...job('c'),verb:'run_exploded'},
+   {...job('d'),payload:{schedule_id:'sch_1',occurrence_id:'occ_1'}},{...job('e'),at:'not a time'},{...job('f'),subject_kind:'user'},
+  ])expect((await post(app,[job('ok'),bad])).status,JSON.stringify(bad)).toBe(400);
+  expect((await post(app,{events:[job('g')]})).status).toBe(400);
+  expect((await post(app,'not json')).status).toBe(400);
+  expect((await post(app,Array.from({length:EVENTS_PUBLISH_MAX_BATCH+1},(_,i)=>job(`n${i}`)))).status).toBe(400);
+  expect((await post(app,'x'.repeat((1<<20)+1))).status).toBe(413);
+  expect(stored).toEqual([]);
+ });
+ it('answers 503 when nothing stores it, so the publisher keeps the batch',async()=>{
+  expect((await post(host(),[job('e1')])).status).toBe(503);
+  expect((await post(host({emit:async()=>{}}),[job('e1')])).status).toBe(503);
+  expect((await post(host({emit:async()=>{},publish:async()=>{throw Error('database down');}}),[job('e1')])).status).toBe(503);
  });
 });

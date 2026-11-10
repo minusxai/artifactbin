@@ -5,15 +5,27 @@
  *  - the identity endpoints (contracts `IDENTITY_PATHS`, cross-repository contract §2): token questions are answered
  *    here from the one bearer read every API request is admitted by (token, OAuth family fence, identity): all of
  *    `introspect`, and `resolve`'s `token_active`. The rest of `resolve`, and `groups`, are relayed to the
- *    application, which owns accounts and groups and checks the secret again.
+ *    application, which owns accounts and groups and checks the secret again;
+ *  - MinusX's job events (contracts `EVENTS_PUBLISH_PATH`, cross-repository contract §6): the durable publish onto
+ *    this process's events service, accepting only `source: 'minusx'` job envelopes with a catalogued verb and the ids
+ *    the feed authorizes on. 2xx only once stored; a storage failure is 503, so MinusX's outbox keeps the batch.
  */
-import {ANONYMOUS,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_PATHS,SERVICE_AUTH_HEADER,parseAliasOrigins,type IdentityIntrospectResponse,type Part,type TokenRecord} from '@artifactbin/contracts';
+import {ANONYMOUS,API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_PATHS,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type Part,type TokenRecord} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+const text=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=256;
+/** A job event as MinusX publishes it: the only envelope another product may put on this installation's feed. */
+const isJobEnvelope=(v:unknown):v is EventEnvelope=>{
+ if(!v||typeof v!=='object'||Array.isArray(v))return false;
+ const e=v as Record<string,unknown>,payload=e.payload as Record<string,unknown>|null;
+ return text(e.id)&&text(e.at)&&!Number.isNaN(Date.parse(e.at))&&e.source==='minusx'&&e.object_kind==='job'&&text(e.object_id)
+  &&(EVENT_VERBS.job as readonly string[]).includes(e.verb as string)&&(e.subject_kind===null||e.subject_kind==='service')&&(e.subject_id===null||text(e.subject_id))
+  &&!!payload&&typeof payload==='object'&&!Array.isArray(payload)&&text(payload.schedule_id)&&text(payload.occurrence_id)&&text(payload.group_id);
+};
 export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sessionAuthority',mount:app=>{
  const secret=readEnv(o.env,'INTERNAL__SERVICE_SECRET');
  /** A refusal Response, or the parsed JSON object body. */
@@ -69,5 +81,14 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  app.all(IDENTITY_PATHS.groups,async c=>{
   const refused=await admit(c,false);if(refused instanceof Response)return refused;
   return o.upstream(c.req.raw,ANONYMOUS);
+ });
+ app.all(EVENTS_PUBLISH_PATH,async c=>{
+  const refused=await admit(c,false);if(refused instanceof Response)return refused;
+  let batch:unknown;
+  try{batch=JSON.parse(await readBody(c.req.raw,{limit:1<<20,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
+  if(!Array.isArray(batch)||batch.length>EVENTS_PUBLISH_MAX_BATCH||!batch.every(isJobEnvelope))return answer({error:'bad_request'},400);
+  if(!o.events?.publish)return answer({error:'events_unavailable'},503);
+  try{await o.events.publish(batch);}catch{return answer({error:'events_unavailable'},503);}
+  return answer({accepted:batch.length});
  });
 }};}
