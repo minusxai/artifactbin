@@ -21,7 +21,7 @@ const ACCESS_COLUMNS='id,user_id,token_id,group_id,visibility,format,edit_id,dat
 export type ReadRow = Pick<ArtifactRow,'id'|'user_id'|'token_id'|'visibility'|'format'> & Partial<Pick<ArtifactRow,'group_id'|'dataset_policy'>>;
 /** Called inside an optional existing transaction; never enqueues work on the outer database. `facts` defaults to `tx`'s. */
 export async function readThrough(tx:Queryable,row:ReadRow,actor:AccessActor,facts:AccessFacts=transactionAccessFacts(actor,tx)):Promise<boolean>{
- if(row.group_id&&await facts.groupRole(row.group_id))return true;
+ if(row.group_id&&(await facts.groupRole(row.group_id)||await facts.groupAudience(row.group_id)))return true;
  if(ownsArtifact(row,actor)||row.visibility!=='private')return true;
  if(!actor.userId)return false;
  return await facts.sharedWith(row.id)||await facts.groupShareRole(row.id)!=='none';

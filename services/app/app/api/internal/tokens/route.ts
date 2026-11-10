@@ -16,7 +16,7 @@
  * NO rate limit here, on purpose — a door is enforced in exactly one place:
  * the proxy counts the OAuth doors in front of the approval that reaches this.
  */
-import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLoopbackName} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,grantScope,isLoopbackName} from '@artifactbin/contracts';
 import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 import { agentContract } from '@/lib/agent-copy';
 import { canAuthenticateUser } from '@/lib/user-kinds';
@@ -40,7 +40,8 @@ export async function POST(request: Request) {
   let audience: string | undefined;
   let scope: string | undefined;
   if (body.audience !== undefined || body.scope !== undefined) {
-    if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== ARTIFACT_SCOPE) return json({ error: 'invalid_audience' }, 400);
+    // The canonical scope the auth host granted (contracts grantScope): `artifacts`, optionally with `minusx`.
+    if (actor.credential !== 'session' || typeof body.audience !== 'string' || typeof body.scope !== 'string' || grantScope(body.scope) !== body.scope) return json({ error: 'invalid_audience' }, 400);
     try {
       const target = new URL(body.audience);
       // Plain http only on loopback: an address literal or a loopback name (contracts `isLoopbackName`:

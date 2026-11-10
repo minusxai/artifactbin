@@ -436,6 +436,8 @@ async function createDb(): Promise<Db> {
 
 // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
 const BACKFILLS: readonly string[] = [
+  // The hierarchy guard row (schema GROUP_HIERARCHY): it must exist before any decision locks it FOR SHARE.
+  "INSERT INTO group_hierarchy(id,revision) VALUES('installation',0) ON CONFLICT (id) DO NOTHING",
   "UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL",
 ];
 

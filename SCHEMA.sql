@@ -313,6 +313,7 @@ CREATE TABLE IF NOT EXISTS app.groups (
   created_by TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
+  parent_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -330,7 +331,21 @@ ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL 
 
 ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS parent_id TEXT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_handle ON app.groups (handle);
+
+CREATE INDEX IF NOT EXISTS idx_groups_parent ON app.groups (parent_id) WHERE parent_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.group_hierarchy (
+  id TEXT NOT NULL,
+  revision BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.group_hierarchy ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.group_hierarchy ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS app.group_members (
   group_id TEXT NOT NULL,

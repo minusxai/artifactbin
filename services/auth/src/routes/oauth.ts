@@ -1,6 +1,6 @@
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, MINUSX_SCOPE, grantScope} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
@@ -115,13 +115,19 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
     if(!sameOrigin(c.req.raw))
       return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
+    // An optional {"scope":"artifacts minusx"}: the grant's scope (contracts grantScope), `artifacts` when absent.
+    let requested:unknown;
+    try{const text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});requested=text.trim()?(JSON.parse(text) as {scope?:unknown}|null)?.scope:undefined;}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
+    const scope=requested===undefined?ARTIFACT_SCOPE:typeof requested==='string'?grantScope(requested):null;
+    if(!scope)return new Response(JSON.stringify({error:'invalid_scope',hint:`Request "${ARTIFACT_SCOPE}" or "${ARTIFACT_SCOPE} ${MINUSX_SCOPE}".`}),{status:400,headers:{'Content-Type':'application/json',...NO_STORE}});
     try{
       const client=await o.oauth.register({client_name:'artifactbin HTTP',redirect_uris:['http://127.0.0.1/callback']});
       const clientId=String(client.client_id);
-      const grant={userId:actor.userId,resource:resource(c.req.raw),scope:ARTIFACT_SCOPE};
+      const grant={userId:actor.userId,resource:resource(c.req.raw),scope};
       const minted=await mintFor(o,c.req.raw,grant);
       const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
-      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
     }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
@@ -151,7 +157,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const state = q.get('state') ?? '';
     const expectedResource = resource(c.req.raw);
     const requestedResource = q.get('resource') ?? expectedResource;
-    const scope = q.get('scope') || ARTIFACT_SCOPE;
+    const scope = grantScope(q.get('scope') || ARTIFACT_SCOPE);
     const client = clientId ? await o.oauth.client(clientId) : null;
     const problem =
       !client ? 'Unknown client.'
@@ -159,14 +165,14 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
       : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
       : !acceptsResource(c.req.raw, requestedResource) ? 'Invalid API resource.'
-      : scope !== ARTIFACT_SCOPE ? 'Unsupported scope.'
+      : !scope ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${escapeHtml(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
-    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope)}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
+    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope ?? '')}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
-      <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>
+      <p>Your coding agent wants to publish artifacts${scope?.split(' ').includes(MINUSX_SCOPE) ? ' and to query MinusX as you' : ''}. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
@@ -190,7 +196,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scope !== ARTIFACT_SCOPE) {
+    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || grantScope(scope) !== scope) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
