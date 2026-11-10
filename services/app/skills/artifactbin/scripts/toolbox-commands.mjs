@@ -89,6 +89,12 @@ const commands = {
     move: {group: flag(), personal: flag('boolean'), yes: flag('boolean')},
     link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')}
   }},
+  // Combined installations only: a group's MinusX connections, and a page's binding to one.
+  minusx: {sub: {
+    connections: {group: flag()}, catalog: {group: flag(), connection: flag()},
+    context: {group: flag(), connection: flag()},
+    bind: {name: flag(), group: flag(), connection: flag()}
+  }},
   comment: {
     sub: {
       list: {status: flag(), cursor: flag(), limit: flag()},

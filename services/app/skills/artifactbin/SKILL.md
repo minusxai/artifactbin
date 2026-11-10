@@ -32,9 +32,9 @@ Skill map (each file's top comment explains it):
   csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html; gen-*.mjs sample data
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
-serve, new-app, new-page
+serve, new-app, new-page, minusx
 - `references/`: guides (read only those you need): runtime, datasets, permissions, functions,
-dataviz, diagrams, maps, groups
+dataviz, diagrams, maps, groups, governed-data
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (only its header, the shared tokens, is worth reading)
 
@@ -78,8 +78,8 @@ Every script takes `--help` (usage, flags, examples, gotchas), `--json` and an e
 FILE`; all but `serve.mjs` take `--server ORIGIN`. Use these scripts, never shell-built HTTP
 wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it). Dataset
 permissions: `policy.mjs`. Function secrets: only the page owner sets them, in the page's
-Resolvers settings; no script or API takes them, and never ask in chat. ACLs and trash have no
-script. Groups: `node scripts/groups.mjs list`
+Resolvers settings; no script or API takes them (a `'minusx'` binding is no secret), and never
+ask in chat. ACLs and trash have no script. Groups: `node scripts/groups.mjs list`
 ([groups](references/groups.md)).
 
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
@@ -169,6 +169,10 @@ script. Groups: `node scripts/groups.mjs list`
   for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
   scripts/export.mjs ID --format html --output copy.html` for a portable copy.
+  Live warehouse rows on a server whose `/api/server` names `minusx`: `node scripts/minusx.mjs
+  connections --group finance`, declare the one you need `'minusx'` in a function's `secrets`,
+  publish, then `node scripts/minusx.mjs bind PAGE12 --name FIN --group finance --connection
+  conn_finance` ([governed data](references/governed-data.md)); each viewer reads as themselves.
 - **Network and install.** To call an external API add `<meta name="csp-connect"
   content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
   `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid
