@@ -41,6 +41,8 @@ export interface QueryFailure {
   continuation?: {kind:string;payload:unknown};
   /** Stable machine-readable reason for a guarded edit cardinality failure. */
   code?: 'row_changed' | 'row_not_unique' | 'policy_denied';
+  /** Set when the result outgrew the caller's `outputBytes` while it was collected. */
+  tooLarge?: boolean;
   /** Set when the failure was our timeout rather than the author's SQL. */
   timedOut?: boolean;
   /** Set when a WRITE would have taken the table past the row cap (nothing was stored). */
@@ -90,6 +92,8 @@ export interface RunInput {
   limit?: number;
   /** Per-query interrupt — clamped by the service, never raised. */
   timeoutMs?: number;
+  /** Serialized size a result may reach while it is collected; past it the query fails `tooLarge`, read no further. */
+  outputBytes?: number;
   /** Read only a window of ONE query's result (its dependencies still run whole). */
   page?: { name: string } & QueryPage;
 }
@@ -129,6 +133,16 @@ export interface MutationInput {
   /** The most rows the table may hold AFTER the write. */
   limit?: number;
   timeoutMs?: number;
+  /**
+   * KEYED MOUNTS (RunInput.catalog's protocol, services/sql/CONTRACT.md): the tables the statement reads, and the
+   * target when it is one of them, come from the database the engine prepared for these keys; the target is
+   * swapped for its writable copy inside a transaction that is always rolled back, so the kept database never
+   * changes. A miss answers `rowsRequired` and the caller resends with `tables`. `table.rows` and `reads` are then
+   * unused; `table.columns` may add columns the catalog's target lacks (NULL in every row).
+   */
+  mounted?: { catalog: SqlReadCatalog; tables: Record<string, { rows: Row[]; columns: DatasetColumn[] }> };
+  /** `written`: `rows` holds only the rows the statement inserted or updated (after it), never the whole table. */
+  answer?: 'table' | 'written';
 }
 /** A write that ran: the table's new rows and how many rows the statement touched. */
 export interface MutationResult extends TableResult {

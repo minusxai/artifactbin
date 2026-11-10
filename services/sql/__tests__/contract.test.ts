@@ -32,6 +32,13 @@ const input = {
 };
 
 describe.each(SHAPES)('%s', (_name, _engine, svc) => {
+  it('stops collecting a result past outputBytes (tooLarge), and leaves a smaller one alone', async () => {
+    const big = (await svc.run({ tables: {}, queries: [{ name: 'q', sql: "select printf('%5000s', 'x') as v" }], params: {}, outputBytes: 1000 })).q!;
+    expect(big).toMatchObject({ tooLarge: true });
+    expect(isQueryFailure(big)).toBe(true);
+    const small = (await svc.run({ tables: {}, queries: [{ name: 'q', sql: "select 'ok' as v" }], params: {}, outputBytes: 1000 })).q!;
+    expect(small).toMatchObject({ rows: [{ v: 'ok' }] });
+  });
   it('runs a dependency chain in ONE request: what travels is the window, what a downstream query reads is the whole result', async () => {
     const r = await svc.run(input);
     if (isQueryFailure(r.q) || isQueryFailure(r.q2)) throw new Error(JSON.stringify(r));
@@ -303,4 +310,46 @@ describe('trusted mutation extensions',()=>{
   expect(()=>engine.analyze("insert into nodes select fixture_generate($t)",schema)).toThrow(/fixture_generate/);
   expect(()=>engine.analyze("select fixture_generate($t)",schema)).toThrow(/fixture_generate/);
  });
+});
+
+
+it.each(['\\'.repeat(600), '界'.repeat(600)])('adversarial: outputBytes bounds JSON bytes for %s', async (value) => {
+    const result = await local.run({ tables: {}, queries: [{ name: 'q', sql: 'select $value as payload' }], params: { value }, outputBytes: 1024 });
+    expect(result.q).toMatchObject({ tooLarge: true });
+});
+
+
+it('review2: outputBytes accepts a result at its exact JSON byte size', async () => {
+  const input = {tables: {}, queries: [{name: 'q', sql: "select 'ok' as v"}], params: {}};
+  const first = (await local.run(input)).q!;
+  expect(isQueryFailure(first)).toBe(false);
+  if (isQueryFailure(first)) throw new Error(first.error);
+  const bytes = Buffer.byteLength(JSON.stringify({rows: first.rows, columns: first.columns}), 'utf8');
+  expect((await local.run({...input, outputBytes: bytes})).q).toMatchObject({rows: first.rows, columns: first.columns});
+});
+
+it('outputBytes refuses a result one byte past its exact JSON size', async () => {
+  for (const sql of ["select 'ok' as v", "select '界\\\"x' as v, 1 as w, true as b, null as n union all select 'y', 2, false, 3.5"]) {
+    const input = { tables: {}, queries: [{ name: 'q', sql }], params: {} };
+    const first = (await local.run(input)).q!;
+    if (isQueryFailure(first)) throw new Error(first.error);
+    const bytes = Buffer.byteLength(JSON.stringify({ rows: first.rows, columns: first.columns }), 'utf8');
+    expect((await local.run({ ...input, outputBytes: bytes })).q).toMatchObject({ rows: first.rows });
+    expect((await local.run({ ...input, outputBytes: bytes - 1 })).q).toMatchObject({ tooLarge: true });
+  }
+});
+
+it('review3: exact bytes for NULL, numeric, boolean and nested JSON outputs', async () => {
+  for (const sql of [
+    'select null as n, 1 as i, -2.5 as f, true as b, false as z',
+    "select json_object('a', json_array(1, null, json_object('b', '界'))) as nested",
+    'select 1 as x where 0',
+  ]) {
+    const input = {tables:{}, queries:[{name:'q', sql}], params:{}};
+    const first = (await local.run(input)).q!;
+    if (isQueryFailure(first)) throw new Error(first.error);
+    const bytes = Buffer.byteLength(JSON.stringify({rows:first.rows, columns:first.columns}), 'utf8');
+    expect((await local.run({...input, outputBytes:bytes})).q).toMatchObject({rows:first.rows, columns:first.columns});
+    expect((await local.run({...input, outputBytes:bytes-1})).q).toMatchObject({tooLarge:true});
+  }
 });

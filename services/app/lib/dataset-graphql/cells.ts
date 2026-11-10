@@ -102,7 +102,7 @@ export async function writeDatasetCells(actor: AccessActor, head: ArtifactRow, p
     },
   });
   if (!isMutationRefused(result)) return { written: result.row };
-  if (result.reason === 'row_changed' || result.reason === 'contended') return { refused: 'row_changed', detail: result.detail };
+  if (result.reason === 'row_changed' || result.reason === 'contended' || result.reason === 'conflict') return { refused: 'row_changed', detail: result.detail };
   if (result.reason === 'policy_denied' || result.reason === 'dataset_read_only') return { refused: 'denied', detail: result.detail };
   return { refused: 'failed', detail: result.detail };
 }

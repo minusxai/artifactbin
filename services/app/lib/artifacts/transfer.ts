@@ -24,7 +24,7 @@ export async function transferArtifact(actor:AccessActor,id:string,destination:A
   if(!target)return null;
   const groups=[...new Set([target.group_id,destination.type==='group'?destination.id:null].filter((group):group is string=>!!group))].sort();
   for(const group of groups)await lockTransferGroup(tx,actor,group);
-  const closure=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 OR ancestor_ids @> ARRAY[$1] ORDER BY id FOR UPDATE NOWAIT',[id])).rows;
+  const closure=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 OR ancestor_ids @> ARRAY[$1] ORDER BY id COLLATE "C" FOR UPDATE NOWAIT',[id])).rows;
   if(closure.some(r=>r.group_id!==target.group_id||r.user_id!==target.user_id||(!target.group_id&&!target.user_id&&r.token_id!==target.token_id)))throw new DatasetError('Folder contains work with a different owner',409);
   previousParent=parentOf(target);
   const groupId=destination.type==='group'?destination.id:null;

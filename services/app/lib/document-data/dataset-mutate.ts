@@ -38,7 +38,7 @@ import {paramSqlName} from '@artifactbin/contracts';
  * module computes the rows, holds the transaction, completes receipts and emits the after-commit event.
  */
 import { trackEvent } from '@/lib/analytics';
-import { MAX_QUERY_ROWS, getDb } from '@/lib/platform';
+import { MAX_QUERY_ROWS, getDb, retryOnConflict, TransactionConflict } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 import type { Scalar } from '@/lib/dataflow';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
@@ -62,7 +62,7 @@ interface MutationRefused {
    * the honest answer is "try again". (Unreachable on PGLite, which serializes
    * every operation; reachable on Postgres.)
    */
-  reason: 'policy_denied' | 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only' | 'too_many_rows';
+  reason: 'policy_denied' | 'invalid_sql' | 'dataset_full' | 'contended' | 'conflict' | 'row_changed' | 'row_not_unique' | 'dataset_read_only' | 'too_many_rows';
   detail: string;
   /**
    * A MACHINE-READABLE reason beside the sentence, for the one refusal a
@@ -125,6 +125,18 @@ export async function mutateDataset(
     maxAffected?:number;
     /** Report each statement's written rows (`steps`); needs `rowIdentity`. */
     trace?:boolean;
+    /** Function allow/deny lists the engine enforces on these statements (a rule's role only; an admin's write has no rule). */
+    execution?:DatasetMutationPolicy['execution'];
+    /**
+     * Under the row lock, before the head moves: do the inputs this write was computed from still hold (another
+     * dataset's read authorization, say)? False is answered like a lost CAS: nothing commits, the next attempt (or,
+     * with casRetries 0, the caller) re-reads and decides again. Queries run on `tx` only.
+     */
+    commitCheck?:(tx:Queryable)=>Promise<boolean>;
+    /** Datasets this write's values were read from: locked FOR SHARE with the authorization rows, before any decision (lib/artifact-access lock order). */
+    lockReads?:readonly string[];
+    /** The caller already charged the public-write rate limit for this call (once, not per attempt): do not charge it again. */
+    throttled?:boolean;
     /** Trusted internal producer: effect and canonical receipt share only the winning dataset transaction. */
     commitEffect?:(tx:Queryable,result:MutationApplied)=>Promise<void>;
   } = {},
@@ -140,7 +152,7 @@ export async function mutateDataset(
   }});
   const admitted=await datasetWriteAccess(dataset,actor,access);
   // Every write a rule admits (not the owner's or an editor's) is rate-limited per dataset, signed-out writes included.
-  if(admitted.allowed&&!admitted.admin){
+  if(admitted.allowed&&!admitted.admin&&!guard.throttled){
     try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}
   }
 
@@ -186,6 +198,7 @@ export async function mutateDataset(
     let policy:DatasetMutationPolicy|undefined;
     try{
       policy=tableMutationPolicy(decision,selected);
+      if(policy&&guard.execution)policy={...policy,execution:guard.execution};
       // Identity allocation is platform-owned; users cannot select this column in their schema.
       // A rule's `_id` reads the identity column (utils compilePolicyPredicate `rowId`).
       if(identity&&policy)policy={...policy,rowId:identity.column,table:{...policy.table,insert_permissions:policy.table.insert_permissions?.map(entry=>({...entry,permission:{...entry.permission,...(Array.isArray(entry.permission.columns)?{columns:[...entry.permission.columns,identity.column]}:{})}}))}};
@@ -247,7 +260,8 @@ export async function mutateDataset(
     const commit=async(tx:Queryable)=>{
      // Under the row lock: the same role and rules, or no commit. A changed
      // decision is answered like a lost CAS: the next attempt re-reads the head and decides again.
-     try{await assertWriteCommit(tx,current,actor,decision,access);}catch(error){if(error instanceof DatasetError)return undefined;throw error;}
+     try{await assertWriteCommit(tx,current,actor,decision,access,{reads:guard.lockReads??[],documents:memberOfDocuments(columns)});}catch(error){if(error instanceof DatasetError)return undefined;throw error;}
+     if(guard.commitCheck&&!await guard.commitCheck(tx))return undefined;
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState||guard.expectedPolicyRevision!==undefined){
       const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
@@ -264,9 +278,13 @@ export async function mutateDataset(
      return committed;
     };
     let row;
-    try { row=await db.transaction(commit); }
+    // The whole commit is retried when Postgres aborts it for a deadlock or a serialization failure (lib/platform
+    // retryOnConflict): nothing of an aborted attempt committed, its receipt included, so the write applies at most
+    // once; exhausted, the caller gets the retryable `conflict`.
+    try { row=await retryOnConflict(()=>db.transaction(commit)); }
     catch(error) {
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
+     if(error instanceof TransactionConflict)return {reason:'conflict',detail:'the write met concurrent writers and was not applied — try again'};
      throw error;
     }
 
@@ -284,6 +302,11 @@ export async function mutateDataset(
       return { reason: 'contended', detail: 'the dataset is being written too quickly to apply this change — try again' };
     }
   }
+}
+
+/** The documents a table's user columns name in memberOf (`doc:<id>`): their membership is read at commit, so they are locked first. */
+function memberOfDocuments(columns:readonly import('@artifactbin/contracts').DatasetColumn[]):string[]{
+ return [...new Set(columns.filter(c=>c.type==='user').flatMap(c=>c.constraints?.memberOf??[]).filter(ref=>ref!=='current').map(ref=>ref.slice(4)))];
 }
 
 /** The one stored table a direct write names, by SQLite's own analysis of it over the dataset's catalog. */

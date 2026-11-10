@@ -148,7 +148,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     return new Promise<T>(resolve=>{
       let done=false;
       const settle=(answer:PoolAnswer)=>{if(done)return;done=true;resolve(answer.ok?answer.result as T:onError(answer.error));};
-      queue.push({request:{...request,id:++ids} as PoolRequest,deadlineMs,prepared:request.method==='run'?preparedKey(request.input):null,settle});pump();
+      queue.push({request:{...request,id:++ids} as PoolRequest,deadlineMs,prepared:request.method==='run'?preparedKey(request.input):request.method==='mutate'&&request.input.mounted?preparedKey({catalog:request.input.mounted.catalog}):null,settle});pump();
     });
   };
 
@@ -156,7 +156,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
   return {
     run: (input) => {
       const { limit, timeoutMs } = queryBounds(input, caps);
-      const bounds: ReadBounds = { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit };
+      const bounds: ReadBounds = { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit, ...(input.outputBytes !== undefined ? { outputBytes: input.outputBytes } : {}) };
       return call<Record<string, QueryOutcome>>({ method: 'run', input, bounds }, timeoutMs * Math.max(1, input.queries.length),
         (error) => Object.fromEntries(input.queries.map((q) => [q.name, timedOut(error) ? { error: `<Query name="${q.name}"> ran too long and was stopped (limit ${timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true } : { error }])));
     },

@@ -6,7 +6,7 @@
  * generated from the filesystem (scripts/generate-routes).
  */
 import type { Hono } from 'hono';
-import { emit } from '@/lib/platform';
+import { emit, TransactionConflict } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { UnservableDocument } from '@/lib/artifacts';
 import { PayloadTooLarge } from '@/lib/http';
@@ -26,6 +26,8 @@ export function mountRoutes(app: Hono, routes: RouteEntry[] = ROUTES): void {
           if (error instanceof UnservableDocument) return error.response();
           // A body past its route's cap (lib/http readBody) is the caller's, not an outage.
           if (error instanceof PayloadTooLarge) return error.response();
+          // A write that kept meeting concurrent writers (lib/platform retryOnConflict) wrote nothing: retry it.
+          if (error instanceof TransactionConflict) return new Response(JSON.stringify({ error: 'conflict', message: error.message }), { status: 503, headers: { 'content-type': 'application/json', 'retry-after': '1' } });
           /*
            * A 500 the operator cannot read is an outage with no handle: the
            * framework's default handler answers and swallows, which is exactly

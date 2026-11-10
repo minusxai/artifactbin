@@ -8,7 +8,8 @@ import {DatasetError} from './errors';
 async function memberIds(db:Queryable, refs:string[],lock=false):Promise<string[]> {
  const ids=refs.filter(ref=>ref!=='current').map(ref=>ref.slice(4));
  if(!ids.length)return [];
- if(lock)await db.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[ids]);
+ // Code-unit order, as every multi-artifact lock (lib/artifact-access lockOrder); the commit locked these first.
+ if(lock)await db.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id COLLATE "C" FOR SHARE',[ids]);
  const result=await db.query<{id:string}>(`SELECT DISTINCT u.id FROM users u JOIN artifacts a ON
    (a.user_id=u.id OR EXISTS (SELECT 1 FROM ${JOIN_RELATIONS} m WHERE m.artifact_id=a.id AND m.user_id=u.id AND m.status='accepted') OR EXISTS (SELECT 1 FROM artifact_shares s WHERE s.artifact_id=a.id AND (s.user_id=u.id OR (s.user_id IS NULL AND s.email=u.email))))
    WHERE a.id=ANY($1::text[]) AND a.deleted_at IS NULL`,[ids]);

@@ -41,7 +41,8 @@ export interface SqliteEngine {
    * imports' `schemas` attached in the order a `run` attaches them.
    */
   held(schemas: readonly string[]): HeldDatabase;
-  mutate(input: MutationInput, bounds: WriteBounds, extensions?: SqlExtensions): MutationOutcome;
+  /** A keyed write (`input.mounted`) is answered over the database `prepared` keeps for its keys, never changing it. */
+  mutate(input: MutationInput, bounds: WriteBounds, extensions?: SqlExtensions, prepared?: PreparedCache): MutationOutcome;
   dryRun(input: DryRunInput): DryRunResult;
   dryRunMutations(input: DryRunMutationsInput, extensions?: SqlExtensions): DryRunMutationsResult;
   /** A fresh guarded database with the function library, for callers that orchestrate their own statements. */
@@ -67,7 +68,7 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
     run: (input, bounds, prepared) => runQueries(sqlite3, input, bounds, prepared),
     runMany: (input, bounds) => runManyQueries(sqlite3, input, bounds),
     held: (schemas) => heldDatabase(sqlite3, schemas),
-    mutate: (input, bounds, extensions) => runMutation(sqlite3, input, bounds, extensions),
+    mutate: (input, bounds, extensions, prepared) => runMutation(sqlite3, input, bounds, extensions, prepared),
     dryRun: (input) => dryRunQueries(sqlite3, input),
     dryRunMutations: (input, extensions) => dryRunMutations(sqlite3, input, extensions),
     open: () => new SqliteDatabase(sqlite3),

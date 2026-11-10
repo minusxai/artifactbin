@@ -4,7 +4,7 @@
  * when it has one. The rows a decision consults are read here by their access columns alone: no document, no content.
  */
 import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from './saved-html-upload';
-import {liveAccessFacts,type AccessFacts} from './access-facts';
+import {transactionAccessFacts,type AccessFacts} from './access-facts';
 import {ownsArtifact} from './access';
 import { JOIN_RELATIONS } from '@/lib/social';
 import type { DatasetGrantContext, Queryable } from '@artifactbin/contracts';
@@ -20,7 +20,7 @@ const ACCESS_COLUMNS='id,user_id,token_id,group_id,visibility,format,edit_id,dat
 /** The row fields a read decision consults. */
 export type ReadRow = Pick<ArtifactRow,'id'|'user_id'|'token_id'|'visibility'|'format'> & Partial<Pick<ArtifactRow,'group_id'|'dataset_policy'>>;
 /** Called inside an optional existing transaction; never enqueues work on the outer database. `facts` defaults to `tx`'s. */
-export async function readThrough(tx:Queryable,row:ReadRow,actor:AccessActor,facts:AccessFacts=liveAccessFacts(actor,tx)):Promise<boolean>{
+export async function readThrough(tx:Queryable,row:ReadRow,actor:AccessActor,facts:AccessFacts=transactionAccessFacts(actor,tx)):Promise<boolean>{
  if(row.group_id&&await facts.groupRole(row.group_id))return true;
  if(ownsArtifact(row,actor)||row.visibility!=='private')return true;
  if(!actor.userId)return false;

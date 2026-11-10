@@ -51,7 +51,11 @@ function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: ReadonlySe
   return mounts;
 }
 
-export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal): Promise<PageSqlAnswer> {
+/**
+ * `aggregates: 'visible'` (the page SQL door, ./page-sql-door): no `allow_aggregations` gate; the reader aggregates
+ * over the rows its role view shows, which is all a mount ever holds.
+ */
+export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { aggregates?: 'gated' | 'visible' } = {}): Promise<PageSqlAnswer> {
   let result;
   const deadline = performance.now() + SQL_READ_LIMITS.timeoutMs;
   try {
@@ -68,13 +72,20 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
       return refuse('validation_failed', 'SQL statement could not be prepared');
     }
     signal.throwIfAborted();
-    const mounts = pageSqlMounts(loaded, selected);
-    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: Math.max(1, deadline - performance.now()), signal });
+    const mounts = pageSqlMounts(loaded, selected, options.aggregates !== 'visible');
+    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: Math.max(1, deadline - performance.now()), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
   } catch (e) {
+    if (e instanceof CatalogQueryFailure && e.tooLarge) return refuse('result_too_large', TOO_LARGE);
     if (e instanceof CatalogQueryFailure) return refuse(e.timedOut ? 'timeout' : 'validation_failed', e.timedOut ? `a statement runs at most ${SQL_READ_LIMITS.timeoutMs} ms` : e.message);
     if (e instanceof Error && e.message.startsWith('Dataset SQL: ')) return refuse('validation_failed', e.message);
     throw e;
   }
   if (result.truncated) refuse('result_too_large', `a result is at most ${SQL_READ_LIMITS.rows} rows; aggregate or filter in SQL`);
-  return { columns: result.columns.map((c) => ({ name: c.name, type: c.type })), rows: result.rows as Array<Record<string, unknown>> };
+  const answer = { columns: result.columns.map((c) => ({ name: c.name, type: c.type })), rows: result.rows as Array<Record<string, unknown>> };
+  // The engine's count is a lower bound of the JSON (text by length); the answer as it will travel is measured exactly.
+  if (jsonBytes(answer) > SQL_READ_LIMITS.outputBytes) refuse('result_too_large', TOO_LARGE);
+  return answer;
 }
+const TOO_LARGE = `a result is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`;
+/** A value's serialized size in UTF-8 bytes. */
+export const jsonBytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;

@@ -20,7 +20,7 @@ parentPort!.on('message', (request: PoolRequest) => {
   try {
     const result = request.method === 'run' ? engine.run(request.input, request.bounds, prepared)
       : request.method === 'runMany' ? engine.runMany(request.input, (_run, i) => request.bounds.at(i)!)
-      : request.method === 'mutate' ? engine.mutate(request.input, request.bounds, extensions)
+      : request.method === 'mutate' ? engine.mutate(request.input, request.bounds, extensions, prepared)
         : request.method === 'dryRun' ? engine.dryRun(request.input)
           : engine.dryRunMutations(request.input, extensions);
     answer = { id: request.id, ok: true, result };

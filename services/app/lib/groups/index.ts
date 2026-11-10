@@ -3,7 +3,7 @@ import {groupAttempt,recordGroupMutation,type GroupMutationActor} from './mutati
 /** Independent owners. Membership and links never derive authority from accounts or artifacts; users and groups share accounts' handle namespace. */
 import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupDetail,GroupInvitation,GroupMember,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
 import {isTestDomainEmail} from '@artifactbin/contracts';
-import { TEST_DOMAIN, getDb, type Queryable, generateInternalId } from '../platform';
+import { TEST_DOMAIN, getDb, retryOnConflict, type Queryable, generateInternalId } from '../platform';
 import { reserveHandle, isValidHandle } from '../accounts';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;}
 export {GroupError} from './errors';
@@ -94,7 +94,10 @@ export async function updateGroup(actorId:string,id:string,input:UpdateGroupInpu
  });
 }
 export async function deleteGroup(actorId:string,id:string,handle:string,actor?:GroupMutationActor):Promise<void>{
- await (await getDb()).transaction(async tx=>{
+ // It locks the group before the shares that name it, against the global lock order (lib/artifact-access locks.ts):
+ // a deadlock with a guarded write aborts one side, and the whole deletion is retried.
+ const db=await getDb();
+ await retryOnConflict(()=>db.transaction(async tx=>{
  await requireEditor(tx,actorId,id);
  const group=await getGroupById(id,tx);
  if(handle!==group!.handle)throw new GroupError('handle_mismatch',409);
@@ -109,7 +112,7 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
  await tx.query('DELETE FROM group_members WHERE group_id=$1',[id]);
  await tx.query("UPDATE account_preferences SET default_destination='{\"type\":\"inherit\"}'::jsonb WHERE default_destination->>'type'='group' AND default_destination->>'id'=$1",[id]);
  await tx.query('UPDATE groups SET deleted_at=now() WHERE id=$1',[id]);
- });
+ }));
 }
 
 export {recordGroupMutation,groupQuota} from './mutations';
