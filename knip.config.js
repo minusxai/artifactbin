@@ -18,7 +18,7 @@ export default {
         // Retained downstream build entry (downstream-script-paths.test.ts).
         'scripts/build/build-islands.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
-        // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
+        // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (scripts/AGENTS.md),
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/{dataset-graphql,dataset-read,resolver}-latency.ts', 'scripts/__tests__/reserved-ids-postgres-proof.ts',

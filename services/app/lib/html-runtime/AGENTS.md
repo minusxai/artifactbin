@@ -12,6 +12,12 @@ build that serve them. Access decisions belong to the doors behind the trusted p
 - Anything assembly writes inside a `<script>` is escaped as `assembleHtmlPage` does (`<` in JSON, `</script`
   in code). Viewer state stays in this viewer's browser storage; only an explicit local Save reads it
   (`readViewerDocument`).
+- Runtime modules are public code: no page, viewer, cookie or credential is an input to their bytes, so they
+  never carry viewer state (`native-html.server.ts`). A retained content-addressed alias serves its exact bytes.
+- A page's extra script, frame or connect origins come only from publish-validated `<head>` declarations
+  (`<meta name="csp-connect" …>`, `lib/document/csp-extensions.ts`) and reader consent, never another way.
+- A read-only (archived) shell relays only reads: GET functions, SQL reads, no uploads. Raw pages and portable
+  copies have no trusted frame, so they never upload.
 - Teach new pages `sql`, `fetch('/fn/NAME')` and `@afbin/state`. `apollo/graphql-compat.ts` is the deprecated
   GraphQL client behind module-graph rule 5 (`GRAPHQL_COMPAT`): fix it, never extend it.
 - Published pages are live code: never remove or rename a name `@afbin/apollo` or `@afbin/state` exports. A name
@@ -28,6 +34,3 @@ build that serve them. Access decisions belong to the doors behind the trusted p
 - `npm test -- --files services/app/lib/html-runtime/__tests__/build.test.ts services/app/lib/html-runtime/__tests__/built-watch.test.ts services/app/lib/html-runtime/__tests__/assembly.test.ts services/app/lib/html-runtime/__tests__/interface.test.ts services/app/lib/skills/__tests__/retired-phrasing.test.ts`
 - `built-watch.test.ts` links the built modules as a page's import map does and runs live-page calls: run it
   after any change to what `@afbin/apollo` or `@afbin/state` export.
-
-## More
-- [Serving and security](../../../../docs/serving-and-security.md)

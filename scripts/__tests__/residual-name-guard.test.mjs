@@ -164,23 +164,21 @@ describe('README.md', () => {
   });
 });
 
-describe('docs/', () => {
+describe('SETUP.md', () => {
   it('source onboarding pulls by the published ID and preserves local edits', () => {
-    const onboarding = read('docs', 'oss-onboarding.md');
+    const onboarding = read('SETUP.md');
     expect(onboarding).toContain('node scripts/read.mjs <published-id> --output page.html');
     expect(onboarding).toContain('returned by `publish.mjs`');
     expect(onboarding).toContain('preserve any unpublished local edits');
     expect(onboarding).not.toMatch(/npm run afbin|afbin (?:pull|push)/);
   });
-  it('keeps the current reference guides linked from the README', () => {
-    for (const f of ['document-format.md', 'serving-and-security.md', 'http-api.md', 'operations.md', 'page-functions.md', 'scripts.md']) {
-      expect(fs.existsSync(path.join(ROOT, 'docs', f)), f).toBe(true);
-      expect(read('docs', f).length, f).toBeGreaterThan(400);
-      expect(readme(), f).toContain(`docs/${f}`);
-    }
+  it('is linked from the README', () => {
+    expect(readme()).toContain('(SETUP.md)');
   });
-  it('operations.md speaks only namespaced names', () => {
-    for (const n of retiredEnvNames()) expect(read('docs', 'operations.md'), n).not.toMatch(new RegExp(`(^|[^A-Z_])${n}=`, 'm'));
+  it('SETUP.md and .env.example speak only namespaced names', () => {
+    for (const file of ['SETUP.md', '.env.example']) {
+      for (const n of retiredEnvNames()) expect(read(file), `${file} ${n}`).not.toMatch(new RegExp(`(^|[^A-Z_])${n}=`, 'm'));
+    }
   });
 });
 

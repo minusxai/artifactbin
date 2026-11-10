@@ -1,7 +1,7 @@
 /**
  * A CSV A PAGE LINKS BY PATH, written to after publish (a scheduled function, the page SQL door), then the page is
  * edited: republishing with the CSV UNCHANGED keeps the dataset as it is now (no re-import over the newer rows, no
- * conflict); a CHANGED CSV keeps the documented rule for replacing data (docs/http-api.md): a conditional replace of
+ * conflict); a CHANGED CSV keeps the rule for replacing data (a conditional PUT): a conditional replace of
  * the version the publish saw, refused when a newer version exists, and nothing is overwritten.
  */
 import {expect,it} from 'vitest';

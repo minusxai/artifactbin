@@ -22,7 +22,7 @@ npm run setup -- --yes
 npm run dev
 ```
 
-Open the public URL printed by setup: http://app.lvh.me:3030 by default. For another instance, use a separate checkout/data directory and `npm run setup -- --yes --port 7445`. Local login codes come from `npm run dev:otp -- your@email.example`; no mail provider is needed. See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing rules.
+Open the public URL printed by setup: http://app.lvh.me:3030 by default. For another instance, use a separate checkout/data directory and `npm run setup -- --yes --port 7445`. Local login codes come from `npm run dev:otp -- your@email.example`; no mail provider is needed. Running your own server: [SETUP.md](SETUP.md). Development and testing rules: [AGENTS.md](AGENTS.md).
 
 ```sh
 npm run validate
@@ -35,28 +35,6 @@ The local test wrapper runs affected tests within its file budget; a deferred lo
 
 `services/app` owns the reader and artifact APIs. `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. The author skill lives at [services/app/skills/artifactbin](services/app/skills/artifactbin/SKILL.md). The HTTP skill is the public authoring path; standard OAuth, verified email login and account API-token access remain supported.
 
-Reference:
-
-- [Document format](docs/document-format.md): native HTML pages, page state, datasets and functions.
-- [HTTP API](docs/http-api.md): authentication, artifact operations, datasets, groups.
-- [Serving and security](docs/serving-and-security.md): accounts, isolation, access and portable files.
-- [Page functions](docs/page-functions.md): how `/fn` calls and schedules are admitted and what they reach.
-- [File uploads](docs/file-uploads.md), [screenshot comments](docs/screenshot-comments.md) and [notifications](docs/notifications.md).
-
-Running a server:
-
-- [OSS onboarding](docs/oss-onboarding.md): first login, first page and per-feature setup.
-- [Operations](docs/operations.md): configuration, health, storage, S3 export uploads and production composition.
-- [Account migration](docs/account-migration.md): the one-time Better Auth account schema upgrade.
-
-Services:
-
-- [SQL service](docs/sql-service.md), [browser service](docs/browser-service.md), [browser sessions](docs/browser-sessions.md) and the [program runner](docs/runner.md).
-
-Working in this repository:
-
-- [Scripts](docs/scripts.md): every program under `scripts/` and who runs it.
-- [Agent workflows](docs/agent-workflows.md): delegated work, worktrees and gate containers.
-- Dated measurements: [resolver call latency](docs/resolver-latency.md) and [dataset read latency](docs/dataset-read-latency.md).
+The guides people and agents read are served by the author skill (`/llms.txt`, `/llms/<topic>`); the operations behind them are described in `services/app/lib/operations/registry.ts`. How a module works is in its own header comment, and the rules for changing it are in the `AGENTS.md` card [AGENTS.md](AGENTS.md) names for that directory. [SETUP.md](SETUP.md) covers running a server.
 
 [Security policy](SECURITY.md) · [Apache-2.0](LICENSE).

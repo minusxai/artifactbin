@@ -5,7 +5,7 @@
  * brief at `.agent/BRIEF.md` with that block appended — so the brief in the
  * plan, the brief in the tree and the env the servers boot with are one
  * source. `.agent/` and `.env` can never be committed (`info/exclude`,
- * `.gitignore`). The handoff procedure is in docs/agent-workflows.md.
+ * `.gitignore`). The delegation rules are the scripts/ card's (scripts/AGENTS.md).
  *
  *   node scripts/agent-worktree.mjs --phase p2 --brief ../p2-brief.md            # from the repo the agent works in
  *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule <path>=<commit>
@@ -17,7 +17,7 @@
  *
  * `--harness` prints a launch line per coding agent. Those lines encode CLI
  * quirks that move with the CLI, so check the installed help before trusting
- * one; docs/agent-workflows.md says the same about version-specific commands.
+ * one.
  */
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';

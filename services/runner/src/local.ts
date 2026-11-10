@@ -1,3 +1,20 @@
+/**
+ * THE RUNNER, in this process (`createRunner`): compiles a page's pinned backend source and runs each call in
+ * isolation. Each run gets its own `node --no-node-snapshot` worker process with a fresh V8 isolate, killed when the
+ * run ends and never reused; a few are started ahead of demand (`prestartedWorkers`, default 2, no more booting at
+ * once than the CPU quota allows). With a worker image (`dockerImage`) each run instead gets a new container:
+ * non-root, `--network none`, read-only, all capabilities dropped, no-new-privileges, memory, CPU and PID limits,
+ * and no pre-started workers. Only the controller talks to Docker; a worker gets bounded stdin/stdout RPC and no
+ * Docker socket, credentials or host mount. Programs get no filesystem, shell, Node modules or network: their
+ * imports are pinned by ./compiler, bundles cached by source hash and compiler version.
+ *
+ * Bounds: `defaults` below (30 s wall, 200 ms per synchronous isolate entry, which is not a cumulative CPU quota,
+ * 64 MiB, 100 upstream requests); page function calls pass the tighter RESOLVER_LIMITS. `getRun({waitMs})` holds a
+ * read until the run is terminal, at most `RESOLVER_LIMITS.runWaitMs`. Cancellation aborts host requests, revokes
+ * capabilities and destroys the worker (and its database tunnels) before the terminal state is saved. On a restart
+ * unfinished runs are marked interrupted (`host_restart`), never replayed: their side effects may have happened.
+ * `start`, `getRun`, `events` and `cancel` serve trusted host code only, never a public route.
+ */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';

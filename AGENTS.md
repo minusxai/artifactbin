@@ -1,7 +1,8 @@
 # Working on artifactbin
 
-`CLAUDE.md` imports this file; setup: [CONTRIBUTING.md](CONTRIBUTING.md). Read it whole, then the card for the
-area you touch. Keep links plain, never `@` imports.
+`CLAUDE.md` imports this file; running a copy: [SETUP.md](SETUP.md). Read it whole, then the card for the area
+you touch. There is no docs folder: a rule goes in its directory's card, an explanation in the code's header
+comment, history nowhere. Keep links plain, never `@` imports.
 
 ## Working in → read first
 
@@ -16,16 +17,10 @@ area you touch. Keep links plain, never `@` imports.
 | [lib/graphql-compat](services/app/lib/graphql-compat/AGENTS.md) | anything that touches GraphQL (deprecated, fenced) |
 | [lib/skills](services/app/lib/skills/AGENTS.md) | the author skill (`services/app/skills`), served `/llms` copy, evals |
 | [solid](services/app/solid/AGENTS.md) | any app UI: chrome, controls, overlays, UI tests |
+| [server](services/app/server/AGENTS.md) | serving, origins, CSP, hosts, credentials: the trust boundary |
+| [browser](services/browser/AGENTS.md) | the browser service: renders, uploads, harvest, live sessions |
+| [scripts](scripts/AGENTS.md) | delegating (briefs, worktrees, gates, handoffs), any root script |
 | [scripts/ci](scripts/ci/AGENTS.md) | workflows, PR lane budgets, test lists and timings, a red main |
-
-| Doc | Read when |
-|---|---|
-| [agent-workflows](docs/agent-workflows.md) | delegating: briefs, worktrees, gates, handoffs |
-| [serving-and-security](docs/serving-and-security.md) | before markup, rendering or trust-boundary changes |
-| [http-api](docs/http-api.md) | changing HTTP behaviour |
-| [operations](docs/operations.md) | deployment and settings |
-| [scripts](docs/scripts.md) | what each script does |
-| [sql-service](docs/sql-service.md), [browser-service](docs/browser-service.md), [runner](docs/runner.md) | changing a service's routes or wire shapes |
 
 ## Check tiers (read before running commands)
 
@@ -82,7 +77,7 @@ area you touch. Keep links plain, never `@` imports.
   link access is neither ownership nor dataset write access.
 - After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides a broken
   lock); native packages and browser assets need build/image verification.
-- Delegating: read the agent-workflows doc first; every brief inherits these rules.
+- Delegating: read the scripts card first; every brief inherits these rules.
 
 ## Commands (from the repo root)
 

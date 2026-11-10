@@ -1,4 +1,12 @@
-/** One event-to-notification policy. Source actions record facts (lib/platform recordEvent), never inbox rows. */
+/**
+ * One event-to-notification policy. Source actions record facts (lib/platform recordEvent) in their own transaction,
+ * never inbox rows; this projection derives recipient rows (`member_notifications`, linked by `source_event_id`) in
+ * that same transaction, so a rollback loses neither half. A person's own actions never notify themselves; an
+ * agent's reply notifies the human account it acted for even when they share an identity (write `notifyThread`).
+ * Blocks exclude a recipient both ways. A reply that also resolves is one event and one notification per recipient;
+ * reopening is a new event. Dataset mutations notify nobody. Inbox reads and mail eligibility recheck access rather
+ * than trusting an old event, and a stored link never grants access, accepts an invite or marks anything read.
+ */
 import type {EventEnvelope,Queryable} from '@artifactbin/contracts';
 import {notificationChanged,notifyThread,recordNotification,removeThreadNotifications} from './write';
 

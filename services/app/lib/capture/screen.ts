@@ -1,3 +1,14 @@
+/**
+ * SCREENSHOT COMMENTS, the browser half: `beginCapture` (called from the Select click, before any asynchronous import,
+ * so the permission prompt keeps its user gesture), `capture` and `dispose`. Automatic capture needs both screen
+ * sharing and exact-tab verification (Capture Handle, `verified` below); a browser without them gets the manual image
+ * upload and an explicit text-only choice, and a generic getDisplayMedia wrapper is never taken as source identity.
+ * Frames use the source's actual dimensions, not devicePixelRatio; only the cropped image leaves this module, and
+ * full-tab bitmaps are released after use, including ones that arrive after a timeout. Streams stop on completion,
+ * failure, navigation, source change or timeout. Stage timings are recorded as performance measures (outcome and
+ * dimensions, never pixels). The draft lifecycle is solid/document/CommentCapture.ts; staging is
+ * lib/annotations/comment-images.
+ */
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import {CaptureError, type CaptureRect, type CaptureSession, type CaptureStage} from './contract';
 import {encodePng} from './png';

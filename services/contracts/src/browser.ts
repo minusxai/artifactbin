@@ -6,7 +6,7 @@ import type { BrowserSessions } from './browser-sessions';
  * the app's retry decision and its 503-vs-500 split depend on which failure it
  * was. The service's one STATEFUL surface is optional `sessions` (below,
  * `./browser-sessions`): persistent isolated browser sessions that keep their
- * context and pages across calls. See docs/browser-sessions.md.
+ * context and pages across calls (services/browser/src/sessions.ts owns leases, receipts and serialisation).
  *
  * There is no PDF: the product exports png and jpg, element-scoped by a
  * selector, with full, card, positioned-card, preview, and slide capture

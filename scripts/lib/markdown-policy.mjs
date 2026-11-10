@@ -2,23 +2,24 @@
  * THE MARKDOWN LAYOUT AND INSTRUCTION-FILE GUARD (scripts/__tests__/markdown-policy.test.mjs runs it).
  *
  * Agents read the root AGENTS.md whole at the start of every session, then the one scoped AGENTS.md its dispatch
- * table names for the area they touch. That only works while the arrangement stays small, flat and true, so
- * every rule is checked here, as data, over a tree of tracked paths:
+ * table names for the area they touch; a person running their own copy reads SETUP.md. There is no docs folder:
+ * a rule lives in the card for the directory it binds, an explanation in the header comment of the code it
+ * explains. That only works while the arrangement stays small, flat and true, so every rule is checked here, as
+ * data, over a tree of tracked paths:
  *
- *   R1 every tracked *.md is in the allowed layout below;
+ *   R1 every tracked *.md is in the allowed layout below (the root files, the scoped pairs, the author skill);
  *   R2 every AGENTS.md has a sibling CLAUDE.md that is exactly `@AGENTS.md\n`, and the reverse;
  *   R3 the root AGENTS.md stays under 8,192 bytes, a scoped one under 4,096;
  *   R4 the root's dispatch table links each scoped AGENTS.md exactly once, and no AGENTS.md that does not exist;
  *   R5 a scoped AGENTS.md never links or names another AGENTS.md (the root included): one level deep;
- *   R6 every relative markdown link in the root files, docs/ and every AGENTS.md resolves to a tracked file;
- *   R7 every checkable inline code span (a repo path, an `npm run` script, a code identifier) in the root files,
- *      docs/ (except the two dated records) and every AGENTS.md names something that exists. A path may be a module
- *      specifier (no extension, or a directory's index), and a slash-less `name.ext` that no tracked file has passes
- *      only as a member access (`caps.sql`) that occurs in a tracked source;
- *   R8 every docs/*.md is linked from README.md, CONTRIBUTING.md or an AGENTS.md;
- *   R9 docs/scripts.md names every script directly in scripts/ and every scripts/ci/*.mjs;
- *   R10 a `docs/<name>.md` named in a tracked source file (a comment, a string) is a tracked doc. Tests and
- *       fixtures are not read: they name made-up docs on purpose.
+ *   R6 every relative markdown link in the root files and every AGENTS.md resolves to a tracked file;
+ *   R7 every checkable inline code span (a repo path, an `npm run` script, a code identifier) in the root files and
+ *      every AGENTS.md names something that exists. A path may be a module specifier (no extension, or a
+ *      directory's index), and a slash-less `name.ext` that no tracked file has passes only as a member access
+ *      (`caps.sql`) that occurs in a tracked source;
+ *   R10 a `docs/<name>.md` named in a tracked source file (a comment, a string) is a tracked file, so with no docs
+ *       folder no source may cite one. Tests and fixtures are not read: they name made-up docs on purpose.
+ *   (R8 and R9 guarded the docs folder and went with it.)
  *
  * Pure: `files` maps every tracked path to its text (markdown and package.json; any other file may be ''), and
  * the identifiers R7 found are passed in, so a literal tree and the real repository run the same code. The test
@@ -26,23 +27,16 @@
  * sources name with another (see `docMentionsIn`).
  */
 
-const ROOT_MARKDOWN = ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'AGENTS.md', 'CLAUDE.md'];
-const DOCS = [
-  'agent-workflows.md', 'account-migration.md', 'browser-service.md', 'browser-sessions.md', 'dataset-read-latency.md',
-  'document-format.md', 'file-uploads.md', 'http-api.md', 'notifications.md', 'operations.md', 'oss-onboarding.md',
-  'page-functions.md', 'resolver-latency.md', 'runner.md', 'screenshot-comments.md', 'scripts.md',
-  'serving-and-security.md', 'sql-service.md',
-];
-/** The ten directories that hold a scoped AGENTS.md/CLAUDE.md pair, each linked from the root's dispatch table. */
+const ROOT_MARKDOWN = ['README.md', 'SETUP.md', 'SECURITY.md', 'AGENTS.md', 'CLAUDE.md'];
+/** The directories that hold a scoped AGENTS.md/CLAUDE.md pair, each linked from the root's dispatch table. */
 export const SCOPED_DIRS = [
   'services/app/lib/platform', 'services/app/lib/artifact-access', 'services/app/lib/html-runtime',
   'services/app/lib/html-components', 'services/app/lib/page-operations', 'services/app/lib/dataflow',
-  'services/app/lib/graphql-compat', 'services/app/lib/skills', 'services/app/solid', 'scripts/ci',
+  'services/app/lib/graphql-compat', 'services/app/lib/skills', 'services/app/solid', 'services/app/server',
+  'services/browser', 'scripts', 'scripts/ci',
 ];
 /** The author skill: product content with its own guard (services/app/lib/skills/__tests__/skill-tree.test.ts). */
 const SKILL_ROOT = 'services/app/skills/artifactbin/';
-/** Dated measurement records: their code spans name things as they were, so R7 does not read them. */
-const DATED_RECORDS = ['docs/resolver-latency.md', 'docs/dataset-read-latency.md'];
 const ROOT_MAX_BYTES = 8192;
 const SCOPED_MAX_BYTES = 4096;
 export const CLAUDE_TEXT = '@AGENTS.md\n';
@@ -62,7 +56,6 @@ const lineAt = (text, index) => text.slice(0, index).split('\n').length;
 const isMarkdown = (file) => file.endsWith('.md');
 const isAgents = (file) => baseOf(file) === 'AGENTS.md';
 const isScopedAgents = (file) => isAgents(file) && file !== 'AGENTS.md';
-const isDoc = (file) => /^docs\/[^/]+\.md$/.test(file);
 
 /** The text with every fenced code block blanked (same length and newlines, so indices still give lines). */
 function withoutFences(text) {
@@ -132,8 +125,8 @@ function packageScripts(files) {
   return scripts;
 }
 
-const R7_FILES = (file) => (isAgents(file) || ['README.md', 'CONTRIBUTING.md', 'SECURITY.md'].includes(file) || isDoc(file))
-  && !DATED_RECORDS.includes(file);
+/** The files R6 and R7 read: every instruction file and every root markdown file (CLAUDE.md is only an import). */
+const CHECKED_FILES = (file) => isAgents(file) || ROOT_MARKDOWN.includes(file);
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 /** A whole-span identifier R7 checks: six or more characters, with an internal capital or UPPER_SNAKE. */
 function spanIdentifier(span) {
@@ -150,7 +143,7 @@ const MEMBER_ACCESS = /^[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*$/;
 export function referencedIdentifiers(files) {
   const ids = new Set();
   for (const [file, text] of Object.entries(files)) {
-    if (!R7_FILES(file)) continue;
+    if (!CHECKED_FILES(file)) continue;
     for (const { span } of codeSpans(text)) {
       const id = spanIdentifier(span);
       if (id) ids.add(id);
@@ -283,13 +276,12 @@ export function validateMarkdownTree(files, identifiers, docMentions = []) {
   const markdown = paths.filter(isMarkdown);
   const agents = markdown.filter(isAgents);
   const scoped = agents.filter(isScopedAgents);
-  const docs = markdown.filter(isDoc);
   const bytes = (file) => new TextEncoder().encode(files[file]).length;
 
   // R1 allowlist.
-  const allowed = new Set([...ROOT_MARKDOWN, ...DOCS.map((doc) => `docs/${doc}`), ...SCOPED_DIRS.flatMap((dir) => [`${dir}/AGENTS.md`, `${dir}/CLAUDE.md`])]);
+  const allowed = new Set([...ROOT_MARKDOWN, ...SCOPED_DIRS.flatMap((dir) => [`${dir}/AGENTS.md`, `${dir}/CLAUDE.md`])]);
   for (const file of markdown) {
-    if (!allowed.has(file) && !file.startsWith(SKILL_ROOT)) report('R1', file, 'markdown is not allowed here: move it into docs/, a scoped AGENTS.md or a code comment, or delete it');
+    if (!allowed.has(file) && !file.startsWith(SKILL_ROOT)) report('R1', file, 'markdown is not allowed here: a rule goes in the scoped AGENTS.md for its directory, setup in SETUP.md, an explanation in the header comment of the code it explains; history is deleted');
   }
 
   // R2 pairs.
@@ -328,7 +320,7 @@ export function validateMarkdownTree(files, identifiers, docMentions = []) {
   }
 
   // R6 links.
-  const linkFiles = markdown.filter((file) => ROOT_MARKDOWN.includes(file) || isDoc(file) || isAgents(file));
+  const linkFiles = markdown.filter(CHECKED_FILES);
   for (const file of linkFiles) {
     for (const link of markdownLinks(files[file])) {
       const to = linkTarget(file, link.target);
@@ -338,33 +330,16 @@ export function validateMarkdownTree(files, identifiers, docMentions = []) {
 
   // R7 references.
   const context = { index: makeIndex(paths), scripts: packageScripts(files), identifiers };
-  for (const file of markdown.filter(R7_FILES)) {
+  for (const file of markdown.filter(CHECKED_FILES)) {
     for (const { span, line } of codeSpans(files[file])) {
       const problem = spanProblem(span, file, context);
       if (problem) report('R7', `${file}:${line}`, `\`${span}\`: ${problem}`);
     }
   }
 
-  // R8 reachability.
-  const linked = new Set(
-    markdown.filter((file) => ['README.md', 'CONTRIBUTING.md'].includes(file) || isAgents(file))
-      .flatMap((file) => markdownLinks(files[file]).map((link) => linkTarget(file, link.target))),
-  );
-  for (const doc of docs) if (!linked.has(doc)) report('R8', doc, 'is linked from no README.md, CONTRIBUTING.md or AGENTS.md');
-
-  // R9 scripts map.
-  const named = paths.filter((file) => /^scripts\/[^/]+\.(?:mjs|ts)$/.test(file) || /^scripts\/ci\/[^/]+\.mjs$/.test(file));
-  if (!tracked.has('docs/scripts.md')) report('R9', 'docs/scripts.md', `is missing; it must name all ${named.length} scripts in scripts/ and scripts/ci/`);
-  else {
-    const map = files['docs/scripts.md'];
-    for (const file of named) {
-      if (!new RegExp(`(?<![\\w.-])${escape(baseOf(file))}(?![\\w-])`).test(map)) report('R9', 'docs/scripts.md', `does not name ${file}`);
-    }
-  }
-
   // R10 sources name real docs.
   for (const { file, line, doc } of docMentions) {
-    if (!tracked.has(doc)) report('R10', `${file}:${line}`, `names ${doc}, which is not a tracked doc: name the doc that replaced it, or drop the reference`);
+    if (!tracked.has(doc)) report('R10', `${file}:${line}`, `names ${doc}, which is not a tracked file: name the card, module or SETUP.md section that holds it now, or drop the reference`);
   }
   return problems;
 }

@@ -22,12 +22,16 @@ guards) and `lib/function-schedules` (the scheduler and its claims), which have 
   commit, which locks the schedule row FOR SHARE last, after the page and its datasets.
 - Secrets stay on the host. A connection's settings go to the runner's driver, never to resolver code; refusals
   carry a code and a name only; a failure's detail is redacted and shown to the page owner alone.
+- An execution failure after admission has an unknown outcome: the host never retries it.
+- Only content creation, fork, publication and revert stamp `content_publisher_user_id` (lib/artifacts
+  `publish`); metadata, sharing, transfer, restore and live-region edits keep it, so a rename never lends the
+  owner's authority to code an editor published. Activating schedules keeps `FUNCTION_SCHEDULE_LIMIT` per
+  publisher (`schedule-capacity.ts`) in every such transaction.
+- Setting or rotating a secret never changes HTML, backend source, version metadata or downloads, and applies to
+  published versions at once; an editor never configures another owner's credentials.
 - Limits come from contracts (`RESOLVER_LIMITS`, `SQL_READ_LIMITS`); never restate a number here.
 - The GraphQL code still here (`namespaces.ts`, `execution-policy.ts`, `document-check.ts`, legacy typeDefs files
   with `@auth`) is under the deprecated GraphQL layer's rule: fixes, not features.
 
 ## Checks
 - `npm test -- --files services/app/lib/page-operations/__tests__/schedule.test.ts services/app/lib/page-operations/__tests__/sql.test.ts services/app/lib/page-operations/__tests__/backend.test.ts services/app/__tests__/page-functions.test.ts services/app/__tests__/function-schedules.test.ts services/app/__tests__/page-sql-door.test.ts`
-
-## More
-- [Page functions](../../../../docs/page-functions.md)

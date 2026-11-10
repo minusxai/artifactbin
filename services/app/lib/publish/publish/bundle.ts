@@ -78,7 +78,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
    // one. A dataset is linked live (`ref:ID`) and is written to after publish (the page's sql, a scheduled function):
    // its head moving past the recorded revision is the dataset being used, not a conflict, and an unchanged CSV is
    // never re-imported over those rows. A CHANGED CSV takes `update`: a conditional replace of the recorded revision,
-   // refused when a newer one exists (docs/http-api.md), so newer rows are never overwritten.
+   // refused when a newer one exists (the content write's expectedVersion/expectedState), so newer rows are never overwritten.
    const moved=mapping.kind==='dataset'?!!row&&row.version<Number(mapping.revision):!!row&&String(row.version)!==mapping.revision;
    if(!row||moved||mapping.kind==='dataset'&&row.format!=='dataset'||mapping.kind==='asset'&&!['image','file','pdf'].includes(row.format))throw Error('Dependency mapping ownership or revision conflict');
    return mapping.kind==='dataset'?'ref:'+row.id:assetAddress(row.id,String(row.version));

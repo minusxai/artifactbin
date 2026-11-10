@@ -1,3 +1,4 @@
+/** Run one gate process for scripts/gates.mjs: its timeout, and its output buffered so parallel gates never interleave. */
 import { spawn } from 'node:child_process';
 
 export const runGateProcess = (command, args, { timeoutMs, env = process.env }) => new Promise((resolve) => {

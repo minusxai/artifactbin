@@ -1,5 +1,5 @@
 /**
- * The markdown layout and the agent instruction files (scripts/lib/markdown-policy.mjs, rules R1–R10).
+ * The markdown layout and the agent instruction files (scripts/lib/markdown-policy.mjs, rules R1–R7 and R10).
  *
  * A guard has to be shown to bite: every rule first fires against a small literal tree and stays quiet on a
  * correct one; then the same validator runs once over the real repository and prints every violation with its
@@ -17,18 +17,16 @@ import {
 
 const validate = (files) => validateMarkdownTree(files, identifiersIn(files, referencedIdentifiers(files)), docMentionsIn(files));
 
-/** A correct tree: the root five, a dispatch table over the ten scoped pairs, two docs, a scripts map. */
+/** A correct tree: the root five, a dispatch table over every scoped pair, and the skill. */
 function goodTree() {
   const rows = SCOPED_DIRS.map((dir) => `| [${dir}](${dir}/AGENTS.md) | editing ${dir} |`).join('\n');
   const files = {
-    'README.md': '# Product\n\nSee [operations](docs/operations.md).\n',
-    'CONTRIBUTING.md': 'Rules are in [AGENTS.md](AGENTS.md). Run `npm run dev`.\n',
+    'README.md': '# Product\n\nRun your own: [SETUP.md](SETUP.md). Rules are in [AGENTS.md](AGENTS.md).\n',
+    'SETUP.md': '# Setup\n\nSee `server.ts`, `scripts/ci/check.mjs:12` and `services/app/{lib,solid}`.\n\n```sh\nnpm run not-a-script ./no/such/path\n```\n',
     'SECURITY.md': 'Report privately.\n',
-    'AGENTS.md': `# Working here\n\n| Working in | Read first when |\n|---|---|\n${rows}\n\n| Doc | Read when |\n|---|---|\n`
-      + '| [docs/scripts.md](docs/scripts.md) | scripts |\n\nRun `npm run validate -- --reuse`; `lib/thing/index.ts` holds `makeThing()`, set `APP__PORT`.\n',
+    'AGENTS.md': `# Working here\n\nSetup: [SETUP.md](SETUP.md).\n\n| Working in | Read first when |\n|---|---|\n${rows}\n\n`
+      + 'Run `npm run validate -- --reuse`; `lib/thing/index.ts` holds `makeThing()`, set `APP__PORT`.\n',
     'CLAUDE.md': CLAUDE_TEXT,
-    'docs/operations.md': '# Operations\n\nSee `server.ts`, `scripts/ci/check.mjs:12` and `services/app/{lib,solid}`.\n\n```sh\nnpm run not-a-script ./no/such/path\n```\n',
-    'docs/scripts.md': '# Scripts\n\n- `dev.mjs` starts it.\n- `ci/check.mjs` checks it.\n',
     'package.json': JSON.stringify({ scripts: { dev: 'node scripts/dev.mjs', validate: 'node scripts/ci/check.mjs' }, workspaces: ['services/app'] }),
     'services/app/package.json': JSON.stringify({ scripts: { 'build:reader': 'node build.mjs' } }),
     'services/app/lib/thing/index.ts': 'export const makeThing = (caps) => caps.sql(process.env.APP__PORT);\n',
@@ -56,12 +54,13 @@ describe('the markdown policy, each rule seen to fire on a literal tree', () => 
     expect(validate(goodTree())).toEqual([]);
   });
 
-  it('R1: a markdown file outside the layout fails with its path; the skill tree and the ten pairs pass', () => {
-    const problems = validate(tree({ 'services/sql/CONTRACT.md': '# x\n', 'docs/extraction/old.md': '# x\n', 'docs/unlisted.md': '# x\n' }));
-    for (const file of ['services/sql/CONTRACT.md', 'docs/extraction/old.md', 'docs/unlisted.md']) {
+  it('R1: a markdown file outside the layout fails with its path, docs/ and CONTRIBUTING.md included; the skill tree and the pairs pass', () => {
+    const outside = ['services/sql/CONTRACT.md', 'docs/extraction/old.md', 'docs/operations.md', 'CONTRIBUTING.md', 'services/sql/AGENTS.md'];
+    const problems = validate(tree(Object.fromEntries([...outside, 'services/sql/CLAUDE.md'].map((file) => [file, file.endsWith('CLAUDE.md') ? CLAUDE_TEXT : '# x\n']))));
+    for (const file of [...outside, 'services/sql/CLAUDE.md']) {
       expect(problems).toContainEqual(expect.stringMatching(new RegExp(`^R1 ${file}: markdown is not allowed here`)));
     }
-    expect(problems.filter((problem) => problem.startsWith('R1'))).toHaveLength(3);
+    expect(problems.filter((problem) => problem.startsWith('R1'))).toHaveLength(6);
   });
 
   it('R2: AGENTS.md and CLAUDE.md come in pairs and CLAUDE.md is exactly the import', () => {
@@ -98,12 +97,13 @@ describe('the markdown policy, each rule seen to fire on a literal tree', () => 
   });
 
   it('R6: relative links resolve to tracked files; URLs, anchors, site paths, code spans and fences are not links', () => {
-    const doc = '# Ops\n\n[gone](missing.md) [up](../README.md#top) [web](https://example.test/x.md) [here](#ops) [site](/llms.txt)\n'
+    const doc = '# Ops\n\n[gone](missing.md) [up](README.md#top) [web](https://example.test/x.md) [here](#ops) [site](/llms.txt)\n'
       + '`[code](nowhere.md)`\n\n```md\n[fenced](nowhere.md)\n```\n\n[ref]: ./also-missing.md\n';
-    const problems = validate(tree({ 'docs/operations.md': doc }));
+    const problems = validate(tree({ 'SETUP.md': doc, [scopedAgents]: '# Platform\n\n[up](../artifact-access/gone.ts) [ok](config.ts)\n', 'services/app/lib/platform/config.ts': '' }));
     expect(problems.filter((problem) => problem.startsWith('R6'))).toEqual([
-      'R6 docs/operations.md:3: link missing.md resolves to docs/missing.md, which is not a tracked file',
-      'R6 docs/operations.md:10: link ./also-missing.md resolves to docs/also-missing.md, which is not a tracked file',
+      'R6 SETUP.md:3: link missing.md resolves to missing.md, which is not a tracked file',
+      'R6 SETUP.md:10: link ./also-missing.md resolves to also-missing.md, which is not a tracked file',
+      `R6 ${scopedAgents}:3: link ../artifact-access/gone.ts resolves to services/app/lib/artifact-access/gone.ts, which is not a tracked file`,
     ]);
     expect(markdownLinks('[a](b.md "title") ![img](<c d.png>)').map((link) => link.target)).toEqual(['b.md', 'c d.png']);
   });
@@ -118,51 +118,44 @@ describe('the markdown policy, each rule seen to fire on a literal tree', () => 
       'Not checked: `tmp/a.md`, `evals/README.md`, `.agent/BRIEF.md`, `node_modules/x/y.js`, `@afbin/state`, `~/a/b.md`, `two words.md`.',
       'Not checked: `unknownroot/a/b`, `short`, `lowercase_word`, `Capital`, `a|b`, `test:{api,node}`.',
     ].join('\n');
-    const problems = validate(tree({ 'docs/operations.md': doc })).filter((problem) => problem.startsWith('R7'));
+    const problems = validate(tree({ 'SETUP.md': doc })).filter((problem) => problem.startsWith('R7'));
     expect(problems).toEqual([
-      'R7 docs/operations.md:3: `scripts/ci/gone.mjs`: names no tracked file or directory (scripts/ci/gone.mjs)',
-      'R7 docs/operations.md:3: `services/app/lib/thing/nope.ts:3`: names no tracked file or directory (services/app/lib/thing/nope.ts)',
-      'R7 docs/operations.md:3: `services/app/{lib,web}`: names no tracked file or directory (services/app/web)',
-      'R7 docs/operations.md:3: `lib/thing/missing`: names no tracked file or directory (lib/thing/missing)',
-      'R7 docs/operations.md:3: `nothere.json`: no tracked file has this name',
-      'R7 docs/operations.md:4: `npm run nope -- --x`: no package.json defines the script "nope"',
-      'R7 docs/operations.md:4: `npm run -w services/app absent`: no package.json defines the script "absent"',
-      'R7 docs/operations.md:4: `makeNothing()`: this identifier occurs in no tracked source file',
-      'R7 docs/operations.md:4: `MISSING_SETTING`: this identifier occurs in no tracked source file',
-      'R7 docs/operations.md:4: `caps.css`: no tracked file has this name',
+      'R7 SETUP.md:3: `scripts/ci/gone.mjs`: names no tracked file or directory (scripts/ci/gone.mjs)',
+      'R7 SETUP.md:3: `services/app/lib/thing/nope.ts:3`: names no tracked file or directory (services/app/lib/thing/nope.ts)',
+      'R7 SETUP.md:3: `services/app/{lib,web}`: names no tracked file or directory (services/app/web)',
+      'R7 SETUP.md:3: `lib/thing/missing`: names no tracked file or directory (lib/thing/missing)',
+      'R7 SETUP.md:3: `nothere.json`: no tracked file has this name',
+      'R7 SETUP.md:4: `npm run nope -- --x`: no package.json defines the script "nope"',
+      'R7 SETUP.md:4: `npm run -w services/app absent`: no package.json defines the script "absent"',
+      'R7 SETUP.md:4: `makeNothing()`: this identifier occurs in no tracked source file',
+      'R7 SETUP.md:4: `MISSING_SETTING`: this identifier occurs in no tracked source file',
+      'R7 SETUP.md:4: `caps.css`: no tracked file has this name',
     ]);
   });
 
-  it('R7: a path may be relative to the file\'s own directory, and the dated records are not read', () => {
+  it('R7: a path may be relative to the file\'s own directory; every root file and card is read', () => {
     expect(validate(tree({ [scopedAgents]: '# Platform\n\n`../thing/index.ts` and `CLAUDE.md`, `../../solid/view`.\n' }))).toEqual([]);
-    const record = '# Old\n\n`scripts/gone.mjs`\n';
-    expect(validate(tree({ 'docs/resolver-latency.md': record, 'docs/dataset-read-latency.md': record, 'README.md': '[a](docs/resolver-latency.md) [b](docs/dataset-read-latency.md) [c](docs/operations.md)\n' }))).toEqual([]);
-    expect(validate(tree({ 'docs/http-api.md': record, 'README.md': '[a](docs/http-api.md) [c](docs/operations.md)\n' })))
-      .toEqual(['R7 docs/http-api.md:3: `scripts/gone.mjs`: names no tracked file or directory (scripts/gone.mjs)']);
+    const stale = '# Old\n\n`scripts/gone.mjs`\n';
+    expect(validate(tree({ 'README.md': stale, 'SECURITY.md': stale, 'scripts/ci/AGENTS.md': stale })).filter((problem) => problem.startsWith('R7'))).toEqual([
+      'R7 README.md:3: `scripts/gone.mjs`: names no tracked file or directory (scripts/gone.mjs)',
+      'R7 SECURITY.md:3: `scripts/gone.mjs`: names no tracked file or directory (scripts/gone.mjs)',
+      'R7 scripts/ci/AGENTS.md:3: `scripts/gone.mjs`: names no tracked file or directory (scripts/gone.mjs)',
+    ]);
   });
 
   it('R7 spans follow CommonMark: double-backtick spans, no spans across a blank line, escaped table pipes', () => {
     expect(codeSpans('a ``x ` y`` b `c\\|d` e `open\n\nclose`').map((span) => span.span)).toEqual(['x ` y', 'c|d']);
   });
 
-  it('R8: every docs/*.md is linked from README.md, CONTRIBUTING.md or an AGENTS.md', () => {
-    const problems = validate(tree({ 'docs/http-api.md': '# HTTP\n', 'docs/runner.md': '# Runner\n', [scopedAgents]: '# Platform\n\n[runner](../../../../docs/runner.md)\n', 'SECURITY.md': '[http](docs/http-api.md)\n' }));
-    expect(problems.filter((problem) => problem.startsWith('R8'))).toEqual(['R8 docs/http-api.md: is linked from no README.md, CONTRIBUTING.md or AGENTS.md']);
-  });
-
-  it('R9: docs/scripts.md names every script directly in scripts/ and every scripts/ci/*.mjs', () => {
-    const problems = validate(tree({ 'scripts/new.ts': '', 'scripts/ci/new-check.mjs': '', 'scripts/lib/helper.mjs': '', 'scripts/ci/list.json': '' }));
-    expect(problems).toEqual(['R9 docs/scripts.md: does not name scripts/ci/new-check.mjs', 'R9 docs/scripts.md: does not name scripts/new.ts']);
-    expect(validate(tree({ 'docs/scripts.md': undefined }))).toContainEqual(expect.stringMatching(/^R9 docs\/scripts\.md: is missing; it must name all 2 scripts/));
-  });
-
-  it('R10: a source file that names a docs file names a tracked one; tests, fixtures, URLs and longer paths are not read', () => {
+  it('R10: a source file that names a docs/ file fails, there being none; tests, fixtures, URLs and longer paths are not read', () => {
     const problems = validate(tree({
       'server.ts': '/** See docs/operations.md and ../docs/gone.md. */\n// https://example.test/docs/elsewhere.md, vendor/docs/theirs.md\n',
+      'scripts/dev.mjs': '// Setup: SETUP.md.\n',
       'scripts/__tests__/x.test.mjs': "const fixture = 'docs/made-up.md';\n",
       'scripts/fixtures/note.txt': 'docs/also-made-up.md\n',
     }));
-    expect(problems).toEqual(['R10 server.ts:1: names docs/gone.md, which is not a tracked doc: name the doc that replaced it, or drop the reference']);
+    const why = 'which is not a tracked file: name the card, module or SETUP.md section that holds it now, or drop the reference';
+    expect(problems).toEqual([`R10 server.ts:1: names docs/operations.md, ${why}`, `R10 server.ts:1: names docs/gone.md, ${why}`]);
   });
 });
 
@@ -208,7 +201,7 @@ function docMentionsInRepository() {
 }
 
 describe('the real repository', () => {
-  it('keeps the markdown layout and its instruction files (R1–R10)', () => {
+  it('keeps the markdown layout and its instruction files (R1–R7, R10)', () => {
     const files = trackedTree();
     const problems = validateMarkdownTree(files, identifiersInRepository(referencedIdentifiers(files)), docMentionsInRepository());
     expect(problems, `\n${problems.join('\n')}\n`).toEqual([]);

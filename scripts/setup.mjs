@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// `npm run setup [-- --yes] [--port <n>] [--pages-host [<host>]]`: create or repair this checkout's `.env`, keeping
+// existing values and secrets. What to write is planned by scripts/lib/setup-plan.mjs (pure, tested); this runs it.
 
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
