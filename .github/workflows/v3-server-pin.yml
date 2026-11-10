@@ -27,7 +27,12 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
-          server="https://x-access-token:${SERVER_TOKEN}@github.com/minusxai/artifactbin-server.git"
+          server="https://github.com/minusxai/artifactbin-server.git"
+          # The token is a request header scoped to this step's environment, never part of a URL (git echoes URLs in
+          # errors and argv is visible to ps). Its encoded form is masked as well as the secret itself.
+          basic=$(printf 'x-access-token:%s' "$SERVER_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$basic"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic"
           git init -q server && cd server
           git config user.name 'deployment automation'
           git config user.email 'deployment-automation@users.noreply.github.com'

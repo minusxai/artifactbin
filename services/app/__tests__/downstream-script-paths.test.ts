@@ -7,7 +7,7 @@
  * its `test` job passes, so a move reaches the server's composition before any paired change can merge.
  *
  * Measured read-only on 2026-11-03 against artifactbin-server 6a10ac0 (toolkit dadea08bad34) and
- * artifactbin-evals 9c5618b; `usedAt` is the consuming file and line there. Removing or changing a row is a
+ * artifactbin-evals 9c5618b, with the server's build paths added on 2026-11-10 at 80fc0cd; `usedAt` is the consuming file and line there. Removing or changing a row is a
  * change to that contract: do it only together with the named repository.
  */
 import { existsSync, statSync } from 'node:fs';
@@ -34,6 +34,19 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   // A setup file, not a script: the server's suite lists it behind an existsSync, so a move would only drop its in-memory
   // database seam there, silently. It stays importable alone, with no provided schemaImageDir, env or build step.
   { path: 'services/app/test/setup/database.ts', repo: SERVER, usedAt: ['vitest.config.ts setupFiles (toolkit/services/app/test/setup/database.ts, guarded by existsSync; read 2026-11-10)'] },
+  // Read on 2026-11-10 at artifactbin-server 80fc0cd: what its build and composition reach by path beyond the rows above.
+  { path: 'services/app/scripts/copy-assets.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:5 (runs it from the toolkit root for the native build)'] },
+  { path: 'services/app/scripts/build-server-reader.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:6 (runs it from toolkit/services/app)'] },
+  { path: 'services/app/lib/html-runtime/build.server.ts', repo: SERVER, usedAt: ['scripts/build-native-core.mjs:9,33 (imports the runtime build)'] },
+  { path: 'services/runner/src/', repo: SERVER, holds: ['model.mjs', 'runner-worker.mjs', 'server.ts'], usedAt: ['services/runner/application.ts:1 (imports model.mjs)', 'scripts/build-source.mjs:35 (copies every .mjs beside the worker)', 'scripts/source-api.mjs:14 (aliases src/server.ts)'] },
+  { path: 'services/sql/src/', repo: SERVER, holds: ['pool-worker.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:40 (emits pool-worker beside the bundle)', 'scripts/source-api.mjs:14'] },
+  { path: 'services/browser/src/', repo: SERVER, holds: ['upload-gateway-server.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:41 (bundles the upload gateway)', 'services/browser/main.mjs:1', 'scripts/source-api.mjs:14'] },
+  { path: 'services/events/src/server.ts', repo: SERVER, usedAt: ['scripts/source-api.mjs:14 (aliases @artifactbin/events/server)'] },
+  { path: 'services/app/skills/artifactbin/SKILL.md', repo: SERVER, usedAt: ['scripts/source-runtime.mjs:43 (refuses to copy app assets without it)'] },
+  { path: 'services/app/scripts/system-font-packages.mjs', repo: SERVER, usedAt: ['scripts/native-runtime-cache.mjs:41 (keys the runtime cache by the fonts it installs)'] },
+  { path: 'services/app/lib/html-systems/font-manifest.json', repo: SERVER, usedAt: ['scripts/native-runtime-cache.mjs:42 and the install action (cache key)'] },
+  { path: 'vite.config.mts', repo: SERVER, usedAt: ['vite.config.mts:2 (extends the toolkit configuration)'] },
+  { path: 'tsconfig.json', repo: SERVER, usedAt: ['tsconfig.json:2 (extends it)', 'scripts/build-source.mjs'] },
   { path: 'scripts/lib/dev-env.mjs', repo: EVALS, usedAt: ['lib/dev-server.ts:18 (imports declaredPort, loadDotEnv, resolvePort)'] },
   { path: 'scripts/lib/shard.mjs', repo: EVALS, usedAt: ['lib/task-set.ts:30 (imports parseShardSpec)'] },
   { path: 'scripts/lib/env.ts', repo: EVALS, usedAt: ['lib/env.ts:2 (re-exports it)'] },
@@ -60,7 +73,7 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(4);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(16);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(4);
   });
 
