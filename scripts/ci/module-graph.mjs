@@ -255,7 +255,7 @@ export const DEEP_MODULES = {
   'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
 };
 /**
- * Rule 5's table: the deprecated GraphQL compatibility layer (lib/graphql-compat/README.md) as path prefixes or exact
+ * Rule 5's table: the deprecated GraphQL compatibility layer (lib/graphql-compat/AGENTS.md) as path prefixes or exact
  * paths without extension, the header each of its files opens with, and the only files outside it that may import
  * it, each with why. New code reads data through `sql` (lib/dataset-access) and calls functions through
  * `fetch('/fn/<name>')` (lib/page-doors); an entry here is a reviewed edit, and the list only shrinks.

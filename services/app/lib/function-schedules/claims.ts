@@ -9,7 +9,7 @@
  *  - each effect a run commits (a caps.sql write) checks `scheduleClaimHolds` inside its own transaction, which locks
  *    the schedule row FOR SHARE: a reclaim waits for that commit, and a reclaim that committed first refuses it.
  *
- * Lock order (lib/artifact-access README): the schedule row is no artifact and no access fact; it is locked last,
+ * Lock order (lib/artifact-access locks.ts): the schedule row is no artifact and no access fact; it is locked last,
  * after the page and the datasets, and no writer of it holds an artifact lock, so it adds no cycle.
  */
 import {RESOLVER_LIMITS,type Queryable,type RunnerAdmission} from '@artifactbin/contracts';

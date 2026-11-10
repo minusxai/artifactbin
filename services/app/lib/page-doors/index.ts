@@ -68,7 +68,7 @@ const resolverAdmit:ResolverAdmit=async({admission,caller,rule})=>{
 };
 /**
  * The same three, decided INSIDE a write's commit (lib/dataset-access PageCommitGuard), after the commit locked the
- * page and its datasets in the one global order (lib/artifact-access README "Lock order"): the page row FOR SHARE,
+ * page and its datasets in the one global order (lib/artifact-access locks.ts): the page row FOR SHARE,
  * the caller's role from facts locked as they are read (`transactionAccessFacts`), and the schedule row last, FOR
  * SHARE, so a revocation, a republish or a reclaim either committed first and refuses the write, or waits for it.
  * lib/graphql-compat guards a page function call's caps.query mutation with it too.
@@ -114,7 +114,7 @@ export function pageVerifier(request:Request,pageId:string,actor:AccessActor,rea
  */
 export function pageCommitGuard(pageId:string,actor:AccessActor,admitted:ArtifactHeader):PageCommitGuard{
  return async tx=>{
-  // LOCK ORDER (lib/artifact-access locks.ts, README "Lock order"): this guard runs inside the dataset write's commit,
+  // LOCK ORDER (lib/artifact-access locks.ts): this guard runs inside the dataset write's commit,
   // after assertWriteCommit locked the page and the datasets in the one global order; the page row below is already
   // held FOR SHARE, and each fact the decision reads locks exactly its own rows as it reads them (read-only:
   // transactionAccessFacts never stamps an invitation). A deadlock with another writer aborts this attempt and the

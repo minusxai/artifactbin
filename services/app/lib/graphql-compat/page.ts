@@ -60,7 +60,7 @@ function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope)
 export const resolverDatasets:ResolverDatasets={
  query:createResolverQuery({links:headDatasetLinks,execute:executeLinkedDatasetGraphql,
   // A resolver's write goes through the page head it read the links from: the same guard as every page write. A page
-  // function call's write (SECURITY FIX, README "Fixes, not features") commits under its admission instead, decided
+  // function call's write (SECURITY FIX: fixes, not features, AGENTS.md) commits under its admission instead, decided
   // inside the commit exactly as a caps.sql write's is (lib/page-doors `admittedCommitGuard`).
   page:async(pageId,actor,admission)=>{
    const row=await getArtifactById(pageId);
