@@ -2,6 +2,14 @@ import {afterEach,expect,it,vi} from 'vitest';
 vi.mock('../build-portable-chrome.server',()=>({buildPortableChrome:async()=>''}));
 import {buildHtmlAssets} from '../build.server';
 afterEach(()=>{vi.unstubAllGlobals();});
+/** The built apollo with its bare runtime imports (`@afbin/reader`, and `@afbin/state`, which also imports the reader) bound to data URLs, as the page's import map binds them. */
+const dataUrl=(code:string)=>'data:text/javascript;base64,'+Buffer.from(code).toString('base64');
+function linked(assets:{apollo:string;state?:string},readerUrl:string){
+ if(!assets.state)throw Error("the runtime build emitted no @afbin/state module");
+ const bindReader=(code:string)=>code.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(readerUrl));
+ const stateUrl=dataUrl(bindReader(assets.state));
+ return bindReader(assets.apollo).replace(/(["'])@afbin\/state\1/g,JSON.stringify(stateUrl));
+}
 it('the emitted author module watches backend results with explicit loading without persisting them',async()=>{
  const assets=await buildHtmlAssets();
  vi.stubGlobal('document',{querySelector:()=>null});vi.stubGlobal('location',{hash:''});
@@ -12,7 +20,7 @@ it('the emitted author module watches backend results with explicit loading with
  vi.stubGlobal('__builtWatchReader',fixture);
  const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
  const readerUrl='data:text/javascript;base64,'+Buffer.from(reader).toString('base64');
- const source=assets.apollo.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(readerUrl));
+ const source=linked(assets,readerUrl);
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  expect(runtime.watchUploadContext).toBeTypeOf('function');
  expect(runtime.bindFileUpload).toBeTypeOf('function');
@@ -35,7 +43,7 @@ it('a published page that calls onBackendChange still subscribes through the bui
  const fixture={config:{pageId:'legacy-name',revision:'1',backends:['orders'],initialState:{}},remote:{online:()=>true,execute:async()=>({data:{}})},startFrameBridge(){},onResolverChange(listener:Function){listeners.push(listener);return {unsubscribe(){}};},remoteReadOnly:false,uploadFile:()=>{throw Error('unused');},watchUploadContext(){},bindFileUpload(){}};
  vi.stubGlobal('__legacyNameReader',fixture);
  const reader='const r=globalThis.__legacyNameReader;export const {config,remote,startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
- const source=assets.apollo.replace(/(["'])@afbin\/reader\1/g,JSON.stringify('data:text/javascript;base64,'+Buffer.from(reader).toString('base64')));
+ const source=linked(assets,dataUrl(reader));
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const changed:unknown[]=[];
  expect(runtime.onBackendChange).toBe(runtime.onResolverChange);
