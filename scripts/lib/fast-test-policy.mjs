@@ -29,6 +29,14 @@ export function partitionFastTests(full, enrolled) {
  * (fetch, workers, eval, Function, computed module loads) stays refused there too.
  */
 const REVIEWED_PACKAGE_CAPABILITIES = [
+  // Native editor dependencies: lib0 callback queue/debounce, Tiptap input/composition/lifecycle
+  // scheduling and command dispatch, Yjs undo/redo dispatch, linkify grammar plugins, drag cursor cleanup.
+  // Audited at the pinned versions; network, eval, workers and dynamic imports remain refused.
+  [/(?:^|\/)node_modules\/lib0\/eventloop\.js$/, ['setTimeout', 'setInterval', 'computed']],
+  [/(?:^|\/)node_modules\/@tiptap\/core\/dist\/index\.js$/, ['setTimeout', 'computed']],
+  [/(?:^|\/)node_modules\/@tiptap\/y-tiptap\/dist\/index\.js$/, ['computed']],
+  [/(?:^|\/)node_modules\/linkifyjs\/dist\/linkify\.cjs$/, ['computed']],
+  [/(?:^|\/)node_modules\/prosemirror-dropcursor\/dist\/index\.js$/, ['setTimeout', 'computed']],
   [/(?:^|\/)node_modules\/yjs\/dist\/yjs\.mjs$/, ['setTimeout', 'computed']],
   [/(?:^|\/)node_modules\/lib0\/promise\.js$/, ['setTimeout', 'setInterval']],
   [/(?:^|\/)node_modules\/lib0\/(?:decoding|function|logging\.common|logging\.node|trait\/equality)\.js$/, ['computed']],

@@ -4,7 +4,7 @@
  * Loaded on demand (see LazyCommentField) so readers who never compose a comment
  * never download ProseMirror; CommentMarkdown.tsx keeps the read-only rendering.
  */
-import { useContext, untrack, children as resolveChildren, createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { on, useContext, untrack, children as resolveChildren, createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Bold from 'lucide-solid/icons/bold';
 import Code from 'lucide-solid/icons/code';
 import Italic from 'lucide-solid/icons/italic';
@@ -70,8 +70,8 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   const [linkOpen,setLinkOpen] = createSignal(false), [href,setHref] = createSignal('https://');
   const canMention = () => !!props.backend && !!props.artifactId && !props.backend.unavailable('mentions');
   const apply = (marker:MdMarker) => { if(marker==='link'){setLinkOpen(value=>!value);return;} editor?.format(marker); };
-  onMount(() => createEffect(() => {
-    const factory=nativeComments()?mountCommentEditor:mountLegacyCommentEditor;
+  onMount(() => createEffect(on(nativeComments, native => {
+    const factory=native?mountCommentEditor:mountLegacyCommentEditor;
     editor?.destroy();
     const placeholder = props.placeholder ?? (canMention() ? 'Protip: Use @ to mention people' : 'Write a comment ...');
     editor=untrack(()=>factory(mount,{value:()=>props.value,label:props.label,placeholder,onChange:props.onChange,
@@ -88,7 +88,7 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
         event.preventDefault();apply(marker);return true;
       }}));
     if(props.autoFocus)editor.view.focus();
-  }));
+  })));
   createEffect(()=>{const value=props.value;editor?.sync(value);});
   onCleanup(()=>editor?.destroy());
   const drop = createImageDropTarget(() => props.image);

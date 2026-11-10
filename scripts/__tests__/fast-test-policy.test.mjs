@@ -38,7 +38,7 @@ describe('reviewed package capabilities (the live-regions editing stack and fast
   it('refuses a capability the file was not reviewed for, and every unlisted file', () => {
     expect(auditFastSource('table[i](x)', 'node_modules/lib0/promise.js')).not.toEqual([]);
     expect(auditFastSource('setTimeout(f, 1)', 'node_modules/prosemirror-model/dist/index.js')).not.toEqual([]);
-    expect(auditFastSource('setTimeout(f, 1)', 'node_modules/lib0/eventloop.js')).not.toEqual([]);
+    expect(auditFastSource('setTimeout(f, 1)', 'node_modules/lib0/unreviewed.js')).not.toEqual([]);
     expect(auditFastSource('setTimeout(f, 1)', 'services/app/lib/live-regions/binding.ts')).not.toEqual([]);
   });
   it('keeps network, workers and eval refused in reviewed files', () => {
@@ -159,4 +159,18 @@ describe('reviewed zod check aggregation dispatch', () => {
     for(const source of [fold.replace('contributors[','others['), fold.replace('(agg,','(url,'), fold.replace('?.(agg, ch._zod.def)','(agg)'), 'new contributors[kind](agg, def)'])expect(auditFastSource(source,file)).not.toEqual([]);
     expect(auditFastSource(fold,'node_modules/unreviewed/json-schema-processors.js')).not.toEqual([]);
   });
+});
+
+const nativeEditorPackages = [
+  ['node_modules/lib0/eventloop.js', 'queue[i](); setTimeout(flush, 0); setInterval(check, 10)'],
+  ['node_modules/@tiptap/core/dist/index.js', 'items[i](props); setTimeout(flush, 0)'],
+  ['node_modules/@tiptap/y-tiptap/dist/index.js', 'undoManager[direction]()'],
+  ['node_modules/linkifyjs/dist/linkify.cjs', 'plugins[i][1](state)'],
+  ['node_modules/prosemirror-dropcursor/dist/index.js', 'this[name](event); setTimeout(clear, 0)'],
+];
+it.each(nativeEditorPackages)('admits reviewed editor scheduling/dispatch only: %s', (file, source) => {
+  expect(auditFastSource(source, file)).toEqual([]);
+  for (const forbidden of ['fetch(url)', 'new Worker(url)', 'eval(code)', 'new Function(code)', 'import(target)']) {
+    expect(auditFastSource(forbidden, file)).not.toEqual([]);
+  }
 });
