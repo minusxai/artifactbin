@@ -57,7 +57,9 @@ async function openOffline(html: string) {
   const refused = vi.fn(async () => { throw new TypeError('network refused'); });
   vi.stubGlobal('fetch', refused);
   vi.stubGlobal('document', { querySelector: (selector: string) => (selector === 'script[data-af="offline-data"]' && data !== null ? { textContent: data } : null) });
-  vi.stubGlobal('location', { hash: '' }); vi.stubGlobal('navigator', {});
+  // A document always has an address. Without one the engine warns as it starts, each stack frame naming this module's
+  // multi-megabyte data: URL: 77 MB of output, which hung the CI runner (runs 42868198102, 42868526006).
+  vi.stubGlobal('location', { hash: '', href: 'file:///export.html' }); vi.stubGlobal('navigator', {});
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} });
   vi.stubGlobal('addEventListener', () => {}); vi.stubGlobal('removeEventListener', () => {});
   const key = `__offlineSqlReader${Math.random().toString(36).slice(2)}`;
