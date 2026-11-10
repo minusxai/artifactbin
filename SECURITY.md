@@ -8,8 +8,8 @@ will get an acknowledgement within 3 business days and a fix or a clear answer a
 
 ## Scope
 
-- This codebase: the artifact document format, its sandbox and CSP, the token and login system, the APIs, and
-  the MCP/OAuth surface.
+- This codebase: the artifact document format, its sandbox and CSP, the token and login system (email codes and
+  OAuth), and the APIs.
 - The hosted deployment at artifactbin.dev, on the same terms.
 
 Out of scope: denial of service by volume, findings that require a compromised operator machine, and reports

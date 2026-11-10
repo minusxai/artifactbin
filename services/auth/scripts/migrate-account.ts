@@ -16,7 +16,7 @@ export function migrationTarget(env: Record<string, string | undefined>): {conne
 
 async function main() {
   if (process.argv.slice(2).join(' ') !== '--writes-paused-backup-verified') {
-    throw new Error('Read services/auth/ACCOUNT-MIGRATION.md; stop writers and verify a restorable backup before passing --writes-paused-backup-verified');
+    throw new Error('Read docs/account-migration.md; stop writers and verify a restorable backup before passing --writes-paused-backup-verified');
   }
   const {connectionString, schema} = migrationTarget(process.env);
   const db = new Kysely<Record<string, unknown>>({dialect:new PostgresDialect({pool:new Pool({connectionString,max:1})})});

@@ -24,14 +24,18 @@ relations, read separately from `/api/artifacts/ID/annotations`.
 
 ## State, shared data and code
 
-The core supplies import mappings for hosted components, libraries and
-`@afbin/apollo`. The authoring reference lives in
-`services/app/skills/artifactbin`: its runtime, backends, datasets and component
-sources describe the public contract served by `/llms/…` and the skill archive.
+The core installs the import map before author modules, so pages import hosted
+components and libraries through their `@afbin/` specifiers as ordinary browser
+ES modules, with no JSX compiler or managed island runtime. Publishing does not
+bundle arbitrary npm packages or make external URLs available offline; external
+module URLs must satisfy the page's declared CSP and reader consent. The
+authoring reference lives in `services/app/skills/artifactbin`: its runtime,
+functions and datasets references, `resolvers/` library and component sources
+describe the public contract served by `/llms/…` and the skill archive.
 
 | Need | Native contract |
 | --- | --- |
-| Viewer-local state | Inert JSON in `<script type="application/json" data-af="state">`; read, watch and update through `@afbin/apollo`. State persists privately in that viewer's browser. |
+| Viewer-local state | Inert JSON in `<script type="application/json" data-af="state">`; read, watch and update it through `state` from `@afbin/state` (older pages use `@afbin/apollo` local fields over the same document). State persists privately in that viewer's browser. |
 | Dataset | `<link rel="af-dataset" data-af-name="sales" href="ref:DATASET_ID">`; live by default, or `data-af-mode="pinned" data-af-revision="2"`. Read and write it with `` sql`…` `` from `@afbin/apollo`: the table is the `data-af-name`. |
 | Resolver | `<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">` plus `resolverSources:{"tracker":"…"}` at publication. TypeScript exports functions the page calls with `fetch('/fn/NAME')` (with optional `roles`, `secrets` and `schedule`); the server binds an immutable backend version. |
 | Components | Import hosted `@afbin/…` modules; use their native custom elements, including data tables and isometric figures. Use direct hosted libraries for new diagrams and maps; retained Mermaid and deck.gl wrappers load through their hosted component URLs. |
@@ -53,6 +57,13 @@ comment views explicitly select fields in the state block using
 backend namespaces must stay out. Restoration changes only those fields and
 never replays backend mutations. Pages without declarations retain target-only
 comments. See the served `/llms/html-operations` and `/llms/runtime` guides.
+
+`@afbin/state` exports `state`, a Zustand vanilla store (`getState`, `setState(partial | fn)`, `subscribe`) of
+the viewer's saved page state; `@afbin/zustand` is plain Zustand for any other store. The state follows the
+viewer's other tabs, is seeded by `#af-state=` links and is what comment views snapshot. Values must be storable
+JSON (`setState` throws a `TypeError` otherwise); a `setState` that loses a race with another tab is applied again
+to the newer document. Both modules load only when a page imports them. Downloaded copies embed the module and
+keep their own viewer's state in that file's browser storage.
 
 The state block holds the page's defaults. A viewer's browser keeps only that viewer's
 overrides (top-level keys that differed from the defaults when written), merged over the

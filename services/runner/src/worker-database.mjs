@@ -152,7 +152,7 @@ export function createDatabaseHost({ send, call }) {
      * mysql2: one connection, made by the first query and again after a loss (as postgres.js does), over the tunnel
      * (`stream`). Placeholders are `?`: with params a statement is prepared on the server (`execute`, never
      * client-side escaping), without them it runs as text (`query`), so statements that cannot be prepared still run.
-     * LOCAL INFILE and multiple statements are refused (client flags off, no infile stream). Types (README):
+     * LOCAL INFILE and multiple statements are refused (client flags off, no infile stream). Types (docs/runner.md):
      * BIGINT and DECIMAL are strings (as postgres.js answers int8 and numeric), DATE/DATETIME/TIMESTAMP Dates in UTC
      * (the session's time_zone is set to UTC), binary values bytes, JSON parsed.
      */

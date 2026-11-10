@@ -8,8 +8,9 @@ one row keyed by subject kind/ID, verb and object kind/ID. Its lifecycle is
 `invitation`), `initiated_by`, `accepted_at` and `revision`. `deleted_at` is set
 for dismissed/left edges. Active reads require accepted status and no deletion.
 Likes and follows are accepted immediately today; the lifecycle supports future
-follow approval without another table. Join authorization remains in membership.
-There is no membership table or legacy join/invitation migration.
+follow approval without another table. Join authorization remains in membership:
+group membership and invitations have their own tables (`group_members`,
+`group_invitations`), never relations rows.
 
 Comments and resolution state remain in `annotations`; edits remain in
 `artifact_edits`. Relations never replace those entity stores.
@@ -58,6 +59,10 @@ it. Expiry hides only the marker and never marks read or cancels email.
 Agent pulse/status reuses remote work and presence, with reduced-motion support.
 
 ## Production email
+
+Group mail is durable: `services/app/lib/notifications/group-mail.ts`
+commits each claim before calling the provider, retries with backoff and quarantines a message after
+eight attempts, and passes the outbox ID as the provider's idempotency key.
 
 The product owns events, relations, inbox rules and UI. Optional deployment email
 integration supplies preferences, scheduling, templates, provider delivery and

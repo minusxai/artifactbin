@@ -1,5 +1,5 @@
 /**
- * THE AUTHORIZATION LOCK ORDER (README: "Lock order"). A write that decides access inside its transaction locks the
+ * THE AUTHORIZATION LOCK ORDER. A write that decides access inside its transaction locks the
  * artifacts it goes through first, in ONE global order, and then decides; every fact the decision reads (a share,
  * a group share, a membership, an account) locks exactly the rows it reads, FOR SHARE, as it reads them
  * (./access-facts `transactionAccessFacts`). So a revocation of anything the decision used (an UPDATE or DELETE of
@@ -22,6 +22,11 @@
  *   1. documents: the page a write goes through, and the documents its user columns' memberOf names, by `lockOrder`
  *   2. datasets: the dataset written (FOR UPDATE) and those its values were read from (FOR SHARE), by `lockOrder`
  *   3. facts, as the decision reads them: shares, group shares, groups, memberships, accounts
+ *
+ * Two tails come after the artifacts too: a transaction that activates scheduled functions locks each affected
+ * publisher's `users` row FOR UPDATE, by `lockOrder`, as a step-3 fact (lib/artifacts schedule-capacity.ts); a page
+ * function call's write locks its schedule row FOR SHARE last (lib/function-schedules claims.ts), which is neither an
+ * artifact nor an access fact.
  *
  * Writers that lock several artifacts take them by `lockOrder` too (publishing a page locks it, then its linked
  * datasets). SQL that locks artifacts in one statement orders `id COLLATE "C"`, the same code-unit order.

@@ -13,8 +13,7 @@
     "./sqlite": "./src/sqlite-local.ts"
   },
   "files": [
-    "src",
-    "CONTRACT.md"
+    "src"
   ],
   "dependencies": {
     "@artifactbin/contracts": "*",

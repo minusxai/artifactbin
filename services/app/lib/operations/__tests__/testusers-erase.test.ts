@@ -191,7 +191,7 @@ it('erasing a test user takes its picture with it, and survives an object that h
 });
 
 /**
- * A COMPETING WRITER (lib/artifact-access README "Lock order"): the erase locks the account before the shares and
+ * A COMPETING WRITER (lib/artifact-access locks.ts, "THE SAFETY NET"): the erase locks the account before the shares and
  * artifacts that name it, against the global order, so a deadlock with a guarded write can abort it. It retries its
  * whole transaction (lib/platform retryOnConflict) and erases exactly once; exhausted, it refuses and erases nothing.
  */

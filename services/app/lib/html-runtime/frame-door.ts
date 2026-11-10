@@ -1,7 +1,7 @@
 /**
  * THE FRAME'S DOOR — the one listener a framed document's bridge traffic ever reaches.
  *
- * Installed by the page behaviour (lib/islands/page, `@mx/page`) in a framed document, which runs BEFORE the
+ * Installed by the runtime's core entry (build.server.ts) in a framed document, which runs BEFORE the
  * author's script exists (the assembler writes behaviour scripts ahead of the per-document module). So this
  * listener is registered first, in the capture phase, with the primitives it needs captured now:
  *

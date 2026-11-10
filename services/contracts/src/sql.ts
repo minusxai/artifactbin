@@ -1,12 +1,13 @@
 /**
- * THE SQL SERVICE — DuckDB in a process of its own, or in this one. Stateless
+ * THE SQL SERVICE — SQLite (wasm) in a process of its own, or in this one. Stateless
  * by construction: every call carries the tables BY VALUE and answers rows;
  * nothing persists between calls, so a document's dependent queries travel in
  * ONE `run` (a later query may read an earlier one's result by name).
  *
- * Four methods, not two: the dry-runs are the publish-time check that refuses
- * a bad query with a 400 instead of a blank chart at render, and they cross
- * the same wire as the other two, so no caller needs DuckDB in its own process.
+ * The two dry-runs are the publish-time check that refuses a bad query with a
+ * 400 instead of a blank chart at render, and they cross the same wire as the
+ * reads and writes, so no caller needs the engine in its own process.
+ * Enforcement rules, error semantics and the prepared-catalog protocol: docs/sql-service.md.
  */
 import type { DatasetMutationPolicy, MutationAnalysis } from './dataset-policy';
 
@@ -63,7 +64,7 @@ export interface QueryPage {
   sort?: { col: string; dir: 'asc' | 'desc' };
 }
 
-/** An isolated DuckDB catalog. Only these logical tables and columns are exposed.
+/** An isolated SQLite catalog. Only these logical tables and columns are exposed.
  * Models are native read SQL, bound lazily so unused drafts cannot break a read. */
 interface SqlReadCatalog {
   defaultSchema: string;
@@ -134,7 +135,7 @@ export interface MutationInput {
   limit?: number;
   timeoutMs?: number;
   /**
-   * KEYED MOUNTS (RunInput.catalog's protocol, services/sql/CONTRACT.md): the tables the statement reads, and the
+   * KEYED MOUNTS (RunInput.catalog's protocol, docs/sql-service.md): the tables the statement reads, and the
    * target when it is one of them, come from the database the engine prepared for these keys; the target is
    * swapped for its writable copy inside a transaction that is always rolled back, so the kept database never
    * changes. A miss answers `rowsRequired` and the caller resends with `tables`. `table.rows` and `reads` are then

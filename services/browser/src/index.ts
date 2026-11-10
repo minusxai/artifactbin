@@ -11,7 +11,7 @@
  * and `POST /sessions` is the stateful surface: a BrowserSessionRequest against
  * a persistent isolated session, served only when the composition supplied a
  * `sessions` implementation (otherwise 503 `sessions_unavailable`).
- * See docs/mx-sessions.md.
+ * See docs/browser-sessions.md.
  */
 import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES } from '@artifactbin/contracts';

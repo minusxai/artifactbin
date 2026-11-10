@@ -1,5 +1,5 @@
 /**
- * THE FUNCTION SCHEDULER (README). Each tick: derive the scheduled functions from the live page heads, claim the due
+ * THE FUNCTION SCHEDULER (docs/page-functions.md). Each tick: derive the scheduled functions from the live page heads, claim the due
  * ones under a lease, run each as the page's publisher (its current role, decided at run time) through the call path
  * that account's own POST takes, and record the outcome.
  * Every statement stands alone (no transaction of its own, so nothing here is ever queued inside another's

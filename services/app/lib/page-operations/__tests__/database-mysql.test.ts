@@ -3,7 +3,7 @@
  * real MySQL 8 (a disposable `mysql:8` container with TLS on, certificates made here by openssl), the same cases as
  * database-postgres.test.ts. TLS runs from the driver to the server: `verify-full` accepts the right CA and name (DNS
  * or IP), and refuses a wrong CA, a wrong name, an unknown root and a second server with TLS off (each with its own code); the controller's socket carries no plaintext SQL
- * when TLS is on. Also the type mapping (README) and the refusal of LOCAL INFILE and multiple statements by a server
+ * when TLS is on. Also the type mapping (docs/runner.md) and the refusal of LOCAL INFILE and multiple statements by a server
  * that allows both. The runner's address policy is the development opt-in (the container listens on loopback), with an
  * injected lookup so test names reach it. Runs in the `integration` project (CI's integration job and runner design
  * validation, the latter with the Docker worker via RUNNER_TEST_IMAGE); skipped without the image.

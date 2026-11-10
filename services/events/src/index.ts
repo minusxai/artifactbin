@@ -23,9 +23,11 @@ export { EVENTS_TABLES } from './schema';
 const HEALTH = '/health';
 
 /**
- * One POST (`/emit`, a JSON array of envelopes → `{ accepted: n }`) plus
- * `GET /health`, answered BEFORE the secret check so the probe works with a
- * secret set. The same shell as services/sql's: utils' jsonServer with its
+ * Two POSTs, each a JSON array of envelopes: `/emit` (best effort →
+ * `{ accepted: n }`) and `/publish` (durable: answers only once stored, an error
+ * when the service has no durable writer), plus `GET /health`, answered BEFORE
+ * the secret check so the probe works with a secret set. The service holds no
+ * request identity and opens no connection but its database: private network only. The same shell as services/sql's: utils' jsonServer with its
  * secret guard, method guard, body cap and name-only error.
  */
 export function serveEvents(svc: EventsService, opts: { maxBody?: number; serviceSecret?: string; routes?: Record<string,(body:unknown)=>Promise<unknown>> } = {}): JsonServer {

@@ -15,7 +15,8 @@ can use `Promise.all`. Source editing is not a session operation.
 
 Clients use the HTTP API `POST /api/browser-sessions`, with ops `script` (a new
 session, or an existing session ID with the next function body), `status`
-(a session's execution receipt) and `close`. See `<origin>/llms.txt`.
+(a session's execution receipt) and `close`. The served `/llms/html-operations` guide documents the calls
+and the session limits; `SESSION_LIMITS` in `services/contracts/src/browser-sessions.ts` holds them.
 
 ```js
 const page = await context.newPage();
@@ -70,8 +71,9 @@ Page objects are retained in memory; arbitrary JS heaps are not serialized to di
 
 ## Hosting requirements
 
-Both browser images include bubblewrap. Hosting must also permit user namespaces
-and delegate the configured cgroup subtree; an ordinary container without those
-permissions cannot run sessions. Unsupported deployments fail closed.
+A host that runs sessions needs bubblewrap installed, user namespaces permitted and the configured cgroup
+subtree delegated; an ordinary container without those permissions cannot run sessions, and an unsupported
+deployment fails closed. On a development host such as macOS, `BROWSER__SANDBOX=none` runs the session worker
+as a plain child process with no containment; it is refused in production.
 
 Isolation policy follows the [bubblewrap security guidance](https://github.com/containers/bubblewrap/blob/main/README.md#sandbox-security); namespace configuration and resource cgroups are separate boundaries.

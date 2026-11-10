@@ -1,155 +1,101 @@
 # Working on artifactbin
 
-`CLAUDE.md` imports this file. [Setup](CONTRIBUTING.md).
+`CLAUDE.md` imports this file; setup: [CONTRIBUTING.md](CONTRIBUTING.md). Read it whole, then the card for the
+area you touch. Keep links plain, never `@` imports.
 
-## Check tiers — read before running commands
+## Working in → read first
 
-**FAST — after every change:** `npm run validate`,
-`npm test -- --files <paths>`, the running dev app.
+| Working in | Read first when |
+|---|---|
+| [lib/platform](services/app/lib/platform/AGENTS.md) | the schema, settings/config, how code reaches the database |
+| [lib/artifact-access](services/app/lib/artifact-access/AGENTS.md) | read, write, export, live-stream or dataset-mutation paths; locking |
+| [lib/html-runtime](services/app/lib/html-runtime/AGENTS.md) | page scripts, viewer state, the built runtime, what pages may do |
+| [lib/html-components](services/app/lib/html-components/AGENTS.md) | native components, specs, generated lists, the reader build |
+| [lib/page-operations](services/app/lib/page-operations/AGENTS.md) | the SQL and function doors, schedules, capabilities |
+| [lib/dataflow](services/app/lib/dataflow/AGENTS.md) | the data language: references, evaluation, browser leaves |
+| [lib/graphql-compat](services/app/lib/graphql-compat/AGENTS.md) | anything that touches GraphQL (deprecated, fenced) |
+| [lib/skills](services/app/lib/skills/AGENTS.md) | the author skill (`services/app/skills`), served `/llms` copy, evals |
+| [solid](services/app/solid/AGENTS.md) | any app UI: chrome, controls, overlays, UI tests |
+| [scripts/ci](scripts/ci/AGENTS.md) | workflows, PR lane budgets, test lists and timings, a red main |
 
-**SLOW — once at completion before merge, never mid-task/per edit:** gate containers, PR CI push, bare `npm test`.
+| Doc | Read when |
+|---|---|
+| [agent-workflows](docs/agent-workflows.md) | delegating: briefs, worktrees, gates, handoffs |
+| [serving-and-security](docs/serving-and-security.md) | before markup, rendering or trust-boundary changes |
+| [http-api](docs/http-api.md) | changing HTTP behaviour |
+| [operations](docs/operations.md) | deployment and settings |
+| [scripts](docs/scripts.md) | what each script does |
+| [sql-service](docs/sql-service.md), [browser-service](docs/browser-service.md), [runner](docs/runner.md) | changing a service's routes or wire shapes |
+
+## Check tiers (read before running commands)
+
+**FAST — after every change:** `npm run validate`, `npm test -- --files <paths>`, the running dev app.
+
+**SLOW — once, at completion before merge, never per edit:** gate containers, PR CI push, bare `npm test`.
 
 - **Finish on FAST, then SLOW once.** Never push, poll CI or gate per edit.
-- **Full gates belong to main PR and post-merge CI** (9 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
-- **Pre-merge:** FAST checks → commit/push once → bounded fast PR CI green → merge.
-  Full builds/browser/container suites run after merge and gate release, not PR approval.
-- **PRs into `main`: ONLY use squash and merge** (`node scripts/ci/merge-fast.mjs owner/repo PR`). This operational entry point verifies the exact completed fast attempt and timing status, then invokes `gh pr merge --squash --admin --match-head-commit SHA`; admin bypass is for reviews only. NEVER land all
-  branch commits via the PR methods "Create a merge commit" (`gh pr merge --merge`) or
-  "Rebase and merge" (`gh pr merge --rebase`). Each PR lands as one squashed commit on `main`.
-  Rebasing a working branch, including onto `main`, is allowed; this restriction applies only
-  to the final PR merge method.
-
-## CI speed contract
-
-For PRs targeting **`main`**, the required check is `pr fast` (`.github/workflows/pr-fast.yml`):
-validate, workflow lint, JavaScript syntax and the fast module list on three runners. Aim for
-**under 40 seconds**, warn at **40 seconds**, and fail above **60 seconds**, from `run_started_at` to the last job, with the completed-workflow observer publishing required `pr fast timing` from the last workload job completion. Observer scheduling/publication overhead is separate; it does not measure its own teardown. Each job's final
-step remains an early diagnostic (`scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`).
-Never raise it. **Every post-merge failure on main gets a fast-lane guard:** find why `pr fast` missed it and add a
-deterministic check that would have caught it (`scripts/ci/fast-tests.json`, `scripts/ci/guard-tests.json` or a
-contract test) within the budget. Full `ci.yml`, page-speed, credential-platform and runner-design suites run on main/manual, not automatic PRs. Never add an unbounded extra PR workflow or wait for full release checks before merging. This 40/60 policy applies consistently to application, proxy, evaluator and deployment repositories.
-
-For the **full post-merge chain** (and `ci.yml` on a PR), measure from `run_started_at` through
-final rollup, including runner setup, dependency waits and uploads. Aim below **3 minutes**; normal
-maximum below **4 minutes**. The full chain fails above **8 minutes**. Job times, parallel sums and
-workflow durations differ; per-job durations above four minutes produce diagnostics rather than
-replacing the complete-chain limit. Report optional cache warming and downstream release notification
-tails separately; they are outside that chain.
-Investigate the critical path and repetition; never raise budgets, skip coverage, subtract queues
-or rerun unchanged code to hide slowness. Report cold and warm timings separately.
+- **Pre-merge:** FAST → commit, push ONCE → open/update an empty-body PR (no descriptive comments unless
+  requested) → `pr fast` green → merge. The full `ci.yml` suite, build, browser gates, page speed and CodeQL run
+  on main after merge and gate release. Local gates only for a failed CI gate shard or a reader/hydration change.
+- **PRs into `main`: ONLY squash and merge**, via `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the exact
+  completed fast attempt and its timing, then squash-merges with `--admin --match-head-commit` (admin bypass is for
+  reviews only). NEVER `--merge` or `--rebase`. Rebasing a working branch is fine.
+- **Deferred (exit 2) mid-task?** Return to `--files`; report the deferral; PR CI runs the rest. On a red PR: fetch
+  every failed job's log in ONE command, fix all failures together (independent ones in parallel agents), never
+  retry unchanged code.
+- **CI speed:** the required check is `pr fast` (`.github/workflows/pr-fast.yml`): aim under 40 s, fail above 60 s,
+  never raise a budget. Every post-merge failure on main gets a fast-lane guard.
 
 ## Working rules
 
 - Design modules first (Ousterhout): cohesive boundaries/contracts, narrow interfaces; routes translate to HTTP.
 - Layers: entry points `server.ts`, `scripts`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
-  libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
-  `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
-  import outside that floor, a new edge in the lib cycle (`module-graph.allowed-cycles.json`) and a deep import:
-  a lib module is entered through its index, plus any entries and browser leaves its `DEEP_MODULES` row lists; a
-  test also reaches its own module, a row's `testOnly` entries (`lib/artifacts/testing`), or a white-box import recorded in
-  `module-graph.allowed-test-imports.json` (shrinks only; shared resets and test seams belong in the harness).
-- TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
-  Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
-  Report only observed runs and red/green/end-to-end evidence.
+  libraries `services/app/lib/*`; packages the other `services/*`, importing only contracts, utils and themselves.
+  No cycles; enter a lib module through its index; `npm run validate` enforces it.
+- TDD for features and refactors: contracts, behavioral tests, observe the failure, implement. Refactors go
+  Blue → Red → Blue: tests pass, prove the assertion catches broken behavior, restore. Report only observed runs.
 - Probe assumptions; record evidence/unknowns. Order milestones by risk; end with runnable checks.
-- Verify user-facing changes on the task's running app (`npm run dev`, port `APP__PORT` in `.env`;
-  a worktree has its own). Changed the skill: `npm run eval` shows an agent using it; it takes `APP__PORT=<n>`.
+- Verify user-facing changes on the task's running app (`npm run dev` on the worktree's own `APP__PORT`, in `.env`).
   Never iterate/test on production; confirm after deploy.
-- **Local evals use the real product contract.** Supply target origin and exact candidate skill
-  assets independently. Local/deployed briefs and scorers are identical: no local-only prompts, auth
-  bypass, production deployment or published/latest fallback. Test installed/fresh-install paths
-  against the candidate; HTTP discovery/guides/auth/API use the target. Isolate harness homes,
-  credentials/data. Record server/source revision, candidate/skill hashes and harness/model/settings;
-  invalidate stale assets on relevant inputs.
-  Package and skill edits reach the next run.
-  Reproductions/timings (including Pi) reuse this eval harness, target/candidate, isolation,
-  auth, traces and metrics; add scenarios/capabilities, never separate runners. URL probes use
-  verbatim user requests. Changed harness semantics require a matched new baseline.
-  Harness delivers local OTP; agent follows normal auth.
-  Enforce caps outside model context; no evaluator/scorer/answer hints via prompts, hooks or config.
-  Preserve native replies and private instruction evidence.
-  Compare baseline/candidate with identical scenarios/settings; retain failures and missing metrics.
 - **50 files TOTAL.** Above 50: nothing runs; exit 2 means **DEFERRED, NOT PASSED**.
   No affected tests: unverified (exit 2). Discovery errors fail. No counting/previewing, cap increases,
   `--all`, wrapper bypasses or deferred-suite batching.
-- **Mid-task deferral**: return to `--files`. After FAST: commit, push ONCE,
-  open/update an empty-body PR (no descriptive comments unless requested), inspect CI. Report deferral;
-  require selected checks before merge. Full suites, Docker/Chromium integration, gates/builds are CI-only.
-  On a red PR: fetch every failed job's log in ONE command, fix all
-  failures together (independent ones in parallel agents), never retry unchanged code.
-- **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same
-  arguments). One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs;
-  failed/deferred/empty runs never count. Label prior evidence, never fresh/CI; omit reuse after manual
-  external-state changes; never copy receipts. See [docs/agent-workflows.md](docs/agent-workflows.md).
-- **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output/sections; skip irrelevant fixtures,
-  transcripts/assets/dependencies; batch reads, never repeat searches.
-- Author skill: test contracts, never prose. Pinned docs/copy/errors: find their tests and gates
-  (`buildQuickSheet`, `agentDiscovery`, `renderDoc`, exact text) and update them. Guide edits run
-  `services/app/lib/skills/__tests__/skill-tree.test.ts`: rendered guides stay within 8,192 bytes.
-  Reuse only the task's own dev server.
+- **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same arguments).
+  One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs; failed,
+  deferred or empty runs never count. Label it prior evidence; skip reuse after external-state changes; never copy.
+- **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output; skip irrelevant fixtures, transcripts, assets
+  and dependencies; batch reads, never repeat searches.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
   new exception at the boundary and verify the bundle.
-- Read env vars through owning service audited config (scripts/eval harnesses own theirs). `MODULE__NAME` settings; spread typed objects, never re-enumerate keys.
-- Product code ignores downstream deployments. Shared types/constants: `services/contracts`;
-  shared transport and assembly: `services/utils`. The app never imports the proxy. Local and HTTP
-  service implementations keep the same contracts.
-- Keep bearer secrets out of URLs/docs/logs/storage; test tokens are not credentials.
-  Use `mxmx_test_*` accounts for disposable browser flows; read local OTPs with `npm run dev:otp`,
-  never a public app endpoint.
-- **App chrome composes `services/app/solid/ui`** (md forms, sm chrome; `rounded-chip|control|panel|dialog`,
-  `text-micro|2xs`, `h-control*`); `/dev/ui` shows all. `scripts/ci/check-ui-primitives.mjs` refuses
-  hand-rolled controls, overlays and one-off styles: add needs to ui. UI tests use accessible names;
-  tooltips use `ui/Tooltip`, not `title`.
+- Read env vars through the owning service's audited config (scripts/eval harnesses own theirs). `MODULE__NAME`
+  settings; spread typed objects, never re-enumerate keys.
+- Product code ignores downstream deployments; the app never imports the proxy. Shared types/constants:
+  `services/contracts`; shared transport/assembly: `services/utils`. Local and HTTP services keep one contract.
+- Keep bearer secrets out of URLs/docs/logs/storage; test tokens are not credentials. Use `mxmx_test_*` accounts for
+  disposable browser flows; read local OTPs only with `npm run dev:otp`.
 - Tests: real handlers, isolated state, reset database/limiter. Gates: deterministic third-party
   fixtures; separate live-provider checks.
-- Generate routes/schemas/CSS lists; never hand-edit; review diffs.
-
-## Commands
-
-From repo root.
-
-- `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
-- `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
-- `npm run eval -- --tasks <name>` — the agent eval against that server (`--deployment`, `--help`).
-  `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (its README is the guide): copy
-  it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.
-- `npm run dev:otp -- <email>` — a local login code from the protected outbox.
-- `npm run validate` — FAST: name guard, incremental TypeScript (TypeScript 7's native compiler where its platform package installed, `tsc` 5 elsewhere; `scripts/lib/type-check.mjs`) with unused declarations, the module-graph check (`scripts/ci/module-graph.mjs`);
-  utils/contracts add `noUncheckedIndexedAccess`.
-- `npm test` — affected api/node/ui/islands tests, ≤50 files; exit 2 means PR CI, never widen.
-  `-- --files <paths>` is the FAST inner loop; bare and `-- <ref>` (branch changes) are SLOW, pre-merge
-  only; `-- --reuse` reuses evidence. Config/package edits may defer everything (expected).
-- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW, PRE-MERGE
-  ONLY, NEVER AFTER AN EDIT**: named browser gates in a Linux container, built (CI's gate build, reused
-  until a build input changes) and served as CI does.
-  `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
-- CI-only, never a deferral bypass: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
-- `npm run build:reader -w services/app` — the hosted native HTML components and server reader assets.
-- Generated inputs: `npm run generate:routes`, `render:schema`,
-  `generate:og`, `generate:design-systems` (runtime registry and agent
-  references from `design-systems/specs`; `-- pages`: specimen pages into `tmp/`).
-
-## Change checks
-
-- Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and SQL via
-  `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
-  setup planner's snapshot via `npm run generate:env-snapshot` (its test fails on drift).
 - PGLite owns one serialized connection per process: never enqueue an out-of-transaction query inside
   a transaction callback. Send notifications/telemetry after commit; preserve atomic edits.
 - Preserve access checks on reads, writes, exports, live streams and dataset mutations; public/unlisted
   link access is neither ownership nor dataset write access.
-- Rendering, editing and author scripts have separate trust boundaries. Read
-  [serving and security](docs/serving-and-security.md) before markup changes.
-- After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides
-  a broken lockfile). Native packages/browser assets need build/image verification.
+- After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides a broken
+  lock); native packages and browser assets need build/image verification.
+- Delegating: read the agent-workflows doc first; every brief inherits these rules.
 
-## Delegated work
+## Commands (from the repo root)
 
-The orchestrator seeds contracts, core tests and a bounded brief; each implementer uses its own
-worktree, data directory and port block, never delegates or shares a checkout.
-**Independent deliverables get separate briefs/implementers in parallel worktrees; shared files get one brief. The orchestrator merges.** Browser gates run in containers
-(`scripts/gate-container.mjs`), up to engine CPUs ÷ container CPUs at once (`GATES__CONTAINER_SLOTS`
-overrides), never on the host. **Gates are SLOW-tier: an implementer runs them ONCE at the end of the
-brief, NEVER per edit. Every brief must say so verbatim.** Separate PRs per repository.
-Handoff: [docs/agent-workflows.md](docs/agent-workflows.md).
+- `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
+- `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
+- `npm run dev:otp -- <email>` — a local login code from the protected outbox.
+- `npm run eval -- --tasks <name>` — the agent eval against that server (setup: the `lib/skills` row).
+- `npm run validate` — FAST: UI primitives, module graph, table ownership, knip (unused files, exports,
+  dependencies), the incremental type check.
+- `npm test` — affected api/node/ui/islands tests (cap above). `-- --files <paths>` is the FAST loop; bare and `-- <ref>` are SLOW, pre-merge only. Config/package edits may defer everything.
+- `node scripts/gate-container.mjs <gate ...>` — **SLOW, PRE-MERGE ONLY, NEVER AFTER AN EDIT**: named browser
+  gates in a Linux container, built and served as CI does.
+  `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
+- CI-only, never a deferral bypass: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
+- Generated routes, schemas and CSS lists are never hand-edited: rerun `npm run generate:routes`, `render:schema`,
+  `generate:og` or `generate:design-systems` and review the diff.

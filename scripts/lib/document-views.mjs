@@ -48,7 +48,7 @@ export function scriptBudgetBytes(external, inline) {
 export function documentViewProbe() {
   const state = (window.__documentView = { fcp: null, lcp: null, takeover: null, painted: null, ready: null, want: null, view: false });
   /*
-   * READY — when the page is interactive (docs/phase2-architecture.md §11): on the
+   * READY — when the page is interactive: on the
    * reader view, the takeover (stamped below); on the raw document, the runtime's
    * `mx:ready` after hydration (the former runtime and the compiled islands both fired
    * it), or DOMContentLoaded on a page that loads no module script at all (a compiled

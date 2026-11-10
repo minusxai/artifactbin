@@ -8,7 +8,7 @@
  *
  * SERIALIZED PER PUBLISHER: the check locks each affected publisher's `users` row FOR UPDATE before counting, so two
  * transactions that add to one publisher's count run one after the other and the second counts the first. LOCK
- * ORDER (lib/artifact-access README): the account rows are facts, step 3, taken after the transaction's artifacts,
+ * ORDER (lib/artifact-access locks.ts): the account rows are facts, step 3, taken after the transaction's artifacts,
  * in `lockOrder`; a deadlock with a writer in another order aborts one, which rolls back whole.
  */
 import {FUNCTION_SCHEDULE_LIMIT,type Queryable} from '@artifactbin/contracts';
