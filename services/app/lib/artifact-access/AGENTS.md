@@ -17,7 +17,12 @@ artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
   Never decide from a fact read before the locks or outside the transaction.
 - An insert can narrow a role (a dataset rule matches exactly one role) and an absent row cannot be locked: insert
   or change shares, group shares, link role, visibility and policy only while holding the artifact's row FOR
-  UPDATE, and memberships only while holding the group's row FOR UPDATE.
+  UPDATE, and memberships only through lib/groups `lockMembershipGroups` (the hierarchy guard FOR SHARE, then the
+  group and every ancestor FOR UPDATE): a share reaches its group's whole subtree.
+- Groups form one tree (lib/groups hierarchy). Shares and a group-owned row's member audience reach a group's
+  subtree in both languages (`reachedGroupsSql`, `groupAudience`); ownership and editor powers stay on direct
+  rows. A topology change (create, delete, reparent) moves the hierarchy revision as its first statement, which
+  takes the guard row exclusively; `lockAuthorization` holds it FOR SHARE first.
 - Facts read inside a write are read-only: never stamp or update a fact row while deciding (an upgraded share
   lock deadlocks two readers of one page). Unresolved invitations are stamped by ordinary reads only.
 - A writer that cannot follow the order (it locks a group or an account first) runs its whole transaction under
@@ -27,6 +32,7 @@ artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
   order list in the `locks.ts` header.
 
 ## Checks
-- `npm test -- --files services/app/lib/artifact-access/__tests__/access.test.ts services/app/lib/artifact-access/__tests__/grants.test.ts services/app/lib/artifact-access/__tests__/group-shares.test.ts services/app/lib/artifact-access/__tests__/proofs.test.ts services/app/lib/dataset-permissions/__tests__/role.test.ts services/app/__tests__/page-sql-door-locks.test.ts`
-- `__tests__/lock-order-postgres.test.ts` is the two-connection Postgres regression; it runs only where Docker
-  has the Postgres image (CI's integration project) and is skipped elsewhere.
+- `npm test -- --files services/app/lib/artifact-access/__tests__/access.test.ts services/app/lib/artifact-access/__tests__/grants.test.ts services/app/lib/artifact-access/__tests__/group-shares.test.ts services/app/lib/artifact-access/__tests__/proofs.test.ts services/app/lib/artifact-access/__tests__/subgroups.test.ts services/app/lib/dataset-permissions/__tests__/role.test.ts services/app/__tests__/page-sql-door-locks.test.ts`
+- `__tests__/lock-order-postgres.test.ts` is the two-connection Postgres regression (subtree cases included); it
+  runs only where Docker has the Postgres image (CI's integration project, locally
+  `npm run test:integration -- <that file>`) and is skipped elsewhere.

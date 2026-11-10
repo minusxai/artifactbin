@@ -3,12 +3,12 @@ export const DESCRIPTION = `Sign in, inspect or remove this origin's private gra
 It uses an email one-time code.
 Usage: node scripts/auth.mjs status
        node scripts/auth.mjs login --email ADDRESS
-       node scripts/auth.mjs login --challenge HANDLE --code-file FILE
+       node scripts/auth.mjs login --challenge HANDLE --code-file FILE [--minusx]
        node scripts/auth.mjs logout [--local]
 Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
   --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
-  completes it. Common: --server ORIGIN (default: the archive origin), --json, --output FILE
-  (never overwrites), --help.
+  completes it; --minusx there also lets the grant query MinusX as you. Common: --server ORIGIN
+  (default: the archive origin), --json, --output FILE (never overwrites), --help.
 Examples:
   node scripts/auth.mjs status                        # reuse an existing grant before signing
                                                       #   in again
@@ -133,7 +133,7 @@ export async function authCommand({sub, values, positionals}, {env = process.env
   if (!cookies) throw new ToolError('session_missing', 'Sign-in returned no session cookie.', 1);
   const tokenResponse = await client.request('/api/authentication/token', {
     method: 'POST',
-    body: {},
+    body: values.minusx ? {scope: 'artifacts minusx'} : {},
     headers: {Cookie: cookies},
     authenticated: false
   });

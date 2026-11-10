@@ -2,7 +2,8 @@
 export const DESCRIPTION = `Groups: membership, invitations, sharing, ownership and links.
 Usage: node scripts/groups.mjs list
        node scripts/groups.mjs show GROUP [--pages] [--cursor CURSOR]
-       node scripts/groups.mjs create HANDLE --name NAME [--description TEXT]
+       node scripts/groups.mjs create HANDLE --name NAME [--description TEXT] [--parent GROUP]
+       node scripts/groups.mjs reparent GROUP --parent GROUP|--root --yes
        node scripts/groups.mjs update GROUP [--name NAME] [--description TEXT]
        node scripts/groups.mjs invite GROUP EMAIL... [--role viewer|editor] [--yes]
        node scripts/groups.mjs uninvite GROUP EMAIL --yes
@@ -34,7 +35,8 @@ Gotchas: GROUP is an ID, handle or @handle, resolved once; writes use stable IDs
   tracker's members then change every entry); unshare --datasets takes them back too.
   --yes (destructive actions, editor invitations, promotions, page shares) needs the user's
   consent in this conversation (references/groups.md).
-  Delete requires an empty group and its exact current handle; deployment defaults are protected.
+  --parent: a subgroup of a group you edit; parent shares reach its members, never the reverse.
+  Delete requires an empty group without subgroups, its exact handle; defaults are protected.
   Unknown write outcomes must be reconciled by reading current state before another write.
 Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/access; 4 conflict;
   5 unknown write outcome. Results never contain credentials.`;
@@ -65,6 +67,8 @@ export async function groupsCommand({sub,values,positionals},options={}){
  if(sub==='delete')requireFlags(values,['handle']);
  if(sub==='move'&&Boolean(values.group)===Boolean(values.personal))
   throw new ToolError('invalid_destination','Choose exactly one of --group or --personal.',2);
+ if(sub==='reparent'&&Boolean(values.parent)===Boolean(values.root))
+  throw new ToolError('invalid_parent','Choose exactly one of --parent or --root.',2);
  if(['share','unshare'].includes(sub))requireFlags(values,['group']);
  if(values.cursor&&!values.pages)throw new ToolError('invalid_cursor',
   '--cursor requires show --pages.',2);
@@ -83,12 +87,14 @@ export async function groupsCommand({sub,values,positionals},options={}){
  const email=sub==='uninvite'?invitationEmail(positionals[1]):undefined;
  if(!pageVerb&&sub!=='list')groupReference(positionals[0]);
  if(values.group)groupReference(values.group);
+ if(values.parent)groupReference(values.parent);
  if(['link','unlink'].includes(sub))groupReference(positionals[1]);
  const target=pageVerb?resolveTarget(positionals[0],selectedServer(values,options.env)):null;
  const client=makeClient(target?.server??selectedServer(values,options.env),options);
  const write=(path,method,body)=>client.request(path,{method,body,unsafe:true});
  if(sub==='list')return client.request('/api/groups');
- if(sub==='create')return write('/api/groups','POST',{handle:positionals[0],...patch});
+ if(sub==='create')return write('/api/groups','POST',{handle:positionals[0],...patch,
+  ...(values.parent?{parent_id:(await resolveGroup(client,values.parent)).group.id}:{})});
  if(sub==='move'&&values.personal)return write('/api/artifacts/'+target.id+'/transfer','POST',
   {destination:{type:'personal'}});
  const detail=await resolveGroup(client,pageVerb?values.group:positionals[0]);
@@ -100,6 +106,8 @@ export async function groupsCommand({sub,values,positionals},options={}){
   return {...detail,pages:await client.request('/api/artifacts?'+query)};
  }
  if(sub==='update')return write(base,'PATCH',patch);
+ if(sub==='reparent')return write(base+'/parent','PUT',{parent_id:values.root?null:
+  (await resolveGroup(client,values.parent)).group.id,from_parent_id:group.parent_id??null});
  if(sub==='delete'){
   if(values.handle!==group.handle)throw new ToolError('handle_mismatch',
   'Echo the exact current group handle with --handle.',2);

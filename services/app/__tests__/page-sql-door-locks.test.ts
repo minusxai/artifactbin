@@ -10,7 +10,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
 import { resolverDatasets } from '@/lib/graphql-compat';
-import { createGroup, deleteGroup, removeGroupMember } from '@/lib/groups';
+import { createGroup, deleteGroup, removeGroupMember, setGroupParent } from '@/lib/groups';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
 import { type Person, person, params, publish, sql, gql, fixture, stored } from './page-sql-door-fixture';
@@ -144,6 +144,7 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
   const group = await createGroup(f.owner.userId!, { handle: 'lock_order_group', name: 'Lock order' });
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
   const doomed = await createGroup(f.owner.userId!, { handle: 'lock_order_doomed', name: 'Doomed' });
+  const moved = await createGroup(f.owner.userId!, { handle: 'lock_order_moved', name: 'Moved' });
   const formats = new Map((await db.query<{ id: string; format: string }>('SELECT id, format FROM artifacts')).rows.map((r) => [r.id, r.format]));
   const isArtifactLock = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM artifacts\b/.test(s) && !/JOIN/.test(s);
   const isFact = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM (artifact_shares|artifact_group_shares|groups|group_members|users)\b/.test(s)
@@ -177,12 +178,14 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
     path = 'group member'; await removeGroupMember(f.owner.userId!, group.id, f.other.userId!);
     path = 'group-owned publish'; await createArtifact(null, f.owner.userId, { format: 'html', source: '<p>group page</p>', meta: {}, title: 'Group page', destination: { type: 'group', id: group.id } });
     path = 'group deletion'; await deleteGroup(f.owner.userId!, doomed.id, 'lock_order_doomed');
+    path = 'group subgroup creation'; await createGroup(f.owner.userId!, { handle: 'lock_order_child', name: 'Child', parent_id: group.id });
+    path = 'group reparent'; await setGroupParent(f.owner.userId!, moved.id, group.id);
   } finally { spy.mockRestore(); }
   const bad = traces.filter((t) => t.problems.length);
   expect(bad, JSON.stringify(bad)).toEqual([]);
   // Each path locked something it is pinned for; the guarded ones locked their page before the dataset.
   // (A test user's erasure, the third competing writer, is pinned in lib/operations' own test: testusers-erase.test.ts.)
-  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'resolver', 'sharing', 'group share', 'group member', 'group-owned publish', 'group deletion'])
+  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'resolver', 'sharing', 'group share', 'group member', 'group-owned publish', 'group deletion', 'group subgroup creation', 'group reparent'])
     expect(traces.some((t) => t.path === p && (t.artifacts.length || t.facts)), p).toBe(true);
   for (const p of ['sql door', 'graphql', 'resolver']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
   expect(traces.find((t) => t.path === 'sql door, cross-link read' && t.artifacts.length)?.artifacts.slice(0, 3)).toEqual([f.page, ...[f.staff, f.notes].sort(lockOrder)]);

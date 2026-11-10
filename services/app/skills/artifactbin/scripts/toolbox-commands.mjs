@@ -23,7 +23,8 @@ function flag(type = 'string', multiple = false) {
 // `listed:false` keeps a command out of the table; `starter` names the starter that routes it.
 const commands = {
   auth: {sub: {
-    login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {},
+    login: {email: flag(), challenge: flag(), 'code-file': flag(), minusx: flag('boolean')},
+    status: {},
     logout: {local: flag('boolean')}
   }},
   serve: {flags: {port: flag(), 'runtime-dir': flag(), autofix: flag('boolean')}},
@@ -80,7 +81,9 @@ const commands = {
   },
   groups: {sub: {
     list: {}, show: {pages: flag('boolean'), cursor: flag()},
-    create: {name: flag(), description: flag()}, update: {name: flag(), description: flag()},
+    create: {name: flag(), description: flag(), parent: flag()},
+    update: {name: flag(), description: flag()},
+    reparent: {parent: flag(), root: flag('boolean'), yes: flag('boolean')},
     invite: {role: flag(), yes: flag('boolean')}, uninvite: {yes: flag('boolean')},
     role: {role: flag(), yes: flag('boolean')}, remove: {yes: flag('boolean')},
     leave: {yes: flag('boolean')}, share: {group: flag(), role: flag(), datasets: flag('boolean'),
