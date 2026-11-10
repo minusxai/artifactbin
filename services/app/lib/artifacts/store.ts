@@ -19,7 +19,7 @@ import {
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/social';
 import { claimArtifactId } from './identities';
-import { parseDatasetDefinition, serializeDatasetDefinition, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
+import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
@@ -119,11 +119,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
   if(document.group_id ? dataset.group_id!==document.group_id : dataset.group_id || (document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id))throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
   const columns=(cs:DatasetColumn[])=>resolveUserColumnScope(cs,document.id);
   const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
-  let source=dataset.source;
-  if(source?.trimStart().startsWith('<Dataset')) {
-   const definition=parseDatasetDefinition(source);
-   source=serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:columns([c])[0]!)}))});
-  }
+  const source=resolveDefinitionScope(dataset.source,document.id)??null;
   await archiveVersion(tx,dataset);
   const meta={...dataset.meta,userScopeDocument:document.id,catalog:bound,columns:columns((dataset.meta.columns??[]) as DatasetColumn[])};
   const updated=(await artifactQuery<ArtifactRow>(tx,'UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(meta),source,newEditId()])).rows[0];

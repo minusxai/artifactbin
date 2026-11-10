@@ -129,7 +129,11 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text
   // (what a file or a sheet actually contains); `sheetUrl` fetches a public
   // Google Sheet. All three converge on the same rows — see lib/data-ingest.
-  const datasetDefinition=body.dataset&&typeof body.dataset==='object'&&!Array.isArray(body.dataset)||typeof body.dataset==='string'&&body.dataset.trimStart().startsWith('<Dataset');
+  // A definition (lib/datasets CatalogInput) is an object or its JSON text. Text
+  // in the retired `<Dataset>` markup goes there too, to be refused by name
+  // rather than ingested as a one-column CSV.
+  const definitionText=typeof body.dataset==='string'&&/^\s*(?:\{|<Dataset\b)/.test(body.dataset);
+  const datasetDefinition=body.dataset&&typeof body.dataset==='object'&&!Array.isArray(body.dataset)||definitionText;
   if (kind === 'dataset' && datasetDefinition) {
     return ctx.prepareDataset ? ctx.prepareDataset(body.dataset, ctx.objects) : json({error:'dataset_not_previewable',details:['Use the dataset preview endpoint']},400);
   }

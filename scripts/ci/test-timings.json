@@ -648,8 +648,6 @@
    "services/app/lib/http/__tests__/revalidation.test.ts": 9,
    "services/app/lib/http/__tests__/thrown-message.test.ts": 5,
    "services/app/lib/images/__tests__/optimise.test.ts": 8906,
-   "services/app/lib/jsx/__tests__/parse.test.ts": 18,
-   "services/app/lib/jsx/__tests__/reactive.test.ts": 15,
    "services/app/lib/libraries/__tests__/components.test.ts": 28,
    "services/app/lib/libraries/__tests__/direct-visual-libraries.test.ts": 578,
    "services/app/lib/libraries/__tests__/hosted-components.test.ts": 2692,

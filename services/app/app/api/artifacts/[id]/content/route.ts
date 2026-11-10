@@ -31,10 +31,11 @@ export const GET=withTokenAuth((request,{ actor,params })=>refusingUnservable(as
   if(table?.objectKey&&!decision.full)return new Response(JSON.stringify(await datasetRowsFor(decision,row,table)),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
   if(table?.objectKey)return new Response(new Uint8Array(await objectStore().get(table.objectKey)),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
   if(!catalog)return json({error:'not_found'},404);
-  // A connected or multi-table dataset holds no downloadable rows: its content is the definition.
-  const stored=typeof row.source==='string'&&row.source.trimStart().startsWith('<Dataset')?row.source:null;
+  // A dataset with no single stored table to download: its content is the definition (JSON),
+  // as stored for its editors, as its role view's public relations for everyone else.
+  const stored=catalog.kind==='stored'&&typeof row.source==='string'&&row.source?row.source:null;
   const definition=canEdit(readable.role)&&stored?stored:readableDefinition(viewCatalog(decision,publicCatalogOf(row)??catalog));
-  return new Response(definition,{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+  return new Response(definition,{headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
  }
  return new Response(row.source??'',{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
 }));
