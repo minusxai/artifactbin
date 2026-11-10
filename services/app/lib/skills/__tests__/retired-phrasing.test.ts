@@ -158,6 +158,9 @@ const RETIRED: Retired[] = [
   // never returned.
   {pattern: /part of every task/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'W1: watching follows the reply (WATCH_MODE); "part of every task" let the reply wait for the watch'},
+  // The 2026-11-11 visibility facts (V): an agent left the product when the only stricter setting was off-limits.
+  {pattern: /team can view"? needs\s+nothing more|only when the user says\s+"public" or "private"|Everyone with the link reads the notes/,
+    scopes: AGENT_TEXT, reason: 'V1: keyed or internal data may be published private unasked; who reads is stated once, in SKILL.md Sharing'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -191,6 +194,7 @@ describe('retired skill phrasing', () => {
       'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
       'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
       'W1:': 'Watching is part of every task, however short the reply.',
+      'V1:': 'so "my team can view" needs\n  nothing more.',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;

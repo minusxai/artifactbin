@@ -89,7 +89,9 @@ script. Groups: `node scripts/groups.mjs list`
   the next step); `node scripts/new-app.mjs --kind list --title "NAME"` (a list people add
   themselves to and change only their own entry: sign-up sheet, RSVP, roster);
   `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items behind a
-  key, grouped with totals, with notes signed-in readers share);
+  key, grouped with totals, with notes signed-in readers share; sign-in and the notes' rules are
+  the platform's: each reader changes or removes only their own note, a signed-out one adds none,
+  and no server of your own is needed);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it links the CSV by its path and writes a DATA block over its
   columns, and `--artifact ID` rebuilds an existing page);
@@ -99,7 +101,10 @@ script. Groups: `node scripts/groups.mjs list`
   write the findings from); `cp examples/report.html index.html` (a report without data). Data
   from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below); behind
   a key or from your own server code: a backend function ([functions](references/functions.md),
-  read it first); never copy its rows into a CSV. If no starter fits, write the page yourself.
+  read it first); never copy its rows into a CSV. The server then keeps the key, encrypted (the
+  owner pastes it into the page's settings; only the API's host receives it), and the rows people
+  write, such as notes; never the API's rows: the function fetches them on the server whenever a
+  reader opens the page. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
   name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
   its stylesheet and fonts). Keep viewer-local state in `state` from `@afbin/state`
@@ -222,9 +227,15 @@ ownership changes alone need no comment watch. Visibility only controls who can 
 comments and dataset writes are separate permissions. A receipt's `user_page_url` is an anonymous
 read-only copy ([groups](references/groups.md#public-view-receipts)).
 
-- Pages are unlisted by default: anyone with the link can open them, so "my team can view" needs
-  nothing more. Use `--visibility public` or `--visibility private` only when the user says
-  "public" or "private"; a private page opens only for the people it is shared with.
+- Who can read. Unlisted (the default): anyone with the link, signed out too, sees all the page
+  shows, its functions' answers included (a `signed_in` role still admits any signed-in link
+  holder). `--visibility private`: only the owner and the people and groups it is shared with,
+  never anyone signed out. `--visibility public` also lists it on the owner's profile: only when
+  the user says "public". Unlisted fits most pages, "my team can view" included. Data from behind
+  a key, or that the user calls internal: publish private, share it with their team's group
+  (below) or have the owner invite people in the page's Share dialog, and check without
+  `--guest-steps` (it runs signed out, which a private page answers with not found). Say in the
+  reply which visibility the page has and who can open it.
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
   When they change its rows (a team tracker), add `--datasets`: a page share alone never lets
