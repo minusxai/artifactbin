@@ -47,11 +47,12 @@ const source = `<!doctype html><html><head><title>Portable native page</title>
 <svg id="portable-author-svg" viewBox="0 0 10 10" width="40" height="40"><circle cx="5" cy="5" r="4" fill="#145a28"></circle></svg>
 <img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
 <script type="module">
-import {client,gql} from '@afbin/apollo';
-const count=gql\`{count}\`;
-client.watchQuery({query:count}).subscribe(({data})=>document.querySelector('#count').textContent=String(data.count));
-document.querySelector('#increment').onclick=()=>client.updateQuery({query:count},({count})=>({count:count+1}));
-document.querySelector('#shared').onclick=async()=>{const result=await client.mutate({mutation:gql\`mutation {tracker{add(name:"Offline",grp:"Later"){_id}}}\`});document.querySelector('#outcome').textContent=result.extensions?.outcomes['tracker.add']??'missing';};
+import {state} from '@afbin/state';
+const show=({count})=>{document.querySelector('#count').textContent=String(count);};
+show(state.getState());state.subscribe(show);
+document.querySelector('#increment').onclick=()=>state.setState(({count})=>({count:count+1}));
+// tracker.ts's add, as the starter page calls it: an offline copy has no app connection, so the call rejects (TypeError).
+document.querySelector('#shared').onclick=async()=>{let outcome;try{const res=await fetch('/fn/add',{method:'POST',body:JSON.stringify({name:'Offline',grp:'Later'})});outcome='answered '+res.status;}catch(error){outcome=error instanceof TypeError?'offline':'rejected '+error?.name;}document.querySelector('#outcome').textContent=outcome;};
 </script></body></html>`;
 const id = await publish({ html: source, visibility: 'private', resolverSources: { tracker: readFileSync(path.join(ROOT, 'services/app/skills/artifactbin/examples/tracker.ts'), 'utf8') } });
 const response = await fetch(`${BASE}/a/${id}/download`, { headers });
