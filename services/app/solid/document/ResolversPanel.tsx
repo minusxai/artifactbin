@@ -16,12 +16,20 @@
  * contracts check it (`databaseConnection`) and sent only when filled. Advanced opens by itself when a CA is the likely
  * fix: the host is an RDS or Supabase name, or Test connection answered `tls_untrusted_certificate`.
  *
+ * A name declared `'minusx'` (MINUSX_CONNECTION_KIND, combined mode only) is a GOVERNED CONNECTION BINDING, not a
+ * secret: the author picks one of their own groups (`GET /api/groups`, direct memberships) and a connection MinusX
+ * lists for them in it (`GET /api/my/minusx/connections`), and saves `{connection_id, group_id}`. The current binding
+ * comes with the resolver (`bindings`); every refusal (`not_group_member`, `connection_not_visible`,
+ * `minusx_not_configured`, `minusx_unavailable`, `binding_forbidden`) is said in plain words. Those reads happen only
+ * when such a name is declared, so a page without one (and every standalone server) asks for nothing new.
+ *
  * A resolver that schedules functions (`export const schedule`, lib/function-schedules) lists each with its interval,
  * its last outcome and its next run; a failed run shows its code, the function's message and the owner-only detail,
  * as Test connection does.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
-import { isResolverDatabaseKind, type ResolverDatabaseKind } from '@artifactbin/contracts';
+import { isResolverDatabaseKind, MINUSX_CONNECTION_KIND, type GroupSummary, type ResolverDatabaseKind } from '@artifactbin/contracts';
+import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { CopyBlock } from '../ui/CopyBlock';
 import { Disclosure } from '../ui/Disclosure';
@@ -31,7 +39,8 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
 interface FunctionSchedule { name: string; every: string; nextRunAt: string; running: boolean; failures: number; lastRunAt: string | null; lastStatus: 'ok' | 'failed' | null; lastError: string | null; lastMessage: string | null; lastDetail: string | null }
-interface PageResolver { name: string; backendId: string; version: string; test: boolean; functions?: boolean; secrets: Record<string, string>; set: string[]; schedules?: FunctionSchedule[] }
+interface MinusxBinding { connection_id: string; group_id: string; group_name: string | null }
+interface PageResolver { name: string; backendId: string; version: string; test: boolean; functions?: boolean; secrets: Record<string, string>; set: string[]; bindings?: Record<string, MinusxBinding>; schedules?: FunctionSchedule[] }
 interface PageResolvers { revision: string; resolvers: PageResolver[] }
 type TestOutcome = { ok: true; text: string } | { ok: false; text: string };
 
@@ -158,6 +167,93 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
   </ListRow>;
 }
 
+/** A binding refusal in plain words; an unknown code is shown as is. */
+const BINDING_WORDS: Record<string, string> = {
+  not_group_member: 'You are not a direct member of that group. Only its own members can pin a page to its data; membership of a parent group or a subgroup does not count.',
+  connection_not_visible: 'MinusX does not show that connection to this group. Choose one of the connections listed for it.',
+  minusx_not_configured: 'This server is not connected to MinusX, so governed connections cannot be bound.',
+  minusx_unavailable: 'MinusX did not answer. Try again in a moment.',
+  binding_forbidden: 'MinusX refused to show you that group’s connections.',
+  invalid_binding: 'Choose a group and one of its connections.',
+};
+const bindingWords = (code: string) => BINDING_WORDS[code] ?? code;
+interface MinusxConnection { id: string; name: string; protocol: string }
+async function readJsonOrRefusal<T>(response: Response): Promise<T> {
+  const body = await response.json().catch(() => null) as (T & { error?: string }) | null;
+  if (!response.ok || !body) throw new Error(body?.error ?? (response.status >= 500 ? 'minusx_unavailable' : 'refused'));
+  return body;
+}
+/** The author's direct memberships: the only groups a page may be pinned to. */
+async function readGroups(): Promise<GroupSummary[]> {
+  return (await readJsonOrRefusal<{ groups: GroupSummary[] }>(await fetch('/api/groups'))).groups;
+}
+async function readConnections(group: string): Promise<MinusxConnection[]> {
+  return (await readJsonOrRefusal<{ connections: MinusxConnection[] }>(await fetch(`/api/my/minusx/connections?group_id=${encodeURIComponent(group)}`))).connections;
+}
+
+function MinusxBindingRow(props: { resolver: PageResolver; name: string; set: boolean; binding: MinusxBinding | null; onNames: (names: string[]) => void }): JSX.Element {
+  const [current, setCurrent] = createSignal<MinusxBinding | null>(props.binding);
+  const [group, setGroup] = createSignal(props.binding?.group_id ?? '');
+  const [connection, setConnection] = createSignal(props.binding?.connection_id ?? '');
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal('');
+  const [groups] = createResource(readGroups);
+  const [connections] = createResource(() => group() || false, readConnections);
+  const groupOptions = () => {
+    const mine = (groups.error ? [] : groups() ?? []).map((g) => ({ value: g.id, label: g.name }));
+    const bound = current();
+    // The binding another editor set may name a group this author is not in: still shown, so it is visible what it pins.
+    return bound && !mine.some((g) => g.value === bound.group_id) ? [{ value: bound.group_id, label: bound.group_name ?? bound.group_id }, ...mine] : mine;
+  };
+  const listed = () => (connections.error || connections.loading ? [] : connections() ?? []);
+  const connectionOptions = () => {
+    const options = listed().map((c) => ({ value: c.id, label: c.name }));
+    const chosen = connection();
+    return chosen && !options.some((o) => o.value === chosen) ? [{ value: chosen, label: chosen }, ...options] : options;
+  };
+  const groupName = (id: string) => groupOptions().find((g) => g.value === id)?.label ?? id;
+  const connectionName = (id: string) => listed().find((c) => c.id === id)?.name ?? id;
+  const listError = () => connections.error ? bindingWords(connections.error instanceof Error ? connections.error.message : 'minusx_unavailable') : '';
+  const changed = () => !current() || current()!.group_id !== group() || current()!.connection_id !== connection();
+  const ready = () => !!group() && !!connection() && listed().some((c) => c.id === connection()) && changed();
+  const send = async (method: 'PUT' | 'DELETE') => {
+    setBusy(true); setError('');
+    try {
+      const body = method === 'PUT' ? { name: props.name, binding: { connection_id: connection(), group_id: group() } } : { name: props.name };
+      const response = await fetch(`/api/my/resolvers/${encodeURIComponent(props.resolver.backendId)}/${encodeURIComponent(props.resolver.version)}/secrets`, { method, headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const answer = await response.json().catch(() => null) as { names?: string[]; error?: string } | null;
+      if (!response.ok || !answer?.names) throw new Error(answer?.error ?? 'backend_secret_failed');
+      setCurrent(method === 'PUT' ? { connection_id: connection(), group_id: group(), group_name: groupName(group()) } : null);
+      if (method === 'DELETE') { setGroup(''); setConnection(''); }
+      props.onNames(answer.names);
+    } catch (cause) { setError(bindingWords(cause instanceof Error ? cause.message : 'backend_secret_failed')); }
+    finally { setBusy(false); }
+  };
+  return <ListRow class="items-end">
+    <div role="group" aria-label={`MinusX connection ${props.name}`} class="grid w-full gap-2">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="font-mono text-sm text-fg">{props.name}</span>
+        <span class="font-sans text-xs text-muted">Governed MinusX connection</span>
+        <Badge tone={props.set && current() ? 'accent' : 'dim'}>{props.set && current() ? 'Bound' : 'Not bound'}</Badge>
+      </div>
+      <Show when={props.set && current()}>{(bound) => <p class="m-0 font-sans text-sm text-fg">Pinned to {connectionName(bound().connection_id)} in {bound().group_name ?? bound().group_id}.</p>}</Show>
+      <form class="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (ready()) void send('PUT'); }}>
+        <Field label={`Group for ${props.name}`} class="min-w-48 flex-1">
+          <Select value={group()} options={groupOptions()} placeholder={groups.loading ? 'Loading your groups…' : 'Choose one of your groups'} disabled={busy() || groups.loading} onChange={(next) => { setGroup(next); setConnection(''); setError(''); }} />
+        </Field>
+        <Field label={`Connection for ${props.name}`} class="min-w-48 flex-1">
+          <Select value={connection()} options={connectionOptions()} placeholder={connections.loading ? 'Loading connections…' : 'Choose a connection'} disabled={busy() || !group() || connections.loading || !!connections.error} onChange={(next) => { setConnection(next); setError(''); }} />
+        </Field>
+        <Button type="submit" size="md" disabled={busy() || !ready()}>Save binding</Button>
+        <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove binding</Button></Show>
+      </form>
+      <Show when={group() && !connections.loading && !connections.error && !listed().length}><StatusMessage kind="empty">MinusX shows {groupName(group())} no connections.</StatusMessage></Show>
+      <Show when={error() || listError()}><StatusMessage kind="error">{error() || listError()}</StatusMessage></Show>
+      <p class="m-0 font-sans text-xs text-muted">Each viewer reads with their own MinusX access in this group. Someone outside it sees the page with a data-access error, never your rows. Only the group and connection are stored, no password.</p>
+    </div>
+  </ListRow>;
+}
+
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 function ScheduleRow(props: { schedule: FunctionSchedule }): JSX.Element {
   const s = () => props.schedule;
@@ -210,6 +306,7 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
       <ul class="m-0 list-none p-0"><For each={names()}>{(name) => {
         const onNames = (next: string[]) => { setSet(next); setOutcome(null); };
         const kind = props.resolver.secrets[name];
+        if (kind === MINUSX_CONNECTION_KIND) return <MinusxBindingRow resolver={props.resolver} name={name} set={set().includes(name)} binding={props.resolver.bindings?.[name] ?? null} onNames={onNames} />;
         return isResolverDatabaseKind(kind)
           ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} outboundIps={props.outboundIps} untrusted={untrusted()} onNames={onNames} />
           : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
