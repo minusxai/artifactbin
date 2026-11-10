@@ -12,18 +12,26 @@ export const IDENTITY_PATHS = {
   groups: '/api/internal/identity/groups',
 } as const;
 
-/** `session_id` and `group_id` are optional. */
-export interface IdentityResolveRequest { user_id: string; session_id?: string; group_id?: string }
+/**
+ * Every field is optional: a MinusX service principal sends only `group_id` (for its chain); an agent's open
+ * session sends its `token_id`.
+ */
+export interface IdentityResolveRequest { user_id?: string; session_id?: string; group_id?: string; token_id?: string }
 
 export interface IdentityResolveResponse {
-  /** The account exists and may sign in. */
-  active: boolean;
+  /** The account exists and may sign in; null when no `user_id` was sent. */
+  active: boolean | null;
   /** null when no `session_id` was sent. */
   session_live: boolean | null;
+  /**
+   * null when no `token_id` was sent; otherwise whether that Artifactbin access token is still live, by the bearer
+   * read's own rule (row, expiry, OAuth family fence, admission). The auth host answers it, before the app's facts.
+   */
+  token_active: boolean | null;
   /** null when no `group_id` was sent or the group does not exist (or is deleted). */
   group: {
     id: string;
-    /** A DIRECT membership row in exactly this group; a descendant's or an ancestor's is not membership. */
+    /** A DIRECT membership row in exactly this group (false without a `user_id`); a descendant's or an ancestor's is not. */
     member: boolean;
     /** The group, then its parent, up to the root. */
     chain: string[];

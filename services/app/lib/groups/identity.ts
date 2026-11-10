@@ -1,7 +1,8 @@
 /**
  * THE IDENTITY ANSWERS behind the service-authenticated endpoints (contracts `IDENTITY_PATHS`, cross-repository
  * contract §2): who a user is, whether a session is live, and their DIRECT membership of one group with its
- * current chain. Nothing is cached: every answer is read from committed state at request time.
+ * current chain (a service principal sends no user and asks for the chain alone). Whether a token is live is the
+ * auth host's answer (`token_active`), added in front of this one. Nothing is cached: every answer is read from committed state at request time.
  *
  * The chain, the membership row and the revision are read in one transaction holding the hierarchy guard FOR
  * SHARE (./hierarchy), so they describe one topology. The session check is a call to the session authority and
@@ -17,15 +18,18 @@ export async function resolveIdentity(input:IdentityResolveRequest):Promise<Iden
  const db=await getDb();
  const facts=await db.transaction(async tx=>{
   await lockHierarchy(tx);
-  const active=await canAuthenticateUser(input.user_id,tx)&&await canUseDeploymentIdentity(input.user_id,tx);
+  const user=input.user_id;
+  const active=user===undefined?null:await canAuthenticateUser(user,tx)&&await canUseDeploymentIdentity(user,tx);
   if(input.group_id===undefined)return {active,group:null};
   const chain=await groupChain(tx,input.group_id);
   if(!chain.length)return {active,group:null};
-  const member=(await tx.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',[input.group_id,input.user_id])).rows.length>0;
+  const member=user!==undefined&&(await tx.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',[input.group_id,user])).rows.length>0;
   return {active,group:{id:input.group_id,member,chain,hierarchy_revision:await hierarchyRevision(tx)}};
  });
- const session_live=input.session_id===undefined?null:await services().humanSessions.live(input.session_id,input.user_id);
- return {active:facts.active,session_live,group:facts.group};
+ // A session belongs to a user: without one there is nothing it could be live for.
+ const session_live=input.session_id===undefined?null:input.user_id===undefined?false:await services().humanSessions.live(input.session_id,input.user_id);
+ // token_active is the auth host's answer (its bearer read); the app reports none of its own.
+ return {active:facts.active,session_live,token_active:null,group:facts.group};
 }
 
 export async function directGroups(userId:string):Promise<IdentityGroupsResponse>{
