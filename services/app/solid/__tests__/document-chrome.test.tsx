@@ -125,6 +125,9 @@ const panelRoot = (): HTMLElement => {
 };
 // The bar's panels load on first open (components/PageChromePanels), so they are awaited.
 const controls = async () => {
+  // Opening controls starts a cold dynamic import. Await it before the DOM assertion's
+  // short timeout; CI transform time is not the controls' rendering deadline.
+  await vi.dynamicImportSettled();
   const panel = await waitFor(() => within(panelRoot()).getByRole('region', { name: 'Artifact controls' }));
   // The drawer is available before the separately loaded document actions.
   await within(panel).findByRole('heading', {name:'Artifact'});
