@@ -17,6 +17,7 @@ import {
 // The shared autofix rules (lib/html-autofix) reach every script through this bundled module.
 export {autofixHtml,formatAutofixReport,scriptFingerprint,
   localReferences} from '../../../lib/html-autofix/index.ts';
+import {scriptFetchPaths} from '../../../lib/html-autofix/index.ts';
 import {htmlAppearance} from '../../../lib/html-page/design-system.ts';
 /** The design system a page names (its meta or <html> attribute), or null. */
 export const pageDesignSystem=source=>htmlAppearance(source).designSystem??null;
@@ -42,8 +43,7 @@ const moduleReferences=text=>{const imports=parseImports(text)[0],runtime=import
    {
   if(item.d===-2)return [];
 if(item.n===undefined){if(runtime.some(entry=>entry.importStart===item.ss))return [];throw Error(
-    'Computed module imports cannot be discovered; use literal imports. A script reaches '+
-    'another file only through a link in the HTML.');}
+    'Computed module imports cannot be discovered; use literal imports.');}
 return item.n.startsWith('.')||item.n.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(item.n)?[item.n]:[
     ];
  });};
@@ -68,6 +68,22 @@ if(node.tagName==='script'&&node.attrs.some(attr=>attr.name==='type'&&
   for(const child of node.childNodes??[])walk(child);
  };
  walk(parse(source));return references;
+}
+/** The paths a page's inline scripts, or a module file, fetch by a literal (fetch('./data.json')):
+ * the server's own reading (lib/html-autofix scriptFetchPaths, lib/html-publication-bundle plan).
+ * A fetch resolves against the page, so each is relative to the page, whichever file holds it. */
+export function publicationScriptFetches(source,contentType){
+ if(contentType==='text/javascript')return scriptFetchPaths(source);
+ if(contentType==='text/css')return [];
+ const paths=[],code=new Set(['','module','text/javascript','application/javascript']);
+ const walk=node=>{
+  const type=node.attrs?.find(attr=>attr.name==='type')?.value.trim().toLowerCase()??'';
+  if(node.tagName==='script'&&!node.attrs.some(attr=>attr.name==='src')&&code.has(type))paths.push(
+    ...scriptFetchPaths(node.childNodes.map(child=>child.value??'').join(''),type==='module'));
+  if(node.tagName==='template'&&node.content)walk(node.content);
+  for(const child of node.childNodes??[])walk(child);
+ };
+ walk(parse(source));return paths;
 }
 export function previewHtml(source,notice,localConfig,platformCss){
  const document=parse(localConfig?withPlatformStyles(source,platformCss):source);

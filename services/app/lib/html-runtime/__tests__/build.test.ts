@@ -124,6 +124,16 @@ it('leaves hosted top-level captures untouched and boots portable and raw local 
   }finally{for(const url of blobs)URL.revokeObjectURL(url);}
  }
 });
+it('hands the core\'s fetch the files the page published (config.files), before any author script runs',async()=>{
+ const {core}=await buildHtmlAssets();
+ const sent:unknown[]=[];const location={href:'https://abc123.pages.example/',pathname:'/'};
+ const blocks:Record<string,string>={runtime:JSON.stringify({pageId:'p',revision:'1',backends:[],files:{'data.json':'/a/p/assets?dependency=d&revision=1&version=1'}})};
+ const document={readyState:'loading',baseURI:location.href,addEventListener(){},documentElement:{setAttribute(){},hasAttribute(){return false;}},querySelector(selector:string){const name=/data-af="([^"]+)"/.exec(selector)?.[1];return name&&blocks[name]?{textContent:blocks[name]}:null;},createElement(){return {type:'',textContent:''};},currentScript:{src:'',after(){}}};
+ const win:Record<string,unknown>={fetch:async(input:unknown)=>{sent.push(input);return new Response('{}');},Request,Response,URL,location,document};win.parent=win;
+ runInNewContext(core,{document,location,window:win,URL,Blob});
+ await (win.fetch as typeof fetch)('./data.json');await (win.fetch as typeof fetch)('./other.json');
+ expect(sent).toEqual(['https://abc123.pages.example/a/p/assets?dependency=d&revision=1&version=1','./other.json']);
+});
 it('ships shared offline chrome within explicit code and style byte budgets',async()=>{
  const assets=await buildHtmlAssets();
  expect(assets.chrome).toContain('data-af-local-chrome');

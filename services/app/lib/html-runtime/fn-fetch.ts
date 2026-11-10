@@ -11,6 +11,13 @@
  * A call answers a real Response: the function's JSON with 200, or its refusal as a status (400, 403, 404, 405,
  * 409, 413, 500, 503) with `{error, message}`. It rejects only as fetch does: TypeError when the page has no
  * connection to the app (an offline copy, a frame that never attached), AbortError when its signal aborts.
+ * A FILE PUBLISHED WITH THE PAGE — `fetch('./data.json')` reads the file the page's publication recorded at that path.
+ * `files` (the runtime config's table, lib/html-publication-bundle publishedFileTable) maps each recorded path, relative
+ * to the page, to where it is read: the page's own asset door (which checks the reader on every request) or, in an
+ * offline copy, its bytes. A request whose URL, resolved against the document as the browser resolves it, is one of
+ * those paths on the page's own origin goes to the browser's own fetch at that address, its query and hash dropped (the
+ * stored file does not vary by them) and a Request's method, headers, body and signal kept; nothing else is touched.
+ *
  * Framework-free and value-free imports only: it is part of every page's core.
  */
 export interface FunctionRequest {name:string;method:'GET'|'POST';search:string;body:string|null;contentType:string|null}
@@ -21,13 +28,16 @@ const NAME=/^[_A-Za-z][_0-9A-Za-z]{0,63}$/;
 const PREFIX='/fn/';
 const NULL_BODY=new Set([101,204,205,304]);
 
-/** Replace `win.fetch`; returns the restore. `load` resolves the reader on the first call only. */
-export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:FunctionCaller}>):()=>void{
+/** Replace `win.fetch`; returns the restore. `load` resolves the reader on the first call only; `files`: path -> address. */
+export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:FunctionCaller}>,files?:Readonly<Record<string,string>>):()=>void{
  // Captured now, before the author's script can replace them.
  const scope=win as unknown as typeof globalThis;
  const native=win.fetch,apply=Reflect.apply,U=scope.URL,Req=scope.Request,Res=scope.Response,location=win.location,doc=win.document;
  // A host without fetch (a test's bare window) has nothing to intercept.
  if(typeof native!=='function'||typeof Req!=='function'||typeof Res!=='function'||typeof U!=='function')return ()=>{};
+ // Resolved once: the document's base never moves (every served policy says base-uri 'none').
+ const published=new Map<string,string>();
+ for(const [name,address] of Object.entries(files??{}))try{const at=new U(name,doc.baseURI);published.set(at.origin+at.pathname,new U(address,doc.baseURI).href);}catch{}
  const local=(status:number,error:string)=>new Res(JSON.stringify({error}),{status,headers:{'content-type':'application/json'}});
  const target=(input:string|URL|Request):URL|null=>{
   try{return new U(typeof input==='string'?input:input instanceof Req?input.url:input.href,doc.baseURI);}catch{return null;}
@@ -68,6 +78,9 @@ export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:F
    input=typeof given==='string'||given instanceof U||given instanceof Req?given:`${given as string}`;
    url=target(input);
   }catch(error){return Promise.reject(error);}
+  const file=url&&url.origin===new U(location.href).origin&&published.get(url.origin+url.pathname);
+  // A Request rebuilt at the file's address (its body already read rejects, as fetch would).
+  if(file){try{return apply(native,win,[input instanceof Req?new Req(file,input):file,...args.slice(1)]);}catch(error){return Promise.reject(error);}}
   if(!url||url.origin!==new U(location.href).origin||!url.pathname.startsWith(PREFIX))return apply(native,win,[input,...args.slice(1)]);
   return call(url,input,args[1]);
  };

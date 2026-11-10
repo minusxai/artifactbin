@@ -5,6 +5,7 @@ import {admitRuntimeModuleImports} from './runtime-module-imports';
 import {fileContentType} from '@artifactbin/contracts';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import {parseCss,walkCss} from './css';
+import {scriptFetchPaths} from '../html-autofix';
 initSync();
 import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext,AuthoringHtmlOptions} from './contracts';
@@ -88,6 +89,20 @@ function links(source:string,css:boolean,js=false):Link[]{
   if('childNodes'in node)for(const child of node.childNodes)visit(child);
  };visit(doc);return result;
 }
+/** What a script fetches by a literal path (lib/html-autofix scriptFetchPaths): the page's inline scripts, or a module file. */
+const JS_TYPES=new Set(['','module','text/javascript','application/javascript']);
+function fetchedPaths(source:string,page:boolean):string[]{
+ if(!page)return scriptFetchPaths(source);
+ const found:string[]=[];
+ const visit=(node:DefaultTreeAdapterMap['node'])=>{
+  if('tagName'in node&&node.tagName==='script'&&!node.attrs.some(a=>a.name==='src')){
+   const type=node.attrs.find(a=>a.name==='type')?.value.trim().toLowerCase()??'';
+   if(JS_TYPES.has(type))found.push(...scriptFetchPaths(node.childNodes.map(child=>'value'in child?child.value:'').join(''),type==='module'));
+  }
+  if('tagName'in node&&node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
+  if('childNodes'in node)for(const child of node.childNodes)visit(child);
+ };visit(parse(source));return found;
+}
 export function planPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}):BundlePlan{
  if(!bundle||typeof bundle.entryPath!=='string'||!Array.isArray(bundle.files)||bundle.files.length>MAX_FILES)throw Error('Invalid publication bundle');
  if(html.length>4_000_000||JSON.stringify(bundle).length>24_000_000||Object.keys(bundle.mappings??{}).length>99)throw Error('Publication bundle limit exceeded');
@@ -134,15 +149,26 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   if(visited.has(name)){if(visited.get(name)!==kind)throw Error('Conflicting dependency kind: '+name);return;}
   const file=files.get(name);if(!file){if(!bundle.mappings?.[name]&&!(hyperlink&&context.linksAsWritten))missing.add(name);return;}
   visiting.add(name);const nested=/^(?:text\/css|(?:text|application)\/javascript)$/.test(file.contentType)?dependencies(file.bytes.toString('utf8'),name,file.contentType==='text/css'):[];
+  if(/^(?:text|application)\/javascript$/.test(file.contentType))fetched.push(...fetchedPaths(file.bytes.toString('utf8'),false));
   for(const dep of nested)visit(dep.path,dep.kind);
   visiting.delete(name);visited.set(name,kind);ordered.push({path:name,kind,contentType:file.contentType,bytes:file.bytes,dependencies:nested.map(d=>d.path)});
  };
+ // A literal fetch is never rewritten: the page's core maps the path it names to the published file wherever the page
+ // is read (html-runtime fn-fetch, the runtime config's `files`). It resolves against the page, from any file; a path
+ // the project does not hold, or that leaves it, names no file of it and stays the script's own.
+ const fetched:string[]=fetchedPaths(html,true);
  for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind,dep.hyperlink);
+ for(let at=0;at<fetched.length;at++){
+  let name:string|null;try{name=resolve(fetched[at]!,entryPath);}catch{continue;}
+  if(name&&name!==entryPath&&!visited.has(name)&&!backendPaths.has(name)&&(files.has(name)||bundle.mappings?.[name]))visit(name,'asset');
+ }
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
- // Every published file is one the page links: a page's address differs by where it is read (its own origin, /raw,
- // an owner host, a download), so a script reaches a file only through the address publish wrote into a link.
+ // Every published file is one the page links or a script fetches by its path: nothing else reaches it.
  const unlinked=[...files.keys()].filter(name=>name!==entryPath&&!backendPaths.has(name)&&!visited.has(name)).sort();
- if(unlinked.length)throw Error(`Not linked from the page: ${unlinked.join(', ')}: link each (<link rel="preload" as="fetch" href="./${unlinked[0]}" crossorigin>) and fetch its href`);
+ if(unlinked.length){
+  let first=path.posix.relative(path.posix.dirname(entryPath),unlinked[0]!);if(!first.startsWith('.'))first='./'+first;
+  throw Error(`Not linked from the page: ${unlinked.join(', ')}: a file publishes with its page when the page links it (<a href="${first}">) or a script fetches it by that literal path (fetch('${first}'))`);
+ }
  return {resolverSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
   for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address){if(edit.hyperlink&&context.linksAsWritten)continue;throw Error('Unresolved local dependency: '+edit.path);}const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;

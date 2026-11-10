@@ -161,6 +161,8 @@ const RETIRED: Retired[] = [
   // The 2026-11-11 visibility facts (V): an agent left the product over link sharing when private was allowed only on the word "private".
   {pattern: /team can view"? needs\s+nothing more|only when the user says\s+"public" or "private"|Everyone with the link reads the notes/,
     scopes: AGENT_TEXT, reason: 'V1: who reads a page at each visibility is stated once, in SKILL.md Sharing; private also fits data the user calls confidential'},
+  {pattern: /reaches (?:a|another) file only through a link|fetch its href/, scopes: [...AGENT_TEXT, 'runtime'],
+    reason: 'A script fetches a file published with its page by the path it wrote (fetch(\'./data.json\'), html-runtime fn-fetch); no link-and-href recipe'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
