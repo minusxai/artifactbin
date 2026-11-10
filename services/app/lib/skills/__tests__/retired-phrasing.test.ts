@@ -60,6 +60,8 @@ const RETIRED: Retired[] = [
     reason: 'H1: no per-harness (Codex) watch instructions'},
   {pattern: /another watch is already running/, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H1: a second watch --next on the page takes over the running one instead of refusing'},
+  {pattern: /annotations\/changes|artifactbin\.comment(?:_reaction)?\b|next_cursor`?\s+as\s+`?after/, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'E1: the comment feed is retired; comments are the events feed\'s comments category (GET /api/events)'},
   {pattern: /(?<![.\w])timeout\(1\)/, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H2: the one timeout sentence is WATCH_MODE (a shell timeout); no text mentions timeout(1)'},
   {pattern: /(?:^|[\s`'"(])timeout\s+\d+[smh]?\s+\S/m, scopes: [...AGENT_TEXT, 'monitoring'],
@@ -185,7 +187,7 @@ describe('retired skill phrasing', () => {
       'P5:': 'there are no connected databases', 'P6: scripts': 'read `head -30 scripts/NAME.mjs`',
       'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
       'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
-      'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
+      'E1: the comment feed': 'GET /api/artifacts/ID/annotations/changes?after=now', 'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;

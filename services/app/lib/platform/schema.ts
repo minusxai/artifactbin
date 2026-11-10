@@ -426,19 +426,11 @@ const ANNOTATIONS: Table = {
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
     // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
-    // The comment feed's position for an edit: a fresh value from `seq`'s own sequence, so one cursor orders
-    // new comments and edits alike (lib/annotations/changes). NULL = never edited (or edited by an agent before edits all moved).
-    { name: 'change_seq', type: 'BIGINT' },
-    // The credential behind the latest edit, beside its position: the feed marks a watcher's own rewrite `you`.
-    { name: 'change_token_id', type: 'TEXT' },
-    // The agent session that wrote the row and made its latest edit: the opaque `Artifactbin-Session` value, beside the
-    // credential. Self-reported, never authorization: the feed's `you` is the credential AND, when both sides name one,
-    // the session, so two agents sharing one sign-in each see the other's comments (lib/annotations/changes).
-    { name: 'author_session', type: 'TEXT' },
-    { name: 'change_session', type: 'TEXT' },
   ],
   primaryKey: ['id'],
-  indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }, { name: 'idx_annotations_artifact_change_seq', columns: ['artifact_id', 'change_seq'] }],
+  // The retired comment feed's edit positions and writer credential/session (the events feed carries its own origin).
+  dropped: ['change_seq', 'change_token_id', 'author_session', 'change_session'],
+  indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],
 };
 
 /** One account can independently react once per kind; no identities leave the aggregate read. */
@@ -456,30 +448,6 @@ const COMMENT_REACTIONS: Table = {
   primaryKey: ['comment_id','user_id','kind'],
 };
 
-/**
- * Every effective reaction change, appended and never rewritten: the comment feed's reaction half
- * (lib/annotations/changes). `seq` comes from `annotations.seq`'s sequence, so one cursor orders comments, edits and
- * reactions. Per (comment, user, kind) rows strictly alternate `active`; `count` is that kind's count right after.
- */
-const COMMENT_REACTION_EVENTS: Table = {
-  name: 'comment_reaction_events',
-  columns: [
-    {name:'seq',type:'BIGINT',notNull:true},
-    {name:'artifact_id',type:'TEXT',notNull:true},
-    {name:'comment_id',type:'TEXT',notNull:true},
-    {name:'user_id',type:'TEXT',notNull:true},
-    {name:'kind',type:'TEXT',notNull:true},
-    {name:'active',type:'BOOLEAN',notNull:true},
-    {name:'reactor_kind',type:'TEXT',notNull:true},
-    {name:'reactor_label',type:'TEXT'},
-    {name:'count',type:'INTEGER',notNull:true},
-    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-    {name:'token_id',type:'TEXT'}, // the credential that reacted: the feed marks a watcher's own reaction `you`
-    {name:'session',type:'TEXT'}, // the agent session that reacted (annotations.author_session); never authorization
-  ],
-  primaryKey: ['seq'],
-  indexes: [{name:'idx_comment_reaction_events_artifact_seq',columns:['artifact_id','seq']}],
-};
 
 
 /**
@@ -1098,7 +1066,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUPS,GROUP_HIERARCHY,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUPS,GROUP_HIERARCHY,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
@@ -1106,12 +1074,13 @@ export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIF
  * copied web fonts, the shared rate-limit counter, browser test-user leases, hosted agents and their branches,
  * remote agents and work, the api 1 resolvers' `caps.store` state, the retired mutation-notification jobs and
  * their inbox rows (both empty when dropped), and the deleted connected Postgres datasets' encrypted connection
- * secrets and result cache.
+ * secrets and result cache, and the retired comment feed's reaction log (the events feed records reactions now).
  */
 export const DROPPED_TABLES: readonly string[] = [
   'custom_domains', 'artifact_node_aliases', 'node_identity_migration_jobs', 'login_codes', 'oauth_codes', 'webfonts',
   'rate_limit_hits', 'browser_test_users', 'hosted_conversations', 'hosted_branches', 'remote_agents', 'remote_work',
   'html_backend_stores', 'notification_jobs', 'mutation_notifications', 'dataset_secrets', 'dataset_result_cache',
+  'comment_reaction_events',
 ];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */

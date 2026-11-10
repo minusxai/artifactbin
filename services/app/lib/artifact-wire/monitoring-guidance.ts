@@ -1,5 +1,5 @@
 /** How long a watch waits with no comment, reply or save before it ends: the skill's `watch --next` stops after the
- * same quiet time (scripts/toolbox-comments.mjs QUIET_MINUTES; agent-starter-consistency pins they agree). */
+ * same quiet time (scripts/toolbox-watch-state.mjs QUIET_MINUTES; agent-starter-consistency pins they agree). */
 const QUIET_MINUTES = 15;
 /** THE watch loop, word for word in the monitor instruction below and in the served guide's "Watch for comments"
  * section (references/html-operations.md); agent-starter-consistency fails when the two drift apart. */
@@ -11,6 +11,6 @@ export function monitoringGuidance(base:string,id:string,format:string,after:'pu
  if(format!=='html'&&format!=='folder')return {};
  const origin=base.replace(/\/$/,''),url=`${origin}/a/${id}`;
  return {monitoring:{artifact_url:url,guide:`${origin}/llms/html-operations#watch-for-comments`,
-  http:`${origin}/api/artifacts/${id}/annotations/changes?after=now&wait=60`,
-  instruction:`${after==='comment'?'After commenting':'After publishing page content'}, send your reply, then start the monitor; do not ask first. The monitor is one blocking request at a time to the http URL (it waits up to 60 s): handle what it returns, then request again from its next_cursor. Handle existing comments first, then: ${WATCH_LOOP}, and end your turn; a later watch starts a new ${QUIET_MINUTES} minutes. The guide covers replies and checkpoints.`}};
+  http:`${origin}/api/events?artifact_id=${id}&category=comments&after=now&wait=30`,
+  instruction:`${after==='comment'?'After commenting':'After publishing page content'}, send your reply, then start the monitor; do not ask first. The monitor is one blocking request at a time to the http URL (it waits up to 30 s): handle what it returns, then request again with its next as after. Handle existing comments first, then: ${WATCH_LOOP}, and end your turn; a later watch starts a new ${QUIET_MINUTES} minutes. The guide covers replies and checkpoints.`}};
 }

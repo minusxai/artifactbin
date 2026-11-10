@@ -32,12 +32,14 @@ it('flushes watch events before checkpoints, deduplicates replay and validates a
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-watch-')),output=path.join(root,'feed.ndjson');
  try{
-  let calls=0;const client={server:'https://example.test',request:async()=>({events:[{event_id:'e1',kind:'comment_created'}],next_cursor:'opaque'+(++calls),has_more:calls===1})};
-  await watchComments(client,'PAGE12',{once:true,output});
+  // A full first page (limit 2) asks again at once; the redelivered event is deduplicated by its id.
+  const event=(id:string)=>({id,type:'artifact.annotated',payload:{annotation_id:'A'}});
+  let calls=0;const client={server:'https://example.test',request:async()=>({events:calls===0?[event('e1'),event('e2')]:[event('e2')],next:'opaque'+(++calls)})};
+  await watchComments(client,'PAGE12',{once:true,output},{limit:2});
   const records=(await readFile(output,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
-  expect(records.map(record=>record.kind)).toEqual(['watch','event','checkpoint','checkpoint']);
-  await watchComments(client,'PAGE12',{once:true,append:true,output});
-  expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(1);
+  expect(records.map(record=>record.kind)).toEqual(['watch','event','event','checkpoint','checkpoint']);
+  await watchComments(client,'PAGE12',{once:true,append:true,output},{limit:2});
+  expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(2);
   await expect(watchComments({...client,server:'https://other.test'},'PAGE12',{once:true,append:true,output})).rejects.toMatchObject({code:'log_mismatch'});
  }finally{await rm(root,{recursive:true,force:true});}
 });

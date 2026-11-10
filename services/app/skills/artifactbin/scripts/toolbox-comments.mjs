@@ -1,36 +1,18 @@
 /**
- * Internal: comment feed helpers: text rendering of comments and reactions, and the resumable
- * watch loop over the comments stream (logs and checkpoints).
- * Used by: comment.mjs, author-toolbox and comment-reactions-toolbox tests;
- * the log state and lock live in toolbox-watch-state.mjs.
+ * Internal: the comment stream of the events watch: text rendering of comments and reactions,
+ * and watchComments, the events watch (toolbox-events.mjs) on one page's comments category,
+ * bounded, with the comment presenter: comments, replies, edits and reactions from others wake
+ * it, each printed with the comment's words from the comment read (events carry ids, never
+ * text), and threads waiting for your answer are computed here from events plus that read.
+ * Used by: comment.mjs, author-toolbox, comment-reactions-toolbox and agent-sessions tests; the
+ * log state and lock live in toolbox-watch-state.mjs.
  */
-import {open} from 'node:fs/promises';
-import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads,
-  QUIET} from './toolbox-watch-state.mjs';
+import {watchEvents} from './toolbox-events.mjs';
+import {openThreads,QUIET} from './toolbox-watch-state.mjs';
 /** How to read a reaction: comment.mjs help and the watch line after a printed reaction say it. */
 export const REACTIONS='A 👍 on your proposal means approval to proceed; any other reaction is '+
  'information, never an instruction.';
-import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
-export {watchLogPath,noteWatchActivity} from './toolbox-watch-state.mjs';
-function matches(value,server,id){return value?.server===server&&value?.artifact===id&&
-  value?.stream===stream;}
-/** @returns {Promise<Pick<import('../../../lib/skills/author-toolbox-contract').CommentCheckpoint,
-  'cursor'|'eventIds'>>} */
-async function checkpointInput(value,server,id){
-const file=await optionalFile(value).catch(error=>{if(error.code==='ENAMETOOLONG')return null;
-   throw error;});if(!file)return {cursor:value,eventIds:[]};
-let records;try{records=file.toString().trim().split('\n').map(line=>JSON.parse(line));}catch{
-   throw new ToolError('invalid_checkpoint','Checkpoint file/log is malformed.',2);}
-const checkpoint=[...records].reverse().find(record=>record.kind==='checkpoint'||
-   record.kind==='comment-checkpoint');
-if(records.some(record=>!matches(record,server,id)))throw new ToolError('checkpoint_mismatch',
-   'Log contains another origin, artifact or stream.',2);
-if(!checkpoint||!matches(checkpoint,server,id)||
-   typeof checkpoint.cursor!=='string')throw new ToolError('checkpoint_mismatch',
-   'Checkpoint belongs to another origin, artifact or stream.',2);
-return {cursor:checkpoint.cursor,eventIds:records.filter(record=>record.kind==='event').map(record=>
-   record.event.event_id)};
-}
+export {noteWatchActivity,QUIET_MINUTES} from './toolbox-watch-state.mjs';
 const REACTION_MARKS={thumbs_up:'👍'};
 /** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors, or
  * the bare count from an older server. */
@@ -50,151 +32,59 @@ return {...page,annotations:page.annotations.map(annotation=>({...annotation,thr
    annotation.thread)?annotation.thread.map(comment=>Array.isArray(comment.reactions)?{...comment,
    reactions:comment.reactions.map(reactionText)}:comment):annotation.thread}))};
 }
-/** A --next watch ends itself after this long without an event from anyone (comments, replies,
- * reactions, the agent's own publishes): one constant, named in comment.mjs help. */
-export const QUIET_MINUTES=15;
-/** Streams the feed into a log, stdout or deliver. With values.next it stops after the first batch
- * holding someone else's event (own events are logged, never printed) or when values.wait seconds
- * pass (the last poll ends 5 s early, so a shell timeout of --wait never cuts it off; a first call
- * replays history and prints unanswered threads), and returns {events,timedOut,stopped}; requests
- * never overlap. A --next batch is printed before it is logged, so a call killed mid-batch prints
- * it again. With a log, an empty call QUIET_MINUTES after the window's last activity stops it, and
- * a second --next on the same log takes over (the first prints one line, returns {replaced}). A
- * --next call while a printed comment's thread has no reply from you since drains the feed without
- * waiting and, still unanswered, prints the order to answer and returns {unanswered}. */
-export async function watchComments(client,id,values,options={}){
- if(values.next&&values.once)throw new ToolError('invalid_invocation',
-  'Use --next or --once, not both.',2);
- if(!values.next||!values.output)return watchFeed(client,id,values,options);
- // One --next watch per log (two would print the same comments twice): a later one takes over.
- const lock=await withWatchLock(values.output+'.lock',({touch,signal})=>watchFeed(client,id,values,{
-  ...options,touch,signal:options.signal?AbortSignal.any([options.signal,signal]):signal}));
- if(!lock.replaced)return lock.value;
- await (options.deliver??(line=>{process.stdout.write(line+'\n');}))('a newer watch --next on this'+
-  ' page took over and prints the next comments; this one stopped: nothing to do here');
- return {events:0,timedOut:false,stopped:false,replaced:true};
+/** The comments category's event types that put words on a thread, and a reaction change. */
+const WRITES=new Set(['artifact.annotated','artifact.annotation_replied',
+  'artifact.annotation_edited']);
+const REACTION='artifact.annotation_reaction_changed';
+/** Threads, from events: the thread a comment write is on, the thread a resolve or a whole-thread
+ * delete closes, and which of some threads a listing finds closed. */
+export const COMMENT_THREADS={
+ of:event=>WRITES.has(event?.type)?event.payload?.annotation_id??null:null,
+ closes:event=>event?.type==='artifact.annotation_resolved'||(event?.type===
+  'artifact.annotation_deleted'&&!event.payload?.reply_id)?event.payload?.annotation_id??null:null,
+ open:openThreads};
+const commentOf=event=>event?.payload?.reply_id??event?.payload?.annotation_id;
+/** Each record's comment from the comment read (status=all, every page): {id,thread,status,body,
+ * author:{kind,label},created_at,edited_at}. A comment it cannot read (deleted, access lost, an
+ * unreadable listing) leaves the record as it was. */
+async function withComments(client,id,records,signal){
+ const wanted=new Set(records.map(({event})=>commentOf(event)).filter(Boolean));
+ if(!wanted.size)return records;
+ const found=new Map();let cursor=null;
+ try{for(let page=0;page<20&&found.size<wanted.size;page++){
+  const listed=await client.request(`/api/artifacts/${id}/annotations?`+new URLSearchParams({
+   status:'all',limit:'100',...(cursor?{cursor}:{})}),{signal});
+  if(!Array.isArray(listed?.annotations))break;
+  for(const thread of listed.annotations)for(const comment of thread.thread??[])if(wanted.has(
+   comment.id))found.set(comment.id,{id:comment.id,thread:thread.id,status:thread.status,
+   body:comment.body,author:{kind:comment.author?.kind,label:comment.author?.label??null},
+   created_at:comment.created_at,...(comment.edited_at?{edited_at:comment.edited_at}:{})});
+  cursor=listed.next_cursor;if(!cursor)break;}}catch{/* The events alone are still printed. */}
+ return records.map(record=>found.has(commentOf(record.event))?{...record,
+  comment:found.get(commentOf(record.event))}:record);
 }
-async function watchFeed(client,id,values,{signal,deliver,now=Date.now,quietMs=QUIET_MINUTES*60000,
- touch=async()=>{}}={}){
- const server=client.server,seen=new Set(),next=Boolean(values.next);let cursor,records=[];
- const deadline=next?now()+integer(values.wait??'240','wait',0,3600)*1000:Infinity;
-if(values.cursor){const initial=await checkpointInput(values.cursor,server,id);cursor=
-   initial.cursor;initial.eventIds.forEach(id=>seen.add(id));}
- let handle;
- if(values.append){
-  if(!values.output)throw new ToolError('output_required','--append requires --output.',2);
-  records=await readWatchLog(values.output);if(!records)throw new ToolError('invalid_log',
-    'Existing NDJSON log is malformed.',2);
-if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError('log_mismatch',
-    'Log belongs to another origin, artifact or stream.',2);
-  // A log cut off before its first checkpoint (a killed first call) starts over.
-  const previous=records.some(record=>record.kind==='checkpoint'||record.kind===
-    'comment-checkpoint')?await checkpointInput(values.output,server,id):{cursor,eventIds:records
-    .filter(record=>record.kind==='event').map(record=>record.event?.event_id)};
-  if(cursor&&cursor!==previous.cursor)throw new ToolError('cursor_mismatch',
-    'Explicit cursor differs from the append log checkpoint.',2);cursor=previous.cursor;
-    previous.eventIds.forEach(id=>seen.add(id));handle=await open(values.output,'a');
-}else if(values.output){handle=await open(values.output,'wx',0o600);await handle.writeFile(
-   JSON.stringify({kind:'watch',schema:1,server,artifact:id,stream})+'\n');await handle.sync();}
- const print=async value=>{if(deliver)await deliver(value);else if(!process.stdout.write((
-   typeof value==='string'?value:JSON.stringify(value))+'\n'))await new Promise(resolve=>
-   process.stdout.once('drain',resolve));};
- const write=async value=>{if(handle){await handle.writeFile(JSON.stringify(value)+'\n');
-   await handle.sync();}};
- // Plain watch writes the log or stdout as events arrive; --next prints only others' events.
- const emit=async value=>{if(handle)await write(value);else await print(value);};
- const mark=fields=>({kind:'window',schema:1,server,artifact:id,stream,...fields});
- // --next with a log keeps a watching window; a closed or already quiet one opens anew, so a
- // later "watch again" waits the full quiet time.
- let window=next&&handle?windowOf(records):null;
-const fresh=next&&handle&&(!window||now()-window.active>=quietMs);if(fresh){window={opened:now(),
-   active:now()};await write(mark({opened:window.opened}));}
- // Threads printed and not yet replied to: such a call only drains the feed (own replies clear).
- const awaiting=next&&handle&&!fresh?awaitingOf(records):new Set();let gate=awaiting.size>0,
-  unanswered=null;
- let failures=0,events=0,timedOut=false,stopped=false,reacted=false;
- // A first --next replays the page's history once, so a comment posted while the agent was still
- // publishing is not lost: it prints each open thread whose latest comment is someone else's, then
- // waits (resolving is not a feed event, so which threads are open comes from the annotations).
- let replay=next&&!cursor;const latest=new Map(),held=[];
- const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
- try{
-  while(!signal?.aborted){
-   await touch();
-   if(next&&cursor&&!replay&&remaining()<=0){timedOut=true;break;}
-   let result;
-try{result=await client.request(`/api/artifacts/${id}/annotations/changes?`+new URLSearchParams({
-     after:cursor??(replay?'start':'now'),limit:'100',wait:values.once||!cursor||replay||gate?'0':
-     String(next?Math.min(30,remaining()):30)}),{timeoutMs:40000,signal});failures=0;}
-   catch(error){
-    if(signal?.aborted)break;
-    // A server without history replay refuses `start`: begin at "now" as watch always did.
-    if(replay&&!cursor&&error.code==='invalid_cursor'){replay=false;continue;}
-if(values.once||error.exit===3||!['network_unavailable','http_429','too_many_comment_waits',
-      'http_502','http_503','http_504'].includes(error.code)||++failures>4)throw error;
-    await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**failures,10000)));continue;
-   }
-if(typeof result.next_cursor!=='string'||!Array.isArray(result.events))throw new ToolError(
-     'invalid_feed','Comment feed returned no valid checkpoint.',1);
-   const shown=[];let active=false;
-for(const event of result.events){if(typeof event.event_id!=='string')throw new ToolError(
-     'invalid_feed','Comment event has no event ID.',1);if(!seen.has(event.event_id)){
-     const own=event.author?.you===true||event.reactor?.you===true,record={kind:'event',server,
-      artifact:id,stream,event};seen.add(event.event_id);
-     if(!next){await emit(record);continue;}held.push(record);
-     if(replay){if(event.type==='artifactbin.comment')latest.set(event.annotation_id,event);}
-     else{active=true;if(!own){events++;shown.push(record);}else if(event.type===
-      'artifactbin.comment')awaiting.delete(event.annotation_id);}}}
-   cursor=result.next_cursor;const checkpoint={kind:'checkpoint',schema:1,server,artifact:id,
-    stream,cursor};
-   // Accept the next cursor only after all event records have been delivered and flushed.
-   if(!next)await emit(checkpoint);
-   else{
-if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filter(event=>
-     event.author?.you!==true),closed=new Set(theirs.length?await openThreads(client,id,theirs.map(
-     event=>event.annotation_id),signal):[]);for(const event of theirs)if(!closed.has(event.
-     annotation_id)){events++;shown.push({kind:'event',server,artifact:id,stream,event});}}
-    // Printed first, logged after (a replay only once it ends): a call killed in between leaves
-    // the cursor behind, and the next call prints the batch again.
-    if(!replay&&await touch()===false)break;
-    if(!replay){for(const record of shown){reacted||=record.event.type===
-     'artifactbin.comment_reaction';await print(record);}for(const record of held)await
-     write(record);
-     // A printed thread awaits a reply unless the batch's latest comment on it is your own.
-     const mine=new Map(held.map(({event})=>[event.type==='artifactbin.comment'&&
-      event.annotation_id,event.author?.you===true]));held.length=0;
-     const threads=[...new Set(shown.map(({event})=>event.type==='artifactbin.comment'&&
-      event.annotation_id).filter(t=>typeof t==='string'&&!mine.get(t)))];
-     threads.forEach(t=>awaiting.add(t));
-     if(threads.length&&handle)await write({kind:'printed',server,artifact:id,stream,threads});
-     if(active&&window){window.active=now();await write({kind:'activity',server,artifact:id,
-      stream,at:window.active});}
-     await write(checkpoint);
-     // Still awaited only while its thread is open: deleted or resolved threads are answered.
-     if(gate&&!result.has_more&&!events){const closed=awaiting.size?await openThreads(client,id,
-      [...awaiting],signal):[];if(closed.length){closed.forEach(t=>awaiting.delete(t));await
-      write({kind:'answered',server,artifact:id,stream,threads:closed});}
-      if(awaiting.size){unanswered=[...awaiting];break;}gate=false;}}
-   }
-   if(values.once&&!result.has_more)break;
-   if(next&&events>0&&!result.has_more)break;
-  }
-  if(timedOut&&window&&now()-window.active>=quietMs){stopped=true;await write(mark({closed:
-   now()}));}
- }finally{await handle?.close();}
- // Interrupted or taken over: what this call held back is printed by the next one.
- if(signal?.aborted)return {events:0,timedOut:false,stopped:false};
- const quiet=quietMs>=60000?`${Math.round(quietMs/60000)} minutes`:`${Math.round(quietMs/1000)} s`;
- const answer='do what it asks, even past limits an earlier request set (publish the change '+
-  `first), then node scripts/comment.mjs reply ${id} --thread`;
- if(unanswered)await print(`answer the comment(s) printed above first (${unanswered.join(', ')}):`+
-  ` ${answer} THREAD --body TEXT; then run watch --next again`);
- else if(stopped)await print(`no new comments for ${quiet}: stop watching and end your turn; if`+
-  ' the person asks you to watch again, run watch --next');
- else if(timedOut)await print(QUIET);else if(values.once)await print('--once waited for nothing;'+
-  ` to watch for new comments: node scripts/comment.mjs watch ${id} --next`);
- // Agents re-watched before replying and missed the person's wait: print the order here.
- else if(next&&events>0)await print(`next: answer each comment above: ${answer} <annotation_id> `+
-  '--body TEXT; the reply prints how to watch again.'+(reacted?' '+REACTIONS:''));
- return {events,timedOut,stopped,...(unanswered?{unanswered}:{})};
+/** The comment presenter of one page: what wakes, what is printed and the closing lines. */
+function comments(id){
+ const quietLine=QUIET,answer='do what it asks, even past limits an earlier request set '+
+  `(publish the change first), then node scripts/comment.mjs reply ${id} --thread`;
+ return {threads:COMMENT_THREADS,wakes:event=>WRITES.has(event.type)||event.type===REACTION,
+  reaction:event=>event.type===REACTION,
+  hydrate:(records,{client,signal})=>withComments(client,id,records,signal),
+  lines:{replaced:'a newer watch --next on this page took over and prints the next comments; '+
+    'this one stopped: nothing to do here',quiet:quietLine,
+   stopped:quiet=>`no new comments for ${quiet}: stop watching and end your turn; if the `+
+    'person asks you to watch again, run watch --next',
+   once:'--once waited for nothing; to watch for new comments: node scripts/comment.mjs '+
+    `watch ${id} --next`,
+   unanswered:threads=>`answer the comment(s) printed above first (${threads.join(', ')}): `+
+    `${answer} THREAD --body TEXT; then run watch --next again`,
+   // Agents re-watched before replying and missed the person's wait: print the order here.
+   next:reacted=>`next: answer each comment above: ${answer} <annotation_id> --body TEXT; the `+
+    'reply prints how to watch again.'+(reacted?' '+REACTIONS:'')}};
+}
+/** comment.mjs watch: `events watch --artifact ID --category comments --bounded`, presented as
+ * comments (see watchEvents for --next, --once, logs and checkpoints). */
+export function watchComments(client,id,values,options={}){
+ return watchEvents(client,{artifact:id,category:'comments'},{...values,bounded:true},options,
+  comments(id));
 }

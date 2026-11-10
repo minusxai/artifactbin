@@ -207,7 +207,7 @@ describe('ensureEventsSchema', () => {
     await ensureEventsSchema(db, 'evt_fresh');
     expect(await count('evt_fresh')).toBe(0);
     const cols = (await db.query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_schema = 'evt_fresh' AND table_name = 'events' ORDER BY ordinal_position")).rows.map((r) => r.column_name);
-    expect(cols).toEqual(['id', 'at', 'source', 'subject_kind', 'subject_id', 'verb', 'object_kind', 'object_id', 'payload']);
+    expect(cols).toEqual(['id', 'at', 'source', 'subject_kind', 'subject_id', 'verb', 'object_kind', 'object_id', 'payload', 'position', 'accepted_at']);
     await expect(ensureEventsSchema(db, 'bad-name; drop')).rejects.toThrow(/identifier/);
   });
 });

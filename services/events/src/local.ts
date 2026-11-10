@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { EventEnvelope, EventSink, EventSubscriber, EventsService, Queryable } from '@artifactbin/contracts';
+import { EVENT_VERBS } from '@artifactbin/contracts';
 import { ensureTable } from '@artifactbin/utils';
 import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLES, IDENTIFIER } from './schema';
 
@@ -29,10 +30,35 @@ export async function ensureEventsSchema(db: Queryable, schema: string = DEFAULT
   const exists = (await db.query('SELECT 1 AS one FROM pg_namespace WHERE nspname = $1', [schema])).rows.length > 0;
   if (!exists) await db.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
   await ensureTable(db, EVENTS_TABLES, { schema });
+  // The counter starts at the highest stored position, so a database whose head row was lost never reuses one.
+  await db.query(`INSERT INTO ${schema}.feed_head (id, position) SELECT 1, coalesce(max(position), 0) FROM ${schema}.events
+    ON CONFLICT (id) DO NOTHING`);
+  // Rows stored before positions existed get them in emitter order, through the same counter row as every append.
+  await db.query(`WITH todo AS (
+      SELECT id, row_number() OVER (ORDER BY at, id) AS n FROM ${schema}.events WHERE position IS NULL
+    ), head AS (
+      UPDATE ${schema}.feed_head SET position = position + (SELECT count(*) FROM todo)
+      WHERE id = 1 AND EXISTS (SELECT 1 FROM todo) RETURNING position
+    ) UPDATE ${schema}.events e SET position = head.position - (SELECT count(*) FROM todo) + todo.n
+    FROM todo, head WHERE e.id = todo.id`);
+}
+
+/**
+ * The one kind another product publishes (MinusX's job runs, CONTRACT §6): refused here unless it is a catalogued
+ * verb carrying the ids the feed authorizes on, so a malformed job event can never be stored unobservable.
+ */
+function checkEnvelope(event: EventEnvelope): void {
+  if (event.object_kind !== 'job') return;
+  const payload = (event.payload ?? {}) as Record<string, unknown>;
+  const ids = ['schedule_id', 'occurrence_id', 'group_id'].every(key => typeof payload[key] === 'string' && payload[key] !== '');
+  if (!(EVENT_VERBS.job as readonly string[]).includes(event.verb) || !ids || typeof event.object_id !== 'string' || !event.object_id)
+    throw new Error('Invalid job event: a catalogued verb and string schedule_id, occurrence_id and group_id are required');
 }
 
 /** The row, as the wire orders it — one list, so the INSERT's columns and its parameters cannot drift. */
 const COLUMNS = ['id', 'at', 'source', 'subject_kind', 'subject_id', 'verb', 'object_kind', 'object_id', 'payload'] as const;
+/** A VALUES list types its parameters itself: the two columns that are not text say what they are. */
+const CASTS: Partial<Record<(typeof COLUMNS)[number], string>> = { at: '::timestamptz', payload: '::jsonb' };
 
 /**
  * The service: `emit` ensures the schema once (memoised), inserts every
@@ -53,16 +79,26 @@ export function createEvents(opts: EventsWriterOptions): EventsWriter {
   const ready = () => ensured ??= ensureEventsSchema(opts.db, schema).catch(error => { ensured = null; throw error; });
   const publish = async (events: EventEnvelope[]) => {
     if (!events.length) return;
+    events.forEach(checkEnvelope);
     await ready();
-    const rows = events.map((_, row) => `(${COLUMNS.map((c, col) => `$${row * COLUMNS.length + col + 1}${c === 'payload' ? '::jsonb' : ''}`).join(', ')})`);
+    const width = COLUMNS.length;
+    const rows = events.map((_, row) => `(${COLUMNS.map((c, col) => `$${row * width + col + 1}${CASTS[c] ?? ''}`).join(', ')}, ${row + 1})`);
     const params: unknown[] = events.flatMap(e => [e.id,e.at,e.source,e.subject_kind,e.subject_id,e.verb,e.object_kind,e.object_id,JSON.stringify(e.payload ?? {})]);
-    params.push(subscribers.map(s => s.id));
-    // The log and its delivery receipts commit in ONE statement, including on a pg Pool.
-    const stored = await opts.db.query<EventEnvelope>(`WITH inserted AS (
-      INSERT INTO ${schema}.events (${COLUMNS.join(', ')}) VALUES ${rows.join(', ')} ON CONFLICT (id) DO NOTHING RETURNING *
+    params.push(subscribers.map(s => s.id), events.length);
+    const [subscriberParam, countParam] = [params.length - 1, params.length];
+    // ONE statement: the counter row first (its lock queues concurrent appends until this one commits), then the log
+    // and its delivery receipts. Positions come from the head's committed value, so they ascend in commit order.
+    const stored = await opts.db.query<EventEnvelope>(`WITH head AS (
+      INSERT INTO ${schema}.feed_head AS h (id, position) VALUES (1, $${countParam}::bigint)
+      ON CONFLICT (id) DO UPDATE SET position = h.position + EXCLUDED.position RETURNING position
+    ), batch (${COLUMNS.join(', ')}, n) AS (VALUES ${rows.join(', ')}), inserted AS (
+      INSERT INTO ${schema}.events (${COLUMNS.join(', ')}, position, accepted_at)
+      SELECT ${COLUMNS.map(c => `b.${c}`).join(', ')}, head.position - $${countParam}::bigint + b.n, clock_timestamp()
+      FROM batch b CROSS JOIN head ORDER BY b.n
+      ON CONFLICT (id) DO NOTHING RETURNING ${COLUMNS.join(', ')}
     ), queued AS (
       INSERT INTO ${schema}.deliveries(event_id,subscriber)
-      SELECT i.id,s FROM inserted i CROSS JOIN unnest($${params.length}::text[]) s ON CONFLICT DO NOTHING
+      SELECT i.id,s FROM inserted i CROSS JOIN unnest($${subscriberParam}::text[]) s ON CONFLICT DO NOTHING
     ) SELECT * FROM inserted`, params);
     for (const sink of opts.sinks ?? []) {
       if (!stored.rows.length) break;
@@ -80,7 +116,7 @@ export function createEvents(opts: EventsWriterOptions): EventsWriter {
       ), claimed AS (
         UPDATE ${schema}.deliveries d SET claim=$2,attempts=attempts+1,available_at=now()+interval '60 seconds'
         FROM picked p WHERE d.event_id=p.event_id AND d.subscriber=p.subscriber RETURNING d.event_id
-      ) SELECT e.* FROM ${schema}.events e JOIN claimed c ON c.event_id=e.id ORDER BY e.at,e.id`,[subscriber.id,claim]);
+      ) SELECT ${COLUMNS.map(c=>`e.${c}`).join(',')} FROM ${schema}.events e JOIN claimed c ON c.event_id=e.id ORDER BY e.position NULLS LAST,e.at,e.id`,[subscriber.id,claim]);
       if (!batch.rows.length) continue;
       const renew=setInterval(()=>{void opts.db.query(`UPDATE ${schema}.deliveries SET available_at=now()+interval '60 seconds' WHERE subscriber=$1 AND claim=$2`,[subscriber.id,claim]).catch(()=>{});},20000);
       renew.unref();

@@ -1,7 +1,8 @@
 import { dailySeries } from '@/lib/viz';
 /**
- * THE READER — every query the app makes against the events schema, and the
- * only module that names it. All of them are SELECTs joining the app's own
+ * THE READER — every query the app makes against the events schema for its
+ * dashboards; the public events feed (lib/event-feed) is the one other reader.
+ * All of them are SELECTs joining the app's own
  * tables: the schema is `EVENTS_SCHEMA` (env), the table name is a literal,
  * the way the proxy reads `${APP__SCHEMA}.tokens`. The app role holds SELECT
  * on it and nothing more.

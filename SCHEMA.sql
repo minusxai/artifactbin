@@ -1371,10 +1371,6 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
-  change_seq BIGINT,
-  change_token_id TEXT,
-  author_session TEXT,
-  change_session TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1426,17 +1422,15 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_seq BIGINT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_seq;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_token_id TEXT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_token_id;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_session TEXT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS author_session;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_session TEXT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_session;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
-
-CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
 
 CREATE TABLE IF NOT EXISTS app.comment_reactions (
   comment_id TEXT NOT NULL,
@@ -1459,48 +1453,6 @@ ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_kind TEXT;
 ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_label TEXT;
 
 ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS app.comment_reaction_events (
-  seq BIGINT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  comment_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  active BOOLEAN NOT NULL,
-  reactor_kind TEXT NOT NULL,
-  reactor_label TEXT,
-  count INTEGER NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  token_id TEXT,
-  session TEXT,
-  PRIMARY KEY (seq)
-);
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_kind TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_label TEXT;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS count INTEGER NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS token_id TEXT;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS session TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_comment_reaction_events_artifact_seq ON app.comment_reaction_events (artifact_id, seq);
 
 CREATE TABLE IF NOT EXISTS app.codes (
   kind TEXT NOT NULL,
@@ -1885,6 +1837,8 @@ DROP TABLE IF EXISTS app.dataset_secrets;
 
 DROP TABLE IF EXISTS app.dataset_result_cache;
 
+DROP TABLE IF EXISTS app.comment_reaction_events;
+
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (
@@ -1980,6 +1934,8 @@ CREATE TABLE IF NOT EXISTS events.events (
   object_kind TEXT NOT NULL,
   object_id TEXT NOT NULL,
   payload JSONB NOT NULL DEFAULT '{}',
+  position BIGINT,
+  accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
 );
 
@@ -2001,11 +1957,23 @@ ALTER TABLE events.events ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
 
 ALTER TABLE events.events ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}';
 
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS position BIGINT;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS idx_events_object_at ON events.events (object_id, at);
 
 CREATE INDEX IF NOT EXISTS idx_events_subject_at ON events.events (subject_id, at);
 
 CREATE INDEX IF NOT EXISTS idx_events_kind_verb_at ON events.events (object_kind, verb, at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_position ON events.events (position);
+
+CREATE INDEX IF NOT EXISTS idx_events_object_position ON events.events (object_id, position);
+
+CREATE INDEX IF NOT EXISTS idx_events_kind_verb_position ON events.events (object_kind, verb, position);
+
+CREATE INDEX IF NOT EXISTS idx_events_accepted_position ON events.events (accepted_at, position);
 
 CREATE TABLE IF NOT EXISTS events.deliveries (
   event_id TEXT NOT NULL,
@@ -2030,4 +1998,14 @@ ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS claim TEXT;
 ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_delivery_pending ON events.deliveries (subscriber, available_at) WHERE delivered_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS events.feed_head (
+  id INTEGER NOT NULL,
+  position BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE events.feed_head ADD COLUMN IF NOT EXISTS id INTEGER NOT NULL;
+
+ALTER TABLE events.feed_head ADD COLUMN IF NOT EXISTS position BIGINT NOT NULL DEFAULT 0;
 

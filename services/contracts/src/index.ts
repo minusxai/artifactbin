@@ -11,6 +11,7 @@ export * from './test-domain';
 export * from './mx';
 export * from './minusx';
 export * from './events';
+export * from './event-feed';
 export * from './relations';
 export * from './agent';
 export * from './routes';
@@ -59,11 +60,10 @@ export { BASEMAP_PATH } from './basemap';
 export { MAX_PEOPLE_IDS } from './query-request';
 export * from './sign-in-required';
 
-export * from './comment-changes';
 export * from './agent-guidance';
 export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
 export { isStartPlaceholder, START_PLACEHOLDER_MARKUP } from './start-placeholder';
-export type { AnnotationAuthor, AnnotationCommentWire, CommentReactionKind, CommentReactionSummary, CommentReactionInput, CommentReactor } from './annotation-comment';
+export type { AnnotationAuthor, AnnotationCommentWire, CommentReactionSummary, CommentReactionInput, CommentReactor } from './annotation-comment';
 export { COMMENT_TARGET_UNSAVED, COMMENT_REACTORS_MAX } from './annotation-comment';
 
 export * from "./groups";

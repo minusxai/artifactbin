@@ -40,6 +40,8 @@ const FIXTURES: Fixtures = {
     invitation_dismissed: {user_id:'usr_a',revision:2},
     annotation_reopened: {annotation_id:'ann_1'},
     annotation_edited: {annotation_id:'ann_1',reply_id:'ann_2'},
+    annotation_replied: { annotation_id: 'ann_1', reply_id: 'ann_2', resolved: false, via: { token_id: 'tok_1', session: null } },
+    annotation_reaction_changed: { annotation_id: 'ann_1', kind: 'thumbs_up', active: true, count: 1 },
     liked: {},
     unliked: {},
   },
@@ -55,6 +57,11 @@ const FIXTURES: Fixtures = {
   token: { minted: { name: 'laptop' }, claimed: { name: 'laptop' }, revoked: { name: null } },
   door: { denied: { door: 'start_doc' } },
   route: { failed: { status: 500, method: 'POST' } },
+  job: {
+    run_started: { schedule_id: 'sch_1', occurrence_id: 'occ_1', group_id: 'grp_1' },
+    run_succeeded: { schedule_id: 'sch_1', occurrence_id: 'occ_1', group_id: 'grp_1' },
+    run_failed: { schedule_id: 'sch_1', occurrence_id: 'occ_1', group_id: 'grp_1' },
+  },
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
