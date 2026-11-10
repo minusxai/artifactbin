@@ -28,3 +28,18 @@ export function suiteEnv(root) {
     APP__PAGES_HOST: 'lvh.me',
   };
 }
+
+/**
+ * Where the suites keep the database schema image (services/app/test/setup/schema-image-file.ts), handed to the setup
+ * files as the provided `schemaImageDir`. CI caches this directory with the test builds (pr-fast.yml, ci.yml), so the
+ * path is pinned beside those steps (scripts/__tests__/ci-plan.test.mjs). @param {string} root the repository root
+ */
+export const SCHEMA_IMAGE_DIR = 'tmp/test-schema-image';
+export const schemaImageDir = (root) => path.resolve(root, SCHEMA_IMAGE_DIR);
+
+/**
+ * Where Vitest keeps transformed modules between runs (`experimental.fsModuleCache`): each entry is named by a hash of
+ * the module's id and source, the config and Vitest's version, and the whole directory is cleared when the lockfile
+ * changes, so an entry from another tree is a miss, never a stale module. CI carries it in the test-builds cache.
+ */
+export const MODULE_CACHE_DIR = 'tmp/vitest-module-cache';

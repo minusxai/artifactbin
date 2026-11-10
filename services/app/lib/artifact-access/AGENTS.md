@@ -22,11 +22,11 @@ artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
   lock deadlocks two readers of one page). Unresolved invitations are stamped by ordinary reads only.
 - A writer that cannot follow the order (it locks a group or an account first) runs its whole transaction under
   lib/platform `retryOnConflict`.
-- A new writer of these tables joins the lock-order trace in `services/app/__tests__/page-sql-door.test.ts`
+- A new writer of these tables joins the lock-order trace in `services/app/__tests__/page-sql-door-locks.test.ts`
   ("every writer locks its artifacts by tier and lockOrder, before its facts"); a new tier or tail joins the
   order list in the `locks.ts` header.
 
 ## Checks
-- `npm test -- --files services/app/lib/artifact-access/__tests__/access.test.ts services/app/lib/artifact-access/__tests__/grants.test.ts services/app/lib/artifact-access/__tests__/group-shares.test.ts services/app/lib/artifact-access/__tests__/proofs.test.ts services/app/lib/dataset-permissions/__tests__/role.test.ts services/app/__tests__/page-sql-door.test.ts`
+- `npm test -- --files services/app/lib/artifact-access/__tests__/access.test.ts services/app/lib/artifact-access/__tests__/grants.test.ts services/app/lib/artifact-access/__tests__/group-shares.test.ts services/app/lib/artifact-access/__tests__/proofs.test.ts services/app/lib/dataset-permissions/__tests__/role.test.ts services/app/__tests__/page-sql-door-locks.test.ts`
 - `__tests__/lock-order-postgres.test.ts` is the two-connection Postgres regression; it runs only where Docker
   has the Postgres image (CI's integration project) and is skipped elsewhere.

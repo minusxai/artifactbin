@@ -7,8 +7,8 @@ name: pr fast
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
 # (scripts/ci/fast-tests.json), the guard tests (scripts/ci/guard-tests.json), the contract tests
-# (scripts/ci/contract-tests.json) and EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts), all at
-# once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
+# (scripts/ci/contract-tests.json), EVERY api, api-isolated, ui and islands test (the `api-*` and `ui-*` parts) and the
+# full suite's cheap node tests (the `node-*` parts), all at once, each runner restoring main's install cache. The api and jsdom suites reached main untested once too often
 # (#1138, #1141: each a red main, and production held for a whole extra merge), so every pull request runs them. The guard tests read
 # the repository's own files by path (workflows, package scripts, the skill tree), so no import graph selects them and
 # the fast list's capability audit refuses them; the contract tests run another repository's post-merge scenario (the
@@ -54,8 +54,8 @@ jobs:
             shard: 1/2
           - part: guards-2
             shard: 2/2
-          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 20 runners, its ui and
-          # islands projects on 4, the same files ci.yml's api and ui jobs run after the merge, each group packed
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 22 runners, its ui and
+          # islands projects on 6, the same files ci.yml's api and ui jobs run after the merge, each group packed
           # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
           # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
           # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
@@ -128,23 +128,42 @@ jobs:
             suite: 22/22
           - part: ui-1
             projects: --project=ui --project=islands
-            suite: 1/5
+            suite: 1/6
           - part: ui-2
             projects: --project=ui --project=islands
-            suite: 2/5
+            suite: 2/6
           - part: ui-3
             projects: --project=ui --project=islands
-            suite: 3/5
+            suite: 3/6
           - part: ui-4
             projects: --project=ui --project=islands
-            suite: 4/5
+            suite: 4/6
           - part: ui-5
             projects: --project=ui --project=islands
-            suite: 5/5
+            suite: 5/6
+          - part: ui-6
+            projects: --project=ui --project=islands
+            suite: 6/6
+          # THE NODE BATCH (vitest.node-batch.config.ts, scripts/lib/node-batch.mjs): the full suite's `node` files
+          # recorded under 200ms that no other list here runs, plus the post-merge failures it guards, one shared module
+          # graph per worker; ci.yml's node job still runs every one of them. 236 files: ~4.3s per runner locally on two
+          # runners (3 workers each), so three runners, predicted ~10s each on CI (an estimate: none has run there yet).
+          - part: node-1
+            batch: 1/3
+          - part: node-2
+            batch: 2/3
+          - part: node-3
+            batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # Node 22, the install cache's (its key says node22; isolated-vm in it is compiled for that major's ABI). The runner's
+      # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
+      # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
+      - id: runner-node
+        run: echo "major=$(node -p 'process.versions.node.split(".")[0]')" | tee -a "$GITHUB_OUTPUT"
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - if: steps.runner-node.outputs.major != '22'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
       # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
@@ -226,31 +245,41 @@ jobs:
           exit "$rc"
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
-      - if: matrix.shard
-        run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       # The test global setup's server reader and hosted libraries (build-runtime.global.ts), keyed by what they are
       # built from (scripts/ci/ci.mjs `test-builds-key`); main's warm-caches writes the entry. A pull request that
       # changes those inputs rebuilds them (~10s) and its first runner saves the result, so its next push restores it.
-      - if: matrix.suite
+      # The entry also carries the test database's schema image (services/app/test/setup/schema-image-file.ts): with it,
+      # each Vitest worker restores its first database instead of running initdb and the boot DDL (660ms -> 170ms
+      # measured locally). Only the file named by this checkout's schema key loads, so a stale entry is a miss. The
+      # guard runners restore it too, for the contract and harness files that open a database.
+      - if: matrix.suite || matrix.shard || matrix.batch
         id: test-builds-key
         run: node scripts/ci/ci.mjs test-builds-key
-      - if: matrix.suite
+      - if: matrix.suite || matrix.shard || matrix.batch
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
+      - if: matrix.shard
+        run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       - if: matrix.suite
         run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
+      - if: matrix.batch
+        run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
       - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()

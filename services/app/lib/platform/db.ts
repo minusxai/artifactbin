@@ -6,6 +6,9 @@
  */
 import {parseDatabaseUrl,type DbTarget} from './database-url';
 export {parseDatabaseUrl} from './database-url';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATABASE_URL } from './config';
@@ -320,11 +323,45 @@ export const SCHEMA_LOCK = 'artifactbin.app.schema';
 
 /**
  * A prepared in-memory database: the schema a fresh in-memory PGLite would build, dumped once and restored by
- * every later one in the process instead of re-running the DDL and backfills.
+ * every later one instead of re-running the DDL and backfills. `key` names the image by everything that decides its
+ * bytes (`schemaImageKey`), so a store that outlives the process (the test suite's image on disk, restored from a CI
+ * cache) answers only an image built from these very statements by this very engine: a changed schema is a miss,
+ * never a stale load.
  */
 export interface SchemaImage {
-  load(): Blob | File | undefined;
-  save(image: Blob | File): void;
+  load(key: string): Blob | File | undefined;
+  save(image: Blob | File, key: string): void;
+}
+
+/** What a schema image is a function of: the boot DDL, the backfills run after it, and the engine that ran both. */
+export interface SchemaImageInputs {
+  statements: readonly string[];
+  backfills: readonly string[];
+  engine: string;
+}
+
+/** The image's name: a hash over its inputs, each part length-prefixed so no two different lists hash alike. */
+export function schemaImageKey(inputs: SchemaImageInputs): string {
+  const hash = createHash('sha256');
+  for (const [name, parts] of [['statements', inputs.statements], ['backfills', inputs.backfills], ['engine', [inputs.engine]]] as const) {
+    hash.update(`${name}:${parts.length}\n`);
+    for (const part of parts) hash.update(`${Buffer.byteLength(part)}:${part}\n`);
+  }
+  return hash.digest('hex').slice(0, 32);
+}
+
+/** This checkout's image inputs: the statements boot runs and the installed PGLite, by name and version. */
+export function schemaImageInputs(): SchemaImageInputs {
+  let dir = path.dirname(createRequire(import.meta.url).resolve('@electric-sql/pglite'));
+  for (;;) {
+    try {
+      const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as { name?: string; version?: string };
+      if (pkg.name === '@electric-sql/pglite') return { statements: SCHEMA_STATEMENTS, backfills: BACKFILLS, engine: `${pkg.name}@${pkg.version}` };
+    } catch { /* no package.json at this level */ }
+    const up = path.dirname(dir);
+    if (up === dir) throw new Error('schemaImageInputs: no @electric-sql/pglite package.json above its entry');
+    dir = up;
+  }
 }
 
 /** How `getDb` opens the database when a composition root decides rather than `DATABASE_URL`. */
@@ -382,7 +419,8 @@ async function createDb(): Promise<Db> {
     mkdirSync(target.dataDir, { recursive: true });
   }
   const image = target.dataDir ? undefined : options.schemaImage;
-  const snapshot = image?.load();
+  const key = image ? schemaImageKey(schemaImageInputs()) : '';
+  const snapshot = image?.load(key);
   const raw = target.dataDir ? new PGlite(target.dataDir, { parsers })
     : new PGlite(snapshot ? { parsers, loadDataDir: snapshot } : { parsers });
   const db = new PgliteDb(raw as unknown as ConstructorParameters<typeof PgliteDb>[0]);
@@ -392,9 +430,14 @@ async function createDb(): Promise<Db> {
   }
   await db.initializeSchema();
   await applyBackfills(db);
-  if (image) image.save(await raw.dumpDataDir('none'));
+  if (image) image.save(await raw.dumpDataDir('none'), key);
   return db;
 }
+
+// Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
+const BACKFILLS: readonly string[] = [
+  "UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL",
+];
 
 /**
  * The DATA half of the boot migration, beside the DDL half: statements that
@@ -403,8 +446,7 @@ async function createDb(): Promise<Db> {
  * call resolves.
  */
 async function applyBackfills(db: Queryable): Promise<void> {
-  // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
-  await db.query("UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL");
+  for (const statement of BACKFILLS) await db.query(statement);
 }
 
 /**

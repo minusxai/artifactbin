@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ISOLATED_FILE_MS, pack, readTimings, weigher } from '../lib/timed-sequencer.mjs';
-import { mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
+import { CI_RUNNER, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
+import { JOBS, mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);
@@ -94,5 +94,54 @@ describe('timed shard packing', () => {
     expect(loads.node.map((shard) => shard.ms)).toEqual([50, 40, 30, 20, 10, 0]);
     expect(loads.node.reduce((sum, shard) => sum + shard.ms, 0)).toBe(150);
     expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12 + ISOLATED_FILE_MS['api-isolated']);
+  });
+});
+
+describe('a shard\'s wall time', () => {
+  const runner = { workers: 3, firstFileMs: { api: 5 } };
+  const file = (key, weight, project = 'api') => ({ key, weight, project });
+
+  it('is the busiest of three workers, never less than its longest file plus its graph\'s import', () => {
+    expect(WORKERS).toBe(3);
+    expect(CI_RUNNER).toEqual({ workers: WORKERS, firstFileMs: SHARED_FIRST_FILE_MS });
+    // 30 alone on one worker; 10+10 and 10 on the other two: the long file decides, not the 60 summed.
+    expect(shardWall([file('a', 30), file('b', 10), file('c', 10), file('d', 10)], runner)).toBe(35);
+    // Six files of 10 on three workers: two each, and each worker pays the import once.
+    expect(shardWall(Array.from({ length: 6 }, (_, i) => file(`f${i}`, 10)), runner)).toBe(25);
+    expect(shardWall([], runner)).toBe(0);
+    expect(shardWall([file('a', 7), file('b', 3)], { workers: 1, firstFileMs: {} })).toBe(10);
+  });
+
+  it('starts isolated files first, which pay no shared graph\'s import (theirs is in their weight)', () => {
+    const items = [file('shared-big', 9), file('iso-small', 2, 'api-isolated'), file('shared-small', 1), file('iso-big', 8, 'api-isolated')];
+    expect(runOrder(items).map((item) => item.key)).toEqual(['iso-big', 'iso-small', 'shared-big', 'shared-small']);
+    // iso-big 8 | iso-small 2 | shared-big 9 + its import 5 = 14, then shared-small to the freest worker: 2 + 1 + 5 = 8.
+    expect(shardWall(items, runner)).toBe(14);
+    expect(shardWall([file('x', 8, 'api-isolated'), file('y', 8, 'api-isolated')], runner)).toBe(8);
+    // The guard config's split projects (`pr-guards-isolated`) start before its shared ones too.
+    expect(runOrder([file('g', 9, 'pr-guards'), file('gi', 1, 'pr-guards-isolated')]).map((item) => item.key)).toEqual(['gi', 'g']);
+  });
+
+  it('packs each file where the predicted wall grows least: small files go to the shards that finish them sooner', () => {
+    const items = [file('big', 30), ...Array.from({ length: 8 }, (_, i) => file(`s${i}`, 5))];
+    const shards = pack(items, 2, { workers: 3, firstFileMs: {} });
+    expect(shards.flat().sort()).toEqual(items.map((item) => item.key).sort());
+    // Summed, the big file's shard would take a small one too (30 vs 30, tie to the first); by wall it never needs to.
+    expect(shards[0]).toEqual(['big']);
+    expect(shardWall(shards[1].map((key) => items.find((item) => item.key === key)), { workers: 3, firstFileMs: {} })).toBe(15);
+    expect(pack(items, 2)[0]).toEqual(['big', 's6']);
+  });
+
+  it('never predicts a slower slowest shard than summed packing, on the recorded table and every job', () => {
+    const timings = readTimings();
+    const weigh = weigher(timings);
+    for (const [job, { projects, count, files }] of Object.entries(JOBS)) {
+      const items = projects.flatMap((project) => (files?.(timings) ?? Object.keys(timings.files[project] ?? {})).map((f) => ({ key: `${project}:${f}`, weight: weigh(project, f), project })));
+      expect(items.length, job).toBeGreaterThan(10);
+      const byKey = new Map(items.map((item) => [item.key, item]));
+      const slowest = (shards) => Math.max(...shards.map((keys) => shardWall(keys.map((key) => byKey.get(key)))));
+      expect(slowest(pack(items, count, CI_RUNNER)), job).toBeLessThanOrEqual(slowest(pack(items, count)));
+      expect(shardLoads(timings)[job].map((shard) => shard.wallMs), job).toEqual(pack(items, count, CI_RUNNER).map((keys) => shardWall(keys.map((key) => byKey.get(key)))));
+    }
   });
 });

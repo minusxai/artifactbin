@@ -1,6 +1,3 @@
-import {nativeHtml} from './native-html-fixture';
-import {artifactState, getArtifactById, getVersionFor} from '@/lib/artifacts';
-import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
  *
@@ -10,87 +7,27 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * and the dashboard aggregates (per-artifact totals + daily series) come back
  * right. Events are fired unawaited on the request path, so assertions poll.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+/* trackEvent, write events, visitors, totals and sparklines here; read events are in analytics-reads.test.ts (split for
+ * the CI shards; ./analytics-fixture.ts). */
+import { nativeHtml } from './native-html-fixture';
+import { artifactState, getArtifactById, getVersionFor } from '@/lib/artifacts';
+import { observedRequest } from '@/__tests__/conditional-request';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { overrideRequestHeaders } from '@/lib/platform';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
-import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
-import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { GET as exportRoute } from '@/app/a/[id]/export/route';
-import {
-  DELETE as deleteArtifactRoute,
-  PUT as putArtifact,
-} from '@/app/api/artifacts/[id]/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent } from '@/lib/analytics';
-import { mintExportKey } from '@/lib/export';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { renderSparklineSvg } from '@/lib/viz';
+import { sessionUser, requestHeaders, params, create, eventRows, expectEvent, settle } from './analytics-fixture';
 
-const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
 beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));
-
-// Owns the session for this file (the harness setSession): id + email, settable per test.
-const sessionUser = { id: '', email: '' };
-
-// Owns the request-headers mock: empty = called OFF a request (the server is
-// holding none — exactly like production code called from a test), populated =
-// a request carrying these headers (lib/request-context).
-const requestHeaders = new Map<string, string>();
 overrideRequestHeaders(() => (requestHeaders.size === 0 ? null : [...requestHeaders]));
-
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-
-
-/** Run a page function, mapping notFound/redirect throws to outcomes. */
-async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'notFound'> {
-  try {
-    // The pages answer as data now (test/helpers/pages): the outcome IS the value.
-    const value = await p;
-    if (value && typeof value === 'object' && 'kind' in (value as Record<string, unknown>)) return (value as { kind: 'render' | 'redirect' | 'notFound' }).kind;
-    return 'render';
-  } catch (err) {
-    const digest = (err as { digest?: string }).digest ?? '';
-    if (digest.startsWith('NEXT_REDIRECT')) return 'redirect';
-    return 'notFound';
-  }
-}
-
-interface Wire { id: string; edit_id: string; version: number }
-
-async function create(token: string, body: Record<string, unknown>): Promise<Wire> {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
-  expect(res.status).toBe(201);
-  return res.json() as Promise<Wire>;
-}
-
-async function eventRows(artifactId?: string): Promise<{ event: string; artifact_id: string; user_id: string | null; client: string | null }[]> {
-  const db = await harness.db();
-  const r = await db.query<{ event: string; artifact_id: string; user_id: string | null; client: string | null }>(
-    `SELECT event, artifact_id, user_id, client FROM analytics_events ${artifactId ? 'WHERE artifact_id = $1' : ''} ORDER BY seq`,
-    artifactId ? [artifactId] : [],
-  );
-  return r.rows;
-}
-
-/** Events are fired unawaited — poll until the expected row lands. */
-async function expectEvent(artifactId: string, event: string): Promise<{ user_id: string | null; client: string | null }> {
-  let match: { user_id: string | null; client: string | null } | undefined;
-  await vi.waitFor(async () => {
-    match = (await eventRows(artifactId)).find((r) => r.event === event);
-    expect(match).toBeDefined();
-  }, { timeout: 3000 });
-  return match!;
-}
-
-/** Give any stray unawaited insert time to land before asserting absence. */
-const settle = () => new Promise((r) => setTimeout(r, 150));
-
 beforeEach(() => {
   sessionUser.id = '';
   sessionUser.email = '';
@@ -170,76 +107,6 @@ describe('write events', () => {
     expect(await expectEvent(doc.id, 'delete')).toMatchObject({ user_id: user.id });
   });
 });
-
-describe('read events', () => {
-  /*
-   * Explicit raw reads count here. Page-data/metadata reads alone do not:
-   * inline readers report their mounted document through the view endpoint,
-   * covered by artifact-views.test.ts and artifact-views.ui.test.tsx.
-   */
-  const serveDocument = (id: string, query = '') =>
-    rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params({ id }));
-
-  it('an explicit raw read logs one view; fetching page data or metadata logs none', async () => {
-    const t = await mintToken('public-reader-owner');
-    const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'public' });
-    await settle(); // let the create event land so counts below are stable
-
-    await artifactPageMetadata(doc.id);
-    expect(await outcome(ArtifactPage(doc.id))).toBe('render');
-    await settle();
-    expect((await eventRows(doc.id)).filter((r) => r.event === 'view')).toHaveLength(0);
-
-    await serveDocument(doc.id);
-    await expectEvent(doc.id, 'view');
-    expect((await eventRows(doc.id)).filter((r) => r.event === 'view')).toHaveLength(1);
-  });
-
-  it('the exporter’s keyed self-fetch is NOT a view, on either surface', async () => {
-    const t = await mintToken('anon');
-    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
-    expect(await outcome(ArtifactPage(doc.id, { key: mintExportKey(doc.id) }))).toBe('render');
-    await serveDocument(doc.id, `?chrome=0&key=${mintExportKey(doc.id)}`);
-    await settle();
-    expect((await eventRows(doc.id)).filter((r) => r.event === 'view')).toHaveLength(0);
-  });
-
-  it('a denied viewer logs nothing; the owner’s pretty-URL render logs a view with their id', async () => {
-    const owner = await createUser({ email: 'owner@example.com' });
-    const t = await mintToken('owned', owner.id);
-    const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'private', title: 'secret' });
-
-    expect(await outcome(ArtifactPage(doc.id))).toBe('notFound');
-    await settle();
-    expect((await eventRows(doc.id)).filter((r) => r.event === 'view')).toHaveLength(0);
-
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
-    const { username } = await (await import('@/lib/accounts')).ensureUsername(owner);
-    const rendered = await outcome(
-      UserPage(`@${username}`, [`${doc.id}-secret`]),
-    );
-    expect(rendered).toBe('render');
-    // The page renders; the view lands when its frame fetches the document.
-    await serveDocument(doc.id);
-    expect(await expectEvent(doc.id, 'view')).toMatchObject({ user_id: owner.id });
-  });
-
-  it('the export route logs export; the SSE connect logs sse_connect once', async () => {
-    const t = await mintToken('public-reader-owner');
-    const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'public' });
-
-    await exportRoute(request(`/a/${doc.id}/export`), params({ id: doc.id }));
-    await expectEvent(doc.id, 'export');
-
-    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
-    expect(res.status).toBe(200);
-    await expectEvent(doc.id, 'sse_connect');
-    await res.body?.cancel();
-    expect((await eventRows(doc.id)).filter((r) => r.event === 'sse_connect')).toHaveLength(1);
-  });
-});
-
 describe('unique daily visitors', () => {
   /** Simulate a request from one browser: same ip+ua = same person today. */
   const asVisitor = (ip: string, ua = 'Mozilla/5.0 test') => {

@@ -143,6 +143,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/6
@@ -202,6 +204,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - run: npm run test:integration
@@ -254,6 +258,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2
@@ -316,6 +322,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       # NO GATE WAITS FOR THIS JOB: each gate shard builds what it runs (scripts/build/build-gate-inputs.mjs)
@@ -378,6 +386,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       # Files are packed by measured time (scripts/lib/timed-sequencer.mjs), not by count, and the
@@ -389,6 +399,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
 
   # EACH SHARD BUILDS WHAT IT RUNS, while it provisions browsers. The shards used to download the `build`
@@ -450,6 +462,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
       # IN THE BACKGROUND: every stream is redirected, or the runner would hold this step open until the
@@ -638,6 +652,15 @@ jobs:
         run: npm run build
       # What the test shards restore (see the api job): the server reader with their markers.
       - run: (cd services/app && node scripts/build-server-reader.mjs --cache)
+      # And the test database's schema image (services/app/test/setup/schema-image-file.ts), which only a Vitest
+      # worker builds: this one file boots a database, writes the image under its key and checks a fresh one restores it.
+      # Cached here, on main, because a pull request's own cache entries are visible to that pull request alone.
+      - run: node node_modules/vitest/vitest.mjs run --project=api services/app/__tests__/schema-image.test.ts
+      # And Vitest's module cache (scripts/lib/suite-env.mjs MODULE_CACHE_DIR) for the api projects, the pull request lane's
+        # critical path: listing their files transforms every module they import. Measured on CI, warm in the same job:
+        # -1.1s median per api runner. Entries are keyed by source, so one saved here and restored after main moved on is
+        # a partial hit, never a stale module.
+      - run: node node_modules/vitest/vitest.mjs list --project=api --project=api-isolated --filesOnly=false > /dev/null
       - id: test-builds-key
         run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -645,6 +668,8 @@ jobs:
           path: |
             services/app/lib/build-assets
             services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.

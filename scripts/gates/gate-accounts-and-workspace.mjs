@@ -392,7 +392,7 @@ async function forkLeg(owner) {
       body: JSON.stringify({ visibility: 'unlisted' }),
     })).status, doc.id);
     check(narrowed === 200, 'the owner narrowed the source to unlisted');
-    // A stranger's copy no longer naming the unlisted source is fork.test.ts's ("says nothing about an UNLISTED source").
+    // A stranger's copy no longer naming the unlisted source is fork-credit.test.ts's ("says nothing about an UNLISTED source").
     await forker.reload();
     await openArtifactControls(forker);
     check((await forker.locator('[data-mx-forked-from]').innerText()).includes('forked from a document that is not public'),

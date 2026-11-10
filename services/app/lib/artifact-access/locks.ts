@@ -39,7 +39,7 @@
  * retryable conflict when it is exhausted. Correctness rests on locking what is read before deciding; the order only
  * keeps the retries rare.
  *
- * Pinned by services/app/__tests__/page-sql-door.test.ts ("lock order") and the two-connection Postgres
+ * Pinned by services/app/__tests__/page-sql-door-locks.test.ts ("lock order") and the two-connection Postgres
  * regression services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts.
  */
 import type { Queryable } from '@artifactbin/contracts';

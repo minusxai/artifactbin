@@ -3,8 +3,9 @@ import path from 'path';
 import { defineConfig } from 'vitest/config';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
-import { suiteEnv } from './scripts/lib/suite-env.mjs';
+import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import { chromiumTests } from './scripts/lib/chromium-tests.mjs';
+import { LEAKS_PAST_ITS_FILE } from './scripts/lib/test-isolation.mjs';
 
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
 // islands project because scripts/ci/test-changed.mjs discovers only api/node/ui/islands.
@@ -31,15 +32,10 @@ const PROPERTY_SOAK_TESTS = ['services/app/lib/live-regions/__tests__/convergenc
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
 const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))];
 /**
- * The api files that replace modules (`vi.mock`/`vi.doMock`/`vi.resetModules`) or rewrite the
- * process environment. Both outlive the file in a worker's module graph and environment, so without
- * isolation they would leak into every later file on that worker; these run in `api-isolated`, one
- * fresh graph per file. Every other api file shares one graph per worker (`api`, isolate: false).
- * Found by reading the files, so a new mock or env write moves its file by itself. A signed-in session is not a
- * mock: the harness names it (`setSession`, services/app/__tests__/harness.ts) and clears it before every test and
- * after every file, so a file that only needs a session shares the graph.
+ * The api files that replace modules or rewrite the process environment (scripts/lib/test-isolation.mjs) would leak
+ * into every later file on their worker; these run in `api-isolated`, one fresh graph per file. Every other api file
+ * shares one graph per worker (`api`, isolate: false).
  */
-const LEAKS_PAST_ITS_FILE = /\bvi\.(?:mock|doMock|resetModules|stubEnv)\(|process\.env(?:\.\w+|\[[^\]]+\])\s*(?:=[^=]|\?\?=)|delete process\.env/;
 const leaking = (include: string[], exclude: string[]) => globSync(include, { cwd: import.meta.dirname, exclude })
   .filter((file) => LEAKS_PAST_ITS_FILE.test(readFileSync(path.join(import.meta.dirname, file), 'utf8')))
   .map((file) => file.split(path.sep).join('/'));
@@ -88,6 +84,10 @@ export default defineConfig({
     // Native HTML tests use the hosted components and libraries built by this setup.
     globalSetup: ['./services/app/test/setup/build-runtime.global.ts'],
     env: suiteEnv(import.meta.dirname),
+    // The setup files keep the database schema image here, one file under its key (test/setup/database.ts).
+    provide: { schemaImageDir: schemaImageDir(import.meta.dirname) },
+    // Transformed modules kept between runs, keyed by their source (scripts/lib/suite-env.mjs MODULE_CACHE_DIR).
+    experimental: { fsModuleCache: true, fsModuleCachePath: MODULE_CACHE_DIR },
     projects: [
       {
         extends: true,
