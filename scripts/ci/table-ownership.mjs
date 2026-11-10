@@ -29,7 +29,6 @@ const OWNERS = {
 /** Path prefixes (ending in `/`) or exact files allowed to write any owned table. */
 const IMPORTERS = [
   'services/app/lib/operations/testuser-erase.ts',
-  'services/app/lib/platform/dataset-definitions.ts',
   'services/test-support/',
 ];
 
