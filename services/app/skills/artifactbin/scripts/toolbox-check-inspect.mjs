@@ -99,9 +99,15 @@ export async function inspectPage(page, options, task, parts = PARTS) {
       return false;
     }
   };
+  // A link answered with a file starts a download and its navigation ends net::ERR_ABORTED: that
+  // request is the download (listed in downloads), not a failure.
+  const downloads = [],
+    aborts = new WeakSet();
+  page.on('download', item => record(downloads, {url: item.url(), file: item.suggestedFilename()}));
   page.on('requestfailed', request => {
     const item = {url: request.url(), error: request.failure()?.errorText};
     if (offPlatform(item.url)) return record(unreachable, new URL(item.url).origin);
+    if (item.error === 'net::ERR_ABORTED' && request.isNavigationRequest()) aborts.add(item);
     const aborted =
       item.error === 'net::ERR_ABORTED' &&
       (started.get(request) < navigation || readerFetch(item.url));
@@ -171,11 +177,13 @@ export async function inspectPage(page, options, task, parts = PARTS) {
       evidence.screenshotError = String(error.message);
     }
   // Do not let page-close cancellation events mutate evidence already collected.
+  const downloaded = new Set(downloads.map(item => item.url));
   return {
     ...evidence,
     pageErrors: [...pageErrors],
     consoleErrors: [...consoleErrors],
-    failedRequests: [...failedRequests],
+    failedRequests: failedRequests.filter(item => !(aborts.has(item) && downloaded.has(item.url))),
+    ...(downloads.length ? {downloads: [...downloads]} : {}),
     httpErrors: [...httpErrors],
     telemetry: [...telemetry],
     unreachable: [...new Set(unreachable)],

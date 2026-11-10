@@ -186,6 +186,10 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A clean pass needs nothing from the saved JSON: only a failure names the file.
  expect(passed).not.toContain('full result');
  expect(passed).toMatch(/390x844: no errors; fits; contrast ok; task \{"total":42\}/);
+ expect(passed).not.toContain('download started');
+ // A step's link that downloaded a file says so on its viewport's line, by the file's name.
+ const fetched=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},steps:{ran:true,passed:true},downloads:[{url:'https://doc.example/a/x/assets?dependency=y',file:'rota.pdf'}]}],unverified:[]},'qa.json');
+ expect(fetched).toMatch(/390x844: no errors; fits; contrast unknown; steps passed; download started: rota\.pdf\n/);
  // No line sends the agent back to its screenshots after a clean pass ("Inspect task results
  // separately"): the facts say what is not tested, nothing more.
  expect(passed).toMatch(/unverified: task behavior, persistence, permissions/);

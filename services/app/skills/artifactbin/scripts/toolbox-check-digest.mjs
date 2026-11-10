@@ -63,9 +63,10 @@ export function checkDigest(envelope,file){
     few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.element?' '+low.element:''}${
      low.slide?' slide '+low.slide:''}${low.color?' '+low.color:''}`,12,
      check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
-  const who=check.viewer?check.viewer+' ':'';
+  const who=check.viewer?check.viewer+' ':'',files=check.downloads?.length?
+   `; download started: ${check.downloads.map(item=>clip(item.file,80)).join(', ')}`:'';
   lines.push(`  ${who}${check.viewport.width}x${check.viewport.height}: ${errors.length?
-   errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
+   errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}${files}`);
  }
  // Script-created IDs that differ between two loads break saved comments; a warning, not a smoke
  // failure.
