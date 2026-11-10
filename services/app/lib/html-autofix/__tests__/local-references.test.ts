@@ -34,3 +34,7 @@ it('keeps the element and the value as written beside the resolved path',()=>{
  expect(ref).toMatchObject({value:'./pic.png?w=2',path:'pic.png'});
  expect(ref!.element.tagName).toBe('img');
 });
+
+it('collects the files a page links with <a href> and <area href>, never navigation within or beyond the page',()=>{
+ expect(paths('<a href="./docs/rota.pdf#page=2">r</a><map><area href="plan.png" alt="p"></map><a href="#top">t</a><a href="?tab=2">q</a><a href="">e</a><a href="mailto:x@example.com">m</a><a href="/a/OTHER1">o</a><a href="https://x.test/a.pdf">x</a><a>none</a>')).toEqual(['docs/rota.pdf','plan.png']);
+});

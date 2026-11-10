@@ -5,6 +5,7 @@ import {json,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
 import {parseCsv} from '@/lib/data-ingest';
 import {graphqlRootNameProblem} from '@/lib/datasets';
+import {FILE_EXTENSIONS} from '@artifactbin/contracts';
 /** A bundle file the actor may not write, named by its project path. */
 class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_not_editable'|'bundle_file_not_creatable',readonly path:string){super(code);}}
 /**
@@ -14,6 +15,8 @@ class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_no
  */
 export interface BundlePage {id:string;resolvedBackendNames:readonly string[];dependencies:readonly unknown[];creator:TokenHoldingActor;newFilesRefused?:boolean}
 const MAPPING_ID=/^[A-Za-z0-9]{6,128}$/;
+/** Why a project file cannot publish with its page, and what to do instead. */
+const unsupportedFile=(path:string):string=>/\.html?$/i.test(path)?`unsupported_file_type: ${path} is a page: publish it on its own and link its address`:`unsupported_file_type: ${path}; a page publishes files of these types: ${FILE_EXTENSIONS.join(', ')}`;
 /**
  * A CSV a page links by path is named by its file, as a CSV published alone is: its title is the file name and its
  * GraphQL root the name made valid (sales.csv → sales), and a header with no rows is an empty table of those columns.
@@ -26,7 +29,7 @@ function csvDatasetFields(path:string,csv:string):{title:string;name?:string;col
 export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[]}|Response>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
- try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{resolvedBackendNames:[...page?.resolvedBackendNames??[],...Object.entries(body.resolverSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
+ try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle,resolvedBackendNames:[...page?.resolvedBackendNames??[],...Object.entries(body.resolverSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
  if(Object.keys(plan.resolverSources).length){
   const explicit=body.resolverSources as Record<string,unknown>|undefined;
   if(explicit&&Object.entries(plan.resolverSources).some(([name,source])=>explicit[name]!==undefined&&explicit[name]!==source))return json({error:'conflicting_backend_sources'},400);
@@ -96,7 +99,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
    const headers=new Headers(request?.headers);headers.set('Idempotency-Key',requestKey);if(creator!==actor)headers.delete('X-Artifactbin-Account');
    const dependencyBody:Record<string,unknown>={reserved_id:reservedByPath.get(input.path),visibility:body.visibility??'unlisted',...(body.shares?{shares:body.shares}:{}),...(body.destination?{destination:body.destination}:{}),...(input.kind==='dataset'?{dataset:Buffer.from(input.base64,'base64').toString('utf8'),...(/^text\/csv\b/.test(input.contentType)?csvDatasetFields(input.path,Buffer.from(input.base64,'base64').toString('utf8')):{})}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
    const response=await create(dependencyBody,new Request(base+'/api/artifacts',{method:'POST',headers}));
-   const saved=await response.json() as Record<string,unknown>;if(!response.ok||typeof saved.id!=='string')throw Error(typeof saved.error==='string'?saved.error:'Dependency publication failed');
+   const saved=await response.json() as Record<string,unknown>;if(!response.ok||typeof saved.id!=='string')throw Error(saved.error==='unsupported_file_type'?unsupportedFile(input.path):typeof saved.error==='string'?saved.error:'Dependency publication failed');
    const revision=String(saved.version??1);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};
   },
  },bundle.mappings);

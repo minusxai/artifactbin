@@ -10,7 +10,10 @@ import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext,AuthoringHtmlOptions} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
 const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
-interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true}
+/** `hyperlink`: an `<a>`/`<area>` href. It names a project file only when it has a path; one that names none is navigation. */
+interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true;hyperlink?:true}
+/** A hyperlink to the page itself or nowhere: an empty href, a query or hash alone, `.`, `./`. */
+const SELF_LINK=/^\s*(?:\.\/?)?\s*(?:[?#]|$)/;
 function normalized(value:string):string{
  if(!value||value.includes('\\')||value.includes('\0')||value.startsWith('/')||value.split('/').includes('..'))throw Error('Invalid bundle path: '+value);
  const result=path.posix.normalize(value);if(result==='.'||result.startsWith('../'))throw Error('Invalid bundle path: '+value);return result;
@@ -54,11 +57,14 @@ function links(source:string,css:boolean,js=false):Link[]{
    }
    for(const attr of node.attrs){
     if(!['src','href','poster','data','srcset','style'].includes(attr.name))continue;
-    // Hyperlinks are navigation, not uploaded content. Core and absolute API paths remain server-owned.
     if(attr.name==='data'&&node.tagName!=='object')continue;
     // Literal authored image bindings are retained; they are not project filenames.
     if(node.tagName==='img'&&attr.name==='src'&&/^\$[_A-Za-z][_0-9A-Za-z]*$|^\{\$[_A-Za-z][_0-9A-Za-z]*\}$/.test(attr.value))continue;
-    if(attr.name==='href'&&!['link','image','use'].includes(node.tagName))continue;
+    // A link (`<a>`, `<area>`) to a project file publishes that file with the page, as an `<img>` does: a relative
+    // address on the page's own origin names nothing a reader can open. Remote, root-relative and in-page links stay.
+    const hyperlink=attr.name==='href'&&(node.tagName==='a'||node.tagName==='area');
+    if(attr.name==='href'&&!hyperlink&&!['link','image','use'].includes(node.tagName))continue;
+    if(hyperlink&&SELF_LINK.test(attr.value))continue;
     const loc=node.sourceCodeLocation?.attrs?.[attr.name];if(!loc)continue;
     const written=source.slice(loc.startOffset,loc.endOffset),equals=written.indexOf('=');if(equals<0)continue;
     const raw=written.slice(equals+1),leading=raw.search(/\S/),quote=raw[leading];const start=loc.startOffset+equals+1+leading+(quote==='"'||quote==="'"?1:0);
@@ -75,7 +81,7 @@ function links(source:string,css:boolean,js=false):Link[]{
       if(stop<cursor)continue;
       while(cursor<value.length&&value[cursor]!==',')cursor++;
      }
-    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset',htmlAttribute:true});
+    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset',htmlAttribute:true,...(hyperlink?{hyperlink:true as const}:{})});
    }
    if(node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
   }
@@ -115,23 +121,31 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  };findBackends(backendDocument);
  for(const edit of backendEdits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+html.slice(edit.end);
  const ordered:BundleDependency[]=[],visiting=new Set<string>(),visited=new Map<string,'asset'|'dataset'>(),missing=new Set<string>();
- const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{if(link.runtimeModule)return [];const name=resolve(link.value,owner);return name?[{...link,path:name}]:[];});
- const visit=(name:string,kind:'asset'|'dataset')=>{
+ const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{
+  if(link.runtimeModule)return [];
+  let name:string|null;
+  // A bare save keeps any link as written, including one that leaves the project (`../`).
+  try{name=resolve(link.value,owner);}catch(error){if(link.hyperlink&&context.linksAsWritten)return [];throw error;}
+  return name?[{...link,path:name}]:[];
+ });
+ const visit=(name:string,kind:'asset'|'dataset',hyperlink=false)=>{
   if(backendPaths.has(name))throw Error('Backend files cannot also be uploaded assets: '+name);
   if(visiting.has(name))throw Error('Dependency cycle: '+name);
   if(visited.has(name)){if(visited.get(name)!==kind)throw Error('Conflicting dependency kind: '+name);return;}
-  const file=files.get(name);if(!file){if(!bundle.mappings?.[name])missing.add(name);return;}
+  const file=files.get(name);if(!file){if(!bundle.mappings?.[name]&&!(hyperlink&&context.linksAsWritten))missing.add(name);return;}
   visiting.add(name);const nested=/^(?:text\/css|(?:text|application)\/javascript)$/.test(file.contentType)?dependencies(file.bytes.toString('utf8'),name,file.contentType==='text/css'):[];
   for(const dep of nested)visit(dep.path,dep.kind);
   visiting.delete(name);visited.set(name,kind);ordered.push({path:name,kind,contentType:file.contentType,bytes:file.bytes,dependencies:nested.map(d=>d.path)});
  };
- for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind);
- // Explicit manifest entries also admit dependencies used dynamically by scripts.
- for(const name of files.keys())if(name!==entryPath&&!backendPaths.has(name)&&!visited.has(name))visit(name,'asset');
+ for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind,dep.hyperlink);
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
+ // Every published file is one the page links: a page's address differs by where it is read (its own origin, /raw,
+ // an owner host, a download), so a script reaches a file only through the address publish wrote into a link.
+ const unlinked=[...files.keys()].filter(name=>name!==entryPath&&!backendPaths.has(name)&&!visited.has(name)).sort();
+ if(unlinked.length)throw Error(`Not linked from the page: ${unlinked.join(', ')}: link each (<link rel="preload" as="fetch" href="./${unlinked[0]}" crossorigin>) and fetch its href`);
  return {resolverSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
-  for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
+  for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address){if(edit.hyperlink&&context.linksAsWritten)continue;throw Error('Unresolved local dependency: '+edit.path);}const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
 }
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */

@@ -12,10 +12,9 @@ Flags: --create publishes FILE as a new page, dataset or asset (a page without a
   --artifact ID replaces that existing page, dataset or file with FILE over its current version
   (a starter copied over a page, a page rewritten whole, or any data file); --type
   html|dataset|asset (inferred from unambiguous extensions); --root DIR project boundary
-  (default: the source directory, or where its marker says it was published from); --manifest
-  FILE JSON {"manifest":[paths]} of extra runtime-loaded files; --title; --visibility (new
-  pages default to unlisted); --template read-only|own-rows|editors-only [--owner-column C] a
-  new dataset's permissions (prints readBack); --name NAME a new dataset's name
+  (default: the source directory, or where its marker says it was published from); --title;
+  --visibility (new pages default to unlisted); --template read-only|own-rows|editors-only
+  [--owner-column C] a new dataset's permissions (prints readBack); --name NAME a new dataset's name
   (default: the file's name, sales.csv → sales; fixed once created); --group HANDLE creates a
   new page in that group (you need editor access; it resolves GET /api/groups/HANDLE first); a
   destination that conflicts with the parent's owner is refused, and it never moves existing
@@ -39,13 +38,14 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   page and starter placeholders left in it (a ref: link with no real ID, a starter's [bracketed]
   text) are refused with the line to fix. Keep editing and publishing the same file and keep its
   marker line: a page rewritten whole loses it and is refused (publish it with --artifact ID).
-  Dependencies publish with the page and are discovered from static HTML URLs, CSS url() and
-  @import, and static or literal dynamic module imports (up to 99 files, 4 MB each, 16 MB
-  total); list other runtime-loaded files in --manifest. A CSV linked by its path (<link
-  rel="af-dataset" data-af-name="sales" href="./sales.csv">) becomes a dataset named by the
-  file, and a later publish after it changes updates that same dataset. Computed imports and
-  cyclic graphs are refused; remote URLs, absolute server paths and ref: links stay as written.
-  af-resolver files go in as resolver sources, never as public assets. An update is
+  Dependencies publish with the page and are discovered from static HTML URLs (<a href> too),
+  CSS url() and @import, and static or literal dynamic module imports (up to 99 files, 4 MB
+  each, 16 MB total). A script reaches a file only through a link (<link rel="preload"
+  as="fetch" href="./data.json" crossorigin>, then fetch its href). A CSV linked by its path
+  (<link rel="af-dataset" data-af-name="sales" href="./sales.csv">) becomes a dataset named by
+  the file, and a later publish after it changes updates that same dataset. Computed imports
+  and cyclic graphs are refused; remote URLs, absolute server paths and ref: links stay as
+  written. af-resolver files go in as resolver sources, never as public assets. An update is
   conditional on the version its marker saw: a newer version (exit 4) is never overwritten;
   then run read.mjs ID --output page.html, reapply your edits there and publish it. The
   journal is saved before sending and --resume never changes it. A dataset or file keeps no

@@ -32,7 +32,6 @@ const commands = {
     flags: {
       type: flag(),
       root: flag(),
-      manifest: flag(),
       title: flag(),
       template: flag(),
       'owner-column': flag(),

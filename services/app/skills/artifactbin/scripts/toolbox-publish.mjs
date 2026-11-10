@@ -108,14 +108,10 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
     'Run without --strict to apply the fixes, or fix them by hand.',
     {autofix:autofixDetail(fixed,report)});}
   source=fixed.html;
-const extra=values.manifest?await jsonFile(values.manifest):{};if(Object.keys(extra).some(key=>
-    key!=='manifest')||extra.manifest!==undefined&&!Array.isArray(
-    extra.manifest))throw new ToolError('invalid_manifest',
-    'Manifest JSON supports only {manifest:[paths]}. Receipts come from the page.',2);
 const mappings=Object.fromEntries((baseline?.dependencyReceipts??[]).map(({path,...receipt})=>[path,
     receipt]));
-const prepared=await prepareBundle({root,entry:entryPath,entryHtml:source,server,manifest:
-    extra.manifest??[],mappings,retainedBackends:baseline?.retainedBackends??[]});body=
+const prepared=await prepareBundle({root,entry:entryPath,entryHtml:source,server,mappings,
+    retainedBackends:baseline?.retainedBackends??[]});body=
     prepared.body;
 const {inspectPublicationBundle}=await platform();inspectPublicationBundle(body.html,
     body.publicationBundle,{resolvedBackendNames:(baseline?.retainedBackends??[]).map(link=>

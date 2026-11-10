@@ -85,6 +85,39 @@ it('accepts a multi-megabyte asset inside the unchanged file limit without recur
  expect(plan.dependencies[0]?.bytes.byteLength).toBe(3_900_000);
 });
 it('keeps rejecting invalid base64 characters, padding and noncanonical encodings',()=>{
- for(const base64 of ['???','A===','AAAA=','AA=A','AA','AA==\n','AB==','AAB='])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).toThrow();
- for(const base64 of ['', 'AA==','AAA=','AAAA'])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).not.toThrow();
+ for(const base64 of ['???','A===','AAAA=','AA=A','AA','AA==\n','AB==','AAB='])expect(()=>planPublicationBundle('<a href="asset.bin">a</a>',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).toThrow(/base64|byte limit/);
+ for(const base64 of ['', 'AA==','AAA=','AAAA'])expect(()=>planPublicationBundle('<a href="asset.bin">a</a>',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).not.toThrow();
+});
+describe('files a page links (<a href>, <area href>)',()=>{
+ const pdf=file('docs/rota.pdf','%PDF-1.4','application/pdf');
+ it('publishes a linked file with the page and points the link at its address',()=>{
+  const html='<a href="./docs/rota.pdf#page=2">Rota</a><map><area href="docs/rota.pdf" alt="Rota"></map>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[pdf]});
+  expect(plan.dependencies.map(d=>[d.path,d.kind])).toEqual([['docs/rota.pdf','asset']]);
+  const rewritten=plan.rewrite(html,'index.html',new Map([['docs/rota.pdf','/a/PAGE12/assets?dependency=ROTA12&revision=1']]));
+  expect(rewritten).toBe('<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1#page=2">Rota</a><map><area href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1" alt="Rota"></map>');
+ });
+ it('leaves navigation that names no project file as written',()=>{
+  const html='<a href="#top">a</a><a href="?tab=2">b</a><a href="">c</a><a href="mailto:x@example.com">d</a><a href="/a/OTHER1">e</a><a href="https://example.com/x.pdf">f</a><a href="//cdn.example/x.pdf">g</a><a>h</a>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[]});
+  expect(plan.dependencies).toEqual([]);expect(plan.rewrite(html,'index.html',new Map())).toBe(html);
+ });
+ it('refuses a project link to a missing file, and keeps it as written in a save that carries no project',()=>{
+  expect(()=>planPublicationBundle('<a href="./missing.pdf">x</a>',{entryPath:'index.html',files:[]})).toThrow('missing.pdf');
+  const bare=planPublicationBundle('<a href="./missing.pdf">x</a>',{entryPath:'index.html',files:[]},{linksAsWritten:true});
+  expect(bare.dependencies).toEqual([]);expect(bare.rewrite(bare.html,'index.html',new Map())).toBe('<a href="./missing.pdf">x</a>');
+  // Element sources stay strict in every save.
+  expect(()=>planPublicationBundle('<img src="./missing.svg">',{entryPath:'index.html',files:[]},{linksAsWritten:true})).toThrow('missing.svg');
+ });
+ it('refuses a file nothing in the page links, and says how a script reaches one',()=>{
+  expect(()=>planPublicationBundle('<h1>x</h1>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]})).toThrow(/data\.json[\s\S]*<link rel="preload" as="fetch" href="\.\/data\.json" crossorigin>/);
+  const plan=planPublicationBundle('<link rel="preload" as="fetch" href="./data.json" crossorigin>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]});
+  expect(plan.dependencies.map(d=>d.path)).toEqual(['data.json']);
+ });
+ it('pins a link to the page version and reads it back as the path the author wrote',async()=>{
+  const {pinPublicationAssetUrls,authoringHtml}=await import('../plan');
+  const saved='<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1#page=2">Rota</a>';
+  expect(pinPublicationAssetUrls(saved,'PAGE12',3)).toBe('<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1&amp;version=3#page=2">Rota</a>');
+  expect(authoringHtml(saved,{server:'https://app.example',pageId:'PAGE12',entryPath:'index.html',receipts:[{path:'docs/rota.pdf',kind:'asset',id:'ROTA12',revision:'1'}]})).toBe('<a href="./docs/rota.pdf#page=2">Rota</a>');
+ });
 });
