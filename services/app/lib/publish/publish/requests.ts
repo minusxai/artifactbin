@@ -1,6 +1,6 @@
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
-import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, ScheduleLimitError, setMetadataFor } from '@/lib/artifacts';
+import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, ScheduleRefusal, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
 import {htmlAssetLinks, htmlBackendNames, htmlGraphqlSources, htmlPageDeclarations} from '@/lib/html-page';
@@ -9,7 +9,7 @@ import {compilePageBackend,composePageSchema,pageDocumentProblems} from '@/lib/p
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import {pageDatasetCheckSources,pageDatasetRoots} from '@/lib/graphql-compat';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
-import type {PreparedHtmlBackend} from '@/lib/html-backends';
+import {credentialNames,type PreparedHtmlBackend} from '@/lib/html-backends';
 import {governedPublishRefusal} from './governed';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
@@ -317,7 +317,7 @@ export async function replaceArtifactWithBody(
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, {...expected,expectedSharingRevision})
     : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
-  } catch(error) {if(error instanceof ScheduleLimitError)return json({error:error.code,details:[error.message]},error.status);if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
+  } catch(error) {if(error instanceof ScheduleRefusal)return json({error:error.code,details:error.details},error.status);if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
   // uniform 404 below for a governed dataset the caller is looking straight
@@ -413,6 +413,8 @@ async function createArtifactFromBodyPrepared(
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const governedRefusal=await governedPublishRefusal(actor.userId,htmlBackends,[]);if(governedRefusal)return governedRefusal;
+  // A credential is a person's (lib/html-backends authority): a group-owned page carries governed bindings only, as its republish does.
+  if(destination.type==='group'&&htmlBackends?.some(backend=>credentialNames(backend).length))return json({error:'backend_credentials_owner_required',details:htmlBackends.flatMap(backend=>credentialNames(backend).map(name=>`resolver "${backend.name}" declares ${name}, a credential: a group-owned page holds no one's credentials; publish it as your own page, or use a governed 'minusx' connection`))},403);
   const graphqlRefusal=await pageGraphqlRefusal(publicationActor,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
@@ -429,7 +431,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof ScheduleLimitError)return json({error:error.code,details:[error.message]},error.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof ScheduleRefusal)return json({error:error.code,details:error.details},error.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

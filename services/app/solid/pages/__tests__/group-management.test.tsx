@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { SessionProvider } from '../../lib/session';
 import { GroupManagement, GroupSettingsPage } from '../Group';
-const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'editor' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'editor' as const}],linked_groups:[],invitations:[]};
+const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'editor' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'editor' as const}],linked_groups:[],invitations:[],parent:null,subgroups:[],subgroup_audience:[]};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it('viewer can search people and open profiles without management controls',()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[]})));

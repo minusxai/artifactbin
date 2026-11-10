@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {mayPublishBackendChange,requiresFreshBackendIdentity} from '../authority';
+import {credentialNames,mayPublishBackendChange,requiresFreshBackendIdentity} from '../authority';
 it('only the personal owner can approve new or existing credential-bearing code',()=>{
  for(const declaresSecrets of [false,true])for(const historicalSecrets of [false,true]){
  expect(mayPublishBackendChange({personalOwner:true,declaresSecrets,historicalSecrets})).toBe(true);
@@ -9,4 +9,11 @@ it('only the personal owner can approve new or existing credential-bearing code'
 it('changes backend credential identity when immutable ownership changes',()=>{
  expect(requiresFreshBackendIdentity({previousOwnerId:'old',nextOwnerId:'new'})).toBe(true);
  expect(requiresFreshBackendIdentity({previousOwnerId:'same',nextOwnerId:'same'})).toBe(false);
+});
+it('a governed MinusX binding is not a credential; every other declared name is',()=>{
+ expect(credentialNames({secretBindings:['DB','FIN','KEY'],secretHosts:{DB:'postgres',FIN:'minusx',KEY:'api.example.com'}})).toEqual(['DB','KEY']);
+ expect(credentialNames({secretBindings:['FIN'],secretHosts:{FIN:'minusx'}})).toEqual([]);
+ // A name with no recorded kind is counted: unknown is a credential.
+ expect(credentialNames({secretBindings:['OLD']})).toEqual(['OLD']);
+ expect(credentialNames({})).toEqual([]);
 });

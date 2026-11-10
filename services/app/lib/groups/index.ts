@@ -1,8 +1,8 @@
 import {GroupError} from './errors';
 import {groupAttempt,notifyAudienceArtifacts,recordGroupMutation,type GroupMutationActor} from './mutations';
-import {bumpHierarchy,groupChain,groupChains,lockMembershipGroups} from './hierarchy';
+import {bumpHierarchy,groupChain,groupChains,lockMembershipGroups,subtreeSql} from './hierarchy';
 /** Independent owners. Membership and links never derive authority from accounts or artifacts; users and groups share accounts' handle namespace. */
-import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupDetail,GroupInvitation,GroupMember,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
+import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupAudienceMember,GroupDetail,GroupInvitation,GroupMember,GroupRelative,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
 import {isTestDomainEmail} from '@artifactbin/contracts';
 import { TEST_DOMAIN, getDb, retryOnConflict, type Queryable, generateInternalId } from '../platform';
 import { reserveHandle, isValidHandle } from '../accounts';
@@ -83,13 +83,27 @@ export async function setGroupParent(actorId:string,id:string,parentId:string|nu
 /** No edge moved: rolled back, so the revision does not move either. */
 class Unchanged extends Error{constructor(public parentId:string|null){super('unchanged');}}
 export async function listGroups(userId:string):Promise<GroupSummary[]>{return (await (await getDb()).query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id FROM groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=$1 AND g.deleted_at IS NULL ORDER BY g.name,g.id',[userId])).rows;}
+const RELATIVE_SQL='SELECT g.id,g.handle,g.name,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.deleted_at IS NULL AND ';
+/** The people a group's shares reach through its subgroups who are not its own direct members, each with one subgroup that brings them in. */
+const SUBGROUP_AUDIENCE_SQL=`SELECT * FROM (SELECT DISTINCT ON (m.user_id) m.user_id,u.username,u.name,g.id AS via_id,g.handle AS via_handle,g.name AS via_name
+ FROM group_members m JOIN users u ON u.id=m.user_id JOIN groups g ON g.id=m.group_id
+ WHERE m.group_id IN (${subtreeSql('$1')}) AND m.group_id<>$1 AND NOT EXISTS (SELECT 1 FROM group_members d WHERE d.group_id=$1 AND d.user_id=m.user_id)
+ ORDER BY m.user_id,g.name,g.id) audience ORDER BY lower(coalesce(name,username,'')),user_id LIMIT 100`;
+/**
+ * A group's page, for a direct member. `members` are the direct rows; `parent` and `subgroups` place it in the tree
+ * (each with the reader's own direct role there, never an inherited one); `subgroup_audience` is who else its shares
+ * reach (./hierarchy: the direct members of every descendant), who are NOT members of this group.
+ */
 export async function getGroupDetail(userId:string|null,idOrHandle:string):Promise<GroupDetail|null>{
  const db=await getDb();const group=(await db.query<GroupRecord>('SELECT * FROM groups WHERE (id=$1 OR handle=$2) AND deleted_at IS NULL',[idOrHandle,idOrHandle.replace(/^@/,'').toLowerCase()])).rows[0];
  if(!group)return null;const role=await getGroupRole(userId,group.id,db);if(!role)return null;
  const members=await searchGroupMembers(userId!,group.id,'');
  const linked_groups=(await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id FROM group_links l JOIN groups g ON g.id=l.linked_group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE l.group_id=$1 AND g.deleted_at IS NULL ORDER BY g.name',[group.id,userId])).rows;
  const invitations=role==='editor'?(await db.query<GroupInvitation>('SELECT id,email,role,created_at,invited_by FROM group_invitations WHERE group_id=$1 ORDER BY created_at',[group.id])).rows:undefined;
- return {group:summary(group,role),members,linked_groups,...(invitations?{invitations}:{})};
+ const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
+ const subgroups=(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
+ const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
+ return {group:summary(group,role),members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience};
 }
 export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{const db=await getDb();if(!await getGroupRole(userId,groupId,db))throw new GroupError('not_found',404);return (await db.query<GroupMember>("SELECT m.user_id,u.username,u.name,m.role FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND ($2='' OR lower(m.user_id)=lower($2) OR strpos(lower(coalesce(u.username,'')||' '||coalesce(u.name,'')),lower($2))>0) ORDER BY (lower(m.user_id)=lower($2)) DESC,u.username,m.user_id LIMIT 100",[groupId,query.trim().replace(/^@/,'')])).rows;}
 async function protectLastEditor(tx:Queryable,id:string,userId:string){if(await getGroupRole(userId,id,tx)==='editor'&&Number((await tx.query<{count:string}>('SELECT count(*) FROM group_members WHERE group_id=$1 AND role=\'editor\'',[id])).rows[0].count)<=1)throw new GroupError('last_editor',409);}

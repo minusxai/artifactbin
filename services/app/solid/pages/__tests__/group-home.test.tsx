@@ -18,7 +18,7 @@ const emptyShelf={artifacts:[],shared:[]};
 const insights={signedIn:true,accountId:'u1',stats:{assets:0},views:{},viewsOverTime:[],likes:0,likesOverTime:[],followers:0,forks:0};
 /** Home's one request answers for the saved group (or its absence); everything else a group homepage must not ask for is a failure. */
 function bootstrapOf(destination:unknown,preferences:unknown={default_destination:{type:'group',id:'g1'}},accountId='u1'){return Response.json({signedIn:true,accountId,deployment:publicDeployment,preferences,destination});}
-const groupDestination={kind:'group',groupId:'g1',detail:{group,members:[],linked_groups:[]},core:emptyShelf};
+const groupDestination={kind:'group',groupId:'g1',detail:{group,members:[],linked_groups:[],parent:null,subgroups:[],subgroup_audience:[]},core:emptyShelf};
 const personalDestination={kind:'personal',core:emptyShelf};
 function stub(unavailable=false){const fetcher=vi.fn(async(url:string)=>{
  if(url.includes('/session'))return Response.json(session);
@@ -242,7 +242,7 @@ it('explains group settings and the compact default toggle on focus',async()=>{
  const settings=await screen.findByRole('link',{name:'Group settings'});
  expect(settings.textContent).toBe('');
  fireEvent.focus(settings);
- expect(await screen.findByRole('tooltip')).toHaveTextContent('Manage people, invitations and linked groups.');
+ expect(await screen.findByRole('tooltip')).toHaveTextContent('Manage people, invitations, subgroups and linked groups.');
  fireEvent.blur(settings);
  fireEvent.focus(screen.getByRole('button',{name:'Remove default'}));
  expect(await screen.findByRole('tooltip')).toHaveTextContent('Your homepage and new artifacts start here. Click to use Personal instead.');

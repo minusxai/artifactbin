@@ -27,6 +27,7 @@ import {createGroup} from '@/lib/groups';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {readPinnedBackendSecret} from '@/lib/html-backend-secrets';
 import {createMinusxClient,governedConnection,GovernedRefusal} from '@/lib/minusx';
+import {createFunctionScheduler,functionSchedulesOf} from '@/lib/function-schedules';
 import {localPageBackendCapability} from '@/lib/page-operations';
 import {resolverPorts} from '@/lib/page-doors';
 import {getDb,minusxSettings,setServices} from '@/lib/platform';
@@ -330,6 +331,124 @@ describe('the TLS mode a connection session names',()=>{
  });
 });
 
+const republishPage=async(who:{token:string},id:string,source:string)=>{
+ const head=(await getArtifactById(id))!;
+ const response=await app.request(`/api/artifacts/${id}`,{method:'PUT',headers:headers(who.token),body:JSON.stringify({html:HTML,resolverSources:{data:source},expectedVersion:head.version,expectedState:artifactState(head)})});
+ return {status:response.status,body:await response.json() as Record<string,unknown>};
+};
+
+describe('a GROUP-owned page pinned to Finance',()=>{
+ // Team owns the page. Alice edits Team and is a direct Finance member; Erin edits Team but is not in Finance; Bob and
+ // Carol read Team's pages as viewers, and only Bob is in Finance.
+ const world=harness.shared(async()=>{
+  const alice=await mintAccountToken('gx_alice'),erin=await mintAccountToken('gx_erin'),bob=await mintAccountToken('gx_bob'),carol=await mintAccountToken('gx_carol');
+  const finance=await createGroup(alice.userId!,{handle:'gx_finance',name:'Finance'});
+  await admitGroupMember(alice.userId!,finance.id,bob.userId!,'viewer');
+  const team=await createGroup(alice.userId!,{handle:'gx_team',name:'Team'});
+  await admitGroupMember(alice.userId!,team.id,erin.userId!,'editor');
+  for(const viewer of [bob,carol])await admitGroupMember(alice.userId!,team.id,viewer.userId!,'viewer');
+  control.visible[finance.id]=[CONNECTION];
+  const created=await app.request('/api/artifacts',{method:'POST',headers:headers(alice.token),body:JSON.stringify({visibility:'private',html:HTML,resolverSources:{data:SOURCE},destination:{type:'group',id:team.id}})});
+  const page=await created.json() as {id:string};
+  expect(created.status,JSON.stringify(page)).toBe(201);
+  expect((await getArtifactById(page.id))!.group_id).toBe(team.id);
+  return {alice,erin,bob,carol,finance,team,page:page.id};
+ });
+
+ it('an editor of the owning group who is not a direct member of the pinned group cannot bind it; one who is can',async()=>{
+  const {alice,erin,finance,team,page}=world();
+  const before=control.seen.length;
+  expect(await bind(erin,page,{connection_id:CONNECTION,group_id:finance.id})).toMatchObject({status:403,body:{error:'not_group_member'}});
+  expect(control.seen.length).toBe(before);
+  const bound=await bind(alice,page,{connection_id:CONNECTION,group_id:finance.id});
+  expect(bound.status,JSON.stringify(bound.body)).toBe(200);
+  expect(bound.body).toEqual({names:['FIN']});
+  // The page's other editor sees the binding is set, and what it pins (no credential is in it).
+  const listed=await resolverOf(erin,page) as unknown as {set:string[];bindings:Record<string,unknown>;backendId:string;version:string};
+  expect(listed.set).toEqual(['FIN']);
+  expect(listed.bindings).toEqual({FIN:{connection_id:CONNECTION,group_id:finance.id,group_name:'Finance'}});
+  // Stored against the owning group, not the person who bound it.
+  const backend=(await getHtmlBackendVersion(listed.backendId,listed.version))!;
+  expect(backend.ownerId).toBe(team.id);
+ },45_000);
+
+ it('each viewer reads as themselves: Bob (in Finance) gets rows under a delegation for Bob, Carol a data-access error',async()=>{
+  const {alice,bob,carol,finance,page}=world();
+  const before=sessionCalls().length;
+  const rows=await fn(page,'revenue',bob.token);
+  expect(rows.status,rows.text).toBe(200);
+  expect(rows.body).toEqual([{month:'2026-10',net:'100.50'},{month:'2026-11',net:'200.00'}]);
+  expect((await fn(page,'probe',carol.token)).body).toEqual({code:'data_access_denied'});
+  const sent=sessionCalls().slice(before).map(entry=>[entry.claims?.sub,entry.claims?.active_group_id,entry.status]);
+  expect(sent).toEqual([[bob.userId,finance.id,200],[carol.userId,finance.id,403]]);
+  expect(control.seen.some(entry=>entry.claims?.sub===alice.userId&&entry.path==='/api/v1/connection-sessions')).toBe(false);
+ },45_000);
+
+ it('a republish validates the stored binding again for the editor who publishes it',async()=>{
+  const {alice,erin,bob,page}=world();
+  const refused=await republishPage(erin,page,SOURCE+'\n// erin');
+  expect(refused.status).toBe(403);
+  expect(refused.body).toMatchObject({error:'not_group_member'});
+  const accepted=await republishPage(alice,page,SOURCE+'\n// alice');
+  expect(accepted.status,JSON.stringify(accepted.body)).toBe(200);
+  // The binding survives the republish (same owning group, same backend identity).
+  expect((await fn(page,'revenue',bob.token)).status).toBe(200);
+ },45_000);
+
+ it('ordinary credentials stay personal: a group page may neither be created with nor republished to a secret that is not a governed binding',async()=>{
+  const {alice,team,page}=world();
+  const withKey=`export const secrets={FIN:'minusx',KEY:'api.example.com'};`+SOURCE.slice(SOURCE.indexOf('\n'));
+  const created=await app.request('/api/artifacts',{method:'POST',headers:headers(alice.token),body:JSON.stringify({visibility:'private',html:HTML,resolverSources:{data:withKey},destination:{type:'group',id:team.id}})});
+  expect(created.status).toBe(403);
+  expect(await created.json()).toMatchObject({error:'backend_credentials_owner_required'});
+  const republished=await republishPage(alice,page,withKey);
+  expect(republished.status).toBe(403);
+  expect(republished.body).toMatchObject({error:'backend_credentials_owner_required'});
+ },45_000);
+});
+
+describe('a scheduled run never opens a governed connection',()=>{
+ it('the run is refused data_access_denied, recorded on the schedule, and MinusX is never asked',async()=>{
+  const owner=await mintAccountToken('sx_owner');
+  const finance=await createGroup(owner.userId!,{handle:'sx_finance',name:'Finance'});
+  control.visible[finance.id]=[CONNECTION];
+  const scheduled=`export const secrets={FIN:'minusx'};export const schedule={pull:'every 15 minutes'};
+export default {async pull(_input,_principal,caps){const db=await caps.db('FIN');try{return (await db.query('select count(*)::int as n from revenue')).rows;}finally{await db.end();}}};`;
+  const page=await publishPage(owner,scheduled);
+  expect(page.status,JSON.stringify(page.body)).toBe(201);
+  expect((await bind(owner,page.body.id,{connection_id:CONNECTION,group_id:finance.id})).status).toBe(200);
+  // The owner's own on-demand call of the same function reads the rows: the binding works.
+  expect((await fn(page.body.id,'pull',owner.token)).body).toEqual([{n:2}]);
+  const before=sessionCalls().length;
+  const clock=Date.now()+60_000;
+  await createFunctionScheduler({db:getDb,now:()=>clock,onError:error=>{throw error;}}).tick();
+  const [state]=await functionSchedulesOf(page.body.id);
+  expect(state).toMatchObject({name:'pull',lastStatus:'failed',failures:1});
+  expect([state!.lastError,state!.lastMessage].join(' ')).toContain('data_access_denied');
+  expect(sessionCalls().length).toBe(before);
+ },45_000);
+});
+
+describe('GET /api/my/minusx/connections: a group\'s connections for the signed-in author',()=>{
+ const list=(token:string|undefined,group?:string)=>app.request(`/api/my/minusx/connections${group===undefined?'':`?group_id=${encodeURIComponent(group)}`}`,{headers:headers(token)});
+ it('lists what MinusX shows the author under that one group, asked with a delegation for the author',async()=>{
+  const author=await mintAccountToken('cx_author'),outsider=await mintAccountToken('cx_outsider');
+  const finance=await createGroup(author.userId!,{handle:'cx_finance',name:'Finance'});
+  control.visible[finance.id]=[CONNECTION];
+  const listed=await list(author.token,finance.id);
+  expect(listed.status).toBe(200);
+  expect(await listed.json()).toEqual({connections:[{id:CONNECTION,name:'Finance warehouse',protocol:'postgres'}]});
+  expect(control.seen.at(-1)).toMatchObject({path:'/api/v1/connections',status:200,claims:expect.objectContaining({sub:author.userId,active_group_id:finance.id,purpose:'catalog.read'})});
+  const before=control.seen.length;
+  const refused=await list(outsider.token,finance.id);
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toEqual({error:'not_group_member'});
+  expect(control.seen.length).toBe(before);
+  expect((await list(author.token)).status).toBe(400);
+  expect((await list(undefined,finance.id)).status).toBe(401);
+ },45_000);
+});
+
 describe('GET /api/server in combined mode',()=>{
  it('advertises the installation and its MinusX control API',async()=>{
   const document=await (await app.request('/api/server')).json() as Record<string,unknown>;
@@ -340,6 +459,15 @@ describe('GET /api/server in combined mode',()=>{
 describe('standalone (no MinusX settings)',()=>{
  beforeAll(()=>{overrideConfig({},{MINUSX__BASE_URL:undefined,INSTALLATION__ID:undefined,MINUSX__DELEGATION_PRIVATE_KEY:undefined,MINUSX__DELEGATION_KEY_ID:undefined});});
  afterAll(()=>{overrideConfig({},{MINUSX__BASE_URL:control.url,INSTALLATION__ID:INSTALLATION,MINUSX__DELEGATION_PRIVATE_KEY:PRIVATE_PEM,MINUSX__DELEGATION_KEY_ID:KID});});
+ it('the connections route answers minusx_not_configured and asks nothing',async()=>{
+  const author=await mintAccountToken('cx_standalone');
+  const group=await createGroup(author.userId!,{handle:'cx_standalone_group',name:'Standalone'});
+  const before=control.seen.length;
+  const response=await app.request(`/api/my/minusx/connections?group_id=${group.id}`,{headers:headers(author.token)});
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({error:'minusx_not_configured'});
+  expect(control.seen.length).toBe(before);
+ });
  it('/api/server is the origin and aliases alone',async()=>{
   expect(Object.keys(await (await app.request('/api/server')).json() as object).sort()).toEqual(['aliases','origin']);
  });

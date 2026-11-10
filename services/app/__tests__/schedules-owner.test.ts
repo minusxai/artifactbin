@@ -18,6 +18,10 @@ import {createArtifactFromBody} from '@/lib/publish';
 import {startAppBackgroundTasks} from '@/lib/runtime';
 import {POST as fnPost} from '@/app/api/artifacts/[id]/fn/[name]/route';
 import {PUT as update} from '@/app/api/artifacts/[id]/route';
+import {POST as forkPost} from '@/app/api/artifacts/[id]/fork/route';
+import {POST as revertPost} from '@/app/api/artifacts/[id]/revert/route';
+import {POST as restorePost} from '@/app/api/artifacts/[id]/restore/route';
+import {trashArtifactFor} from '@/lib/workspace';
 import {mintAccountToken,request,useAppHarness} from './harness';
 
 const harness=useAppHarness();
@@ -72,6 +76,70 @@ describe('SCHEDULES__OWNER=minusx refuses new page schedules and nothing else',(
   expect(added.body.details).toEqual([expect.stringContaining('schedules now')]);
   owner(undefined);
   expect((await republish(bob,page.body.id,`export const schedule={refresh:'every 15 minutes',now:'every 1 hour'};export default {async refresh(){return 1;},async now(){return 2;}};`)).status).toBe(200);
+ },45_000);
+});
+
+describe('SCHEDULES__OWNER=minusx: fork, trash restore and revert refuse to activate a page schedule, as publish does',()=>{
+ afterAll(()=>owner(undefined));
+ const post=async(handler:(request:Request,context:{params:Promise<{id:string}>})=>Promise<Response>,id:string,path:string,who:Person,json:Record<string,unknown>={})=>{
+  // A revert is a conditional write: it names the head it saw.
+  const head=path==='revert'?(await getArtifactById(id))!:null;
+  const body=head?{...json,expectedVersion:head.version,expectedState:artifactState(head)}:json;
+  const response=await handler(request(`/api/artifacts/${id}/${path}`,{method:'POST',token:who.token,json:body}),{params:Promise.resolve({id})});
+  return {status:response.status,body:await response.json() as {error?:string;details?:string[];id?:string}};
+ };
+ /** A page published while Artifactbin owned schedules: version 1 schedules `refresh`, version 2 (the head) schedules nothing. */
+ async function scheduledThenPlain(name:string){
+  owner('artifactbin');
+  const who=await person(name);
+  const page=await publish(who,SCHEDULED);
+  expect(page.status,JSON.stringify(page.body)).toBe(201);
+  expect((await republish(who,page.body.id,PLAIN)).status).toBe(200);
+  return {who,id:page.body.id};
+ }
+ const scheduledHeads=async()=>(await (await getDb()).query<{n:number}>(`SELECT count(*)::int AS n FROM artifacts a CROSS JOIN LATERAL jsonb_array_elements(a.meta->'htmlLinks') e
+  JOIN html_backend_versions v ON v.backend_id=e->>'backendId' AND v.version=e->>'version' WHERE a.deleted_at IS NULL AND v.function_schedules IS NOT NULL`)).rows[0]!.n;
+
+ it('refuses each of the three with schedules_owned_by_minusx and changes nothing',async()=>{
+  const {who,id}=await scheduledThenPlain('doors');
+  // A second page whose head still schedules `refresh` (a fork's source, then the trashed page).
+  const scheduled=await publish(who,SCHEDULED);
+  expect(scheduled.status).toBe(201);
+  owner('minusx');
+  const active=await scheduledHeads();
+  const before=(await getArtifactById(id))!.version;
+  const reverted=await post(revertPost,id,'revert',who,{version:1});
+  expect(reverted.status).toBe(409);
+  expect(reverted.body.error).toBe('schedules_owned_by_minusx');
+  expect(reverted.body.details).toEqual([expect.stringContaining('refresh')]);
+  expect((await getArtifactById(id))!.version).toBe(before);
+  const forked=await post(forkPost,scheduled.body.id,'fork',who);
+  expect(forked.status).toBe(409);
+  expect(forked.body.error).toBe('schedules_owned_by_minusx');
+  expect(await scheduledHeads()).toBe(active);
+  expect(await trashArtifactFor(who.actor,scheduled.body.id)).not.toBeNull();
+  const trashed=await scheduledHeads();
+  const restored=await post(restorePost,scheduled.body.id,'restore',who);
+  expect(restored.status).toBe(409);
+  expect(restored.body.error).toBe('schedules_owned_by_minusx');
+  expect((await (await getDb()).query('SELECT deleted_at FROM artifacts WHERE id=$1',[scheduled.body.id])).rows[0]?.deleted_at).not.toBeNull();
+  expect(await scheduledHeads()).toBe(trashed);
+  // A page without schedules forks, reverts and restores as before.
+  expect((await post(forkPost,id,'fork',who)).status).toBe(201);
+  expect(await trashArtifactFor(who.actor,id)).not.toBeNull();
+  expect((await post(restorePost,id,'restore',who)).status).toBe(200);
+  expect((await republish(who,id,PLAIN.replace("'on demand'","'version 3'"))).status).toBe(200);
+  expect((await post(revertPost,id,'revert',who,{version:2})).status).toBe(200);
+ },45_000);
+
+ it('under the default owner the same three succeed',async()=>{
+  const {who,id}=await scheduledThenPlain('default_doors');
+  const scheduled=await publish(who,SCHEDULED);
+  owner(undefined);
+  expect((await post(revertPost,id,'revert',who,{version:1})).status).toBe(200);
+  expect((await post(forkPost,scheduled.body.id,'fork',who)).status).toBe(201);
+  expect(await trashArtifactFor(who.actor,scheduled.body.id)).not.toBeNull();
+  expect((await post(restorePost,scheduled.body.id,'restore',who)).status).toBe(200);
  },45_000);
 });
 

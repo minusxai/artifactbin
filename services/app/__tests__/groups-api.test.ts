@@ -52,3 +52,34 @@ it('refuses withdrawal of accepted or missing invitations without removing membe
  }
  expect(await getGroupRole(invitee.userId!,group.id)).toBe('viewer');
 });
+
+describe('a group\'s page data names its place in the tree and who receives its shares',()=>{
+ it('GET /api/groups/{id}: the parent and subgroups with the reader\'s own direct role, direct members only, and the subgroup audience apart',async()=>{
+  const admin=await mintAccountToken('tree_admin'),rita=await mintAccountToken('tree_rita'),eve=await mintAccountToken('tree_eve');
+  const post=async(body:Record<string,unknown>)=>(await create(request('/api/groups',{method:'POST',token:admin.token,json:body}))).json();
+  const finance=await post({handle:'tree_finance',name:'Finance'});
+  const retail=await post({handle:'tree_retail',name:'Retail',parent_id:finance.id});
+  const outlet=await post({handle:'tree_outlet',name:'Outlet',parent_id:retail.id});
+  // Rita is in Retail only; Eve in Outlet only; the admin is a direct member of all three.
+  const join=async(group:string,who:{userId:string|null;email:string|null},role:'viewer'|'editor')=>{expect((await invite(request(`/api/groups/${group}/invitations`,{method:'POST',token:admin.token,json:{email:who.email,role}}),context({id:group}))).status).toBe(201);await acceptGroupInvitations(who.userId!,who.email!);};
+  await join(retail.id,rita,'viewer');await join(outlet.id,eve,'editor');
+  const read=async(token:string,id:string)=>{const response=await detail(request(`/api/groups/${id}`,{token}),context({id}));expect(response.status).toBe(200);return response.json();};
+  const top=await read(admin.token,finance.id);
+  expect(top.parent).toBeNull();
+  expect(top.subgroups).toEqual([{id:retail.id,handle:'tree_retail',name:'Retail',role:'editor'}]);
+  expect(top.members.map((m:{user_id:string})=>m.user_id)).toEqual([admin.userId]);
+  // Rita and Eve receive Finance's shares through a subgroup without being Finance members.
+  expect(top.subgroup_audience).toEqual([
+   {user_id:eve.userId,username:null,name:null,via:{id:outlet.id,handle:'tree_outlet',name:'Outlet'}},
+   {user_id:rita.userId,username:null,name:null,via:{id:retail.id,handle:'tree_retail',name:'Retail'}},
+  ].sort((a,b)=>a.user_id!.localeCompare(b.user_id!)));
+  // From Retail, as Rita: its parent (Rita is not a Finance member: no role), its subgroup, and Outlet's Eve.
+  const middle=await read(rita.token,retail.id);
+  expect(middle.parent).toEqual({id:finance.id,handle:'tree_finance',name:'Finance',role:null});
+  expect(middle.subgroups).toEqual([{id:outlet.id,handle:'tree_outlet',name:'Outlet',role:null}]);
+  expect(middle.subgroup_audience.map((m:{user_id:string})=>m.user_id)).toEqual([eve.userId]);
+  // A leaf has no subgroups and no subgroup audience.
+  const leaf=await read(eve.token,outlet.id);
+  expect(leaf).toMatchObject({parent:{id:retail.id,role:null},subgroups:[],subgroup_audience:[]});
+ });
+});

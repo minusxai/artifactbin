@@ -6,7 +6,8 @@
  *   (`minusx_not_configured`), so a page can never be published expecting governed data nothing can serve.
  * - Republishing a link whose `'minusx'` name already has a binding validates that binding again for the AUTHOR of
  *   this save (lib/minusx `validateMinusxBinding`: direct member of the pinned group, and the connection visible to
- *   it through MinusX). A first publish has no binding yet; it is validated when the author sets it.
+ *   it through MinusX), whoever bound it: on a group-owned page, another editor of the group. A first publish has
+ *   no binding yet; it is validated when the author sets it.
  * - With `SCHEDULES__OWNER=minusx`, a function schedule the page's current head does not already declare (by link
  *   name and function name) is NEW and refused (`schedules_owned_by_minusx`): MinusX owns recurring work there.
  */
@@ -37,9 +38,12 @@ export async function governedPublishRefusal(authorId:string|null|undefined,back
  for(const {backend,names} of governed){
   const link=prior(backend.name);
   if(!link)continue;
+  // The binding is stored under the backend's owner (the page's owner, or its owning group), not under whoever saves.
+  const ownerId=(await getHtmlBackendVersion(link.backendId,link.version))?.ownerId;
+  if(!ownerId)continue;
   for(const name of names){
    let stored:string;
-   try{stored=await backendSecrets.get({ownerId:authorId,backendId:link.backendId},[name],name);}catch{continue;}
+   try{stored=await backendSecrets.get({ownerId,backendId:link.backendId},[name],name);}catch{continue;}
    try{await validateMinusxBinding(authorId,minusxBinding(JSON.parse(stored)));}
    catch(error){
     const code=error instanceof MinusxBindingError?error.code:'invalid_binding';

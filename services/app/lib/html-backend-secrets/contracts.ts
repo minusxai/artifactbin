@@ -1,7 +1,8 @@
 import {isResolverDatabaseKind,MINUSX_CONNECTION_KIND,RESOLVER_DATABASE_KINDS,RESOLVER_DATABASE_LIMITS,type ResolverDatabaseKind} from '@artifactbin/contracts';
 import {hostNameSyntax} from '@artifactbin/utils/public-address';
 /** Declarations contain names only. Credential values are never versioned with source. */
-export interface PinnedBackendSecretScope {ownerId:string;backendId:string;pageId:string;secretBindings?:readonly string[]}
+/** `secretHosts`: each declared name's host or kind; a group-owned page reads only its governed (`'minusx'`) names. */
+export interface PinnedBackendSecretScope {ownerId:string;backendId:string;pageId:string;secretBindings?:readonly string[];secretHosts?:Readonly<Record<string,string>>}
 export interface BackendSecretScope {ownerId:string;backendId:string}
 export interface BackendSecretCipher {seal(value:string,scope:BackendSecretScope,name:string):string;open(ciphertext:string,scope:BackendSecretScope,name:string):string}
 export interface BackendSecretRepository {

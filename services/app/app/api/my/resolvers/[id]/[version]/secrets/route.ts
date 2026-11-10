@@ -11,7 +11,13 @@ type Context={params:Promise<{id:string;version:string}>};
 async function handle(request:Request,context:Context){
  const actor=await requestOrSessionActor(request);if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);if(!actor.userId&&!actor.tokenId)return unauthorized(request);
  const {id,version}=await context.params,backend=await getHtmlBackendVersion(id,version);
- if(!backend||backend.ownerId!==accountOf(actor)||(request.method==='PUT'&&!await getOwnedArtifactFor(actor,backend.pageId)))return json({error:'not_found'},404);
+ if(!backend)return json({error:'not_found'},404);
+ // WHO MAY: a personal page's backend owner (still owning the page to change anything), or, on a GROUP-owned page
+ // (its backends owned by the group), a direct editor of the owning group, for its governed 'minusx' bindings only:
+ // a binding holds no credential and reads data as each viewer, while every other name is a person's credential.
+ const owner=backend.ownerId===accountOf(actor),page=owner&&request.method==='GET'?null:await getOwnedArtifactFor(actor,backend.pageId);
+ const group=!!page?.group_id&&backend.ownerId===page.group_id;
+ if(!group&&(!owner||(request.method==='PUT'&&!page)))return json({error:'not_found'},404);
  const scope={ownerId:backend.ownerId,backendId:backend.backendId};
  try{
   // Names and bound hosts only, never values; `test` says whether the owner can run Test connection.
@@ -20,11 +26,12 @@ async function handle(request:Request,context:Context){
   // A name bound to a database kind holds a connection ({host,port,database,user,password,tls?,ca?}) of that kind,
   // stored sealed like a value; a body `kind` other than the declared one is refused.
   const kind=backend.secretHosts?.[body.name];
+  if(group&&kind!==MINUSX_CONNECTION_KIND)return json({error:'backend_credentials_owner_required'},403);
   // A name declared 'minusx' holds the author's binding ({connection_id, group_id}: a MinusX connection and the group
-  // its data is pinned to), no password; it is validated for this owner through MinusX before it is stored.
+  // its data is pinned to), no password; it is validated for the account setting it through MinusX before it is stored.
   if(request.method==='PUT'&&kind===MINUSX_CONNECTION_KIND){
    let binding;try{binding=minusxBinding(body.binding);}catch{return json({error:'invalid_binding'},400);}
-   try{await validateMinusxBinding(backend.ownerId,binding);}catch(error){if(error instanceof MinusxBindingError)return json({error:error.code},error.code==='minusx_unavailable'?503:error.code==='minusx_not_configured'?400:403);throw error;}
+   try{await validateMinusxBinding(accountOf(actor),binding);}catch(error){if(error instanceof MinusxBindingError)return json({error:error.code},error.code==='minusx_unavailable'?503:error.code==='minusx_not_configured'?400:403);throw error;}
    await backendSecrets.put(scope,body.name,JSON.stringify(binding));
   }
   else if(request.method==='PUT'&&isResolverDatabaseKind(kind)){try{await backendSecrets.putConnection(scope,body.name,kind,body.connection);}catch{return json({error:'invalid_connection'},400);}}

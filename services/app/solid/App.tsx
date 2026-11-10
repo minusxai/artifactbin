@@ -133,7 +133,8 @@ export function App(): JSX.Element {
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
       <Route path="/groups" component={GroupsPage} />
-      <Route path="/groups/:identity/settings" component={()=><GroupSettingsPage identity={useParams().identity!}/>} />
+      {/* The params are read once, in the route's owner: the page reads `identity` again later, outside any (a refresh after a save). */}
+      <Route path="/groups/:identity/settings" component={()=>{const params=useParams();return <GroupSettingsPage identity={params.identity!}/>;}} />
       <Route path="/getting-started" component={GettingStartedPage} />
       {UiGallery && <Route path="/dev/ui" component={UiGallery} />}
       <Route path="/:user" component={ProfilePage} />

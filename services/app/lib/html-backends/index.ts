@@ -1,14 +1,15 @@
 import {createHash} from 'node:crypto';
 import type {DatasetRole,HtmlBackendLink,Queryable} from '@artifactbin/contracts';
-import {mayPublishBackendChange,requiresFreshBackendIdentity} from './authority';
+import {credentialNames,mayPublishBackendChange,requiresFreshBackendIdentity} from './authority';
 import { getDb, generateFileId } from '../platform';
 import type {PreparedHtmlBackend,HtmlBackendVersionRecord} from './contracts';
 export type {PreparedHtmlBackend,HtmlBackendVersionRecord} from './contracts';
 /** Called under the owning page lock before writing any immutable version. */
 export async function mayCommitHtmlBackends(tx:Queryable,pageId:string,personalOwner:boolean,prepared:readonly PreparedHtmlBackend[]):Promise<boolean>{
  for(const backend of prepared){
-  const history=(await tx.query<{protected:boolean}>(`SELECT EXISTS(SELECT 1 FROM html_backend_versions v WHERE v.page_id=$1 AND v.name=$2 AND (jsonb_array_length(v.secret_bindings)>0 OR EXISTS(SELECT 1 FROM html_backend_secrets s WHERE s.backend_id=v.backend_id))) AS protected`,[pageId,backend.name])).rows[0]?.protected??false;
-  if(!mayPublishBackendChange({personalOwner,declaresSecrets:!!backend.secretBindings?.length,historicalSecrets:history}))return false;
+  // A version that declared, or a stored value under, any name other than a governed 'minusx' binding.
+  const history=(await tx.query<{protected:boolean}>(`SELECT EXISTS(SELECT 1 FROM html_backend_versions v WHERE v.page_id=$1 AND v.name=$2 AND (EXISTS(SELECT 1 FROM jsonb_array_elements_text(v.secret_bindings) b(name) WHERE COALESCE(v.secret_hosts->>b.name,'')<>'minusx') OR EXISTS(SELECT 1 FROM html_backend_secrets s WHERE s.backend_id=v.backend_id AND COALESCE(v.secret_hosts->>s.name,'')<>'minusx'))) AS protected`,[pageId,backend.name])).rows[0]?.protected??false;
+  if(!mayPublishBackendChange({personalOwner,declaresSecrets:credentialNames(backend).length>0,historicalSecrets:history}))return false;
  }
  return true;
 }
@@ -37,4 +38,5 @@ export async function getHtmlBackendVersion(backendId:string,version:string):Pro
  return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,functions:row.function_roles??null,schedule:row.function_schedules??null,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings??[],secretHosts:row.secret_hosts??{}}:null;
 }
 
+export {credentialNames} from './authority';
 export {htmlLiveLinks,htmlSharedRevisions,changedHtmlSharedRevisions} from './live';

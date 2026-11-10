@@ -51,9 +51,11 @@ node scripts/minusx.mjs bind PAGE12 --name FIN --group finance --connection conn
 ```
 
 The server checks that you are a direct member of the group and that the group can see the
-connection, and stores only `{connection_id, group_id}`. Every later publish checks it again;
-to change the group or connection, bind again. The page script never names a user or group:
-nothing it sends can change who reads.
+connection, and stores only `{connection_id, group_id}`. Every later publish checks it again
+for whoever publishes; to change the group or connection, bind again. A group-owned page
+(`publish --group`) may carry a binding: any editor of the owning group who is a direct member
+of the pinned group binds it. The page script never names a user or group: nothing it sends
+can change who reads.
 
 ## Who reads, and when they cannot
 
@@ -75,5 +77,6 @@ its members can open it; sharing a page grants no data access by itself.
 ## Limits
 
 No schedules here: recurring refreshes belong to MinusX jobs, and a page `schedule` export is
-refused with `schedules_owned_by_minusx` when MinusX owns schedules. Reads only: the governed
+refused with `schedules_owned_by_minusx` when MinusX owns schedules (so is a fork, trash
+restore or revert that would bring one back). Reads only: the governed
 session refuses writes. Per run the `caps.db` limits apply (4 connections, 16 MiB in).

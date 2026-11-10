@@ -10,7 +10,7 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
-import { assertScheduleCapacity } from './schedule-capacity';
+import { assertScheduleCapacity, schedulesBefore } from './schedule-capacity';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import {
@@ -249,7 +249,8 @@ async function insertArtifact(
   if(input.format==='html'&&input.htmlBackends){
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
-    const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
+    // A group-owned page's backends belong to the group (its stored values with them), a personal page's to its creator.
+    const links=await commitHtmlBackends(tx,id,input.destination?.type==='group'?input.destination.id:creatorId,input.htmlBackends,[]);
     input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
   }
   if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
@@ -401,6 +402,8 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
      * actor in the same statement. A live-region save is a text edit, not a publication: it keeps the publisher.
      */
     async publish(content: ArtifactInput, options: { publisher?: boolean } = {}): Promise<ArtifactRow> {
+      // What the head schedules before this write: a publication may keep those, never add one MinusX owns (./schedule-capacity).
+      const scheduled = options.publisher === true ? await schedulesBefore(tx, [id]) : new Set<string>();
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -418,7 +421,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
           ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document, options.publisher === true],
       )).rows[0];
       // A publication or revert makes the actor the publisher of the head's schedules: its capacity, in this transaction.
-      if (options.publisher === true && updated && updated.format === 'html') await assertScheduleCapacity(tx, [id]);
+      if (options.publisher === true && updated && updated.format === 'html') await assertScheduleCapacity(tx, [id], scheduled);
       if (content.ancestor_ids && current.format === 'folder') {
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);
@@ -743,7 +746,8 @@ async function replaceArtifactInTx(
     const names=htmlBackendNames(input.source??'');
     if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
     if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
-    const backendOwner=current.user_id??current.token_id;
+    // The same owner a creation gave the backends (above): the owning group, else the personal owner.
+    const backendOwner=current.group_id??current.user_id??current.token_id;
     if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
     const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
     const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
