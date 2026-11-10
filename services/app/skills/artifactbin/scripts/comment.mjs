@@ -19,17 +19,21 @@ Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a fi
   your comments show, kept for this agent session (default: your product and a colour, such as
   "Claude Code Red"; ARTIFACTBIN_AGENT_NAME also sets it). add, reply, edit and react print the
   name, then the watch to run: they ask for answers, so watch for them.
-Watch --next: Claude Code: start it with the Bash tool's run_in_background first, then send your
-  reply as your last message and end your turn; you are woken when it prints. Other harnesses:
-  in one turn, say your reply to the user (the page link first; a reply form the user set, such
-  as just the link, is what you say), then call the watch: the words before a tool call are your
-  reply, and nothing after the call may be read, since the session can end while it waits. Run
-  it in the foreground with its default wait and a shell timeout of at least 300000 ms. It
-  returns as soon as someone comments, and on its own within 4 minutes: handle what it printed
-  and run it again until it says to stop watching. Watching is part of every task, however short
-  the reply. It prints the next comments from someone else (one JSON line each; a first call also
-  prints threads still waiting for your answer) and exits 0. After 4 minutes it prints "no new
-  comments yet: run the same watch --next command again".
+Watch --next: Nothing may hold back your reply, and a watch may never return: the reply is every
+  link the user asked for, in the form they asked for (a page's public view is its receipt's
+  user_page_url), plus what they asked; a message that only says you will watch is not a reply.
+  Claude Code: start the watch, one per page, with the Bash tool's run_in_background first, then
+  send your reply as your last message and end your turn; you are woken when it prints. Other
+  harnesses: in one turn, say your reply to the user, then call the watch: the words before a tool
+  call are your reply, and nothing after the call may be read, since the session can end while it
+  waits. Several pages: that one call runs every page's watch and waits for all (node
+  scripts/comment.mjs watch A --next & node scripts/comment.mjs watch B --next & wait). Run it in
+  the foreground with its default wait and a shell timeout of at least 300000 ms. It returns as
+  soon as someone comments, and on its own within 4 minutes: handle what it printed and run it
+  again until it says to stop watching. Watching follows every task, however short the reply. It
+  prints the next comments from someone else (one JSON line each; a first call also prints threads
+  still waiting for your answer) and exits 0. After 4 minutes it prints "no new comments yet: run
+  the same watch --next command again".
   After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for
   15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
   second --next of this agent session on the same page takes over from the running one, which
@@ -146,13 +150,8 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
       const current = await client.request(`/api/artifacts/${id}`);
       if (Number.isSafeInteger(current?.version)) anchor.revision = String(current.version);
     }
-    if (
-      anchor?.kind !== 'html-node' ||
-      anchor.v !== 1 ||
-      typeof anchor.revision !== 'string' ||
-      typeof anchor.nodeId !== 'string' ||
-      typeof anchor.quote !== 'string'
-    )
+    if (anchor?.kind !== 'html-node' || anchor.v !== 1 || typeof anchor.revision !== 'string' ||
+      typeof anchor.nodeId !== 'string' || typeof anchor.quote !== 'string')
       throw new ToolError('invalid_anchor',
         'Provide a native html-node anchor with canonical revision/nodeId/quote.', 2);
   // react: PUT of the desired state, idempotent, so retrying the same call is safe.
