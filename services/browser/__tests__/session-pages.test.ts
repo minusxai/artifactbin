@@ -211,6 +211,35 @@ it('runs an export-default array of step calls through the session worker, and t
  expect((await worker.run('return 7')).result).toBe(7);
 },30_000);
 
+// A link whose answer is a file starts a download, and the browser ends that navigation net::ERR_ABORTED: the check
+// lists the download and fails nothing. An aborted navigation that started no download, and a request that failed,
+// stay failed requests.
+it('lists a link that downloads a file as a download, not a failed request, and keeps every other failure', async () => {
+ const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
+ const asked:string[]=[];
+ worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
+  const url=new URL(request.url);asked.push(url.pathname);
+  if(url.origin===BASE&&url.pathname==='/a/doc1')return html(`<!doctype html><html><body><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/"></iframe></body></html>`);
+  if(url.origin===DOC_ORIGIN&&url.pathname==='/')return html('<!doctype html><html><body><a id="rota" href="/files/rota.pdf">Rota</a><a id="empty" href="/files/empty.pdf">Empty</a><p>Files</p></body></html>');
+  if(url.pathname==='/files/rota.pdf')return new Response('%PDF-1.4\n%%EOF\n',{headers:{'content-type':'application/pdf','content-disposition':'attachment; filename="rota.pdf"'}});
+  if(url.pathname==='/files/empty.pdf')return new Response(null,{status:204});
+  if(url.pathname==='/broken.png')throw Error('unreachable');
+  return new Response('not found',{status:404});
+ }});
+ const run=async(steps:string)=>(await worker!.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`));
+ const clicked=await run(`const started=page.waitForEvent('download');await page.locator('#rota').click();return (await started).suggestedFilename();`);
+ expect(clicked.error).toBeUndefined();
+ const evidence=clicked.result as {failedRequests:unknown[];downloads?:{url:string;file:string}[];steps:unknown;task:unknown};
+ expect(evidence.steps).toEqual({ran:true,passed:true});expect(evidence.task).toBe('rota.pdf');
+ expect(evidence.failedRequests).toEqual([]);expect(evidence.downloads).toEqual([{url:`${DOC_ORIGIN}/files/rota.pdf`,file:'rota.pdf'}]);
+ expect(asked).toContain('/files/rota.pdf');
+ const failing=await run(`await page.locator('#empty').click();await page.evaluate(()=>{const img=document.createElement('img');img.src='/broken.png';document.body.append(img);});await page.waitForTimeout(300);`);
+ expect(failing.error).toBeUndefined();
+ const failed=failing.result as {failedRequests:{url:string;error:string}[];downloads?:unknown};
+ expect(failed.downloads).toBeUndefined();
+ expect(failed.failedRequests.map(item=>[new URL(item.url).pathname,item.error]).sort()).toEqual([['/broken.png','net::ERR_FAILED'],['/files/empty.pdf','net::ERR_ABORTED']]);
+},30_000);
+
 // A step past the deadline names the numbered call still running and what the page shows, so the agent sees why it waits.
 it('names the running step call and the page status when a steps file hits its deadline', async () => {
  const {chromium}=await import('playwright');const browser=await chromium.launch();const page=await browser.newPage();

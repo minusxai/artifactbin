@@ -49,7 +49,7 @@ async function parallel<T,R>(items:readonly T[],work:(item:T)=>Promise<R>):Promi
  const results:R[]=[];let position=0;await Promise.all(Array.from({length:Math.min(4,items.length)},async()=>{while(position<items.length){const index=position++;results[index]=await work(items[index]!);}}));return results;
 }
 /** One page admission snapshot and bounded parallel current-ACL checks; no credential URLs. */
-export async function loadBundleAssetResources(request:Request,actor:AccessActor,pageId:string):Promise<Array<{url:string;contentType:string;bytes:Uint8Array}>>{
+export async function loadBundleAssetResources(request:Request,actor:AccessActor,pageId:string):Promise<Array<{url:string;contentType:string;bytes:Uint8Array;name:string}>>{
  const admitted=await admission(request,actor,pageId);if(!admitted)throw Error('Bundle page unavailable');
  const receipts=[...new Map(admitted.receipts.filter(receipt=>receipt.kind==='asset').map(receipt=>[receipt.id+':'+receipt.revision,receipt])).values()];
  const assets=await parallel(receipts,async receipt=>{const asset=await assetVersion(admitted.delegator,receipt);if(!asset)throw Error('Bundle dependency unavailable');return {receipt,asset};});
@@ -59,6 +59,6 @@ export async function loadBundleAssetResources(request:Request,actor:AccessActor
   const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
   try{while(true){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;if(size>(asset.meta.bytes as number)){await reader.cancel();throw Error('Bundle export limit exceeded');}chunks.push(chunk.value);}}finally{reader.releaseLock();}
   const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
-  return {url:`/a/${pageId}/assets?dependency=${receipt.id}&revision=${receipt.revision}`,contentType:response.headers.get('content-type')??'application/octet-stream',bytes};
+  return {url:`/a/${pageId}/assets?dependency=${receipt.id}&revision=${receipt.revision}`,contentType:response.headers.get('content-type')??'application/octet-stream',bytes,name:receipt.path.split('/').pop()!};
  });
 }
