@@ -132,4 +132,7 @@ it('carries the live-cell library in a download of a page that imports it, and o
   const { actor: other, id: plain } = await publish('private');
   const without = new JSDOM(await (await download(request(`/a/${plain}/download`, { token: other.token }), params(plain))).text()).window.document;
   expect(without.querySelector('[data-af="collab"]')).toBeNull();
+  // Every copy carries @afbin/state (the embedded @afbin/apollo imports it), and its source never does.
+  for (const copy of [doc, without]) expect(JSON.parse(copy.querySelector('script[type="application/json"][data-af="state-module"]')!.textContent!)).toContain('af:viewer:');
+  expect(readPortableDocument(html).source).not.toContain('data-af="state-module"');
 });

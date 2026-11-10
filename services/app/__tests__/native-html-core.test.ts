@@ -91,3 +91,13 @@ it('serves retained immutable reader code on the exact public runner path for GE
  const previous='export const priorReader=true;',oldDigest=createHash('sha256').update(previous).digest('hex');await retainedRuntimeAssets.put(oldDigest,previous);
  expect(await (await reader(request,{params:Promise.resolve({digest:oldDigest})})).text()).toBe(previous);
 });
+
+it('lets a page runner origin load every flat runtime module the core maps, @afbin/state included',async()=>{
+ const assets=await buildHtmlAssets();
+ const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));
+ const paths=Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([,value])=>value as string);
+ expect(paths).toHaveLength(8);
+ expect(paths).toContain('/af/state.js');
+ for(const pathname of paths)app.get(pathname,()=>new Response('module'));
+ for(const pathname of paths)expect((await app.request(origin+pathname)).status,pathname).toBe(200);
+});

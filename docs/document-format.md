@@ -54,6 +54,23 @@ backend namespaces must stay out. Restoration changes only those fields and
 never replays backend mutations. Pages without declarations retain target-only
 comments. See the served `/llms/html-operations` and `/llms/runtime` guides.
 
+The state block holds the page's defaults. A viewer's browser keeps only that viewer's
+overrides (top-level keys that differed from the defaults when written), merged over the
+current defaults one level deep, so a republished default reaches every key a viewer never
+changed. An override whose JSON type no longer matches its default's is dropped (a `null`
+default takes any value). `data-af-state-version` (1-64 letters, digits, `.`, `_`, `-`) on the
+state block clears every viewer's overrides once when it changes (on that version's first
+write: reading never changes saved state); publish warns about an invalid value, which is ignored.
+
+Overrides are stored under their own browser key (`af:viewer:v2:<page>`). A viewer's state saved
+by an earlier runtime (a full document under `af:viewer:<page>`) migrates on first read and is
+persisted by the first write; that legacy key is never changed, so a tab left open from before the
+deploy keeps working on it. Transiently, that old tab's edits after the migration are not seen by
+new tabs (nor theirs by it) until it reloads. Each saved entry records the page revision that wrote
+it: a tab still showing an older revision of the page never writes over it — its changes are
+refused (`state.setState` reports the error and shows the saved state again; `updateQuery`
+rejects) until it reloads.
+
 Hosted readers retain sharing, comments, live source updates and presence through
 the trusted reader shell. `/a/ID/download` returns portable HTML with canonical
 source and runtime assets. Viewer-local state works offline; remote shared writes

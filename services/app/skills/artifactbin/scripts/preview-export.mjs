@@ -13,7 +13,7 @@ import walkCss from 'css-tree/walker';
 // one statement of the core addresses.
 import {isRuntimeCoreSrc} from '../../../lib/html-page/core-script.ts';
 initSync();
-const PLATFORM=new Set(['@afbin/apollo','@afbin/reader','@afbin/chrome','@afbin/portable','@afbin/collab']);
+const PLATFORM=new Set(['@afbin/apollo','@afbin/reader','@afbin/chrome','@afbin/portable','@afbin/collab','@afbin/state']);
 const PREFIX='@afbin/local-export/';
 const ORIGIN='http://local-export.invalid';
 const JS=new Set(['text/javascript','application/javascript','application/ecmascript',
@@ -142,7 +142,7 @@ const attr=name=>element.attrs.find(attr=>attr.name===name),get=name=>attr(name)
     value});};
   const src=get('src'),type=get('type'),platform=get('data-af');
   if(element.tagName==='script'){
-if(!src&&['runtime','apollo','reader','chrome','portable-engine','portable','core'].includes(
+if(!src&&['runtime','apollo','state-module','reader','chrome','portable-engine','portable','core'].includes(
      platform)||isRuntimeCoreSrc(src)||type==='importmap'||type&&
      type!=='module'&&!JS.has(type))continue;
 if(src){if(type==='module'){const alias=await module(resolve(src,pathname));set('src',data(

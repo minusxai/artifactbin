@@ -210,3 +210,49 @@ it('ships @afbin/collab as its own small module over the page reader: Yjs, no Pr
  expect(assets.core).toContain('[data-af="collab"]');
  expect(assets.core).toMatch(/"@afbin\/collab":\w+/);
 });
+
+it('ships @afbin/state as its own small module that @afbin/apollo imports: Zustand over the one viewer document, no graphql, never in the reader',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.statePath).toBe('/af/state.js');
+ const state=assets.state!;
+ expect(gzipSync(state).byteLength).toBeLessThanOrEqual(8*1024);
+ expect(state).not.toMatch(/GraphQL|Syntax Error:/);
+ expect(state).toMatch(/from\s*"@afbin\/reader"/);
+ // One document per page: apollo takes its StatePort from @afbin/state, never a second copy of the viewer state, and
+ // imports it dynamically so an older core's import map (no @afbin/state) still links apollo and reaches its skew guard.
+ expect(assets.apollo).toMatch(/import\(\s*"@afbin\/state"\s*\)/);
+ expect(assets.apollo).not.toMatch(/from\s*"@afbin\/state"/);
+ expect(assets.apollo).not.toContain('af:viewer:');
+ expect(state).toContain('af:viewer:');
+ expect(assets.reader).not.toContain('af:viewer:');
+ expect(assets.reader).not.toContain('zustand');
+ // Mapped for every page; offline, only from the copy's own embedded block.
+ expect(assets.core).toMatch(/new URL\("\/af\/state\.js"/);
+ expect(assets.core).toContain('[data-af="state-module"]');
+ expect(assets.core).toMatch(/"@afbin\/state":\w+/);
+});
+
+it('review: a pre-deploy import map can reach the skew guard and reload on a late apollo import', async () => {
+ const { spawnSync } = await import('node:child_process');
+ const assets = await buildHtmlAssets();
+ const result = spawnSync(process.execPath, ['--experimental-vm-modules', '--input-type=module', '-e', `
+  import { SourceTextModule, SyntheticModule } from 'node:vm';
+  let reloaded = false;
+  globalThis[Symbol.for('afbin.runtime-build')] = 'pre-deploy-build';
+  globalThis.sessionStorage = { getItem: () => null, setItem() {} };
+  globalThis.location = { reload() { reloaded = true; } };
+  const reader = new SyntheticModule(['config','remote','onResolverChange','startFrameBridge','remoteReadOnly','uploadFile','watchUploadContext','bindFileUpload'], function() {});
+  try {
+   const apollo = new SourceTextModule(${JSON.stringify(assets.apollo)});
+   await apollo.link(specifier => {
+    // The old core maps reader and apollo, but does not map @afbin/state.
+    if (specifier === '@afbin/reader') return reader;
+    throw Error('Unmapped bare specifier: ' + specifier);
+   });
+   await apollo.evaluate();
+  } catch (error) { console.log(error.message); }
+  console.log('reloaded=' + reloaded);
+ `], { encoding: 'utf8' });
+ expect(result.status).toBe(0);
+ expect(result.stdout).toContain('reloaded=true');
+});

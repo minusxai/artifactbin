@@ -47,7 +47,7 @@ export default {
         // Hosted native HTML and library bundles
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
         // Native HTML core bundles this module by URL; its exports are the author ABI.
-        'lib/html-runtime/{browser-client,build.server,index}.ts',
+        'lib/html-runtime/{browser-client,browser-state,build.server,index}.ts',
         // Public custom-element API, bundled by build-html-components.
         'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented,popover,tooltip,floating-position,date-picker,date-calendar,select,select-model,icon,icon-glyphs,floating-geometry,accordion,accordion-model,file-upload,file-upload-model,data-table,table-model,markdown,mermaid,slide-deck,slide-navigation,deck-gl,deck-gl-engine,deck-gl-model,isometric,isometric-model,user,user-model,avatar-model,segmented-model,dialog-model,popover-model,date-picker-styles,tooltip-model,slide-deck-parts,data-table-frame,data-table-grid,data-table-cells,data-table-compare,data-table-measure}.ts',
         'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',

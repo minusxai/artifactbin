@@ -33,6 +33,11 @@ export function canonical(value: AfJson | undefined): string {
 export const own = (document: AfJsonObject, key: string): AfJson | undefined =>
   Object.hasOwn(document, key) ? document[key] : undefined;
 
+/** Sets an own data property: a storable JSON key such as `__proto__` stays a field, never the object's prototype. */
+export const setOwn = (document: Record<string, unknown>, key: string, value: unknown): void => {
+  Object.defineProperty(document, key, { value, writable: true, enumerable: true, configurable: true });
+};
+
 /* ----------------------------------------------------------- local store */
 
 export function createLocalStore(initial: AfJsonObject = {}): StatePort {
@@ -63,7 +68,7 @@ export function createLocalStore(initial: AfJsonObject = {}): StatePort {
       const updated: AfJsonObject = { ...document };
       for (const [key, value] of Object.entries(change.next)) {
         if (value === undefined) delete updated[key];
-        else updated[key] = clone(value);
+        else setOwn(updated, key, clone(value));
       }
       document = updated;
       for (const listener of [...listeners])

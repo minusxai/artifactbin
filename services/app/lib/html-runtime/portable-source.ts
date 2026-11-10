@@ -4,7 +4,7 @@ import {INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
 import { readPortableDocument,hasPortableDocument } from './portable';
-const generated=new Set(['runtime','apollo','reader','portable','chrome','portable-engine','collab','core',INLINE_SCRIPT_POLICY]);
+const generated=new Set(['runtime','apollo','reader','portable','chrome','portable-engine','collab','state-module','core',INLINE_SCRIPT_POLICY]);
 /** Recover author bytes from an explicitly selected disk file, never the running DOM. */
 export function recoverPortableRendering(fileBytes:string):string {
  if(!hasPortableDocument(fileBytes))return fileBytes;

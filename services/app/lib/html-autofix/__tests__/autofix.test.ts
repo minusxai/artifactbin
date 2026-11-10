@@ -25,6 +25,14 @@ describe('autofix rules',()=>{
   expect(bad[0]!.message).toContain('data-af-comment-exclude');expect(bad[0]!.message).toContain('["draft"]');
   for(const attributes of [`data-af-comment-exclude='["draft","draft"]'`,`data-af-comment-fields='[]'`,`data-af-comment-fields='["a-b"]'`,'data-af-comment-version=""'])expect(findWarnings(state(attributes)).map(problem=>problem.rule),attributes).toEqual(['comment-view']);
  });
+ it('accepts a state version and warns about one the runtime would ignore',()=>{
+  const state=(attributes:string)=>page(OK+`\n<script type="application/json" data-af="state" ${attributes}>{"tab":"a"}</script>`);
+  for(const ok of ['data-af-state-version="2"','data-af-state-version="2026-11.b_1"',`data-af-state-version="${'v'.repeat(64)}"`])expect(findWarnings(state(ok)),ok).toEqual([]);
+  for(const attributes of ['data-af-state-version=""','data-af-state-version="two words"',`data-af-state-version="${'v'.repeat(65)}"`,'data-af-state-version="v/2"']){
+   const bad=findWarnings(state(attributes));expect(bad.map(problem=>problem.rule),attributes).toEqual(['state-version']);
+   expect(bad[0]!.message).toContain('data-af-state-version');expect(findProblems(state(attributes))).toEqual([]);
+  }
+ });
  it('leaves a correct page byte-identical and reports clean',()=>{
   const html=page(OK),result=autofixHtml(html,{exists:()=>true});
   expect(result.html).toBe(html);expect(result.changed).toBe(false);

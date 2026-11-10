@@ -1,19 +1,47 @@
 import { createLocalStore } from './apollo/local-store';
 import type { StoreReceipt } from './apollo/apollo-contracts';
+import { entryDocument, isNewerRevision, legacyEntry, overridesOf, parseEntry, storedOverrides, type OverrideEntry } from './viewer-overrides';
 import type { ViewerStateOptions, ViewerStatePort } from './viewer-state-contract';
 
-/** One browser's private document. The only persistence port is that browser's storage. */
+/** What a write from an instance of an older page revision gets: the newer revision's saved state is not its to change. */
+const STALE_REVISION = 'This page was updated in another tab; reload it to save changes';
+
+/**
+ * One browser's private document. The only persistence port is that browser's storage, which holds only the viewer's
+ * overrides of the page's defaults (./viewer-overrides). Reads (and so every storage notification) never write; the
+ * legacy key is only ever read. Writes compare-and-swap against the merged document and store the overrides it leaves.
+ * An instance whose page revision is older than the entry's never writes: its writes are rejected (`state.setState`
+ * reports and shows the saved document again; `updateQuery` rejects) until the viewer reloads it.
+ */
 export function createViewerState(options: ViewerStateOptions): ViewerStatePort {
-  let document = createLocalStore(options.initial ?? {}).read();
+  const defaults = createLocalStore(options.defaults ?? {}).read();
+  const version = options.version ?? null, revision = options.revision ?? null;
+  /** The entry when browser storage is unusable (denied, full or unreadable): this viewer continues privately in memory. */
+  let memory: OverrideEntry | null = null;
+  let storageEnabled = true;
   const listeners = new Set<Parameters<ViewerStatePort['subscribe']>[0]>();
   let queue = Promise.resolve();
-  let storageEnabled = true;
-  if (options.replaceInitial) try { options.storage.write(JSON.stringify(document)); } catch { storageEnabled = false; /* memory remains available */ }
-  const read = () => {
-    try { const raw = storageEnabled ? options.storage.read() : null; if (raw) document = createLocalStore(JSON.parse(raw)).read(); } catch { storageEnabled = false; /* invalid or unavailable storage retains the viewer's document */ }
-    return createLocalStore(document).read();
+  /** An `#af-state` seed this instance shows until its persistence (under the page lock) has run. */
+  let seeding: OverrideEntry | null = null;
+  /** The stored entry, or the legacy document migrated in memory while the new key is empty. Never writes. */
+  const stored = (): OverrideEntry | null => {
+    if (!storageEnabled) return memory;
+    try {
+      const raw = options.storage.read();
+      // Any present value, even an empty string, is this viewer's entry: an invalid one is never overwritten.
+      if (raw !== null) return parseEntry(raw);
+      const legacy = options.legacy?.();
+      return legacy ? legacyEntry(legacy, defaults) : null;
+    } catch { storageEnabled = false; return memory; /* invalid or unavailable storage: never overwritten, memory from here */ }
   };
-  read();
+  const save = (next: OverrideEntry) => {
+    memory = next;
+    if (!storageEnabled) return;
+    try { options.storage.write(JSON.stringify(storedOverrides(next))); } catch { storageEnabled = false; /* storage-denied viewers continue privately in memory */ }
+  };
+  const entry = () => seeding ?? stored();
+  const fenced = (current: OverrideEntry | null) => !!current && isNewerRevision(current.revision, revision);
+  const read = () => entryDocument(entry(), defaults, version);
   const notify = () => {
     const current = read();
     for (const listener of [...listeners]) try { listener(createLocalStore(current).read()); } catch { /* subscriptions are independent */ }
@@ -29,18 +57,36 @@ export function createViewerState(options: ViewerStateOptions): ViewerStatePort 
     let started = false;
     return options.lock(() => { started = true; return work(); }).catch((error: unknown) => { if (started) throw error; return serial(work); });
   };
+  if (options.seed) {
+    // An explicit link replaces this viewer's overrides, as any write does: under the page lock, behind the revision fence.
+    // Until that runs, this instance shows the seed.
+    const seeded = seeding = { version, revision, overrides: overridesOf(createLocalStore(options.seed).read(), defaults) };
+    void locked(async () => {
+      if (fenced(stored())) { storageEnabled = false; memory = seeded; } else save(seeded);
+      seeding = null;
+      notify();
+      return { status: 'committed', document: read() };
+    }).catch(() => { seeding = null; });
+  }
   return {
     read,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     write(change) {
       return locked(async () => {
-        const store = createLocalStore(read());
-        const receipt = await store.write(change);
+        const before = entry();
+        const current = entryDocument(before, defaults, version);
+        if (fenced(before)) return { status: 'rejected', document: current, error: STALE_REVISION };
+        const receipt = await createLocalStore(current).write(change);
         if (receipt.status !== 'committed') return receipt;
-        document = receipt.document;
-        try { options.storage.write(JSON.stringify(document)); } catch { storageEnabled = false; /* storage-denied viewers continue privately in memory */ }
+        // Checked again right before saving (nothing awaits in between): a newer revision that wrote meanwhile, past a
+        // lock that did not hold, is still never overwritten.
+        const latest = stored();
+        if (fenced(latest)) return { status: 'rejected', document: entryDocument(latest, defaults, version), error: STALE_REVISION };
+        // Another state version's overrides are not carried: `current` was the defaults, so this write resets them.
+        const next = { version, revision, overrides: overridesOf(receipt.document, defaults) };
+        save(next);
         notify();
-        return receipt;
+        return { status: 'committed', document: entryDocument(next, defaults, version) };
       });
     },
     dispose() { stop(); listeners.clear(); },
