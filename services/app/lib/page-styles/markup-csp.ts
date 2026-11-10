@@ -6,9 +6,9 @@
  * that stream's `/frame` sub-path, its own write endpoint
  * (`<origin>/a/<id>/mutate`), its anonymous asset resolver
  * (`<origin>/a/<id>/resolve`), the static `/geojson/` boundary files, and
- * `blob:`/`data:` for the local URLs GLB loaders build — and nothing else on the
- * origin. A configured asset origin adds itself and that document's own
- * `<origin>/a/<id>/assets` endpoint, and nothing else again.
+ * `blob:`/`data:` for the local URLs GLB loaders build, its own published files
+ * (`<origin>/a/<id>/assets`) — and nothing else on the origin. A configured asset
+ * origin adds itself, and nothing else again.
  *
  * Why a path, not 'self': 'self' would open every `/api/*` route to the
  * author's script (minting tokens from a viewer's IP, for one). A CSP source
@@ -138,7 +138,8 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string): str
     const source=d.startsWith('script-src ')?d+` ${self}/libraries/ ${self}/af/components/`:d;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
-  const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
+  // Its own published files (lib/html-publication-bundle) are read at the address publish wrote into a link.
+  const assetConnect=` ${self}${assetsPath(id)}`+(assetOrigin?` ${assetOrigin}`:'');
   return [...sources, connect+assetConnect, ...BEHAVIOUR_DIRECTIVES].join('; ');
 }
 

@@ -42,8 +42,8 @@ const moduleReferences=text=>{const imports=parseImports(text)[0],runtime=import
    {
   if(item.d===-2)return [];
 if(item.n===undefined){if(runtime.some(entry=>entry.importStart===item.ss))return [];throw Error(
-    'Computed module imports cannot be discovered; use literal imports. Other runtime-loaded '+
-    'files must be listed in the publication manifest.');}
+    'Computed module imports cannot be discovered; use literal imports. A script reaches '+
+    'another file only through a link in the HTML.');}
 return item.n.startsWith('.')||item.n.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(item.n)?[item.n]:[
     ];
  });};
@@ -57,6 +57,9 @@ if(contentType==='text/css'){const references=[];walkCss(parseCss(source),functi
 if(['img','script','link','source','video','audio','iframe','object','embed','image',
      'use'].includes(node.tagName))for(const attr of node.attrs)if(['src','href','poster'].includes(
      attr.name))references.push(attr.value);
+   // A link to a project file publishes it with the page; one to the page itself names no file.
+   if(node.tagName==='a'||node.tagName==='area')for(const attr of node.attrs)if(attr.name==='href'&&
+     !/^\s*(?:\.\/?)?\s*(?:[?#]|$)/.test(attr.value))references.push(attr.value);
 if(node.tagName==='script'&&node.attrs.some(attr=>attr.name==='type'&&
      attr.value==='module'))references.push(...moduleReferences(node.childNodes.map(child=>
      child.value??'').join('')));
