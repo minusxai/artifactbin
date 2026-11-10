@@ -96,5 +96,6 @@
   "services/app/lib/html-components/__tests__/markdown-code-sizes.test.ts",
   "services/app/lib/graphql-compat/__tests__/hasura-schema.test.ts",
   "services/app/lib/graphql-compat/__tests__/hasura-read.test.ts",
-  "services/app/lib/live-regions/__tests__/tasks.test.ts"
+  "services/app/lib/live-regions/__tests__/tasks.test.ts",
+  "scripts/__tests__/new-doc-contract.test.mjs"
 ]

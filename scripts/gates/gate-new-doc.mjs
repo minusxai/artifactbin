@@ -15,6 +15,7 @@
  *
  *   node scripts/gates/gate-new-doc.mjs [base]
  */
+import { NEW_DOC_REGION as REGION, NEW_DOC_EDITOR, NEW_DOC_HTML } from './lib/new-doc-contract.mjs';
 import { performance } from 'node:perf_hooks';
 import { connectAgent } from './lib/account-connection.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -30,7 +31,7 @@ const started = performance.now();
 const stamp = Date.now().toString(36);
 const ownerEmail = `mxmx_test_newdoc_${stamp}@example.com`;
 const readerEmail = `mxmx_test_newdoc_reader_${stamp}@example.com`;
-const REGION = 'article[data-af-editable="rich"]';
+
 /** How soon a reader sees typing: the live ping is throttled to ~300 ms, then the frame re-fetches and draws it. */
 const LIVE_BUDGET_MS = 3000;
 
@@ -79,7 +80,7 @@ try {
     check(page.url().includes(id), `the page opened the new doc (${new URL(page.url()).pathname})`);
     const created = await api('');
     // The read wire carries no template for a page: the doc's mark shows as its page opening the region (below).
-    check(/<article data-af-editable="rich"[^>]*><h1[^>]*><\/h1><p[^>]*><\/p><\/article>/.test(created.html), 'the new page is the doc template: one rich region with an empty title');
+    check(NEW_DOC_HTML.test(created.html), 'the new page is the doc template: one rich region with an empty title');
     // Unlisted from the start: the person's test is a doc others already have the link to, with nothing to share first.
     check(created.version === 1 && created.visibility === 'unlisted', `it is unlisted at version 1 (${created.visibility} v${created.version})`);
   });
@@ -97,14 +98,14 @@ try {
     historyBefore = (await versions()).length;
     const frame = await documentFrame(page);
     await frame.locator(REGION).waitFor();
-    const mounted = await until(() => frame.locator(REGION).getAttribute('contenteditable'), (value) => value === 'true', 15_000);
+    const mounted = await until(() => frame.locator(NEW_DOC_EDITOR).getAttribute('contenteditable'), (value) => value === 'true', 15_000);
     check(mounted === 'true', 'the owner\'s page opened the region\'s editor without a press');
     // No click anywhere: what is typed now goes where the page put the caret.
     await page.keyboard.type('Launch plan', { delay: 20 });
     await page.keyboard.press('Enter');
     await page.keyboard.type('First line of the body.', { delay: 20 });
     const typedAt = Date.now();
-    const title = await until(() => frame.locator(`${REGION} > h1`).first().textContent(), (text) => text?.includes('Launch plan'));
+    const title = await until(() => frame.locator(`${NEW_DOC_EDITOR} > h1`).first().textContent(), (text) => text?.includes('Launch plan'));
     check(title?.trim() === 'Launch plan', `typing straight away lands in the title ("${title?.trim() ?? ''}")`);
     // With no save asked for and no pause, the open reader sees the text and the name.
     const read = await within(() => readerFrame.locator('article').textContent(), (text) => !!text?.includes('First line of the body.') && text.includes('Launch plan'), typedAt, 15_000);
