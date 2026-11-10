@@ -134,7 +134,7 @@ test('platform modules come only from closed /af/, /libraries/ and /af/component
  assert.equal(LEGACY_CORE_PATH,(await import('../../services/app/lib/html-page/core-script.ts')).LEGACY_CORE_PATH);
  const {withHttpServer}=await import('../../services/test-support/src/net.ts');
  const requests=[];
- const files={'/af/core.js':'core()','/af/apollo.js':'export const apollo=1;','/af/reader.js':'export const reader=1;','/af/components/tabs.js':'import "./chunk-abc.js";','/af/components/chunk-abc.js':'export {};','/libraries/fixture-1.0.0/index.js':'export const value=1;','/af/import-map.json':JSON.stringify({imports:{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js','@afbin/evil':'https://evil.test/x.js','not-reserved':'/af/components/tabs.js'}})};
+ const files={'/af/core.js':'core()','/af/apollo.js':'export const apollo=1;','/af/state.js':'export const state=1;','/af/reader.js':'export const reader=1;','/af/components/tabs.js':'import "./chunk-abc.js";','/af/components/chunk-abc.js':'export {};','/libraries/fixture-1.0.0/index.js':'export const value=1;','/af/import-map.json':JSON.stringify({imports:{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js','@afbin/evil':'https://evil.test/x.js','not-reserved':'/af/components/tabs.js'}})};
  const server=await withHttpServer((incoming,reply)=>{requests.push(incoming.url);const body=files[incoming.url];reply.writeHead(body===undefined?404:200,{'content-type':incoming.url.endsWith('.json')?'application/json':'text/javascript'});reply.end(body??'missing');});
  try{
   const platform=platformModules({origin:server.base});
@@ -143,7 +143,7 @@ test('platform modules come only from closed /af/, /libraries/ and /af/component
   for(const refused of ['/af/../secret.js','/af/components/nested/x.js','/libraries/fixture/index.js','/index.html','/af/styles.css'])assert.equal(await platform.module(refused),null,refused);
   assert.equal(await platform.module('/af/components/absent.js'),null);
   assert.deepEqual(await platform.importMap(),{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js'});
-  const runtime=await platform.runtimeAssets();assert.equal(runtime.core,'core()');assert.equal(runtime.apolloPath,'/af/apollo.js');assert.equal(runtime.chrome,undefined);
+  const runtime=await platform.runtimeAssets();assert.equal(runtime.core,'core()');assert.equal(runtime.apolloPath,'/af/apollo.js');assert.equal(runtime.statePath,'/af/state.js');assert.equal(runtime.chrome,undefined);
   await platform.module('/af/core.js');assert.equal(requests.filter(url=>url==='/af/core.js').length,1);
   assert.equal(await platformModules({origin:null}).module('/af/core.js'),null);
   assert.throws(()=>platformModules({origin:'file:///tmp'}),/http\(s\)/);

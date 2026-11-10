@@ -103,7 +103,7 @@ describe('installable shared skill folder',()=>{
     const hosted=async(pathname:string)=>{const answer=await fetch(server.base+pathname);expect(answer.status,pathname).toBe(200);return answer.text();};
     const imports=JSON.parse(await hosted('/af/import-map.json')).imports as Record<string,string>;
     expect(imports['@afbin/vega']).toBe('/libraries/vega-6.3.1/index.js');expect(imports['@afbin/tabs']).toBe('/af/components/tabs.js');
-    for(const pathname of [imports['@afbin/vega']!,imports['@afbin/vega-lite']!,imports['@afbin/tabs']!,'/af/core.js','/af/apollo.js','/af/reader.js']){
+    for(const pathname of [imports['@afbin/vega']!,imports['@afbin/vega-lite']!,imports['@afbin/tabs']!,'/af/core.js','/af/apollo.js','/af/state.js','/af/reader.js']){
      const response=await fetch(new URL(pathname,preview.url));
      expect(response.status,pathname).toBe(200);expect(await response.text(),pathname).toBe(await hosted(pathname));
     }
@@ -111,7 +111,7 @@ describe('installable shared skill folder',()=>{
     const assets=await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json();
     expect(assets.core).toContain('@afbin/apollo');expect(assets.reader).toContain('offline');
     expect(assets.apolloPath).toBe('/af/apollo.js');expect(assets.readerPath).toBe('/af/reader.js');
-    expect(assets.apollo).toBe(await hosted('/af/apollo.js'));
+    expect(assets.apollo).toBe(await hosted('/af/apollo.js'));expect(assets.state).toBe(await hosted('/af/state.js'));
     // Each platform file is fetched once and then served from the preview's memory.
     const fetched=server.requests.filter(request=>request==='/af/apollo.js').length;
     await fetch(new URL('/af/apollo.js',preview.url));expect(server.requests.filter(request=>request==='/af/apollo.js').length).toBe(fetched);

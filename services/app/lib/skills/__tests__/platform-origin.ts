@@ -9,12 +9,13 @@ import {GET as reader} from '@/app/af/reader.js/route';
 import {GET as chrome} from '@/app/af/chrome.js/route';
 import {GET as portable} from '@/app/af/portable.js/route';
 import {GET as morph} from '@/app/af/morph.js/route';
+import {GET as state} from '@/app/af/state.js/route';
 import {GET as styles} from '@/app/af/styles.css/route';
 import {GET as importMap} from '@/app/af/import-map.json/route';
 import {GET as font} from '@/app/af/fonts/[name]/route';
 import {GET as component} from '@/app/af/components/[file]/route';
 
-const modules:Record<string,(request:Request)=>Response|Promise<Response>>={'/af/core.js':core,'/af/apollo.js':apollo,'/af/reader.js':reader,'/af/chrome.js':chrome,'/af/portable.js':portable,'/af/morph.js':morph,'/af/styles.css':styles,'/af/import-map.json':importMap};
+const modules:Record<string,(request:Request)=>Response|Promise<Response>>={'/af/core.js':core,'/af/apollo.js':apollo,'/af/reader.js':reader,'/af/chrome.js':chrome,'/af/portable.js':portable,'/af/morph.js':morph,'/af/state.js':state,'/af/styles.css':styles,'/af/import-map.json':importMap};
 
 export async function platformOrigin():Promise<RunningServer&{requests:string[]}>{
  const requests:string[]=[];

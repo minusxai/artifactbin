@@ -53,5 +53,10 @@
     "package": "highlight.js",
     "version": "11.12.0",
     "entry": "highlight.js"
+  },
+  "zustand": {
+    "package": "zustand",
+    "version": "5.1.0",
+    "entry": "zustand.js"
   }
 }

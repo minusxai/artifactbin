@@ -57,7 +57,7 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
   const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row);
-  const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab}:{})};
+  const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
@@ -100,8 +100,8 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
  return publicRevalidatedResponse(request,await htmlCore(),JS);
 }
 
-/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/regions.js, /af/collab.js), always this build's bytes. */
-export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions'|'collab';
+/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/regions.js, /af/collab.js, /af/state.js), always this build's bytes. */
+export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions'|'collab'|'state';
 export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
  const source=(await htmlAssets())[module];
  if(!source)return new Response('Not found',{status:404});

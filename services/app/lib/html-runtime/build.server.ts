@@ -1,5 +1,5 @@
 import {buildPortableChrome} from './build-portable-chrome.server';
-import {build} from 'esbuild';
+import {build,type PluginBuild} from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -19,7 +19,12 @@ export async function buildHtmlCore():Promise<string>{return (await buildHtmlAss
 async function compile():Promise<HtmlRuntimeAssets>{
  const options={bundle:true,minify:true,write:false,platform:'browser' as const,target:'es2022'};
  const reader=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-reader.ts',import.meta.url))],format:'esm',external:['@afbin/chrome','@afbin/portable','@afbin/morph','@afbin/regions'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
- const author=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-client.ts',import.meta.url))],format:'esm',plugins:[{name:'shared-reader',setup(builder){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}}]});
+ // `@afbin/state` owns the page's one local-state document; `@afbin/apollo` imports it rather than carrying a second copy.
+ const sharedState={name:'shared-state',setup(builder:PluginBuild){builder.onResolve({filter:/^\.\/browser-state$/},()=>({path:'@afbin/state',external:true}));}};
+ const sharedReader={name:'shared-reader',setup(builder:PluginBuild){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}};
+ const author=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-client.ts',import.meta.url))],format:'esm',plugins:[sharedReader,sharedState]});
+ // Zustand and the viewer's document (./browser-state): loaded only when a page imports `@afbin/state` or `@afbin/apollo`.
+ const stateBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-state.ts',import.meta.url))],format:'esm',plugins:[sharedReader]});
  const readerSource=reader.outputFiles?.[0]?.text,apollo=author.outputFiles?.[0]?.text;
  if(!readerSource||!apollo)throw Error('HTML runtime build produced no module');
  const portableBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./portable-session.ts',import.meta.url))],format:'esm',external:['@afbin/chrome']});
@@ -36,14 +41,14 @@ async function compile():Promise<HtmlRuntimeAssets>{
   }));},
  }]});
  // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
- const collabBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./collab.ts',import.meta.url))],format:'esm',plugins:[{name:'shared-reader',setup(builder){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}}]});
+ const collabBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./collab.ts',import.meta.url))],format:'esm',plugins:[sharedReader]});
  const chrome=await buildPortableChrome();
  // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
  // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
- const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text};
+ const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
- const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,collabPath}=RUNTIME_MODULE_PATHS;
+ const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door.ts',import.meta.url)))};
 import {installFunctionFetch} from ${JSON.stringify(fileURLToPath(new URL('./fn-fetch.ts',import.meta.url)))};
@@ -64,6 +69,8 @@ const reader=portableReader?blob(JSON.parse(portableReader.textContent)):new URL
 const portable=document.querySelector('[data-af="apollo"]');
 if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!portable)throw Error('Portable HTML is missing its author module');
 const apollo=portable?blob(JSON.parse(portable.textContent)):new URL(${JSON.stringify(apolloPath)},document.currentScript.src||location.href).href;
+const stateBlock=document.querySelector('[data-af="state-module"]');
+const state=stateBlock?blob(JSON.parse(stateBlock.textContent)):new URL(${JSON.stringify(statePath)},document.currentScript.src||location.href).href;
 const engineBlock=document.querySelector('[data-af="portable-engine"]');
 const portableEngine=engineBlock?blob(JSON.parse(engineBlock.textContent)):new URL(${JSON.stringify(portableEnginePath)},document.currentScript.src||location.href).href;
 const chromeBlock=document.querySelector('[data-af="chrome"]');
@@ -80,12 +87,12 @@ const sharedBlock=config.offline?document.querySelector('[data-af="offline-modul
 const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
 if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
 const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/(?:libraries\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|af\\/components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,document.currentScript.src||location.href).href;
-const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
+const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/state':state,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
 // fetch('/fn/<name>') calls the page's backend function through the reader (./fn-fetch), before any author script runs.
 installFunctionFetch(window,()=>import(reader));
 if(config.offline&&window.parent===window){void import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin)).catch(()=>document.documentElement.setAttribute('data-af-connection','unavailable'));}
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,collab:guarded.collab,collabPath};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,collab:guarded.collab,collabPath,state:guarded.state,statePath};
 }

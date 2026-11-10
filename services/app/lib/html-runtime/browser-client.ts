@@ -1,9 +1,4 @@
-import {commentViewDeclaration,createHtmlCommentView} from './comment-view';
-import {installHtmlCommentView} from '../html-bridge/comment-view-session';
 import {createClient,gql} from './apollo/graphql-compat';
-import {readStateFragment} from './apollo/state-url';
-import {createViewerState} from './viewer-state';
-import type {StoreReceipt} from './apollo/apollo-contracts';
 import {config,remote,onResolverChange} from './browser-reader';
 import {createSql,SqlError} from './apollo/sql';
 import {RemoteUnreachable} from './apollo/apollo-contracts';
@@ -11,18 +6,6 @@ export {startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadC
 // Names live pages still call (onResolverChange's old name); isolated with their deletion rule in legacy-page-names.
 export * from './legacy-page-names';
 export {gql};
-// A raw authored file may place its state block after the blocking core script.
-// Read defaults only when the author first imports the client, after that block is parsed.
-let initial=config.initialState;
-if(!initial){try{initial=JSON.parse(document.querySelector('[data-af="state"]')?.textContent||'{}')}catch{initial={}}}
-const key = `af:viewer:${config.pageId}`;
-const carried = readStateFragment(location.hash);
-const state = createViewerState({
-  initial: carried.state ?? initial ?? {}, replaceInitial: !!carried.state,
-  storage: { read: () => localStorage.getItem(key), write: (json) => localStorage.setItem(key, json) },
-  observe(listener) { const changed = (event: StorageEvent) => { if (event.key === key) listener(); }; addEventListener('storage', changed); return () => removeEventListener('storage', changed); },
-  ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => Promise.resolve(navigator.locks.request(key, work)) } : {}),
-});
 /** One statement over the page's dataset links as the reader (./apollo/sql): `${…}` values are always bound parameters. */
 /**
  * `sql` (./apollo/sql) reaches the page SQL door through the reader's ONE request relay, the one GraphQL uses
@@ -37,14 +20,11 @@ export const sql=createSql({
   subscribe:(listener)=>{const subscription=onResolverChange((names,reason)=>listener(reason==='authority'?undefined:names));return()=>subscription.unsubscribe();},
 });
 export {SqlError} from './apollo/sql';
+// The page's one local-state document is @afbin/state's (./browser-state); `gql` local fields read and write it. Loaded
+// dynamically, never as a static import: a page whose core predates @afbin/state has no import-map entry for it, and a
+// static import would fail to link before this module's skew guard (build.server) could reload the page.
+const {statePort:state}=await import('./browser-state');
 export const client=createClient({backends:()=>config.backends??[],datasets:()=>config.datasets??[],state,remote});
-
-// Saved comment views: the authored state block's fields (lib/html-runtime/comment-view). An invalid list saves nothing.
-const viewBlock=document.querySelector('[data-af="state"]');
-try {
- const declaration=viewBlock ? commentViewDeclaration({initial:initial??{},attribute:name=>viewBlock.getAttribute(name)},config.backends??[]) : undefined;
- installHtmlCommentView(document,declaration&&createHtmlCommentView({state,backends:config.backends??[],declaration}));
-}catch { installHtmlCommentView(document,{capture(){throw new Error('Invalid comment view declaration');},async restore(){throw new Error('Invalid comment view declaration');}}); }
 
 /** Read only for an explicit local Save action; this private document is never uploaded automatically. */
 export const readViewerDocument=()=>state.read();

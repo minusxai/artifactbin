@@ -18,6 +18,7 @@
  *          missing-asset        a relative local reference with no file behind it (checked only when `exists` is given)
  *  WARNED  duplicate-id         two elements with one HTML id
  *          comment-view         a state block's data-af-comment-fields/-exclude/-version the runtime would refuse (no view saved)
+ *          state-version        a state block's data-af-state-version the runtime would ignore (saved state never resets)
  *          pwa-metadata         an install setting publish would silently ignore
  *
  * IDs are never assigned here: the server's identity ledger owns them (lib/html-page canonicalizeHtmlPage); dropping
@@ -31,10 +32,11 @@ import {applyEdits,atHeadStart,attribute,parseSource,type Element} from '../html
 import {repairCoreScript} from '../html-page/index.ts';
 import {normalizeDesignSelection} from '../html-page/design-system.ts';
 import {parseCommentViewFieldList} from '../../../contracts/src/comment-view-state.ts';
+import {STATE_VERSION_ATTRIBUTE,isStateVersion} from '../../../contracts/src/state-version.ts';
 initSync();
 
 type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link' | 'duplicate-data-af-id';
-type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata' | 'comment-view';
+type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata' | 'comment-view' | 'state-version';
 interface AutofixLine { line: number; text: string }
 interface AutofixFix { rule: AutofixRule; reason: string; before: AutofixLine[]; after: AutofixLine[] }
 interface AutofixProblem { rule: AutofixProblemRule; line: number; column: number; snippet: string; message: string }
@@ -116,7 +118,7 @@ export function autofixHtml(input: string, options: AutofixOptions = {}): Autofi
   if (handWritten) routine.push(`dropped ${handWritten} hand-written data-af-id (the platform assigns them)`);
 
   for (const fix of pending) fixes.push({ rule: fix.rule, reason: fix.reason, before: fix.before, after: fix.inserted.filter(Boolean).map((text) => placed(html, text)) });
-  const found = findProblems(html, options), warned = new Set<AutofixProblemRule>(['duplicate-id', 'pwa-metadata', 'comment-view']);
+  const found = findProblems(html, options), warned = new Set<AutofixProblemRule>(['duplicate-id', 'pwa-metadata', 'comment-view', 'state-version']);
   return { html, changed: html !== input, fixes, problems: found.filter((problem) => !warned.has(problem.rule)), warnings: found.filter((problem) => warned.has(problem.rule)), routine };
 }
 
@@ -193,6 +195,9 @@ function findProblems(html: string, options: AutofixOptions = {}): AutofixProble
     }
     const version = attribute(element, 'data-af-comment-version');
     if (version !== null && (!version || version.length > 128)) report('data-af-comment-version must be 1-128 characters, or removed');
+    // The page state version (lib/html-runtime/viewer-overrides): an invalid one is ignored, so no viewer's saved state resets.
+    const stateVersion = attribute(element, STATE_VERSION_ATTRIBUTE);
+    if (stateVersion !== null && !isStateVersion(stateVersion)) problems.push({ rule: 'state-version', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `${STATE_VERSION_ATTRIBUTE} must be 1-64 letters, digits, '.', '_' or '-'; it is ignored, so changing it would not reset viewers' saved state` });
   }
 
   if (options.exists) {
