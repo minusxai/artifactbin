@@ -7,6 +7,7 @@
   "scripts/__tests__/gate-waits.test.mjs",
   "scripts/__tests__/html-author-skill.test.mjs",
   "scripts/__tests__/images.test.mjs",
+  "scripts/__tests__/integration-admission.test.mjs",
   "scripts/__tests__/markdown-policy.test.mjs",
   "scripts/__tests__/merge-admission.test.mjs",
   "scripts/__tests__/page-speed-lab.test.mjs",

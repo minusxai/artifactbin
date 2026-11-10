@@ -148,6 +148,9 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
+          // These cases launch whole server processes. File workers already provide parallelism;
+          // concurrent cases must not multiply three workers into seven cold server boots.
+          maxConcurrency: 1,
           environment: 'node',
           include: [
             ...CHROMIUM_TESTS,
