@@ -5,7 +5,7 @@
  *
  *   node scripts/ci/test-timings.mjs --run <ci run id>   # reads that run's logs with gh
  *   node scripts/ci/test-timings.mjs <log file> ...      # or saved job logs
- *   node scripts/ci/test-timings.mjs --sums              # print each shard's packed load from the table
+ *   node scripts/ci/test-timings.mjs --sums              # print each shard's packed load and predicted wall
  *
  * Files a log does not mention keep their recorded time. No shard carries work outside Vitest (the integration
  * project is a job of its own), so the table holds file times and nothing else.
@@ -13,7 +13,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { pack, readTimings, weigher } from '../lib/timed-sequencer.mjs';
+import { CI_RUNNER, pack, readTimings, shardWall, weigher } from '../lib/timed-sequencer.mjs';
 
 const OUT = path.resolve(import.meta.dirname, 'test-timings.json');
 /** The Vitest projects CI runs with `--shard` (ci.yml's api, ui and node jobs; pr-fast.yml's suite shards). */
@@ -55,19 +55,26 @@ export function mergeTimings(timings, measured) {
   return { ...timings, files };
 }
 
-/** Each job's shards as the sequencer packs every recorded file: [{ files, ms }] per shard. */
+/**
+ * Each job's shards as the sequencer packs every recorded file (by predicted wall, on the CI runner): per shard its file
+ * count, summed weight and predicted Vitest wall (`shardWall`; Vitest's own start and teardown are outside it).
+ * @returns {Record<string, { files: number, ms: number, wallMs: number }[]>}
+ */
 export function shardLoads(timings) {
   const weigh = weigher(timings);
   return Object.fromEntries(Object.entries(JOBS).map(([job, { projects, count }]) => {
-    const items = projects.flatMap((project) => Object.keys(timings.files[project] ?? {}).map((file) => ({ key: `${project}:${file}`, weight: weigh(project, file) })));
-    const weights = new Map(items.map((item) => [item.key, item.weight]));
-    return [job, pack(items, count).map((keys) => ({ files: keys.length, ms: keys.reduce((sum, key) => sum + weights.get(key), 0) }))];
+    const items = projects.flatMap((project) => Object.keys(timings.files[project] ?? {}).map((file) => ({ key: `${project}:${file}`, weight: weigh(project, file), project })));
+    const byKey = new Map(items.map((item) => [item.key, item]));
+    return [job, pack(items, count, CI_RUNNER).map((keys) => {
+      const shard = keys.map((key) => byKey.get(key));
+      return { files: keys.length, ms: shard.reduce((sum, item) => sum + item.weight, 0), wallMs: shardWall(shard) };
+    })];
   }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--sums') {
   for (const [job, shards] of Object.entries(shardLoads(readTimings(OUT)))) {
-    console.log(`${job}: ${shards.map(({ files, ms }, i) => `${i + 1}/${shards.length} ${(ms / 1000).toFixed(1)}s (${files} files)`).join(', ')}`);
+    console.log(`${job}: ${shards.map(({ files, ms, wallMs }, i) => `${i + 1}/${shards.length} ${(ms / 1000).toFixed(1)}s, wall ${(wallMs / 1000).toFixed(1)}s (${files} files)`).join(', ')}`);
   }
 } else if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
