@@ -3,7 +3,7 @@
  * FeatureCollection becomes one row per feature — its properties as columns, its
  * geometry as a JSON string in the `geometry` column — and is queried, joined
  * and filtered like any other rows. `<DeckGL>`'s GeoJsonLayer reads that column
- * back (lib/jsx/deck-spec GEOMETRY_COLUMN). Pure: the CLI ingests with it.
+ * back (lib/html-component-specs deck-spec GEOMETRY_COLUMN). Pure: the CLI ingests with it.
  */
 import { GEOMETRY_COLUMN } from '@/lib/html-component-specs/deck-spec';
 
