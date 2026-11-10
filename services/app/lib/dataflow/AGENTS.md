@@ -1,25 +1,22 @@
 # The data language
 
-`lib/dataflow` turns a document's `<Helmet>` declarations into a `CompiledDataflow` and answers every
-pure question about one: reference syntax (`$name`, `ref:`), built-ins, placement, mutation requests,
-URL values, reference data and the publish-time reference checks. Both realms use it: the server,
-the islands and the story runtime.
+`lib/dataflow` holds the pure half of a page's data: the `CompiledDataflow` record and the questions asked of
+it, built-ins, stored-flow evaluation over a SQL engine, number formats, URL values and the `$name` SQL lexer.
+It owns no database, access check or HTTP; those stay with its callers.
 
-- It sits below the recorded cycle and imports only itself, `lib/jsx`, `lib/validation` (types),
-  `@artifactbin/contracts`, `@artifactbin/utils` and `@artifactbin/sql`. `npm run validate` fails
-  any edge back into the cycle; move the shared code down or invert the dependency instead.
-- Three entries, the whole outside interface (`DEEP_MODULES` in `scripts/ci/module-graph.mjs` refuses
-  any other path): `index.ts` (browser-safe), `references.ts` (reference uses, read with the JSX
-  parser, kept out of the index so the islands never load it) and `server.ts` (the compiler, the
-  publish checks, node-only). Re-export only names something outside imports.
-- VALUE imports in the browser bundles' graphs (islands, app shell, offline) name a leaf
-  (`DATAFLOW_BROWSER_LEAVES`): a barrel import keeps every re-exported file (row 40.1: esbuild islands
-  +3.5 to +9.2 KB raw per kit, `sideEffects: false` did not help; rolldown app shell +10.3 KB before the
-  document frame). Types come from the index.
-- The compiler never reads process state. Its caller passes the composition's SQL extensions
-  (`prepareCompile`/`compileWithLoader` `{ extensions }`, the server's `sqlExtensions()`); without
-  them a `<Mutation>` calling one is refused.
-- `ResolvedRef` carries what the reference checks read. The dataset catalog that only the server's
-  publish checks need rides on `ServerRef` in `lib/datasets/schema-loader.ts`, so this module never
-  depends on `lib/datasets`. `DatasetColumn` is defined once, in `dataset-shape.ts`.
-- The `$name` lexer (`sql-parameters.ts`) lives here; `lib/datasets/sql` binds with it.
+## Rules
+- Two entries: the index (browser-safe) and `server.ts` (the SQL lexing helpers). Re-export from them only
+  what something outside imports; knip refuses unused exports.
+- Browser-bundled code imports VALUES from a leaf in `DATAFLOW_BROWSER_LEAVES` (`number-format`, `url-values`),
+  never the index: a barrel import keeps every re-exported file in the bundle. Types come from the index. A
+  new leaf or importer is a reviewed edit to the `lib/dataflow` row in `scripts/ci/module-graph.mjs`.
+- Import only `@artifactbin/contracts`, `@artifactbin/utils/shape` and `d3-format`. Take utils by subpath,
+  never its root: the root reaches `node:http`, which breaks the reader build.
+- Evaluation is pure over what the caller passes: `evaluateDataflow` takes the engine, the imports' rows and an
+  optional `sourceQuery` for connected databases. Never read process state, settings or the database here.
+- Number formats are author input: `numberFormatter` never throws on a bad spec, so neither publish nor
+  rendering can fail on one.
+
+## Checks
+- `npm test -- --files services/app/lib/dataflow/__tests__/interface-vocabulary.test.ts services/app/lib/dataflow/__tests__/interface-server.test.ts services/app/lib/dataflow/__tests__/compiled-flow.test.ts services/app/lib/dataflow/__tests__/number-format.test.ts services/app/lib/dataflow/__tests__/cell-value.test.ts`
+- `npm run validate` after any import change (module graph and knip).
