@@ -290,9 +290,9 @@ export function DatasetEditorPage({
   const saveDataset = () => void run("save", async () => {
     const savedTitle = title().trim();
     if (!savedTitle) throw new Error("Enter a dataset title.");
-    const dataset = serializeDatasetDefinition(buildCatalog());
+    const dataset = buildCatalog();
     setTitle(savedTitle);
-    const metadataOnly = Boolean(id && dataset === originalDefinition.current);
+    const metadataOnly = Boolean(id && serializeDatasetDefinition(dataset) === originalDefinition.current);
     const data = await apiRequest<{
       id: string;
     }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : "/api/my/artifacts", metadataOnly ? "PATCH" : id ? "PUT" : "POST", metadataOnly ? {
@@ -503,7 +503,7 @@ export function DatasetEditorPage({
             <div hidden={section() !== "source"} class="mx-auto mt-6 max-w-4xl space-y-6">
               <Panel padding="none" class="overflow-hidden"><Disclosure inset summary={<>
                   <span class="text-sm font-semibold text-fg">Advanced</span>
-                  <span class="text-xs font-normal text-muted">default schema · source markup</span>
+                  <span class="text-xs font-normal text-muted">default schema · source JSON</span>
                 </>}>
                 <div class="space-y-5 border-t border-edge p-4 sm:p-5">
                   <fieldset disabled={Boolean(busy()) || sourceText() !== null} class="grid gap-4 sm:grid-cols-2">
@@ -521,13 +521,13 @@ export function DatasetEditorPage({
                     setError(err instanceof Error ? err.message : "Could not show source.");
                   }
                 }}>
-                    Edit source markup
+                    Edit source JSON
                   </Button> : <div class="space-y-3">
-                    <Field label="Dataset source markup">
+                    <Field label="Dataset source JSON">
                       <Textarea size="sm" rows={12} aria-label="Dataset source" spellcheck={false} class="resize-y" value={sourceText() ?? ""} onInput={e => setSourceText(e.target.value)} />
                     </Field>
                     <p class="text-xs text-muted">
-                      Apply markup to update the visual editor.
+                      The definition as JSON: "kind", "defaultSchema" and "tables", each with "schema", "name" and its "columns", "rows" or "sql". Apply it to update the visual editor.
                     </p>
                     <div class="flex gap-2">
                       <Button aria-label="Apply dataset source" onClick={() => {

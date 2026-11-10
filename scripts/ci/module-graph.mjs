@@ -183,8 +183,6 @@ const BUNDLED_LEAVES = {
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',
   ],
-  'lib/jsx': [
-    ],
   'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
   'lib/markdown': ['content'],
   'lib/mermaid-images': ['reader-draw'],

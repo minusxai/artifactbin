@@ -54,7 +54,6 @@
     "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",
     "acorn": "8.18.0",
-    "acorn-jsx": "5.3.2",
     "babel-preset-solid": "1.9.15",
     "css-tree": "3.2.1",
     "d3-format": "3.1.2",

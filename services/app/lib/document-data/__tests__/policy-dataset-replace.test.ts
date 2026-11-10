@@ -89,11 +89,9 @@ it('accepts a stored table with declared columns and no rows, and still refuses 
  * fills in later publishes EMPTY with its shape declared, instead of being seeded
  * with a fake row to get past the refusal.
  */
-it('publishes a stored <Dataset> whose table declares columns and starts with no rows', async () => {
+it('publishes a stored dataset whose table declares columns and starts with no rows', async () => {
   const author = await mintToken('empty-table-author');
-  const definition = `<Dataset kind="stored">
-  <Table schema="public" name="rows" columns={[{"name":"name","type":"string"},{"name":"joined_on","type":"date"}]} rows={[]} />
-</Dataset>`;
+  const definition = JSON.stringify({ kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }], rows: [] }] });
   const created = await create(request('/api/artifacts', { method: 'POST', token: author.token, json: { dataset: definition, access: 'readwrite' } }));
   expect(created.status, await created.clone().text()).toBe(201);
   const row = (await getArtifactById((await created.json()).id as string))!;
@@ -105,9 +103,7 @@ it('publishes a stored <Dataset> whose table declares columns and starts with no
 /** A bare column NAME has nothing to infer from in an empty table, so it is text. */
 it('names the columns a stored table declares with bare names when it starts empty', async () => {
   const author = await mintToken('empty-named-author');
-  const definition = `<Dataset kind="stored">
-  <Table schema="public" name="rows" columns={["name","note"]} rows={[]} />
-</Dataset>`;
+  const definition = { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: ['name', 'note'], rows: [] }] };
   const created = await create(request('/api/artifacts', { method: 'POST', token: author.token, json: { dataset: definition } }));
   expect(created.status, await created.clone().text()).toBe(201);
   const row = (await getArtifactById((await created.json()).id as string))!;

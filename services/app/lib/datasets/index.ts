@@ -3,7 +3,7 @@ export { catalogOf, importedRows, importedTables, prepareCatalog, publicCatalogO
 export { publishDataset, publishImage, publishPdf, publishVizRecipe, storeImageContent, storePdfContent } from './data-tiers';
 export { loadDatasetRows, storeDatasetRows, storedRowCount } from './dataset-store';
 export { datasetCreateFields } from './dataset-usage';
-export { parseDatasetDefinition, serializeDatasetDefinition } from './definition';
+export { serializeDatasetDefinition } from './definition';
 export { executeDocumentQueries } from './document-queries';
 export type { DocumentQuerySourceMode } from './document-queries';
 export { DatasetError } from './errors';
@@ -18,7 +18,7 @@ export type { ServerRefLoader } from './asset-reference';
 export type {
   CatalogInput, CatalogRowView, DatasetCatalog, DatasetTable,
 } from './types';
-export { people, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
+export { people, resolveDefinitionScope, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
 export { graphqlRootNameProblem } from './graphql-names';
 
 export { selectSqlLinks } from './sql-links';

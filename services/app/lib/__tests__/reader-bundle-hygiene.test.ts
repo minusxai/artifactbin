@@ -191,7 +191,7 @@ const ROUTE_ENTRIES = ['solid/main.tsx', 'solid/pages/Document.tsx', 'solid/page
  * reader never parses CSS.
  */
 const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'unified', 'remark-parse', 'remark-gfm', 'lexical', 'typebox', 'css-tree', 'source-map-js', ...FORBIDDEN];
-const ROUTE_FORBIDDEN_FILES = ['solid/editor/InPlaceEditor.tsx', 'solid/document/SocialPreviewEditor.tsx', 'lib/jsx/parse.ts'];
+const ROUTE_FORBIDDEN_FILES = ['solid/editor/InPlaceEditor.tsx', 'solid/document/SocialPreviewEditor.tsx'];
 
 describe('reader route bundle hygiene', () => {
   const reach = walk(ROUTE_ENTRIES);

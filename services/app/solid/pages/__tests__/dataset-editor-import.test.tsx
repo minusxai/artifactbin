@@ -84,9 +84,9 @@ it('prevents saving during import and preserves the draft after a failed sheet i
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
-it('preserves declared stored column types when source markup is applied and saved', async () => {
+it('preserves declared stored column types when source JSON is applied and saved', async () => {
   editor(); change('Dataset title', 'Typed quantities'); click('Edit dataset source');
-  change('Dataset source', '<Dataset kind="stored"><Table schema="public" name="quantities" columns={[{"name":"quantity","type":"number"}]} rows={[{"quantity":3}]} /></Dataset>');
+  change('Dataset source', JSON.stringify({ kind: 'stored', tables: [{ schema: 'public', name: 'quantities', columns: [{ name: 'quantity', type: 'number' }], rows: [{ quantity: 3 }] }] }));
   click('Apply dataset source'); click('Save dataset');
   await waitFor(() => expect(savedDefinition()?.tables[0]).toEqual(expect.objectContaining({columns:[{name:'quantity',type:'number'}], rows:[{quantity:3}]})));
 });
@@ -115,7 +115,7 @@ it('keeps explicit empty table columns and a rejected typed draft for correction
     return fallback(url, init);
   }));
   editor(); change('Dataset title', 'Typed quantities'); click('Edit dataset source');
-  change('Dataset source', '<Dataset kind="stored"><Table schema="public" name="quantities" columns={[{"name":"quantity","type":"number"}]} rows={[{"quantity":"invalid"}]} /><Table schema="public" name="empty" columns={["name"]} rows={[]} /></Dataset>');
+  change('Dataset source', JSON.stringify({ kind: 'stored', tables: [{ schema: 'public', name: 'quantities', columns: [{ name: 'quantity', type: 'number' }], rows: [{ quantity: 'invalid' }] }, { schema: 'public', name: 'empty', columns: ['name'], rows: [] }] }));
   click('Apply dataset source'); click('Save dataset');
   await waitFor(() => expect(savedDefinition()?.tables[0]?.columns).toEqual([{ name: 'quantity', type: 'number' }]));
   expect(await screen.findByRole('alert')).toHaveTextContent('Column quantity expects a number.');
@@ -124,6 +124,17 @@ it('keeps explicit empty table columns and a rejected typed draft for correction
   change('Stored rows 1', '[{"quantity":3}]'); click('Save dataset');
   await waitFor(() => expect(state.calls.filter(c => c.url === '/api/my/artifacts')).toHaveLength(2));
   const retry = state.calls.filter(c => c.url === '/api/my/artifacts')[1];
-  expect(retry.body.dataset).toContain('"type":"number"');
-  expect(retry.body.dataset).toContain('"quantity":3');
+  expect(retry.body.dataset.tables[0]).toEqual({ schema: 'public', name: 'quantities', columns: [{ name: 'quantity', type: 'number' }], rows: [{ quantity: 3 }] });
+});
+
+it('shows the loaded definition as JSON and refuses the retired markup on apply', async () => {
+  editor(true);
+  await screen.findByLabelText('Stored rows 1');
+  click('Edit dataset source');
+  expect(screen.getByText('Dataset source JSON')).toBeInTheDocument();
+  expect(JSON.parse((screen.getByLabelText('Dataset source') as HTMLTextAreaElement).value)).toEqual({ kind: 'stored', defaultSchema: 'sales', tables: [{ schema: 'sales', name: 'orders', columns: [{ name: 'id', type: 'number' }] }] });
+  change('Dataset source', '<Dataset kind="stored"><Table schema="sales" name="orders" /></Dataset>');
+  click('Apply dataset source');
+  expect(await screen.findByRole('alert')).toHaveTextContent('the definition is JSON');
+  expect(screen.getByLabelText('Dataset source')).toBeInTheDocument();
 });

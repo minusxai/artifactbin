@@ -7,9 +7,9 @@
  *
  * The check reads every string and template literal of non-test source with the TypeScript parser (so a
  * comment that quotes a statement is not one) and refuses an `UPDATE`, `INSERT INTO` or `DELETE FROM` naming
- * an owned table outside its owner. IMPORTERS lists the code that recreates or erases whole rows on purpose:
- * test-user erasure and the test
- * fixtures package.
+ * an owned table outside its owner. IMPORTERS lists the code that recreates, erases or rewrites whole rows on purpose:
+ * test-user erasure, the test fixtures package and the boot rewrite of stored dataset definitions, which runs
+ * inside lib/platform's database open, below lib/artifacts.
  *
  *   node scripts/ci/table-ownership.mjs [--root <dir>]
  */
@@ -29,6 +29,7 @@ const OWNERS = {
 /** Path prefixes (ending in `/`) or exact files allowed to write any owned table. */
 const IMPORTERS = [
   'services/app/lib/operations/testuser-erase.ts',
+  'services/app/lib/platform/dataset-definitions.ts',
   'services/test-support/',
 ];
 

@@ -12,7 +12,7 @@ export function notificationDemoDataset({assignee, nonmember, pending, left, out
   {id:6,title:'Former member',status:'Todo',assignee:left},
   {id:7,title:'Restricted recipient',status:'Todo',assignee:outsider},
  ];
- return `<Dataset kind="stored"><Table schema="public" name="rows" columns={${JSON.stringify(columns)}} rows={${JSON.stringify(rows)}} /></Dataset>\n`;
+ return `${JSON.stringify({kind:'stored',tables:[{schema:'public',name:'rows',columns,rows}]},null,2)}\n`;
 }
 export function notificationDemoDocument(datasetId) {
  if(!/^[a-zA-Z0-9_-]+$/.test(datasetId))throw new Error('Expected an artifact ID');

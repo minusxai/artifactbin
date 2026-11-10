@@ -1,5 +1,6 @@
 import { JOIN_RELATIONS } from '@/lib/social';
-import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
+import {serializeDatasetDefinition} from './definition';
+import type {CatalogInput} from './types';
 import type {DatasetColumn, PersonCard, Queryable, Row, UserOption} from '@artifactbin/contracts';
 import { avatarUrl } from '@/lib/avatars';
 import {DatasetError} from './errors';
@@ -73,16 +74,23 @@ export function resolveUserColumnScope(columns:DatasetColumn[],scope:string):Dat
  return columns.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${scope}`:ref))]}}:c);
 }
 
+/**
+ * The stored definition (a dataset's JSON source) with its user columns' `current` scope resolved, as
+ * the catalog's are. A row without a definition source (rows-only datasets) keeps what it has. The text
+ * was validated when it was written, so it is read as it is, not re-validated.
+ */
+export function resolveDefinitionScope(source:string|null|undefined,scope:string):string|null|undefined {
+ if(typeof source!=='string'||!source)return source;
+ const definition=JSON.parse(source) as CatalogInput;
+ return serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:resolveUserColumnScope([c],scope)[0]!)}))});
+}
+
 /** A schema round-trip must not turn a frozen current scope back into a wildcard. */
 export function retainUserScope<T extends {meta:Record<string,unknown>;source?:string|null}>(input:T,previous:{meta:Record<string,unknown>}):T {
  const scope=previous.meta.userScopeDocument;
  if(typeof scope!=='string')return input;
  const resolve=(columns:DatasetColumn[])=>resolveUserColumnScope(columns,scope);
  const catalog=input.meta.catalog as {tables:Array<{columns:DatasetColumn[]}>}|undefined;
- let source=input.source;
- if(catalog&&source?.trimStart().startsWith('<Dataset')) {
-  const definition=parseDatasetDefinition(source);
-  source=serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:resolve([c])[0]!)}))});
- }
+ const source=catalog?resolveDefinitionScope(input.source,scope):input.source;
  return {...input,...(source!==undefined?{source}:{}),meta:{...input.meta,userScopeDocument:scope,...(Array.isArray(input.meta.columns)?{columns:resolve(input.meta.columns as DatasetColumn[])}:{}),...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>({...t,columns:resolve(t.columns)}))}}:{})}};
 }
