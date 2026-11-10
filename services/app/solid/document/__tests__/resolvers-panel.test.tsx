@@ -76,6 +76,27 @@ it('shows the refusal code and the owner detail when the test fails', async () =
   expect(await panel.findByRole('alert')).toHaveTextContent('secret_unavailable: GOOGLE_SA is not set');
 });
 
+it('runs a function file\'s test function as GET /fn/test on the page revision, and shows a refusal\'s code, message and detail', async () => {
+  const calls: Array<{ url: string; headers: unknown }> = [];
+  let answer: { status: number; body: unknown } = { status: 200, body: 'Read 3 items' };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({ url, headers: init?.headers });
+    const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'sheets', backendId: 'b1', version: 'v1', test: true, functions: true, secrets: { GOOGLE_SA: 'sheets.googleapis.com' }, set: ['GOOGLE_SA'] }] });
+    if (url === '/api/artifacts/Abc123/fn/test') return reply(answer.body, answer.status);
+    return reply({ error: 'not_found' }, 404);
+  }));
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = await resolver();
+  fireEvent.click(panel.getByRole('button', { name: 'Test connection' }));
+  expect(await panel.findByText('Read 3 items')).toBeTruthy();
+  expect(calls.find(call => call.url.includes('/fn/'))).toEqual({ url: '/api/artifacts/Abc123/fn/test', headers: { 'x-page-revision': 'r7' } });
+  expect(calls.some(call => call.url.endsWith('/graphql'))).toBe(false);
+  answer = { status: 500, body: { error: 'backend_failed', message: 'The function failed', detail: 'secret_unavailable: GOOGLE_SA' } };
+  fireEvent.click(panel.getByRole('button', { name: 'Test connection' }));
+  expect(await panel.findByRole('alert')).toHaveTextContent('backend_failed: The function failed: secret_unavailable: GOOGLE_SA');
+});
+
 it('offers no Test connection when the resolver declares no test field', async () => {
   serve({ test: false });
   render(() => <ResolversPanel id="Abc123" />);

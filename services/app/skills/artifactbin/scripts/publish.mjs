@@ -15,7 +15,7 @@ Flags: --create publishes FILE as a new page, dataset or asset (a page without a
   (default: the source directory, or where its marker says it was published from); --manifest
   FILE JSON {"manifest":[paths]} of extra runtime-loaded files; --title; --visibility (new
   pages default to unlisted); --template read-only|own-rows|editors-only [--owner-column C] a
-  new dataset's permissions (prints readBack); --name NAME a new dataset's GraphQL root
+  new dataset's permissions (prints readBack); --name NAME a new dataset's name
   (default: the file's name, sales.csv → sales; fixed once created); --group HANDLE creates a
   new page in that group (you need editor access; it resolves GET /api/groups/HANDLE first); a
   destination that conflicts with the parent's owner is refused, and it never moves existing

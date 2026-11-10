@@ -5,7 +5,7 @@
  *   (horizontal|vertical), activation-mode (automatic|manual), loop (default on; "false" stops
  *   wrapping), variant (default|line, also per af-tabs-list), dir. Children: af-tabs-list,
  *   af-tabs-trigger value="a" (disabled skips it), af-tabs-content value="a".
- * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your Apollo value
+ * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your state value
  *   back for controlled use.
  * Examples:
  *   <af-tabs value="a"><af-tabs-list><af-tabs-trigger value="a">One</af-tabs-trigger>

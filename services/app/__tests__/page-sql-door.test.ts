@@ -272,6 +272,25 @@ it('concurrent read-modify-write statements never lose an update', async () => {
   expect((await stored(f.staff))[0]!.salary).toBe(16);
 });
 
+it('a capped insert (the tracker\'s limit) holds under concurrency: the count and the insert commit together', async () => {
+  const f = await fixture();
+  // examples/tracker.ts add: one statement, so a write that lost the head re-runs its count on the head that won.
+  const LIMIT = 5, capped = (name: string) => sql(f.page, f.owner,
+    'insert into staff (name, team) select $name, $team where (select count(*) from staff where team = $team) < $limit',
+    { name, team: 'red', limit: LIMIT });
+  const replies = await Promise.all(Array.from({ length: 8 }, (_, i) => capped('n' + i)));
+  // Each call either added its row, found the group full (affected 0), or was told to retry; never past the limit.
+  for (const reply of replies) expect([200, 409], JSON.stringify(reply.body)).toContain(reply.status);
+  const added = replies.filter((r) => r.status === 200).reduce((sum, r) => sum + (r.body.affected ?? 0), 0);
+  const red = (await stored(f.staff)).filter((row) => row.team === 'red');
+  expect(red.length).toBeLessThanOrEqual(LIMIT);
+  expect(red.length).toBe(1 + added);
+  // Once full, a further add changes nothing.
+  while ((await stored(f.staff)).filter((row) => row.team === 'red').length < LIMIT) expect((await capped('fill')).status).toBe(200);
+  expect((await capped('one more')).body.affected).toBe(0);
+  expect((await stored(f.staff)).filter((row) => row.team === 'red')).toHaveLength(LIMIT);
+});
+
 /* ------------------------------------------------------------------------------------------- GraphQL parity */
 
 it('parity: the same writes through GraphQL and SQL allow and deny alike and leave the same rows', async () => {

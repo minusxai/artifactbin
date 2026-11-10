@@ -1,24 +1,15 @@
-/** What this command does and how to use it; also printed by --help. */
-export const DESCRIPTION = `Read a page's or dataset's GraphQL schema or run a query or mutation.
-A page ID targets the page's linked datasets and backend namespaces; a dataset ID targets that
-dataset's generated API as your role sees it (the server says which the ID is).
+/** Older pages (gql) only; new pages use sql.mjs. What it does and how; also printed by --help. */
+export const DESCRIPTION = `Older pages only: GraphQL for pages published before sql.
+New pages read and write datasets with sql: use node scripts/sql.mjs (sql.mjs --help).
 Usage: node scripts/graphql.mjs schema ID|URL [--revision N]
        node scripts/graphql.mjs query|mutate ID|URL --document FILE [--operation NAME]
-         [--variables FILE] [--revision N] [--idempotency-key KEY (mutate on a dataset)]
-Flags: --document FILE (required for query/mutate); --operation NAME (required when the document
-  has several); --variables FILE a JSON object; --revision N a saved page revision (default:
-  current; pages only); --idempotency-key KEY replays a dataset mutation (default: a new key,
-  printed as idempotencyKey). Common: --server, --json, --help.
+         [--variables FILE] [--revision N] [--idempotency-key KEY]
+Flags: --document FILE, --operation NAME, --variables FILE, --revision N, --idempotency-key KEY
+  (a dataset mutation's replay key). Common: --server, --json, --help.
 Examples:
   node scripts/graphql.mjs schema ID
-  node scripts/graphql.mjs query ID --document q.graphql --variables vars.json
-Gotchas: the operation is validated against the SDL first; use schema for exact names. A dataset
-  schema also prints your role. query is safe to repeat; mutate can write data. Exit 5 means a
-  mutation outcome is unknown: reconcile by reading before any new write, or on a dataset repeat
-  the same mutation with its --idempotency-key (it applies at most once). Errors or
-  non-committed outcomes fail the command.
-Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
-  Results never contain credentials.`;
+Gotchas: exit 5 means a mutation's outcome is unknown: read before any new write.
+Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.`;
 
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';

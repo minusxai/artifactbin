@@ -2,7 +2,7 @@
  * Example: check.mjs steps for examples/csv-dashboard.html (a function body that receives page).
  * Usage: cp examples/csv-dashboard-steps.mjs steps.mjs (no edits needed: it reads DATA from the
  *   page); then node scripts/check.mjs index.html --steps steps.mjs
- * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through _sql),
+ * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through sql),
  *   then checks that every DATA chart drew marks (a map: its canvas or its unavailable note) and
  *   a table; when a chart has a filter it picks that chart's first table row, checks that another
  *   chart changed, then clears it and checks every chart is back; and that no [bracketed] starter

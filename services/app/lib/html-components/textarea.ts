@@ -5,7 +5,7 @@
  * Events: af-change (bubbles) with event.detail.value.
  * Examples:
  *   <af-textarea label="Notes" rows="4"></af-textarea>
- * Gotchas: reflect your Apollo value back for controlled use.
+ * Gotchas: reflect your state value back for controlled use.
  */
 import { registerComponent } from './register-component';
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract,

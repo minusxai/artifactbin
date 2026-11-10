@@ -3,7 +3,9 @@
 What one trivial resolver field (`ping: () => "pong"`) costs per call, by stage. The benchmark is
 [`scripts/resolver-latency.ts`](../scripts/resolver-latency.ts). It is never run by CI and nothing asserts a
 budget. It drives the real code unchanged: `createBackendInvoker` against `createRunner`, the runner behind
-`runnerHttp` and the signed `runnerClient`, and page GraphQL on the dev app.
+`runnerHttp` and the signed `runnerClient`, and page GraphQL on the dev app. A page now calls a function with
+`fetch('/fn/NAME')` (lib/page-doors `pageFunction`), which runs through the same `createBackendInvoker` and
+runner; the `app` rows below were measured through page GraphQL, the path older pages keep.
 
 ```sh
 npm run dev                                                    # only for --modes app
@@ -230,7 +232,7 @@ requests after 3 warm-ups; RSS is the process peak, sampled every 10 ms. The sta
 `services/app/lib/graphql-compat/__tests__/dataset-graphql-budget.test.ts`.
 
 The tables below are historical: their `2 roots (list + count)` and `count + sum + nodes` rows used the removed
-`<root>_aggregate` root. Counts and totals are now a page's read-only `_sql`; `--page-sql` measures it under
+`<root>_aggregate` root. Counts and totals are now SQL (a new page's `` sql`…` `` door; older pages' `_sql` field, on the same engine); `--page-sql` measures the latter under
 concurrent readers and live refetches (9,900 rows, 20 readers: warm 17 CPU ms/request against 18 for a 100-row
 list; a write then every reader refetching, 31 against 35).
 

@@ -18,11 +18,11 @@ Examples:
   node scripts/policy.mjs set DATASET_ID --file p.json
 Gotchas: only owners and editors read or set permissions. Rule roles are viewer (shared viewers),
   signed_in (signed-in link holders) and anonymous (signed-out link holders); each request matches
-  exactly one, so list every role a rule is for. Rules name source columns; get shows each
-  column's GraphQL field. configuration (the GraphQL names) is server-owned: leave it out or
-  unchanged. Run --dry-run first and read readBack: it says in plain words what each role can do.
-  A revision conflict means someone else changed the permissions or the dataset: get again,
-  reapply, set. Session values: X-Hasura-User-Id, X-Hasura-Page-Id, X-Hasura-Role.
+  exactly one, so list every role a rule is for. Rules name source columns (the names sql
+  reads). configuration is server-owned: leave it out or unchanged. Run --dry-run first and
+  read readBack: it says in plain words what each role can do. A revision conflict means
+  someone else changed the permissions or the dataset: get again, reapply, set. Session
+  values: X-Hasura-User-Id, X-Hasura-Page-Id, X-Hasura-Role.
 Exit: 0 ok; 1 failed; 2 invalid (policy errors are listed by JSON path); 3 auth/access;
   4 revision conflict; 5 unknown save outcome (get shows the revision; a repeated set at the old
   revision cannot apply twice). Results never contain credentials.`;

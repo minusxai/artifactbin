@@ -28,16 +28,15 @@ describe('one installable native HTML author skill',()=>{
   expect(packed).toContain('src="data:image/png;base64,AQID"');
   expect(packed).toContain('alt="Garden beds after the harvest"');
  });
- it('executes the documented namespace input mutation against the composed backend SDL',async()=>{
-  const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
-  const guide=publicGuideText('resolvers',BASE)!;
-  // The retired topic name is no longer served.
-  expect(publicGuideText('backends',BASE)).toBeNull();
-  const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
-  expect(query).toBeTruthy();
-  const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);
-  const response=await executePageOperation({schema,request:{query:query!,variables:{items:[{category:'Food',amount:200}]}},caller:{pageId:'PAGE12',subject:'test-user',role:'owner'},signal:new AbortController().signal,invoke:async call=>{expect(call.args.items).toEqual([{category:'Food',amount:200}]);return true;}});
-  expect(response.errors).toBeUndefined();expect(response.data).toEqual({budget:{save:true}});
+ it('publishes the documented function file as the platform reads it, and the page calls it with fetch',async()=>{
+  const {functionFileSurface}=await import('@/lib/page-operations');
+  const guide=publicGuideText('functions',BASE)!;
+  // The retired topic names are no longer served.
+  for(const topic of ['backends','resolvers'])expect(publicGuideText(topic,BASE)).toBeNull();
+  const file=guide.match(/```ts\n(export const secrets[\s\S]+?)```/)?.[1];
+  expect(file).toBeTruthy();
+  expect(await functionFileSurface(file!)).toEqual({functions:{deals:'anonymous',test:'owner',addNote:'signed_in'},schedule:null});
+  expect(guide).toContain("fetch('/fn/addNote',{method:'POST'");expect(guide).not.toMatch(/typeDefs|@auth|gql/);
  });
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
   const root=llmsText(BASE);
@@ -101,7 +100,7 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','sql','graphql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
    // The installed autofix runs standalone and edits only the selected file.
    const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
    expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);
@@ -125,7 +124,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(plan.dependencies.find(dep=>dep.path==='examples/deliveries.csv')).toMatchObject({kind:'dataset'});expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain("roles={add:'signed_in'}");expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });
@@ -135,7 +134,7 @@ describe('the shipped skill folder',()=>{
  it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
-  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/groups.md','references/live-docs.md','references/maps.md','references/permissions.md','references/resolvers.md','references/runtime.md']);
+  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/functions.md','references/groups.md','references/live-docs.md','references/maps.md','references/permissions.md','references/runtime.md']);
   // The design systems ship as self-documenting stylesheets, not guides.
   expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.

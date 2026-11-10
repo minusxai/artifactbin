@@ -3,19 +3,18 @@
  * Usage: import '@afbin/slide-deck';  (registers the tags; this .ts is the readable contract)
  * Props: index (zero-based; you own it); label (aria-label, default "Slide deck"); default-index
  *   (uncontrolled start); af-slide title (rail and aria label).
- * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your Apollo value back.
+ * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your state value back.
  * Examples:
  *   <script type="application/json" data-af="state">{"index":0}</script>
  *   <af-slide-deck index="0">
  *   <af-slide><h1>Review</h1></af-slide>
  *   <af-slide><h2>Next</h2></af-slide></af-slide-deck>
- *   import {client,gql} from "@afbin/apollo"; import "@afbin/slide-deck";
- *   const deck=document.querySelector("af-slide-deck"), q=gql`{index}`;
- *   const sub=client.watchQuery({query:q}).subscribe(({data})=>{
- *     if(deck.index!==data.index)deck.index=data.index;});
- *   deck.addEventListener("af-change",e=>client.updateQuery({query:q},
- *     s=>({...s,index:e.detail.value})));
- *   window.addEventListener("pagehide",()=>sub.unsubscribe(),{once:true});
+ *   import {state} from "@afbin/state"; import "@afbin/slide-deck";
+ *   const deck=document.querySelector("af-slide-deck");
+ *   const show=({index})=>{if(deck.index!==index)deck.index=index;};
+ *   show(state.getState());const stop=state.subscribe(show);
+ *   deck.addEventListener("af-change",e=>state.setState({index:e.detail.value}));
+ *   window.addEventListener("pagehide",stop,{once:true});
  * Gotchas: slides are not export-marked; a presentation deck starts from examples/deck.html.
  *   Slide IDs stay stable when reordered or edited. Check keyboard navigation and print layout
  *   in the actual page.

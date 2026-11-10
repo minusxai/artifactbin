@@ -2,7 +2,7 @@
  * Internal: what new-app.mjs's starters share (files copied without overwriting, a dataset
  * published once and reused through the ref: the kept page links it by, the page's placeholders
  * filled, the publish step) and the
- * --kind api starter whole (an HTTP API's items with shared notes, read by a resolver whose key
+ * --kind api starter whole (an HTTP API's items with shared notes, read by functions whose key
  * only the page owner sets). The tracker's trimming is toolbox-tracker.mjs.
  * Used by: new-app.mjs.
  */
@@ -60,7 +60,7 @@ export function fill(html, starter, {title, ids}) {
 }
 /** A DNS name a secret may be bound to: two labels or more, the last alphabetic (no IP). */
 const HOST_NAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;
-/** --url for --kind api: an HTTPS address on port 443 at a host name, which a resolver may fetch
+/** --url for --kind api: an HTTPS address on port 443 at a host name, which a function may fetch
  * with a secret. */
 export function apiUrl(raw) {
   if (raw === undefined) throw new ToolError('missing_url', 'The API starter needs the ' +
@@ -69,7 +69,7 @@ export function apiUrl(raw) {
   try { url = new URL(String(raw)); } catch {}
   if (url?.protocol !== 'https:' || url.port || url.username || url.password ||
     !HOST_NAME.test(url.hostname)) throw new ToolError('invalid_url', `${raw} is not an ` +
-    'https:// address at a host name, without a port or credentials.', 2, 'A resolver reaches ' +
+    'https:// address at a host name, without a port or credentials.', 2, 'A function reaches ' +
     `HTTPS on port 443 only, at a public host name: ${API_URL}`);
   return url;
 }
@@ -82,7 +82,7 @@ export async function ownRowsApp(kind, {title, dir, at, server, options, url}) {
     ...spec.files.map(name => [spec.page.replace('.html', `-${name}.mjs`), name + '.mjs'])];
   const outputs = [...await Promise.all(copied.map(async ([from, to]) => [to,
     await readFile(new URL(from, EXAMPLES), 'utf8')])), [spec.table + '.csv', spec.columns + '\n']];
-  // The resolver reads --url: its host is the one the key may go to.
+  // The functions read --url: its host is the one the key may go to.
   const quoted = text => `'${text.replace(/[\\']/g, '\\$&')}';`;
   for (const output of outputs) if (url && output[0] === 'api.ts') output[1] = output[1]
     .replace(/^(const HOST = )'[^']*';/m, (_, start) => start + quoted(url.hostname))

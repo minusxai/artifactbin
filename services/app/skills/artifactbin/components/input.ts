@@ -5,7 +5,7 @@
  * Events: af-change (bubbles) with event.detail.value.
  * Examples:
  *   <af-input id="search" label="Search"></af-input>
- * Gotchas: reflect your Apollo value back for controlled use.
+ * Gotchas: reflect your state value back for controlled use.
  */
 import { registerComponent } from './register-component';
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract,

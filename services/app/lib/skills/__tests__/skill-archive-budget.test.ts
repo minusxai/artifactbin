@@ -24,7 +24,9 @@ import {archiveFor} from '@/lib/skills';
 // the cap comes back down to what that needs, with the usual few KB of headroom.
 // 1.75 MiB: main sat 0.5 KB under 1.74; agent session names (scripts/toolbox-agent.mjs, ~6 KB) give every agent
 // comment its own name ("Claude Code Red") and keep two agents sharing one sign-in from hiding each other's comments.
-const SKILL_ARCHIVE_MAX_BYTES=1.75*1024*1024;
+// 1.76 MiB: the SQL model (scripts/sql.mjs, schema and statements through the page SQL door, ~6 KB) replaces
+// graphql.mjs as the way agents read a page's tables; graphql.mjs stays for older pages, so the archive grows by it.
+const SKILL_ARCHIVE_MAX_BYTES=1.76*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Example: a dashboard over one linked dataset, computed by read-only SQL (_sql), whose charts
+<!-- Example: a dashboard over one linked dataset, every number computed by SQL (sql), whose charts
 filter each other. Usage: and Gotchas: are above DATA; keep this line. -->
 <html lang="en">
 <head>
@@ -19,9 +19,9 @@ filter each other. Usage: and Gotchas: are above DATA; keep this line. -->
 //   point (table:false, and say the relationship in a text); two categories or day by hour: rect
 //   (a heatmap: series is its rows, y its colour); the same trend per group: series with
 //   multiples:true; places: map (lat, lon; x names the place, y sizes it). Delete charts and
-//   queries no question needs. Every number comes from DATA.queries, each a read-only SQLite
-//   SELECT over the linked datasets (the table is the data-af-name) run as the reader through
-//   _sql and rerun when the data changes. A text is a function of h: h.one(name) is a query's
+//   queries no question needs. Every number comes from DATA.queries, each a SQLite SELECT over
+//   the linked datasets (the table is the data-af-name) run as the reader with sql and rerun
+//   when the data changes (sql.watch). A text is a function of h: h.one(name) is a query's
 //   first row, h.rows(name) all its rows, h.fmt(n, digits) formats. A chart draws one query's
 //   rows: x, y and an optional series, as SQL computed them (GROUP BY in SQL, never in script);
 //   its values open in a table under it (table:false hides it). filters: {param: label}; a chart
@@ -29,7 +29,7 @@ filter each other. Usage: and Gotchas: are above DATA; keep this line. -->
 //   clears it) and reruns every query: each says which filters it obeys with ($city is null or
 //   city = $city), and the picking chart's own query leaves its filter out. labels names columns
 //   for readers. ids are unique keys.
-// Built with: one HTML page; a published CSV dataset; every number computed by _sql (watchQuery
+// Built with: one HTML page; a published CSV dataset; every number computed by sql (sql.watch
 //   keeps them live); Vega-Lite charts (deck.gl for a map), each with a table of its values.
 window.DATA = {
   filters: {city:'City', category:'Category'},

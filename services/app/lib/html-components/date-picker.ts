@@ -6,7 +6,7 @@
  * Events: af-change (bubbles, cancelable) with event.detail.value.
  * Examples:
  *   <af-date-picker label="Due" min="2026-01-01"></af-date-picker>
- * Gotchas: reflect your Apollo value back for controlled use; it never persists data. An explicit
+ * Gotchas: reflect your state value back for controlled use; it never persists data. An explicit
  *   aria-label names the trigger verbatim and the current value becomes its description.
  */
 import { registerComponent } from './register-component';

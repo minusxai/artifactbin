@@ -4,7 +4,7 @@
  *   files); no edits needed: node scripts/check.mjs index.html --steps steps.mjs --guest-steps
  *   guest.mjs --cleanup-steps cleanup.mjs
  * Gotchas: the wide viewport adds a TEST note through the first item's form, or through the
- *   page's notes API on a test item while no item loads (the API's key not set yet: check
+ *   page's sql on a test item while no item loads (the API's key not set yet: check
  *   reports the items Not tested), and re-reads it after a reload; the guest reads it next and
  *   cleanup.mjs removes it, even on failure. It fails on [placeholders] left in the page.
  */
@@ -31,10 +31,9 @@ if(page.viewportSize().width>800){
         .textContent),null,{timeout:5000});
       if(!/^Added/.test(await status()))throw Error('add failed: '+await status());
     }else{
-      const failed=await page.evaluate(async note=>{const {client,gql}=await import(
-        '@afbin/apollo');const result=await client.mutate({mutation:gql`mutation Add(
-        $o:notes_insert_input!){insert_notes_one(object:$o){_id}}`,variables:{o:{
-        item:'check-test',note}}});return result.errors?.[0]?.message??null;},TEST);
+      const failed=await page.evaluate(async note=>{const {sql}=await import('@afbin/apollo');
+        try{await sql`insert into notes (item, note) values ('check-test', ${note})`;return null;}
+        catch(error){return error.message;}},TEST);
       if(failed)throw Error('add failed: '+failed);
     }
     await page.reload();await loaded();

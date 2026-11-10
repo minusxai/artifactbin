@@ -768,7 +768,7 @@
    "services/app/lib/skills/__tests__/skill-tree.test.ts": 137,
    "services/app/lib/skills/__tests__/starters.test.ts": 7929,
    "services/app/lib/skills/__tests__/tracker-combos.test.ts": 2720,
-   "services/app/lib/skills/__tests__/tracker-resolver.test.ts": 17,
+   "services/app/lib/skills/__tests__/tracker-functions.test.ts": 17,
    "services/app/lib/skills/__tests__/updater.test.ts": 1616,
    "services/app/lib/skills/__tests__/zip-origin.test.ts": 429,
    "services/app/lib/social/__tests__/relation-state.test.ts": 3789,

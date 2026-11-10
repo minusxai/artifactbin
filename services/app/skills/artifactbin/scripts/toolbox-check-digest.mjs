@@ -81,8 +81,8 @@ export function checkDigest(envelope,file){
  for(const {name} of envelope.unreadDatasets??[])lines.push(`  page links dataset ${clip(name,60)
   } but never reads it on load or in your steps: compute its numbers from its rows in page `+
   'script (references/datasets.md#read)');
- // Each failed GraphQL field with what the server told the owner; an unset secret is Not tested.
- for(const failure of (envelope.graphqlFailures??[]).slice(0,5))lines.push('  '+failed(failure));
+ // Each failed call with what the server told the owner; an unset secret is Not tested.
+ for(const failure of (envelope.callFailures??[]).slice(0,5))lines.push('  '+failed(failure));
  if(!(clean&&envelope.reply))for(const item of envelope.needsSecrets??[])lines.push(
   '  Not tested: '+untested(item));
  // What the step labels proved, per viewport: the Tested: line of the reply facts.
@@ -109,14 +109,18 @@ export function checkDigest(envelope,file){
   '  fix what is named above, then run the check again.');
  return lines.join('\n')+'\n';
 }
-/** One failed GraphQL field: the owner detail, or for a guest the code and what the owner gets. */
-const failed=({field,message,code,detail,guest,ownerDetail,ownerPasses,notReplayed})=>`${
- code?.startsWith('backend_')?'resolver':'GraphQL'} ${field} failed${detail?`: ${detail} (owner `+
+/** One failed call: the owner detail, or for a guest the code and what the owner gets. */
+const failed=({field,kind,message,code,detail,guest,ownerDetail,ownerPasses,notReplayed})=>`${
+ kind==='fn'?'function '+field.slice(3):kind==='sql'?'sql':code?.startsWith('backend_')?
+ 'resolver '+field:'GraphQL '+field} failed${detail?`: ${detail} (owner `+
  'detail)':guest?` for the guest (${code??message}); ${ownerDetail?'as owner the detail is: '+
- ownerDetail:ownerPasses?'as owner it succeeds':notReplayed?'not a read-only query, so it was '+
+ ownerDetail:ownerPasses?'as owner it succeeds':notReplayed?'not a read, so it was '+
  'not run again as owner':'no owner detail'}`:`: ${message}${code?` (${code})`:''}`}`;
-/** What an unset resolver secret kept the check from testing, and who sets it. */
-const untested=({step,fields,secrets})=>`${step===undefined?'resolver '+fields.join(', '):step===
+/** A refused call's name as the reply says it: function NAME, sql or resolver FIELD. */
+const called=field=>field.startsWith('fn/')?'function '+field.slice(3):field==='sql'?'sql':
+ 'resolver '+field;
+/** What an unset secret kept the check from testing, and who sets it. */
+const untested=({step,fields,secrets})=>`${step===undefined?fields.map(called).join(', '):step===
  null?'the steps':JSON.stringify(step)} (needs secret ${secrets.join(', ')}, which the owner `+
  "sets in the page's Resolvers settings)";
 /** A clean pass whose steps proved no labelled behaviour still proves each viewport loads. */

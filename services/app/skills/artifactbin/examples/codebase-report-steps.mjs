@@ -2,7 +2,7 @@
  * Example: check.mjs steps for examples/codebase-report.html (a function body that receives page).
  * Usage: new-codebase-report.mjs copies it as steps.mjs (no edits needed: it reads the page's
  *   DATA); then node scripts/check.mjs index.html --steps steps.mjs
- * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through _sql),
+ * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through sql),
  *   then checks that every finding has text and evidence, every Vega-Lite chart drew marks, the
  *   diagram drew its arrows, and that no [bracketed] starter text is left. Add a step for each
  *   requested number.

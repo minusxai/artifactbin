@@ -1,24 +1,19 @@
 /**
- * Example resolver: a JSON API behind a bearer key; the key is a secret the host fills in, never
- *   in code.
+ * Example backend functions: a JSON API behind a bearer key; the key is a secret the host fills
+ *   in, never in code.
  * Secrets: API_KEY = the provider's key, set by the page owner in the page's Resolvers panel.
  * Usage: cp resolvers/resolver-http-json.ts deals.ts; link it with
- *   <link rel="af-resolver" data-af-name="deals" href="./deals.ts">; publish, then send the owner
- *   to the Resolvers panel to set API_KEY and press Test connection.
- * Next: set HOST and PATH; rename Item's fields and the mapping to the API's JSON.
+ *   <link rel="af-resolver" data-af-name="deals" href="./deals.ts">; the page calls
+ *   fetch('/fn/items?status=open'); publish, then send the owner to the Resolvers panel to set
+ *   API_KEY and press Test connection (it runs test).
+ * Next: set HOST and PATH; rename the fields items() maps to the API's JSON.
  * Gotchas: {{API_KEY}} is filled only in requests to HOST (the secrets map binds it). Never return
  *   the key or echo it into rows. Every status comes back: check res.ok and read 4xx bodies.
  */
 const HOST = 'api.example.com';
 const PATH = '/v1/items';
 export const secrets = { API_KEY: HOST };
-export const typeDefs = `
-  type Item { id: ID! name: String! amount: Float }
-  type Query {
-    items(status: String): [Item!]!
-    test: String! @auth(role: owner)
-  }
-`;
+export const roles = { test: 'owner' };
 type Res = { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> };
 type Init = { method?: string; headers?: Record<string, string>; body?: string };
 type Caps = { fetch(url: string, init?: Init): Promise<Res> };
@@ -40,7 +35,7 @@ export default {
     return rows.map(r => ({ id: String(r.id), name: String(r.name ?? ''),
       amount: Number(r.amount) || null }));
   },
-  async test(_args: unknown, _principal: unknown, caps: Caps) {
+  async test(_input: unknown, _principal: unknown, caps: Caps) {
     return 'Read ' + (await get(caps)).length + ' items from ' + HOST + PATH;
   },
 };

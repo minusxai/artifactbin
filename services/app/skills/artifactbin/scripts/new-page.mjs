@@ -3,7 +3,7 @@ export const DESCRIPTION = `Set up a page computed from a CSV in one call: a das
 chart page. Copies the CSV into the project as NAME.csv; copies examples/csv-dashboard.html as
 index.html, its renderer csv-dashboard.mjs and its steps file as steps.mjs; links the CSV by its
 path (the page's first publish creates the NAME dataset from it, and a publish after the CSV
-changes updates that dataset) and writes a DATA block whose _sql queries read this CSV's columns
+changes updates that dataset) and writes a DATA block whose SQL queries read this CSV's columns
 (labels, a total per number column, a chart per number column by the first text column), with
 [bracketed] text for you to write. Nothing is sent to the server.
 Usage: node scripts/new-page.mjs --data FILE.csv --title NAME [--artifact ID] [--dir DIR]
@@ -16,7 +16,7 @@ Examples:
   node scripts/new-page.mjs --data coffee.csv --title "Coffee at a small startup" --artifact Ab12Cd
 Gotchas: a rerun is safe: the page, renderer and steps file are kept, never overwritten; only
   the CSV copy takes the rows passed (updated), which the next publish sends over the same
-  dataset. NAME is the file's name made a GraphQL name (Q1 sales.csv → q1_sales). The output
+  dataset. NAME is the file's name made a table name (Q1 sales.csv → q1_sales). The output
   names what DATA draws and how to change it with your columns; steps.mjs needs no edits.
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed). Results never contain
   credentials.`;
@@ -63,7 +63,7 @@ const COORDINATE = /^(lat(itude)?|lon|lng|long|longitude)$/i;
 /** The text columns, in order: the first is what DATA groups by. */
 const texts = (columns, numbers) => columns.filter(column => !numbers.includes(column) &&
   !COORDINATE.test(column));
-/** The DATA block for these columns: _sql queries, every text a [bracketed] draft. */
+/** The DATA block for these columns: SQL queries, every text a [bracketed] draft. */
 function dataBlock(name, columns, numbers) {
   const x = texts(columns, numbers)[0] ?? columns[0];
   const shown = numbers.slice(0, 3), first = numbers[0], by = `by_${x.replace(/\W+/g, '_')}`;
@@ -107,7 +107,7 @@ function fill(starter, {title, name, columns, numbers}) {
 /** What the written DATA shows, in this CSV's names: what the agent keeps or changes. */
 function draws(columns, numbers, rows) {
   const x = texts(columns, numbers)[0] ?? columns[0];
-  return `DATA's _sql queries compute a total per number column (${numbers.slice(0, 3)
+  return `DATA's SQL queries compute a total per number column (${numbers.slice(0, 3)
     .join(', ') || 'none'}) and ${numbers.slice(0, 2).map(y => `${y} summed per ${x}`)
     .join(' and ') || 'nothing'}; it draws a lead, those totals and a bar chart of each, with a ` +
     `table of its values (${rows.length} rows).`;

@@ -10,12 +10,12 @@ import {runSteps} from './toolbox-check-steps.mjs';
 import {layout, overflow, ids} from './toolbox-check-probes.mjs';
 import {contrast} from './toolbox-check-contrast.mjs';
 import {slides} from './toolbox-check-slides.mjs';
-import {graphql} from './toolbox-check-graphql.mjs';
+import {calls, callKind} from './toolbox-check-calls.mjs';
 import {capture} from './toolbox-check-capture.mjs';
 
 /** The self-contained parts inspectPage calls; the hosted script defines each from its source. */
 export const PARTS = {
-  ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides, graphql, capture
+  ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides, calls, callKind, capture
 };
 
 /** Runs in either the server session or a fresh local browser context. No credentials. */
@@ -27,8 +27,8 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     failedRequests = [],
     httpErrors = [],
     telemetry = [],
-    graphqlErrors = [],
-    graphqlReads = [],
+    callErrors = [],
+    callReads = [],
     unreachable = [];
   // A hosted check's browser reaches only the platform's own sites and Google Fonts (no internet):
   // a request elsewhere fails there yet loads for readers, so it is listed, never a page failure.
@@ -64,6 +64,8 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   page.on('console', message => {
     if (message.type() === 'error') {
       const url = message.location?.().url;
+      // A refused sql, function or GraphQL call is reported once, as a call failure (below).
+      if (url && parts.callKind(url)) return;
       if (url && classify(url)) record(telemetry, {url, error: message.text()});
       else if (!(url && offPlatform(url))) record(consoleErrors, message.text());
     }
@@ -72,16 +74,16 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   // aborts are not page failures.
   let navigation = 0;
   const started = new WeakMap();
-  // The page's dataset reads, on load and in its steps: its GraphQL (client, resolvers,
-  // subscriptions) and its live dataset cells. check fails a linked dataset that none read.
+  // The page's dataset reads, on load and in its steps: its sql, its functions, an older page's
+  // GraphQL and its live dataset cells. check fails a linked dataset that none read.
   let datasetReads = 0;
-  const read =
-    /^\/api\/(?:artifacts|local-connection)\/[^/]+\/(?:graphql$|regions\/cell(?::|%3A))/i;
+  const cell = /^\/api\/(?:artifacts|local-connection)\/[^/]+\/regions\/cell(?::|%3A)/i;
   page.on('request', request => {
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) navigation++;
     started.set(request, navigation);
     try {
-      if (read.test(new URL(request.url()).pathname)) datasetReads++;
+      if (parts.callKind(request.url()) || cell.test(new URL(request.url()).pathname))
+        datasetReads++;
     } catch {}
   });
   // The reader's own comment fetch is cancelled whenever a step reloads or navigates; it is reader
@@ -109,13 +111,13 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     );
   });
   page.on('response', response => {
-    if (response.status() >= 400) {
+    if (response.status() >= 400 && !parts.callKind(response.url())) {
       const item = {url: response.url(), status: response.status()};
       record(classify(item.url) ? telemetry : httpErrors, item);
     }
-    // A failed GraphQL field, with the owner-only detail and the page and console errors before it.
+    // A failed call, with the owner-only detail and the page and console errors before it.
     const before = {pageErrorsBefore: pageErrors.length, consoleErrorsBefore: consoleErrors.length};
-    parts.graphql(response, before, graphqlErrors, graphqlReads);
+    parts.calls(response, before, callErrors, callReads, parts.callKind);
   });
   page.setDefaultTimeout(options.timeoutMs ?? 4000);
   const evidence = {
@@ -156,10 +158,10 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   } catch (error) {
     evidence.inspectionError = String(error.message);
   }
-  // The GraphQL bodies still being read, for at most a second.
+  // The call bodies still being read, for at most a second.
   let wait;
   const late = new Promise(resolve => (wait = setTimeout(resolve, 1000)));
-  await Promise.race([Promise.allSettled(graphqlReads), late]);
+  await Promise.race([Promise.allSettled(callReads), late]);
   clearTimeout(wait);
   if (options.capture)
     try {
@@ -178,6 +180,6 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     telemetry: [...telemetry],
     unreachable: [...new Set(unreachable)],
     datasetReads,
-    ...(graphqlErrors.length ? {graphqlErrors: [...graphqlErrors]} : {})
+    ...(callErrors.length ? {callErrors: [...callErrors]} : {})
   };
 }

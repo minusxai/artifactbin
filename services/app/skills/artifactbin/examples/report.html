@@ -11,7 +11,7 @@ Usage: cp examples/report.html index.html; replace every [bracketed] part and th
 Gotchas: the route drawing is an illustration, not a chart: figures from data belong in a page
   started from csv-dashboard.html. Check desktop and 390px widths and every control by keyboard.
 Built with: one HTML page in semantic HTML and CSS; an inline SVG illustration; a disclosure
-  whose open state is kept per viewer in @afbin/apollo local state.
+  whose open state is kept per viewer in @afbin/state.
 -->
 <html lang="en">
 <head>
@@ -70,14 +70,15 @@ use shade.</p><p class="muted">All locations and observations in this document a
 Replace them with evidence before presenting findings.</p></aside></div>
 </main>
 <script type="module">
-import {client,gql} from '@afbin/apollo';
-const preference=gql`{showMethod}`;
-client.watchQuery({query:preference}).subscribe(({data})=>{
- document.querySelector('#method').hidden=!data.showMethod;
- document.querySelector('#show-method').setAttribute('aria-expanded',String(data.showMethod));
-});
-// The button only flips local state; the watcher above is the single place that updates the DOM.
+import {state} from '@afbin/state';
+// The one place that updates the DOM: now, and on every change (subscribe skips the current value).
+const show=({showMethod})=>{
+ document.querySelector('#method').hidden=!showMethod;
+ document.querySelector('#show-method').setAttribute('aria-expanded',String(showMethod));
+};
+show(state.getState());state.subscribe(show);
+// The button only flips local state.
 document.querySelector('#show-method').onclick=
- ()=>client.updateQuery({query:preference},({showMethod})=>({showMethod:!showMethod}));
+ ()=>state.setState(({showMethod})=>({showMethod:!showMethod}));
 </script>
 </body></html>

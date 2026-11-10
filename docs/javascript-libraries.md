@@ -19,7 +19,7 @@ it is the state block's defaults with the viewer's saved overrides merged over t
 [document format](document-format.md)), persists per viewer in browser storage
 (Zustand's `persist` middleware over the runtime's compare-and-swap document), follows the viewer's other
 tabs, is seeded by `#af-state=` links and is what comment views snapshot. It is the same document
-`@afbin/apollo`'s `gql` local fields read and write. Values must be storable JSON (`setState` throws a
+an older page's `@afbin/apollo` local fields read and write. Values must be storable JSON (`setState` throws a
 `TypeError` otherwise); a `setState` that loses a race with another tab is applied again to the newer
 document. Downloaded copies embed the module and keep their own viewer's state in that file's browser storage.
 Both modules load only when a page imports them (`@afbin/apollo` imports `@afbin/state`).

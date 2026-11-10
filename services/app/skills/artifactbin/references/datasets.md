@@ -1,11 +1,10 @@
 ---
 name: datasets
-description: "Read before a page shows or writes dataset rows: CSV and JSON datasets, linking them into pages, GraphQL rows and writes, and read-only `_sql` for every total, count and join."
+description: "Read before a page shows or writes dataset rows: CSV and JSON datasets, linking them into pages, reading, totals, joins and writes with sql, and live views with sql.watch."
 ---
 ## Read first
 
-A dataset is stored CSV or JSON rows; a page links it and queries its generated GraphQL API
-(Hasura's shape):
+A dataset is stored CSV or JSON rows; a page links it and reads and writes it with SQL:
 
 ```html
 <link rel="af-dataset" data-af-name="orders" href="./orders.csv">
@@ -25,84 +24,79 @@ from page HTML:
 New datasets are readable by anyone who can
 open them; only the owner and editors change rows. To let readers add or edit rows,
 set rules: [permissions](permissions.md). To read your own Postgres or MySQL database, use a
-resolver ([`caps.db`](resolvers.md#capsdb-your-own-database)).
+backend function ([`caps.db`](functions.md#capsdb-your-own-database)).
 
 ## Contents
 
-[Names](#names-discover-before-querying) · [Read](#read) · [Totals: `_sql`](#totals-group-by-and-joins-_sql) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
+[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
 
-## Names: discover before querying
+## Tables: discover before querying
 
-`node scripts/graphql.mjs schema PAGE_ID` (or `DATASET_ID`) prints the SDL (and role) you get. In a
-page the root is the link's `data-af-name` (`orders`); queried directly it is the file's name
-(`orders.csv` → `orders`) unless `publish.mjs --name` set one. A column keeps its name when it is a valid GraphQL name;
-otherwise it is lower-cased with `_` for other characters (`Created By` → `created_by`). Every row
-has `_id: ID!`, the stable row ID (a CSV `id` column stays ordinary). Types: number → `Float`,
-boolean → `Boolean`, text, dates and user IDs → `String`; every column is nullable.
+`node scripts/sql.mjs schema PAGE_ID` (or `DATASET_ID`) prints each table as a `CREATE TABLE` with
+its column types, as your role sees it. In a page, a dataset is the table named by its
+link's `data-af-name` (`orders`; a multi-table one is `orders.<table>`). Columns keep the file's
+names: quote one that is not a plain name (`"Created By"`). Every table has `_id`, the stable row
+ID (a CSV `id` column stays ordinary). Types: number, boolean, text; dates are ISO text and user
+columns hold account IDs. `node scripts/sql.mjs query ID 'select …'` runs one statement.
 
 ## Read
 
-GraphQL reads and writes ROWS; anything computed (counts, totals, GROUP BY, joins) is one `_sql`
-query ([below](#totals-group-by-and-joins-_sql)). Import `client,gql` from `@afbin/apollo`:
+`` sql`…` `` from `@afbin/apollo` runs one SQLite statement over the page's linked datasets as the
+reader. Every `${…}` is a bound parameter, never SQL text: a string, finite number, boolean, null
+or Date. A read answers its rows (an array; `rows.columns` lists `{name, type}`):
 
 ```js
-const {data,errors}=await client.query({query:gql`query West($r:String!){
- orders(where:{region:{_eq:$r}},order_by:{date:desc},limit:50){_id date region amount}
-}`,variables:{r:'West'}});
-if(errors?.length)throw Error(errors[0].message);
+import {sql} from '@afbin/apollo';
+const region='West';
+const recent=await sql`select _id, date, amount from orders where region = ${region}
+  order by date desc limit 50`;
+const months=await sql`select substr(date, 1, 7) as month, count(*) as n, sum(amount) as total
+  from orders group by month order by month`;
 ```
 
-- `orders(where,order_by,limit,offset)`: `limit` defaults to 100, at most 1000; `_id` is always the
-  last sort key, so `offset` paging is stable.
-- `orders_by_pk(_id:ID!)` is null when the row is missing or hidden from you.
-- `orders_can{insert}` and a row's `_can{update delete}` say what you may change
-  ([permissions](permissions.md#what-this-viewer-may-change)): show only those controls.
-- `where`: `_and _or _not`; per column `_eq _neq _gt _gte _lt _lte _in _nin _is_null`, plus
-  `_like _ilike _nlike _nilike` on strings. `order_by`: `asc desc` and their `_nulls_first`/`_last`.
-
-## Totals, group by and joins: `_sql`
-
-```js
-const {data,errors}=await client.query({query:gql`query Months($p:JSON){
- _sql(sql:"select month, count(*) as n, sum(amount) as total from orders where region = $region group by month order by month",params:$p){columns{name type} rows}
-}`,variables:{p:{region:'West'}}});
-// data._sql.rows: [{month:'2026-01',n:4,total:1200},…]
-```
-
-One read-only SQLite `SELECT` over the page's linked datasets as the reader: a dataset is the table
-named by its `data-af-name` (`orders`; multi-table `orders.<table>`), with `_id`; join them freely.
-`$name` binds `params.name`. It sees only rows and columns your rule shows; each dataset it names
-needs `allow_aggregations` in your rule ([permissions](permissions.md)). At most 10,000 rows, 5 s.
-`watchQuery` refetches it on change; local preview runs it too.
+Compute every count, total, group by and join in SQL, never by summing rows in script; join
+linked datasets freely. A reader sees only the rows and columns their rule shows. A refusal
+rejects with `SqlError` (`code`, `message`): `validation_failed`, `permission_denied`,
+`timeout`, `result_too_large`, `unavailable` (no app frame: a downloaded copy or local preview).
+At most 10,000 input rows, 5 s and 4 MiB per answer; column and table names cannot be bound.
 
 ## Write
 
-```graphql
-mutation Add($o:orders_insert_input!){insert_orders_one(object:$o){_id amount}}
-mutation Fix($id:ID!){update_orders_by_pk(pk_columns:{_id:$id},_set:{amount:13}){_id amount}}
-mutation Bump($id:ID!){update_orders(where:{_id:{_eq:$id}},_inc:{votes:1}){affected_rows}}
-mutation Drop($id:ID!){delete_orders_by_pk(_id:$id){_id}}
+```js
+const {affected,returning}=await sql`insert into orders (region, amount) values (${r}, ${n})`;
+await sql`update orders set amount = ${n} where _id = ${id}`;
+await sql`update orders set votes = votes + 1 where _id = ${id}`;
+await sql`delete from orders where _id = ${id}`;
 ```
 
-`insert_orders(objects)` takes up to 100 rows; `update_`/`delete_orders(where)` return
-`affected_rows`. One mutation is atomic, writes one dataset and changes at most 100 rows. For compare-and-set put old values in `where`; `affected_rows:0`
-means "changed meanwhile". There is no upsert: read the row, then `update_…_by_pk`
-or `insert_…_one`. `_id` is generated and never set. Returned rows need a select rule.
-
-`client.mutate` sends one `Idempotency-Key` per call, so a retry applies once.
-`graphql.mjs mutate DATASET_ID --document m.graphql` prints its `idempotencyKey`; after exit 5
-(unknown outcome) repeat with `--idempotency-key KEY`. Errors carry
-`extensions.code`: `permission_denied`, `check_violation`, `validation_failed`, `too_many_rows`,
-`one_dataset_per_mutation`, `outcome_unknown`, `dataset_not_found`. Only the owner and editors write
-until [permissions](permissions.md) allow more; a page link never grants writes.
+One `INSERT`, `UPDATE` or `DELETE` of one linked table answers `{affected, returning}` (the rows as
+your rule shows them; no `RETURNING` clause). It runs as the reader under the dataset's rules
+([permissions](permissions.md)) and can change only rows the reader can see: a row the rules do
+not let them change is skipped, so `affected: 0` means "not allowed, or changed meanwhile": say
+so, never "saved". A write changes at most 100 rows atomically; `_id` is generated and never set.
+There is no upsert: read the row, then update or insert. Functions whose result changes between
+runs (`random()`, `current_timestamp`) are refused: pass the value. Each write sends its own
+`Idempotency-Key`, so a retry applies once. Refusals: `permission_denied`, `check_violation`,
+`too_many_rows`, `validation_failed`, `outcome_unknown` (read before writing again). Only the
+owner and editors write until [permissions](permissions.md) allow more; a page link never
+grants writes. Pinned links and archived page versions read only.
 
 ## Live views
 
-`client.watchQuery({query}).subscribe(...)` refetches after committed writes and when the dataset
-changes; `onResolverChange(names=>…)` from `@afbin/apollo` names changed links. Never poll.
-`examples/csv-dashboard.html` charts `_sql` group-bys;
-`examples/tracker.html` writes rows directly, draws its controls from `_can`, counts with
-`_sql` and, with its limits feature, adds through a resolver ([resolvers](resolvers.md)).
+`sql.watch(statement, rows=>…, error=>…)` runs it now and again whenever a dataset it names
+changes (another reader's write, a schedule's), one request at a time; it returns the stop
+function. The statement must name its tables in its text. Never poll.
+
+```js
+const stop=sql.watch(sql`select count(*) as open from tasks where not done`,
+  ([{open}])=>{badge.textContent=String(open);},error=>{badge.textContent=error.message;});
+// When removing this UI: stop();
+```
+
+`onResolverChange(names=>…)` from `@afbin/apollo` names changed links (and `viewer` on sign-in
+or out): re-call [functions](functions.md) whose answers depend on them.
+`examples/csv-dashboard.html` watches its SQL group-bys; `examples/tracker.html` writes rows
+directly, counts with SQL and, with its limits feature, adds through a function.
 
 ## Type together (`@afbin/collab`)
 
@@ -122,7 +116,7 @@ The owner opts each text column in with the policy's table key `"collaborative_c
 ([permissions](permissions.md)). Who may type is the update rule for that row and column (a check.mjs browser as its
 viewer); anyone else gets `readonly`: set the field to the value you read before `bind`. Keys typed
 before the session starts are merged in.
-Typing is saved as one dataset version when someone leaves or after a quiet spell; a GraphQL write
+Typing is saved as one dataset version when someone leaves or after a quiet spell; a `sql` write
 meanwhile is merged with the typing. A deleted row, or text the update rule's `check` refuses, ends
 editing: the field turns read-only and `error` says why (`removed`, `check_violation`, `rejected`).
 

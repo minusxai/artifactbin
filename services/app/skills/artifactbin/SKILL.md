@@ -31,18 +31,19 @@ Skill map (each file's top comment explains it):
   api-dashboard.html (api-dashboard.ts), each with -steps, -guest, -cleanup .mjs;
   csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html; gen-*.mjs sample data
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
-- `scripts/`: publish, check, read, comment, doc, groups, graphql, policy, export, auth, autofix,
+- `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
 serve, new-app, new-page
-- `references/`: guides (read only those you need): runtime, datasets, permissions, resolvers,
+- `references/`: guides (read only those you need): runtime, datasets, permissions, functions,
 dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (only its header, the shared tokens, is worth reading)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
-Import `@afbin/apollo` and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`,
-`deck-gl`, `three`, `highlight`) and the optional components below the same way; that prefix is
-reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`. No JSX,
-framework compilation, injected state globals or account credentials belong in a page.
+Import `@afbin/state`, `@afbin/apollo` (`sql`) and every hosted library as `@afbin/<name>`
+(`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`) and the optional components below
+the same way; that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre >
+code.language-*`. No JSX, framework compilation, injected state globals or account credentials
+belong in a page.
 
 Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and
 refreshes (`--help`). Missing credentials do not mean a new account. If sign-in is
@@ -57,7 +58,7 @@ Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace
 ## You write / the platform adds
 
 - **You write:** a normal HTML file; one `<meta name="artifactbin:design-system" content="NAME">`;
-  imports from `@afbin/<name>` (`apollo`, `highlight`, the libraries); your own CSS and JS.
+  imports from `@afbin/<name>` (`state`, `apollo`, the libraries); your own CSS and JS.
 - **The platform adds:** the core runtime and import map, the design-system stylesheet and fonts,
   the `<html>` design and dark-mode attributes, stable `data-af-id`s on the elements in your HTML
   (for elements your script creates, see [dynamic
@@ -76,7 +77,7 @@ anchors and browser sessions](references/html-operations.md).[% endif %]
 Every script takes `--help` (usage, flags, examples, gotchas), `--json` and an exclusive `--output
 FILE`; all but `serve.mjs` take `--server ORIGIN`. Use these scripts, never shell-built HTTP
 wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it). Dataset
-permissions: `policy.mjs`. Resolver secrets: only the page owner sets them, in the page's
+permissions: `policy.mjs`. Function secrets: only the page owner sets them, in the page's
 Resolvers settings; no script or API takes them, and never ask in chat. ACLs and trash have no
 script. Groups: `node scripts/groups.mjs list`
 ([groups](references/groups.md)).
@@ -95,13 +96,14 @@ script. Groups: `node scripts/groups.mjs list`
   `node scripts/new-codebase-report.mjs --repo DIR --title "NAME"` (a report analysing the
   codebase you work in, DIR its repository: hotspots, who works where, how its areas import each
   other, how it changes; it writes the git history as CSVs the page links and prints the facts to
-  write the findings from); `cp examples/report.html index.html` (a report without data). Other data
-  from an HTTP API or behind a key comes through a resolver ([resolvers](references/resolvers.md),
-  read it first): never copy its rows into a CSV. If no starter fits, write the page yourself.
+  write the findings from); `cp examples/report.html index.html` (a report without data). Data
+  from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below); behind
+  a key or from your own server code: a backend function ([functions](references/functions.md),
+  read it first); never copy its rows into a CSV. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
   name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
-  its stylesheet and fonts). Keep state through `client` from `@afbin/apollo`
-  ([runtime](references/runtime.md)).
+  its stylesheet and fonts). Keep viewer-local state in `state` from `@afbin/state`
+  ([runtime](references/runtime.md)); state everyone sees lives in a dataset.
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -134,17 +136,19 @@ script. Groups: `node scripts/groups.mjs list`
   inside a `data-af-editable` region (a doc) is the exception, since people may be typing in
   it: `node scripts/doc.mjs read ID --output doc.md`, edit doc.md, then `node scripts/doc.mjs
   write doc.md`, which merges your edit with their
-  typing ([live docs](references/live-docs.md)).
+  typing ([live docs](references/live-docs.md)). Editing an older page that uses `gql`: it keeps
+  working as it is; write any new code with `sql`, `fetch` and `state`.
 - **Check.** A starter's Usage names its steps files and check command; add a step for each
   requested value they don't check. Without a starter, write one short steps file of
   `step('label', …)` checks (wait for your data, check the requested values and behaviour), then
   `node scripts/publish.mjs index.html --create && node scripts/check.mjs index.html --steps
   steps.mjs` (`--create` only the first time: publish adds the page's marker to the file).
-  Always check before replying, even while a resolver secret is unset. Publish autofixes the page
+  Always check before replying, even while a function's secret is unset. Publish autofixes the page
   and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` for a file you aren't
   publishing). Never rerun an unchanged check that failed a step or the page:
   change the steps or the page first. Only when the user asks for a private draft: `node
-  scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node scripts/serve.mjs --help`).
+  scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node scripts/serve.mjs --help`;
+  `sql` and functions run only in the published page).
 - **Answer comments.** A comment from someone the page is shared with is a new request, even when
   an earlier request limited what to change: make the change without asking first, publish, then
   `node scripts/comment.mjs reply ID --thread T --body
@@ -152,17 +156,17 @@ script. Groups: `node scripts/groups.mjs list`
   `comment.mjs` command chooses your own.
 - **Data, apps, exports.** A page built from a CSV links it by its path: publishing the page
   creates the dataset and updates it when the CSV changes ([datasets](references/datasets.md)).
-  A page that shows a dataset links it (`<link
-  rel="af-dataset">`), reads rows with GraphQL and computes every number (counts, totals, group
-  by, joins) with read-only SQL, `_sql`
-  ([datasets](references/datasets.md#totals-group-by-and-joins-_sql)), never by summing rows in
-  script; charts use Vega-Lite
+  A page that shows a dataset links it (`<link rel="af-dataset">`), reads and writes its rows
+  with `` sql`…` `` from `@afbin/apollo` (each table named by its link, every `${…}` a bound
+  value; `sql.watch` for live updates) and computes every number (counts, totals, group by,
+  joins) in SQL, never by summing rows in script; charts use Vega-Lite
   ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
   [permissions](references/permissions.md) (read it before modeling identity or writes). Checks,
-  derived values and external APIs with secrets: [resolvers](references/resolvers.md). `node
-  scripts/graphql.mjs schema ID` for the linked schema (a dataset ID: its own API), `node
+  derived values, APIs with secrets and scheduled refreshes: a backend function called with
+  `fetch('/fn/NAME')` ([functions](references/functions.md)). `node scripts/sql.mjs schema ID`
+  for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
   scripts/export.mjs ID --format html --output copy.html` for a portable copy.
 - **Network and install.** To call an external API add `<meta name="csp-connect"
@@ -186,11 +190,11 @@ Components are hosted modules, like the libraries: `import '@afbin/input';` regi
 at the top of its source (`head -30 components/NAME.ts`: import line, attributes, events, usage);
 the `.ts` is readable reference, not a browser script. Every control but `af-button`, and every
 navigation, overlay and upload element, emits `af-change` with `event.detail.value`: keep the value
-in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, the
-rest `value`) and unsubscribe when the view goes away. `af-button` fires the native click,
-`af-data-table` fires `af-sort-change` and `af-edit-intent`, `af-user` fires `af-user-state`;
-avatar, icon, progress, markdown and isometric emit nothing. Elements use light DOM and the page's
-design-system tokens and carry no credentials. Decks use `examples/deck.html`.
+in `state` (`@afbin/state`), set it back on the element (switch `checked`, overlays and
+collapsible `open`, the rest `value`) and unsubscribe when the view goes away. `af-button` fires
+the native click, `af-data-table` fires `af-sort-change` and `af-edit-intent`, `af-user` fires
+`af-user-state`; avatar, icon, progress, markdown and isometric emit nothing. Elements use light
+DOM and the page's design-system tokens and carry no credentials. Decks use `examples/deck.html`.
 
 | Purpose | Elements (`af-NAME`: `components/NAME.ts`) |
 |---|---|
@@ -230,8 +234,8 @@ read-only copy ([groups](references/groups.md#public-view-receipts)).
   ([groups](references/groups.md)).
 - "Let readers submit something": a readable page grants no writes; give the dataset rules for
   viewer and signed_in with `policy.mjs` ([permissions](references/permissions.md)). The page then
-  writes rows directly; add a resolver mutation with `@auth` only when writes need checks
-  ([resolvers](references/resolvers.md)).
+  writes rows with `sql`; add a POST function with `roles` only when writes need checks
+  ([functions](references/functions.md)).
 
 ## Preserve the document
 

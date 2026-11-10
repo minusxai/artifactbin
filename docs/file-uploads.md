@@ -62,7 +62,7 @@ const binding=bindFileUpload(document.querySelector('af-file-upload'));
 The platform adds the core script before author modules. The component's
 `af-change` event carries `detail.value` (file metadata) and a reason of `upload`
 or `remove`. Upload changes the selection only: persist the returned references
-through your declared dataset's GraphQL mutation and current write policy.
+through your declared dataset's current write policy (a page's `sql` insert).
 Removing a reference does not delete stored bytes.
 
 For custom controls, `watchUploadContext` reports trusted upload availability;

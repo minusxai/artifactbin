@@ -12,9 +12,11 @@ import {GET as readPolicy} from '@/app/api/artifacts/[id]/policy/route';
 import {GET as listComments,POST as addComment} from '@/app/api/artifacts/[id]/annotations/route';
 import {POST as replyComment,PATCH as editComment} from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
-vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>{
- const typeDefs=/export const typeDefs\s*=\s*`([\s\S]*?)`/.exec(source)?.[1];if(!typeDefs)throw Error('Missing example schema');return{typeDefs,compiled:source};
-}}));
+// The compiler without a runner: a function file's surface as publish reads it from the source, or an older file's SDL.
+vi.mock('@/lib/page-operations',async original=>{const real=await original<typeof import('@/lib/page-operations')>();return {...real,compilePageBackend:async(source:string)=>{
+ const typeDefs=/export const typeDefs\s*=\s*`([\s\S]*?)`/.exec(source)?.[1];if(typeDefs)return{typeDefs,compiled:source};
+ const {functions,schedule}=await real.functionFileSurface(source);return{typeDefs:'',functions,...(schedule?{schedule}:{}),compiled:source,test:Object.hasOwn(functions,'test')};
+}};});
 // The suite caps a file at 10 KB (suite-env) so size tests trip cheaply; the dashboard's renderer
 // (examples/csv-dashboard.mjs) is a real-sized bundle dependency, so these publish under the product default.
 vi.mock('@/lib/platform/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/platform/config')>(),MAX_FILE_BYTES:50_000_000}));

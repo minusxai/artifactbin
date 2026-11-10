@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Example: a codebase report from the repository's own git history, files and imports, every
-number computed by read-only SQL (_sql). Usage: and Gotchas: are above DATA; keep this line. -->
+number computed by SQL (sql). Usage: and Gotchas: are above DATA; keep this line. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -15,14 +15,14 @@ number computed by read-only SQL (_sql). Usage: and Gotchas: are above DATA; kee
 //   page and steps.mjs outside the repository); read the facts it prints, then edit only DATA:
 //   rewrite each [bracketed] text as what the reader should do, with the numbers that show it;
 //   then run the publish and check it printed (that publish creates or updates the datasets).
-// Gotchas: findings first, evidence after. Every number is a DATA query: one read-only SQLite
-//   SELECT over the linked tables commits, files and imports, run through _sql (never summed in
+// Gotchas: findings first, evidence after. Every number is a DATA query: one SQLite SELECT
+//   over the linked tables commits, files and imports, run with sql (never summed in
 //   script). A text is a function of h: h.one(name) a query's first row, h.rows(name) its rows,
 //   h.fmt(n). A chart is a Vega-Lite mark and encoding over one query's columns; one with diagram
 //   draws its rows as a Pele flowchart (from, to, weight). changes counts the window's commits
 //   that touched a file; an import counts file pairs between two areas.
-// Built with: one HTML page; three datasets gathered from git; _sql queries in one watched
-//   request; Vega-Lite charts and a Pele flowchart, each with a table of its values.
+// Built with: one HTML page; three datasets gathered from git; watched sql queries; Vega-Lite
+//   charts and a Pele flowchart, each with a table of its values.
 window.DATA = {
   source: {repo: '[repo name]', head: '[commit id]', since: '[1 year ago]'},
   queries: {
@@ -112,17 +112,15 @@ td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
 <section class="rule"><h2>How this was measured</h2><p id="method" class="muted"></p></section>
 </main>
 <script type="module">
-import {client,gql} from '@afbin/apollo';
+import {sql} from '@afbin/apollo';
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
 import {mount} from '@afbin/pele-flowchart';
 const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
 const label=col=>D.labels[col]??col,fmt=n=>Number.isFinite(n)?n.toLocaleString():'–';
-// One request: each DATA query an aliased _sql field, its SQL a variable (never spliced in).
-const pageQuery=gql([`query Page(${names.map((_,i)=>`$s${i}:String!`).join(',')}){`+
-  names.map((name,i)=>`${name}:_sql(sql:$s${i}){rows}`).join(' ')+'}']);
-const variables=Object.fromEntries(names.map((name,i)=>[`s${i}`,D.queries[name]]));
-let answers={},views=[],diagrams=[];
+// Each DATA query is SQL text with no values in it: the sql tag runs it as written.
+const statement=text=>sql(Object.assign([text],{raw:[text]}));
+let answers={},views=[],diagrams=[],stops=[];
 const h={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
 // Script-made nodes take data-af-ids from DATA ids and row positions, stable on every render.
 const node=(tag,id,text,cls)=>{const n=document.createElement(tag);n.dataset.afId=id;
@@ -186,15 +184,15 @@ function render(){$('#title').textContent=document.title;$('#lead').textContent=
 const theme=new MutationObserver(()=>{if(names.some(name=>answers[name]))void draw();});
 theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark',
   'data-af-design-system']});
-// watchQuery answers now and again whenever a linked dataset changes (the command reruns).
-const watch=client.watchQuery({query:pageQuery,variables}).subscribe(async result=>{
-  if(result.loading)return;
-  if(result.errors?.length){status.textContent=result.errors[0].message||
-    'Could not read the linked datasets.';return;}
-  try{answers=Object.fromEntries(names.map(name=>[name,result.data?.[name]?.rows??[]]));render();
-    await draw();status.textContent=`Computed ${names.length} queries from the linked datasets.`;
-  }catch(error){status.textContent=error.message||'Could not draw the linked datasets.';}});
-addEventListener('pagehide',()=>{watch.unsubscribe();theme.disconnect();
+// sql.watch answers now and again whenever a linked dataset changes (the command reruns); the
+// page draws once every query has answered.
+const got={},failed=error=>{status.textContent=error.message||'Could not read the datasets.';};
+stops=names.map(name=>sql.watch(statement(D.queries[name]),async rows=>{got[name]=rows;
+  if(Object.keys(got).length<names.length)return;
+  try{answers={...got};render();await draw();
+    status.textContent=`Computed ${names.length} queries from the linked datasets.`;
+  }catch(error){status.textContent=error.message||'Could not draw the linked datasets.';}},failed));
+addEventListener('pagehide',()=>{stops.forEach(stop=>stop());theme.disconnect();
   views.forEach(view=>view.finalize());diagrams.forEach(d=>d.destroy());},{once:true});
 </script>
 </body></html>

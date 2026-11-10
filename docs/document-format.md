@@ -32,8 +32,8 @@ sources describe the public contract served by `/llms/…` and the skill archive
 | Need | Native contract |
 | --- | --- |
 | Viewer-local state | Inert JSON in `<script type="application/json" data-af="state">`; read, watch and update through `@afbin/apollo`. State persists privately in that viewer's browser. |
-| Dataset | `<link rel="af-dataset" data-af-name="sales" href="ref:DATASET_ID">`; live by default, or `data-af-mode="pinned" data-af-revision="2"`. Query the declared GraphQL namespace. |
-| Resolver | `<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">` plus `resolverSources:{"tracker":"…"}` at publication. TypeScript exports GraphQL type definitions and resolvers; the server binds an immutable backend version. |
+| Dataset | `<link rel="af-dataset" data-af-name="sales" href="ref:DATASET_ID">`; live by default, or `data-af-mode="pinned" data-af-revision="2"`. Read and write it with `` sql`…` `` from `@afbin/apollo`: the table is the `data-af-name`. |
+| Resolver | `<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">` plus `resolverSources:{"tracker":"…"}` at publication. TypeScript exports functions the page calls with `fetch('/fn/NAME')` (with optional `roles`, `secrets` and `schedule`); the server binds an immutable backend version. |
 | Components | Import hosted `@afbin/…` modules; use their native custom elements, including data tables and isometric figures. Use direct hosted libraries for new diagrams and maps; retained Mermaid and deck.gl wrappers load through their hosted component URLs. |
 | Charts | Import `@afbin/vega` and, for Vega-Lite, `@afbin/vega-lite`. Author the spec in page code; use the AST expression interpreter under the no-eval policy. |
 | Files | Ordinary `<img>`, `<a>`, `<video>` and other HTML URLs; admitted `ref:ID` assets resolve through the platform. See [file uploads](file-uploads.md). |

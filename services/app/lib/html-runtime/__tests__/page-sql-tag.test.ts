@@ -19,6 +19,9 @@ it('binds every ${…} as a parameter, never as SQL text, and answers rows with 
   expect(sent[0]).toEqual({ sql: 'select region, sum(amount) as total from sales where year = $p0 and name = $p1 group by region', params: { p0: 2024, p1: name }, idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{16,128}$/) });
   expect(rows).toEqual([{ n: 1 }]);
   expect((rows as unknown as { columns: unknown }).columns).toEqual([{ name: 'n', type: 'number' }]);
+  // Out of iteration and JSON, and an ordinary property a library handed the rows may delete (Vega does).
+  expect(Object.keys(rows)).toEqual(['0']);expect(JSON.stringify(rows)).toBe('[{"n":1}]');
+  expect(delete (rows as unknown as { columns?: unknown }).columns).toBe(true);
   // A date is its ISO instant, a boolean stays a boolean; anything else is refused before anything is sent.
   await sql`select ${new Date('2024-01-02T03:04:05Z')}, ${true}, ${null}`;
   expect(sent[1]!.params).toEqual({ p0: '2024-01-02T03:04:05.000Z', p1: true, p2: null });

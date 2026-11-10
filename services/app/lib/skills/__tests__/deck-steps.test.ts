@@ -36,9 +36,9 @@ async function template(edit = (html: string) => html): Promise<string | null> {
   const dom = new JSDOM(html.replace(/<script[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only'});
   Object.assign(dom.window, {IntersectionObserver: class { observe() {} disconnect() {} }, stubs: {compile: () => ({spec: {}}),
     vega: {View: class { async runAsync() {} finalize() {} }, parse: () => ({}), expressionInterpreter: {}},
-    apollo: {gql: () => '', client: {query: async () => { throw Error('the template deck reads no dataset'); }}}}});
+    apollo: {sql: () => { throw Error('the template deck reads no dataset'); }}}});
   dom.window.eval(data!);
-  await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile}=stubs,{client,gql}=stubs.apollo;${app!.replace(/^import .*$/gm, '')}})()`);
+  await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile}=stubs,{sql}=stubs.apollo;${app!.replace(/^import .*$/gm, '')}})()`);
   return run(dom, source.replace('PLACEHOLDERS_OK=false', 'PLACEHOLDERS_OK=true'));
 }
 

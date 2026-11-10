@@ -15,7 +15,7 @@
 //   traction, business model, competition, ask); N topics means N slides. Types: cover is the
 //   problem slide {label "Problem · Company", title ≤40 characters (default: the <title>), text one
 //   line, stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y,series?}] or dataset
-//   columns x, y (summed per x by _sql, in the order column's order, default x; y:['now','goal']
+//   columns x, y (summed per x by sql, in the order column's order, default x; y:['now','goal']
 //   and names {now:'Today'} compare series), format ".1f", unit "$#B"}, flow
 //   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit, from
 //   (traction chart id), milestone (target only; shown as "last traction value → target"), items≤3
@@ -79,17 +79,17 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 <span id="count" class="t-mono" aria-live="polite">01 / 01</span></nav>
 <script type="module">
 import * as vega from '@afbin/vega';import {compile} from '@afbin/vega-lite';
-import {client,gql} from '@afbin/apollo';
+import {sql} from '@afbin/apollo';
 const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
-// Chart slides naming dataset columns ask _sql for y summed per x, in the order column's order.
+// Chart slides naming dataset columns ask sql for y summed per x, in the order column's order.
+// Column names cannot be bound values: the SQL text quotes them and the tag runs it as written.
 const DATASET=window.DATA?.dataset,sqlName=n=>'"'+String(n).replaceAll('"','""')+'"';
-const sums=gql(['query Sums($sql:String!){_sql(sql:$sql){rows}}']); // gql takes a 1-string array
+const run=text=>sql(Object.assign([text],{raw:[text]}));
 for(const s of DATASET?SLIDES.filter(s=>s.type==='chart'&&s.y&&!s.data):[])try{ // y: 1+ columns
-  const ys=[s.y].flat(),r=await client.query({query:sums,variables:{sql:`select ${sqlName(s.x)}`+
+  const ys=[s.y].flat(),rows=await run(`select ${sqlName(s.x)}`+
     ` as x, ${ys.map((y,i)=>`sum(${sqlName(y)}) as y${i}`).join(', ')} from ${sqlName(DATASET)}`+
-    ` group by ${sqlName(s.x)} order by min(${sqlName(s.order??s.x)})`}});
-  if(r.errors?.length)throw Error(r.errors[0].message);
-  s.data=r.data._sql.rows.flatMap(row=>ys.map((c,i)=>({x:String(row.x),y:row['y'+i],...ys[1]?
+    ` group by ${sqlName(s.x)} order by min(${sqlName(s.order??s.x)})`);
+  s.data=rows.flatMap(row=>ys.map((c,i)=>({x:String(row.x),y:row['y'+i],...ys[1]?
     {series:s.names?.[c]??c}:{}}))).filter(d=>Number.isFinite(d.y));}
   catch(e){s.data=[];s.error=s.label+': '+e.message;}
 const make=(node,attrs,text)=>{for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);

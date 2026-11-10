@@ -7,7 +7,7 @@
  * Examples:
  *   <af-collapsible><af-collapsible-trigger>More</af-collapsible-trigger>
  *   <af-collapsible-content>Details</af-collapsible-content></af-collapsible>
- * Gotchas: reflect your Apollo value back for controlled use (open attribute or property wins);
+ * Gotchas: reflect your state value back for controlled use (open attribute or property wins);
  *   a native <button> inside the trigger carries the ARIA state instead of the trigger itself.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';

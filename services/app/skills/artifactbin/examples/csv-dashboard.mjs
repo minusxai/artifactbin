@@ -1,6 +1,6 @@
 /**
- * Example: the renderer of examples/csv-dashboard.html. It reads window.DATA, asks every DATA
- *   query through _sql in one watched request, and draws the stats, the Vega-Lite charts, the
+ * Example: the renderer of examples/csv-dashboard.html. It reads window.DATA, watches every DATA
+ *   query with sql (sql.watch), and draws the stats, the Vega-Lite charts, the
  *   deck.gl map, a value table per chart and the filters that link them. A file of its own so
  *   the page stays short enough to read whole.
  * Usage: keep it next to index.html as csv-dashboard.mjs (new-page.mjs copies it); index.html
@@ -10,19 +10,19 @@
  *   query with its $param set; a late answer for an older pick is dropped. A map names only
  *   the places whose names fit; every dot keeps its tooltip and the table lists them all.
  */
-import {client,gql} from '@afbin/apollo';
+import {sql} from '@afbin/apollo';
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
 const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
 const label=col=>D.labels[col]??col,filters=D.filters??{};
-// Each filter is a _sql parameter: null shows every row; a picked value narrows the queries that
-// read it. gql also takes a one-string array: one request, each DATA query an aliased _sql field
-// whose SQL and parameters travel as variables (never spliced into the document).
+// Each filter is a parameter: null shows every row; a picked value narrows the queries that read
+// it. A DATA query's $names become the sql tag's bound values, never text spliced into the SQL.
 const picked=Object.fromEntries(Object.keys(filters).map(key=>[key,null]));
-const pageQuery=gql([`query Page($p:JSON,${names.map((_,i)=>`$s${i}:String!`).join(',')}){`+
-  names.map((name,i)=>`${name}:_sql(sql:$s${i},params:$p){rows}`).join(' ')+'}']);
-const sqls=Object.fromEntries(names.map((name,i)=>[`s${i}`,D.queries[name]]));
-let answers={},views=[],watch,round=0,width=0,drawn=Promise.resolve(),pending=false;
+const statement=text=>{const parts=text.split(/\$([A-Za-z_]\w*)/),strings=parts.filter((_,i)=>
+  i%2===0),values=parts.filter((_,i)=>i%2).map(name=>{if(!(name in picked))throw Error(
+  `$${name} is not one of DATA.filters`);return picked[name];});
+  return sql(Object.assign(strings,{raw:strings}),...values);};
+let answers={},views=[],stops=[],round=0,width=0,drawn=Promise.resolve(),pending=false;
 const fmt=(n,digits=0)=>Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:digits,
   maximumFractionDigits:digits}):'–';
 // What every text reads: a query's rows as SQL answered them.
@@ -160,17 +160,19 @@ function render(){const h=helpers,open=[...document.querySelectorAll('details[op
     'section-'+s.id);section.className='rule';section.append(node('h2',`section-${s.id}-title`,
     s.title),node('p',`section-${s.id}-text`,s.text(h)));return section;}));
   open.forEach(id=>byId(id)?.setAttribute('open',''));if(focus)byId(focus)?.focus();}
-// watchQuery answers now and again whenever the linked dataset changes (another reader's write);
-// a picked filter starts a new watch, and an older watch's late answer is ignored.
-function listen(){watch?.unsubscribe();const mine=++round;status.textContent='Computing…';
-  watch=client.watchQuery({query:pageQuery,variables:{...sqls,p:{...picked}}}).subscribe(
-    async result=>{if(result.loading||mine!==round)return;
-      if(result.errors?.length){status.textContent=result.errors[0].message||
-        'Could not read the linked dataset.';return;}
-      try{answers=Object.fromEntries(names.map(name=>[name,result.data?.[name]?.rows??[]]));
-        render();await redraw();
-        status.textContent=`Computed ${names.length} queries from the linked dataset.`;
-      }catch(error){status.textContent=error.message||'Could not draw the linked dataset.';}});}
+// sql.watch answers now and again whenever the linked dataset changes (another reader's write);
+// once every query has answered, the page draws. A picked filter starts new watches, and an
+// older watch's late answer is ignored.
+function listen(){stops.forEach(stop=>stop());const mine=++round,got={};
+  status.textContent='Computing…';
+  const failed=error=>{if(mine===round)status.textContent=error.message||
+    'Could not read the linked dataset.';};
+  try{stops=names.map(name=>sql.watch(statement(D.queries[name]),async rows=>{
+    if(mine!==round)return;got[name]=rows;if(Object.keys(got).length<names.length)return;
+    try{answers={...got};render();await redraw();
+      status.textContent=`Computed ${names.length} queries from the linked dataset.`;
+    }catch(error){status.textContent=error.message||'Could not draw the linked dataset.';}},
+    failed));}catch(error){stops=[];failed(error);}}
 listen();
 // Charts follow the reader's light or dark mode, the owner's design system and the page width.
 const ready=()=>names.some(name=>answers[name]);
@@ -179,5 +181,5 @@ theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-a
   'data-af-design-system']});
 const resize=new ResizeObserver(()=>{if(ready()&&$('#charts').clientWidth!==width)void redraw();});
 resize.observe($('#charts'));
-addEventListener('pagehide',()=>{watch?.unsubscribe();theme.disconnect();resize.disconnect();
+addEventListener('pagehide',()=>{stops.forEach(stop=>stop());theme.disconnect();resize.disconnect();
   views.forEach(view=>view.finalize());},{once:true});
