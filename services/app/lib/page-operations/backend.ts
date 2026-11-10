@@ -43,11 +43,12 @@ export default async function(input,host){
  if(input.kind==='schema'){const t=Backend.typeDefs;if(t!==undefined&&typeof t!=='string'||typeof t==='string'&&(!Backend.default||typeof Backend.default!=='object'))throw Error('invalid_backend_exports');return {typeDefs:t??null,secrets:Backend.secrets};}
  // Only a name the host admitted from the static surface (./function-source) or the SDL arrives here; it runs only if it is a function.
  const own=(o,k)=>o!==null&&typeof o==='object'&&Object.prototype.hasOwnProperty.call(o,k);
- const fn=own(Backend.default,input.field)?Backend.default[input.field]:typeof Backend.typeDefs!=='string'&&!['default','roles','secrets','typeDefs'].includes(input.field)&&own(Backend,input.field)?Backend[input.field]:undefined;if(typeof fn!=='function')throw Error('missing_resolver');
+ const fn=own(Backend.default,input.field)?Backend.default[input.field]:typeof Backend.typeDefs!=='string'&&!['default','roles','secrets','typeDefs'].includes(input.field)&&own(Backend,input.field)?Backend[input.field]:undefined;if(typeof fn!=='function')return {missing:true};
  const principal=Object.freeze(input.principal);
  ${CALL}
  const caps=${CAPS};
- try{return await fn(input.args,principal,caps);}catch(e){
+ // The reply is an envelope the wrapper alone builds: {missing:true} means nothing ran; a result is always {value}.
+ try{return {value:await fn(input.args,principal,caps)};}catch(e){
   if(e!==null&&typeof e==='object'&&!__afPlatform.has(e)&&typeof e.message==='string'&&e.message)throw Error(${JSON.stringify(RESOLVER_THREW)}+e.message);
   // An uncaught capability refusal keeps its code (\`tls_untrusted_certificate: …\`), so the owner's failure detail names it.
   if(e!==null&&typeof e==='object'&&typeof e.code==='string'&&e.code&&typeof e.message==='string'&&e.message!==e.code&&!e.message.startsWith(e.code+': '))throw Error(e.code+': '+e.message);
@@ -147,12 +148,15 @@ async function pinnedValues(backend:PageBackendRecord,read:(backend:PageBackendR
 export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[];readSecret?:(backend:PageBackendRecord,name:string)=>Promise<string>}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
  const backend=await load(call.fileId,call.version);
  if(!backend||backend.backendId!==call.fileId||backend.version!==call.version||backend.pageId!==call.principal.tenant)throw new FieldNotExecuted('Backend link mismatch','forbidden');
- try{return await runBackend(backend);}catch(error){
+ try{
+  const reply=await runBackend(backend);
+  // Only the wrapper builds {missing:true} (no function under that name at run time: nothing ran); a resolver result arrives as {value}.
+  if(reply!==null&&typeof reply==='object'&&!Array.isArray(reply)&&reply.missing===true)throw new FieldNotExecuted('No such function','unknown_function');
+  return reply!==null&&typeof reply==='object'&&!Array.isArray(reply)?(reply.value??null) as HtmlJson:null;
+ }catch(error){
   if(!(error instanceof RunFailed))throw error;
   const reason=error.receipt?.reason;
   if(!reason)throw new FieldFailed('backend_failed');
-  // The wrapper's own refusal (no function under that name at run time): nothing ran. A resolver's own throw is prefixed (RESOLVER_THREW).
-  if(reason==='missing_resolver')throw new FieldNotExecuted('No such function','unknown_function');
   const secrets=await pinnedValues(backend,options.readSecret??readPinnedBackendSecret),thrown=reason.startsWith(RESOLVER_THREW);
   const receipt=thrown?{...error.receipt!,reason:reason.slice(RESOLVER_THREW.length)}:error.receipt;
   throw new FieldFailed('backend_failed',resolverFailureDetail(receipt,secrets),thrown?redactedLine(receipt!.reason!,secrets):undefined);

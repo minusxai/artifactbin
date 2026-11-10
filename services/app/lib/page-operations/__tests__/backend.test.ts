@@ -62,7 +62,7 @@ describe('caps.db on the host',()=>{
 describe('backend run admission retries',()=>{
  const backend={...record,compiled:'bundle'};
  const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1',role:'viewer' as const},signal:new AbortController().signal};
- const fakeRunner=(failures:Array<()=>Error>)=>{const starts:string[]=[];const runner={start:async(input:RunStart)=>{starts.push(input.requestId);const fail=failures.shift();if(fail)throw fail();return {runId:'run1'};},getRun:async()=>({status:'completed',output:[{category:'Rent',amount:1}]}),cancel:async()=>{},events:async()=>({events:[],nextSequence:0,hasMore:false})} as unknown as RunnerService;return {runner,starts};};
+ const fakeRunner=(failures:Array<()=>Error>)=>{const starts:string[]=[];const runner={start:async(input:RunStart)=>{starts.push(input.requestId);const fail=failures.shift();if(fail)throw fail();return {runId:'run1'};},getRun:async()=>({status:'completed',output:{value:[{category:'Rent',amount:1}]}}),cancel:async()=>{},events:async()=>({events:[],nextSequence:0,hasMore:false})} as unknown as RunnerService;return {runner,starts};};
  const invoker=(runner:RunnerService)=>createBackendInvoker(runner,async()=>backend,{startRetryDelaysMs:[1,1,1]});
  it('retries a full runner queue with the same request and returns the result',async()=>{
   const {runner,starts}=fakeRunner([()=>Error('queue_full'),()=>Error('runner_closed')]);
@@ -167,7 +167,7 @@ describe('resolver completion wait',()=>{
  function waiting(finishAfterMs:number|null){
   const waits:number[]=[];let cancelled=0,startedAt=0;
   const runner={start:async()=>{startedAt=Date.now();return {runId:'run1'};},cancel:async()=>{cancelled++;},
-   getRun:async({waitMs}:{waitMs?:number})=>{waits.push(waitMs??-1);const doneAt=finishAfterMs===null?Infinity:startedAt+finishAfterMs;const asked=Date.now(),wake=Math.min(asked+(waitMs??0),doneAt);await new Promise(r=>setTimeout(r,Math.max(0,wake-asked)));return wake>=doneAt?{runId:'run1',status:'completed',output:'pong',receipt:null}:{runId:'run1',status:'running',output:null,receipt:null};}} as unknown as RunnerService;
+   getRun:async({waitMs}:{waitMs?:number})=>{waits.push(waitMs??-1);const doneAt=finishAfterMs===null?Infinity:startedAt+finishAfterMs;const asked=Date.now(),wake=Math.min(asked+(waitMs??0),doneAt);await new Promise(r=>setTimeout(r,Math.max(0,wake-asked)));return wake>=doneAt?{runId:'run1',status:'completed',output:{value:'pong'},receipt:null}:{runId:'run1',status:'running',output:null,receipt:null};}} as unknown as RunnerService;
   return {runner,waits,cancelled:()=>cancelled};
  }
  it('asks once and returns as the run completes instead of polling',async()=>{

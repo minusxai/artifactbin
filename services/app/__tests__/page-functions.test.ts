@@ -337,3 +337,63 @@ describe('the callable surface is the source text, never the evaluated module',(
   expect((await call(page,'x',null,{method:'GET'})).status).toBe(404);
  });
 });
+
+// Re-review 3: an invoked resolver's throw must never be mistaken for no invocation.
+it.each([
+ ['primitive', `throw 'missing_resolver'`],
+ ['function', `const e=()=>{};e.message='missing_resolver';throw e`],
+ ['changing message', `let n=0;throw {get message(){return ++n===1?'':'missing_resolver'}}`],
+ ['Error constructor replacement', `globalThis.Error=()=>({message:'missing_resolver'});throw {message:'own failure'}`],
+])('re-review 3: %s throw remains a function failure',async(_label,body)=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+  visibility:'public',html:'<link rel="af-resolver" data-af-name="api" href="./api.ts">',
+  resolverSources:{api:`export default {a(){${body}}}`},
+ }}));
+ expect(response.status,await response.clone().text()).toBe(201);
+ const {id}=await response.json();
+ expect(await call(id,'a',null,{method:'GET'})).toMatchObject({status:500,body:{error:'backend_failed'}});
+});
+
+it.each([
+ ['globalThis', `globalThis['module'].exports.default.b=()=>2`],
+ ['Function', `Function('return module')().exports.default.b=()=>2`],
+ ['new Function', `(new Function('return module'))().exports.default.b=()=>2`],
+ ['indirect eval', `(0,globalThis['eval'])('module').exports.default.b=()=>2`],
+ ['top-level this', `this.default={a:()=>2,b:()=>3}`],
+ ['arguments', `arguments[0].default={a:()=>2,b:()=>3}`],
+ ['prototype getter', `Object.setPrototypeOf(api,{get b(){return ()=>3}})`],
+ ['defineProperty', `Object.defineProperty(api,'b',{value:()=>3})`],
+ ['Symbol.toPrimitive', `api[Symbol.toPrimitive]=()=>{api.b=()=>3;return ''};String(api)`],
+ ['runtime replacement', `api.a=()=>99;api.b=()=>3`],
+])('re-review 3: %s cannot add a callable or weaken a role',async(_label,mutation)=>{
+ const w=world();
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+  visibility:'public',html:'<link rel="af-resolver" data-af-name="api" href="./api.ts">',
+  resolverSources:{api:`export const roles={a:'owner'};const api={a(){return 1}};try{${mutation}}catch{};export default api`},
+ }}));
+ if(response.status===400)return;
+ expect(response.status,await response.clone().text()).toBe(201);
+ const {id}=await response.json();
+ expect((await call(id,'a',null,{method:'GET'})).status).toBe(403);
+ expect((await call(id,'b',null,{method:'GET'})).status).toBe(404);
+});
+
+it.each([
+ ['namespace', `namespace N {export function a(){return 1}};export default {a:N.a}`],
+ ['enum', `enum N {a};export default {a(){return N.a}}`],
+ ['reserved keys', `export default {roles(){return 1},secrets(){return 1},typeDefs(){return 1},default(){return 1},constructor(){return 1},toString(){return 1}}`],
+ ['named aliases', `function f(){return 1};export {f as a};export const roles={a:'owner'}`],
+])('re-review 3: %s preserves declared roles',async(_label,source)=>{
+ const w=world();
+ const roles=_label==='reserved keys'?`export const roles={roles:'owner',secrets:'owner',typeDefs:'owner',default:'owner',constructor:'owner',toString:'owner'};`: _label==='named aliases'?'':`export const roles={a:'owner'};`;
+ const response=await publish(request('/api/artifacts',{method:'POST',token:w.owner.token,json:{
+  visibility:'public',html:'<link rel="af-resolver" data-af-name="api" href="./api.ts">',resolverSources:{api:roles+source},
+ }}));
+ expect(response.status,await response.clone().text()).toBe(201);
+ const {id}=await response.json();
+ for(const name of _label==='reserved keys'?['roles','secrets','typeDefs','default','constructor','toString']:['a']){
+  expect((await call(id,name,null,{method:'GET'})).status,name).toBe(403);
+  expect((await call(id,name,w.owner,{method:'GET'})).status,name).toBe(200);
+ }
+});
