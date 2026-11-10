@@ -54,8 +54,8 @@ jobs:
             shard: 1/2
           - part: guards-2
             shard: 2/2
-          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 20 runners, its ui and
-          # islands projects on 4, the same files ci.yml's api and ui jobs run after the merge, each group packed
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 22 runners, its ui and
+          # islands projects on 6, the same files ci.yml's api and ui jobs run after the merge, each group packed
           # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
           # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
           # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
@@ -128,19 +128,22 @@ jobs:
             suite: 22/22
           - part: ui-1
             projects: --project=ui --project=islands
-            suite: 1/5
+            suite: 1/6
           - part: ui-2
             projects: --project=ui --project=islands
-            suite: 2/5
+            suite: 2/6
           - part: ui-3
             projects: --project=ui --project=islands
-            suite: 3/5
+            suite: 3/6
           - part: ui-4
             projects: --project=ui --project=islands
-            suite: 4/5
+            suite: 4/6
           - part: ui-5
             projects: --project=ui --project=islands
-            suite: 5/5
+            suite: 5/6
+          - part: ui-6
+            projects: --project=ui --project=islands
+            suite: 6/6
           # THE NODE BATCH (vitest.node-batch.config.ts, scripts/lib/node-batch.mjs): the full suite's `node` files
           # recorded under 200ms that no other list here runs, plus the post-merge failures it guards, one shared module
           # graph per worker; ci.yml's node job still runs every one of them. 236 files: ~4.3s per runner locally on two
