@@ -30,7 +30,7 @@ describe('the registry is curated, not generated', () => {
 
   it('carries the artifact and dataset operations of the protocol', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
-      'create_group','delete_group','get_group','invite_group_member','leave_group','link_group','list_group_invitations','list_group_members','list_groups','remove_group_invitation','remove_group_member','set_group_member_role','share_artifact_with_group','unlink_group','unshare_artifact_with_group','update_group',
+      'create_group','delete_group','get_group','invite_group_member','leave_group','link_group','list_group_invitations','list_group_members','list_groups','remove_group_invitation','remove_group_member','set_group_member_role','set_group_parent','share_artifact_with_group','unlink_group','unshare_artifact_with_group','update_group',
       'annotate', 'browser_session', 'change_artifact_membership', 'create_artifact', 'delete_artifact', 'edit_comment', 'export_artifact', 'fork_artifact', 'get_artifact', 'get_artifact_members',
       'get_dataset_policy', 'get_dataset_policy_templates', 'get_version', 'list_artifacts', 'list_versions', 'mutate_dataset', 'query_dataset_graphql', 'query_resource', 'react_comment', 'refresh_asset', 'restore_artifact', 'revert_artifact',
       'set_dataset_policy', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',

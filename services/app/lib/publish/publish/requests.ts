@@ -9,7 +9,7 @@ import {compilePageBackend,composePageSchema,pageDocumentProblems} from '@/lib/p
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import {pageDatasetCheckSources,pageDatasetRoots} from '@/lib/graphql-compat';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
-import type {PreparedHtmlBackend} from '@/lib/html-backends';
+import {credentialNames,type PreparedHtmlBackend} from '@/lib/html-backends';
 import {governedPublishRefusal} from './governed';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
@@ -413,6 +413,8 @@ async function createArtifactFromBodyPrepared(
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const governedRefusal=await governedPublishRefusal(actor.userId,htmlBackends,[]);if(governedRefusal)return governedRefusal;
+  // A credential is a person's (lib/html-backends authority): a group-owned page carries governed bindings only, as its republish does.
+  if(destination.type==='group'&&htmlBackends?.some(backend=>credentialNames(backend).length))return json({error:'backend_credentials_owner_required',details:htmlBackends.flatMap(backend=>credentialNames(backend).map(name=>`resolver "${backend.name}" declares ${name}, a credential: a group-owned page holds no one's credentials; publish it as your own page, or use a governed 'minusx' connection`))},403);
   const graphqlRefusal=await pageGraphqlRefusal(publicationActor,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;

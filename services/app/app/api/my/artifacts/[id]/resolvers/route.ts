@@ -7,6 +7,9 @@ import {backendSecrets} from '@/lib/html-backend-secrets';
 import {declaresResolverTest} from '@/lib/page-operations';
 import {functionSchedulesOf} from '@/lib/function-schedules';
 import {json,unauthorized} from '@/lib/http';
+import {getGroupById} from '@/lib/groups';
+import {minusxBinding} from '@/lib/minusx';
+import {MINUSX_CONNECTION_KIND,type MinusxBinding} from '@artifactbin/contracts';
 type Context={params:Promise<{id:string}>};
 /**
  * GET — the page owner's Resolvers panel: each resolver on the head revision with its declared secrets (name → bound
@@ -14,21 +17,31 @@ type Context={params:Promise<{id:string}>};
  * outcome (lib/function-schedules: a failure's code, the function's message and the owner-only detail).
  * Values are never read. `revision` is what Test connection runs `test` against: a legacy file's GraphQL field, or a
  * function file's (`functions`: typeDefs-free) `test` function through `/fn/test`.
+ *
+ * `bindings`: each set governed MinusX name (`'minusx'`) with what it pins, `{connection_id, group_id, group_name}`. It
+ * holds no credential, so the panel shows it. A group-owned page's backends are the group's: its direct editors see
+ * what is set, as they may set its bindings (the secrets route).
  */
 export async function GET(request:Request,context:Context){
  const actor=await requestOrSessionActor(request);if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);if(!actor.userId&&!actor.tokenId)return unauthorized(request);
  const {id}=await context.params;
  try{
-  if(!await getOwnedArtifactFor(actor,id))return json({error:'not_found'},404);
+  const owned=await getOwnedArtifactFor(actor,id);
+  if(!owned)return json({error:'not_found'},404);
   const page=await readHtmlPage(actor,id),account=accountOf(actor),schedules=await functionSchedulesOf(id);
   const resolvers=await Promise.all(page.links.flatMap(link=>link.kind==='backend'?[link]:[]).map(async link=>{
    const backend=await getHtmlBackendVersion(link.backendId,link.version);
    if(!backend||backend.pageId!==id)return null;
    const secrets=backend.secretHosts??{};
-   const set=backend.ownerId===account?(await backendSecrets.names({ownerId:backend.ownerId,backendId:backend.backendId})).filter(name=>name in secrets):[];
+   const scope={ownerId:backend.ownerId,backendId:backend.backendId};
+   const set=backend.ownerId===account||(!!owned.group_id&&backend.ownerId===owned.group_id)?(await backendSecrets.names(scope)).filter(name=>name in secrets):[];
+   const bindings:Record<string,MinusxBinding&{group_name:string|null}>={};
+   for(const name of set.filter(name=>secrets[name]===MINUSX_CONNECTION_KIND)){
+    try{const binding=minusxBinding(JSON.parse(await backendSecrets.get(scope,[name],name)));bindings[name]={...binding,group_name:(await getGroupById(binding.group_id))?.name??null};}catch{/* unreadable: shown as set, without what it pins */}
+   }
    const scheduled=schedules.filter(schedule=>schedule.link===link.name).map(({link:_link,...schedule})=>schedule);
    const functions=!backend.typeDefs;
-   return {name:link.name,backendId:link.backendId,version:link.version,functions,test:functions?Object.hasOwn(backend.functions??{},'test'):declaresResolverTest(backend.typeDefs),secrets,set,schedules:scheduled};
+   return {name:link.name,backendId:link.backendId,version:link.version,functions,test:functions?Object.hasOwn(backend.functions??{},'test'):declaresResolverTest(backend.typeDefs),secrets,set,bindings,schedules:scheduled};
   }));
   return json({revision:page.revision,resolvers:resolvers.filter(Boolean)},200,{'Cache-Control':'no-store'});
  }catch{return json({error:'not_found'},404);}

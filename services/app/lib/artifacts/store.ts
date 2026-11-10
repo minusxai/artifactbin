@@ -249,7 +249,8 @@ async function insertArtifact(
   if(input.format==='html'&&input.htmlBackends){
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
-    const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
+    // A group-owned page's backends belong to the group (its stored values with them), a personal page's to its creator.
+    const links=await commitHtmlBackends(tx,id,input.destination?.type==='group'?input.destination.id:creatorId,input.htmlBackends,[]);
     input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
   }
   if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
@@ -745,7 +746,8 @@ async function replaceArtifactInTx(
     const names=htmlBackendNames(input.source??'');
     if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
     if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
-    const backendOwner=current.user_id??current.token_id;
+    // The same owner a creation gave the backends (above): the owning group, else the personal owner.
+    const backendOwner=current.group_id??current.user_id??current.token_id;
     if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
     const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
     const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);

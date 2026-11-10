@@ -31,7 +31,7 @@ export class ScheduleRefusal extends DatasetError {
 export class ScheduleLimitError extends ScheduleRefusal {
  constructor(total:number){super('schedule_limit',[`This would give the publishing account ${total} scheduled functions across the pages it published; one account may have at most ${FUNCTION_SCHEDULE_LIMIT}. Remove a schedule here or from another page it published, then try again.`],400);}
 }
-export class SchedulesOwnedByMinusxError extends ScheduleRefusal {
+class SchedulesOwnedByMinusxError extends ScheduleRefusal {
  constructor(added:readonly {link:string;function:string}[]){super('schedules_owned_by_minusx',added.map(entry=>`resolver "${entry.link}" schedules ${entry.function}: recurring work on this installation is scheduled in MinusX, not by a page, so this would start a page schedule; publish a version without the schedule export instead`),409);}
 }
 const HEADS=`FROM artifacts a

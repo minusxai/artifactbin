@@ -12,7 +12,7 @@
  *   refuses, or no caller at all (anonymous), is `data_access_denied`; there is no fallback to anyone else's
  *   access and no direct connection. MinusX unreachable is `data_unavailable`.
  */
-import {isResolverDatabaseKind,type MinusxBinding} from '@artifactbin/contracts';
+import {isResolverDatabaseKind,type MinusxBinding,type MinusxConnections} from '@artifactbin/contracts';
 import {getGroupRole} from '@/lib/groups';
 import {databaseConnection,type DatabaseConnection} from '@/lib/html-backend-secrets';
 import {IS_DEV,IS_TEST,minusxSettings} from '@/lib/platform';
@@ -29,15 +29,20 @@ export function minusxBinding(value:unknown):MinusxBinding{
 
 /** Why an author may not pin a binding: `minusx_not_configured`, `not_group_member`, `binding_forbidden`, `connection_not_visible`, `minusx_unavailable`. */
 export class MinusxBindingError extends Error {constructor(readonly code:string){super(code);this.name='MinusxBindingError';}}
-export async function validateMinusxBinding(authorId:string,binding:MinusxBinding):Promise<void>{
+/**
+ * The connections an author could pin under `groupId`: what MinusX lists for a delegation minted for that author under
+ * exactly that group (the author must be a direct member of it), refused as `validateMinusxBinding` refuses.
+ */
+export async function minusxConnectionsFor(authorId:string,groupId:string):Promise<MinusxConnections['connections']>{
  const settings=minusxSettings();
  if(!settings)throw new MinusxBindingError('minusx_not_configured');
  // Direct membership of exactly that group: a parent's or a child's membership is not this group's.
- if(!await getGroupRole(authorId,binding.group_id))throw new MinusxBindingError('not_group_member');
- let listed;
- try{listed=await createMinusxClient(settings).connections({userId:authorId,groupId:binding.group_id});}
+ if(!await getGroupRole(authorId,groupId))throw new MinusxBindingError('not_group_member');
+ try{return (await createMinusxClient(settings).connections({userId:authorId,groupId})).connections;}
  catch(error){throw new MinusxBindingError(error instanceof MinusxRefusal&&(error.status===401||error.status===403)?'binding_forbidden':'minusx_unavailable');}
- if(!listed.connections.some(connection=>connection.id===binding.connection_id))throw new MinusxBindingError('connection_not_visible');
+}
+export async function validateMinusxBinding(authorId:string,binding:MinusxBinding):Promise<void>{
+ if(!(await minusxConnectionsFor(authorId,binding.group_id)).some(connection=>connection.id===binding.connection_id))throw new MinusxBindingError('connection_not_visible');
 }
 
 /** A run's refusal: `data_access_denied`, `connection_unavailable` or `data_unavailable`, with nothing else in it. */

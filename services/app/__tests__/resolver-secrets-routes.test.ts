@@ -30,7 +30,7 @@ it('lists the page resolvers for the owner, and sets and removes a value through
   expect(listed.status).toBe(200);
   const before = await listed.json() as { revision: string; resolvers: { backendId: string; version: string }[] };
   expect(before.revision).toEqual(expect.any(String));
-  expect(before.resolvers).toEqual([{ name: 'db', backendId: expect.any(String), version: expect.any(String), functions: false, test: true, secrets: { TOKEN: 'api.example.com' }, set: [], schedules: [] }]);
+  expect(before.resolvers).toEqual([{ name: 'db', backendId: expect.any(String), version: expect.any(String), functions: false, test: true, secrets: { TOKEN: 'api.example.com' }, set: [], bindings: {}, schedules: [] }]);
   const { backendId, version } = before.resolvers[0]!;
   const alias = `/api/my/resolvers/${backendId}/${version}/secrets`;
   const set = await app.request(alias, { method: 'PUT', headers: json(owner.token), body: JSON.stringify({ name: 'TOKEN', value: VALUE }) });
