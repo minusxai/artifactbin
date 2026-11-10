@@ -10,8 +10,9 @@ Examples:
   node scripts/export.mjs ID --format html --output copy.html
   node scripts/export.mjs ID --format png --slide 2 --output slide-2.png
 Gotchas: the HTML copy carries credential-free provenance (origin, page ID, saved revision) and
-  opens offline; it does not overwrite or publish anything, and merely opening or editing it
-  changes nothing on the server.
+  opens offline; it carries the page's dataset rows that you may read, so its sql tables render
+  offline. It does not overwrite or publish anything, and merely opening or editing it changes
+  nothing on the server.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 

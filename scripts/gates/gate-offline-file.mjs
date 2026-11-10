@@ -37,12 +37,21 @@ async function publish(body) {
   if (response.status !== 201) throw new Error(`publish -> ${response.status}: ${await response.text()}`);
   return (await response.json()).id;
 }
+// A table the page computes with sql: the download carries the rows this reader may read and the engine that answers them.
+const salesId = await publish({ dataset: [{ region: 'North', amount: 428 }, { region: 'North', amount: 461 }, { region: 'South', amount: 512 }, { region: 'South', amount: 186 }], title: 'Offline sales', visibility: 'private' });
 const source = `<!doctype html><html><head><title>Portable native page</title>
+<link rel="af-dataset" data-af-name="sales" href="ref:${salesId}">
 <style>body{font-family:system-ui;background:#fff;color:#17202b}.status{color:rgb(20,90,40)}</style>
 <link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">
 <script type="application/json" data-af="state">{"count":3}</script>
 <script src="/af/core.js"></script></head><body>
 <h1 class="status">Portable native page</h1><output id="count">Starting</output>
+<table id="sql-table"><tbody></tbody></table>
+<script type="module">
+import {sql} from '@afbin/apollo';
+const rows=await sql\`select region, sum(amount) as total from sales group by region order by region\`;
+document.querySelector('#sql-table tbody').innerHTML=rows.map(r=>'<tr><td>'+r.region+'</td><td>'+r.total+'</td></tr>').join('');
+</script>
 <button id="increment">Increment locally</button><button id="shared">Change shared job</button><output id="outcome"></output>
 <svg id="portable-author-svg" viewBox="0 0 10 10" width="40" height="40"><circle cx="5" cy="5" r="4" fill="#145a28"></circle></svg>
 <img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
@@ -113,6 +122,9 @@ async function reading(engineName, browser) {
         await expect(page.locator('h1')).toHaveCSS('color', 'rgb(20, 90, 40)');
         await expect.poll(() => page.getByAltText('Portable pixel').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
         await expect(page.locator('#portable-author-svg circle')).toHaveAttribute('r', '4');
+      });
+      await step('a table computed with sql renders from the rows the file carries', async () => {
+        await expect(page.locator('#sql-table td')).toHaveText(['North', '889', 'South', '698']);
       });
       await step('private local state remains interactive while shared mutations are explicitly offline', async () => {
         await expect(page.locator('#count')).toHaveText('3');

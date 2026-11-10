@@ -58,6 +58,13 @@ export interface HtmlAssemblyInput {
   collab?: string;
   /** `@afbin/state`, embedded in every portable export (the embedded `@afbin/apollo` imports it). */
   state?: string;
+  /**
+   * `@afbin/offline-sql` (./offline-sql: the SQLite engine and its wasm), embedded only in a portable export that
+   * carries `offlineData`. Embed-only, so it has no RUNTIME_MODULE_PATHS address: a hosted page never loads an engine.
+   */
+  offlineSql?: string;
+  /** The rows the downloading reader's `sql` reads through the page (lib/dataset-access offlinePageSqlData); offline exports only. */
+  offlineData?: { tables: ReadonlyArray<{ schema: string; name: string; columns: ReadonlyArray<{ name: string; type: string }>; rows: ReadonlyArray<Readonly<Record<string, unknown>>> }> };
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
   /** Embedded assets work without a network; connection is a separate explicit capability. */
@@ -66,7 +73,7 @@ export interface HtmlAssemblyInput {
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string; regions?:string; regionsPath?:string; nativeRegions?:string; nativeRegionsPath?:string; nativeMarkdown?:string; nativeMarkdownPath?:string; collab?:string; collabPath?:string; state?:string; statePath?:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string; regions?:string; regionsPath?:string; nativeRegions?:string; nativeRegionsPath?:string; nativeMarkdown?:string; nativeMarkdownPath?:string; collab?:string; collabPath?:string; state?:string; statePath?:string; offlineSql?:string }
 /** D17: the platform runtime's flat public addresses (core: lib/html-page/core-script). No version or hash; strong ETag and `no-cache`. */
 export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',regionsPath:'/af/regions.js',nativeRegionsPath:'/af/native-regions.js',nativeMarkdownPath:'/af/native-markdown.js',collabPath:'/af/collab.js',statePath:'/af/state.js'} as const;
 /** `Symbol.for` key under which core records its build id for the lazy modules' skew guard (build.server). */

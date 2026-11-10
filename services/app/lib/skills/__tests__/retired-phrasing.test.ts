@@ -145,6 +145,8 @@ const RETIRED: Retired[] = [
     reason: 'Q1: datasets are read and written with sql, viewer state with @afbin/state, never the Apollo client'},
   {pattern: /\bgql\s*[`(\[]|`gql`/, scopes: AGENT_TEXT, allow: 'Editing an older page that uses `gql`',
     reason: 'Q1: gql is named only in the one note on older pages (SKILL.md)'},
+  {pattern: /downloaded copy has no app connection: `sql` rejects|show that the data lives in the original page/, scopes: AGENT_TEXT,
+    reason: 'Q4: a downloaded copy answers its sql reads from the rows it carries (lib/html-runtime offline-sql)'},
   {pattern: /\btypeDefs\b/, scopes: AGENT_TEXT,
     reason: 'Q2: a backend file exports functions, roles, secrets and schedule; never GraphQL SDL'},
   {pattern: /@auth\b/, scopes: AGENT_TEXT, reason: 'Q2: export const roles = {name: role} says who may call a function'},
