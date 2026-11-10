@@ -1,19 +1,29 @@
-## Pull-request timing policy
+# Agent workflows
 
-Across application, proxy, evaluator and deployment repositories, automatic PR verification targets under40 seconds, warns from40 seconds and fails above60 seconds. Measure from the workflow attempt start through its final clock, including setup/install/network/prerequisite waits. Do not raise budgets, subtract waits or retry unchanged failures. Keep clear workflow comments and boundary tests.
+Delegating, worktrees, handoffs, local evals and browser gate containers. The universal rules (check tiers, the
+50-file cap, exit 2, reuse receipts, empty PR bodies) are in [AGENTS.md](../AGENTS.md) and bind every implementer
+and reviewer unchanged; this file adds only what delegation needs.
 
-Merge after the fast PR lane passes; do not wait for full release suites on PRs. Complete type/build/runtime/browser/security coverage remains on main and gates deployment for the exact revision. Fast PR success must never be treated as tested-release evidence.
-
-# Agent handoffs
+## Delegated work
 
 Use the active harness and user-selected model. Old version-specific launch commands and model
 comparisons are historical evidence, not portable defaults; consult the installed CLI help before using them.
 
-For delegated implementation, the orchestrator owns the design, contracts, core behavioral tests and
-risk register. Order dependent milestones by plan-changing risk. Seed the tests and skeletons before
-handoff; prove the tests detect the behavior they claim to guard. Give each implementer a bounded brief
-with scope, deletion list, constraints, verification commands and completion criteria. Implementers do
-not delegate further or widen their brief.
+The orchestrator owns the design, contracts, core behavioral tests and risk register, and seeds contracts, core
+tests and skeletons before handoff. Order dependent milestones by plan-changing risk, and prove the seeded tests
+detect the behavior they claim to guard. Each implementer gets a bounded brief with scope, deletion list,
+constraints, verification commands and completion criteria.
+
+- Each implementer uses its own worktree, data directory and port block, never delegates or shares a checkout, and
+  does not widen its brief.
+- Independent deliverables get separate briefs and implementers in parallel worktrees; shared files get one brief.
+  The orchestrator merges.
+- Browser gates run in containers (`scripts/gate-container.mjs`, below), up to engine CPUs ÷ container CPUs at once
+  (`GATES__CONTAINER_SLOTS` overrides), never on the host.
+- Gates are SLOW-tier: an implementer runs them ONCE at the end of the brief, NEVER per edit. Every brief must say so verbatim.
+- Separate PRs per repository.
+
+## Worktrees
 
 `node scripts/agent-worktree.mjs --phase <name> --brief <file> --base <branch> --install` creates a worktree,
 allocates a free 100-port block and installs pinned dependencies with checked `npm ci`.
@@ -27,56 +37,34 @@ adds fresh local secrets; `--from <port>` starts the search for a free 100-port 
 launch line for that coding agent (check the installed CLI's help before trusting it); never commit `.env` or `.agent/`. Each worktree owns its database/object paths,
 compose project and ports. `node scripts/port-block.mjs --env` measures availability instead of guessing.
 
+## Briefs and reports
+
 Keep the concrete handoff in `.agent/BRIEF.md` and completion evidence in `.agent/REPORT.md`.
 Do not treat a process exit code as proof of completion: inspect its report, log and changes. Resume
 partially completed work with its existing commits rather than recreating the seed. Shell timeouts must
 work on the host (`gtimeout` or a process alarm on macOS). Never stop another session's server by name
 or port; track and stop only processes the task owns.
 
-The orchestrator reviews the diff, report and verification receipts. The local-check rules the
-implementer worked under — the file cap, exit 2, reuse receipts, empty PR bodies — are stated once in
-[AGENTS.md](../AGENTS.md) and apply unchanged to the review; what follows is only what review adds.
+## Review
 
-Reproduce risky assertions and the changed user flow when evidence is missing or invalidated;
-do not routinely repeat the implementer's entire red/green sequence. CI checks the combined branch.
-Review the diff against the brief and inspect PR checks, including CodeQL when
-configured. Merge only reviewed work and then dispatch remaining authorized work whose dependencies
-are satisfied. A passing test against an old server is not verification: check the process and build you
-started. Browser gates run in containers via `scripts/gate-container.mjs`, up to N at once (below).
-
-After merging lockfile changes, regenerate the lock if needed and run `npm ci --dry-run`. Read install
-output unfiltered: an already populated `node_modules` can hide a missing lock entry.
-
-## CI timing evidence
-
-The [CI speed contract](../AGENTS.md#ci-speed-contract) measures one attempt's complete required-check
-chain, not its longest job. GitHub's attempt `run_started_at` is the start; the final required rollup
-is the finish. This includes dependency queues, setup and receipt uploads. The builtin-only
-`scripts/lib/ci-elapsed.mjs` enforces a hard failure above 480 seconds on both PRs and main, with
-180/240-second target and normal-limit diagnostics. Per-job durations above 240 seconds warn on PRs
-and main; legitimate preparation waits remain included. The complete chain owns the hard timing failure.
-A receipt is evidence only from a successful run.
-Optional background cache warming and post-check downstream release notification stay outside this rollup;
-full workflow duration and merge-to-live latency remain separate reported metrics.
-
-When investigating a miss, retain attempt timestamps and each critical-path step's timing. Separate
-cold transfers/installs from warm runs. Reduce serial work or safely share immutable inputs before
-changing shard counts. Keep required coverage and exact-tree provenance; improving one job is not proof
-that the complete chain improved. Record observed timings and remaining misses in the handoff.
-
-CI browser downloads use separate immutable Chromium, Firefox and WebKit caches. A cache hit
-certifies only that engine's files; each fresh runner still provisions its required OS libraries.
-The main warmer writes the same engine keys as readers.
+The orchestrator reviews the diff against the brief, the report and the verification receipts. Reproduce risky
+assertions and the changed user flow when evidence is missing or invalidated; do not routinely repeat the
+implementer's entire red/green sequence. CI checks the combined branch: inspect the PR's `pr fast` checks. CodeQL
+runs on main after merge and on a weekly schedule, not on the PR, so read its alerts there. Merge only reviewed
+work and then dispatch remaining authorized work whose dependencies are satisfied. A passing test against an old
+server is not verification: check the process and build you started.
 
 ## Local loop
 
-Work up the tiers, and stop at the cheapest one that can still be wrong:
+Work up the tiers, and stop at the cheapest one that can still be wrong. Tiers 1 and 2 are FAST, after every
+change; tier 3 when the skill or another agent-facing surface changed; tiers 4 and 5 are SLOW: once, at the end,
+before merge, never per edit.
 
 1. Unit tests — `npm test -- --files <paths>`.
 2. The local stack — `npm run dev` on this checkout's `APP__PORT`; verify the change in the app.
-3. Browser gates — `node scripts/gate-container.mjs <gate ...>`, in a Linux container, up to N at once.
-4. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
-5. Docker and Postgres — pre-release only, not a routine loop.
+3. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
+4. Browser gates — `node scripts/gate-container.mjs <gate ...>`, in a Linux container (below).
+5. Docker and Postgres — pre-release only.
 
 Live sessions (tiers 3–4) need Linux bubblewrap. `BROWSER__SANDBOX=none` runs the session worker as
 a plain child process instead — no containment at all, refused under `NODE_ENV=production`, and
@@ -95,10 +83,9 @@ skill projection from the intended source revision. Installation scenarios must 
 candidate through the same installer/npm paths a deployed target uses. Never silently fetch a public
 release or require a production deploy to make the local evaluation runnable.
 
-A complete candidate may need runtime asset compilation before packing. The local-eval exception
-in AGENTS.md permits that preparation using normal package assembly; cache it by all relevant inputs
-and run it once per source snapshot. It is not a production deployment or evidence that CI passed.
-Do not replace the real skill with a limited fixture or silently remove its capabilities to make the
+A complete candidate may need runtime asset compilation before packing. Prepare it with normal package assembly,
+cache it by all relevant inputs and run it once per source snapshot; it is not a production deployment or evidence
+that CI passed. Do not replace the real skill with a limited fixture or silently remove its capabilities to make the
 evaluation cheaper. Full suites and merge gates still belong to CI.
 
 For direct HTTP, supply the target artifact URL and serve its root/references/API on that target.
@@ -119,8 +106,9 @@ repository's README owns the exact runnable commands and provider preflight, not
 `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [--servers N] <gate ...>` runs the named
 gates the way CI's gate job does, from any worktree: the official Playwright image for the pinned
 Playwright (Linux Chromium, Firefox, WebKit and fonts) with Node 22 and bubblewrap; the worktree's
-source copied from a read-only mount; `npm run build`; then
-`node scripts/gates.mjs --servers=N --only=<gates>` against production servers inside the container,
+source copied from a read-only mount; CI's gate build (`scripts/build/build-gate-inputs.mjs`: the app and the
+server bundle), restored instead from the `afbin-gate-builds` volume when no build input changed since it last ran;
+then `node scripts/gates.mjs --servers=N --only=<gates>` against production servers inside the container,
 with the real bubblewrap session sandbox instead of `BROWSER__SANDBOX=none`. The output streams, the
 exit status is the gates', and the container is removed afterwards, also when the runner is killed.
 
@@ -129,9 +117,9 @@ exit status is the gates', and the container is removed afterwards, also when th
   smaller (3 on a 14-CPU, 36 GB Colima). A runner that finds every slot taken waits and names the
   holders; a slot whose runner died is reclaimed.
 - **Caches.** Dependencies install once per `afbin-gate-deps-<key>` volume, keyed like CI's install
-  cache, and are copied into each container; the `afbin-gate:*` image is built once per Playwright
-  version. Both persist; nothing else does. Remove stale ones with
-  `docker volume ls -q --filter label=afbin.gate-container=1 | xargs docker volume rm`.
+  cache, and are copied into each container; the `afbin-gate-builds` volume keeps the last few gate builds; the
+  `afbin-gate:*` image is built once per Playwright version. These persist; nothing else does. Remove stale
+  volumes with `docker volume ls -q --filter label=afbin.gate-container=1 | xargs docker volume rm`.
 - The worktree must be under `$HOME`, which Colima shares. The gates run as root in the container:
   the Colima VM restricts unprivileged user namespaces, and root there is what lets bubblewrap build
   the session sandbox without changing a VM-wide setting.
@@ -142,8 +130,8 @@ exit status is the gates', and the container is removed afterwards, also when th
 ## Exercising the agent policy
 
 Run `node scripts/agent-dev-flow.mjs` to create a disposable checkout with the current
-instructions and real local-check wrappers. Give its printed `.agent/BRIEF.md` to a bounded agent
-(e.g. GPT Sol). It provides 51 affected test identities, simulated validation/discovery/GitHub tools,
+instructions and real local-check wrappers. Give its printed `.agent/BRIEF.md` to a bounded agent.
+It provides 51 affected test identities, simulated validation/discovery/GitHub tools,
 and a local bare Git remote; no real PR, install, browser, or paid model call is made by the fixture.
 Inspect `.agent/commands.jsonl`, the agent's transcript, and `.agent/REPORT.md`: discovery only,
 exit 2 reported as deferred, no cap override/full suite/batches, a pushed commit, empty PR body,

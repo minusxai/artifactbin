@@ -1,4 +1,8 @@
-/** Native document metadata, asset addresses, CSP and durable annotation ranges. */
+/**
+ * Native document metadata, asset addresses, CSP and durable annotation ranges. No I/O: persistence belongs to
+ * lib/artifacts and publication to lib/publish. Keep the module below the browser bridge and persistence layers;
+ * browser consumers enter through the leaves DEEP_MODULES['lib/document'] lists, everyone else through this index.
+ */
 export type { StoredContent } from './stored-content';
 
 export { newEditId } from './splice';

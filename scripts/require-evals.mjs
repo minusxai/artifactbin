@@ -1,5 +1,5 @@
 /**
- * `npm run eval` needs the private eval suite copied into ./evals (see AGENTS.md). Without it,
+ * `npm run eval` needs the private eval suite copied into ./evals (see services/app/lib/skills/AGENTS.md). Without it,
  * tsx fails with a module-not-found stack trace that says nothing about the fix; this says it.
  */
 import { existsSync } from 'node:fs';
