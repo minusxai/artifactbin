@@ -109,10 +109,29 @@ describe('files a page links (<a href>, <area href>)',()=>{
   // Element sources stay strict in every save.
   expect(()=>planPublicationBundle('<img src="./missing.svg">',{entryPath:'index.html',files:[]},{linksAsWritten:true})).toThrow('missing.svg');
  });
- it('refuses a file nothing in the page links, and says how a script reaches one',()=>{
-  expect(()=>planPublicationBundle('<h1>x</h1>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]})).toThrow(/data\.json[\s\S]*<link rel="preload" as="fetch" href="\.\/data\.json" crossorigin>/);
+ it('refuses a file nothing in the page links or fetches, and says what to write',()=>{
+  expect(()=>planPublicationBundle('<h1>x</h1>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]})).toThrow(/data\.json[\s\S]*fetch\('\.\/data\.json'\)/);
   const plan=planPublicationBundle('<link rel="preload" as="fetch" href="./data.json" crossorigin>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]});
   expect(plan.dependencies.map(d=>d.path)).toEqual(['data.json']);
+ });
+ it('publishes a file a script fetches by a literal path, resolved against the page, and leaves the script as written',()=>{
+  const html='<script>fetch("./a.json")</script><script type="module">await fetch(`b.json`, {cache:"no-store"});import "./js/app.js";</script><script type="application/json">{"x":"fetch(\'./c.json\')"}</script>';
+  const files=[file('a.json','{}','application/json'),file('b.json','{}','application/json'),file('c.json','{}','application/json'),file('js/app.js','export const geo=await fetch(\'./geo/states.geojson\');','text/javascript'),file('geo/states.geojson','{}','application/geo+json')];
+  // A JSON block is data, not a script: its text fetches nothing.
+  expect(()=>planPublicationBundle(html,{entryPath:'index.html',files})).toThrow(/Not linked from the page: c\.json/);
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:files.filter(f=>f.path!=='c.json')});
+  expect(plan.dependencies.map(d=>d.path).sort()).toEqual(['a.json','b.json','geo/states.geojson','js/app.js']);
+  // A module's fetch reads against the document, as the browser resolves it: geo/ beside the page, not js/geo/.
+  expect(plan.dependencies.find(d=>d.path==='js/app.js')!.dependencies).toEqual([]);
+  const addresses=new Map(plan.dependencies.map(d=>[d.path,'/a/P/assets?dependency='+d.path]));
+  expect(plan.rewrite(html,'index.html',addresses)).toBe(html.replace('./js/app.js','/a/P/assets?dependency=js/app.js'));
+  expect(plan.rewrite('export const geo=await fetch(\'./geo/states.geojson\');','js/app.js',addresses)).toBe('export const geo=await fetch(\'./geo/states.geojson\');');
+ });
+ it('ignores a literal fetch of a path the project does not hold, or one that is not a file of it',()=>{
+  const html='<script type="module">// await fetch("./old.json")\nawait fetch("/api/x");await fetch("https://example.com/y.json");await fetch("../outside.json");await fetch(`./${name}.json`);</script>';
+  expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
+  // A file published before and reused by mapping is reached the same way.
+  expect(()=>planPublicationBundle('<script>fetch("./kept.json")</script>',{entryPath:'index.html',files:[],mappings:{'kept.json':{kind:'asset',id:'KEPT12',revision:'1'}}})).not.toThrow();
  });
  it('pins a link to the page version and reads it back as the path the author wrote',async()=>{
   const {pinPublicationAssetUrls,authoringHtml}=await import('../plan');

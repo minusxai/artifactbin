@@ -38,7 +38,9 @@ const refuse=(why:string)=>new VersionRefused(why);
 /** Where the core keeps the HTML this document loaded (lib/html-runtime/build.server, captured at readyState interactive). */
 export const LOADED_SOURCE=Symbol.for(LOADED_SOURCE_KEY);
 
-interface Runtime {revision?:string;live?:number;savedNodeIds?:string[];scriptFingerprint?:string;appearance?:{designSystem?:string}}
+interface Runtime {revision?:string;live?:number;savedNodeIds?:string[];scriptFingerprint?:string;appearance?:{designSystem?:string};files?:Record<string,string>}
+/** The files a version published (./fn-fetch), each address without its version pin: what the scripts read. */
+const filesOf=(runtime:Runtime)=>JSON.stringify(Object.entries(runtime.files??{}).map(([name,address])=>[name,address.replace(/&version=\d+$/,'')]).sort());
 const runtimeOf=(doc:Document):Runtime=>{try{return JSON.parse(doc.querySelector('script[data-af="runtime"]')?.textContent??'{}') as Runtime;}catch{return {};}};
 const ID='data-af-id';
 const INTERACTIVE=new Set(['button','input','select','textarea','form','a','details','summary','option','optgroup','datalist','dialog','label','output','iframe','object','embed','video','audio','canvas']);
@@ -80,6 +82,8 @@ export interface VersionPlan {
 export function planVersion(loaded:Document,next:Document,scripts:string|null,oldIds?:readonly string[],editing?:ReadonlySet<string>):VersionPlan{
  const current=runtimeOf(loaded),incoming=runtimeOf(next);
  if(!incoming.scriptFingerprint||incoming.scriptFingerprint!==current.scriptFingerprint)throw refuse('the new version runs different scripts');
+ // Scripts already ran over the files the loaded version published; new files need them to run again.
+ if(filesOf(incoming)!==filesOf(current))throw refuse('the new version publishes different files');
  const oldSet=new Set(oldIds??current.savedNodeIds??[]),newSet=new Set(incoming.savedNodeIds??[]);
  const before=byId(loaded,oldSet),after=byId(next,newSet);
  const stable=new Set<string>(),touched:Element[]=[],removed:Element[]=[];

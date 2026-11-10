@@ -54,6 +54,23 @@ it('snapshots inline, static and lazy module graphs with shared chunks once',asy
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+it('snapshots a file a script fetches by a literal path, from the page or a module it loads, and skips one the project lacks',async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
+ const root=await mkdtemp(join(tmpdir(),'bundle-fetches-'));
+ try{
+  await mkdir(join(root,'js'));
+  await writeFile(join(root,'index.html'),'<script type="module">const data=await (await fetch(\'./data.json\')).json();</script><script type="module" src="./js/dash.mjs"></script>');
+  // fetch() reads against the document, so a module in js/ that fetches ./states.geojson means the file beside the page.
+  await writeFile(join(root,'js/dash.mjs'),'// await fetch("./old.json")\nexport const geo=await (await fetch("./states.geojson")).json();');
+  await writeFile(join(root,'data.json'),'{"total":42}');await writeFile(join(root,'states.geojson'),'{"type":"FeatureCollection","features":[]}');
+  const bundle=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
+  expect(bundle.body.publicationBundle.files.map((file:{path:string})=>file.path).sort()).toEqual(['data.json','js/dash.mjs','states.geojson']);
+  const {planPublicationBundle}=await import('../plan');
+  expect(planPublicationBundle(bundle.body.html,bundle.body.publicationBundle).dependencies.map(dep=>dep.path).sort()).toEqual(['data.json','js/dash.mjs','states.geojson']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 it('preserves URL query identity in inline modules and styles while escaping HTML attributes',async()=>{
  const {planPublicationBundle,pinPublicationAssetUrls}=await import('../plan');
  const html='<script type="module">import "./x.js";</script><style>.a{background:url(./x.png)}</style><img src="./x.png">';

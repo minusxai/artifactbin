@@ -20,7 +20,7 @@
  *          comment-view         a state block's data-af-comment-fields/-exclude/-version the runtime would refuse (no view saved)
  *          state-version        a state block's data-af-state-version the runtime would ignore (saved state never resets)
  *          pwa-metadata         an install setting publish would silently ignore
- *          unlinked-file        an inline script naming a project file by its path, which no link in the page publishes
+ *          unlinked-file        an inline script naming a project file other than in a literal fetch, which publish does not find
  *
  * IDs are never assigned here: the server's identity ledger owns them (lib/html-page canonicalizeHtmlPage); dropping
  * one only lets the server mint it.
@@ -34,6 +34,8 @@ import {repairCoreScript} from '../html-page/index.ts';
 import {normalizeDesignSelection} from '../html-page/design-system.ts';
 import {parseCommentViewFieldList} from '../../../contracts/src/comment-view-state.ts';
 import {STATE_VERSION_ATTRIBUTE,isStateVersion} from '../../../contracts/src/state-version.ts';
+import {scriptFetchPaths} from './script-fetches.ts';
+export {scriptFetchPaths} from './script-fetches.ts';
 initSync();
 
 type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link' | 'duplicate-data-af-id';
@@ -207,16 +209,19 @@ function findProblems(html: string, options: AutofixOptions = {}): AutofixProble
       const link = ref.element.tagName === 'a' || ref.element.tagName === 'area';
       if (!options.exists(ref.path)) problems.push({ rule: 'missing-asset', line: lineOf(html, ref.element), column: ref.element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, ref.element)), message: link ? `linked file not found: ${ref.value}; put it beside the page or link a full address` : `local file not found: ${ref.value}` });
     }
-    // A script's own string naming a project file: publish uploads only what the HTML links, and the page's address
-    // differs by where it is read, so the script's path reaches nothing. A guess from literals, so a warning.
+    // A script's own string naming a project file: publish uploads what the HTML links and what a script fetches by a
+    // literal path (./script-fetches), so a name held anywhere else (a constant, d3.json) publishes nothing. A guess
+    // from literals, so a warning.
     const linked = new Set(references.map((ref) => ref.path));
     for (const element of [...document.elements, ...document.templateElements]) {
       if (element.tagName !== 'script' || attribute(element, 'src') !== null) continue;
-      for (const [, , value] of textContent(element).matchAll(SCRIPT_PATH)) {
+      const text = textContent(element);
+      for (const fetched of scriptFetchPaths(text, attribute(element, 'type') === 'module')) { const path = projectPath(fetched); if (path) linked.add(path); }
+      for (const [, , value] of text.matchAll(SCRIPT_PATH)) {
         const path = projectPath(value!);
         if (!path || linked.has(path) || !options.exists(path)) continue;
         linked.add(path);
-        problems.push({ rule: 'unlinked-file', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `a script names ${value}: link it (<link rel="preload" as="fetch" href="./${path}" crossorigin>) and fetch its href` });
+        problems.push({ rule: 'unlinked-file', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `a script names ${value}, which publishes with the page only when a script fetches it by that literal path: fetch('${value}')` });
       }
     }
   }

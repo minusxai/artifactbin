@@ -26,7 +26,7 @@ function csvDatasetFields(path:string,csv:string):{title:string;name?:string;col
  const {headers,rows}=parseCsv(csv);
  return {title:file,...(graphqlRootNameProblem(stem)?{}:{name:stem}),...(headers.length&&!rows.length?{columns:headers.map(name=>({name,type:'string' as const}))}:{})};
 }
-export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[]}|Response>{
+export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Response>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
  try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle,resolvedBackendNames:[...page?.resolvedBackendNames??[],...Object.entries(body.resolverSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
@@ -103,7 +103,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
    const revision=String(saved.version??1);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};
   },
  },bundle.mappings);
- const next:Record<string,unknown>={...body,reserved_id:body.reserved_id??reserved[99],html:result.html};delete next.publicationBundle;return {body:next,receipts:result.receipts};
+ const next:Record<string,unknown>={...body,reserved_id:body.reserved_id??reserved[99],html:result.html};delete next.publicationBundle;return {body:next,receipts:result.receipts,entryPath:plan.entryPath};
  }catch(error){
   const cause=error instanceof Error?error.cause:undefined;
   if(cause instanceof BundleFileRefusal)return json({error:cause.code,path:cause.path,dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},403);

@@ -102,11 +102,11 @@ describe('autofix rules',()=>{
   expect(problems.map(problem=>problem.rule)).toEqual(['missing-asset']);
   expect(problems[0]!.message).toBe('linked file not found: ./rota.pdf; put it beside the page or link a full address');
  });
- it('warns when a script names a project file by its path, which a published page cannot reach',()=>{
-  const html=page(OK+'\n<link rel="preload" as="fetch" href="./linked.json" crossorigin>','<script type="module">const a=await fetch("./data.json");const b=await fetch(document.querySelector("link").href);const c="./linked.json";const d="./absent.json";</script>');
+ it('warns when a script names a project file other than by a literal fetch, which publish cannot find',()=>{
+  const html=page(OK+'\n<link rel="preload" as="fetch" href="./linked.json" crossorigin>','<script type="module">const a=await fetch("./data.json");const b=await d3.json("./geo.json");const c="./linked.json";const d="./absent.json";</script>');
   const result=autofixHtml(html,{exists:path=>path!=='absent.json'});
   expect(result.problems).toEqual([]);
-  expect(result.warnings.map(warning=>[warning.rule,warning.message])).toEqual([['unlinked-file','a script names ./data.json: link it (<link rel="preload" as="fetch" href="./data.json" crossorigin>) and fetch its href']]);
+  expect(result.warnings.map(warning=>[warning.rule,warning.message])).toEqual([['unlinked-file',"a script names ./geo.json, which publishes with the page only when a script fetches it by that literal path: fetch('./geo.json')"]]);
  });
  it('moves design selection from <html> into head metadata and drops the copied system stylesheet (D2)',()=>{
   const html=page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./design-systems/riso.css">').replace('<html>','<html data-af-dark="false" data-af-design-system="riso">');

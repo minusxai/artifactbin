@@ -3,3 +3,4 @@ export {planPublicationBundle,inspectPublicationBundle,pinPublicationAssetUrls} 
 export type {PublicationBundle} from './contracts';
 export {publishBundleDependencies,changedBundlePaths} from './execute';
 export {serveBundleAsset,loadBundleAssetResources} from './assets';
+export {publishedFileTable,type PublicationRecord} from './files';

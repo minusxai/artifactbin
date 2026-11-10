@@ -88,6 +88,6 @@ describe('what publish refuses or keeps',()=>{
   expect((await page.json() as {details:string[]}).details.join(' ')).toContain('other.html is a page: publish it on its own and link its address');
   const unlinked=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'bundle_links_unlinked_01'},json:{html:'<h1>x</h1>',publicationBundle:{entryPath:'index.html',files:[file('data.json','{}','application/json')]}}}));
   expect(unlinked.status).toBe(400);
-  expect((await unlinked.json() as {details:string[]}).details.join(' ')).toContain('<link rel="preload" as="fetch" href="./data.json" crossorigin>');
+  expect((await unlinked.json() as {details:string[]}).details.join(' ')).toContain("fetch('./data.json')");
  });
 });

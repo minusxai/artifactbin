@@ -4,6 +4,7 @@ import {type HtmlAssemblyInput, type HtmlRuntimeConfig, assembleHtmlPage, downlo
 import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, buildHtmlAssets} from '@/lib/html-runtime/server';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import {nativeHtmlStructuralWrapper} from './native-html-structural-wrapper';
+import {publishedFileTable,type PublicationRecord} from '@/lib/html-publication-bundle';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +41,8 @@ export interface NativeHtmlRender {
   unsavedIds?: ReadonlySet<string>;
   /** Offline only: the rows the downloading reader's `sql` reads (lib/dataset-access offlinePageSqlData), with the engine that answers them. */
   offlineData?: HtmlAssemblyInput['offlineData'];
+  /** Offline only: where the copy reads each file its page published (its bytes, or the platform's door); served pages derive it. */
+  files?: Readonly<Record<string, string>>;
 }
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
 
@@ -55,6 +58,10 @@ function htmlCore(): Promise<string> {
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
   const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),...(input.live!==undefined?{live:input.live}:{}),backends:links.map(link=>link.name),...(links.some(link=>link.kind==='dataset')?{datasets:links.flatMap(link=>link.kind==='dataset'?[link.name]:[])}:{}),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.domainReads&&!input.offline?{domainReads:true as const}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
+  // A page script's fetch of a file its publication recorded reads it at the page's asset door, on every surface
+  // (html-runtime fn-fetch); the address is relative, so it resolves on whichever origin serves the page.
+  const files=input.offline?input.files:publishedFileTable(input.row.meta as PublicationRecord,input.row.id,input.row.version);
+  if(files&&Object.keys(files).length)config.files=files;
   const source=input.row.source??'';
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);

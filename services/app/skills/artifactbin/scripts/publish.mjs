@@ -39,13 +39,13 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   text) are refused with the line to fix. Keep editing and publishing the same file and keep its
   marker line: a page rewritten whole loses it and is refused (publish it with --artifact ID).
   Dependencies publish with the page and are discovered from static HTML URLs (<a href> too),
-  CSS url() and @import, and static or literal dynamic module imports (up to 99 files, 4 MB
-  each, 16 MB total). A script reaches a file only through a link (<link rel="preload"
-  as="fetch" href="./data.json" crossorigin>, then fetch its href). A CSV linked by its path
-  (<link rel="af-dataset" data-af-name="sales" href="./sales.csv">) becomes a dataset named by
-  the file, and a later publish after it changes updates that same dataset. Computed imports
-  and cyclic graphs are refused; remote URLs, absolute server paths and ref: links stay as
-  written. af-resolver files go in as resolver sources, never as public assets. An update is
+  CSS url() and @import, static or literal dynamic module imports, and a script's fetch of a
+  literal path, fetch('./data.json'), which reads it wherever the page is read (up to 99
+  files, 4 MB each, 16 MB total). A CSV linked by its path (<link rel="af-dataset"
+  data-af-name="sales" href="./sales.csv">) becomes a dataset named by the file, and a later
+  publish after it changes updates that same dataset. Computed imports and cyclic graphs are
+  refused; remote URLs, absolute server paths and ref: links stay as written. af-resolver
+  files go in as resolver sources, never as public assets. An update is
   conditional on the version its marker saw: a newer version (exit 4) is never overwritten;
   then run read.mjs ID --output page.html, reapply your edits there and publish it. The
   journal is saved before sending and --resume never changes it. A dataset or file keeps no
