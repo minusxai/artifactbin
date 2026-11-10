@@ -42,10 +42,11 @@ export default defineConfig({
       ...byIsolation('pr-guards', 'guard-tests.json', {
         setupFiles: ['./services/app/test/setup/guard.setup.ts'],
         env: { APP_PACKAGE_ROOT: new URL('./services/app', import.meta.url).pathname, DATABASE_URL: suiteEnv(import.meta.dirname).DATABASE_URL },
-        testTimeout: 5000,
-        // A hook here may boot the app harness's database, and a worker's first file pays the cold boot: on a loaded
-        // runner that took over 5s and failed html-backends/store.test.ts in `beforeAll` (run 42819140233). Hooks get
-        // the contract project's 20s; tests keep 5s, and the lane's own 60s clock still fails a slow run.
+        // The first database use in a worker pays the cold boot, in a hook or in a test body, and on a loaded runner
+        // that alone has passed 5s: html-backends/store.test.ts in `beforeAll` (run 42819140233) and
+        // operations/registry.test.ts in a test that locally takes 0.7s (7.2s, run 42828858143). Both get the
+        // contract project's 20s; the lane's own 60s clock is what fails a slow run.
+        testTimeout: 20000,
         hookTimeout: 20000,
       }),
       ...byIsolation('pr-contracts', 'contract-tests.json', {
