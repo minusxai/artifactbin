@@ -6,24 +6,13 @@ on:
 permissions:
   contents: read
 jobs:
-  floor:
-    name: floor (${{ matrix.os }} ${{ matrix.i }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 3
-    strategy: { matrix: { os: [ ubuntu-slim, ubuntu-24.04-arm ], i: [ 1, 2, 3 ] } }
-    steps:
-      - run: echo noop; nproc; grep -m1 -iE 'model name|CPU part' /proc/cpuinfo || true; lscpu | grep -iE 'model name|^CPU\(s\)' || true
-  arm:
-    name: arm (${{ matrix.suite }})
+  paired-arm:
+    name: paired-arm (${{ matrix.i }})
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix: { suite: [ 3/22, 9/22, 16/22 ] }
+    strategy: { fail-fast: false, matrix: { i: [ 1, 2, 3, 4 ] } }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: { node-version: 22 }
       - run: npm ci --no-audit --no-fund
       - id: test-builds-key
         run: node scripts/ci/ci.mjs test-builds-key
@@ -34,5 +23,10 @@ jobs:
             services/app/public/libraries
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
-      - run: lscpu | grep -iE 'model name|^CPU\(s\)'
-      - run: node node_modules/vitest/vitest.mjs run --project=api --project=api-isolated --shard=${{ matrix.suite }}
+      - run: lscpu | grep -iE 'model name|^CPU\(s\)'; node -v
+      - name: paired api runs on arm
+        run: |
+          A="--project=api --project=api-isolated --shard=3/22"
+          P=scripts/exp/paired.sh
+          $P cold-base $A; $P base $A; $P w4 $A --maxWorkers=4; $P base $A; $P w4 $A --maxWorkers=4; $P fsmc-fill $A --experimental.fsModuleCache; $P fsmc $A --experimental.fsModuleCache
+          $P g-base --config vitest.guard.config.ts; $P g-shared --config vitest.exp-guard-shared.config.ts
