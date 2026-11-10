@@ -64,6 +64,8 @@ describe('caps.fetch',()=>{
   expect(await code(lax({url:`http://u:{{KEY}}@api.localhost:${server.port}/echo`},s))).toBe('secret_host_forbidden');
   // A database connection is never a fetch secret, even to a host literally named "postgres".
   expect(await code(lax({url:`${base}/echo`,headers:{authorization:'{{WAREHOUSE}}'}},{...s,hosts:{...hosts,WAREHOUSE:'postgres'}}))).toBe('secret_host_forbidden');
+  // A governed MinusX binding is never a fetch secret either, even at a host named like it.
+  expect(await code(lax({url:`http://minusx/echo?b={{FIN}}`},{...s,hosts:{...hosts,FIN:'minusx'}}))).toBe('secret_host_forbidden');
   expect(await code(lax({url:`http://postgres/echo?p={{WAREHOUSE}}`},{...s,hosts:{...hosts,WAREHOUSE:'postgres'}}))).toBe('secret_host_forbidden');
   // Every database kind, MySQL too.
   expect(await code(lax({url:`${base}/echo`,headers:{authorization:'{{SHOP}}'}},{...s,hosts:{...hosts,SHOP:'mysql'}}))).toBe('secret_host_forbidden');

@@ -35,7 +35,7 @@ export function secretHostMap(value:unknown):Record<string,string>{
   if(!SECRET_NAME.test(name))throw Error(`invalid_secrets: ${JSON.stringify(name.slice(0,64))} is not an upper-case name`);
   if(typeof host==='string'&&host.length<=253&&(SECRET_HOST.test(host)||isResolverDatabaseKind(host)||host===MINUSX_CONNECTION_KIND))continue;
   const shown=typeof host==='string'?JSON.stringify(host.slice(0,64)):typeof host;
-  throw Error(`invalid_secrets: ${name}: ${shown} is neither a host name (exact or one leading *. label) nor a database type (${[...RESOLVER_DATABASE_KINDS,MINUSX_CONNECTION_KIND].join(', ')})`);
+  throw Error(`invalid_secrets: ${name}: ${shown} is neither a host name (exact or one leading *. label) nor a database type (${RESOLVER_DATABASE_KINDS.join(', ')})`);
  }
  return Object.fromEntries(entries.sort(([a],[b])=>a<b?-1:a>b?1:0));
 }
