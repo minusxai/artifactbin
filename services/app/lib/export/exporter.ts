@@ -45,8 +45,9 @@ const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after m
 /** How long to wait before the single re-render (see renderArtifactImage). */
 const RENDER_RETRY_MS = 1_000;
 
+const RENDER_FAILED_HINT = 'the page did not load and finish drawing (its data reads, charts and diagrams) before the render deadline; check it with node scripts/check.mjs ID';
 /** Bump to invalidate images made by an older capture implementation. */
-export const EXPORT_RENDER_GENERATION = 10;
+export const EXPORT_RENDER_GENERATION = 11;
 
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -500,7 +501,10 @@ export async function exportImageResponse(
     // None at all is a document whose script drew no slide (it threw, say): named, so it is not mistaken for a render fault.
     if (rendered.reason === 'no_slide') return json({ error: 'slide_not_found', slides: rendered.slides, ...(rendered.slides === 0 ? { hint: 'the page drew no data-af-slide element by capture time; check its script for errors (node scripts/check.mjs ID)' } : {}) }, 404);
     const unavailable = rendered.reason === 'unavailable';
-    return json({ error: unavailable ? 'render_unavailable' : 'render_failed' }, unavailable ? 503 : 500);
+    // A failed render is a page that did not load, or never finished drawing (a data read, chart or diagram still
+    // pending at the deadline): never an image without its data. The caller is told where to look.
+    if (unavailable) return json({ error: 'render_unavailable' }, 503);
+    return json({ error: 'render_failed', hint: RENDER_FAILED_HINT }, 500);
   }
   if('image' in rendered)return imageResponse(rendered.image,base,delivery);
   return new Response(new Uint8Array(rendered.bytes), {

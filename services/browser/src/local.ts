@@ -28,6 +28,17 @@ const PREVIEW_MAX_HEIGHT = 4_096;
 /** A timed-out page that will not close within this is a wedged browser, which is then retired. */
 const PAGE_CLOSE_WAIT_MS = 5_000;
 
+/**
+ * A page's own data reads: its GraphQL, SQL, query and function doors on the render URL's origin. Each answers and ends
+ * (the app bounds them); a long-lived stream (`regions/stream`, events) is not one, so it never holds a capture.
+ */
+const DATA_READ_PATH = /^\/api\/artifacts\/[^/]+\/(?:graphql|sql|query|fn\/[^/]+)$/;
+/** After the last data read ends, how long the page gets to draw what it read before readiness goes on. */
+const DATA_QUIET_MS = 500;
+function isDataRead(target: string, pageOrigin: string): boolean {
+  try { const url = new URL(target); return url.origin === pageOrigin && DATA_READ_PATH.test(url.pathname); } catch { return false; }
+}
+
 class NavigationError extends Error {}
 // The one slide drawn, whatever the deck's own CSS shows: the same rule as toolbox-check-capture.mjs's.
 const SLIDE_REVEAL_CSS = '[data-af-slide]{transition:none!important;animation:none!important}'
@@ -179,6 +190,12 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         });
       }
       if (req.waitForMountsMs) await page.addInitScript(watchMounts);
+      // Data reads in flight, and when the last one ended: a capture waits until the page's data has arrived and drawn.
+      const reads = new Set<unknown>(), pageOrigin = new URL(req.url).origin;
+      let lastRead = 0;
+      page.on('request', request => { if (isDataRead(request.url(), pageOrigin)) reads.add(request); });
+      const ended = (request: unknown) => { if (reads.delete(request)) lastRead = Date.now(); };
+      page.on('requestfinished', ended); page.on('requestfailed', ended);
       await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw deadlineElapsed(e) ? new Error('Render deadline') : new NavigationError((e as Error).message); });
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
@@ -201,6 +218,14 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       // photographed as it stands (never a failure: the fallback is a page, a component that never mounts is the author's).
       if (req.waitForMountsMs) await page.waitForFunction(mountsRendered, req.selector, { timeout: Math.min(req.waitForMountsMs, remaining()) }).catch(() => { remaining(); });
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
+      // A page drawn from its data (sql, GraphQL, functions) is ready once no read is in flight and the last one ended a
+      // moment ago. A read that never ends runs into the deadline: a failed render, never an image without its data.
+      for (;;) {
+        const wait = reads.size ? DATA_QUIET_MS : lastRead + DATA_QUIET_MS - Date.now();
+        if (wait <= 0) break;
+        await page.waitForTimeout(Math.min(wait, remaining()));
+        remaining();
+      }
       // Readiness covers lazy placeholders and Vega's asynchronous work. Two
       // frames ensure an app handoff cannot expose a transient empty state.
       const waitForCharts=async()=>{

@@ -48,6 +48,13 @@ const STUCK_CHART_PAGE = `<html><body><main data-mx-chart-state="pending" style=
 const DRAWN = (label: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>${label}</text></svg>`)}`;
 const HARVEST_PAGE = `<html><body style="margin:0"><main><figure data-mx-mermaid-state="pending" data-kind="fixed"></figure><figure data-mx-mermaid-state="pending" data-kind="random"></figure><figure data-mx-mermaid-state="ready" data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
 setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';a.dataset.mxMermaidState='ready';b.dataset.mxMermaidState='ready';},200)</script></body></html>`;
+/* A tile drawn from the page's own SQL read, which answers after the settle: red until its rows arrive and draw. */
+const DATA_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"></main><script>fetch('/api/artifacts/x/sql',{method:'POST',body:'{}'}).then(r=>r.json()).then(()=>setTimeout(()=>{document.querySelector('main').style.background='#3c3'},100))</script></body></html>`;
+/* A data read that never answers; and a long-lived stream, which is not a data read and never holds a capture. */
+const HUNG_DATA_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"></main><script>fetch('/api/artifacts/x/graphql',{method:'POST',body:'{}'})</script></body></html>`;
+const STREAM_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#3c3"></main><script>fetch('/api/artifacts/x/regions/stream')</script></body></html>`;
+/** The fixture's data doors: sql answers late, graphql and the stream never do (until the page goes away). */
+const DATA_DOORS: Record<string, number> = { '/api/artifacts/x/sql': 1200, '/api/artifacts/x/graphql': 60_000, '/api/artifacts/x/regions/stream': 60_000 };
 let pages: RunningServer;
 let url: string;
 
@@ -56,7 +63,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { const late = DATA_DOORS[q.url ?? '']; if (late !== undefined) { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'application/json' }); s.end('{"columns":[],"rows":[]}'); } }, late); t.unref?.(); s.on('close', () => clearTimeout(t)); return; } if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/data'?DATA_PAGE:q.url==='/hung-data'?HUNG_DATA_PAGE:q.url==='/stream'?STREAM_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -76,6 +83,20 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     if(!r.ok)throw new Error(JSON.stringify(r));
     const {data,info}=await sharp(Buffer.from(r.bytes)).raw().toBuffer({resolveWithObject:true});
     const at=(50*info.width+50)*info.channels;expect([...data.subarray(at,at+3)]).toEqual([51,204,51]);
+  });
+  it('waits for the page\'s data reads to answer and draw, past the settle, before capturing',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/data`});
+    if(!r.ok)throw new Error(JSON.stringify(r));
+    const {data,info}=await sharp(Buffer.from(r.bytes)).raw().toBuffer({resolveWithObject:true});
+    const at=(50*info.width+50)*info.channels;expect([...data.subarray(at,at+3)]).toEqual([51,204,51]);
+  });
+  it('fails a render whose data read never answers, instead of an image without its data',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/hung-data`,timeoutMs:3_000});
+    expect(r).toMatchObject({ok:false,reason:'failed'});
+  });
+  it('never waits on a long-lived stream, which is not a data read',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/stream`,timeoutMs:5_000});
+    expect(r.ok).toBe(true);
   });
   it('returns failure when a chart never finishes, instead of cacheable loading pixels',async()=>{
     const r=await svc.render({...base(),url:`${pages.base}/stuck-chart`,settleMs:0,timeoutMs:250});

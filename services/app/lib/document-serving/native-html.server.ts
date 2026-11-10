@@ -64,14 +64,15 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
-export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean}={}):string {
+export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean;captureSql?:boolean}={}):string {
   if (!pages){
     // The opaque raw reader may load only this page's admission-checked linked
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
     // On a anonymous owner host, and in the exporter's capture, the page reads its data from its own page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
     // Its page functions too (html-runtime/fn-fetch): the page's own function path, a prefix source.
-    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}`:'';
+    // The exporter's capture alone also reads its `sql` from the page SQL door (lib/page-doors `opaqueSqlRead`).
+    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
     return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");

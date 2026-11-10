@@ -83,13 +83,13 @@ describe('the browser verdict becomes the HTTP answer', () => {
   it('navigation → 500 render_failed, never 503', async () => {
     const res = await shoot(scripted({ ok: false, reason: 'navigation', detail: 'ERR_CONNECTION_REFUSED' }));
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: 'render_failed' });
+    expect(await res.json()).toEqual({ error: 'render_failed', hint: expect.stringContaining('check.mjs') });
   });
 
-  it('failed → 500 render_failed', async () => {
+  it('failed → 500 render_failed, saying the page never finished drawing and where to look', async () => {
     const res = await shoot(scripted({ ok: false, reason: 'failed', detail: 'selector never appeared' }));
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: 'render_failed' });
+    expect(await res.json()).toEqual({ error: 'render_failed', hint: expect.stringContaining('did not load and finish drawing (its data reads') });
   });
 
   /** A missing slide is a missing RESOURCE, and the count is what fixes it in one step. */
