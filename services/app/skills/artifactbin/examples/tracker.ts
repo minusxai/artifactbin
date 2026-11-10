@@ -4,8 +4,8 @@
  * Usage: node scripts/new-app.mjs --kind tracker [--limit N] copies it as tracker.ts beside the
  *   page; publish it with the page (node scripts/publish.mjs index.html). The page calls
  *   fetch('/fn/me') and, with limits, fetch('/fn/add', {method: 'POST', body}). caps.sql runs as
- *   the caller, so the entries rules (own-rows, team) still decide who may add, and the owner
- *   column is stamped as usual.
+ *   the caller, so the entries rules (own-rows, team) still decide who may add and stamp
+ *   created_by. Owners and editors bypass rules, so their own entries are left unstamped.
  * Gotchas: LIMIT must equal APP.limit in the page (--limit N writes both); the page only shows
  *   it, add enforces it in ONE statement (the count and the insert together), so concurrent adds
  *   never pass it: the SQL door re-runs a write whose dataset moved. A POST may write; GET inputs
