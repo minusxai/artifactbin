@@ -14,7 +14,7 @@
  * Each mode reads as the owner (no role view) and as a viewer whose role view keeps a third of the
  * rows. Cold is the first read of a fresh pool; warm is the same read repeated one at a time;
  * concurrent is `--concurrent` reads at once. RSS is this process's, threads included, after the
- * mode ran. Results: docs/dataset-read-latency.md.
+ * mode ran. Results are not kept in the repository: record a run with `--json`.
  */
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';

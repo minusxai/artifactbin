@@ -25,7 +25,7 @@
  *
  * Every runner mode runs in a fresh child process, so its first call is a real cold start (no esbuild
  * service, no JIT). The resolver is compiled once in this process, as publishing does, and handed over.
- * Results: docs/resolver-latency.md.
+ * Results are not kept in the repository: compare a before and an after run on the same machine.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';

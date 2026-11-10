@@ -14,6 +14,9 @@ only the skill: no loose files at its root (`loadSkillSources` throws).
   across everything an agent reads. Shipped code keeps a header and 200 lines of 100 columns
   (`skill-code-shape.test.ts`). The reader build generates
   `services/app/skills/artifactbin/components/`: never hand-edit it.
+- Installed skills update from `/skills/artifactbin.zip`, and the updater refuses members outside the folders
+  it knows (`toolbox-update-archive.mjs`; the packager's list is `package.ts` and `assets.ts`): ship a new
+  folder only once installs run an updater that accepts it.
 - Verify on the task's own dev server only, then `npm run eval` shows an agent using the change.
 - Evals: `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo; its README is the guide. Copy it
   from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.

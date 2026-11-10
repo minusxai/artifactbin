@@ -30,7 +30,7 @@ export interface ServerIdentityDocument {
  * THE LOCAL DEVELOPMENT HOSTS, the only names plain HTTP is accepted on: loopback
  * (`localhost`, `127.0.0.1`, `[::1]`), and the names reserved for or resolving
  * to loopback — `*.localhost` (RFC 6761), `lvh.me` and `*.lvh.me` (127.0.0.1 in
- * public DNS; development's pages host, CONTRIBUTING.md) and `*.test` (RFC 6761).
+ * public DNS; development's pages host, SETUP.md) and `*.test` (RFC 6761).
  * Takes a WHATWG `URL.hostname`, so IPv6 arrives bracketed and names lowercased.
  */
 export function isLocalDevelopmentHost(hostname: string): boolean {

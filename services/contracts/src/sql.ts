@@ -7,7 +7,24 @@
  * The two dry-runs are the publish-time check that refuses a bad query with a
  * 400 instead of a blank chart at render, and they cross the same wire as the
  * reads and writes, so no caller needs the engine in its own process.
- * Enforcement rules, error semantics and the prepared-catalog protocol: docs/sql-service.md.
+ *
+ * WHAT THE SERVICE ENFORCES, whatever the caller says: one statement per query, admitted by type (reads on
+ * `run`, one write on `mutate`), params bound and never spliced, a row cap and a per-query interrupt (`limit` and
+ * `timeoutMs` may lower the caps, never raise them) and a 64 MiB body. The engine has no credentials, storage,
+ * request identity or network: run it on a private network, with `INTERNAL__SERVICE_SECRET` on the service and
+ * its callers (production refuses to start without it).
+ *
+ * ERRORS. A query that cannot run is a `QueryFailure` for that query; a malformed body is 400 `bad_request`, the
+ * detail in the operator log only. An unreachable service is a `QueryFailure` on EVERY query at the client's
+ * deadline, the dry runs included: an empty `errors` there would admit an unchecked document and move the
+ * author's error from publish time to render time. Paged reads keep `totalRows` (the count before the window);
+ * `truncated` is set only when the returned rows omit part of that result, never merely for asking for a page.
+ *
+ * Mutations bind a row action's fields as ordinary named parameters (`$_row.<column>` as `$_row__<column>`,
+ * `paramSqlName`); binding a row's values does not establish its identity, and the caller owns the row schema and
+ * authorization. Keyed catalog reads and writes (`RunInput.catalog`, `MutationInput.mounted`) are answered from a
+ * prepared database when the engine has one (services/sql/src/sqlite/prepared.ts). One conformance suite runs every
+ * engine in this thread, in worker threads and over HTTP (services/sql/__tests__/contract.test.ts).
  */
 import type { DatasetMutationPolicy, MutationAnalysis } from './dataset-policy';
 
@@ -135,7 +152,7 @@ export interface MutationInput {
   limit?: number;
   timeoutMs?: number;
   /**
-   * KEYED MOUNTS (RunInput.catalog's protocol, docs/sql-service.md): the tables the statement reads, and the
+   * KEYED MOUNTS (RunInput.catalog's protocol, services/sql/src/sqlite/prepared.ts): the tables the statement reads, and the
    * target when it is one of them, come from the database the engine prepared for these keys; the target is
    * swapped for its writable copy inside a transaction that is always rolled back, so the kept database never
    * changes. A miss answers `rowsRequired` and the caller resends with `tables`. `table.rows` and `reads` are then

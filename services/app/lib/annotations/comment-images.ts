@@ -1,4 +1,13 @@
-/** Private staged raster attachments. Only annotation creation consumes a stage. */
+/**
+ * Private staged raster attachments. Only annotation creation consumes a stage: single use, inside the transaction
+ * that writes the root comment or the reply, against the `edit_id` it was staged for, which must still be the head
+ * (a moved head is 409 `stale`, an unusable stage 400 `invalid_attachment`). A captured image is staged against the
+ * edit it captured, an attached one against the head at send. The original, the flattened preview and the thumbnail
+ * are WebP within COMMENT_IMAGE_LIMITS (contracts). Stage rows reserve their bytes against the uploader (serialised
+ * per account, or per unclaimed token); stages expire after `stageHours` and each upload sweeps a bounded batch of
+ * expired ones, keeping a row and its charge until every object is gone. Every read rechecks the parent document's
+ * access and the comment's live state, with private, no-store caching. Comment images are never public artifacts.
+ */
 import sharp from 'sharp';
 import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
 import { annotationScope } from '@/lib/artifact-access';

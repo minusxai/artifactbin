@@ -11,7 +11,8 @@
  * and `POST /sessions` is the stateful surface: a BrowserSessionRequest against
  * a persistent isolated session, served only when the composition supplied a
  * `sessions` implementation (otherwise 503 `sessions_unavailable`).
- * See docs/browser-sessions.md.
+ * A service without an operation answers 503 `<op>_unavailable`, and the client (utils `browserClient`) maps an
+ * older service's 404 to the same verdict, so a mixed-version rollout degrades instead of failing.
  */
 import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES } from '@artifactbin/contracts';

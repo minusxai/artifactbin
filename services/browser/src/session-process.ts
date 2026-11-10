@@ -1,3 +1,12 @@
+/**
+ * ONE SESSION'S ISOLATED WORKER AND ITS BROKER. The worker (./session-worker) runs Playwright inside bubblewrap with
+ * private writable storage and no access to the host's network or checkout; this parent is the only way out. It
+ * admits the app's origin and document origins (./session-origins), forwards the authenticated actor, strips supplied
+ * credential headers, resolves canonical redirects itself (at most ten same-origin hops, ./session-redirects) and
+ * bounds bodies. Google Fonts is the one outside exception, relayed through the app's internal route. Event streams
+ * pass only for CATCH_UP_STREAMS, as finite response segments flushed at frame boundaries; the platform's streams catch
+ * up from a cursor, so live updates survive the reconnect gap without an open tunnel.
+ */
 import { sessionRequest } from './session-redirects';
 import { createSessionRequestQueue } from './session-request-queue';
 import { createSessionResources } from './session-resources';

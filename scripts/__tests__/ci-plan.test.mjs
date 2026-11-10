@@ -488,7 +488,7 @@ describe('the build cache key covers every build input and nothing a build canno
       expect(isBuildInput(path), path).toBe(true);
     }
     for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/solid/document/__tests__/framed-nodes.test.ts',
-      'scripts/gates/gate-editor-engine.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md',
+      'scripts/gates/gate-editor-engine.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'SETUP.md', 'README.md',
       'scripts/ci/test-timings.json', 'scripts/ci/test-timings.mjs', 'scripts/lib/timed-sequencer.mjs']) {
       expect(isBuildInput(path), path).toBe(false);
     }

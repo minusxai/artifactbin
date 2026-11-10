@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// `npm run dev:otp -- <email>`: print the latest unexpired local login code for that address from the protected
+// development outbox `npm run dev` writes (.artifactbin/dev-mail.jsonl). A loopback public URL never sends mail.
 import fs from 'node:fs';
 import path from 'node:path';
 

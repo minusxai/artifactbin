@@ -14,10 +14,19 @@ export function migrationTarget(env: Record<string, string | undefined>): {conne
   return {connectionString, schema: readEnv(env, 'AUTH__SCHEMA') || 'auth'};
 }
 
+/** The refusal without the acknowledgement flag: what to do first, and the exact flag. */
+export const ACKNOWLEDGEMENT_REQUIRED = 'Stop all auth/account writers and verify a restorable backup (restored on a disposable database), then rerun with --writes-paused-backup-verified and AUTH__MIGRATION_DATABASE_URL naming the reviewed target database.';
+
+/** What the operator sees: our reviewed refusals verbatim; anything else (driver diagnostics can contain private
+ * connection details) as one fixed line. */
+export function operatorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  return /^(Stop all auth\/account writers|AUTH__MIGRATION_DATABASE_URL|Duplicate authentication|Unexpected authentication|Unexpected legacy authentication|Invalid authentication schema)/.test(message)
+    ? message : 'Authentication migration failed; keep writers stopped and inspect database state and diagnostics privately.';
+}
+
 async function main() {
-  if (process.argv.slice(2).join(' ') !== '--writes-paused-backup-verified') {
-    throw new Error('Read docs/account-migration.md; stop writers and verify a restorable backup before passing --writes-paused-backup-verified');
-  }
+  if (process.argv.slice(2).join(' ') !== '--writes-paused-backup-verified') throw new Error(ACKNOWLEDGEMENT_REQUIRED);
   const {connectionString, schema} = migrationTarget(process.env);
   const db = new Kysely<Record<string, unknown>>({dialect:new PostgresDialect({pool:new Pool({connectionString,max:1})})});
   try {
@@ -26,9 +35,6 @@ async function main() {
   } finally {await db.destroy();}
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(error => {
-  // Driver diagnostics can contain private connection details. Only our reviewed refusal messages escape.
-  const message = error instanceof Error ? error.message : '';
-  console.error(/^(Read services\/auth|AUTH__MIGRATION_DATABASE_URL|Duplicate authentication|Unexpected authentication|Unexpected legacy authentication|Invalid authentication schema)/.test(message)
-    ? message : 'Authentication migration failed; keep writers stopped and inspect database state and diagnostics privately.');
+  console.error(operatorMessage(error));
   process.exitCode = 1;
 });

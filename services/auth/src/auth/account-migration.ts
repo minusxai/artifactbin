@@ -1,6 +1,20 @@
+/**
+ * THE BETTER AUTH 1.7.2 ACCOUNT SCHEMA, refused at startup and upgraded only by an operator. Better Auth 1.7.0–1.7.2
+ * required `account.issuer` and a unique (issuer, accountId) index; 1.7.3 reversed that, and 1.7.7 identifies accounts
+ * by (providerId, accountId). Fresh and pre-issuer (1.6) schemas need nothing. SCHEMA.sql describes fresh databases
+ * only: never apply its missing issuer column as a DROP COLUMN on an existing one.
+ *
+ * The upgrade (`npm run migrate:account -w services/auth`, scripts/migrate-account.ts) runs on one transaction: it
+ * locks the table, refuses unexpected column or index definitions and duplicate identities, then makes `issuer`
+ * nullable and drops only the verified legacy index, keeping the column, every issuer value, account, user and
+ * session. Repeating it changes nothing. Its messages below are all an operator gets, so they say what to do and
+ * cite no file. Once the new version has written accounts (NULL issuer), never roll back only the binary: the old
+ * one can create duplicate identities. Restore a coordinated snapshot, or reconcile forward under review; never invent
+ * issuer values or merge identities.
+ */
 import {sql, type Kysely} from 'kysely';
 
-const guidance = 'Stop all auth/account writers, verify a restorable backup, then explicitly run migrateHumanAccountSchema with writesPausedAndBackupVerified: true. See docs/account-migration.md. Startup never applies this migration.';
+const guidance = 'Stop all auth/account writers and verify a restorable backup, then run `npm run migrate:account -w services/auth -- --writes-paused-backup-verified` with AUTH__MIGRATION_DATABASE_URL set (and AUTH__SCHEMA when the schema is not auth), or call migrateHumanAccountSchema with writesPausedAndBackupVerified: true. Startup never applies this migration.';
 const identifier = (schema: string) => {
   if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error('Invalid authentication schema identifier');
   return sql.id(schema, 'account');
@@ -33,7 +47,7 @@ async function inspect(db: Kysely<Record<string, unknown>>, schema: string) {
 
 async function assertNoIdentityCollisions(db: Kysely<Record<string, unknown>>, schema: string): Promise<void> {
   const collision = await sql`SELECT 1 FROM ${identifier(schema)} GROUP BY "providerId", "accountId" HAVING count(*) > 1 LIMIT 1`.execute(db);
-  if (collision.rows.length) throw new Error('Duplicate authentication provider/account identities; stop all auth/account writers and resolve ownership under review without merging or deleting identities automatically. See docs/account-migration.md.');
+  if (collision.rows.length) throw new Error('Duplicate authentication provider/account identities; stop all auth/account writers and resolve ownership under review without merging or deleting identities automatically; list them with SELECT "providerId", "accountId", count(*) FROM <schema>.account GROUP BY 1, 2 HAVING count(*) > 1.');
 }
 
 /** Read-only startup guard. The operator, never a mixed-version startup, owns DDL. */

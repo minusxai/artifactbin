@@ -4,7 +4,7 @@ import {afterEach, beforeEach, expect, it} from 'vitest';
 import {pgliteDialect} from '../src/auth/pglite';
 import {createHumanAuth} from '../src/auth/human';
 import {assertHumanAccountSchema, migrateHumanAccountSchema} from '../src/auth/account-migration';
-import {migrationTarget} from '../scripts/migrate-account';
+import {ACKNOWLEDGEMENT_REQUIRED, migrationTarget, operatorMessage} from '../scripts/migrate-account';
 
 let pg: PGlite;
 let db: Kysely<Record<string, unknown>>;
@@ -62,6 +62,21 @@ it('refuses unexpected issuer defaults without altering data', async () => {
 it('requires explicit coordinated-operation acknowledgement', async () => {
   await legacy();
   await expect(migrateHumanAccountSchema(db, {writesPausedAndBackupVerified: false} as never)).rejects.toThrow('Stop all auth/account writers');
+});
+
+it('every refusal says what to run and cites no file, and the operator sees each one verbatim', async () => {
+  await legacy();
+  const startup = await assertHumanAccountSchema(db).then(() => '', (error: Error) => error.message);
+  await pg.exec(`INSERT INTO auth.account VALUES ('collision','provider','identity','https://other.invalid')`);
+  const duplicate = await migrateHumanAccountSchema(db, options).then(() => '', (error: Error) => error.message);
+  expect(startup).toContain('npm run migrate:account -w services/auth -- --writes-paused-backup-verified');
+  expect(startup).toContain('AUTH__MIGRATION_DATABASE_URL');
+  expect(duplicate).toContain('GROUP BY 1, 2 HAVING count(*) > 1');
+  expect(ACKNOWLEDGEMENT_REQUIRED).toContain('--writes-paused-backup-verified');
+  const unacknowledged = await migrateHumanAccountSchema(db, {writesPausedAndBackupVerified: false} as never).then(() => '', (error: Error) => error.message);
+  for (const message of [startup, duplicate, unacknowledged, ACKNOWLEDGEMENT_REQUIRED]) expect(message).not.toMatch(/docs\/|\.md\b|See /);
+  for (const message of [duplicate, unacknowledged, ACKNOWLEDGEMENT_REQUIRED]) expect(operatorMessage(new Error(message))).toBe(message);
+  expect(operatorMessage(new Error('connect ECONNREFUSED postgres://user:secret@db'))).not.toContain('secret');
 });
 it('fresh runtime works and existing-user startup refuses legacy schema without DDL', async () => {
   await pg.exec('DROP TABLE auth.account');

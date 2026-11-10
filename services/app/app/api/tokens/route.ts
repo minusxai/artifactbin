@@ -1,7 +1,7 @@
 /**
- * POST /api/tokens — the OPERATOR's mint. Not agent-facing (an agent is
- * connected by the afbin CLI's browser approval, which spends the internal
- * mint). The caller is the downstream deployment's stack walk, which presents
+ * POST /api/tokens — the OPERATOR's mint. Not agent-facing (an agent signs
+ * in with an email code and exchanges it for an origin-scoped grant at
+ * /api/authentication/token). The caller is the downstream deployment's stack walk, which presents
  * the deployment's shared secret.
  *
  * The secret is read per REQUEST, not at module load, so a test (or an

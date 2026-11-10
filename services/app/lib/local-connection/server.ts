@@ -1,3 +1,11 @@
+/**
+ * A LINKED PORTABLE FILE'S DOORS (`/api/local-connection`): a downloaded copy, opened from disk, may read the hosted
+ * original's public data through the trusted local broker. Grants are short-lived public-reader capabilities over
+ * same-origin browser doors: ambient account authority is stripped (the actor is always anonymous), mutations are
+ * refused before any backend runs, `authorizePrivate` and `checkSession` are refused outright, and revision and
+ * current public access are rechecked, revoking stale or unavailable grants. Sign-in, comments and shared changes
+ * happen on the hosted original, never here.
+ */
 import {createHash,randomBytes} from 'node:crypto';
 import {attachActor} from '@artifactbin/utils';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';

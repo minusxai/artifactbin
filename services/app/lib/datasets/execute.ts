@@ -19,7 +19,7 @@ const idDigest=(ids:readonly string[])=>{let digest=idDigests.get(ids);if(!diges
 /**
  * The content address of stored table `i` as this read mounts it: the object (content-addressed), its declared
  * columns, the row IDs a door adds and the role view that filters it. The engine adds the catalog's own shape
- * (columns, models) to its database key, so a key only has to name the ROWS (docs/sql-service.md).
+ * (columns, models) to its database key, so a key only has to name the ROWS (services/sql/src/sqlite/prepared.ts).
  */
 function sourceKey(saved:DatasetCatalog,i:number,opts:CatalogQueryOptions):string {
  const table=saved.tables[i]!;
@@ -30,7 +30,7 @@ type ReadTables=Parameters<typeof runQueries>[0]['tables'];
 interface KeyedRead {catalog:ReadCatalog;sql:string;params:Record<string,Scalar>;limit:number;timeoutMs?:number;outputBytes?:number;execute?:typeof runQueries;page?:{name:string;limit:number;offset:number;sort?:{col:string;dir:'asc'|'desc'}}}
 /**
  * ONE KEYED CATALOG READ: every stored source names its content (`key`), so the SQL engine answers from the database it
- * prepared for these keys; only a miss loads, filters and sends the rows (`load`) and asks again (docs/sql-service.md).
+ * prepared for these keys; only a miss loads, filters and sends the rows (`load`) and asks again (services/sql/src/sqlite/prepared.ts).
  */
 async function keyedRead(read:KeyedRead,load:()=>Promise<ReadTables>):Promise<CatalogResult>{
  const run=(tables:ReadTables)=>(read.execute??runQueries)({tables,catalog:read.catalog,queries:[{name:'result',sql:read.sql}],params:read.params,limit:read.limit,timeoutMs:read.timeoutMs,...(read.outputBytes!==undefined?{outputBytes:read.outputBytes}:{}),...(read.page?{page:read.page}:{})});
@@ -116,7 +116,7 @@ export async function executeMounted(mounts:readonly CatalogMount[],sql:string,p
 }
 
 /**
- * ONE WRITE OVER KEYED MOUNTS (MutationInput.mounted, docs/sql-service.md): every table the statement may read,
+ * ONE WRITE OVER KEYED MOUNTS (MutationInput.mounted, services/sql/src/sqlite/prepared.ts): every table the statement may read,
  * and its target when it is mounted, is the SQL service's prepared database for exactly these mounts (the keys
  * `executeMounted` uses), so a repeated write neither loads nor ships its rows; only a miss loads them (shared with
  * concurrent readers) and resends. The engine writes a copy inside a rolled-back transaction: the kept database

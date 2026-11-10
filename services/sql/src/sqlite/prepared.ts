@@ -2,7 +2,10 @@
  * PREPARED CATALOG DATABASES: a catalog read whose every stored source carries a content `key` is
  * answered from a database already built for exactly that catalog and those keys, so a repeated read
  * neither ships its rows again nor rebuilds SQLite. The caller sends the keys alone first; a miss is a
- * `rowsRequired` failure and the caller resends with the rows (docs/sql-service.md).
+ * `rowsRequired` failure and the caller resends with the rows (services/app/lib/datasets/execute.ts is that caller).
+ * Each read runs in a transaction that is rolled back, so a kept database stays as built, and the worker pool sends a
+ * keyed read to the thread its database was last sent to when that thread is idle (`SqlPoolOptions.preparedBytes`,
+ * 32 MiB per thread by default, is the cap).
  *
  * The entry's identity is derived HERE from everything the database mounts — the default schema, every
  * table's schema, name and columns, every model's SQL and every source's key — never from a caller's key

@@ -1,4 +1,11 @@
-/** Standalone production controller. Run on a dedicated host; never expose the Docker socket to workers. */
+/**
+ * Standalone production controller. Run on a dedicated Linux host with Docker; never expose the Docker socket to
+ * workers. Build the worker image from services/runner/Dockerfile and keep the settings in the service's protected
+ * environment. One controller per `RUNNER__DATA_DIR`: it owns embedded PGlite storage (tables rendered with the
+ * others by `npm run render:schema`) and is not horizontally replicated. The app reaches it with
+ * `RUNNER__SERVICE_URL` and the same `CONTRACT__ACTOR_SECRET`; keep that connection private.
+ * `.github/workflows/runner-design.yml` verifies the image, operation authority, OS restrictions and cleanup.
+ */
 import { PGlite } from '@electric-sql/pglite';
 import { serve } from '@hono/node-server';
 import { overHttp } from '@artifactbin/utils';

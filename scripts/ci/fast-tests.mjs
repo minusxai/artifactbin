@@ -1,3 +1,5 @@
+/** Run by scripts/ci/fast-check.mjs: audit full-suite ownership and each enrolled test's capabilities
+ * (scripts/lib/fast-test-policy.mjs), then run the pure module tests of scripts/ci/fast-tests.json. */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

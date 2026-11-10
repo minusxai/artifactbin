@@ -4,6 +4,15 @@ import { request as httpsRequest } from 'node:https';
 import { Readable } from 'node:stream';
 import { createGunzip, createInflate, createBrotliDecompress } from 'node:zlib';
 
+/**
+ * THE ASSET ORIGIN FOR AN EXPORT RENDER. A page loads through its internal render URL; its requests to the public
+ * `assetOrigin` keep that URL in Chromium, but only public byte GET and HEAD routes `isPublicAssetRequest` admits are
+ * fetched, here, from the render URL's internal origin, with a fixed `Host` that selects the app's public-byte
+ * middleware (public-ref ACLs included). So the browser container can sit on an internal-only network: no public
+ * DNS, no TLS to the asset host. Responses keep public serving's CORS, nosniff and sandbox policy with cookie and
+ * redirect metadata removed, are bounded (below, and 15 s or the shorter render timeout) and abort when the render
+ * closes. Context-wide interception and blocked service workers keep workers and popups from routing around it.
+ */
 // Export transport bounds, independent of the app's configurable ingest limit.
 const MAX_BYTES = 64 * 1024 * 1024;
 

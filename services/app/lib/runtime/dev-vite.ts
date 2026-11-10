@@ -5,7 +5,7 @@ export function developmentViteOptions(appRoot: string, port: number) {
 }
 
 /**
- * Every document on its own origin in development (APP__PAGES_HOST, CONTRIBUTING.md): Vite fronts the
+ * Every document on its own origin in development (APP__PAGES_HOST, SETUP.md): Vite fronts the
  * listener, and its DNS-rebinding guard answers only hosts it knows, so it is told the pages domain (its
  * apex and every document label) and the app's own host; its own CORS headers stay off, because the app's
  * origin gate (server/pages-host) decides who may call what.
