@@ -97,6 +97,23 @@ describe('timed shard packing', () => {
   });
 });
 
+describe('the integration job\'s order', () => {
+  // The integration project is one job, never sharded, but the sequencer still orders it. With no recorded times every
+  // file weighed the same and ties broke by path, so `scripts/__tests__/app-only-auth`, `reserved-ids-proof` and
+  // `services/app/__tests__/boot-env` started together on the three workers: nineteen node processes booting at once.
+  // The app boots took twice as long (9-13s became 20-25s) and main went red on the 30s boot wait (ci runs 42841957938
+  // and 42851310653). Recorded times put the long files first and keep those three off the starting line.
+  it('starts longest first, never the three process-spawning files together', () => {
+    const timings = readTimings();
+    const weigh = weigher(timings);
+    const files = Object.keys(timings.files.integration ?? {});
+    const spawners = ['scripts/__tests__/app-only-auth.test.mjs', 'scripts/__tests__/reserved-ids-proof.test.mjs', 'services/app/__tests__/boot-env.test.ts'];
+    for (const file of spawners) expect(files, file).toContain(file);
+    const order = runOrder(files.map((file) => ({ key: `integration:${file}`, weight: weigh('integration', file), project: 'integration' }))).map((item) => item.key.slice('integration:'.length));
+    expect(order.slice(0, WORKERS).filter((file) => spawners.includes(file))).toEqual([]);
+  });
+});
+
 describe('a shard\'s wall time', () => {
   const runner = { workers: 3, firstFileMs: { api: 5 } };
   const file = (key, weight, project = 'api') => ({ key, weight, project });

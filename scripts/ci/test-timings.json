@@ -1091,6 +1091,21 @@
    "services/app/web/__tests__/page-data-store.ui.test.ts": 23,
    "services/app/web/__tests__/page-preload.ui.test.ts": 26,
    "services/app/web/__tests__/restore-reader.ui.test.ts": 15
+  },
+  "integration": {
+   "scripts/__tests__/app-only-auth.test.mjs": 9284,
+   "scripts/__tests__/reserved-ids-proof.test.mjs": 8600,
+   "services/app/__tests__/boot-env.test.ts": 13839,
+   "services/app/__tests__/dev-app.test.ts": 28099,
+   "services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts": 4653,
+   "services/app/lib/live-regions/__tests__/cells.soak.test.ts": 3981,
+   "services/app/lib/live-regions/__tests__/convergence.soak.test.ts": 42650,
+   "services/app/lib/page-operations/__tests__/database-mysql.test.ts": 22650,
+   "services/app/lib/page-operations/__tests__/database-postgres.test.ts": 13985,
+   "services/browser/__tests__/contract.test.ts": 28121,
+   "services/browser/__tests__/internal-assets.test.ts": 2542,
+   "services/browser/__tests__/render-lifecycle.test.ts": 6161,
+   "services/browser/__tests__/session-pages.test.ts": 37842
   }
  }
 }
