@@ -164,9 +164,12 @@ it('sees exactly what caps.query sees, for every caller, on an unlisted and on a
   expect(seen).toEqual([['unlisted owner', 3], ['unlisted viewer', 2], ['unlisted other', 2], ['unlisted anonymous', null], ['private owner', 3], ['private viewer', 2], ['private other', null], ['private anonymous', null]]);
 });
 
-it('admits reads only: a write, DDL or ATTACH statement is refused and nothing changes', async () => {
+it('a read call admits reads only: a write is read_only, DDL or ATTACH is refused, and nothing changes', async () => {
   const f = await fixture();
-  for (const statement of ["DELETE FROM staff", "UPDATE staff SET salary = 0", "INSERT INTO staff(name) VALUES ('x')", 'CREATE TABLE t(x)', 'DROP TABLE staff', "ATTACH DATABASE 'x.db' AS x", 'PRAGMA writable_schema = 1'])
+  // A row write belongs to a call that may write (POST, a scheduled run: __tests__/function-schedules.test.ts).
+  for (const statement of ["DELETE FROM staff", "UPDATE staff SET salary = 0", "INSERT INTO staff(name) VALUES ('x')", "/* c */ insert into staff(name) values ('x')"])
+    expect(await refusal(sql(f, owner(f), { sql: statement })), statement).toMatch(/^read_only: /);
+  for (const statement of ['CREATE TABLE t(x)', 'DROP TABLE staff', "ATTACH DATABASE 'x.db' AS x", 'PRAGMA writable_schema = 1'])
     expect(await refusal(sql(f, owner(f), { sql: statement })), statement).toMatch(/^validation_failed: /);
   expect((await sql(f, owner(f), { sql: 'SELECT count(*) AS n FROM staff' })).rows).toEqual([{ n: 3 }]);
 });
@@ -197,7 +200,7 @@ it('remote callback: the caller comes from the signed pin, and a refusal reaches
   expect((await call(pin({ subject: f.viewer.userId, role: 'viewer' }), { ...names, principal: { subject: f.owner.userId, role: 'owner' } })).body.rows).toEqual([{ name: 'ada' }, { name: 'cy' }]);
   expect((await call(pin({ subject: f.owner.userId, role: 'owner' }), names)).body.rows).toHaveLength(3);
   expect(await call(pin(), names)).toEqual({ status: 400, body: { error: 'caller_unavailable: the run does not attest who called' } });
-  expect(await call(pin({ subject: f.owner.userId, role: 'owner' }), { sql: 'DELETE FROM staff' })).toEqual({ status: 400, body: { error: expect.stringMatching(/^validation_failed: /) } });
+  expect(await call(pin({ subject: f.owner.userId, role: 'owner' }), { sql: 'DELETE FROM staff' })).toEqual({ status: 400, body: { error: expect.stringMatching(/^read_only: /) } });
 });
 
 it('shares one in-flight read of a revision under one role view between concurrent calls, never across callers', async () => {

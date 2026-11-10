@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { DATASET_ROLES, RESOLVER_LIMITS, type Actor, type RunnerCaller, type RunnerJson, type Upstream } from '@artifactbin/contracts';
+import { DATASET_ROLES, RESOLVER_DATABASE_CHECK_OPERATION, RESOLVER_LIMITS, runnerAdmissionOf, type Actor, type RunnerCaller, type RunnerJson, type Upstream } from '@artifactbin/contracts';
 import type { CapabilityContext, RunnerOptions } from './local';
 import { boundedJson } from './model.mjs';
 export interface HostCapabilitiesOptions {
@@ -13,7 +13,8 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
             throw Error('run_revoked');
         const started = Date.now();
         const observation = { service: 'artifactbin', operation, durationMs: 0, status: null as number | null, requestId: null as string | null } as CapabilityContext['requests'][number];
-        context.requests.push(observation);
+        // The worker's per-query check is bookkeeping, not a request the receipt lists.
+        if (operation !== RESOLVER_DATABASE_CHECK_OPERATION) context.requests.push(observation);
         try {
             return await options.artifactbin({ ...context, observation }, operation, args);
         }
@@ -27,7 +28,9 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
 export function runnerIdentity(context: CapabilityContext): Actor {
     const {request, runId, callId} = context;
     const caller = admittedCaller(request.input);
-    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{pageBackendOperation:request.pageBackendOperation,runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex'),...(caller ? {caller} : {})}} : {})};
+    // A page function call's admission (part of the run's fingerprint, like the caller): the app re-decides it at every capability.
+    const input = request.input, admission = input && typeof input === 'object' && !Array.isArray(input) && input.kind === 'invoke' ? runnerAdmissionOf(input.admission) : null;
+    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{pageBackendOperation:request.pageBackendOperation,runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex'),...(caller ? {caller} : {}),...(admission ? {admission} : {})}} : {})};
 }
 /** The caller the app admitted a resolver call for (`input.principal`, part of the run's fingerprint); never program output. */
 function admittedCaller(input: RunnerJson): RunnerCaller | undefined {

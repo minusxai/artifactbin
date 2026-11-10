@@ -10,6 +10,7 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
+import { assertScheduleCapacity } from './schedule-capacity';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import {
@@ -41,7 +42,7 @@ const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annota
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'content_publisher_user_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
@@ -262,8 +263,8 @@ async function insertArtifact(
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
-     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $16::jsonb, $17::int, $18::jsonb) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, content_publisher_user_id, dataset_policy, policy_revision, document)
+     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $3, $16::jsonb, $17::int, $18::jsonb) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, document_state)
      SELECT id, edit_id, 0, '', COALESCE($7::text, ''), 0, 0, $3, $2, jsonb_build_object('epoch',COALESCE(document->>'epoch',document#>>'{prose,epoch}'),'version',version) FROM created
@@ -311,6 +312,8 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[],created.rows[0].sharing_revision??0));
   await bindCurrentUserScopes(tx,created.rows[0]);
+  // A created (or forked) page's schedules are active at once: its publisher's capacity is checked in this transaction.
+  if(input.format==='html')await assertScheduleCapacity(tx,[id]);
   if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
@@ -397,7 +400,11 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
     async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
       await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
     },
-    async publish(content: ArtifactInput): Promise<ArtifactRow> {
+    /**
+     * `publisher`: this write publishes content (a replace or a revert), so the head's content publisher becomes the
+     * actor in the same statement. A live-region save is a text edit, not a publication: it keeps the publisher.
+     */
+    async publish(content: ArtifactInput, options: { publisher?: boolean } = {}): Promise<ArtifactRow> {
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -405,14 +412,17 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
              meta=$5, title=$6, description=$7, visibility=COALESCE($9,visibility),
              ancestor_ids=COALESCE($10::text[],ancestor_ids), access=COALESCE($11,access), link_role=COALESCE($14,link_role),
              sharing_revision=sharing_revision+CASE WHEN (COALESCE($9,visibility),COALESCE($11,access),COALESCE($14,link_role)) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END,
-             ${headBumpSql('$8', '$12', '$13')}
+             ${headBumpSql('$8', '$12', '$13')},
+             content_publisher_user_id=CASE WHEN $16::boolean THEN $12 ELSE content_publisher_user_id END
          WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
         [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, content.source, content.meta)),
           content.title !== undefined ? content.title : current.title,
           content.description !== undefined ? content.description : current.description,
           newEditId(), content.visibility ?? null, content.ancestor_ids ?? null, content.access ?? null,
-          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document],
+          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document, options.publisher === true],
       )).rows[0];
+      // A publication or revert makes the actor the publisher of the head's schedules: its capacity, in this transaction.
+      if (options.publisher === true && updated && updated.format === 'html') await assertScheduleCapacity(tx, [id]);
       if (content.ancestor_ids && current.format === 'folder') {
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);
@@ -592,7 +602,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     try { await write.validateContent(target); }
     catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
-    const updated = await write.publish(target);
+    const updated = await write.publish(target, { publisher: true });
     await logWholeDocumentWrite(tx, current, updated);
     await reconcileSourceIds(tx, updated, 'restore');
     if (hadRegions) await closeLiveRegions(tx, id);
@@ -761,7 +771,7 @@ async function replaceArtifactInTx(
   const source = input.source;
   const updated = await write.publish({
     ...input, source, meta: input.meta,
-  });
+  }, { publisher: true });
   if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
   else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
   await bindCurrentUserScopes(tx,updated);

@@ -44,3 +44,16 @@ on `/fn`) and the publish document check (`document-check`). `lib/page-operation
 
 Do not add an importer to make new code work: read with `sql` and call functions with `/fn`. When a
 listed importer stops needing GraphQL, delete its entry in the same change.
+
+## Fixes, not features
+
+"Does not grow" and "do not extend" mean features: no new GraphQL capability, root, door, client API or
+importer. Security and correctness fixes to what is already here are allowed, and required, when the rest of the
+product is fixed for the same flaw. A fix keeps this layer's behavior for the pages that depend on it and changes only
+what made it unsafe. It reuses the guard the non-GraphQL path uses rather than writing a second one.
+
+The first such fix: a page function call's `caps.query` mutation (`page.ts`, `resolverDatasets.query`) commits under
+the call's admission (lib/page-doors `admittedCommitGuard`), exactly as its `caps.sql` write does. Inside the commit,
+the page head must still be the one the call was admitted on, the caller must still meet the function's `roles` (or
+`@auth`), and a scheduled run's claim must still be current (lib/function-schedules README). A legacy GraphQL
+resolver call carries no admission and keeps `pageCommitGuard`.

@@ -23,18 +23,18 @@ export async function commitHtmlBackends(tx:Queryable,pageId:string,ownerId:stri
   const fresh=previousOwner!==undefined&&requiresFreshBackendIdentity({previousOwnerId:previousOwner,nextOwnerId:ownerId});
   const backendId=!old||fresh?generateFileId():old;
   const secretHosts=backend.secretHosts??{};
-  const functions=backend.functions??null;
-  // A legacy file's version hash is what it always was; a manifest joins it only when there is one.
-  const version=createHash('sha256').update(JSON.stringify([backend.source,backend.typeDefs,backend.compiled,backend.secretBindings??[],secretHosts,...(functions?[functions]:[])])).digest('hex');
-  await tx.query(`INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id,secret_bindings,secret_hosts,function_roles) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb) ON CONFLICT DO NOTHING`,[backendId,version,pageId,backend.name,backend.source,backend.typeDefs,backend.compiled,ownerId,JSON.stringify(backend.secretBindings??[]),JSON.stringify(secretHosts),functions?JSON.stringify(functions):null]);
+  const functions=backend.functions??null,schedule=backend.schedule??null;
+  // A legacy file's version hash is what it always was; a manifest (and a schedule) joins it only when there is one.
+  const version=createHash('sha256').update(JSON.stringify([backend.source,backend.typeDefs,backend.compiled,backend.secretBindings??[],secretHosts,...(functions?[functions]:[]),...(schedule?[{schedule}]:[])])).digest('hex');
+  await tx.query(`INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id,secret_bindings,secret_hosts,function_roles,function_schedules) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb) ON CONFLICT DO NOTHING`,[backendId,version,pageId,backend.name,backend.source,backend.typeDefs,backend.compiled,ownerId,JSON.stringify(backend.secretBindings??[]),JSON.stringify(secretHosts),functions?JSON.stringify(functions):null,schedule?JSON.stringify(schedule):null]);
   links.push({kind:'backend',name:backend.name,backendId,version});
  }
  return links;
 }
 /** Internal execution adapter: access is established by the resolved immutable page link. */
 export async function getHtmlBackendVersion(backendId:string,version:string):Promise<HtmlBackendVersionRecord|null>{
- const row=(await (await getDb()).query<{backend_id:string;page_id:string;name:string;version:string;source:string;type_defs:string;compiled:string;owner_id:string;secret_bindings:string[];secret_hosts:Record<string,string>|null;function_roles:Record<string,DatasetRole>|null}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[backendId,version])).rows[0];
- return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,functions:row.function_roles??null,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings??[],secretHosts:row.secret_hosts??{}}:null;
+ const row=(await (await getDb()).query<{backend_id:string;page_id:string;name:string;version:string;source:string;type_defs:string;compiled:string;owner_id:string;secret_bindings:string[];secret_hosts:Record<string,string>|null;function_roles:Record<string,DatasetRole>|null;function_schedules:Record<string,number>|null}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[backendId,version])).rows[0];
+ return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,functions:row.function_roles??null,schedule:row.function_schedules??null,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings??[],secretHosts:row.secret_hosts??{}}:null;
 }
 
 export {htmlLiveLinks,htmlSharedRevisions,changedHtmlSharedRevisions} from './live';

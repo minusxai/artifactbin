@@ -174,6 +174,12 @@ const ARTIFACTS: Table = {
     // version row when this state is archived, so history can say who.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // WHO PUBLISHED THE HEAD'S CONTENT — the account whose creation, fork, publication or revert made the content now at
+    // the head. Unlike actor_user_id (the last accepted writer of anything, metadata included), only those writes stamp
+    // it, in the same statement; metadata, sharing, transfer, trash restore and live-region saves keep it. A page's
+    // scheduled functions run as this account (lib/function-schedules), so an edit that is not a publication never
+    // lends its author's authority to code someone else published. NULL: no account published it (a token).
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     // PROVENANCE: the artifact this one was FORKED from — the immediate
@@ -1042,9 +1048,29 @@ const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
  {name:'secret_hosts',type:'JSONB',notNull:true,default:"'{}'::jsonb"},
  // A typeDefs-free file's functions and the role each needs (page-operations/functions); null for a legacy (typeDefs) file.
  {name:'function_roles',type:'JSONB'},
-],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}],
+ // Such a file's `export const schedule`, {name: intervalMs} (page-operations/schedule); null without one.
+ {name:'function_schedules',type:'JSONB'},
+],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']},{name:'idx_html_backend_scheduled',columns:['page_id'],where:'function_schedules IS NOT NULL'}],
  // `api` marked the removed resolver format (1 = caps.store/secrets.get); dead data.
  dropped:['api']};
+
+/**
+ * A scheduled page function's run state (lib/function-schedules), one row per (page, backend link, function) the page
+ * HEAD schedules: derived from the heads on every tick, so a republish without the schedule, a trash or a delete
+ * removes it. `lease_until`/`claim_token` hold a run open (no overlap, across processes); `failures` drives backoff;
+ * `last_*` is what the owner's Resolvers panel shows. Due times are the scheduler's clock; the lease is database time.
+ */
+const PAGE_FUNCTION_SCHEDULES:Table={name:'page_function_schedules',columns:[
+ {name:'page_id',type:'TEXT',notNull:true},{name:'link',type:'TEXT',notNull:true},{name:'function',type:'TEXT',notNull:true},
+ {name:'every_ms',type:'BIGINT',notNull:true},{name:'next_run_at',type:'TIMESTAMPTZ',notNull:true},
+ // The lease is DATABASE time (now()), never a process clock; claim_epoch is the fencing token: it grows by one per claim,
+ // and every effect a run commits checks, inside its transaction, that its (claim_token, claim_epoch) is still current.
+ {name:'lease_until',type:'TIMESTAMPTZ'},{name:'claim_token',type:'TEXT'},{name:'claim_epoch',type:'BIGINT',notNull:true,default:'0'},
+ {name:'failures',type:'INTEGER',notNull:true,default:'0'},
+ {name:'last_started_at',type:'TIMESTAMPTZ'},{name:'last_finished_at',type:'TIMESTAMPTZ'},
+ {name:'last_status',type:'TEXT'},{name:'last_error',type:'TEXT'},{name:'last_message',type:'TEXT'},{name:'last_detail',type:'TEXT'},
+
+],primaryKey:['page_id','link','function'],indexes:[{name:'idx_page_function_schedules_due',columns:['next_run_at']}]};
 
 const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
  {name:'owner_id',type:'TEXT',notNull:true},{name:'backend_id',type:'TEXT',notNull:true},
@@ -1061,7 +1087,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,

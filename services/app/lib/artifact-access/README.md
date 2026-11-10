@@ -38,6 +38,11 @@ email and stamped only by ordinary reads, never inside a write, so two readers o
 1. documents: the page a write goes through, and the documents its user columns name in `memberOf`
 2. datasets: the one written (`FOR UPDATE`), then those its values were read from (`FOR SHARE`)
 
+A transaction that activates scheduled functions (lib/artifacts `schedule-capacity.ts`: create, fork, publication,
+revert, trash restore) then locks each affected publisher's `users` row FOR UPDATE, in `lockOrder`, as a fact of step
+3 after its artifacts, and counts the publisher's active schedules. A page function call's write locks its schedule
+row (lib/function-schedules `claims.ts`) FOR SHARE last; that row is neither an artifact nor an access fact.
+
 Within each tier, artifacts are ordered by `lockOrder` (code units; ids are ASCII), and SQL that locks several
 artifacts in one statement orders `id COLLATE "C"`, the same order. Every multi-artifact writer uses it: publishing a
 page locks it, then its datasets; `memberOf` validation; transfers. Facts come after the artifacts, in the order the

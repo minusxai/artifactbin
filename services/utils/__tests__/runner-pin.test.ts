@@ -35,3 +35,19 @@ describe('runner pin caller', () => {
     expect(actor?.runner && 'caller' in actor.runner).toBe(false);
   });
 });
+
+describe('runner pin admission', () => {
+  const HEAD = 'a'.repeat(64);
+  const admitted = (admission: unknown): Actor => ({ ...pin({ subject: 'editor1', role: 'editor' }), runner: { ...pin({ subject: 'editor1', role: 'editor' }).runner!, admission } as Actor['runner'] });
+  it('round-trips a page function call\'s admission, a scheduled run\'s claim included', () => {
+    for (const admission of [{ page: 'page1', head: HEAD, function: 'refresh' }, { page: 'page1', head: HEAD, function: 'refresh', claim: { link: 'api', token: 't1', epoch: 3 } }])
+      expect(verifyActor(signActor(admitted(admission), SECRET), SECRET)?.runner?.admission).toEqual(admission);
+  });
+  it('refuses a tampered or malformed admission', () => {
+    const header = signActor(admitted({ page: 'page1', head: HEAD, function: 'refresh', claim: { link: 'api', token: 't1', epoch: 3 } }), SECRET);
+    expect(verifyActor(reencode(header, (c) => { c.runner.admission.claim.epoch = 4; }), SECRET)).toBeNull();
+    expect(verifyActor(reencode(header, (c) => { c.runner.admission.head = 'b'.repeat(64); }), SECRET)).toBeNull();
+    for (const admission of [null, { page: 'page1', head: 'short', function: 'refresh' }, { page: 'page1', head: HEAD }, { page: 'page1', head: HEAD, function: 'a.b' }, { page: 'page1', head: HEAD, function: 'f', extra: 1 }, { page: 'page1', head: HEAD, function: 'f', claim: { link: 'api', token: 't', epoch: 0 } }])
+      expect(verifyActor(signActor(admitted(admission), SECRET), SECRET), JSON.stringify(admission)).toBeNull();
+  });
+});

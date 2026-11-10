@@ -7,14 +7,14 @@ import DocumentSettings from '../DocumentSettings';
 
 type Call = { url: string; method: string; body: unknown };
 const VALUE = 'private-panel-value';
-function serve(answers: { set?: string[]; test?: boolean; graphql?: () => { status: number; body: unknown } } = {}) {
+function serve(answers: { set?: string[]; test?: boolean; schedules?: unknown[]; graphql?: () => { status: number; body: unknown } } = {}) {
   const calls: Call[] = [];
   let set = answers.set ?? [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ url, method, body });
     const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
-    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'sheets', backendId: 'b1', version: 'v1', test: answers.test ?? true, secrets: { GOOGLE_SA: 'sheets.googleapis.com' }, set }] });
+    if (url === '/api/my/artifacts/Abc123/resolvers') return reply({ revision: 'r7', resolvers: [{ name: 'sheets', backendId: 'b1', version: 'v1', test: answers.test ?? true, secrets: { GOOGLE_SA: 'sheets.googleapis.com' }, set, ...(answers.schedules ? { schedules: answers.schedules } : {}) }] });
     if (url === '/api/my/resolvers/b1/v1/secrets') {
       set = method === 'PUT' ? ['GOOGLE_SA'] : [];
       return reply({ names: set });
@@ -223,4 +223,33 @@ it('opens Advanced by itself for an RDS or Supabase host and after an untrusted-
   fireEvent.click(panel.getByRole('button', { name: 'Test connection' }));
   expect(await panel.findByRole('alert')).toHaveTextContent('tls_untrusted_certificate');
   expect(advanced(panel).open).toBe(true);
+});
+
+it('lists each scheduled function with its interval and last outcome; a failure shows its code, message and the owner detail', async () => {
+  serve({ schedules: [
+    { name: 'refresh', every: 'every 1 hour', everyMs: 3600000, nextRunAt: '2026-11-10T02:00:00.000Z', running: false, failures: 3, lastRunAt: '2026-11-10T01:00:00.000Z', lastFinishedAt: '2026-11-10T01:00:01.000Z', lastStatus: 'failed', lastError: 'backend_failed', lastMessage: 'upstream said no', lastDetail: 'Error: upstream said no at refresh' },
+    { name: 'tidy', every: 'every 1 day', everyMs: 86400000, nextRunAt: '2026-11-11T00:00:00.000Z', running: false, failures: 0, lastRunAt: '2026-11-10T00:00:00.000Z', lastFinishedAt: '2026-11-10T00:00:01.000Z', lastStatus: 'ok', lastError: null, lastMessage: null, lastDetail: null },
+    { name: 'fresh', every: 'every 15 minutes', everyMs: 900000, nextRunAt: '2026-11-10T00:00:00.000Z', running: false, failures: 0, lastRunAt: null, lastFinishedAt: null, lastStatus: null, lastError: null, lastMessage: null, lastDetail: null },
+  ] });
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = await resolver();
+  const list = within(panel.getByRole('list', { name: 'Scheduled functions' }));
+  const rows = list.getAllByRole('listitem');
+  expect(rows).toHaveLength(3);
+  const [refresh, tidy, fresh] = rows.map((row) => within(row));
+  expect(refresh!.getByText('refresh')).toBeTruthy();
+  expect(refresh!.getByText('every 1 hour')).toBeTruthy();
+  expect(refresh!.getByText('Failed 3 times')).toBeTruthy();
+  expect(refresh!.getByRole('alert').textContent).toContain('backend_failed: upstream said no');
+  expect(refresh!.getByRole('alert').textContent).toContain('Error: upstream said no at refresh');
+  expect(tidy!.getByText('Last run succeeded')).toBeTruthy();
+  expect(tidy!.queryByRole('alert')).toBeNull();
+  expect(fresh!.getByText('Not run yet')).toBeTruthy();
+});
+
+it('a resolver with no schedule shows no scheduled functions', async () => {
+  serve();
+  render(() => <ResolversPanel id="Abc123" />);
+  const panel = await resolver();
+  expect(panel.queryByRole('list', { name: 'Scheduled functions' })).toBeNull();
 });

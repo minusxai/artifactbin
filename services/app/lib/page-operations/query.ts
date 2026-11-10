@@ -7,6 +7,7 @@
  */
 import { RESOLVER_LIMITS, type DatasetGraphqlReply, type DatasetGraphqlRequest, type HtmlDatasetLink, type Queryable, type RunnerCaller, type RunnerJson } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
+import type { AdmissionCheck } from './admission';
 
 /** A refusal handed to resolver code as an Error with `code` (and the remote callback's `code: detail`). */
 export class ResolverQueryError extends Error {
@@ -28,6 +29,8 @@ interface ResolverQueryInput {
   operation: 'query' | 'mutation' | undefined;
   args: RunnerJson;
   signal?: AbortSignal;
+  /** A page function call's admission (./admission), already re-decided before this dispatch. */
+  admission?: AdmissionCheck;
 }
 export type ResolverQuery = (input: ResolverQueryInput) => Promise<RunnerJson>;
 
@@ -37,8 +40,10 @@ export interface ResolverQueryPorts {
   /**
    * The page head as one read: its dataset links and the guard its writes commit under (lib/page-doors: that head,
    * those links and the caller's access, decided again inside the write's transaction). Mutations use it when given.
+   * A page function call's `admission` (./admission) makes the guard decide it instead: the head it was admitted on,
+   * the caller's eligibility for the function and a scheduled run's claim, inside the commit.
    */
-  page?(pageId: string, actor: AccessActor): Promise<{ links: readonly HtmlDatasetLink[]; commitGuard: (tx: Queryable) => Promise<void> }>;
+  page?(pageId: string, actor: AccessActor, admission?: AdmissionCheck): Promise<{ links: readonly HtmlDatasetLink[]; commitGuard: (tx: Queryable) => Promise<void> }>;
   /** lib/graphql-compat `executeLinkedDatasetGraphql`: the page audience rule over each dataset's own sharing. */
   execute(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: { operation: 'query' | 'mutation' | undefined; resultBytes: number; pageId: string; commitGuard?: (tx: Queryable) => Promise<void> }, signal: AbortSignal): Promise<DatasetGraphqlReply>;
 }
@@ -49,7 +54,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 const CODES: Record<string, string> = { dataset_changed: 'conflict', dataset_not_found: 'unavailable', unexpected: 'unavailable' };
 
 export function createResolverQuery(ports: ResolverQueryPorts): ResolverQuery {
-  return async ({ pageId, caller, operation, args, signal }) => {
+  return async ({ pageId, caller, operation, args, signal, admission }) => {
     if (!caller) throw new ResolverQueryError('caller_unavailable', 'the run does not attest who called');
     if (!isObject(args) || typeof args.query !== 'string') throw new ResolverQueryError('validation_failed', 'caps.query takes a GraphQL document string');
     if (Buffer.byteLength(args.query) > RESOLVER_LIMITS.queryDocumentBytes) throw new ResolverQueryError('validation_failed', `a query document is at most ${RESOLVER_LIMITS.queryDocumentBytes} bytes`);
@@ -63,7 +68,7 @@ export function createResolverQuery(ports: ResolverQueryPorts): ResolverQuery {
     let reply: DatasetGraphqlReply;
     try {
       // A write commits only while the head its links came from, and the caller's access to it, still hold.
-      const head = operation === 'mutation' && ports.page ? await ports.page(pageId, actor) : null;
+      const head = operation === 'mutation' && ports.page ? await ports.page(pageId, actor, admission) : null;
       reply = await ports.execute(actor, head?.links ?? await ports.links(pageId), request, { operation, resultBytes: RESOLVER_LIMITS.queryResultBytes, pageId, ...(head ? { commitGuard: head.commitGuard } : {}) }, signal ?? new AbortController().signal);
     } catch (e) {
       if (e instanceof Error && (e.message === 'dataset_changed' || e.message === 'dataset_not_found')) throw new ResolverQueryError(CODES[e.message]!);

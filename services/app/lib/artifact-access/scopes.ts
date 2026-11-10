@@ -53,6 +53,8 @@ export interface ArtifactRow {
   /** Who made the head: the last accepted writer (an editor may differ from the owner). */
   actor_user_id: string | null;
   actor_token_id: string | null;
+  /** Who published the head's content (creation, fork, publication, revert): a page's scheduled functions run as it. */
+  content_publisher_user_id: string | null;
   created_at: string;
   updated_at: string;
   /**

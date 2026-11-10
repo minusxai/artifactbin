@@ -8,6 +8,8 @@ import { describeDatabaseError } from "./database-errors.mjs";
 
 /** RESOLVER_DATABASE_OPERATION in services/contracts (this file runs without the repository's packages). */
 export const DATABASE_OPERATION = "artifactbin.pageBackend.db";
+/** RESOLVER_DATABASE_CHECK_OPERATION in services/contracts: the app re-decides the call before each query. */
+export const DATABASE_CHECK_OPERATION = "artifactbin.pageBackend.dbCheck";
 /** RESOLVER_DATABASE_LIMITS.windowBytes and .chunkBytes; pinned equal by services/app page-operations tests. */
 export const WINDOW_BYTES = 256 * 1024, CHUNK_BYTES = 64 * 1024;
 const MAX_SQL_BYTES = 256 * 1024, MAX_CLIENTS = 8;
@@ -230,6 +232,8 @@ export function createDatabaseHost({ send, call }) {
             if (!client) throw Error("connection_closed");
             if (typeof text !== "string" || !text || Buffer.byteLength(text) > MAX_SQL_BYTES) throw Error("invalid_request: sql must be a non-empty string under 256 KiB");
             if (params !== undefined && params !== null && !Array.isArray(params)) throw Error("invalid_request: params must be an array");
+            // The call may have lost its authority since the connection opened (a revoked caller, a republished page, a lost claim).
+            await call(DATABASE_CHECK_OPERATION, null);
             try {
                 return await client.client.query(text, params ?? []);
             } catch (error) { throw Error(describeDatabaseError(error, client.secrets)); }

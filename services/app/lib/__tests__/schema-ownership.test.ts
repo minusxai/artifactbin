@@ -143,3 +143,9 @@ it('group mail retries and fenced claims belong to app durable state',()=>{
  const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS app.group_mail_outbox (')[1]?.split(');')[0];
  for(const column of ['claim_token TEXT','attempts INTEGER NOT NULL DEFAULT 0','next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()','quarantined_at TIMESTAMPTZ'])expect(declaration).toContain(column);
 });
+it('the head\'s content publisher and the scheduled run\'s fencing epoch belong to the app',()=>{
+ const sql=renderedSchema().schema;
+ expect(declared()['app.artifacts']).toBe('app');expect(declared()['app.page_function_schedules']).toBe('app');
+ expect(sql).toContain('ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT');
+ expect(sql).toMatch(/ALTER TABLE app\.page_function_schedules ADD COLUMN IF NOT EXISTS claim_epoch BIGINT NOT NULL DEFAULT 0|claim_epoch BIGINT NOT NULL DEFAULT 0/);
+});

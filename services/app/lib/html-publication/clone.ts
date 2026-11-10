@@ -14,8 +14,9 @@ export async function planHtmlClone(actor:AccessActor,pageId:string,links:readon
   const backend=await ports.backend(link.backendId,link.version);
   if(!backend||backend.pageId!==pageId||backend.name!==link.name)throw Error('backend_link_mismatch');
   // Declaration names are immutable code metadata; secret rows are scoped to the fresh backend ID.
-  // Never spread owner authority, credential values, or store state.
-  htmlBackends.push({name:link.name,source:backend.source,typeDefs:backend.typeDefs,...(backend.functions?{functions:{...backend.functions}}:{}),compiled:backend.compiled,...(backend.secretBindings?{secretBindings:[...backend.secretBindings]}:{}),...(backend.secretHosts?{secretHosts:{...backend.secretHosts}}:{})});
+  // Never spread owner authority, credential values, or store state. A schedule is code metadata (it is in the
+  // source): the copy's runs are its own owner's, with their own run state (lib/function-schedules).
+  htmlBackends.push({name:link.name,source:backend.source,typeDefs:backend.typeDefs,...(backend.functions?{functions:{...backend.functions}}:{}),...(backend.schedule?{schedule:{...backend.schedule}}:{}),compiled:backend.compiled,...(backend.secretBindings?{secretBindings:[...backend.secretBindings]}:{}),...(backend.secretHosts?{secretHosts:{...backend.secretHosts}}:{})});
  }
  return {htmlBackends,htmlDatasets};
 }

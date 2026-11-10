@@ -11,6 +11,11 @@ export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancell
  * One resolver call's size and time limits, as a single table: they move together. Raising the
  * fetch response cap means raising every link after it (worker message, remote callback reply).
  */
+/**
+ * How many scheduled page functions one publisher may have active across the live page heads whose content it
+ * published (lib/artifacts schedule-capacity: an invariant every transaction that activates schedules checks).
+ */
+export const FUNCTION_SCHEDULE_LIMIT = 20;
 export const RESOLVER_LIMITS = Object.freeze({
   /** `caps.fetch` response body, before redaction. */
   fetchResponseBytes: 2 * 1024 * 1024,
@@ -62,6 +67,12 @@ export const RESOLVER_DATABASE_LIMITS = Object.freeze({
 });
 /** The host operation that answers a named connection; the worker calls it, resolver code cannot. */
 export const RESOLVER_DATABASE_OPERATION = 'artifactbin.pageBackend.db';
+/**
+ * The runner worker's own check before each `caps.db` query (worker-database.mjs; resolver code cannot send it): the
+ * app re-decides the call's admission, so a revoked caller's open connection stops at its next query. It is not
+ * counted against the run's request limit.
+ */
+export const RESOLVER_DATABASE_CHECK_OPERATION = 'artifactbin.pageBackend.dbCheck';
 /**
  * The database kinds `caps.db` connects to, THE ONE LIST: a `secrets` export binding of one of these
  * (`{DB: 'postgres'}`, `{DB: 'mysql'}`) declares a connection of that kind instead of a fetch secret. Compile-time

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type RunStart, type RunWait, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
+import { RESOLVER_DATABASE_CHECK_OPERATION, RESOLVER_DATABASE_OPERATION, RESOLVER_LIMITS, type RunStart, type RunWait, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
 import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
 import { createWorkerPool, startWorker, type Worker, type WorkerMessage } from './worker-pool';
@@ -226,7 +226,8 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 value = { sequence };
             }
             else {
-                if (++r.requestCount > r.limits.maxRequests)
+                // The worker's per-query check is not resolver work (resolver code cannot send it: runner-worker.mjs).
+                if (msg.operation !== RESOLVER_DATABASE_CHECK_OPERATION && ++r.requestCount > r.limits.maxRequests)
                     throw Error('request_limit');
                 const started = Date.now();
                 value = await options.capabilities({ runId: id, callId, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);
