@@ -33,7 +33,7 @@ interface BearerRow { id: string; user_id: string | null; audience: string | nul
 export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
   const tokens = `${o.appSchema ? `${identifier(o.appSchema, 'app schema')}.` : ''}tokens`;
-  const sql = `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
+  const sql = (key: 'token_hash' | 'id') => `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
     FROM ${tokens} t
     LEFT JOIN LATERAL (
       SELECT 1 AS live FROM ${auth}.credentials member
@@ -46,13 +46,11 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
       LIMIT 1
     ) fence ON true
     LEFT JOIN ${auth}."user" u ON u.id=t.user_id
-    WHERE t.token_hash=$1 AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
+    WHERE t.${key}=$1 AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
       AND (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL)`;
-  return {
-    async byToken(presented) {
-      // The shape check comes FIRST: a guess never reaches the hash or the database.
-      if (!TOKEN_RE.test(presented)) return null;
-      const row = (await o.db.query<BearerRow>(sql, [hashToken(presented)])).rows[0];
+  const byHash = sql('token_hash'), byId = sql('id');
+  const read = async (statement: string, key: string): Promise<TokenRecord | null> => {
+      const row = (await o.db.query<BearerRow>(statement, [key])).rows[0];
       if (!row) return null;
       const token: TokenRecord = {
         id: row.id,
@@ -62,6 +60,15 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
         ...(row.email !== null && row.email !== undefined ? { email: row.email, emailVerified: row.email_verified === true } : {}),
       };
       return !o.admitBearer || await o.admitBearer(token) ? token : null;
+  };
+  return {
+    async byToken(presented) {
+      // The shape check comes FIRST: a guess never reaches the hash or the database.
+      if (!TOKEN_RE.test(presented)) return null;
+      return read(byHash, hashToken(presented));
+    },
+    async byId(id) {
+      return id ? read(byId, id) : null;
     },
   };
 }

@@ -10,6 +10,9 @@
  *  - The safety net: writers that cannot follow it (group-owned publish, group deletion, test-user erasure) can
  *    deadlock with a guarded write; with both sides' whole transactions under lib/platform `retryOnConflict`, both
  *    complete, and the guarded decision is the one the state it finally read gives.
+ *  - The tree (lib/groups hierarchy): a decision through an ancestor's share against a descendant's membership
+ *    removal, a NEW descendant membership, and a reparent or deletion of the subgroup: each waits for the decision's
+ *    commit, or committed first and is what the decision reads.
  *
  * Only the tables and columns these statements touch are created. Runs in the `integration` project; skipped
  * without the image.
@@ -23,6 +26,7 @@ import { datasetWriteAccess } from '@/lib/dataset-permissions';
 import type { ArtifactRow } from '../scopes';
 import { transactionAccessFacts } from '../access-facts';
 import { lockAuthorization, lockOrder } from '../locks';
+import { lockMembershipGroups } from '@/lib/groups';
 
 const dockerAvailable = spawnSync('docker', ['image', 'inspect', 'postgres:17-alpine'], { stdio: 'ignore' }).status === 0;
 const ACTOR = { userId: 'u1', tokenId: null, email: null, documentEditor: false };
@@ -42,7 +46,8 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
   const code = (e: { code?: string }) => e.code ?? String(e);
   /** This disposable server's own rows, reset per case (not the app harness database). */
   const seed = async () => {
-    await clients[0]!.query(`TRUNCATE artifact_group_shares, artifact_shares, group_members, groups, users, artifacts;
+    await clients[0]!.query(`TRUNCATE artifact_group_shares, artifact_shares, group_members, groups, users, artifacts, group_hierarchy;
+      INSERT INTO group_hierarchy VALUES ('installation', 0);
       INSERT INTO artifacts VALUES ('page'), ('data'), ('data2'), ('Bdata'), ('adata'); INSERT INTO users VALUES ('u1', 'u1@example.com', 'account');
       INSERT INTO groups VALUES ('g1', NULL); INSERT INTO group_members VALUES ('g1', 'u1', 'viewer');
       INSERT INTO artifact_shares VALUES ('page', 'u1', 'u1@example.com', 'viewer'); INSERT INTO artifact_group_shares VALUES ('data', 'g1', 'editor');`);
@@ -61,7 +66,8 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     await clients[0]!.query(`
       CREATE TABLE artifacts (id text PRIMARY KEY);
       CREATE TABLE users (id text PRIMARY KEY, email text, kind text);
-      CREATE TABLE groups (id text PRIMARY KEY, deleted_at timestamptz);
+      CREATE TABLE groups (id text PRIMARY KEY, deleted_at timestamptz, parent_id text);
+      CREATE TABLE group_hierarchy (id text PRIMARY KEY, revision bigint NOT NULL DEFAULT 0);
       CREATE TABLE group_members (group_id text REFERENCES groups(id), user_id text REFERENCES users(id), role text, PRIMARY KEY (group_id, user_id));
       CREATE TABLE artifact_shares (artifact_id text REFERENCES artifacts(id), user_id text, email text, role text, PRIMARY KEY (artifact_id, email));
       CREATE TABLE artifact_group_shares (artifact_id text REFERENCES artifacts(id), group_id text REFERENCES groups(id), role text, PRIMARY KEY (artifact_id, group_id));`);
@@ -88,9 +94,9 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       await lockAuthorization(tx(writer), { write: 'data' });
       const before = await datasetWriteAccess(row, ACTOR, { tx: tx(writer) });
       expect(before).toMatchObject({ allowed: true, role: 'signed_in' });
-      // Invitation acceptance holds the group before inserting, just as lib/groups does.
+      // Invitation acceptance holds the group (and its ancestors) before inserting: lib/groups lockMembershipGroups.
       const grant = transaction(grantor, async () => {
-        await grantor.query("SELECT id FROM groups WHERE id='g1' FOR UPDATE");
+        await lockMembershipGroups(tx(grantor), ['g1']);
         await grantor.query("INSERT INTO group_members VALUES ('g1', 'u1', 'viewer')");
       });
       const slipped = await settles(grant, 150);
@@ -284,5 +290,84 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     const codes = await Promise.all([guarded, published]);
     for (const [c, result] of [[writer, codes[0]], [publisher, codes[1]]] as const) if (result !== 'ok') await c.query('ROLLBACK');
     expect(codes).toEqual(['ok', 'ok']);
+  });
+  /**
+   * THE TREE. Finance ('fin') ⊃ Retail ('ret'); u1 is a Retail member only; 'data' is shared with Finance. The
+   * guarded write reaches it through the ancestor's share (lib/groups hierarchy); each competing writer runs the
+   * production protocol: a membership write takes lib/groups `lockMembershipGroups` (the guard FOR SHARE, the group
+   * and every ancestor FOR UPDATE), a topology write moves the revision first (the guard exclusively).
+   */
+  const subtree = async (role = 'editor', member = true) => {
+    await seed();
+    await clients[0]!.query(`DELETE FROM artifact_group_shares; DELETE FROM group_members;
+      INSERT INTO groups VALUES ('fin', NULL, NULL), ('ret', NULL, 'fin');
+      INSERT INTO artifact_group_shares VALUES ('data', 'fin', '${role}');${member ? " INSERT INTO group_members VALUES ('ret', 'u1', 'viewer');" : ''}`);
+  };
+  const BUMP = "INSERT INTO group_hierarchy(id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=group_hierarchy.revision+1";
+  const competitors = {
+    'a descendant membership removal': async (c: pg.Client) => { await lockMembershipGroups(tx(c), ['ret']); await c.query("DELETE FROM group_members WHERE group_id='ret' AND user_id='u1'"); },
+    // The guard alone: lib/groups setGroupParent also locks both chains, which would block it too; this pins the guard.
+    'a reparent of the subgroup out of the ancestor': async (c: pg.Client) => { await c.query(BUMP); await c.query("UPDATE groups SET parent_id=NULL WHERE id='ret'"); },
+    'a deletion of the subgroup': async (c: pg.Client) => { await c.query(BUMP); await c.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await c.query("DELETE FROM group_members WHERE group_id='ret'"); await c.query("UPDATE groups SET deleted_at=now() WHERE id='ret'"); },
+    'a deletion of the ancestor share': async (c: pg.Client) => { await c.query("SELECT id FROM artifacts WHERE id='data' FOR UPDATE"); await c.query("DELETE FROM artifact_group_shares WHERE artifact_id='data' AND group_id='fin'"); },
+  } as const;
+
+  it.each(Object.keys(competitors) as Array<keyof typeof competitors>)('subtree: %s waits for an in-flight decision through the ancestor share', async (name) => {
+    await subtree();
+    const writer = await connect(), other = await connect();
+    await writer.query('BEGIN');
+    try {
+      await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
+      expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
+      const competing = transaction(other, () => competitors[name](other)).then(() => 'ok', code);
+      expect(await settles(competing, 300)).toBe(false);
+      // Still the decision's state until it commits.
+      expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
+      await writer.query('COMMIT');
+      expect(await competing).toBe('ok');
+    } finally { await writer.query('ROLLBACK'); }
+    // The next decision sees the change.
+    const next = await connect();
+    expect(await transaction(next, async () => { await lockAuthorization(tx(next), { write: 'data' }); return transactionAccessFacts(ACTOR, tx(next)).groupShareRole('data'); })).toBe('none');
+  });
+
+  it.each(Object.keys(competitors) as Array<keyof typeof competitors>)('subtree: %s committed first is what the decision reads', async (name) => {
+    await subtree();
+    const writer = await connect(), other = await connect();
+    await other.query('BEGIN');
+    await competitors[name](other);
+    await writer.query('BEGIN');
+    try {
+      const role = lockAuthorization(tx(writer), { page: 'page', write: 'data' }).then(() => transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data'));
+      expect(await settles(role, 300)).toBe(false);
+      await other.query('COMMIT');
+      expect(await role).toBe('none');
+      await writer.query('COMMIT');
+    } finally { await writer.query('ROLLBACK'); }
+  });
+
+  it('subtree: a NEW descendant membership cannot narrow the role of an in-flight commit', async () => {
+    // A viewer share to Finance: joining Retail would turn the decision's `signed_in` into `viewer`, which this
+    // dataset rule refuses. The join takes Finance FOR UPDATE (an ancestor); the decision holds it FOR SHARE.
+    await subtree('viewer', false);
+    const writer = await connect(), grantor = await connect();
+    const row = {
+      id: 'data', user_id: 'another-owner', token_id: null, group_id: null,
+      format: 'dataset', visibility: 'unlisted', link_role: 'viewer', access: 'readwrite',
+      meta: { columns: [{ name: 'name', type: 'string' }], objectKey: 'unused' },
+      dataset_policy: { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'signed_in', permission: { columns: '*', check: {} } }] }] },
+    } as unknown as ArtifactRow;
+    await writer.query('BEGIN');
+    try {
+      await lockAuthorization(tx(writer), { write: 'data' });
+      expect(await datasetWriteAccess(row, ACTOR, { tx: tx(writer) })).toMatchObject({ allowed: true, role: 'signed_in' });
+      const grant = transaction(grantor, async () => { await lockMembershipGroups(tx(grantor), ['ret']); await grantor.query("INSERT INTO group_members VALUES ('ret', 'u1', 'viewer')"); }).then(() => 'ok', code);
+      expect(await settles(grant, 300)).toBe(false);
+      expect(await datasetWriteAccess(row, ACTOR, { tx: tx(writer) })).toMatchObject({ allowed: true, role: 'signed_in' });
+      await writer.query('COMMIT');
+      expect(await grant).toBe('ok');
+    } finally { await writer.query('ROLLBACK'); }
+    const next = await connect();
+    expect(await transaction(next, async () => { await lockAuthorization(tx(next), { write: 'data' }); return datasetWriteAccess(row, ACTOR, { tx: tx(next) }); })).toMatchObject({ allowed: false, role: 'viewer' });
   });
 });

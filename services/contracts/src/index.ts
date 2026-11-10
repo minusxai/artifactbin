@@ -20,6 +20,7 @@ export { isLocalDevelopmentHost, normalizeOrigin, parseAliasOrigins, type Server
 export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, ClaimResult, CodeStore } from './identity';
+export * from './identity-service';
 export type { Column, Table } from './schema';
 export * from './dataset-policy';
 export * from './dataset-permissions';

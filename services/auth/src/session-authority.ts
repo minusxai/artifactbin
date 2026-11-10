@@ -1,20 +1,73 @@
-/** Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. */
-import {timingSafeEqual} from 'node:crypto';
-import {HUMAN_SESSION_LIVE_PATH,SERVICE_AUTH_HEADER,type Part} from '@artifactbin/contracts';
-import {BodyTooLargeError,readBody} from '@artifactbin/utils';
+/**
+ * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
+ * is service-authenticated (SERVICE_AUTH_HEADER carrying INTERNAL__SERVICE_SECRET) and refused without it:
+ *  - session-live: is a human session still live (the pages sessions' revalidation);
+ *  - the identity endpoints (contracts `IDENTITY_PATHS`, cross-repository contract §2): token questions are answered
+ *    here from the one bearer read every API request is admitted by (token, OAuth family fence, identity): all of
+ *    `introspect`, and `resolve`'s `token_active`. The rest of `resolve`, and `groups`, are relayed to the
+ *    application, which owns accounts and groups and checks the secret again.
+ */
+import {ANONYMOUS,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_PATHS,SERVICE_AUTH_HEADER,parseAliasOrigins,type IdentityIntrospectResponse,type Part,type TokenRecord} from '@artifactbin/contracts';
+import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
+import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
+import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
+const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sessionAuthority',mount:app=>{
  const secret=readEnv(o.env,'INTERNAL__SERVICE_SECRET');
- app.all(HUMAN_SESSION_LIVE_PATH,async c=>{
-  const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+ /** A refusal Response, or the parsed JSON object body. */
+ const admit=async(c:Context<AuthEnv>,parse=true):Promise<Response|Record<string,unknown>>=>{
   if(c.req.method!=='POST')return answer({error:'method_not_allowed'},405);
-  const provided=Buffer.from(c.req.header(SERVICE_AUTH_HEADER)??''),expected=Buffer.from(secret??'');
-  if(!expected.length||provided.length!==expected.length||!timingSafeEqual(provided,expected))return answer({error:'unauthorized'},401);
+  if(!serviceSecretMatches(c.req.header(SERVICE_AUTH_HEADER),secret))return answer({error:'unauthorized'},401);
+  if(!parse)return {};
   let body:unknown;
   try{body=JSON.parse(await readBody(c.req.raw,{limit:8192,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
-  const input=body as {sessionId?:unknown;userId?:unknown}|null;
-  if(!input||typeof input.sessionId!=='string'||!input.sessionId||typeof input.userId!=='string'||!input.userId)return answer({error:'bad_request'},400);
+  return body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:answer({error:'bad_request'},400);
+ };
+ app.all(HUMAN_SESSION_LIVE_PATH,async c=>{
+  const input=await admit(c);if(input instanceof Response)return input;
+  if(typeof input.sessionId!=='string'||!input.sessionId||typeof input.userId!=='string'||!input.userId)return answer({error:'bad_request'},400);
   try{return answer({live:await o.sessions.live?.(input.sessionId,input.userId)??false});}catch{return answer({error:'session_unavailable'},503);}
+ });
+ /**
+  * Is the bearer read's record a live credential of this deployment's account: an account's token, an OAuth access
+  * token for one of this deployment's API origins, and an identity the deployment still admits. The record, or null.
+  */
+ const live=async(c:Context<AuthEnv>,token:TokenRecord|null):Promise<(TokenRecord&{userId:string})|null>=>{
+  const userId=token?.userId;
+  if(!token||!userId)return null;
+  const origins=acceptedOriginsOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'),parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS')));
+  if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`))return null;
+  return !o.admitIdentity||await o.admitIdentity({userId})?{...token,userId}:null;
+ };
+ app.all(IDENTITY_PATHS.introspect,async c=>{
+  const input=await admit(c);if(input instanceof Response)return input;
+  if(typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
+  let token:(TokenRecord&{userId:string})|null;
+  try{token=await live(c,await o.tokens.byToken(input.token));}catch{return answer({error:'session_unavailable'},503);}
+  if(!token)return answer({active:false} satisfies IdentityIntrospectResponse);
+  return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[]} satisfies IdentityIntrospectResponse);
+ });
+ // The application answers the account, session and group; this host adds `token_active` (null without a token_id).
+ app.all(IDENTITY_PATHS.resolve,async c=>{
+  const input=await admit(c);if(input instanceof Response)return input;
+  const tokenId=input.token_id;
+  if(tokenId!==undefined&&tokenId!==null&&(typeof tokenId!=='string'||!tokenId))return answer({error:'bad_request'},400);
+  const {token_id:_omitted,...forwarded}=input;
+  const headers=new Headers(c.req.raw.headers);headers.delete('content-length');
+  const relayed=await o.upstream(new Request(c.req.raw.url,{method:'POST',headers,body:JSON.stringify(forwarded)}),ANONYMOUS);
+  if(!relayed.ok)return relayed;
+  let tokenActive:boolean|null=null;
+  if(typeof tokenId==='string'){
+   if(!o.tokens.byId)tokenActive=false;
+   else try{tokenActive=!!await live(c,await o.tokens.byId(tokenId));}catch{return answer({error:'session_unavailable'},503);}
+  }
+  return answer({...await relayed.json() as Record<string,unknown>,token_active:tokenActive});
+ });
+ // The application answers this; this host only refuses a caller without the secret before relaying it.
+ app.all(IDENTITY_PATHS.groups,async c=>{
+  const refused=await admit(c,false);if(refused instanceof Response)return refused;
+  return o.upstream(c.req.raw,ANONYMOUS);
  });
 }};}

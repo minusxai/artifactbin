@@ -1,5 +1,5 @@
 import {canUseDeploymentIdentity} from '../accounts';
-import {recordGroupMutation} from '../groups';
+import {lockMembershipGroups,recordGroupMutation} from '../groups';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
 import { getDb, type Queryable, deploymentConfig, env, minusxSettings, schedulesOwner } from '../platform';
@@ -72,7 +72,8 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
    await tx.query('UPDATE deployment_state SET owner_user_id=$2 WHERE id=$1',[ID,identity.userId]);
    await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
   }
-  if(!s.setup_complete||!policy.matches(email)||!await group(tx,s.default_group_id,null,true))return false;
+  // A membership write: the hierarchy guard, then the default group and its ancestors (lib/groups lockMembershipGroups).
+  if(!s.setup_complete||!policy.matches(email)||!s.default_group_id||!(await lockMembershipGroups(tx,[s.default_group_id])).has(s.default_group_id)||!await group(tx,s.default_group_id,null,true))return false;
   const invitation=(await tx.query<{role:'editor'|'viewer'}>('SELECT role FROM group_invitations WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE',[s.default_group_id,email])).rows[0];
   if(policy.inviteOnly&&!invitation)return false;
   const previous=(await tx.query<{role:string}>('SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2',[s.default_group_id,identity.userId])).rows[0]?.role??null;

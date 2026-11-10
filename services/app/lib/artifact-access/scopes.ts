@@ -10,6 +10,7 @@
  */
 import { ACCOUNT_REACH_SQL } from '@/lib/user-kinds';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { reachedGroupsSql } from '@/lib/groups';
 import type {DocumentGraph} from '@artifactbin/contracts';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
@@ -122,7 +123,12 @@ const live = (scope: Scope): Scope => ({ where: (p) => `${LIVE_ARTIFACT_SQL} AND
  * through an email change, and an old invite to an address the person no
  * longer has stops matching (share-resolution.test.ts).
  */
-const GROUP_SHARE_PREDICATE=(roles:readonly string[],param:string)=>`EXISTS (SELECT 1 FROM artifact_group_shares gs JOIN group_members gm ON gm.group_id=gs.group_id JOIN groups g ON g.id=gm.group_id JOIN users gu ON gu.id=gm.user_id WHERE gs.artifact_id=artifacts.id AND gm.user_id=${param} AND gu.kind='account' AND g.deleted_at IS NULL AND gs.role IN (${roles.map(role=>`'${role}'`).join(',')}))`;
+/**
+ * A GROUP SHARE holding one of `roles` that reaches the account: a share to any live group its direct memberships
+ * climb to (lib/groups hierarchy), so a share to Finance reaches a Retail member and never the other way round.
+ * The mirror of ./access-facts `groupShareRole`.
+ */
+const GROUP_SHARE_PREDICATE=(roles:readonly string[],param:string)=>`(EXISTS (SELECT 1 FROM users gu WHERE gu.id=${param} AND gu.kind='account') AND EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id=artifacts.id AND gs.role IN (${roles.map(role=>`'${role}'`).join(',')}) AND gs.group_id IN (${reachedGroupsSql(param)})))`;
 
 export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
   `(${GROUP_SHARE_PREDICATE(roles,param)} OR EXISTS (SELECT 1 FROM artifact_shares s
@@ -134,7 +140,14 @@ export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
  * trashed rows on purpose (the listing, restore). Every other
  * caller wants `ownerScope`, which is this with the gate composed in.
  */
-export const groupMemberPredicate = (user:string, role?:'editor', alias='artifacts') => `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user}${role ? " AND gm.role='editor'" : ''} AND g.deleted_at IS NULL)`;
+/**
+ * A group-owned row's members. `'editor'`: a DIRECT editor of the owning group, its owner (never inherited from the
+ * tree). Without a role: the owning group's AUDIENCE, a direct member of it or of any descendant (./access-facts
+ * `groupAudience`), the same subtree a share to that group reaches.
+ */
+export const groupMemberPredicate = (user:string, role?:'editor', alias='artifacts') => role
+  ? `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role='editor' AND g.deleted_at IS NULL)`
+  : `(${alias}.group_id IN (${reachedGroupsSql(user)}))`;
 
 export const ownerPredicate = ({ tokenId, userId, groupId }: AccessActor): Scope =>
   groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'editor')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };

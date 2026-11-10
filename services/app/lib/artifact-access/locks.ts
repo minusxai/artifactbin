@@ -13,15 +13,23 @@
  *    write holds (step 1 or 2) — every writer of them locks the artifact FOR UPDATE first;
  *  - memberships: the group's row, which the decision takes FOR SHARE for every group that could change the role
  *    (the artifact's owning group and every group its group shares name, joined or not) — every membership writer
- *    locks the group FOR UPDATE first.
+ *    locks the group AND ALL ITS ANCESTORS FOR UPDATE first (lib/groups lockMembershipGroups), so a new membership
+ *    anywhere in a shared group's subtree (which that share reaches) waits for the decision too.
  * The remaining facts are existing rows (the accounts' kinds), locked as they are read. Editor-group trust only widens
  * (it admits `backend_only` rules, it never changes the role). Facts the decision did not read are not locked.
  *
+ * THE TREE. A group share and a group-owned row reach a subtree (lib/groups hierarchy), so a decision enumerates
+ * edges. Step 0 holds the installation's hierarchy guard row FOR SHARE for the whole transaction; every topology
+ * mutation (group create, delete, reparent) takes it exclusively as its first statement, so no edge moves under a
+ * decision in flight, and a move committed first is what the decision reads.
+ *
  * The order, on the normal path:
  *
+ *   0. the hierarchy guard (`group_hierarchy`), FOR SHARE, at the transaction's start — never upgraded
  *   1. documents: the page a write goes through, and the documents its user columns' memberOf names, by `lockOrder`
  *   2. datasets: the dataset written (FOR UPDATE) and those its values were read from (FOR SHARE), by `lockOrder`
- *   3. facts, as the decision reads them: shares, group shares, groups, memberships, accounts
+ *   3. facts, as the decision reads them: shares, group shares, groups (the owning and shared groups, in
+ *      `id COLLATE "C"` order), memberships (in those groups' subtrees), accounts
  *
  * Two tails come after the artifacts too: a transaction that activates scheduled functions locks each affected
  * publisher's `users` row FOR UPDATE, by `lockOrder`, as a step-3 fact (lib/artifacts schedule-capacity.ts); a page
@@ -43,6 +51,7 @@
  * regression services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts.
  */
 import type { Queryable } from '@artifactbin/contracts';
+import { lockHierarchy } from '@/lib/groups';
 
 /** The one order every multi-artifact lock takes: code units (ids are ASCII), identical to SQL `COLLATE "C"`. */
 export const lockOrder = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -58,8 +67,9 @@ export interface AuthorizationLocks {
   read?: readonly string[];
 }
 
-/** Steps 1–2: the artifacts, in the global order. Facts lock themselves as the decision reads them. */
+/** Steps 0–2: the hierarchy guard, then the artifacts, in the global order. Facts lock themselves as the decision reads them. */
 export async function lockAuthorization(tx: Queryable, locks: AuthorizationLocks): Promise<void> {
+  await lockHierarchy(tx);
   const write = locks.write ?? null;
   const documents = [...new Set([...(locks.page ? [locks.page] : []), ...(locks.documents ?? [])])].filter((id) => id !== write).sort(lockOrder);
   for (const id of documents) await tx.query('SELECT id FROM artifacts WHERE id=$1 FOR SHARE', [id]);

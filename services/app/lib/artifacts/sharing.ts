@@ -1,4 +1,4 @@
-import {groupQuota,recordGroupMutation,GroupError,getGroupRole} from '../groups';
+import {groupQuota,recordGroupMutation,GroupError,getGroupRole,subtreeMemberIds} from '../groups';
 import { ownerScope,editorScope, type ArtifactRow } from '@/lib/artifact-access';
 import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
@@ -135,7 +135,8 @@ export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:
   else await tx.query('INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,$3,$4) ON CONFLICT(artifact_id,group_id) DO UPDATE SET role=EXCLUDED.role',[id,groupId,role,actor.userId]);
   await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
   await tx.query(`SELECT ${notifyArtifactSql('id','edit_id')} FROM artifacts WHERE id=$1`,[id]);
-  const members=(await tx.query<{user_id:string}>('SELECT user_id FROM group_members WHERE group_id=$1',[groupId])).rows.map(member=>member.user_id);
+  // The share's audience: direct members of the group and of every subgroup (lib/groups hierarchy).
+  const members=await subtreeMemberIds(tx,groupId);
   await recordGroupMutation(tx,actor.userId!,groupId,role===null?'unshared':'shared',{artifact_id:id,previous_role:previous,role},members,actor);
   return {changed:true};
  }).catch(error=>{if(error&&typeof error==='object'&&'code' in error&&error.code==='55P03')throw new GroupError('share_refused',409);throw error;});

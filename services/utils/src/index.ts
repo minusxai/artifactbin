@@ -12,7 +12,7 @@ export { createCodeStore } from './codes';
 export { cookieName, clearCookieHeader, readCookie } from './agent-session';
 export { renderSchema, renderDroppedTables, ensureTable } from './schema';
 export { sqlClient, browserClient, eventsClient, queryBounds } from './clients';
-export { serviceSecretForServer } from './service-auth';
+export { serviceSecretForServer, serviceSecretMatches } from './service-auth';
 export { SERVING_POOL, withPoolErrors } from './pool';
 export { envelope, type EventSubject, type EventObject } from './events';
 export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './assets-origin';
