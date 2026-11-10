@@ -26,7 +26,8 @@ import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
-import { DatasetBindingUnsupportedError, datasetPermissionTemplates, executeDatasetGraphql, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-graphql';
+import { DatasetBindingUnsupportedError, datasetPermissionTemplates, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-access';
+import { executeDatasetGraphql } from '@/lib/graphql-compat';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 /** What an operation answers: a status and a JSON body, transport-free. */

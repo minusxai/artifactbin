@@ -5,7 +5,7 @@
  */
 import type {DatasetGraphqlReply,HtmlDatasetLink} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
-import {executeLinkedDatasetGraphql} from '@/lib/dataset-graphql';
+import {executeLinkedDatasetGraphql} from '@/lib/graphql-compat';
 export const liveLink=(datasetId:string,name='data'):HtmlDatasetLink=>({kind:'dataset',name,datasetId,mode:'live'});
 export interface LinkedCall {variables?:Record<string,unknown>;pageId?:string;idempotencyKey?:string}
 export function linkedGql(actor:AccessActor,link:HtmlDatasetLink|readonly HtmlDatasetLink[],query:string,call:LinkedCall={}):Promise<DatasetGraphqlReply>{

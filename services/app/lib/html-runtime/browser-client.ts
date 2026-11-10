@@ -1,6 +1,7 @@
 import {commentViewDeclaration,createHtmlCommentView} from './comment-view';
 import {installHtmlCommentView} from '../html-bridge/comment-view-session';
-import {createClient,gql,readStateFragment} from './apollo/client';
+import {createClient,gql} from './apollo/graphql-compat';
+import {readStateFragment} from './apollo/state-url';
 import {createViewerState} from './viewer-state';
 import type {StoreReceipt} from './apollo/apollo-contracts';
 import {config,remote,onResolverChange} from './browser-reader';

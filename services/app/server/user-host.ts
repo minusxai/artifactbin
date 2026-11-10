@@ -235,7 +235,7 @@ async function pageReads(request: Request, id: string, owner: UserPagesOwner): P
 const PAGE_READS_ROUTE = /^\/api\/artifacts\/([^/]+)\/graphql$/;
 
 /**
- * A served page's function calls (html-runtime/fn-fetch → domain-reads, lib/page-graphql `pageFunction`): GET or POST,
+ * A served page's function calls (html-runtime/fn-fetch → domain-reads, lib/page-doors `pageFunction`): GET or POST,
  * the owner's served page only, as a guest. The request reaches the app as an opaque origin's (`Origin: null`, every
  * credential dropped) whatever it claimed, so the app's own door reads it as nobody and runs reads only, as here.
  */

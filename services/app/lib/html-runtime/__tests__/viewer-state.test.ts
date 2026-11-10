@@ -46,7 +46,7 @@ it('an explicit state URL replaces the viewer document without sharing it', () =
   state.dispose();
 });
 it('answers the first query after a reload with the saved choice, not the state block defaults', async () => {
-  const { createClient, gql } = await import('../apollo/client');
+  const { createClient, gql } = await import('../apollo/graphql-compat');
   const storage = browser();
   const preference = gql`{dark month}`;
   // First load: the viewer turns dark mode on.

@@ -15,7 +15,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { readHtmlPage } from '@/lib/html-publication';
 import { getHtmlBackendVersion, htmlLiveLinks, htmlSharedRevisions } from '@/lib/html-backends';
 import { localPageBackendCapability, pageBackendOperation } from '@/lib/page-operations';
-import { resolverDatasets } from '@/lib/page-graphql';
+import { resolverDatasets } from '@/lib/graphql-compat';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 

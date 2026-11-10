@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkModuleGraph, DEEP_MODULES, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
+import { checkModuleGraph, DEEP_MODULES, GRAPHQL_COMPAT, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'ci', 'module-graph.mjs');
@@ -361,6 +361,51 @@ describe('module graph', () => {
       expect(check(deep, { cycles: [], testImports: recorded })).toBe('');
       expect(recordTestImports(scanModuleGraph(tree({ ...base, ...deep }))).testImports).toEqual(recorded);
       expect(check(tests, { cycles: [], testImports: recorded })).toMatch(/no longer made[^\n]*\n {2}services\/app\/__tests__\/ledger\.test\.ts imports @\/lib\/ledger\/post/);
+    });
+  });
+
+  describe('the GraphQL fence (rule 5)', () => {
+    const fence = {
+      paths: ['services/app/lib/compat/', 'services/app/lib/rt/gq'],
+      header: '/** OLD */',
+      importers: { 'services/app/app/api/q/route.ts': 'the route', 'services/app/lib/rt/entry.ts': 'the browser entry' },
+    };
+    const base = {
+      'services/app/lib/compat/index.ts': "/** OLD */\nexport { q } from './inner/q';\n",
+      'services/app/lib/compat/inner/q.ts': "/** OLD */\nexport const q = 1;\n",
+      'services/app/lib/compat/__tests__/q.test.ts': "/** OLD */\nimport { q } from '../inner/q';\n",
+      'services/app/lib/rt/gq.ts': "/** OLD */\nexport const gql = 1;\n",
+      'services/app/lib/rt/index.ts': 'export const rt = 1;\n',
+      'services/app/app/api/q/route.ts': "import { q } from '@/lib/compat';\n",
+      'services/app/lib/rt/entry.ts': "import { gql } from './gq';\n",
+    };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files }), fence), allowList([]), undefined, DEEP_MODULES, fence).violations.join('\n');
+
+    it('passes the layer itself, tests and the listed importers', () => {
+      expect(check({ 'services/app/__tests__/q.test.ts': "import { q } from '@/lib/compat';\n" })).toBe('');
+    });
+
+    it('refuses any other importer, within a module too, naming the file and the specifier', () => {
+      const violations = check({
+        'services/app/lib/billing/a.ts': "import { q } from '@/lib/compat';\n",
+        'services/app/lib/rt/other.ts': "import { gql } from './gq.ts';\n",
+      });
+      expect(violations).toContain('The GraphQL compatibility layer (lib/graphql-compat, html-runtime/apollo/graphql-compat) is deprecated');
+      expect(violations).toContain('  services/app/lib/billing/a.ts imports @/lib/compat');
+      expect(violations).toContain('  services/app/lib/rt/other.ts imports ./gq.ts');
+    });
+
+    it('fails a listed importer that no longer imports it, and a file of the layer without the header', () => {
+      const violations = check({ 'services/app/app/api/q/route.ts': 'export const route = 1;\n', 'services/app/lib/compat/inner/r.ts': 'export const r = 1;\n' });
+      expect(violations).toMatch(/no longer import it[^\n]*\n {2}services\/app\/app\/api\/q\/route\.ts/);
+      expect(violations).toMatch(/opens with its header line: \/\*\* OLD \*\/\n {2}services\/app\/lib\/compat\/inner\/r\.ts/);
+    });
+
+    it('fences this repository: every compat file carries the header and every listed importer still imports it', () => {
+      const graph = scanModuleGraph(ROOT);
+      expect(graph.fenced.length).toBeGreaterThan(10);
+      expect(Object.keys(GRAPHQL_COMPAT.importers)).toContain('services/app/app/api/artifacts/[id]/graphql/route.ts');
+      expect(checkModuleGraph(graph, { cycles: [], testImports: {} }).violations.filter(line => /GraphQL compatibility/.test(line))).toEqual([]);
     });
   });
 

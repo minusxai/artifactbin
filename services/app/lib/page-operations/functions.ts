@@ -1,5 +1,5 @@
 /**
- * PAGE FUNCTIONS — a backend file's default-export functions called by name over plain HTTP (lib/page-graphql
+ * PAGE FUNCTIONS — a backend file's default-export functions called by name over plain HTTP (lib/page-doors
  * `pageFunction`, route `/api/artifacts/:id/fn/:name`), beside the page GraphQL. Pure: no I/O but the invoke port.
  *
  * Which functions a page offers, and who may call each:

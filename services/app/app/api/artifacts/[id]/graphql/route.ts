@@ -1,5 +1,5 @@
-import {pageGraphql} from '@/lib/page-graphql';
-import {DatasetBindingUnsupportedError,datasetGraphqlSchema,isDatasetGraphqlTarget} from '@/lib/dataset-graphql';
+import {datasetGraphqlSchema,isDatasetGraphqlTarget,pageGraphql} from '@/lib/graphql-compat';
+import {DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import {runOperation} from '@/lib/operations';
 import {requestOrSessionActor,refusesCrossSite} from '@/lib/authentication';
 import {json,readJson} from '@/lib/http';

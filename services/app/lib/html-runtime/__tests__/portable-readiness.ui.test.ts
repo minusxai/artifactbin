@@ -1,5 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {createClient,createLocalStore,gql} from '../apollo/client';
+import {createClient,gql} from '../apollo/graphql-compat';
+import {createLocalStore} from '../apollo/local-store';
 import type {startPortableSession} from '../portable-session';
 const harness=vi.hoisted(()=>({start:vi.fn<typeof startPortableSession>()}));
 vi.mock('@afbin/portable',()=>({startPortableSession:harness.start}));

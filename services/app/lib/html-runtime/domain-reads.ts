@@ -9,7 +9,7 @@ import type {FunctionCaller} from './fn-fetch';
  *
  * The capture's address carries the exporter's key (`?key=`, lib/export read-key), which names the requester the
  * export was asked for; it rides in the BODY (never a header, which would preflight, nor a new URL), and the endpoint
- * reads as that requester (lib/page-graphql). Without one the read is a signed-out viewer's.
+ * reads as that requester (lib/graphql-compat). Without one the read is a signed-out viewer's.
  */
 export function createDomainReadTransport(page:{pageId:string;revision:string},location:Pick<Location,'href'>,send:typeof fetch):RemotePort{
  const key=new URL(location.href).searchParams.get('key');
@@ -26,7 +26,7 @@ export function createDomainReadTransport(page:{pageId:string;revision:string},l
 /**
  * A page function call (./fn-fetch) from the same unframed page: straight to the page's function path on its own
  * host, credentials omitted, a POST body as text/plain (no preflight). The host reads as nobody and runs reads only
- * (lib/page-graphql `pageFunction`); an export capture's key is not carried, so a private page answers 404.
+ * (lib/page-doors `pageFunction`); an export capture's key is not carried, so a private page answers 404.
  */
 export function createDomainFunctionCall(page:{pageId:string;revision:string},location:Pick<Location,'href'>,send:typeof fetch):FunctionCaller{
  return async(request,signal)=>{

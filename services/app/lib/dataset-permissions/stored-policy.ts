@@ -1,7 +1,7 @@
 /**
  * THE STORED POLICY, read: a dataset's version 3 permissions (Hasura metadata shape), or, when none is stored,
  * the default (every rule role reads every table; nobody below editor writes). Every read and write decision
- * reads this (./read, ./write) and so does the policy door (lib/dataset-graphql/policy).
+ * reads this (./read, ./write) and so does the policy door (lib/dataset-access/policy).
  *
  * Anything else stored, a retired version 1 or 2 policy or a version 3 one that no longer validates, THROWS
  * naming what it found and how to fix it: no rule is guessed. Owner and editor decisions never read it

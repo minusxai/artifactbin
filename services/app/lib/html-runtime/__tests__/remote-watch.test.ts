@@ -1,5 +1,6 @@
 import {it,expect} from 'vitest';
-import {createClient,createLocalStore,gql} from '../apollo/client';
+import {createClient,gql} from '../apollo/graphql-compat';
+import {createLocalStore} from '../apollo/local-store';
 import type {RemotePort,QueryResult} from '../apollo/apollo-contracts';
 const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 function fixture(){let notify=()=>{};const jobs:Array<{resolve:(value:any)=>void;reject:(cause:Error)=>void}>=[],sent:any[]=[];let stops=0;

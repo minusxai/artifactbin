@@ -6,7 +6,8 @@ import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseE
 import {htmlAssetLinks, htmlBackendNames, htmlGraphqlSources, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {compilePageBackend,composePageSchema,pageDocumentProblems} from '@/lib/page-operations';
-import {authorizeDatasetBinding,DatasetBindingUnsupportedError,pageDatasetCheckSources,pageDatasetRoots} from '@/lib/dataset-graphql';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
+import {pageDatasetCheckSources,pageDatasetRoots} from '@/lib/graphql-compat';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**

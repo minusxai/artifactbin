@@ -7,7 +7,7 @@ import {fetchResolverResource,ResolverFetchError} from './public-fetch';
 import {readPinnedBackendSecret} from '@/lib/html-backend-secrets';
 import {pageBackendCapability,type ResolverDatasets} from './backend';
 import {ResolverQueryError} from './query';
-/** `datasets` is the composition's caps.query and caps.sql ports (lib/page-graphql `resolverDatasets`); without one, that capability is refused. */
+/** `datasets` is the composition's caps.query and caps.sql ports (lib/graphql-compat `resolverDatasets`); without one, that capability is refused. */
 export async function localPageBackendCapability(request:RunStart,operation:string,input:RunnerJson,signal?:AbortSignal,datasets?:ResolverDatasets):Promise<RunnerJson>{
  return pageBackendCapability(request,operation,input,getHtmlBackendVersion,readPinnedBackendSecret,(args,secrets)=>fetchResolverResource(args,secrets,signal),datasets,signal);
 }

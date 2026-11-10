@@ -3,7 +3,7 @@ import type { PageCaller, PageSchema, PageOperationRequest, PageOperationRespons
 export const PAGE_OPERATION_RESULT_BYTES = 4 * 1024 * 1024;
 export type RemoteError = NonNullable<PageOperationResponse['errors']>[number];
 /**
- * The page's dataset links on the generated API (lib/dataset-graphql `loadPageDatasets`), for this caller and request:
+ * The page's dataset links on the generated API (lib/graphql-compat `loadPageDatasets`), for this caller and request:
  * resolvers for their flat query roots, and the door a mutation naming only their roots goes through whole.
  */
 export interface PageDatasetPort {

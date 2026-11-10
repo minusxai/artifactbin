@@ -13,7 +13,7 @@
  *    live text from the value the cell last saw (its snapshot, kept as version 0) — so typing survives — or, when the
  *    row is gone, the cell's rows are deleted and its editors told (`closed`, `removed`).
  *  - SAVE: the merged text of every dirty cell the caller may write is written through the dataset's one write path
- *    (lib/dataset-graphql writeDatasetCells: one dataset version, the caller's rules, guarded on the head the merge
+ *    (lib/dataset-access writeDatasetCells: one dataset version, the caller's rules, guarded on the head the merge
  *    was made from; a write landing first is merged in and the save tried again). The rows are marked saved inside
  *    that commit.
  */
@@ -22,7 +22,7 @@ import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type HtmlDataset
 import { applyCellRevision, cellValue, createCellState, snapshotValue } from '@/lib/live-regions';
 import { canReadArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import { canUpdateCell, cellCheckAdmits, datasetWriteAccess } from '@/lib/dataset-permissions';
-import { locateDatasetCell, writeDatasetCells, type DatasetCell } from '@/lib/dataset-graphql';
+import { locateDatasetCell, writeDatasetCells, type DatasetCell } from '@/lib/dataset-access';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db, type Queryable } from '@/lib/platform';
 import { base64, NOT_FOUND, refuse, type RegionAnswer, type SessionCore, type Tx } from './sessions';

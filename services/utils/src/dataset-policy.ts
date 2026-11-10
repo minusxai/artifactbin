@@ -16,7 +16,7 @@ const comparisons: Record<string, string> = {
 /**
  * The pattern operators as SQL: the engine library function (`like_matches`, `ilike_matches`, both `datasetPatternMatch`)
  * and whether the operator is its negation. Rules' filters and checks (compilePolicyPredicate) and the generated API's
- * `where` (app lib/dataset-graphql) compile them the same way, so every door decides a pattern alike.
+ * `where` (app lib/graphql-compat) compile them the same way, so every door decides a pattern alike.
  */
 const PATTERN_OPERATORS: Readonly<Record<string, { readonly fn: 'like_matches' | 'ilike_matches'; readonly negated: boolean }>> = {
   _like: { fn: 'like_matches', negated: false },

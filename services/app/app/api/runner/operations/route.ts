@@ -1,5 +1,5 @@
 import {pageBackendOperation} from '@/lib/page-operations';
-import {resolverDatasets} from '@/lib/page-graphql';
+import {resolverDatasets} from '@/lib/graphql-compat';
 import {readJson,json} from '@/lib/http';
 import type {RunnerJson} from '@artifactbin/contracts';
 export async function POST(request:Request){

@@ -1,9 +1,9 @@
 /**
  * THE PUBLISH DOCUMENT CHECK: the GraphQL documents a page's code sends, validated at publish against the page's
  * names, so a wrong name is refused with its fix instead of failing every call at run time. Pure: esbuild, acorn and
- * graphql-js only; the caller supplies the schemas (lib/dataset-graphql `pageDatasetCheckSources`).
+ * graphql-js only; the caller supplies the schemas (lib/graphql-compat `pageDatasetCheckSources`).
  *
- * - A resolver's `caps.query(document)` runs on the page's datasets alone (lib/dataset-graphql
+ * - A resolver's `caps.query(document)` runs on the page's datasets alone (lib/graphql-compat
  *   `executeLinkedDatasetGraphql`: no viewer, no resolver namespaces), so it is validated against `datasetSdl`.
  * - The page's own `gql` documents run on the composed page schema (datasets, resolver namespaces, `viewer`), so
  *   they are validated against `composePageSchema`. A top-level field that is not a page backend by the client's

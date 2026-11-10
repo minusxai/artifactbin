@@ -1,5 +1,5 @@
 /**
- * A PAGE FUNCTION through its plain-HTTP door (`/api/artifacts/:id/fn/:name`, lib/page-graphql `pageFunction`): a
+ * A PAGE FUNCTION through its plain-HTTP door (`/api/artifacts/:id/fn/:name`, lib/page-doors `pageFunction`): a
  * backend file's default-export function, run by today's resolver runner as the reader the request proves, its
  * answer the function's JSON. Who may call it is the file's `roles` export (or a legacy file's `@auth`), "at least"
  * as today; a variable never names the caller.

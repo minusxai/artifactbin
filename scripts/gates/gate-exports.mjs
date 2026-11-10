@@ -161,7 +161,7 @@ async function dataDeckLeg() {
 
 /**
  * AN EXPORT SHOWS WHAT ITS REQUESTER MAY SEE. A PRIVATE deck reading a PRIVATE dataset exports its slide with real
- * rows for its owner — the capture reads as the requester the export key was minted for (lib/page-graphql) — and a
+ * rows for its owner — the capture reads as the requester the export key was minted for (lib/graphql-compat) — and a
  * second account, or nobody, who cannot read the page is refused, never handed the owner's image.
  */
 async function privateDataDeckLeg() {

@@ -16,7 +16,7 @@ JSON.stringify({limit: 50})})` answers a real `Response` whose JSON is the funct
 `/fn/../graphql` is not one); every other fetch reaches the browser's fetch untouched (CSP and CORS as before). The
 reader relays the call over the frame bridge (`html-runtime/fn-relay.ts` → `html-reader/frame-bridge/parent.ts`),
 and the parent makes it with the reader's own session as `GET|POST /api/artifacts/:id/fn/:name`, the shell's
-revision pinned in `x-page-revision`, no other frame header. The route (lib/page-graphql `pageFunction`) admits the
+revision pinned in `x-page-revision`, no other frame header. The route (lib/page-doors `pageFunction`) admits the
 caller exactly as the GraphQL door does and runs the function through the same invoker.
 
 - Input: POST's JSON object body (empty: `{}`; any content type; at most 64 KiB, else 413), or GET's query parameters
@@ -119,7 +119,7 @@ tls?, ca?}}` on the secrets address; it is stored with the declared kind.
 ## `caps.query`
 
 `await caps.query(graphql, variables?)` returns `data` from the generated
-Hasura-style API (`lib/dataset-graphql/hasura.ts` `executeLinkedDatasetGraphql`)
+Hasura-style API (`lib/graphql-compat/dataset/hasura.ts` `executeLinkedDatasetGraphql`)
 over the datasets the page links, under their page names: a single-table dataset's
 root is the link name, a multi-table dataset's are `<name>_<table root>`. It runs as
 the caller: the dataset role is each dataset's own sharing under the page audience
@@ -147,12 +147,12 @@ the SQL service's `run` door, the one registered page queries use, which admits 
 through `caps.query` mutations. A call mounts the linked datasets its SQL names (SQLite folds ASCII identifiers,
 so a link name absent from the text cannot be read): a single-table dataset is the table `<link>`, a multi-table
 one `<link>.<table>` (an attached schema, as the service mounts imports), each with `_id`, the row's
-generated-API id. Rows come from the same load `caps.query` uses (`lib/dataset-graphql` `readLinkedDatasetTables`
+generated-API id. Rows come from the same load `caps.query` uses (`lib/dataset-access` `planLinkedDatasetTables`
 over `loadLinked`: each dataset's role view for the caller through the page, `X-Hasura-Page-Id` the page), so
 filtered rows, hidden columns and unreadable datasets are absent. A mounted table whose rule for the caller does
 not allow SQL (`allow_aggregations`, the one SQL permission) refuses the call (`permission_denied`; owner and editor
 always may). caps.sql reads the page head's links (a resolver run names no revision); the page's own `_sql`
-(`lib/dataset-graphql` `page-sql`) reads the links of the revision the reader has open, on the same engine and
+(`lib/dataset-access` `page-sql`) reads the links of the revision the reader has open, on the same engine and
 permission, through keyed catalog sources rather than shipped rows. Reads of one revision under one role view are shared while in flight (`lib/datasets` `createSharedReads`).
 Limits are the registered page queries' (`SQL_READ_LIMITS` in `services/contracts`): 10,000 input rows (inline
 and dataset together), a million cells and 8 MiB of input, 5 s per `run`, 20 s per call; the answer is bounded

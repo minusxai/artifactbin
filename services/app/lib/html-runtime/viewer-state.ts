@@ -1,4 +1,4 @@
-import { createLocalStore } from './apollo/client';
+import { createLocalStore } from './apollo/local-store';
 import type { StoreReceipt } from './apollo/apollo-contracts';
 import type { ViewerStateOptions, ViewerStatePort } from './viewer-state-contract';
 

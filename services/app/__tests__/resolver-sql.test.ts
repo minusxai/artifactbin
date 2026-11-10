@@ -14,7 +14,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { readHtmlPage } from '@/lib/html-publication';
 import { getHtmlBackendVersion } from '@/lib/html-backends';
 import { localPageBackendCapability, pageBackendOperation } from '@/lib/page-operations';
-import { resolverDatasets } from '@/lib/page-graphql';
+import { resolverDatasets } from '@/lib/graphql-compat';
 
 /** Dataset executions caps.sql makes (its reads select `_id`), optionally held so concurrent calls overlap. */
 const reads = vi.hoisted(() => ({ count: 0, holdMs: 0 }));
