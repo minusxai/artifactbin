@@ -178,3 +178,14 @@ it('native comments preserve HTML clipboard formatting and paste literal text in
  code.view.pasteText('**literal**',literal);
  expect(code.view.state.doc.firstChild?.textContent).toBe('**literal**');
 });
+
+it('highlights code as decorations without changing Markdown or local history', () => {
+  const source='```ts\nconst answer = 42;\n```';
+  const editor=mount(source);
+  expect(editor.view.dom.querySelector('.mx-code-token-keyword')?.textContent).toBe('const');
+  expect(commentMarkdown(editor.view.state.doc)).toBe(source);
+  editor.view.dispatch(editor.view.state.tr.insertText('x', 7));
+  fireEvent.keyDown(editor.view.dom,{key:'z',ctrlKey:true});
+  expect(commentMarkdown(editor.view.state.doc)).toBe(source);
+  expect(editor.view.state.doc.toJSON()).not.toHaveProperty('decorations');
+});

@@ -14,6 +14,7 @@ import {fileURLToPath} from 'node:url';
 // regions (the live region editor) and collab (live dataset cells) are served for completeness;
 // Save HTML never embeds them (an offline page never opens a session).
 const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|collab|state)\.js$/;
+const NATIVE_RUNTIME=/^\/af\/native-(?:regions|markdown)\.js$/;
 const LIBRARY=/^\/libraries\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/;
 const COMPONENT=/^\/af\/components\/[a-z][a-z0-9-]*\.js$/;
 const MAX_BYTES=8_000_000;
@@ -29,7 +30,7 @@ export const LEGACY_CORE_PATH='/af/v1/core.js';
 
 /** True for a path this module may answer. */
 export const isPlatformModulePath=pathname=>pathname===LEGACY_CORE_PATH||RUNTIME.test(pathname)||
-  LIBRARY.test(pathname)||COMPONENT.test(pathname);
+  NATIVE_RUNTIME.test(pathname)||LIBRARY.test(pathname)||COMPONENT.test(pathname);
 
 /** A source checkout's own build outputs (absent in the installed archive). */
 async function checkoutModule(pathname){

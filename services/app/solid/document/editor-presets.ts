@@ -1,4 +1,5 @@
 /** Native Tiptap presets. Comments have private local history; document collaboration is a separate preset. */
+import { NativeCodePresentation } from '@/lib/html-runtime/native-code-presentation';
 import { Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Code from '@tiptap/extension-code';
@@ -28,5 +29,5 @@ export function commentExtensions() {
     trailingNode: false,
     codeBlock: { enableTabIndentation: true, tabSize: 2 },
     link: { openOnClick: false, autolink: false, linkOnPaste: false, isAllowedUri: url => safeHref(url) !== null },
-  }), Bold.extend({ name: 'strong', priority: 1000 }), Code.extend({ excludes: '' }), Mention];
+  }), NativeCodePresentation, Bold.extend({ name: 'strong', priority: 1000 }), Code.extend({ excludes: '' }), Mention];
 }

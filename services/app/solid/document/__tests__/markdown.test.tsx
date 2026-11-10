@@ -222,3 +222,15 @@ it('renders saved agent badges using the same name color as the editor', () => {
   expect(badge.style.getPropertyValue('--mention-color')).toBe('#8e44ad');
   expect(badge).toHaveClass('comment-agent-mention');
 });
+
+it('highlights saved code only in opted-in comments while retaining inert source text', async()=>{
+ const {TiptapComments}=await import('../comment-editor-trial');
+ const source='```js\nconst tag = "<img src=x onerror=alert(1)>";\n```';
+ const view=render(()=> <TiptapComments.Provider value={()=>true}><CommentMarkdown text={source} label="Highlighted comment"/></TiptapComments.Provider>);
+ await waitFor(()=>expect(screen.getByLabelText('Highlighted comment').querySelector('.mx-code-token-keyword')?.textContent).toBe('const'));
+ expect(screen.getByLabelText('Highlighted comment').querySelector('code')?.textContent).toBe('const tag = "<img src=x onerror=alert(1)>";');
+ expect(screen.getByLabelText('Highlighted comment').querySelector('img')).toBeNull();
+ view.unmount();
+ render(()=> <CommentMarkdown text={source} label="Legacy comment"/>);
+ expect(screen.getByLabelText('Legacy comment').querySelector('.mx-code-token-keyword')).toBeNull();
+});
