@@ -7,7 +7,8 @@ import { signActor } from '../../services/utils/src/index.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 
-// The two settings are two boots (CONTRACT__ACTOR_SECRET wins over AUTH__SECRET), run side by side.
+// The two settings are separate boots (CONTRACT__ACTOR_SECRET wins over AUTH__SECRET).
+// The integration project admits one case per worker; file workers provide the parallelism.
 it.concurrent.each(['AUTH__SECRET', 'CONTRACT__ACTOR_SECRET'])('app-only startup accepts proxy identity signed with %s', async (setting) => {
   const socket = createServer();
   await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
