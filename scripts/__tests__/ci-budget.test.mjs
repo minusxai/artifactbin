@@ -243,7 +243,7 @@ it('enrolls node-project contract tests that the full suite also runs, once each
  const contracts=read('scripts/ci/contract-tests.json'),guards=read('scripts/ci/guard-tests.json'),fast=read('scripts/ci/fast-tests.json');
  expect(contracts).toContain('services/app/lib/html-backends/__tests__/native-acceptance.test.ts');
  expect(contracts).toEqual([...new Set(contracts)].sort());
- expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain("include: enrolled('contract-tests.json')");
+ expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain("byIsolation('pr-contracts', 'contract-tests.json'");
  for(const file of contracts){
   expect(readFileSync(new URL(`../../${file}`,import.meta.url),'utf8').length,file).toBeGreaterThan(0);
   expect(file).toMatch(/^services\/app\/lib\/.+\/__tests__\/[^/]+(?<!\.ui)\.test\.ts$/);
