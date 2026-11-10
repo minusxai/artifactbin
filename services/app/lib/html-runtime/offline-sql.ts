@@ -13,6 +13,7 @@
  */
 import { SQL_READ_LIMITS, isQueryFailure, type ColumnType, type Row, type RunInput } from '@artifactbin/contracts';
 import { loadSqlite, PreparedCache, type SqliteEngine } from '@artifactbin/sql/core';
+import { offlineSqlNoData } from './portable-chrome-contract';
 
 /** The engine's `sqlite3.wasm`, base64, defined by the build (build.server): a copy cannot fetch it. */
 declare const __AF_SQLITE_WASM__: string;
@@ -32,7 +33,7 @@ function embedded(): OfflineTable[] {
 
 export async function runOfflineSql(request: { sql: string; params: Record<string, string | number | boolean | null> }): Promise<Reply> {
   const { engine, tables } = await (ready ??= loadSqlite(Uint8Array.from(atob(__AF_SQLITE_WASM__), (c) => c.charCodeAt(0))).then((engine) => ({ engine, tables: embedded() }), (error: unknown) => { ready = undefined; throw error; }));
-  if (!tables.length) return { error: 'unavailable', message: 'this copy carries no data for sql; open the original page' };
+  if (!tables.length) return offlineSqlNoData();
   let analysis;
   try { analysis = engine.analyze(request.sql, tables.map((t) => ({ schema: t.schema, table: t.name, columns: t.columns }))); }
   catch (e) { return { error: 'validation_failed', message: e instanceof Error ? e.message : 'the statement was refused' }; }

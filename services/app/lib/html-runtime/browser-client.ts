@@ -2,6 +2,7 @@ import {createClient,gql} from './apollo/graphql-compat';
 import {config,remote,onResolverChange} from './browser-reader';
 import {createSql,SqlError} from './apollo/sql';
 import {RemoteUnreachable} from './apollo/apollo-contracts';
+import {offlineSqlNoData} from './portable-chrome-contract';
 export {startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload} from './browser-reader';
 // Names live pages still call (onResolverChange's old name); isolated with their deletion rule in legacy-page-names.
 export * from './legacy-page-names';
@@ -14,11 +15,12 @@ export {gql};
  * sits at its 20 KiB gzip budget (html-runtime build.test). No app frame relays in a local preview or an owner host's
  * own reads (the reader builds those transports from this same config), so those refuse at once. A downloaded copy
  * answers from the rows it carries, in the engine only an export embeds (`@afbin/offline-sql`, ./offline-sql), never
- * through the app, even when the copy is connected: without that module (no data in the copy) it refuses.
+ * through the app, even when the copy is connected: without that module (no data in the copy) it refuses, and says so
+ * where the reader sees it (offlineSqlNoData).
  */
 const offlineSql=(request:{sql:string;params:Record<string,string|number|boolean|null>})=>{
   const name='@afbin/offline-sql';
-  return (import(name) as Promise<typeof import('./offline-sql')>).then((engine)=>engine.runOfflineSql(request),()=>({error:'unavailable',message:'this copy carries no data for sql; open the original page'}));
+  return (import(name) as Promise<typeof import('./offline-sql')>).then((engine)=>engine.runOfflineSql(request),offlineSqlNoData);
 };
 export const sql=createSql({
   run:(request)=>config.localPreview||(config.domainReads&&window.parent===window)?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))

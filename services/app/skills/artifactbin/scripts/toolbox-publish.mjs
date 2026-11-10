@@ -75,8 +75,12 @@ if(updating&&values.name!==undefined)throw new ToolError('name_not_for_update',
   replaced=`${name} replaced page ${target} (its version ${baseline.version} was the baseline).`;}
  else if(marker&&!values.create)baseline=await markedBaseline(client,marker,name,source);
  if(type==='html'&&!baseline&&!values.create)unmarked(source,name);
-if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=
-   stripMarker(recoverPortableSource(source)??source);}baseline=null;}
+ // An export (export.mjs --format html) carries its reader's rows and the runtime: only its
+ // page is published, as the app's local publish does it (recoverPortableSource).
+ let exported=null;if(type==='html'){const recovered=(await platform()).recoverPortableSource(
+  source);if(recovered!==source)exported=`${name} is an exported copy: published without the `+
+  'rows and runtime it carries.';source=recovered;}
+ if(values.create){if(type==='html')source=stripMarker(source);baseline=null;}
  // The page's receipts are relative to the root it was published from: the marker's entryPath
  // says how far above the file that is.
  const up=baseline&&marker?.id===baseline.id?marker.entryPath.split('/').length-1:0;
@@ -168,8 +172,9 @@ intent.source.output=path.join(path.dirname(file),path.basename(file,
  const published=await watched(client,await finishPublication(await resumeJournal(journal,client,
   'publish')),options);
  // A page's author ends by replying and watching for comments: say so as the last line printed.
- const done={...published,...(replaced?{note:[replaced,published.note].filter(Boolean).join(' ')}:
-  {}),next:type==='html'?watchNext(published.id):updateNext(name,published.id,type)};
+ const notes=[replaced,exported,published.note].filter(Boolean);
+ const done={...published,...(notes.length?{note:notes.join(' ')}:{}),next:type==='html'?
+  watchNext(published.id):updateNext(name,published.id,type)};
  if(type==='dataset'&&values.template)return {...done,permissions:await applyTemplate(client,
   done.id,values.template,values['owner-column'])};
  if(!fixed)return done;

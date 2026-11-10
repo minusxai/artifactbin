@@ -25,7 +25,11 @@ what an artifact is served as, and the local-file doors in `lib/local-connection
   are stored hash-only and shown once.
 - An export capture holds no session: its short-lived key names the requester the export door admitted
   (`lib/export/read-key.ts`), and a requester's render is kept for that requester alone.
-- A portable download holds canonical source, identity and runtime assets, never a credential. A linked local
+- A portable download holds canonical source, identity and runtime assets, never a credential. An export also
+  carries the rows its reader's `sql` may read through the page and the engine that queries them
+  (`offlinePageSqlData`), nothing else of a dataset; past 16 MiB, no rows, and the copy says so. No server path
+  stores those blocks: create and replace keep only an export's verified source (`verifiedPortableSource`) and
+  `canonicalizeHtmlPage` refuses `offline-data` or `offline-sql` in any source. A linked local
   file stays read-only: the local-connection broker strips ambient authority, refuses mutations,
   `authorizePrivate` and `checkSession`, and rechecks revision and public access on every grant.
 - `host.ts` opens no socket and imports no local SQL or browser engine and no deployment identity: production's

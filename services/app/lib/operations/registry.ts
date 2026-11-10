@@ -20,6 +20,7 @@ import { canEdit, CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIEL
  */
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation';
+import { authoredHtml } from './authored-html';
 import { createArtifactFromBody, forkArtifact, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish';
 import {DatasetError} from '@/lib/datasets';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
@@ -174,6 +175,7 @@ const SCHEDULE_LIMIT: OperationError = { status: 400, code: 'schedule_limit', fi
 const CONTENT_ERRORS: OperationError[] = [
   {status:400,code:'native_html_required',fix:'Use the html field with a complete HTML document; markup, JSX and document_update publication inputs are retired.'},
   {status:400,code:'invalid_html',fix:'Fix the named HTML identities or declaration problem and resubmit the complete source.'},
+  {status:400,code:'portable_copy_unverified',fix:'This HTML is an exported copy edited outside the source it carries: publish the original source, or export the page again.'},
   {status:400,code:'invalid_backend',fix:'Fix the backend file\'s exports (default functions, roles, secrets, schedule); the detail names the problem (invalid_functions, invalid_roles, invalid_schedule, schedule_limit). HTML and backend versions publish together.'},
   {status:400,code:'invalid_dataset_binding',fix:'Use a valid dataset link that the authenticated publisher can read.'},
   { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the live theme and design-system names' },
@@ -221,7 +223,9 @@ const createArtifactOp: Operation = {
   async run(ctx, input) {
     const creator = await withAccountToken(ctx.actor);
     if (!creator) return reply({ error: 'unauthorized' }, 401);
-    return fromResponse(await createArtifactFromBody(input, creator, ctx.base, ctx.request));
+    const authored = authoredHtml(input);
+    if (authored instanceof Response) return fromResponse(authored);
+    return fromResponse(await createArtifactFromBody(authored, creator, ctx.base, ctx.request));
   },
 };
 
@@ -250,7 +254,9 @@ const updateArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt,request:ctx.request}));
+    const authored = authoredHtml(input);
+    if (authored instanceof Response) return fromResponse(authored);
+    return fromResponse(await replaceArtifactWithBody(authored, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt,request:ctx.request}));
   },
 };
 

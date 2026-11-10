@@ -32,8 +32,31 @@ export function portableRenderedDigest(html:string):string {
  const clean=(node:DefaultTreeAdapterMap['node'])=>{if('childNodes' in node){node.childNodes=node.childNodes.filter(child=>!('attrs' in child&&(child.nodeName==='script'||child.nodeName==='meta'&&child.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY))&&child.attrs.some(attr=>attr.name==='src'&&isRuntimeCoreSrc(attr.value)||attr.name==='data-af'&&(attr.value==='core'||attr.value===INLINE_SCRIPT_POLICY))));for(const child of node.childNodes)clean(child);}};
  clean(doc);return sha256Hex(serialize(doc));
 }
+/** The envelope's source when the file's own rendering still matches it, else null; and that rendering, stripped. */
+function envelopeSource(fileBytes:string):{source:string|null;rendering:string} {
+ const envelope=readPortableDocument(fileBytes),rendering=recoverPortableRendering(fileBytes),digest=portableRenderedDigest(rendering);
+ return {source:digest===portableRenderedDigest(envelope.source)||digest===envelope.renderedDigest?envelope.source:null,rendering};
+}
+/** A file a person picked (local publish, the skill): its source, or its disk edits with every generated block removed. */
 export function recoverPortableSource(fileBytes:string):string {
  if(!hasPortableDocument(fileBytes))return fileBytes;
- const envelope=readPortableDocument(fileBytes),source=recoverPortableRendering(fileBytes),digest=portableRenderedDigest(source);
- return digest===portableRenderedDigest(envelope.source)||digest===envelope.renderedDigest?envelope.source:source;
+ const recovered=envelopeSource(fileBytes);
+ return recovered.source??recovered.rendering;
+}
+/** Why a server refuses a portable file: it no longer verifies, so no source in it can be trusted to be the author's. */
+export class PortableSourceUnverified extends Error {
+ constructor(){super('This HTML is an exported copy that no longer matches the source it carries: publish the original source, or export the page again.');this.name='PortableSourceUnverified';}
+}
+/**
+ * What a server stores of submitted HTML (lib/publish): an export reduced to the source its envelope carries, never
+ * its generated blocks (its reader's rows, the engine, the runtime). Unlike recoverPortableSource it never keeps a
+ * stripped rendering: an export edited outside its envelope, or one whose envelope is unreadable, throws
+ * PortableSourceUnverified. HTML with no envelope is returned as it is.
+ */
+export function verifiedPortableSource(html:string):string {
+ if(!hasPortableDocument(html))return html;
+ let source:string|null=null;
+ try{source=envelopeSource(html).source;}catch{/* An unreadable envelope verifies nothing. */}
+ if(source===null)throw new PortableSourceUnverified();
+ return source;
 }

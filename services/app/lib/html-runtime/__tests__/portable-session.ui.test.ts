@@ -2,7 +2,7 @@ import {expect,it,vi,afterEach} from 'vitest';
 import * as saver from '../save-local';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import {startPortableSession} from '../portable-session';
-import type {PortableChromeOptions} from '../portable-chrome-contract';
+import {OFFLINE_SQL_NO_DATA,OFFLINE_SQL_NO_DATA_ATTRIBUTE,OFFLINE_SQL_NO_DATA_EVENT,type PortableChromeOptions} from '../portable-chrome-contract';
 const identity={platformOrigin:'https://platform.example',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)};
 afterEach(()=>{document.documentElement.removeAttribute('data-af-private-preview');document.documentElement.removeAttribute('data-af-dark');document.head.innerHTML='';localStorage.clear();});
 function session(linked=false,source='<p>source</p>'){
@@ -103,4 +103,14 @@ it('ignores an actual-source Save completion after the portable session is dispo
  const spy=vi.spyOn(saver,'saveLocalDocument').mockImplementation(options=>new Promise(resolve=>{finish=()=>{options.onSource?.('<p>late</p>');resolve(true);};}));
  const page=session(true);await Promise.resolve();const saving=page.controls.onSave({includePrivateState:false});await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
  page.dispose();const count=page.chrome.update.mock.calls.length;finish();await saving;expect(page.chrome.update).toHaveBeenCalledTimes(count);expect(page.connection.reportSource).not.toHaveBeenCalled();spy.mockRestore();
+});
+it('shows that the copy carries no data for its sql, whether its sql asked before or after the controls mounted',async()=>{
+ document.documentElement.setAttribute(OFFLINE_SQL_NO_DATA_ATTRIBUTE,'');
+ const page=session();await Promise.resolve();await Promise.resolve();
+ expect(page.chrome.update).toHaveBeenCalledWith(expect.objectContaining({notice:OFFLINE_SQL_NO_DATA}));
+ document.documentElement.removeAttribute(OFFLINE_SQL_NO_DATA_ATTRIBUTE);page.dispose();
+ const later=session();await Promise.resolve();await Promise.resolve();
+ expect(later.chrome.update).not.toHaveBeenCalledWith(expect.objectContaining({notice:OFFLINE_SQL_NO_DATA}));
+ window.dispatchEvent(new Event(OFFLINE_SQL_NO_DATA_EVENT));
+ expect(later.chrome.update).toHaveBeenCalledWith(expect.objectContaining({notice:OFFLINE_SQL_NO_DATA}));later.dispose();
 });

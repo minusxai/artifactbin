@@ -46,6 +46,19 @@ export interface PortableChromeHandle {
   update(next: PortableChromeUpdate): void;
   dispose(): void;
 }
+/**
+ * AN EXPORTED COPY WITH NO ROWS FOR ITS `sql`: it carries none (it links no dataset, or its rows were past the export's
+ * 16 MiB) and a table it computes would be empty with no word why. Its `sql` (./browser-client, ./offline-sql) rejects
+ * with this sentence, marks the document and says so, and the copy's local controls (./portable-session) show it.
+ */
+export const OFFLINE_SQL_NO_DATA = 'This copy carries no data for its sql tables: open the original page to see them.';
+export const OFFLINE_SQL_NO_DATA_EVENT = 'af:offline-sql-no-data';
+export const OFFLINE_SQL_NO_DATA_ATTRIBUTE = 'data-af-offline-sql-no-data';
+export function offlineSqlNoData(): { error: 'unavailable'; message: string } {
+  globalThis.document?.documentElement?.setAttribute(OFFLINE_SQL_NO_DATA_ATTRIBUTE, '');
+  globalThis.dispatchEvent?.(new Event(OFFLINE_SQL_NO_DATA_EVENT));
+  return { error: 'unavailable', message: OFFLINE_SQL_NO_DATA };
+}
 /** The runtime reserves this inset; the local renderer never rewrites authored layout. */
 export const PORTABLE_CHROME_HEIGHT = 76;
 

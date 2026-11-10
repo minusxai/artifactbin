@@ -10,10 +10,18 @@ import { request, setSession, useAppHarness } from './harness';
 import { getDb } from '@/lib/platform';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { fixture, params, publish, ROWS, type Person } from './page-sql-door-fixture';
+import { OFFLINE_SQL_NO_DATA, OFFLINE_SQL_NO_DATA_EVENT } from '@/lib/html-runtime/portable-chrome-contract';
+
+/** The export's data cap, lowered by one test to stand for rows past 16 MiB: the real read, a smaller limit. */
+const cap = vi.hoisted(() => ({ maxBytes: undefined as number | undefined }));
+vi.mock('@/lib/dataset-access', async (actual) => {
+  const real = await actual<typeof import('@/lib/dataset-access')>();
+  return { ...real, offlinePageSqlData: (...args: Parameters<typeof real.offlinePageSqlData>) => real.offlinePageSqlData(args[0], args[1], args[2], cap.maxBytes ?? args[3], args[4]) };
+});
 
 useAppHarness();
 beforeEach(() => setSession(null));
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); cap.maxBytes = undefined; });
 
 const SECRET = 'zebra-secret-7731';
 const PAGE_SQL = 'select name, salary from staff order by name';
@@ -106,4 +114,20 @@ it('a page that links no dataset carries no rows and no engine, and its sql says
   expect(block(doc, 'offline-sql')).toBeNull();
   const { runtime } = await openOffline(html);
   await expect(Promise.resolve(runtime.sql`select 1 as one`)).rejects.toMatchObject({ code: 'unavailable', message: expect.stringContaining('carries no data') });
+});
+
+it('a copy whose rows are over the cap carries none, and its sql and its local controls say so: never a silent empty table', async () => {
+  const f = await exportedPage();
+  cap.maxBytes = 8;
+  const html = await exported(f.page, f.owner);
+  const doc = new JSDOM(html).window.document;
+  expect(block(doc, 'offline-data')).toBeNull();
+  expect(block(doc, 'offline-sql')).toBeNull();
+  const { runtime } = await openOffline(html);
+  const dispatched = vi.fn();
+  vi.stubGlobal('dispatchEvent', dispatched);
+  await expect(Promise.resolve(runtime.sql([PAGE_SQL] as unknown as TemplateStringsArray))).rejects.toMatchObject({ code: 'unavailable', message: OFFLINE_SQL_NO_DATA });
+  // The copy's local controls show the same sentence (lib/html-runtime portable-session).
+  expect(dispatched).toHaveBeenCalledWith(expect.objectContaining({ type: OFFLINE_SQL_NO_DATA_EVENT }));
+  expect(OFFLINE_SQL_NO_DATA).toMatch(/carries no data.*open the original page/);
 });
