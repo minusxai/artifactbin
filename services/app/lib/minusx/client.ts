@@ -2,7 +2,7 @@
  * THE MINUSX CONTROL CLIENT (contract §4.2), as Artifactbin's server calls it: every request carries a delegation
  * minted for exactly that request (./delegation) and nothing else that identifies anyone. A refusal becomes a
  * `MinusxRefusal` carrying MinusX's error code and HTTP status only; a network failure, a timeout or an answer of
- * the wrong shape is `unavailable`. No error, log line or URL ever carries the token.
+ * the wrong shape (a connection session without a `tls` of `verify-full` or `disable` included) is `unavailable`. No error, log line or URL ever carries the token.
  */
 import {MINUSX_API_PREFIX,type DelegationPurpose,type MinusxErrorBody,type MinusxCatalog,type MinusxConnectionSession,type MinusxConnections,type MinusxContext} from '@artifactbin/contracts';
 import type {MinusxSettings} from '@/lib/platform';
@@ -61,7 +61,7 @@ export function createMinusxClient(settings:MinusxSettings,fetcher:(request:Requ
   },
   async connectionSession(subject,connectionId,signal){
    const answer=await call(subject,'database.connect','POST','/connection-sessions',{connection_id:connectionId},signal) as Record<string,unknown>;
-   if(typeof answer.host!=='string'||typeof answer.port!=='number'||typeof answer.user!=='string'||typeof answer.password!=='string'||typeof answer.database!=='string'||typeof answer.protocol!=='string')throw new MinusxRefusal('unavailable',200);
+   if(typeof answer.host!=='string'||typeof answer.port!=='number'||typeof answer.user!=='string'||typeof answer.password!=='string'||typeof answer.database!=='string'||typeof answer.protocol!=='string'||(answer.tls!=='verify-full'&&answer.tls!=='disable'))throw new MinusxRefusal('unavailable',200);
    return answer as unknown as MinusxConnectionSession;
   },
  };

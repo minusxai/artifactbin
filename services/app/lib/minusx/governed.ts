@@ -15,7 +15,7 @@
 import {isResolverDatabaseKind,type MinusxBinding} from '@artifactbin/contracts';
 import {getGroupRole} from '@/lib/groups';
 import {databaseConnection,type DatabaseConnection} from '@/lib/html-backend-secrets';
-import {IS_DEV,IS_TEST,minusxSettings} from '@/lib/platform';
+import {minusxSettings} from '@/lib/platform';
 import {createMinusxClient,MinusxRefusal} from './client';
 
 const ID=/^[A-Za-z0-9_.:-]{1,128}$/;
@@ -42,7 +42,6 @@ export async function validateMinusxBinding(authorId:string,binding:MinusxBindin
 
 /** A run's refusal: `data_access_denied`, `connection_unavailable` or `data_unavailable`, with nothing else in it. */
 export class GovernedRefusal extends Error {constructor(readonly code:'data_access_denied'|'connection_unavailable'|'data_unavailable'){super(code);this.name='GovernedRefusal';}}
-const LOOPBACK=new Set(['127.0.0.1','::1','localhost']);
 export async function governedConnection(input:{subject:string|null;binding:MinusxBinding;pageId:string;signal?:AbortSignal}):Promise<DatabaseConnection>{
  const settings=minusxSettings();
  if(!settings)throw new GovernedRefusal('data_unavailable');
@@ -55,9 +54,9 @@ export async function governedConnection(input:{subject:string|null;binding:Minu
   throw new GovernedRefusal('data_unavailable');
  }
  if(!isResolverDatabaseKind(session.protocol))throw new GovernedRefusal('connection_unavailable');
- // The session answer names no TLS mode: the gateway is verified (verify-full), except a loopback gateway in a
- // development or test process, which may be plaintext (the runner admits loopback only under its own opt-in).
- const tls=(IS_DEV||IS_TEST)&&LOOPBACK.has(session.host)?'disable':'verify-full';
- try{return databaseConnection({kind:session.protocol,host:session.host,port:session.port,database:session.database,user:session.user,password:session.password,tls});}
+ // The session names its TLS mode (contract §4.2): `disable` only when MinusX's gateways run plaintext. The runner's
+ // tunnel then decides whether it may reach that endpoint, by the rule every resolver database meets: a public
+ // address over TLS, and loopback or plaintext only under its own development opt-in (RUNNER__DATABASE_LOOPBACK).
+ try{return databaseConnection({kind:session.protocol,host:session.host,port:session.port,database:session.database,user:session.user,password:session.password,tls:session.tls});}
  catch{throw new GovernedRefusal('data_unavailable');}
 }

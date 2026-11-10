@@ -71,6 +71,8 @@ export interface MinusxConnectionSession {
   user: string;
   password: string;
   database: string;
+  /** How to connect (contract §4.2): `disable` only when MinusX's gateways run plaintext (development and tests). */
+  tls: 'verify-full' | 'disable';
   expires_at: string;
   policy_revision: number | string;
 }

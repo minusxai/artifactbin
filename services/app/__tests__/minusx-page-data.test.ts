@@ -19,13 +19,14 @@ import {jwtVerify,type JWTPayload,type ProtectedHeaderParameters} from 'jose';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '@artifactbin/runner/local';
-import {DELEGATION_AUDIENCE,DELEGATION_ISSUER,DELEGATION_TYPE,type MinusxConnectionSession} from '@artifactbin/contracts';
+import {createDatabaseTunnels} from '@artifactbin/runner/database-tunnel';
+import {DELEGATION_AUDIENCE,DELEGATION_ISSUER,DELEGATION_TYPE,type MinusxConnectionSession,type RunnerJson} from '@artifactbin/contracts';
 import {mountRoutes} from '../server/api';
 import {artifactState,getArtifactById} from '@/lib/artifacts';
 import {createGroup} from '@/lib/groups';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {readPinnedBackendSecret} from '@/lib/html-backend-secrets';
-import {createMinusxClient} from '@/lib/minusx';
+import {createMinusxClient,governedConnection,GovernedRefusal} from '@/lib/minusx';
 import {localPageBackendCapability} from '@/lib/page-operations';
 import {resolverPorts} from '@/lib/page-doors';
 import {getDb,minusxSettings,setServices} from '@/lib/platform';
@@ -43,6 +44,8 @@ const PRIVATE_PEM=privateKey.export({type:'pkcs8',format:'pem'}) as string;
 
 interface Seen {method:string;path:string;url:string;token:string;body:string;status?:number;claims?:JWTPayload&Record<string,unknown>;header?:ProtectedHeaderParameters}
 interface Session {user:string;database:string}
+/** The TLS mode the fake MinusX names in each connection session (the real one: "disable" only with plaintext gateways). */
+const sessionTls:{mode:string|undefined}={mode:'disable'};
 
 /** The governed endpoint: a Postgres wire listener over a real PGlite that admits only a credential MinusX issued. */
 async function gateway(sessions:Map<string,Session>){
@@ -115,8 +118,8 @@ async function minusx(key:KeyObject,gatewayPort:()=>number,sessions:Map<string,S
   if(url.pathname==='/api/v1/context')return reply(200,{group_id:claims.active_group_id,revision:1,docs:[{title:'Revenue',body:'Net of tax.'}],metrics:[],models:[{id:'monthly_revenue',name:'monthly_revenue',version:3,description:'Monthly net revenue'}]});
   const password=randomBytes(18).toString('base64url');
   sessions.set(password,{user:claims.sub!,database:connectionId});
-  const session:MinusxConnectionSession={protocol:'postgres',host:'127.0.0.1',port:gatewayPort(),user:claims.sub!,password,database:connectionId,expires_at:new Date(Date.now()+15*60_000).toISOString(),policy_revision:3};
-  return reply(200,session);
+  const session:MinusxConnectionSession={protocol:'postgres',host:'127.0.0.1',port:gatewayPort(),user:claims.sub!,password,database:connectionId,tls:sessionTls.mode as MinusxConnectionSession['tls'],expires_at:new Date(Date.now()+15*60_000).toISOString(),policy_revision:3};
+  return reply(200,sessionTls.mode===undefined?{...session,tls:undefined}:session);
  });
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  return {seen,visible,url:`http://127.0.0.1:${(server.address() as net.AddressInfo).port}`,close:()=>new Promise<void>(resolve=>server.close(()=>resolve()))};
@@ -286,6 +289,45 @@ describe('a page pinned to Finance, read by its viewers',()=>{
    for(const text of [...texts,...control.seen.map(entry=>entry.url),...logged,...stored])expect(text.includes(signature)).toBe(false);
   }
  },45_000);
+});
+
+describe('the TLS mode a connection session names',()=>{
+ const member=harness.shared(async()=>{
+  const owner=await mintAccountToken('mx_tls_owner');
+  const group=await createGroup(owner.userId!,{handle:'mx_tls_group',name:'TLS'});
+  control.visible[group.id]=[CONNECTION];
+  return {owner,group};
+ });
+ const connect=async()=>{const {owner,group}=member();return governedConnection({subject:owner.userId!,binding:{connection_id:CONNECTION,group_id:group.id},pageId:'pg_tls'});};
+ afterAll(()=>{sessionTls.mode='disable';});
+ it('is honoured as named: verify-full stays verify-full even for a loopback gateway, disable stays disable',async()=>{
+  sessionTls.mode='verify-full';
+  expect(await connect()).toMatchObject({host:'127.0.0.1',tls:'verify-full'});
+  sessionTls.mode='disable';
+  expect(await connect()).toMatchObject({host:'127.0.0.1',tls:'disable'});
+ });
+ it("the runner's tunnel reaches the gateway the session names by the rule every resolver database meets",async()=>{
+  // What a governed run hands the runner is the session's endpoint and TLS mode, unchanged.
+  const grant=async(mode:'disable'|'verify-full',allowLoopback:boolean,host?:string)=>{
+   sessionTls.mode=mode;
+   const value={...await connect(),...(host?{host}:{})};
+   return createDatabaseTunnels({allowLoopback}).forRun({owner:'o',page:'p'},()=>{}).grant(value as unknown as RunnerJson);
+  };
+  // Development and tests (RUNNER__DATABASE_LOOPBACK=true): a loopback gateway, plaintext as the session says.
+  expect(await grant('disable',true)).toMatchObject({host:'127.0.0.1',tls:'disable',grant:expect.any(String)});
+  // Production: plaintext and loopback are refused; a gateway on a public name over TLS is admitted.
+  await expect(grant('disable',false)).rejects.toThrow('tls_required');
+  await expect(grant('verify-full',false)).rejects.toThrow('forbidden_address');
+  expect(await grant('verify-full',false,'gateway.example.com')).toMatchObject({host:'gateway.example.com',tls:'verify-full'});
+  // A gateway on a private address is refused like any private database: GATEWAY__PUBLIC_HOST must be public.
+  await expect(grant('verify-full',false,'10.0.0.7')).rejects.toThrow('forbidden_address');
+ });
+ it('a session without a known TLS mode is unusable: data_unavailable, never a guessed mode',async()=>{
+  for(const mode of [undefined,'require','prefer']){
+   sessionTls.mode=mode;
+   await expect(connect()).rejects.toEqual(new GovernedRefusal('data_unavailable'));
+  }
+ });
 });
 
 describe('GET /api/server in combined mode',()=>{
