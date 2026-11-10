@@ -40,6 +40,11 @@ describe('main validation', () => {
     const script = pin.jobs.pin.steps[0].run;
     expect(script).toContain('git/ref/heads/main');
     expect(script).toContain('refs/heads/main');
+    // The server token never rides in a URL (git echoes URLs in errors, and argv is visible to `ps`): it is an
+    // environment-scoped request header, masked in its encoded form too.
+    expect(script).not.toMatch(/https:\/\/[^\s"']*SERVER_TOKEN/);
+    expect(script).toContain('GIT_CONFIG_KEY_0=http.https://github.com/.extraheader');
+    expect(script).toMatch(/::add-mask::/);
     // One pin mechanism: the old consumer dispatch into the server's update-submodule workflow is gone.
     expect(ci.jobs).not.toHaveProperty('notify-consumer');
   });
