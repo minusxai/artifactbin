@@ -102,7 +102,7 @@ script. Groups: `node scripts/groups.mjs list`
   from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below); behind
   a key or from your own server code: a backend function ([functions](references/functions.md),
   read it first); never copy its rows into a CSV. The server then keeps the key, encrypted (the
-  owner pastes it into the page's settings; only the API's host receives it), and the rows people
+  owner enters it in the page's settings; only the API's host receives it), and the rows people
   write, such as notes; never the API's rows: the function fetches them on the server whenever a
   reader opens the page. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
