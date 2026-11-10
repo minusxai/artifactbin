@@ -1,6 +1,6 @@
 import {sql, type Kysely} from 'kysely';
 
-const guidance = 'Stop all auth/account writers, verify a restorable backup, then explicitly run migrateHumanAccountSchema with writesPausedAndBackupVerified: true. See services/auth/ACCOUNT-MIGRATION.md. Startup never applies this migration.';
+const guidance = 'Stop all auth/account writers, verify a restorable backup, then explicitly run migrateHumanAccountSchema with writesPausedAndBackupVerified: true. See docs/account-migration.md. Startup never applies this migration.';
 const identifier = (schema: string) => {
   if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error('Invalid authentication schema identifier');
   return sql.id(schema, 'account');
@@ -33,7 +33,7 @@ async function inspect(db: Kysely<Record<string, unknown>>, schema: string) {
 
 async function assertNoIdentityCollisions(db: Kysely<Record<string, unknown>>, schema: string): Promise<void> {
   const collision = await sql`SELECT 1 FROM ${identifier(schema)} GROUP BY "providerId", "accountId" HAVING count(*) > 1 LIMIT 1`.execute(db);
-  if (collision.rows.length) throw new Error('Duplicate authentication provider/account identities; stop all auth/account writers and resolve ownership under review without merging or deleting identities automatically. See services/auth/ACCOUNT-MIGRATION.md.');
+  if (collision.rows.length) throw new Error('Duplicate authentication provider/account identities; stop all auth/account writers and resolve ownership under review without merging or deleting identities automatically. See docs/account-migration.md.');
 }
 
 /** Read-only startup guard. The operator, never a mixed-version startup, owns DDL. */

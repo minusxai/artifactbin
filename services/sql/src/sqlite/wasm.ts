@@ -3,7 +3,7 @@
  * on the server and in the browser. In Node the package reads its own
  * `sqlite3.wasm`; a browser (or the offline file, which cannot fetch) hands
  * the bytes in. One module per process serves every database: a database is
- * cheap, the module is not (see CONTRACT.md for measured costs).
+ * cheap, the module is not.
  */
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 

@@ -1,7 +1,11 @@
 /** Self-contained candidate reader gate. Must run inside scripts/gate-container.mjs.
  * COMPONENT_BASELINE__INPUT optionally names a JSON file with implementation, sourceRevision,
  * output and entries [{fixture,theme,url}]; without one the gate publishes the catalogue through
- * the normal HTTP publication API. Every fixture is captured from its real local /raw reader. */
+ * the normal HTTP publication API. Every fixture is captured from its real local /raw reader, each
+ * state at two viewports in two color modes. It checks hosted components, interactions, fonts and
+ * resources, and makes no visual parity claim. COMPONENT_BASELINE__OUTPUT names an absolute evidence
+ * directory. Never publish these fixtures to production, and never commit an input, credentials or
+ * generated test data. */
 import assert from 'node:assert/strict';
 import { readFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';

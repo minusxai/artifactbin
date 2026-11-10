@@ -3,7 +3,7 @@
  * services registry — an HTTP client when `SQL__SERVICE_URL` is set, the
  * in-process engine a composition root registered otherwise. Nothing else in
  * the app knows which engine runs; the guards, the caps and the wire live in the
- * package (services/sql/CONTRACT.md).
+ * package (docs/sql-service.md).
  */
 import type { SqlService } from '@artifactbin/contracts';
 import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, services } from '@/lib/platform';

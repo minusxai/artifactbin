@@ -64,14 +64,6 @@ Firefox/WebKit upload path, including brush strokes, comment save, thumbnail loa
 and reload. It is run by the normal gate manifest. Real Chrome picker acceptance
 requires a person; an automated chooser in CI tests a separate permission setup.
 
-## Capture timeout investigation (22 September 2026)
-
-Repeated native Region Capture probes on local Chrome at a fractional pixel ratio
-produced two frames, then stalled despite successful crop promises and a live,
-unmuted track. Both video-frame callbacks and ImageCapture reads stalled; retaining
-all crop targets did not prevent it. The precise Chromium internal cause is unknown.
-A full-tab ImageCapture probe completed 12/12 local canvas crops without a timeout.
-Only the cropped image is encoded/uploaded; full-tab bitmaps are released after use,
-including results arriving after a timeout. Existing `region` metadata remains readable.
-Per-stage performance measures distinguish permission, playback, painting, frame
-readout and encoding. They contain timing/outcome/dimensions, never screenshot pixels.
+Only the cropped image is encoded and uploaded; full-tab bitmaps are released after use, including results that
+arrive after a timeout. Existing `region` metadata remains readable. Per-stage performance measures (permission,
+playback, painting, frame readout, encoding) record timing, outcome and dimensions, never screenshot pixels.

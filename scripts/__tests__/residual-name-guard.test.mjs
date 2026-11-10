@@ -173,7 +173,7 @@ describe('docs/', () => {
     expect(onboarding).not.toMatch(/npm run afbin|afbin (?:pull|push)/);
   });
   it('keeps the current reference guides linked from the README', () => {
-    for (const f of ['document-format.md', 'serving-and-security.md', 'ownership.md', 'operations.md']) {
+    for (const f of ['document-format.md', 'serving-and-security.md', 'http-api.md', 'operations.md', 'page-functions.md', 'scripts.md']) {
       expect(fs.existsSync(path.join(ROOT, 'docs', f)), f).toBe(true);
       expect(read('docs', f).length, f).toBeGreaterThan(400);
       expect(readme(), f).toContain(`docs/${f}`);

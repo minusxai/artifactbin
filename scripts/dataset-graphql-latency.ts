@@ -12,7 +12,7 @@
  * sequential requests after `--warmup`, and the process's peak RSS sampled every 10 ms while they ran.
  *
  * The budget test pins the statements (services/app/lib/graphql-compat/__tests__/dataset-graphql-budget.test.ts);
- * this script measures what they and the engine cost. Results: docs/resolver-latency.md, "Dataset GraphQL".
+ * this script measures what they and the engine cost. Results: docs/dataset-read-latency.md, "Dataset GraphQL".
  *
  * `--page-sql`: a page's `_sql` under live load through the real page route. `--readers` signed-in link holders (each
  * its own account, under a select rule that filters rows and hides a column) and the owner read one GROUP BY at

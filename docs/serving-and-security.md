@@ -8,6 +8,20 @@ commenting or editing; neither a public page nor an unlisted URL grants dataset
 write access. Reads, versions, exports, streams and mutations retain their own
 access checks. IDs and existing links survive title and folder changes.
 
+## Accounts and credentials
+
+The account owns everything its connections publish. A person signs in with an email code or standard OAuth;
+agents run the author skill's `services/app/skills/artifactbin/scripts/auth.mjs`, which emails a one-time code and
+exchanges it for an origin-scoped grant ([HTTP API](http-api.md) describes the same door for direct callers). No
+agent-facing surface issues a credential: there is no public mint, no token page and no surface that asks a person
+to paste one. An operator holding the deployment's `ADMIN__SECRET` can mint for operational use
+(`services/app/app/api/tokens/route.ts`); without it that door is a 404. The skill keeps the grant privately under
+`~/.artifactbin` (or `ARTIFACTBIN_HOME`), one file per server origin, readable only by its owner. Access tokens
+cover the `/api` resource; rotating refresh tokens keep a client signed in without extending access-token lifetime.
+A connection reaches everything its account owns. Connections are stored hash-only, shown once to the client
+alone, and listed and revoked on `/account`. File preview needs no server login, and shared preview names are
+attribution, not verified identity.
+
 ## The native reader boundary
 
 `/a/ID` is the trusted app shell: navigation, sharing, comments and presence
@@ -36,8 +50,7 @@ policy.
 Keep tokens, session cookies and secret values out of page HTML, local state,
 source files and publication requests. The trusted parent handles authenticated
 page transport; author code receives no account bearer. Public runtime modules
-(`/af/core.js`, `/af/apollo.js`, `/af/reader.js`, `/af/chrome.js`, `/af/portable.js`,
-`/af/morph.js`) contain code only, are revalidated by ETag and never cache viewer
+(`RUNTIME_MODULE_PATHS` in `services/app/lib/html-runtime/contract.ts`, plus `/af/core.js`) contain code only, are revalidated by ETag and never cache viewer
 state. Retained content-addressed module aliases serve exact digest-checked bytes.
 
 ## Data and backend execution
@@ -51,7 +64,7 @@ reader: reads see each dataset's role view (hidden columns absent, row filters a
 limits applied) under the same read fences, and a write is decided by the dataset's
 own rules, again inside its commit, changing only rows the reader can see. Backend
 functions at `/api/artifacts/ID/fn/NAME` (the runtime's `fetch('/fn/NAME')`) admit
-the caller the same way; GET reads, POST may write, and a function's `caps.sql`
+the caller the same way; GET reads, POST may write, and a function's caps.sql
 runs as that caller. A scheduled run executes as the page's content publisher,
 re-checked at every capability. Dataset ACLs and row/column write policies apply
 independently of page access. Pages published before SQL keep page GraphQL at
@@ -96,7 +109,7 @@ and `srcset` are not automatically made portable. Unsupported or inaccessible
 referenced images can refuse export. Test the file without a network before
 promising offline completeness.
 
-An unpublished local project can use the skill's `scripts/serve.mjs`. To publish
+An unpublished local project can use the skill's `services/app/skills/artifactbin/scripts/serve.mjs`. To publish
 from the browser, `/local/publish` asks a signed-in account to select the HTML and
 any dependency files, review the plan and publish a private linked copy. Only
 explicitly selected files are available; publication does not silently rewrite
@@ -119,11 +132,11 @@ connected portable file remains read-only for remote operations.
 - **Folders:** create `{format:"folder",title:"Reports"}` and use its ID as
   `parent_id`. Listings, moves, trash and restoration keep ownership checks;
   a folder has no page content of its own.
-- **Custom domains:** when enabled, account settings attach and verify DNS through
-  `/api/my/domain` and `/api/my/domain/verify`. Choose an owned public HTML page
-  as homepage or set exact custom paths, or keep the public profile listing.
-  Domain pages read as guests through the domain's own endpoints (functions answer
-  GET only); shared writes are refused. Use the original hosted page for authenticated work.
+- **Publishing hosts:** custom domains are retired. With `APP__USER_PAGES_HOST`
+  set, each user or group handle gets an anonymous host of its own
+  (`services/app/server/user-host.ts`; see [operations](operations.md)). Those
+  pages read as guests (functions answer GET only); shared writes are refused.
+  Use the original hosted page for authenticated work.
 - **Notifications:** the bell and `/notifications` retain membership, social and
   conversation notifications with current-access checks and read revisions.
   `/account#notifications` manages preferences where delivery is configured.

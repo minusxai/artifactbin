@@ -24,7 +24,7 @@ Agents author through the artifactbin author skill, downloaded from
 `<origin>/skills/artifactbin.zip` (use this checkout's public URL as `<origin>`);
 its `node scripts/auth.mjs` signs in. The HTTP API guide is at `<origin>/llms.txt`.
 
-Save this as `page.html` (the HTML page format is described in the author skill):
+Save this as page.html (the HTML page format is described in the author skill):
 
 ```html
 <!doctype html>
@@ -66,15 +66,15 @@ values and secrets. App and adjacent HMR ports must both be available.
 | PNG/JPG exports | Chromium, prepared/downloaded when needed; exports run on the server. | [serving and security](serving-and-security.md) |
 | Offline HTML | A published head; download the HTML export. Viewer-local state works offline; linked public reads are optional, and remote writes never queue. | [serving and security](serving-and-security.md) |
 | Native browser scripts and hosted components | Ordinary HTML ES modules and hosted `@afbin/…` imports. Extra hosts need declared CSP consent. | [document format](document-format.md), `<origin>/llms/runtime` |
-| Backend functions | Publish paired backend files through `resolverSources` and native `af-resolver` links. Source dev registers its local runner; split hosts need their runner configuration. Secret bindings retain separate authority checks. | `<origin>/llms/functions`, [runner configuration](../services/runner/README.md) |
-| Live browser sessions | Chromium and the browser worker's OS prerequisites. Linux server sessions require bubblewrap, user namespaces and delegated cgroup v2. `npm run dev` on macOS uses its documented development-only plain-process mode. | [browser sessions](mx-sessions.md), `.env.example` browser settings |
+| Backend functions | Publish paired backend files through `resolverSources` and native `af-resolver` links. Source dev registers its local runner; split hosts need their runner configuration. Secret bindings retain separate authority checks. | `<origin>/llms/functions`, [runner](runner.md) |
+| Live browser sessions | Chromium and the browser worker's OS prerequisites. Linux server sessions require bubblewrap, user namespaces and delegated cgroup v2. `npm run dev` on macOS uses its documented development-only plain-process mode. | [browser sessions](browser-sessions.md), `.env.example` browser settings |
 | Google/OIDC, S3, external application PostgreSQL, anonymous publishing hosts and split services | Operator credentials/infrastructure. Source/custom compositions support these adapters; some compositions use a narrower configuration. | [operations](operations.md), `.env.example` |
 
 ## Verify and troubleshoot
 
 Run `npm run validate` and focused `npm test -- --files <test paths>` while
-working; broader suites and browser/container gates belong in PR CI. A deferred
-suite is not a pass. See [AGENTS.md](../AGENTS.md) for the check budget.
+working; broader suites and browser/container gates run in CI after merge. A
+deferred suite is not a pass. See [AGENTS.md](../AGENTS.md) for the check budget.
 
 - Mixing `localhost`, an IP address and `app.lvh.me` breaks sign-in: use the exact public origin setup prints.
 - Private document blank: check the app/pages same-site relationship and wildcard
