@@ -34,8 +34,8 @@ const DOC_LAYOUT_CSS = [
  * owner types into it the moment it opens (`template: 'doc'` is what the page reads to open it, solid/pages/Document).
  * Its `<title>` follows its first heading on each region save until someone renames it (lib/artifacts doc-title).
  */
-function docStarterHtml(tiptap=false): string {
-  return `<!doctype html><html lang="en">${head(UNTITLED_DOCUMENT, `<meta name="artifactbin:design-system" content="meridian"><style>${DOC_LAYOUT_CSS}</style>`)}<body><main><article data-af-editable="${tiptap?'rich-native-v1':'rich'}" class="af-markdown-body"><h1></h1><p></p></article></main></body></html>`;
+function docStarterHtml(): string {
+  return `<!doctype html><html lang="en">${head(UNTITLED_DOCUMENT, `<meta name="artifactbin:design-system" content="meridian"><style>${DOC_LAYOUT_CSS}</style>`)}<body><main><article data-af-editable="rich-native-v1" class="af-markdown-body"><h1></h1><p></p></article></main></body></html>`;
 }
 
 /** The page an agent handoff starts from (`/api/start`): a bare titled page the agent replaces whole. */
@@ -44,10 +44,10 @@ export function agentStarterHtml(): string {
 }
 
 /** Each menu choice starts as a normal HTML file with the same publication contract; a doc says it is one. */
-export function artifactStarter(template: ArtifactStarterTemplate, parentId?: string | null, tiptap=false) {
+export function artifactStarter(template: ArtifactStarterTemplate, parentId?: string | null) {
   const label=ARTIFACT_STARTERS.find(starter=>starter.template===template)?.label;
   // A doc is unlisted: its link reads it, the way people share a document; the other starters stay private.
-  if(!label||template==='doc')return {html:docStarterHtml(tiptap),template:'doc' as const,visibility:'unlisted' as const,parent_id:parentId??null};
+  if(!label||template==='doc')return {html:docStarterHtml(),template:'doc' as const,visibility:'unlisted' as const,parent_id:parentId??null};
   const title=`Untitled ${label.toLowerCase()}`;
   return {html:`<!doctype html><html lang="en">${head(title)}<body><main><h1>${title}</h1></main></body></html>`,visibility:'private' as const,parent_id:parentId??null};
 }

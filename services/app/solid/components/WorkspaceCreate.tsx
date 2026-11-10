@@ -33,11 +33,11 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
   const [error, setError] = createSignal('');
   const choose = () => { setError(''); setDialog(true); };
   const creationHref = (path:string) => { const params=new URLSearchParams();if(props.parentId)params.set('parent_id',props.parentId);if(props.groupId)params.set('group_id',props.groupId);else if(props.personal)params.set('personal','1');return `${path}${params.size?'?'+params.toString():''}`;};
-  const createArtifact = async (template: ArtifactStarterTemplate, tiptap=false) => {
+  const createArtifact = async (template: ArtifactStarterTemplate) => {
     if (busy()) return;
     setBusy(true); setError('');
     try {
-      const response = await apiFetch('/api/my/artifacts', 'POST', { ...artifactStarter(template, props.parentId, tiptap), ...(props.groupId ? {destination:{type:'group',id:props.groupId}} : props.personal ? {destination:{type:'personal'}} : {}) });
+      const response = await apiFetch('/api/my/artifacts', 'POST', { ...artifactStarter(template, props.parentId), ...(props.groupId ? {destination:{type:'group',id:props.groupId}} : props.personal ? {destination:{type:'personal'}} : {}) });
       if (!response.ok) throw new Error('create failed');
       const body = await response.json() as { id?: string };
       if (!body.id) throw new Error('missing artifact');
@@ -60,7 +60,6 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
   // "New" is a doc, ready to type in (lib/workspace artifactStarter); the other kinds start from a template.
   const entries = (): MenuEntry[] => [
     starterItem(ARTIFACT_STARTERS[0]!),
-    {label:'Document (Tiptap trial)',text:'Document (Tiptap trial)',icon:()=> <FileText size={14}/>,disabled:busy(),onSelect:()=>void createArtifact('doc',true)},
     { label: 'Template', text: 'Template', icon: () => <LayoutTemplate size={14} />, items: ARTIFACT_STARTERS.slice(1).map(starterItem) },
     { label: 'Upload HTML', text: 'Upload HTML', icon: () => <FileUp size={14} />, onSelect: () => setUploadHtml(true) },
     { label: 'Folder', text: 'Folder', icon: () => <FolderPlus size={14} />, onSelect: choose },

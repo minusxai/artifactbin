@@ -19,7 +19,6 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
-import { TiptapComments, isTiptapDocument } from './comment-editor-trial';
 import { isAreaRange } from '@/lib/document/annotation-range';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
@@ -143,8 +142,6 @@ const optionalRouterLocation = () => { try { return useLocation(); } catch { ret
 
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const backend = props.backend ?? createHttpBackend(props.id);
-  const [nativeComments,setNativeComments]=createSignal(false);
-  onMount(()=>{void backend.load().then(head=>setNativeComments(isTiptapDocument(head?.html??''))).catch(()=>{});});
   // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
   // are the dependency list: an effect keyed on one runs on a real change.
   const railOpen = createMemo(() => props.railOpen);
@@ -943,7 +940,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     }),
   });
 
-  return <TiptapComments.Provider value={nativeComments}><CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend} revision={props.membershipRevision}>
+  return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend} revision={props.membershipRevision}>
     <CommentsOffline.Provider value={backend.mode === 'offline'}>
       <style>{CAPTURE_CHROME_CSS}</style>
       <Show when={capture.busy() && !selection()}>
@@ -1096,5 +1093,5 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           onCancel={() => { if (!confirmBusy()) setDeleting(null); }} onConfirm={() => void confirmDelete()} />
       </Show>
     </CommentsOffline.Provider>
-  </PersonMentionProvider></CommentImagesProvider></TiptapComments.Provider>;
+  </PersonMentionProvider></CommentImagesProvider>;
 }
