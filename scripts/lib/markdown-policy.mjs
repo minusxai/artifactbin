@@ -16,11 +16,14 @@
  *      specifier (no extension, or a directory's index), and a slash-less `name.ext` that no tracked file has passes
  *      only as a member access (`caps.sql`) that occurs in a tracked source;
  *   R8 every docs/*.md is linked from README.md, CONTRIBUTING.md or an AGENTS.md;
- *   R9 docs/scripts.md names every script directly in scripts/ and every scripts/ci/*.mjs.
+ *   R9 docs/scripts.md names every script directly in scripts/ and every scripts/ci/*.mjs;
+ *   R10 a `docs/<name>.md` named in a tracked source file (a comment, a string) is a tracked doc. Tests and
+ *       fixtures are not read: they name made-up docs on purpose.
  *
  * Pure: `files` maps every tracked path to its text (markdown and package.json; any other file may be ''), and
  * the identifiers R7 found are passed in, so a literal tree and the real repository run the same code. The test
- * finds identifiers in the real repository with one `git grep` (see `referencedIdentifiers`).
+ * finds identifiers in the real repository with one `git grep` (see `referencedIdentifiers`), and the docs that
+ * sources name with another (see `docMentionsIn`).
  */
 
 const ROOT_MARKDOWN = ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'AGENTS.md', 'CLAUDE.md'];
@@ -174,6 +177,22 @@ export function identifiersIn(files, candidates) {
 /** git pathspecs for the same sources: every tracked file except markdown and package-lock.json. */
 export const IDENTIFIER_PATHSPECS = ['.', ':(exclude)*.md', ':(exclude)package-lock.json'];
 
+/** R10: a flat `docs/<name>.md` (any `../` before it dropped), not part of a longer path or a URL. */
+const DOC_MENTION = /(?<![\w./-])(?:\.\.\/)*(docs\/[A-Za-z0-9_-]+\.md)/g;
+const DOC_MENTION_SOURCE = (file) => IDENTIFIER_SOURCE(file) && !/(?:^|\/)__tests__\/|\.test\./.test(file) && !file.startsWith('scripts/fixtures/');
+/** git pathspecs for the same sources, and the extended pattern that finds candidate lines for `docMentionsOf`. */
+export const DOC_MENTION_PATHSPECS = [...IDENTIFIER_PATHSPECS, ':(exclude)*__tests__*', ':(exclude)*.test.*', ':(exclude)scripts/fixtures'];
+export const DOC_MENTION_GREP = 'docs/[A-Za-z0-9_-]+\\.md';
+/** The docs one line of a source file names. */
+export function docMentionsOf(file, line, text) {
+  return [...text.matchAll(DOC_MENTION)].map((match) => ({ file, line, doc: match[1] }));
+}
+/** Every doc a tracked source outside tests and fixtures names (a literal tree's stand-in for git grep). */
+export function docMentionsIn(files) {
+  return Object.entries(files).filter(([file]) => DOC_MENTION_SOURCE(file))
+    .flatMap(([file, text]) => text.split('\n').flatMap((line, i) => docMentionsOf(file, i + 1, line)));
+}
+
 const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** The `npm run` script a span names, or undefined. Flags (`-w <workspace>`, `--`) and their values are skipped. */
 function npmScript(span) {
@@ -254,8 +273,9 @@ function spanProblem(span, file, { index, scripts, identifiers }) {
  * Every problem in the tree, one line each: `R<n> <file>[:<line>]: <what is wrong>`, in rule order.
  * @param {Record<string, string>} files every tracked path → its text (markdown and package.json at least)
  * @param {Set<string>} identifiers the R7 identifiers that occur in a tracked non-markdown file
+ * @param {{file: string, line: number, doc: string}[]} docMentions the docs that tracked sources name (R10)
  */
-export function validateMarkdownTree(files, identifiers) {
+export function validateMarkdownTree(files, identifiers, docMentions = []) {
   const paths = Object.keys(files).sort();
   const tracked = new Set(paths);
   const problems = [];
@@ -340,6 +360,11 @@ export function validateMarkdownTree(files, identifiers) {
     for (const file of named) {
       if (!new RegExp(`(?<![\\w.-])${escape(baseOf(file))}(?![\\w-])`).test(map)) report('R9', 'docs/scripts.md', `does not name ${file}`);
     }
+  }
+
+  // R10 sources name real docs.
+  for (const { file, line, doc } of docMentions) {
+    if (!tracked.has(doc)) report('R10', `${file}:${line}`, `names ${doc}, which is not a tracked doc: name the doc that replaced it, or drop the reference`);
   }
   return problems;
 }

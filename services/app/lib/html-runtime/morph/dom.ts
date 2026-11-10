@@ -1,5 +1,5 @@
 /**
- * THE DOM MORPH shared by every live update (docs/phase2-architecture.md §2.4): `from`'s children made `to`'s, matched by
+ * THE DOM MORPH shared by every live update: `from`'s children made `to`'s, matched by
  * persistent identity, moving as few nodes as possible and never one holding an iframe or the reader's focus when its
  * siblings can move around it. Framework-free and import-light, so the compiled-story engine (./engine) and the native
  * HTML page's live morph (lib/html-runtime/live-morph) run the same matching and arrangement.

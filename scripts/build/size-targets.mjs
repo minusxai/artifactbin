@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * THE PHASE 2 SIZE TARGETS (docs/phase2-architecture.md), checked against a
+ * THE PHASE 2 SIZE TARGETS, checked against a
  * page-speed lab result (scripts/ci/performance-loads.mjs output).
  *
  *   node scripts/build/size-targets.mjs <lab.json> [--markdown] [--strict]

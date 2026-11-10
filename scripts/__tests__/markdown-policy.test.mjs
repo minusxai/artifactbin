@@ -1,5 +1,5 @@
 /**
- * The markdown layout and the agent instruction files (scripts/lib/markdown-policy.mjs, rules R1–R9).
+ * The markdown layout and the agent instruction files (scripts/lib/markdown-policy.mjs, rules R1–R10).
  *
  * A guard has to be shown to bite: every rule first fires against a small literal tree and stays quiet on a
  * correct one; then the same validator runs once over the real repository and prints every violation with its
@@ -11,11 +11,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  CLAUDE_TEXT, IDENTIFIER_PATHSPECS, SCOPED_DIRS, codeSpans, identifierPattern, identifiersIn, markdownLinks,
-  referencedIdentifiers, validateMarkdownTree,
+  CLAUDE_TEXT, DOC_MENTION_GREP, DOC_MENTION_PATHSPECS, IDENTIFIER_PATHSPECS, SCOPED_DIRS, codeSpans, docMentionsIn,
+  docMentionsOf, identifierPattern, identifiersIn, markdownLinks, referencedIdentifiers, validateMarkdownTree,
 } from '../lib/markdown-policy.mjs';
 
-const validate = (files) => validateMarkdownTree(files, identifiersIn(files, referencedIdentifiers(files)));
+const validate = (files) => validateMarkdownTree(files, identifiersIn(files, referencedIdentifiers(files)), docMentionsIn(files));
 
 /** A correct tree: the root five, a dispatch table over the ten scoped pairs, two docs, a scripts map. */
 function goodTree() {
@@ -155,6 +155,15 @@ describe('the markdown policy, each rule seen to fire on a literal tree', () => 
     expect(problems).toEqual(['R9 docs/scripts.md: does not name scripts/ci/new-check.mjs', 'R9 docs/scripts.md: does not name scripts/new.ts']);
     expect(validate(tree({ 'docs/scripts.md': undefined }))).toContainEqual(expect.stringMatching(/^R9 docs\/scripts\.md: is missing; it must name all 2 scripts/));
   });
+
+  it('R10: a source file that names a docs file names a tracked one; tests, fixtures, URLs and longer paths are not read', () => {
+    const problems = validate(tree({
+      'server.ts': '/** See docs/operations.md and ../docs/gone.md. */\n// https://example.test/docs/elsewhere.md, vendor/docs/theirs.md\n',
+      'scripts/__tests__/x.test.mjs': "const fixture = 'docs/made-up.md';\n",
+      'scripts/fixtures/note.txt': 'docs/also-made-up.md\n',
+    }));
+    expect(problems).toEqual(['R10 server.ts:1: names docs/gone.md, which is not a tracked doc: name the doc that replaced it, or drop the reference']);
+  });
 });
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -185,10 +194,23 @@ function identifiersInRepository(candidates) {
   try { return grep(['-P', '-e', identifierPattern(candidates)]); } catch { return grep(['-w', '-F', ...[...candidates].flatMap((id) => ['-e', id])]); }
 }
 
+/** The docs that tracked sources outside tests and fixtures name: one `git grep` for candidate lines, read by the validator's own pattern. */
+function docMentionsInRepository() {
+  let lines;
+  try { lines = git(['grep', '-I', '-n', '-E', '-e', DOC_MENTION_GREP, '--', ...DOC_MENTION_PATHSPECS]).split('\n').filter(Boolean); } catch (error) {
+    if (error.status === 1) return [];
+    throw error;
+  }
+  return lines.flatMap((entry) => {
+    const [, file, line, text] = /^([^:]+):(\d+):(.*)$/.exec(entry) ?? [];
+    return file ? docMentionsOf(file, Number(line), text) : [];
+  });
+}
+
 describe('the real repository', () => {
-  it('keeps the markdown layout and its instruction files (R1–R9)', () => {
+  it('keeps the markdown layout and its instruction files (R1–R10)', () => {
     const files = trackedTree();
-    const problems = validateMarkdownTree(files, identifiersInRepository(referencedIdentifiers(files)));
+    const problems = validateMarkdownTree(files, identifiersInRepository(referencedIdentifiers(files)), docMentionsInRepository());
     expect(problems, `\n${problems.join('\n')}\n`).toEqual([]);
   });
 });

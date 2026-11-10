@@ -282,7 +282,7 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
 interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision']; /** The title-slug address it was resolved from, served there as is. */ servedPath?: string }
-/** The document page's reader header (docs/phase2-architecture.md §6): which renderer answered. */
+/** The document page's reader header: which renderer answered. */
 const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { ['x-mx-reader']: reader.mode } : {});
 
 /**
