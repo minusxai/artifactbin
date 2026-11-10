@@ -106,7 +106,7 @@ Test accounts use the `mxmx_test_*` prefix and disposable state.
 Anonymous publishing hosts use optional `APP__USER_PAGES_HOST` (off by default). A live user or group
 handle maps underscores to hyphens in one host label. Public HTML appears on its public home; unlisted HTML
 is available only by ID and carries noindex and no-referrer. Copies retain app canonical URLs. Host
-requests are guests even if they carry cookies or bearer tokens; only read operations reach page GraphQL.
+requests are guests even if they carry cookies or bearer tokens; only read operations reach page data (sql reads, GET functions).
 The former custom-domain attachment, DNS verification and path override APIs have been removed.
 Enabling wildcard DNS and TLS is an operator deployment step; the product never provisions a hostname.
 

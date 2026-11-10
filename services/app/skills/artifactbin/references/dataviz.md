@@ -48,7 +48,7 @@ Declare nominal categories, ordinal order, quantitative magnitudes and temporal 
 
 Missing is not zero. Null observations can create line gaps; absent rows cannot. Vega-Lite filtering connects valid points; choose break-path modes deliberately. Vega line marks support `defined`. Distinguish empty, loading and error states.
 
-Aggregate once at the stated grain, in SQL for a dataset (`_sql` GROUP BY, [datasets](datasets.md#totals-group-by-and-joins-_sql)). Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. `.3~s` compacts large numbers; offer exact values too.
+Aggregate once at the stated grain, in SQL for a dataset (`sql` GROUP BY, [datasets](datasets.md#read)). Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. `.3~s` compacts large numbers; offer exact values too.
 
 Choose explicit timestamp offsets and reporting timezone before grouping. Vega-Lite time units default to local time; UTC units use the `utc` prefix. UTC scales govern positioning, not arbitrary timezone conversion. Precompute reporting-zone buckets when needed; preserve date-only calendar semantics.
 
@@ -66,11 +66,11 @@ Tooltips list fields by `title`: name each for readers, never raw columns (`{"fi
 
 ## Data and lifetime
 
-Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read rows as [datasets](datasets.md#read) says, under the link's `data-af-name`. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `watchQuery` can render linked dataset data directly and refreshes it on invalidation; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
+Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Read rows as [datasets](datasets.md#read) says, from the table named by the link's `data-af-name`. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `@afbin/state`. `sql.watch` renders linked dataset data directly and reruns on change; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
 
-Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, unsubscribe client listeners and remove listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
+Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, stop state and sql listeners and remove listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
 
-Offline needs local libraries/assets and permitted data. Download does not automatically snapshot GraphQL or pack arbitrary dependencies. Show unavailable states honestly; test downloads offline.
+Offline needs local libraries/assets and permitted data. Download does not snapshot dataset rows or pack arbitrary dependencies. Show unavailable states honestly; test downloads offline.
 
 ## Examples
 

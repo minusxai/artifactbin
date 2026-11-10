@@ -1,13 +1,18 @@
 ---
 name: permissions
-description: "Read before deciding who may see, add or change a dataset's rows: Hasura-format permissions, the fixed roles, templates and the policy.mjs dry run, read-back and set flow."
+description: "Read before deciding who may see, add or change a dataset's rows: Hasura-format permissions, the fixed roles, templates, what the page may show each reader, and the policy.mjs dry run, read-back and set flow."
 ---
 ## Read first
 
 Every dataset has one permission document in Hasura's metadata format (version 3). It decides who
-can see, add, change and delete rows, through every door: page GraphQL and `_sql`, a resolver's
-`caps.query` and `caps.sql`, direct `graphql.mjs DATASET_ID`, downloads and SQL. Read it, change it and save it
-only with `node scripts/policy.mjs` (`--help`). Only the dataset's owner and editors can.
+can see, add, change and delete rows, through every door: the page's `sql` reads and writes,
+everything a [function](functions.md) does for a reader (`caps.sql`), `sql.mjs`, downloads and
+exports. Read it, change it and save it only with `node scripts/policy.mjs` (`--help`). Only the
+dataset's owner and editors can.
+
+## Contents
+
+[Roles](#roles) · [Document](#the-document) · [Templates](#templates) · [What this viewer may change](#what-this-viewer-may-change) · [Change](#change-permissions-dry-run-read-back-set)
 
 ## Roles
 
@@ -23,8 +28,8 @@ Each request has exactly one role, decided by the dataset's own sharing, never b
 Someone reading a page that links the dataset, with no share of their own on the dataset, is
 `signed_in` if signed in, otherwise `anonymous`: linking grants nothing by default. Rules match one
 role exactly, so a rule for `signed_in` does not cover `viewer`: list every role it is for. (A
-resolver's `@auth(role: …)` is different: it means "at least", anonymous < signed_in < viewer <
-editor < owner; see [resolvers](resolvers.md).)
+function's `roles` entry is different: it means "at least" on the page, anonymous < signed_in <
+viewer < editor < owner; see [functions](functions.md#roles).)
 
 ## The document
 
@@ -41,15 +46,16 @@ editor < owner; see [resolvers](resolvers.md).)
  "delete_permissions":[{"role":"signed_in","permission":{"filter":{"created_by":{"_eq":"X-Hasura-User-Id"}}}}]}]}
 ```
 
-A CSV or JSON dataset is one table, `public.rows`. Rules name source columns (as in the file);
-`policy.mjs get` shows each column's GraphQL field. `select`: `columns` (`"*"` or a list), `filter`,
-`limit` (at most 1000), `allow_aggregations` (may run SQL, e.g. `_sql` totals; without it rows only).
+A CSV or JSON dataset is one table, `public.rows`. Rules name source columns (as in the file).
+`select`: `columns` (`"*"` or a list), `filter`, `limit` (at most 1000), `allow_aggregations`
+(lets a function's `caps.sql` and direct dataset SQL read the table; the page's `sql` needs only
+the select rule).
 `insert`: `columns`, `check`, `set`. `update`: `columns`, `filter`, `check`, `set`. `delete`: `filter`. Filters use the query `where` grammar.
 Hidden columns cannot be read, filtered, sorted or aggregated. A table's `collaborative_columns` (text
 columns) are typed in live together with `@afbin/collab`
 ([datasets](datasets.md#type-together-afbincollab)). `backend_only:true` limits an entry
-to the owner's trusted page programs, not page GraphQL or resolvers. `configuration` (the GraphQL
-names) is server-owned: omit it or send it unchanged.
+to the owner's trusted page programs, not the page's `sql` or functions. `configuration` is
+server-owned: omit it or send it unchanged.
 
 Session values, filled by the server: `X-Hasura-User-Id` (the account), `X-Hasura-Page-Id` (the page
 the request came through) and `X-Hasura-Role`. A rule needing a value the request lacks denies:
@@ -63,7 +69,7 @@ anonymous has no user ID; direct calls have no page ID. Use them in `filter`, `c
   the owner and editors change rows.
 - `own-rows --owner-column created_by`: everyone reads; viewer and signed_in add rows (the column is
   set to them) and change or delete only rows they added; anonymous never writes. The page shows
-  edit controls where `_can` says so ([below](#what-this-viewer-may-change)). The CSV needs the owner
+  edit controls on their rows ([below](#what-this-viewer-may-change)). The CSV needs the owner
   column; rows the owner adds are not stamped. `node scripts/new-app.mjs --kind list` sets up a
   page built on it (`examples/tracker.html`).
 - `editors-only`: only the owner and editors read or write; everyone else gets not found.
@@ -73,12 +79,13 @@ For something else (everyone signed in edits every row, hidden columns), edit th
 
 ## What this viewer may change
 
-Ask, never re-derive a rule in page script: `{tasks_can{insert} tasks{_id _can{update delete}}}`.
-`tasks_can.insert`: the viewer's role has an insert rule. A row's `_can.update`/`_can.delete`: the
-role has that rule and its `filter` holds for this row (`check` is not tried). Owner and editors:
-true; no rule, `backend_only` or a filter on a column the role cannot read: false. `_can` works on
-lists, `_by_pk`, `nodes` and `returning`. Draw add, edit and delete controls from it; writes are
-still judged. `{viewer{canEdit}}` says whether they may edit the page itself.
+The rules judge every write; the page only chooses which controls to show. Learn who reads from
+a function that returns its `principal` (`me` in `examples/tracker.ts`: signed in, account ID,
+role on the page), then follow the rules' shape: owner and editors change everything; with
+`own-rows`, a signed-in reader adds and changes rows whose owner column is their ID. `role` is
+the page role, not the dataset's: a write the rules refuse still fails. A write changes only
+rows the reader may: `affected: 0` means not allowed (or changed meanwhile), and the page must
+say so. A guest gets no write controls.
 
 ## Change permissions: dry run, read-back, set
 
@@ -97,7 +104,7 @@ Read the warnings too: anonymous can write; a rule uses `X-Hasura-Page-Id` (dire
 denied); an update without `check` lets rows leave the filter; a private dataset never applies
 signed_in or anonymous rules. Never grant anonymous writes unless the user asks for them.
 
-A role with no rule for an operation has no such field in its schema (`graphql.mjs schema` shows
-what each role gets), so the request fails validation. A row that fails `check` is refused with
-`extensions.code` `check_violation`; a rule needing a signed-in session, or a read-only dataset,
-gives `permission_denied`. Fix the rule or the request, not the error handling.
+A role with no rule for an operation, a rule needing a signed-in session, or a read-only
+dataset refuses the write with `permission_denied` (`sql.mjs schema` shows the columns a role
+reads). A row that fails `check` is refused with `check_violation`; a row outside the update or
+delete `filter` is skipped (`affected: 0`). Fix the rule or the request, not the error handling.

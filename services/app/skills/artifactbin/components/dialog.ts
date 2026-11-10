@@ -8,7 +8,7 @@
  * Examples:
  *   <af-dialog><af-dialog-trigger><button>Open</button></af-dialog-trigger>
  *     <af-dialog-content>Hello</af-dialog-content></af-dialog>
- * Gotchas: reflect your Apollo value back for controlled use. Content moves into a native
+ * Gotchas: reflect your state value back for controlled use. Content moves into a native
  *   <dialog> (showModal) while mounted; focus returns to the opener on close.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';

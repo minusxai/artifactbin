@@ -3,8 +3,8 @@
  * THE PAGE OWNER'S RESOLVERS PANEL. Each resolver on the head revision, each secret it declares with the one host
  * that may receive it and whether a value is set. Values are write-only: typed into a password input, sent once,
  * cleared, and never read back (the server returns names only). When the resolver declares `test`, Test connection
- * runs `{ <name> { test } }` as the owner against the listed revision and shows the string, or the refusal code with
- * the owner-only detail.
+ * runs it as the owner against the listed revision and shows the string, or the refusal code with the owner-only
+ * detail: a function file's `test` function as `GET /fn/test`, a legacy file's field as `{ <name> { test } }`.
  *
  * A name bound to a database kind (RESOLVER_DATABASE_KINDS: `postgres`, `mysql`) is a database connection of that
  * kind: host, port (the kind's default to start), database, user and password, saved together (write-only, like a
@@ -31,7 +31,7 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
 interface FunctionSchedule { name: string; every: string; nextRunAt: string; running: boolean; failures: number; lastRunAt: string | null; lastStatus: 'ok' | 'failed' | null; lastError: string | null; lastMessage: string | null; lastDetail: string | null }
-interface PageResolver { name: string; backendId: string; version: string; test: boolean; secrets: Record<string, string>; set: string[]; schedules?: FunctionSchedule[] }
+interface PageResolver { name: string; backendId: string; version: string; test: boolean; functions?: boolean; secrets: Record<string, string>; set: string[]; schedules?: FunctionSchedule[] }
 interface PageResolvers { revision: string; resolvers: PageResolver[] }
 type TestOutcome = { ok: true; text: string } | { ok: false; text: string };
 
@@ -50,6 +50,9 @@ async function readOutboundIps(): Promise<string[]> {
   } catch { return []; }
 }
 const refusal = (body: unknown, status: number): string => {
+  const failed = body as { error?: string; message?: string; detail?: string } | null;
+  if (typeof failed?.error === 'string' && typeof failed.message === 'string')
+    return [failed.error, failed.message, failed.detail].filter(Boolean).join(': ');
   const error = (body as { errors?: { message?: string; extensions?: { code?: string; detail?: string } }[] } | null)?.errors?.[0];
   if (error) return [error.extensions?.code ?? error.message ?? 'test_failed', error.extensions?.detail].filter(Boolean).join(': ');
   return (body as { error?: string } | null)?.error ?? `test_failed (${status})`;
@@ -188,6 +191,12 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
   const test = async () => {
     setTesting(true); setOutcome(null);
     try {
+      if (props.resolver.functions) {
+        const response = await fetch(`/api/artifacts/${encodeURIComponent(props.id)}/fn/test`, { headers: { 'x-page-revision': props.revision } });
+        const body = await response.json().catch(() => null) as unknown;
+        setOutcome(response.ok && typeof body === 'string' ? { ok: true, text: body } : { ok: false, text: refusal(body, response.status) });
+        return;
+      }
       const response = await fetch(`/api/artifacts/${encodeURIComponent(props.id)}/graphql`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ query: `query ResolverTest { ${props.resolver.name} { test } }`, revision: props.revision }) });
       const body = await response.json().catch(() => null) as { data?: Record<string, { test?: unknown } | null>; errors?: unknown[] } | null;
       const text = body?.data?.[props.resolver.name]?.test;

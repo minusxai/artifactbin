@@ -82,6 +82,40 @@ it('validates selected GraphQL against SDL and never replays an unknown mutation
   await writeFile(document,'mutation { unknownField }');await expect(graphqlCommand({sub:'mutate',values:{document},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'graphql_validation'});expect(writes).toBe(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('answers every sql.mjs statement in the documented shape, through a page or a dataset, paging a dataset read up to --limit',async()=>{
+ const {sqlCommand}=await import('../../../skills/artifactbin/scripts/sql.mjs');
+ const sent:Array<{path:string;body?:any;key?:string|null}>=[];
+ const rows=Array.from({length:250},(_,i)=>({n:i}));
+ const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+  const path=new URL(String(url)).pathname,body=init?.body?JSON.parse(String(init.body)):undefined;
+  sent.push({path,body,key:new Headers(init?.headers).get('idempotency-key')});
+  if(path==='/api/artifacts/PAGE12')return Response.json({id:'PAGE12',format:'html',version:3});
+  if(path==='/api/artifacts/DATA12')return Response.json({id:'DATA12',format:'dataset',version:9});
+  if(path==='/api/artifacts/PAGE12/sql')return Response.json(/^insert/.test(body.sql)?{affected:1,returning:[{_id:'r1',n:1}]}:{columns:[{name:'n',type:'number'}],rows});
+  if(path==='/api/artifacts/DATA12/mutate')return Response.json({id:'DATA12',version:10,affected:2,rowCount:252});
+  if(path==='/api/artifacts/DATA12/query'){
+   // The dataset query door: at most 100 rows a page, the next page by cursor.
+   const offset=body.cursor?Number(body.cursor):0,page=rows.slice(offset,offset+body.limit);
+   return Response.json({results:[{id:'DATA12',name:'public.rows',columns:[{name:'n',type:'number'}],rows:page,totalRows:rows.length,next_cursor:offset+body.limit<rows.length?String(offset+body.limit):null}]});}
+  return Response.json({error:'not_found'},{status:404});}};
+ const run=(target:string,statement:string,values:Record<string,unknown>={}):Promise<any>=>sqlCommand({sub:'query',values,positionals:[target,statement]},options);
+ // A page read: {columns, rows}, the head revision bound, --limit cutting it with truncated.
+ expect(await run('PAGE12','select n from t',{limit:'2'})).toEqual({columns:[{name:'n',type:'number'}],rows:[{n:0},{n:1}],truncated:true});
+ expect(sent.find(s=>s.path.endsWith('/sql'))!.body).toEqual({sql:'select n from t',params:{},revision:'3'});
+ // A page write: {affected, returning} and the key that replays it.
+ const wrote=await run('PAGE12','insert into t (n) values ($n)',{});
+ expect(wrote).toMatchObject({affected:1,returning:[{_id:'r1',n:1}],idempotencyKey:expect.stringMatching(/^[a-f0-9]{32}$/)});
+ expect(sent.at(-1)!.key).toBe(wrote.idempotencyKey);
+ // A dataset read follows next_cursor (default 1000 rows) and answers {columns, rows}, never the door's {results}.
+ sent.length=0;
+ expect(await run('DATA12','select n from rows')).toEqual({columns:[{name:'n',type:'number'}],rows});
+ expect(sent.filter(s=>s.path.endsWith('/query')).map(s=>[s.body.limit,s.body.cursor??null])).toEqual([[100,null],[100,'100'],[100,'200']]);
+ const capped=await run('DATA12','select n from rows',{limit:'150'});
+ expect(capped.rows).toHaveLength(150);expect(capped.truncated).toBe(true);
+ // A dataset write: {affected, returning} (returning is empty: the door answers counts only).
+ expect(await run('DATA12','delete from rows where n < 2')).toEqual({affected:2,returning:[],version:10});
+ await expect(run('DATA12','select 1',{limit:'10001'})).rejects.toMatchObject({code:'invalid_limit',exit:2});
+});
 it('uses private origin-bound login challenges and saves grants without exposing secrets',async()=>{
  const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
@@ -383,12 +417,14 @@ it('quotes every user-facing command in Core flows with flags and verbs its scri
  const {readFileSync}=await import('node:fs');
  for(const name of Object.keys(COMMANDS)){
   if(calls.some(call=>call[1]===name))continue;
+  // graphql.mjs is for older pages only: nothing routes a new page to it.
+  if(name==='graphql')continue;
   expect(COMMANDS[name].starter,name).toBeTruthy();
   const usage=/\/\/ Usage:[\s\S]*?\/\/ Built with:/.exec(readFileSync(new URL(`../../../skills/artifactbin/${COMMANDS[name].starter}`,import.meta.url),'utf8'))?.[0]??'';
   expect(usage,name).toContain(`node scripts/${name}.mjs --title`);
  }
  for(const [,name,rest] of calls){
-  expect(COMMANDS[name!],name).toBeDefined();
+  expect(COMMANDS[name!],name).toBeDefined();expect(name,'Core flows route data to sql.mjs').not.toBe('graphql');
   const description=descriptionOf(name!);
   // Flags used in the flows are documented by the script itself; so is a leading verb (list, reply, watch ...).
   for(const flag of rest!.match(/--[a-z-]+/g)??[])expect(description,`${name} ${flag}`).toContain(flag);
@@ -543,7 +579,7 @@ it('reads Built with from the page starter comment, and only datasets with a sto
  const {builtWith,datasetLinks,replyFacts}=await import('../../../skills/artifactbin/scripts/toolbox-check-reply.mjs');
  const {readFile}=await import('node:fs/promises');
  const app=await readFile(new URL('../../../skills/artifactbin/examples/tracker.html',import.meta.url),'utf8');
- expect(builtWith(app)).toMatch(/^one HTML page; .* through its generated API\.$/);expect(builtWith(app)).not.toContain('//');
+ expect(builtWith(app)).toMatch(/^one HTML page; .* read and written with sql; tracker\.ts functions\.$/);expect(builtWith(app)).not.toContain('//');
  expect(builtWith('<!-- Example: x.\nBuilt with: one HTML page and\n  a CSV dataset. -->\n<p>x</p>')).toBe('one HTML page and a CSV dataset.');
  expect(builtWith('<p>no starter</p>')).toBeNull();
  const html='<link rel="af-dataset" data-af-name="targets" href="ref:DATA12"><link href="ref:DATA34" rel="af-dataset" data-af-name="rows"><link rel="stylesheet" href="ref:CSS123">';
@@ -623,13 +659,15 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
  const unset={field:'weather.forecast',message:failed,code:'backend_failed',detail:'secret_unavailable: WEATHER_KEY',pageErrorsBefore:0,consoleErrorsBefore:0};
  const notOnPage={field:'pipeline.addNote',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',pageErrorsBefore:0,consoleErrorsBefore:1};
  // What the page logged after the refusal came from it.
- const blocked={...base,consoleErrors:[failed+' {"code":"backend_failed"}'],error:'Timeout 6000ms exceeded (step call #2 page.getByText("Sunny"))',failedStep:'Forecast shows',graphqlErrors:[unset]};
+ const blocked={...base,consoleErrors:[failed+' {"code":"backend_failed"}'],error:'Timeout 6000ms exceeded (step call #2 page.getByText("Sunny"))',failedStep:'Forecast shows',callErrors:[unset]};
  const quiet={...base,steps:{ran:true,passed:true}};
  let results:Record<string,any>={},set:string[]=[];const asked:string[]=[],replays:any[]=[];
  const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));asked.push(url.pathname);
   if(url.pathname==='/a/PAGE12/raw')return new Response('<main>Pipeline</main>');
   if(url.pathname==='/api/my/artifacts/PAGE12/resolvers')return Response.json({revision:'3',resolvers:[{name:'weather',backendId:'BACK12',version:'v1',test:false,secrets:{WEATHER_KEY:'api.weather.test'},set}]});
   if(url.pathname==='/api/artifacts/PAGE12/graphql'){replays.push(JSON.parse(String(init.body)));return Response.json({data:null,errors:[{message:failed,path:['weather','alerts'],extensions:{code:'backend_failed',detail:'HTTP 401: Upstream refused'}}]});}
+  if(url.pathname==='/api/artifacts/PAGE12/fn/forecast'){replays.push({fn:url.pathname+url.search,method:init?.method??'GET'});return Response.json({error:'backend_failed',message:'The function failed',detail:'HTTP 401: Upstream refused'},{status:500});}
+  if(url.pathname==='/api/artifacts/PAGE12/sql'){replays.push(JSON.parse(String(init.body)));return Response.json({columns:[],rows:[]});}
   const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
   const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!,found=results[(body.viewer??'self')+w]??quiet;
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{...found,viewport:{width:Number(w),height:Number(h)}}});};
@@ -642,7 +680,7 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   const passed=await check({});
   expect(passed.smokePassed).toBe(true);expect(passed.needsSecrets).toEqual([{step:'Forecast shows',fields:['weather.forecast'],secrets:['WEATHER_KEY']}]);
   expect(passed.checks[0]).toMatchObject({consoleErrors:[],needsSecret:{step:'Forecast shows',secrets:['WEATHER_KEY']}});
-  expect(passed.checks[0].error).toBeUndefined();expect(passed.graphqlFailures).toBeUndefined();
+  expect(passed.checks[0].error).toBeUndefined();expect(passed.callFailures).toBeUndefined();
   const proved=checkDigest({ok:true,code:'completed',...passed});
   expect(proved).not.toContain(`  Not tested: "Forecast shows"`);
   expect(proved).toContain(`\nNot tested: "Forecast shows" ${why}; visual appearance\n`);
@@ -656,8 +694,8 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   expect(named).not.toContain('Not tested');expect(named).not.toContain('For your reply:');
   // Another failed field in the same viewport keeps it failing, and so does an error logged before
   // the refusal; the step is still Not tested there.
-  set=[];results={self1280:{...blocked,consoleErrors:['favicon missing',failed],graphqlErrors:[{...unset,consoleErrorsBefore:1}]},
-   self390:{...blocked,consoleErrors:['favicon missing',failed],graphqlErrors:[unset,notOnPage]}};
+  set=[];results={self1280:{...blocked,consoleErrors:['favicon missing',failed],callErrors:[{...unset,consoleErrorsBefore:1}]},
+   self390:{...blocked,consoleErrors:['favicon missing',failed],callErrors:[unset,notOnPage]}};
   const mixed=await check({}).catch((e:any)=>e);
   expect(mixed.details.smokePassed).toBe(false);
   const both=checkDigest(toolFailure('check',mixed));
@@ -666,22 +704,34 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   expect(both).toMatch(/1280x800: consoleErrors 1: favicon missing; .*steps stopped at "Forecast shows"/);
   expect(both).toMatch(/390x844: consoleErrors 2: favicon missing; .*task error: Timeout/);
   // A field that failed for the owner fails the check even when every step passed.
-  results={self1280:{...quiet,graphqlErrors:[notOnPage]},self390:quiet};
+  results={self1280:{...quiet,callErrors:[notOnPage]},self390:quiet};
   const unnoticed=await check({}).catch((e:any)=>e);
   expect(unnoticed).toMatchObject({code:'check_failed',details:{smokePassed:false}});
   expect(checkDigest(toolFailure('check',unnoticed))).not.toContain('For your reply:');
   // A guest gets no detail: a read is asked again as the owner, a write never is.
-  results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',graphqlErrors:[
-   {field:'weather.alerts',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{query:'query{weather{alerts}}',revision:'3'}},
-   {field:'pipeline.addNote',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0}]}};
+  const fnFailed={message:'The function failed',code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0};
+  results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',callErrors:[
+   {field:'weather.alerts',kind:'graphql',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{query:'query{weather{alerts}}',revision:'3'}},
+   {field:'pipeline.addNote',kind:'graphql',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0},
+   {field:'fn/forecast',kind:'fn',...fnFailed,replay:{search:'?city=Oslo'}},{field:'fn/addNote',kind:'fn',...fnFailed},
+   {field:'sql',kind:'sql',message:'not allowed',code:'permission_denied',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{sql:'select count(*) as n from notes',params:{},revision:'3'}}]}};
   const asGuest=await check({'guest-steps':guest}).catch((e:any)=>e);
-  expect(replays).toEqual([{query:'query{weather{alerts}}',revision:'3'}]);
+  // Reads are asked again as the owner (a GraphQL query, a GET function, a SELECT); writes never are.
+  expect(replays).toEqual([{query:'query{weather{alerts}}',revision:'3'},{fn:'/api/artifacts/PAGE12/fn/forecast?city=Oslo',method:'GET'},{sql:'select count(*) as n from notes',params:{},revision:'3'}]);
   const told=checkDigest(toolFailure('check',asGuest));
   expect(told).toContain('  resolver weather.alerts failed for the guest (backend_failed); as owner the detail is: HTTP 401: Upstream refused');
-  expect(told).toContain('  resolver pipeline.addNote failed for the guest (backend_failed); not a read-only query, so it was not run again as owner');
-  expect(told).not.toContain('query{');expect(told).not.toContain('Bearer');
-  // No failed GraphQL call: no resolver read at all.
-  expect(asked.filter(p=>p.endsWith('/resolvers'))).toHaveLength(3);
+  expect(told).toContain('  resolver pipeline.addNote failed for the guest (backend_failed); not a read, so it was not run again as owner');
+  expect(told).toContain('  function forecast failed for the guest (backend_failed); as owner the detail is: HTTP 401: Upstream refused');
+  expect(told).toContain('  function addNote failed for the guest (backend_failed); not a read, so it was not run again as owner');
+  expect(told).toContain('  sql failed for the guest (permission_denied); as owner it succeeds');
+  expect(told).not.toContain('query{');expect(told).not.toContain('select count');expect(told).not.toContain('Bearer');
+  // An unset secret a function needed is Not tested under the function's name.
+  results={self1280:{...blocked,callErrors:[{...unset,field:'fn/forecast',kind:'fn'}]},self390:quiet};
+  const fnUnset=await check({});
+  expect(fnUnset.needsSecrets).toEqual([{step:'Forecast shows',fields:['fn/forecast'],secrets:['WEATHER_KEY']}]);
+  expect(checkDigest({ok:true,code:'completed',...fnUnset,checks:fnUnset.checks.map((c:any)=>({...c,error:undefined}))})).toContain('WEATHER_KEY');
+  // No failed call with a secret's detail: no resolver read at all.
+  expect(asked.filter(p=>p.endsWith('/resolvers'))).toHaveLength(4);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('repeats a status read through a transient network failure but never resubmits a lost script',async()=>{

@@ -132,13 +132,26 @@ const RETIRED: Retired[] = [
   {pattern: /Original Chart defaults|old compact default|Previously downloaded|Mermaid\.js `initialize`|KEPT FOR EXISTING/,
     scopes: AGENT_TEXT, reason: 'P4: no legacy or migration notes in agent text (no backward-compat prose)'},
   {pattern: /no connected databases|no raw TCP|out of reach/, scopes: AGENT_TEXT,
-    reason: 'P5: resolvers reach Postgres and MySQL with caps.db (references/resolvers.md)'},
+    reason: 'P5: backend functions reach Postgres and MySQL with caps.db (references/functions.md)'},
   {pattern: /head -30 scripts|read the top of it|New page, steps|served; skip|don't read the CSS|This file is for reading/,
     scopes: [...AGENT_TEXT, 'designSystems'], reason: 'P6: scripts are learned with --help; design-system CSS needs no reading'},
   {pattern: /Household budget|qa-1\.json|older starter title|\^(?:Pitch deck|Shared dashboard)\$/, scopes: AGENT_TEXT,
     reason: 'P1: starters carry neutral placeholders and no one-prompt constants'},
   {pattern: /\((?:rulings? )?[HMSL]\d{1,2}(?:, [HMSL]\d{1,2})*\)/, scopes: AGENT_TEXT,
     reason: 'P6: internal ruling tags stay out of agent-readable text'},
+  // The 2026-11-10 SQL model (Q): new pages read and write datasets with sql, call their own API with
+  // fetch('/fn/NAME') and keep viewer state in @afbin/state. GraphQL is named once: SKILL.md's note on older pages.
+  {pattern: /client\s*\.\s*(?:query|mutate|watchQuery|updateQuery|addResolvers)\b/, scopes: AGENT_TEXT,
+    reason: 'Q1: datasets are read and written with sql, viewer state with @afbin/state, never the Apollo client'},
+  {pattern: /\bgql\s*[`(\[]|`gql`/, scopes: AGENT_TEXT, allow: 'Editing an older page that uses `gql`',
+    reason: 'Q1: gql is named only in the one note on older pages (SKILL.md)'},
+  {pattern: /\btypeDefs\b/, scopes: AGENT_TEXT,
+    reason: 'Q2: a backend file exports functions, roles, secrets and schedule; never GraphQL SDL'},
+  {pattern: /@auth\b/, scopes: AGENT_TEXT, reason: 'Q2: export const roles = {name: role} says who may call a function'},
+  {pattern: /(?<![\w.$])_sql\b/, scopes: [...AGENT_TEXT, 'registry'],
+    reason: 'Q1: a page computes with the sql tag (sql`…`), not the _sql GraphQL field'},
+  {pattern: /\bGraphQL\b|\bApollo (?:state|client|value)/i, scopes: DOCS,
+    reason: 'Q1: no GraphQL teaching for new pages (graphql.mjs --help covers older pages)'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -169,6 +182,8 @@ describe('retired skill phrasing', () => {
       'P3:': 'Republish only to fix a failed requirement', 'P4:': 'Original Chart defaults: transparent',
       'P5:': 'there are no connected databases', 'P6: scripts': 'read `head -30 scripts/NAME.mjs`',
       'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
+      'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
+      'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;

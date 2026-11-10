@@ -1,11 +1,13 @@
 /**
- * Example resolver: a BigQuery SQL query, run with a Google service account (jobs.query REST API).
+ * Example backend functions: a BigQuery SQL query, run with a Google service account (jobs.query
+ *   REST API).
  * Secrets: GOOGLE_SA = the service account's JSON key (roles BigQuery Job User and Data Viewer),
  *   set by the page owner in the page's Resolvers panel.
  * Usage: cp resolvers/resolver-bigquery.ts revenue.ts; link it with
- *   <link rel="af-resolver" data-af-name="revenue" href="./revenue.ts">; publish, then send the
- *   owner to the Resolvers panel to set GOOGLE_SA and press Test connection.
- * Next: set PROJECT and SQL; rename Point's fields to the query's columns.
+ *   <link rel="af-resolver" data-af-name="revenue" href="./revenue.ts">; the page calls
+ *   fetch('/fn/revenue?region=West'); publish, then send the owner to the Resolvers panel to set
+ *   GOOGLE_SA and press Test connection (it runs test).
+ * Next: set PROJECT and SQL; rename the fields revenue() maps to the query's columns.
  * Gotchas: pass reader input as query parameters (never by string concatenation). A slow query
  *   returns jobComplete:false: aggregate in SQL so it finishes within 10 s.
  */
@@ -13,13 +15,7 @@ const PROJECT = 'my-project';
 const SQL = `SELECT FORMAT_DATE('%Y-%m', day) AS month, SUM(revenue) AS revenue
   FROM \`my-project.sales.daily\` WHERE region = @region GROUP BY month ORDER BY month`;
 export const secrets = { GOOGLE_SA: 'bigquery.googleapis.com' };
-export const typeDefs = `
-  type Point { month: String! revenue: Float }
-  type Query {
-    revenue(region: String!): [Point!]!
-    test: String! @auth(role: owner)
-  }
-`;
+export const roles = { test: 'owner' };
 type Auth = { type: 'google'; secret: string; scopes: string[] };
 type Res = { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> };
 type Init = { method?: string; headers?: Record<string, string>; body?: string; auth?: Auth };
@@ -52,7 +48,7 @@ export default {
       .map(r => ({ month: String(r.month),
         revenue: r.revenue === null ? null : Number(r.revenue) }));
   },
-  async test(_args: unknown, _principal: unknown, caps: Caps) {
+  async test(_input: unknown, _principal: unknown, caps: Caps) {
     await query(caps, 'SELECT 1');
     return 'BigQuery project ' + PROJECT + ' answered';
   },

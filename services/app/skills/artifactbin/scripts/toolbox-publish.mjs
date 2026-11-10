@@ -48,7 +48,7 @@ if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='d
    '--template (with --owner-column for own-rows) sets the permissions of a new dataset.',2,
    'For an existing dataset use policy.mjs template and set.');
 if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_dataset',
-   '--name sets a new dataset\'s GraphQL root name.',2);
+   '--name sets a new dataset\'s name.',2);
  let baseline=null,source=bytes.toString('utf8'),replaced=null,marker=null;
  const target=values.artifact?resolveTarget(values.artifact,server).id:null,name=path.basename(
   file);
@@ -60,7 +60,7 @@ if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_
  if(values.create&&marker)throw new ToolError('already_published',`${name} is already page `+
   `${marker.id}.`,2,`To update page ${marker.id}: node scripts/publish.mjs ${name}. For a second `+
   'page from it, delete its last line (the af-authoring marker) first.');
- // An update keeps its owner, permissions and GraphQL name: refused before anything is read.
+ // An update keeps its owner, permissions and name: refused before anything is read.
  const updating=!values.create&&Boolean(target||marker);
  for(const flag of ['group','personal'])if(updating&&values[flag]!==undefined)throw new ToolError(
   flag+'_not_for_update',`--${flag} places a new page; it never moves an existing one.`,2,
@@ -69,7 +69,7 @@ if(updating&&values.template)throw new ToolError('template_not_for_update',
    '--template applies only when a dataset is created.',2,
    'Use policy.mjs template ID and policy.mjs set ID for an existing dataset.');
 if(updating&&values.name!==undefined)throw new ToolError('name_not_for_update',
-   '--name applies only when a dataset is created; its GraphQL name never changes.',2,
+   '--name applies only when a dataset is created; its name never changes.',2,
    'Drop --name, or publish a new dataset with --create.');
  if(target&&marker?.id!==target&&!values.create){baseline=await headBaseline(client,target,type);
   replaced=`${name} replaced page ${target} (its version ${baseline.version} was the baseline).`;}

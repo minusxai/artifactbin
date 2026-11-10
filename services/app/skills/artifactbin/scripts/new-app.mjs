@@ -1,17 +1,17 @@
 /** Command: a shared tracker (examples/tracker.html, trimmed) or API dashboard, in one call. */
 export const DESCRIPTION = `Set up a shared-app starter in one call: files, dataset, rules and id.
 --kind tracker (default) writes examples/tracker.html as index.html with only the chosen
-  features, plus steps.mjs, guest.mjs and cleanup.mjs (its checks) and, with limits, tracker.ts;
+  features, plus steps.mjs, guest.mjs and cleanup.mjs (its checks) and tracker.ts (its functions);
   publishes an empty entries dataset (name, grp, note, created_by; description with collab)
   with the rules the features need. --kind list is the tracker's list preset.
 --kind api: copies examples/api-dashboard.html as index.html with its steps files and
-  api-dashboard.ts as api.ts, a resolver reading --url with the API_KEY secret; publishes an
+  api-dashboard.ts as api.ts, backend functions reading --url with the API_KEY secret; publishes an
   empty notes dataset (item, note, created_by) with own-rows rules.
 All fill the ref: id and title into index.html.
 Tracker features: own-rows (signed-in people add entries and change or remove only their own);
   team (needs own-rows: people the page is shared with change every entry); collab (an entry's
   description is typed in together); table (a sortable table view); limits (needs own-rows: at
-  most --limit entries per group, enforced on the server by tracker.ts).
+  most --limit entries per group, enforced on the server by tracker.ts in one statement).
 Usage: node scripts/new-app.mjs --title NAME [--kind tracker|list|api] [--preset tasks|list]
   [--without FEATURE,…] [--limit N] [--url URL] [--dir DIR]
 Flags: --title NAME the app's name, for <title> (a bare title argument works too);
@@ -32,9 +32,9 @@ Gotchas: an unknown feature, or one whose requirement you drop, is refused (exit
   A rerun is safe: an existing file is kept (and listed as kept), never overwritten, and the
   dataset the kept index.html links (its ref:) is reused, so nothing is created twice. The steps,
   guest and cleanup files, tracker.ts and api.ts need no reading or editing. Who may do what
-  lives in the dataset's rules (node scripts/policy.mjs explain ID); the page only follows the
-  server's _can. The API's key never goes on the command line or into a file: only the page
-  owner sets it, in the page's Resolvers settings.
+  lives in the dataset's rules (node scripts/policy.mjs explain ID); the page only shows the
+  controls they allow and reports a write they refuse. The API's key never goes on the command
+  line or into a file: only the page owner sets it, in the page's Resolvers settings.
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
   rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
   Results never contain credentials.`;

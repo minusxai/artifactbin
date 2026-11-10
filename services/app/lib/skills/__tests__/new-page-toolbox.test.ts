@@ -52,7 +52,7 @@ it('sets up a CSV page in one call: the dataset, the starter and a DATA block ov
   expect(data).toContain("{id:'revenue', title:'[Revenue by month]', mark:'bar', query:'by_month', x:'month', y:'revenue'}");
   // What it drew and how to change it, in this CSV's own names: an agent that misread the starter
   // ("a chart per region, not what we want") wrote its own page instead (2026-11-07).
-  expect(result.draws).toBe("DATA's _sql queries compute a total per number column (revenue, orders) and revenue summed per month and orders summed per month; it draws a lead, those totals and a bar chart of each, with a table of its values (3 rows).");
+  expect(result.draws).toBe("DATA's SQL queries compute a total per number column (revenue, orders) and revenue summed per month and orders summed per month; it draws a lead, those totals and a bar chart of each, with a table of its values (3 rows).");
   expect(result.next).toMatch(/^Next: in index\.html edit only DATA \(its \[bracketed\] text/);
   for(const variation of ["one line: mark:'line'","a line or bar per region: select and group by region in the query, then series:'region'","only some rows: where region = 'North' in the query","one value per month as given: a query without sum or group by",'no value table: table:false','no stats or sections: stats:[], sections:[]',"a number for one month in a text: a query with sum(revenue) where month = '2026-01', read as h.one(name).revenue",'another dataset: link it and join it in SQL',
    // The deeper ones, as the starter draws them, in this CSV's names: no map without coordinates.

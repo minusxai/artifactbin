@@ -48,7 +48,9 @@ describe('cli-capabilities', () => {
    const response=await GET(request('/api/capabilities'));expect(response.status).toBe(200);
    const body=await response.json();expect(body.version).toBe(1);
    expect(body.page).toEqual({format:'html',create:{method:'POST',path:'/api/artifacts'},update:{method:'PUT',path:'/api/artifacts/{id}',required:['html','expectedVersion','expectedState']}});
-   expect(body.graphql).toEqual({method:'POST',path:'/api/artifacts/{id}/graphql',schema:{method:'GET',path:'/api/artifacts/{id}/graphql'}});
+   expect(body.sql).toEqual({method:'POST',path:'/api/artifacts/{id}/sql',body:['sql','params','revision']});
+   expect(body.fn).toEqual({methods:['GET','POST'],path:'/api/artifacts/{id}/fn/{name}',pageFetch:'/fn/{name}'});
+   expect(body.graphql).toBeUndefined();
    expect(body.dataset).toEqual({createField:'dataset',linkRel:'af-dataset',namespaceAttribute:'data-af-name',modes:['live','pinned']});
    expect(body.skill).toEqual({name:'artifactbin',archive:'/skills/artifactbin.zip',guide:'/llms.txt'});
    expect(body.reference).toBe('ref:<id>');expect(body).not.toHaveProperty('allowlists');expect(body).not.toHaveProperty('protocol');

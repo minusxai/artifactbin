@@ -3,7 +3,7 @@
 What a repeated read of one stored dataset table costs. The benchmark is
 [`scripts/dataset-read-latency.ts`](../scripts/dataset-read-latency.ts), beside
 [`resolver-latency.ts`](resolver-latency.md). It is never run by CI and nothing asserts a budget. It drives the
-real code unchanged: `executeCatalog` (every dataset door and the generated GraphQL call it) over the SQL
+real code unchanged: `executeCatalog` (every dataset door calls it: the page SQL door, `query_resource` and older pages' GraphQL) over the SQL
 engine's worker pool (`createSql`), in this process (`pool`) and behind `serveSql` and `sqlClient` on loopback
 (`http`). The rows come from an in-memory object store that answers the same bytes every time, as the store's
 read cache does, so the time is the app's and the engine's, never the bucket's.

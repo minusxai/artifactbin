@@ -8,7 +8,7 @@
  * Examples:
  *   <af-popover><af-popover-trigger><button>Info</button></af-popover-trigger>
  *     <af-popover-content>Hello</af-popover-content></af-popover>
- * Gotchas: reflect your Apollo value back for controlled use. Outside press, Escape, focus leaving
+ * Gotchas: reflect your state value back for controlled use. Outside press, Escape, focus leaving
  *   and another popover opening all request close; focus returns to the trigger.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';

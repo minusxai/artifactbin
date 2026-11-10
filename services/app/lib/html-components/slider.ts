@@ -5,7 +5,7 @@
  * Events: af-change (bubbles) with event.detail.value.
  * Examples:
  *   <af-slider label="Volume" min="0" max="100" value="40"></af-slider>
- * Gotchas: reflect your Apollo value back for controlled use.
+ * Gotchas: reflect your state value back for controlled use.
  */
 import { registerComponent } from './register-component';
 import { format as d3format } from 'd3-format';

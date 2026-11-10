@@ -155,11 +155,12 @@ it('lists content the hosted check browser cannot reach (it has no internet) wit
  expect(local.unreachable).toEqual([]);expect(local.failedRequests).toHaveLength(2);
 });
 
-it('captures each failed GraphQL field with its owner detail, and keeps a detail-less read for an owner re-run',async()=>{
+it('captures each failed sql statement, function call and older GraphQL field with its owner detail, and keeps a detail-less read for an owner re-run',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};
- const respond=(url:string,body:unknown,sent:unknown)=>listeners.response!({url:()=>url,status:()=>200,json:async()=>body,request:()=>({postDataJSON:()=>sent})});
+ const respond=(url:string,body:unknown,sent:unknown,status=200,method='POST')=>listeners.response!({url:()=>url,status:()=>status,json:async()=>body,request:()=>({postDataJSON:()=>sent,method:()=>method})});
  const graphql='https://example.test/api/artifacts/PAGE12/graphql',failed='Backend execution failed';
+ const sql='https://example.test/api/artifacts/PAGE12/sql',fn='https://example.test/api/artifacts/PAGE12/fn/';
  const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},
   goto:async()=>{
    listeners.console!({type:()=>'error',text:()=>'before any call'});
@@ -169,28 +170,44 @@ it('captures each failed GraphQL field with its owner detail, and keeps a detail
    respond(graphql,{data:null,errors:[{message:failed,path:['pipeline','move'],extensions:{code:'backend_failed'}}]},{query:'mutation{pipeline{move}}',revision:'3'});
    respond(graphql,{data:{ok:true}},{query:'{ok}',revision:'3'});
    respond('https://example.test/data.json',{errors:[{message:'not GraphQL'}]},null);
+   // sql and functions refuse with a status and {error, message, detail?}; their console line is the call's.
+   respond(sql,{error:'permission_denied',message:'your role may not insert rows of notes'},{sql:'insert into notes (note) values ($p0)',params:{p0:'x'},revision:'3'},403);
+   respond(sql,{error:'validation_failed',message:'no such column: nme'},{sql:'select nme from notes',params:{},revision:'3'},400);
+   respond(sql,{columns:[],rows:[]},{sql:'select 1',params:{},revision:'3'});
+   respond(fn+'items?limit=5',{error:'backend_failed',message:'The function failed',detail:'secret_unavailable: API_KEY'},null,500,'GET');
+   respond(fn+'items',{error:'backend_failed',message:'The function failed'},null,500,'GET');
+   respond(fn+'add',{error:'forbidden',message:'Not allowed'},{name:'x'},403,'POST');
+   respond(fn+'me',{signedIn:true},null,200,'GET');
+   listeners.console!({type:()=>'error',text:()=>'Failed to load resource: 403',location:()=>({url:sql})});
    listeners.console!({type:()=>'error',text:()=>failed});},
   locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})})};
  const evidence=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
- expect(evidence.graphqlErrors).toEqual([
-  {field:'pipeline.addNote',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',pageErrorsBefore:0,consoleErrorsBefore:1},
-  {field:'weather.forecast',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:1,replay:{query:'query Q{weather{forecast}}',variables:{city:'Pune'},operationName:'Q',revision:'3'}},
-  {field:'pipeline.move',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:1}]);
- expect(evidence.consoleErrors).toEqual(['before any call',failed]);
+ const at={pageErrorsBefore:0,consoleErrorsBefore:1};
+ expect(evidence.callErrors).toEqual([
+  {field:'pipeline.addNote',kind:'graphql',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',...at},
+  {field:'weather.forecast',kind:'graphql',message:failed,code:'backend_failed',...at,replay:{query:'query Q{weather{forecast}}',variables:{city:'Pune'},operationName:'Q',revision:'3'}},
+  {field:'pipeline.move',kind:'graphql',message:failed,code:'backend_failed',...at},
+  {field:'sql',kind:'sql',message:'your role may not insert rows of notes',code:'permission_denied',...at},
+  {field:'sql',kind:'sql',message:'no such column: nme',code:'validation_failed',...at,replay:{sql:'select nme from notes',params:{},revision:'3'}},
+  {field:'fn/items',kind:'fn',message:'The function failed',code:'backend_failed',detail:'secret_unavailable: API_KEY',...at},
+  {field:'fn/items',kind:'fn',message:'The function failed',code:'backend_failed',...at,replay:{search:''}},
+  {field:'fn/add',kind:'fn',message:'Not allowed',code:'forbidden',...at}]);
+ // A refused call is reported once, as a call failure: not again as an HTTP or console error.
+ expect(evidence.consoleErrors).toEqual(['before any call',failed]);expect(evidence.httpErrors).toEqual([]);
 });
 
-it('counts the page\'s dataset reads (GraphQL and dataset cells) on load and in its steps, not other requests',async()=>{
+it('counts the page\'s dataset reads (sql, functions, older GraphQL and dataset cells) on load and in its steps, not other requests',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};
  const send=(url:string)=>listeners.request!({url:()=>url,isNavigationRequest:()=>false,frame:()=>null});
  const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},
-  goto:async()=>{send('https://example.test/api/artifacts/PAGE12/graphql');send('https://example.test/data.json');send('https://example.test/api/my/artifacts/PAGE12/annotations');send('https://example.test/api/artifacts/PAGE12/regions/intro/open');},
+  goto:async()=>{send('https://example.test/api/artifacts/PAGE12/sql');send('https://example.test/api/artifacts/PAGE12/fn/me');send('https://example.test/data.json');send('https://example.test/api/my/artifacts/PAGE12/annotations');send('https://example.test/api/artifacts/PAGE12/regions/intro/open');},
   locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})})};
  const loaded=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
- expect(loaded.datasetReads).toBe(1);
+ expect(loaded.datasetReads).toBe(2);
  // A read a step triggers (a lazy load after a click) counts, and so does a live dataset cell.
  const stepped=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}},async()=>{send('https://doc.example.test/api/artifacts/PAGE12/graphql');send('https://example.test/api/artifacts/PAGE12/regions/cell%3ADATA12%3Ar1%3Aname/open');});
- expect(stepped.datasetReads).toBe(3);
+ expect(stepped.datasetReads).toBe(4);
 });
 
 it('loads named ESM and CommonJS Playwright exports and distinguishes invalid modules',async()=>{

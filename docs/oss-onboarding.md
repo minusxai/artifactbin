@@ -60,13 +60,13 @@ values and secrets. App and adjacent HMR ports must both be available.
 | Feature | What a fresh OSS installation needs | Where to start |
 | --- | --- | --- |
 | Native HTML pages, design systems, comments, sharing, history and restore | Default setup and a signed-in account. Share roles and artifact visibility still control access. | [HTTP API](http-api.md), [document format](document-format.md) |
-| CSV/JSON datasets, GraphQL queries, charts and mutations | Register data through the author skill or HTTP API and reference it from the page. Mutations need the dataset's write policy. | `<origin>/llms/datasets`, `<origin>/llms/dataviz` |
-| Your own PostgreSQL | Datasets are stored rows only. A page reaches your database through a resolver that calls its HTTP API with `caps.fetch` (the Neon and Supabase examples), with the password as a resolver secret. | `<origin>/llms/resolvers` |
+| CSV/JSON datasets, SQL reads and writes, charts | Register data through the author skill or HTTP API and reference it from the page. Mutations need the dataset's write policy. | `<origin>/llms/datasets`, `<origin>/llms/dataviz` |
+| Your own PostgreSQL | Datasets are stored rows only. A page reaches your database through a backend function: `caps.db` for Postgres or MySQL, or its HTTP API with `caps.fetch` (the Neon and Supabase examples), with the password as a secret. | `<origin>/llms/functions` |
 | Images, PDFs, other files and URL imports | Uploaded files or permitted remote URLs. Remote imports need network access and respect size limits and blocked private destinations. | [file uploads](file-uploads.md) |
 | PNG/JPG exports | Chromium, prepared/downloaded when needed; exports run on the server. | [serving and security](serving-and-security.md) |
 | Offline HTML | A published head; download the HTML export. Viewer-local state works offline; linked public reads are optional, and remote writes never queue. | [serving and security](serving-and-security.md) |
 | Native browser scripts and hosted components | Ordinary HTML ES modules and hosted `@afbin/…` imports. Extra hosts need declared CSP consent. | [document format](document-format.md), `<origin>/llms/runtime` |
-| Shared TypeScript resolvers | Publish paired resolver files through `resolverSources` and native `af-resolver` links. Source dev registers its local runner; split hosts need their runner configuration. Secret bindings retain separate authority checks. | `<origin>/llms/resolvers`, [runner configuration](../services/runner/README.md) |
+| Backend functions | Publish paired backend files through `resolverSources` and native `af-resolver` links. Source dev registers its local runner; split hosts need their runner configuration. Secret bindings retain separate authority checks. | `<origin>/llms/functions`, [runner configuration](../services/runner/README.md) |
 | Live browser sessions | Chromium and the browser worker's OS prerequisites. Linux server sessions require bubblewrap, user namespaces and delegated cgroup v2. `npm run dev` on macOS uses its documented development-only plain-process mode. | [browser sessions](mx-sessions.md), `.env.example` browser settings |
 | Google/OIDC, S3, external application PostgreSQL, anonymous publishing hosts and split services | Operator credentials/infrastructure. Source/custom compositions support these adapters; some compositions use a narrower configuration. | [operations](operations.md), `.env.example` |
 
@@ -81,7 +81,7 @@ suite is not a pass. See [AGENTS.md](../AGENTS.md) for the check budget.
   DNS; use the public URL setup prints.
 - `runner_unavailable`: a host without a local runner needs the separate runner settings and
   controller. Source development should register its local runner at startup.
-- `invalid_backend`: check the paired backend's TypeScript exports and GraphQL schema.
+- `invalid_backend`: check the paired backend's TypeScript exports (functions, `roles`, `schedule`).
   A browser module is not a backend resolver, and a command-program artifact is
   not an accepted publication format.
 - Exports or sessions cannot launch: check Chromium preparation and the server

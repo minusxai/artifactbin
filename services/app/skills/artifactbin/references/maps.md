@@ -39,8 +39,7 @@ let latestViewState;
 let disposed = false;
 let resize;
 let themeObserver;
-let client;
-let viewQuery;
+let state;
 const dark = () => document.documentElement.dataset.afDark === "true";
 
 function showFallback() {
@@ -49,24 +48,22 @@ function showFallback() {
 }
 
 function persistView() {
-  if (!client || !viewQuery || !latestViewState) return;
+  if (!state || !latestViewState) return;
   clearTimeout(saveTimer);
   saveTimer = undefined;
-  client.updateQuery({query: viewQuery}, () => ({mapView: {
+  void state.setState({mapView: {
     longitude: latestViewState.longitude, latitude: latestViewState.latitude,
     zoom: latestViewState.zoom, pitch: latestViewState.pitch, bearing: latestViewState.bearing
-  }}));
+  }});
 }
 
 try {
-  const [{client: apollo, gql}, {Deck, MapView, ScatterplotLayer}] = await Promise.all([
-    import("@afbin/apollo"),
+  const [{state: store}, {Deck, MapView, ScatterplotLayer}] = await Promise.all([
+    import("@afbin/state"),
     import("@afbin/deck-gl")
   ]);
-  client = apollo;
-  viewQuery = gql`{mapView {longitude latitude zoom pitch bearing}}`;
-  const {data} = await client.query({query: viewQuery});
-  latestViewState = data.mapView;
+  state = store;
+  latestViewState = state.getState().mapView;
 
   const makeLayer = isDark => new ScatterplotLayer({
     id: "sample-points",
@@ -123,7 +120,7 @@ window.addEventListener("pagehide", dispose, {once: true});
 
 ## Theme, updates and lifetime
 
-deck.gl does not infer the page's design-system colors. The example observes `data-af-dark`, updates concrete colors, and stores navigated view coordinates in each viewer's private Apollo local state. For data changes, construct updated layers and call `deck.setProps({layers: [...]})`; preserve the view state if the user has navigated. Disconnect observers and call `deck.finalize()` when replacing or disposing the map. If WebGL is unavailable, the live status message points to the equivalent table.
+deck.gl does not infer the page's design-system colors. The example observes `data-af-dark`, updates concrete colors, and stores navigated view coordinates in each viewer's private `@afbin/state` store. For data changes, construct updated layers and call `deck.setProps({layers: [...]})`; preserve the view state if the user has navigated. Disconnect observers and call `deck.finalize()` when replacing or disposing the map. If WebGL is unavailable, the live status message points to the equivalent table.
 
 Set a nonzero height on the host. Observe its actual box so maps resize when a panel or viewport changes. Keep controls and a short text/table alternative outside the canvas for essential values and actions; do not make hover the only way to inspect data.
 

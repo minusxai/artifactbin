@@ -37,10 +37,11 @@ describe('native author resources',()=>{
    // The dashboard's script is its own module, bundled beside the page it loads from.
    const script=name==='csv-dashboard'?Buffer.from(saved.body.publicationBundle.files.find(file=>file.path==='examples/csv-dashboard.mjs').base64,'base64').toString():saved.body.html;
    if(name==='csv-dashboard')expect(saved.body.html).toContain('<script type="module" src="./csv-dashboard.mjs"');
-   expect(script).toContain("from '@afbin/apollo'");
+   // Data starters read with sql from @afbin/apollo; the report keeps its viewer state in @afbin/state.
+   expect(script).toContain(name==='report'?"from '@afbin/state'":"from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.publicationBundle.files.map(file=>file.path)).toContain('examples/deliveries.csv');
-   if(name==='tracker'){const resolver=saved.body.publicationBundle.files.find(file=>file.path==='examples/tracker.ts');expect(Buffer.from(resolver.base64,'base64').toString()).toContain('@auth(role:signed_in)');expect(saved.body.html).toContain('href="ref:abc123"');}
+   if(name==='tracker'){const resolver=saved.body.publicationBundle.files.find(file=>file.path==='examples/tracker.ts');expect(Buffer.from(resolver.base64,'base64').toString()).toContain("roles={add:'signed_in'}");expect(saved.body.html).toContain('href="ref:abc123"');}
   }
  });
  it('generates every shipped design-system stylesheet from the retained specification',async()=>{

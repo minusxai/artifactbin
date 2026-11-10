@@ -4,7 +4,7 @@
  * Props: options (property or JSON attribute; scalars or {value,label} objects), value,
  *   defaultValue / default-value, multiple, allowCreate / allow-create (multiple only), disabled;
  *   attributes label, aria-label, placeholder (single only; shown when nothing is selected).
- * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your Apollo value
+ * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your state value
  *   back for controlled use.
  * Examples:
  *   const select=document.querySelector('af-select');

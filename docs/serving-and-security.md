@@ -43,15 +43,21 @@ state. Retained content-addressed module aliases serve exact digest-checked byte
 ## Data and backend execution
 
 Native `<link rel="af-dataset">` and `<link rel="af-resolver">` declarations bind
-unique GraphQL namespaces. The page version pins backend versions and any pinned
-dataset revisions; live datasets use current data. Page GraphQL at
-`/api/artifacts/ID/graphql` checks page access, revision and current authority.
-Dataset ACLs and row/column write policies apply independently. Its reserved
-read-only `_sql` root reads the same links of the same revision as the reader:
-each dataset's role view (hidden columns absent, row filters and limits applied),
-refused for a table whose rule does not allow SQL (`allow_aggregations`), under
-the same read fences; it never writes. Viewer-local Apollo
-state is private browser state, not a shared database or an authorization source.
+unique link names. The page version pins backend versions and any pinned
+dataset revisions; live datasets use current data. The page SQL door at
+`/api/artifacts/ID/sql` (the runtime's `` sql`…` ``) checks page access, revision
+and current authority, then runs one statement over the revision's links as the
+reader: reads see each dataset's role view (hidden columns absent, row filters and
+limits applied) under the same read fences, and a write is decided by the dataset's
+own rules, again inside its commit, changing only rows the reader can see. Backend
+functions at `/api/artifacts/ID/fn/NAME` (the runtime's `fetch('/fn/NAME')`) admit
+the caller the same way; GET reads, POST may write, and a function's `caps.sql`
+runs as that caller. A scheduled run executes as the page's content publisher,
+re-checked at every capability. Dataset ACLs and row/column write policies apply
+independently of page access. Pages published before SQL keep page GraphQL at
+`/api/artifacts/ID/graphql`, under the same checks. Viewer-local state
+(`@afbin/state`) is private browser state, not a shared database or an
+authorization source.
 
 An image export (`/a/ID/export`, `export_artifact`) shows what its requester may
 read. The exporter's capture has no session; its short-lived key names the
@@ -60,13 +66,14 @@ that requester, queries only, under the same checks. Renders read as nobody may
 be shared; a requester's render is stored for that requester alone and re-made
 when their access to the page's datasets changes.
 
-A backend source file exports GraphQL types and resolvers. Publication validates
+A backend source file exports functions (with optional `roles`, `secrets` and
+`schedule`; an older file exports GraphQL types and resolvers). Publication validates
 and bundles it server-side. The RunnerService executes pinned code with trusted
 principal and capability checks; the browser never fetches the backend source as
 a module. The backend store uses compare-and-swap. Public fetches and declared
 owner secret bindings have distinct constrained capabilities. Secret values are
 configured through the owner-only backend secret API, encrypted separately and
-excluded from source and downloads. Do not return them from resolvers.
+excluded from source and downloads. Do not return them from functions.
 
 The retained runner HTTP capability endpoint accepts only host-attested immutable
 backend operations with matching source identity. It is not an arbitrary agent
@@ -115,8 +122,8 @@ connected portable file remains read-only for remote operations.
 - **Custom domains:** when enabled, account settings attach and verify DNS through
   `/api/my/domain` and `/api/my/domain/verify`. Choose an owned public HTML page
   as homepage or set exact custom paths, or keep the public profile listing.
-  Domain pages read as guests through the domain's own GraphQL endpoint; shared
-  mutations are refused. Use the original hosted page for authenticated work.
+  Domain pages read as guests through the domain's own endpoints (functions answer
+  GET only); shared writes are refused. Use the original hosted page for authenticated work.
 - **Notifications:** the bell and `/notifications` retain membership, social and
   conversation notifications with current-access checks and read revisions.
   `/account#notifications` manages preferences where delivery is configured.

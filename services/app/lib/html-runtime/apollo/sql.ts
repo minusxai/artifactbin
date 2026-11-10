@@ -56,7 +56,9 @@ export function createSql(port: SqlPort): SqlTag {
     const reply = await port.run({ sql: statement.text, params: { ...statement.params }, idempotencyKey: key() });
     if (!reply || typeof reply !== 'object') throw new SqlError('unexpected', 'Invalid SQL reply');
     if ('error' in reply) throw new SqlError(String(reply.error), reply.message ?? String(reply.error));
-    if ('rows' in reply) return Object.defineProperty([...reply.rows], 'columns', { value: reply.columns, enumerable: false }) as SqlRows;
+    // `columns` rides on the array, out of iteration and JSON, and stays an ordinary property: a chart library handed
+    // the rows may rewrite or delete it (Vega's data ingestion deletes an array's `columns`, d3-dsv style).
+    if ('rows' in reply) return Object.defineProperty([...reply.rows], 'columns', { value: reply.columns, enumerable: false, writable: true, configurable: true }) as SqlRows;
     return { affected: reply.affected, returning: reply.returning ?? [] };
   };
   const tag = ((strings: TemplateStringsArray, ...values: SqlValue[]): SqlStatement => {

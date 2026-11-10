@@ -7,7 +7,7 @@
  * Examples:
  *   document.querySelector('af-segmented').options=["Day","Week","Month"];
  *   <af-segmented label="Range" value="Week"></af-segmented>
- * Gotchas: reflect your Apollo value back for controlled use; options are a property, not an
+ * Gotchas: reflect your state value back for controlled use; options are a property, not an
  *   attribute; the value attribute is a string matched back to the typed option value; label
  *   also becomes the aria-label unless you set aria-label yourself.
  */

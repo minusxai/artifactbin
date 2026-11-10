@@ -16,7 +16,7 @@ import {markers, trackerFeatures, trackerFiles, trim} from '../../../skills/arti
 
 const EXAMPLES = new URL('../../../skills/artifactbin/examples/', import.meta.url);
 const NAMES = Object.keys(FEATURES);
-const AMBIENT = `declare module '@afbin/apollo'{export const client:any,gql:any,onResolverChange:any}
+const AMBIENT = `declare module '@afbin/apollo'{export const sql:any,onResolverChange:any}
 declare module '@afbin/collab'{export const collab:any}
 declare module '@afbin/data-table'{}
 declare const page:any, step:any; interface Window{APP:any}`;
@@ -62,8 +62,10 @@ function leftovers(keep: Set<string>, out: Files): string[] {
     for (const name of NAMES) if (!keep.has(name) && new RegExp(`@(?:feature|only) ${name}\\b`).test(text))
       problems.push(`${file}: ${name} code is left`);
   }
-  if (keep.has('limits') !== /rel="af-resolver"/.test(out['index.html']!)) problems.push('resolver link and limits disagree');
-  if (keep.has('limits') !== 'tracker.ts' in out) problems.push('tracker.ts and limits disagree');
+  // tracker.ts is always there (me says who reads); only limits adds add, and only limits calls it.
+  if (!/rel="af-resolver" data-af-name="tracker"/.test(out['index.html']!) || !('tracker.ts' in out)) problems.push('tracker.ts is not linked');
+  if (keep.has('limits') !== /\badd\(input/.test(out['tracker.ts'] ?? '')) problems.push('tracker.ts add and limits disagree');
+  if (keep.has('limits') !== /call\('add'/.test(out['index.html']!)) problems.push('the page\'s add and limits disagree');
   return problems;
 }
 async function generateAll(from = EXAMPLES) {
@@ -134,7 +136,8 @@ it('writes one --limit into the page and the resolver, the preset\'s texts, and 
   expect(tasks['index.html']).toMatch(/^ {2}limit: 12,/m);
   expect(tasks['tracker.ts']).toMatch(/^const LIMIT=12;/m);
   const list = await trackerFiles(trackerFeatures({preset: 'list'}), {preset: 'list'});
-  expect(Object.keys(list).sort()).toEqual(['cleanup.mjs', 'guest.mjs', 'index.html', 'steps.mjs']);
+  expect(Object.keys(list).sort()).toEqual(['cleanup.mjs', 'guest.mjs', 'index.html', 'steps.mjs', 'tracker.ts']);
+  expect(list['tracker.ts']!.slice(list['tracker.ts']!.indexOf('*/'))).not.toMatch(/LIMIT|add|roles/);
   for (const [from, to] of Object.entries(PRESETS.list.texts)) {
     expect(list['index.html'], from).not.toContain(`'${from}'`);
     expect(list['index.html'], to).toContain(`'${to}'`);

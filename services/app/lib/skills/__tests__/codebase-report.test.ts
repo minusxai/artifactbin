@@ -1,7 +1,7 @@
 /**
  * examples/codebase-report.html runs as a page over the three tables the codebase command gathers
- * (commits, files, imports): jsdom runs its scripts with the hosted modules stubbed, its one watched
- * request's `_sql` fields run on the real SQLite engine, its findings read the SQL answers, its
+ * (commits, files, imports): jsdom runs its scripts with the hosted modules stubbed, each DATA query a
+ * watched `sql` statement run on the real SQLite engine, its findings read the SQL answers, its
  * Vega-Lite specs compile and render with marks in the pinned vega and vega-lite, its Pele
  * flowchart is drawn from the imports query's rows, and its own steps file passes once its
  * [bracketed] text is written and names what is left otherwise.
@@ -42,16 +42,12 @@ const TABLES: Record<string, Row[]> = {
 const engine = createSqliteSql({maxRows: 10000, timeoutMs: 5000});
 const columns = (rows: Row[]) => Object.keys(rows[0]!).map(name => ({name,
   type: typeof rows[0]![name] === 'number' ? 'number' : 'string'}));
-/** `_sql` as the page route answers it: every aliased field's SQL run over the three linked tables. */
-async function answer(query: string, variables: Record<string, unknown> = {}) {
-  const data: Record<string, unknown> = {};
+/** The page SQL door over the three linked tables: one statement's rows, or a throw. */
+async function answer(text: string, params: Record<string, unknown> = {}): Promise<unknown[]> {
   const tables = Object.fromEntries(Object.entries(TABLES).map(([name, rows]) => [name, {columns: columns(rows), rows}]));
-  for (const [, alias, variable] of query.matchAll(/(\w+):_sql\(sql:\$(\w+)\)/g)) {
-    const outcome = (await engine.run({tables: tables as never, queries: [{name: 'r', sql: String(variables[variable!])}], params: {}})).r!;
-    if ('error' in outcome) return {data: null, errors: [{message: outcome.error}]};
-    data[alias!] = {rows: outcome.rows};
-  }
-  return {data};
+  const outcome = (await engine.run({tables: tables as never, queries: [{name: 'r', sql: text}], params: params as never})).r!;
+  if ('error' in outcome) throw Object.assign(Error(outcome.error), {code: 'validation_failed'});
+  return outcome.rows;
 }
 /** The page with its DATA [bracketed] text written: only the DATA script and <title>, never page code. */
 const fill = (html: string) => {
@@ -65,12 +61,16 @@ async function load(html: string, reply: typeof answer = answer): Promise<Page> 
   const dom = new JSDOM(html.replace(/<script type="module"[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only'});
   const page: Page = {dom, queries: [], specs: [], diagrams: []}, settled: Array<Promise<unknown>> = [];
   Object.assign(dom.window, {structuredClone, stubs: {
-    apollo: {gql: (strings: readonly string[]) => strings.join(''), client: {
-      watchQuery: ({query, variables}: {query: string; variables?: Record<string, unknown>}) => ({subscribe(next: (result: unknown) => unknown) {
-        page.queries.push(query);
-        settled.push(reply(query, variables).then(result => next({...result, loading: false})));
-        return {unsubscribe() {}};
-      }})}},
+    // The sql tag: each `${…}` a bound $pN; a watch answers once (no dataset changes in jsdom).
+    apollo: {sql: Object.assign((strings: readonly string[], ...values: unknown[]) => {
+      const params: Record<string, unknown> = {};let text = strings[0]!;
+      values.forEach((value, i) => { params['p' + i] = value; text += '$p' + i + strings[i + 1]; });
+      return {text, params};
+    }, {watch: (statement: {text: string; params: Record<string, unknown>}, next: (rows: unknown) => unknown, error?: (e: unknown) => unknown) => {
+      page.queries.push(statement.text);
+      settled.push(reply(statement.text, statement.params).then(next, e => error?.(e)));
+      return () => {};
+    }})},
     compile: (spec: Record<string, unknown>) => { page.specs.push(spec); return {spec}; },
     mount: (host: HTMLElement, source: string, options: {onRender(): void}) => {
       page.diagrams.push(source);
@@ -89,7 +89,7 @@ async function load(html: string, reply: typeof answer = answer): Promise<Page> 
   try {
     for (const script of scripts) {
       const body = script.replace(/^import .*$/gm, '');
-      await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile,mount}=stubs,{client,gql}=stubs.apollo;${body}})()`);
+      await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile,mount}=stubs,{sql}=stubs.apollo;${body}})()`);
     }
     await Promise.all(settled);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -128,13 +128,12 @@ it('imports only hosted @afbin modules and names its design system, nothing the 
   for (const name of names) expect(HOSTED.has(name), name).toBe(true);
 });
 
-it('computes every number with _sql over the three linked tables in one watched request', async () => {
+it('computes every number with sql over the three linked tables, one watched statement per DATA query', async () => {
   const page = await load(fill(read('codebase-report.html')));
   expect(page.error).toBeUndefined();
   const data = (page.dom.window as unknown as {DATA: Record<string, any>}).DATA, names = Object.keys(data.queries);
-  expect(page.queries).toHaveLength(1);
-  for (const name of names) expect(page.queries[0]).toMatch(new RegExp(`${name}:_sql\\(sql:\\$s\\d+\\)`));
-  expect(page.queries[0]).not.toMatch(/commits\(|files\(|imports\(/);
+  // Each query's text as DATA wrote it, nothing spliced in.
+  expect(page.queries).toEqual(names.map(name => data.queries[name]));
   expect(page.dom.window.document.querySelector('#status')!.textContent)
     .toBe(`Computed ${names.length} queries from the linked datasets.`);
   expect(page.dom.window.document.querySelector('#lead')!.textContent)
@@ -189,7 +188,7 @@ it('passes its own steps once written, and names the starter text, a broken char
   expect(template.failure).toContain('starter text left: "[How this codebase changes]"');
   const broken = await load(html.replace("query:'weekly', spec", "query:'week', spec"));
   expect((await steps(broken.dom, source)).failure).toBe('charts with no data: weekly (0 marks): check each chart\'s query and fields against the dataset columns');
-  const failed = await load(html, async () => ({data: null, errors: [{message: 'Dataset not found'}]}));
+  const failed = await load(html, async () => { throw Object.assign(Error('Dataset not found'), {code: 'not_found'}); });
   expect(failed.dom.window.document.querySelector('#status')!.textContent).toBe('Dataset not found');
   expect((await steps(failed.dom, source)).failure).toBe('no query answered: Dataset not found');
 });

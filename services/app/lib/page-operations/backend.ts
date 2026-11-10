@@ -4,7 +4,7 @@ import { DATASET_ROLES, isResolverDatabaseKind, RESOLVER_DATABASE_CHECK_OPERATIO
 import { functionScheduleMinimumMinutes, services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
 import { functionManifest, type FunctionRoles } from './functions';
-import { staticSurface } from './function-source';
+import { staticSurface, type FunctionSurface } from './function-source';
 import { FUNCTION_SCHEDULE_MIN_MINUTES, scheduleManifest } from './schedule';
 import { functionRule } from './functions';
 import type { AdmissionCheck, ResolverAdmit } from './admission';
@@ -139,12 +139,26 @@ export function createBackendCompiler(runner:RunnerService){return async(source:
   return {compiled,typeDefs:result.typeDefs,functions:null,...secrets,test:resolverTestField(boundedBackendSchema(result.typeDefs))};
  }
  if(surface.typeDefs)throw Error('invalid_backend_exports: typeDefs must be a string');
+ const {functions,schedule}=checkedFunctions(surface);
+ return {compiled,typeDefs:'',functions,...(schedule?{schedule}:{}),...secrets,test:Object.hasOwn(functions,'test')};
+};}
+/** A typeDefs-free file's callable functions with their roles, and its schedule, as publish checks them. */
+function checkedFunctions(surface:FunctionSurface):{functions:FunctionRoles;schedule:Record<string,number>|null}{
  const functions=functionManifest(surface.functions,surface.roles);
  // Test connection: an owner-only `test` function, as a legacy file's `test: String! @auth(role: owner)`.
  if(Object.hasOwn(functions,'test')&&functions.test!=='owner')throw Error("invalid_test_field: give test the owner role (roles = {test: 'owner'})");
- const schedule=scheduleManifest(surface.schedule,surface.functions,(functionScheduleMinimumMinutes()??FUNCTION_SCHEDULE_MIN_MINUTES)*60_000);
- return {compiled,typeDefs:'',functions,...(schedule?{schedule}:{}),...secrets,test:Object.hasOwn(functions,'test')};
-};}
+ return {functions,schedule:scheduleManifest(surface.schedule,surface.functions,(functionScheduleMinimumMinutes()??FUNCTION_SCHEDULE_MIN_MINUTES)*60_000)};
+}
+/**
+ * What a function file (no `typeDefs`) publishes, from its source text alone: its functions and roles and its
+ * schedule, refused exactly as publish refuses them (`invalid_functions`, `invalid_roles`, `invalid_schedule`,
+ * `invalid_test_field`). It runs nothing, so a starter or template can be checked without a runner.
+ */
+export async function functionFileSurface(source:string):Promise<{functions:FunctionRoles;schedule:Record<string,number>|null}>{
+ const surface=await staticSurface(source);
+ if(surface.typeDefs)throw Error('invalid_backend_exports: a function file exports no typeDefs');
+ return checkedFunctions(surface);
+}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
 /** Every pinned secret value that can still be read, and each connection's password; a missing or transferred one cannot be in the reason. */
 async function pinnedValues(backend:PageBackendRecord,read:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<string[]>{

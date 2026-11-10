@@ -10,7 +10,7 @@
  *   <af-accordion type="single" value="a"><af-accordion-item value="a">
  *   <af-accordion-trigger>Why</af-accordion-trigger>
  *   <af-accordion-content>Because.</af-accordion-content></af-accordion-item></af-accordion>
- * Gotchas: reflect your Apollo value back for controlled use; an item without a value is
+ * Gotchas: reflect your state value back for controlled use; an item without a value is
  *   disabled; a native <button> inside the trigger carries the ARIA state instead of the trigger.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';

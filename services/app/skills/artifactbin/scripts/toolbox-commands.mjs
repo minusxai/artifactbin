@@ -60,7 +60,15 @@ const commands = {
       'playwright-module': flag()
     }
   },
+  sql: {
+    sub: {
+      schema: {revision: flag()},
+      query: {params: flag(), limit: flag(), revision: flag(), 'idempotency-key': flag()}
+    }
+  },
+  // Older pages only (their gql reads and writes); new pages use sql.
   graphql: {
+    listed: false,
     sub: {
       schema: {revision: flag()},
       query: {document: flag(), operation: flag(), variables: flag(), revision: flag()},

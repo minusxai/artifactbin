@@ -5,7 +5,7 @@
  *   Children: af-tooltip-trigger (use a native button inside), af-tooltip-content (side, align,
  *   side-offset). Optional af-tooltip-provider wrapper: delay-duration (300) and
  *   skip-delay-duration (100, reopen without delay right after another tooltip closed).
- * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your Apollo value
+ * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your state value
  *   back for controlled use.
  * Examples:
  *   <af-tooltip><af-tooltip-trigger><button>?</button></af-tooltip-trigger>
