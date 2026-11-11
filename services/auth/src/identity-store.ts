@@ -77,6 +77,15 @@ async function ensureIdentityRows(db: Queryable, authSchema = 'auth'): Promise<v
 export class IdentityNotReady extends Error {}
 
 const schemaExists = async (db: Queryable, schema: string) => (await db.query('SELECT 1 FROM pg_namespace WHERE nspname=$1', [schema])).rows.length > 0;
+/**
+ * The columns the identity views read from the app's tables (./identity-store/views.ts and the SQL of ./identity-store/rules.ts:
+ * `active`, `live`), which the app's boot adds. Keep in step with them: a view created before one exists fails with 42703.
+ */
+const APP_VIEW_COLUMNS: Record<string, string[]> = {
+  deployment_members: ['user_id'],
+  deployment_state: ['id', 'setup_complete'],
+  identity_settings: ['id', 'deployment_mode', 'api_audiences', 'service_audiences'],
+};
 const relationKind = async (db: Queryable, schema: string, name: string) =>
   (await db.query<{relkind: string}>('SELECT c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2', [schema, name])).rows[0]?.relkind ?? null;
 
@@ -91,7 +100,7 @@ const relationKind = async (db: Queryable, schema: string, name: string) =>
  * `ALTER TABLE … SET SCHEMA`, which keeps every row, index and constraint; that needs one role owning the table and
  * CREATE on AUTH__SCHEMA, as in a single-role install. In a split-role database the operator runs those statements
  * once (`identityMoveStatements`) and this refuses to boot (`IdentityNotReady`) until then. The app's tables the views
- * read (`deployment_members`, `deployment_state`, `identity_settings`) are the app's boot's: without them this
+ * read (`deployment_members`, `deployment_state`, `identity_settings`) and the columns the views read from them are the app's boot's: without them this
  * answers `IdentityNotReady` too, for the host to retry. A view whose columns changed (or a view a former contract
  * named) is dropped and created again, once; readers keep their SELECT through the schema's default privileges.
  */
@@ -101,6 +110,11 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
     await tx.query("SELECT pg_advisory_xact_lock(hashtext('artifactbin.identity.schema'))");
     for (const table of ['deployment_members', 'deployment_state', 'identity_settings'])
       if (await relationKind(tx, app, table) !== 'r') throw new IdentityNotReady(`identity: the app's ${app}.${table} does not exist yet; boot the app first (it creates its own tables), then this host`);
+    for (const [table, columns] of Object.entries(APP_VIEW_COLUMNS)) {
+      const have = new Set((await tx.query<{column_name: string}>('SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2', [app, table])).rows.map(row => row.column_name));
+      const missing = columns.filter(column => !have.has(column));
+      if (missing.length) throw new IdentityNotReady(`identity: the app's ${app}.${table} has no ${missing.join(', ')} yet; boot the app first (it adds its own columns), then this host`);
+    }
     await ensureAuthSchema(tx, auth);
     const moving: string[] = [];
     for (const table of IDENTITY_OWNED_TABLES)
