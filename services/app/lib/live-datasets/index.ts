@@ -330,16 +330,17 @@ export async function liveDatasetSql(actor: AccessActor, id: string, raw: { sql?
 
 /**
  * PUBLISH: the page's dataset links with every link to a live dataset recorded as one (`live-dataset`: never pinned),
- * and its declared queries, each on a live link the PUBLISHER (the person saving, never the page's owner) owns or
- * edits. Throws LiveDatasetRefusal; a stored link is left as it was (its own checks follow).
+ * readable by `reader` (whom the stored links are authorized as: the page's owner on a replace), and its declared
+ * queries, each on a live link the PUBLISHER (the person saving, never the page's owner) owns or edits. Throws
+ * LiveDatasetRefusal; a stored link is left as it was (its own checks follow).
  */
-export async function livePageDeclarations(publisher: AccessActor, links: readonly HtmlDatasetLink[], queries: readonly HtmlDeclaredQuery[]): Promise<{ links: (HtmlDatasetLink | HtmlLiveDatasetLink)[]; queries: HtmlDeclaredQuery[] }> {
+export async function livePageDeclarations(reader: AccessActor, publisher: AccessActor, links: readonly HtmlDatasetLink[], queries: readonly HtmlDeclaredQuery[]): Promise<{ links: (HtmlDatasetLink | HtmlLiveDatasetLink)[]; queries: HtmlDeclaredQuery[] }> {
   const out: (HtmlDatasetLink | HtmlLiveDatasetLink)[] = [], live = new Map<string, ArtifactRow>();
   for (const link of links) {
     const row = await liveRow(link.datasetId);
     if (!row) { out.push(link); continue; }
     if (link.mode === 'pinned') throw new LiveDatasetRefusal(400, 'live_dataset_not_pinnable', `link "${link.name}" pins a live dataset: a connection has no row revisions; drop data-af-mode and data-af-revision`);
-    if (!await canReadArtifact(row, publisher)) throw new LiveDatasetRefusal(400, 'dataset_not_found', `link "${link.name}" names a dataset you cannot read`);
+    if (!await canReadArtifact(row, reader)) throw new LiveDatasetRefusal(400, 'dataset_not_found', `link "${link.name}" names a dataset you cannot read`);
     out.push({ kind: 'live-dataset', name: link.name, datasetId: link.datasetId });
     live.set(link.name, row);
   }

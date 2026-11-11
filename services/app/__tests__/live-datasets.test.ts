@@ -9,13 +9,14 @@
  */
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
-import { request, setSession, useAppHarness } from './harness';
+import { admitGroupMember, request, setSession, useAppHarness } from './harness';
+import { createGroup } from '@/lib/groups';
 import { params, person, publish, sql, type Person } from './page-sql-door-fixture';
 import { overrideConfig } from '@/lib/platform/config';
 import { getDb, TABLES } from '@/lib/platform';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { writeDatasetPermissions } from '@/lib/dataset-access';
-import { forkArtifact, replaceArtifactWithBody } from '@/lib/publish';
+import { createArtifactFromBody, forkArtifact, replaceArtifactWithBody } from '@/lib/publish';
 import { closeLiveDatasetConnections, setLiveDatasetNetworkSeams } from '@/lib/live-datasets';
 import { GET as connectionGet, PATCH as connectionPatch } from '@/app/api/artifacts/[id]/connection/route';
 import { POST as connectionTest } from '@/app/api/artifacts/[id]/connection/test/route';
@@ -235,6 +236,15 @@ it('refuses a declared query from a publisher who cannot edit the live dataset, 
   const head = await call(artifactGet as never, `/api/artifacts/${page}`, page, bob);
   const replaced = await replaceArtifactWithBody({ html: PAGE(id, MINE), expectedVersion: head.body.version, expectedState: head.body.state }, bob.actor, page, 'http://localhost:3000');
   expect([replaced.status, (await replaced.json()).error]).toEqual([403, 'declared_query_not_permitted']);
+  // A page editor not shared on the dataset republishes the owner's page that links it (no declared queries): the link
+  // is the owner's to hold, as a stored dataset's is.
+  const carol = await person('carol');
+  const closed = (await createLive(alice, { visibility: 'private' })).body.id;
+  const linking = (await publish(alice, { html: PAGE(closed) })).body.id;
+  await updateSharingFor(alice.actor, linking, { shares: [{ email: carol.email!, role: 'editor' }] });
+  const carolHead = await call(artifactGet as never, `/api/artifacts/${linking}`, linking, carol);
+  const carolSave = await replaceArtifactWithBody({ html: PAGE(closed, '<title>v2</title>'), expectedVersion: carolHead.body.version, expectedState: carolHead.body.state }, carol.actor, linking, 'http://localhost:3000');
+  expect(carolSave.status, await carolSave.clone().text()).toBe(200);
   // Nor does copying a page that declares one.
   const declared = (await publish(alice, { html: PAGE(id, MINE), visibility: 'unlisted' })).body.id;
   const fork = await forkArtifact(bob.actor, (await getArtifactById(declared))!, {});
@@ -317,4 +327,23 @@ it('keeps a live dataset\'s rules to "who may run declared queries", and every s
   const fork = await forkArtifact(alice.actor, row, {});
   expect(fork instanceof Response ? [fork.status, (await fork.json()).error] : 'forked').toEqual([400, 'not_forkable']);
   expect((await publish(alice, { connection: config(), name: 'shop_api' })).status).toBe(400);
+});
+
+it('lets a group own a live dataset (its editors change and query it), and keeps the secret out of the creation ledger', async () => {
+  const { alice, bob, carol } = await people();
+  const group = await createGroup(alice.userId!, { handle: 'live_group', name: 'Live' });
+  await admitGroupMember(alice.userId!, group.id, bob.userId!, 'editor');
+  await admitGroupMember(alice.userId!, group.id, carol.userId!, 'viewer');
+  const keyed = await createArtifactFromBody({ connection: config(), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
+  expect(keyed.status, await keyed.clone().text()).toBe(201);
+  const id = ((await keyed.json()) as { id: string }).id;
+  expect((await getArtifactById(id))!.group_id).toBe(group.id);
+  expect((await call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, bob, { method: 'PATCH', json: { tls: 'disable' } })).status).toBe(200);
+  expect((await call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, carol, { method: 'PATCH', json: { tls: 'disable' } })).status).toBe(403);
+  expect((await call(queryPost as never, `/api/artifacts/${id}/query`, id, bob, { method: 'POST', json: { sql: 'select count(*)::int as n from sales.orders' } })).body.results[0].rows).toEqual([{ n: 3 }]);
+  expect((await (await getDb()).query('SELECT count(*)::int AS n FROM artifact_creation_operations')).rows[0]).toEqual({ n: 1 });
+  // The ledger's fingerprint leaves the secret out: the same request with another password is the same request (a replay).
+  const again = await createArtifactFromBody({ connection: config({ password: 'another-one' }), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
+  expect([again.status, ((await again.json()) as { id: string }).id]).toEqual([201, id]);
+  expect(await everyStoredRow()).not.toContain(PASSWORD);
 });

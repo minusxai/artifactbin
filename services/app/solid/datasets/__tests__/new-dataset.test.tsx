@@ -11,6 +11,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { CONNECTORS as SPECS } from '@artifactbin/contracts';
 import { NewDatasetPage } from '../NewDataset';
 import { LiveDatasetForm } from '../LiveDatasetForm';
+import { LiveDatasetView } from '../LiveDatasetView';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ kind: 'account', user: { id: 'u1' } }) }) }));
 vi.mock('@/solid/pages/DatasetEditor', () => ({ DatasetEditorPage: (props: { initialSource?: string }) => <p>Stored editor: {props.initialSource}</p> }));
@@ -83,4 +84,18 @@ it('edits a live dataset without ever showing its secret, sending only what chan
   fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
   await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(2));
   expect(calls.filter((c) => c.method === 'PATCH')[1]!.body).toEqual({ database: 'shop2', password: 'n3w' });
+});
+
+it('lets an owner choose who runs declared queries, saved as the dataset\'s rules over the current revision', async () => {
+  const calls = serve({
+    'GET /api/artifacts/ds1/connection': { role: 'owner', declaredQueryRoles: [], pages: [], connection: { connector: 'postgres', label: 'PostgreSQL', fields: { host: 'db.example.com' } } },
+    'GET /api/artifacts/ds1/connection/schema': { tables: [] },
+    'GET /api/artifacts/ds1/policy': { revision: 3 },
+    'PUT /api/artifacts/ds1/policy': { saved: true },
+  });
+  render(() => <LiveDatasetView id="ds1" />);
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Anyone signed in/ }));
+  await waitFor(() => expect(calls.find((c) => c.method === 'PUT')).toBeDefined());
+  expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ expectedPolicyRevision: 3, policy: { version: 3, tables: [{ table: { schema: 'public', name: 'queries' }, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] }] } });
+  expect(screen.getByRole('region', { name: 'Connection' })).toHaveTextContent('db.example.com');
 });
