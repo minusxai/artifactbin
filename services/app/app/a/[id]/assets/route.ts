@@ -57,13 +57,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // headless browser with no session, so without this a private document's
   // export photographs alt text where its picture should be.
   const key = params.get('key');
-  const admitted = holdsCreatingToken(artifact, actor) || (await canReadArtifact(artifact, actor)) || verifyExportKey(artifact.id, key ?? undefined);
+  const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
+  const admitted = holdsCreatingToken(artifact, actor) || (await canReadArtifact(artifact, actor)) || byExportKey;
   if (!admitted) return missing();
 
   if(params.has('dependency')){
     if(!['GET','HEAD'].includes(request.method)||params.getAll('dependency').length!==1||params.getAll('revision').length>1||params.has('u')||managed)return missing();
     const dependency=params.get('dependency');
-    return dependency?await serveBundleAsset(request,actor,id,dependency)??missing():missing();
+    // A capture's own file is admitted by its verified key as its page is (lib/html-publication-bundle serveBundleAsset).
+    return dependency?await serveBundleAsset(request,actor,id,dependency,byExportKey?key:null)??missing():missing();
   }
   if(!url)return reply({error:'missing_url'},400);
   const kind = params.get('kind') ?? 'image';

@@ -24,7 +24,9 @@ what an artifact is served as, and the local-file doors in `lib/local-connection
   one. The operator mint (`services/app/app/api/tokens/route.ts`) is a 404 without `ADMIN__SECRET`. Connections
   are stored hash-only and shown once.
 - An export capture holds no session: its short-lived key names the requester the export door admitted
-  (`lib/export/read-key.ts`), and a requester's render is kept for that requester alone.
+  (`lib/export/read-key.ts`), and a requester's render is kept for that requester alone. The capture's own response
+  alone names its page's `/a/<id>/assets` file addresses with that key; a keyed asset answer is never cached, and
+  nothing stored, downloaded or shared carries the key.
 - A portable download holds canonical source, identity and runtime assets, never a credential. An export also
   carries the rows its reader's `sql` may read through the page and the engine that queries them
   (`offlinePageSqlData`), nothing else of a dataset; past 16 MiB, no rows, and the copy says so. No server path
