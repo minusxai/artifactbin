@@ -70,7 +70,8 @@ export const RESOLVER_DATABASE_OPERATION = 'artifactbin.pageBackend.db';
 /**
  * The runner worker's own check before each `caps.db` query (worker-database.mjs; resolver code cannot send it): the
  * app re-decides the call's admission, so a revoked caller's open connection stops at its next query. It is not
- * counted against the run's request limit.
+ * counted against the run's request limit. Its input is the empty object, as every operation's input is an object: the
+ * same message reaches the app in process and, from a separate runner service, through `/api/runner/operations`.
  */
 export const RESOLVER_DATABASE_CHECK_OPERATION = 'artifactbin.pageBackend.dbCheck';
 /**
