@@ -13,10 +13,11 @@ export interface HtmlRuntimeConfig {
   live?: number;
   /** Source-owned identities, supplied by assembly before author code runs. */
   savedNodeIds?: readonly string[];
+  /** Every linked name the page declares (its dataset and default-connection links), in source order. */
   backends: readonly string[];
-  /** Dataset links: their generated roots are flat remote fields (apollo `datasets`); the rest of `backends` are resolver namespaces. */
+  /** Stored dataset links: their generated roots are flat remote fields (apollo `datasets`). */
   datasets?: readonly string[];
-  /** Namespace -> immutable linked resource ID, for backend invalidation notifications. */
+  /** Link name -> the dataset's ID, for invalidation notifications. */
   bindings?: Readonly<Record<string, string>>;
   /** Exact platform origin. Never a credential or a URL carrying one. */
   appOrigin?: string;
