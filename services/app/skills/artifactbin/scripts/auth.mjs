@@ -168,9 +168,10 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     root
   );
   if (serviceResponse) {
-    if (typeof serviceResponse.access_token !== 'string' || typeof serviceResponse.refresh_token !== 'string' ||
-      typeof serviceResponse.client_id !== 'string' || typeof serviceResponse.resource !== 'string' ||
-      !Number.isFinite(serviceResponse.expires_in))
+    const grant = serviceResponse;
+    if (typeof grant.access_token !== 'string' || typeof grant.refresh_token !== 'string' ||
+      typeof grant.client_id !== 'string' || typeof grant.resource !== 'string' ||
+      !Number.isFinite(grant.expires_in))
       throw new ToolError('invalid_grant_response', 'The service grant was incomplete.', 1);
     await shared.saveCredentials({
       server,

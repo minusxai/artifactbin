@@ -26,7 +26,8 @@ file to change it, or leave the link to keep the published version.
 
 ## The file
 
-Start from `resolvers/resolver-*.ts` (public URL, JSON API, Google Sheets, BigQuery, Supabase, Neon; usage atop each) or `examples/tracker.ts`. The callable
+Start from `resolvers/` (usage atop each; `resolver-public-url.ts`, `resolver-http-json.ts`,
+`resolver-google-sheets.ts`, `resolver-bigquery.ts`, `resolver-supabase.ts`, `resolver-neon.ts`) or `examples/tracker.ts`. The callable
 functions are the keys of an object-literal `export default {…}` and the named exported
 functions, read from the source at publish (no spreads, computed keys or reassignment:
 `invalid_functions`). Each gets `(input, principal, caps)`: `principal` is `{tenant, subject,
@@ -134,10 +135,10 @@ IP allowlists: allow the addresses `GET /api/outbound-ips` lists.
 
 ## caps.db as the viewer
 
-`secrets = {SALES: 'viewer'}`: a data service this server trusts opens `caps.db('SALES')` as each
-viewer, never you. Bind it in Resolvers or with `PUT /api/my/resolvers/BACKEND/VERSION/secrets`
-`{name, binding: {service, params}}` (ids and versions: `GET /api/my/artifacts/ID/resolvers`).
-Viewers it refuses, guests and schedules get `data_access_denied: SALES`: show a data error.
+`secrets = {SALES: 'viewer'}`: a trusted data service opens `caps.db('SALES')` as each viewer,
+not you. Bind it in Resolvers or `PUT /api/my/resolvers/BACKEND/VERSION/secrets`
+`{name, binding: {service, params}}` (from `GET /api/my/artifacts/ID/resolvers`). A refused
+viewer, a guest or a schedule gets `data_access_denied: SALES`.
 
 ## Schedules
 
