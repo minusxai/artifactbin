@@ -14,8 +14,8 @@ export const PLATFORM_STYLES_PATH = '/af/styles.css';
 
 /** D17: platform font files, by name with no version or hash (lib/html-systems/fonts.server serves them, immutable). */
 export const PLATFORM_FONTS_PATH = '/af/fonts/';
-/** `<name>.woff2` for a hosted content-hashed font path (`/fonts/<name>.<hash8>.woff2`); null for anything else. */
-export const platformFontName = (hashed: string): string | null => /^\/fonts\/([a-z0-9-]+)\.[a-f0-9]{8}\.woff2$/.exec(hashed)?.[1]?.concat('.woff2') ?? null;
+/** `<name>.woff2` for a hosted content-hashed font path (`/af/fonts/<name>.<hash8>.woff2`); null for anything else. */
+export const platformFontName = (hashed: string): string | null => /^\/af\/fonts\/([a-z0-9-]+)\.[a-f0-9]{8}\.woff2$/.exec(hashed)?.[1]?.concat('.woff2') ?? null;
 
 export const HTML_SYSTEM_NAMES = Object.keys(HTML_SYSTEM_MODES);
 /** Each system's display name. */

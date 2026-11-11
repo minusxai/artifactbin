@@ -103,7 +103,7 @@ describe('installable shared skill folder',()=>{
    try {
     const hosted=async(pathname:string)=>{const answer=await fetch(server.base+pathname);expect(answer.status,pathname).toBe(200);return answer.text();};
     const imports=JSON.parse(await hosted('/af/import-map.json')).imports as Record<string,string>;
-    expect(imports['@afbin/vega']).toBe('/libraries/vega-6.3.1/index.js');expect(imports['@afbin/tabs']).toBe('/af/components/tabs.js');
+    expect(imports['@afbin/vega']).toBe('/af/lib/vega-6.3.1/index.js');expect(imports['@afbin/tabs']).toBe('/af/components/tabs.js');
     for(const pathname of [imports['@afbin/vega']!,imports['@afbin/vega-lite']!,imports['@afbin/tabs']!,'/af/core.js','/af/apollo.js','/af/state.js','/af/reader.js']){
      const response=await fetch(new URL(pathname,preview.url));
      expect(response.status,pathname).toBe(200);expect(await response.text(),pathname).toBe(await hosted(pathname));

@@ -95,13 +95,13 @@ describe('the app stylesheet', () => {
 describe('the shell and the story name one file per face', () => {
   const storyCss = () => storyFontFaceCss(Object.values(STORY_FAMILY_ASSETS).flat());
 
-  it('the shell names its faces at /fonts — the content-addressed files the story is served', async () => {
+  it('the shell names its faces at /af/fonts — the content-addressed files the story is served', async () => {
     const shell = facesOf(await appStylesheet(), 'shell');
     expect(shell.length).toBeGreaterThan(0);
     for (const face of shell) {
       for (const url of face.urls) {
-        expect(url, `${face.family} ${face.range.slice(0, 16)}`).toMatch(/^\/fonts\/[\w.-]+\.[0-9a-f]{8}\.woff2$/);
-        expect(existsSync(path.join(process.cwd(), 'public', url)), url).toBe(true);
+        expect(url, `${face.family} ${face.range.slice(0, 16)}`).toMatch(/^\/af\/fonts\/[\w.-]+\.[0-9a-f]{8}\.woff2$/);
+        expect(existsSync(path.join(process.cwd(), 'public', 'fonts', path.basename(url))), url).toBe(true);
       }
     }
   }, 60_000);
@@ -109,7 +109,7 @@ describe('the shell and the story name one file per face', () => {
   it('no two URLs across the shell and every theme carry the same bytes', async () => {
     const { css, assets } = await appBuild();
     const all = [...facesOf(css, 'shell'), ...facesOf(storyCss(), 'story')];
-    const bytesOf = (url: string) => url.startsWith('/fonts/') ? readFileSync(path.join(process.cwd(), 'public', url)) : assets.get(url);
+    const bytesOf = (url: string) => url.startsWith('/af/fonts/') ? readFileSync(path.join(process.cwd(), 'public', 'fonts', path.basename(url))) : assets.get(url);
     const urlsByHash = new Map<string, Set<string>>();
     for (const url of new Set(all.flatMap((f) => f.urls).filter((u) => /\.woff2$/.test(u)))) {
       const bytes = bytesOf(url);

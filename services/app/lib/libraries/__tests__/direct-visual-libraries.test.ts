@@ -7,7 +7,7 @@ import registry from '../registry.json';
 import {isPublicSkillTopic} from '../../skills';
 it('ships both native visualization guides on the public HTTP and archive surface',()=>{expect(isPublicSkillTopic('maps')).toBe(true);expect(isPublicSkillTopic('diagrams')).toBe(true);});
 it('provides pinned native Mermaid and framework-free deck.gl APIs as closed browser modules',async()=>{
- expect(libraryUrls()).toMatchObject({pele:'/libraries/pele-1.12.0/index.js','deck-gl':'/libraries/deck-gl-9.4.0/index.js'});
+ expect(libraryUrls()).toMatchObject({pele:'/af/lib/pele-1.12.0/index.js','deck-gl':'/af/lib/deck-gl-9.4.0/index.js'});
  for(const name of ['pele','deck-gl']){
   const spec=(registry as Record<string,{entry:string}>)[name];expect(spec).toBeDefined();
   const result=await build({entryPoints:[path.resolve('lib/libraries',spec.entry)],bundle:true,minify:true,write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',logLevel:'silent'});

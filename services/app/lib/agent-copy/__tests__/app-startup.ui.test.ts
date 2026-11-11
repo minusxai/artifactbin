@@ -6,7 +6,7 @@ it('paints a named product loading status before JavaScript and keeps help in th
   host.innerHTML = agentDiscoveryBody(agentDiscovery('https://example.test'));
   const startup = host.querySelector('[data-app-startup]')!;
   expect(startup.querySelector('[role="status"]')?.textContent).toBe('Loading artifactbin…');
-  expect(startup.querySelector('img')?.getAttribute('src')).toBe('/logo-128.png');
+  expect(startup.querySelector('img')?.getAttribute('src')).toBe('/af/img/logo-128.png');
   expect(startup.querySelector('noscript')?.textContent).toContain('JavaScript');
   const visible = startup.cloneNode(true) as Element;
   visible.querySelector('noscript')?.remove();

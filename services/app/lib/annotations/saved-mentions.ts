@@ -3,12 +3,12 @@ import type {Queryable} from '@artifactbin/contracts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {invitePeople} from '@/lib/artifacts';
-import {isPersonMentionHref} from '../document';
+import {personMentionId} from '../document';
 
-/** The people a comment body mentions (`/people/<id>` links), in order. */
+/** The people a comment body mentions (`/api/people/<id>` links, or the stored `/people/<id>` form), in order. */
 function mentionIds(body:string):string[]{
  const ids:string[]=[];
- const inline=(nodes:MdInline[])=>{for(const n of nodes){if(n.kind==='link'&&isPersonMentionHref(n.href))ids.push(n.href.slice('/people/'.length));else if(n.kind==='strong'||n.kind==='em')inline(n.children);}};
+ const inline=(nodes:MdInline[])=>{for(const n of nodes){const id=n.kind==='link'?personMentionId(n.href):null;if(id)ids.push(id);else if(n.kind==='strong'||n.kind==='em')inline(n.children);}};
  const blocks=(nodes:MdNode[])=>{for(const n of nodes){if((n.kind==='paragraph'||n.kind==='heading'))inline(n.children);else if(n.kind==='list')n.items.forEach(i=>blocks(i.children));else if(n.kind==='quote')blocks(n.children);}};
  blocks(parseMarkdownLite(body));
  return ids;

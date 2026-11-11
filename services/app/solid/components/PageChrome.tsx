@@ -115,7 +115,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
   return <>
-    <PageBar logo={<img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} />} mobileTitle={props.byline ? props.title ?? undefined : crumbs().at(-1)?.label}
+    <PageBar logo={<img src="/af/img/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} />} mobileTitle={props.byline ? props.title ?? undefined : crumbs().at(-1)?.label}
       compactContext={props.compactContext} compactNavigation={Boolean(props.compactActions)} navigation={<>        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
         <Show when={props.byline} fallback={<>
           <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>

@@ -128,7 +128,7 @@ Set a nonzero height on the host. Observe its actual box so maps resize when a p
 
 The module and its included layer packages are pinned and packaged with an admitted native page dependency. The example above is self-contained and works without network access. It does not include a basemap provider or tile service. Add a basemap only when you have selected and disclosed its provider, network requirements and applicable terms. External tiles and remote data can fail or be unavailable offline. For application data, use the authorized dataset/backend APIs described in [HTML runtime](runtime.md) and pass the returned rows into deck.gl; do not put account credentials in URLs or page code.
 
-Region boundaries come with the platform, in a published page, the local preview and a download: `const regions = await (await fetch("/geojson/india-states.json")).json();` is a GeoJSON FeatureCollection for a `GeoJsonLayer`. `india-states.json`: 36 states, `properties` `name`, `code` (ISO 3166-2, `IN-MH`) and `postal` (`MH`). `us-states.json`: `properties.name`, FIPS code as the feature `id`. `world.json`: countries, `properties.name`, ISO 3166-1 alpha-3 code as the feature `id` where one exists.
+Region boundaries come with the platform, in a published page, the local preview and a download: `const regions = await (await fetch("/af/geojson/india-states.json")).json();` is a GeoJSON FeatureCollection for a `GeoJsonLayer`. `india-states.json`: 36 states, `properties` `name`, `code` (ISO 3166-2, `IN-MH`) and `postal` (`MH`). `us-states.json`: `properties.name`, FIPS code as the feature `id`. `world.json`: countries, `properties.name`, ISO 3166-1 alpha-3 code as the feature `id` where one exists.
 
 ## API reference
 

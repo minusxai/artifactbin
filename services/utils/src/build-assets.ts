@@ -1,8 +1,8 @@
-import { BUILD_ASSET_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts';
+import { BUILD_ASSET_HEADER, BUILD_ASSET_PATH, isAppBuildPath } from '@artifactbin/contracts';
 
-/** A candidate is only a probe; the app's manifest is the authority. */
+/** A candidate is only a probe; the app's manifest is the authority. The shape is the URL map's (`/af/app/`). */
 export function isBuildAssetPath(pathname: string): boolean {
-  return /^\/assets\/[\w.-]+\.(?:js|css|woff2)$/.test(pathname);
+  return isAppBuildPath(pathname);
 }
 
 /** Rebuild from an allowlist: no credentials, identity or forwarding inputs. */

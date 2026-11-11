@@ -38,21 +38,20 @@
  */
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import { attachActor, readCookie } from '@artifactbin/utils';
-import { ANONYMOUS } from '@artifactbin/contracts';
+import { ANONYMOUS, documentHostServes } from '@artifactbin/contracts';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
 import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
-import { LEGACY_CORE_PATH } from '@/lib/html-page';
 import { compressDynamic } from './content-encoding';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
-/** Public, content-addressed (or static) bytes any origin may load: the runtime, fonts, boundaries, images. */
-const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|native-regions|native-markdown|collab|state)\.js$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:apollo|reader)\/[a-f0-9]{64}$|^\/af\/styles\.css$/;
-
-/** STATIC, or the legacy core address existing pages still load (lib/html-page LEGACY_CORE_PATH). */
-const isStatic = (pathname: string): boolean => STATIC.test(pathname) || pathname === LEGACY_CORE_PATH;
+/**
+ * Public bytes any origin may load (contracts `documentHostServes`): every `/af/` file (none reads a credential),
+ * the old file directories that still answer, stored bytes (`/assets/`), the basemap proxy and the icon.
+ */
+const isStatic = documentHostServes;
 
 const NO_STORE = { 'cache-control': 'no-store' };
 

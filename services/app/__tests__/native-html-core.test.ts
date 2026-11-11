@@ -47,7 +47,7 @@ it('serves registered platform fonts by plain name, immutable, and nothing else'
  const request=new Request('https://app.example.test/af/fonts/'+name);
  const response=await font(request,{params:Promise.resolve({name})});expect(response.status).toBe(200);
  expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');expect(response.headers.get('content-type')).toBe('font/woff2');
- expect(Buffer.from(await response.arrayBuffer())).toEqual(readFileSync('public'+face.url));
+ expect(Buffer.from(await response.arrayBuffer())).toEqual(readFileSync('public/fonts/'+face.url.split('/').at(-1)!));
  const head=await fontHead(new Request(request,{method:'HEAD'}),{params:Promise.resolve({name})});expect(await head.text()).toBe('');
  for(const bad of ['../secret.woff2',face.url.split('/').at(-1)!,'unknown-font.woff2'])expect((await font(request,{params:Promise.resolve({name:bad})})).status).toBe(404);
  const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));app.get('/af/fonts/:name',c=>font(c.req.raw,{params:Promise.resolve({name:c.req.param('name')})}));

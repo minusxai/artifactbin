@@ -10,7 +10,7 @@ export function agentDiscoveryHead(help:AgentDiscovery):string{
  * status and a retry link that works without app JavaScript. Agent guidance is
  * confined to noscript; head and tail discovery remain available to agents. */
 export function agentDiscoveryBody(help:AgentDiscovery):string{
- return `<main data-app-startup class="app-startup"><div class="app-startup-brand"><img src="/logo-128.png" alt="" width="28" height="28"><span>artifactbin</span></div><p role="status" aria-live="polite">Loading artifactbin…</p><p class="app-startup-retry">Taking a while? <a href="">Reload</a></p><noscript><p>Enable JavaScript to open artifactbin.</p><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></noscript></main>`;
+ return `<main data-app-startup class="app-startup"><div class="app-startup-brand"><img src="/af/img/logo-128.png" alt="" width="28" height="28"><span>artifactbin</span></div><p role="status" aria-live="polite">Loading artifactbin…</p><p class="app-startup-retry">Taking a while? <a href="">Reload</a></p><noscript><p>Enable JavaScript to open artifactbin.</p><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></noscript></main>`;
 }
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{

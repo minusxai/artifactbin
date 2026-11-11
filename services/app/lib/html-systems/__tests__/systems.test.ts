@@ -19,7 +19,7 @@ it('declares each platform font face once, on /af/fonts/ names that map to exact
  expect(sources.length).toBe(new Set(sources).size);
  const packaged=new Map(Object.values(manifest.systems).flat().map(face=>[PLATFORM_FONTS_PATH+platformFontName(face.url),face.url]));
  for(const url of sources){expect(url).toMatch(/^\/af\/fonts\/[a-z0-9-]+\.woff2$/);expect(packaged.has(url),url).toBe(true);}
- const file=packaged.get(sources[0]!)!.slice(1);
+ const file='fonts/'+packaged.get(sources[0]!)!.split('/').at(-1)!;
  expect(existsSync(path.resolve('public',file))||existsSync(path.resolve('services/app/public',file))).toBe(true);
 });
 

@@ -6,20 +6,22 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
+import { storyFontManifest } from '@/lib/html-systems';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
 const cacheOf = async (path: string) => (await app.request(path)).headers.get('cache-control');
 
 describe('static cache headers', () => {
   it('serves the content-addressed trees immutable for a year, CORS-open', async () => {
-    for (const path of ['/fonts/anything.woff2']) {
+    const hashed = storyFontManifest.app[0]!.url;
+    for (const path of [hashed, hashed.replace('/af/fonts/', '/fonts/')]) {
       expect(await cacheOf(path), path).toContain('immutable');
       expect((await app.request(path)).headers.get('access-control-allow-origin'), path).toBe('*');
     }
   });
 
   it('gives the geojson a day, not a year', async () => {
-    expect(await cacheOf('/geojson/world.json')).toBe('public, max-age=86400');
+    expect(await cacheOf('/af/geojson/world.json')).toBe('public, max-age=86400');
   });
 
   it('hands a long-lived cache to nothing else — a document is per-viewer', async () => {

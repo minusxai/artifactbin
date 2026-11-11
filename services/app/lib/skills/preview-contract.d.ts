@@ -24,7 +24,7 @@ export interface PreviewLimits { maxFiles: number; maxFileBytes: number; maxTota
 export interface RevisionSource { current(options?: {fresh?: boolean}): Promise<string> }
 /** Concurrent clients share one scan; a monotonic test clock controls the cache. */
 export declare function createRevisionSource(root: string, options?: { now?: () => number; scan?: () => Promise<string>; intervalMs?: number }): RevisionSource;
-/** Platform code for the preview, admitted only at closed paths (/af/<module>.js, /libraries/<name>-<semver>/index.js,
+/** Platform code for the preview, admitted only at closed paths (/af/<module>.js, /af/lib/<name>-<semver>/index.js,
  * /af/components/<file>.js), fetched once per session; a source checkout's own build outputs come first. */
 export interface PlatformModules {
   module(pathname: string): Promise<Buffer | null>;

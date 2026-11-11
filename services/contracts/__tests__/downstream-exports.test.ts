@@ -13,10 +13,24 @@ import {
   type MutationInput, type MutationOutcome, type ObjectKind, type Part, type Queryable, type RunSnapshot, type RunStart,
   type RunnerService, type SqlService, type TokenReader, type TokenRecord, type Upstream,
 } from '@artifactbin/contracts';
+// The URL map the deployment's proxy (and any co-hosted router) reads instead of keeping its own path lists:
+// the classifier, the host allowlists, the legacy table and the e-mail link builder its mail extension writes.
+import {
+  URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, canonicalPublicPath,
+  LEGACY_PUBLIC_PATHS, emailLinkPath, personLinkPath, isScreenPath, type PathKind,
+} from '@artifactbin/contracts';
 
 it('exports the values the deployment imports', () => {
   const values = { ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, IDENTITY_CALL_PATH, IDENTITY_INTROSPECT_PATH, RESOLVER_LIMITS, SERVICE_AUTH_HEADER, eventName, isQueryFailure };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
+});
+
+it('exports the URL map the deployment classifies paths with', () => {
+  for (const [name, value] of Object.entries({ URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, canonicalPublicPath, LEGACY_PUBLIC_PATHS, emailLinkPath, personLinkPath, isScreenPath })) expect(value, name).toBeDefined();
+  expect(URL_SPACE_PATH).toBe('/af/url-space.json');
+  expect(emailLinkPath('d1')).toBe('/api/email/d1');
+  expect(classifyPath('/email/d1')).toBe('legacy');
+  expectTypeOf<PathKind>().not.toBeNever();
 });
 
 it('exports the types the deployment imports', () => {

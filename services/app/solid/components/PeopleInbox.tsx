@@ -2,6 +2,7 @@
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
 import type { MemberNotificationItem } from '@artifactbin/contracts';
+import { personLinkPath } from '@artifactbin/contracts/url-space';
 import { timeAgo } from '../ui/ui';
 import { Button } from '../ui/Button';
 import { StatusMessage } from '../ui/StatusMessage';
@@ -12,7 +13,7 @@ const ACTION: Record<string, string> = { group_invited:'invited you to group',gr
 function senderLabel(item: MemberNotificationItem): string { return item.agent_label ? item.agent_label === 'Agent' ? 'Agent' : `@${item.agent_label.replace(/^@/, '')}` : `@${item.username ?? 'someone'}`; }
 function destination(item: MemberNotificationItem): string {
   if(item.source?.startsWith('group:'))return item.group_handle?'/@'+encodeURIComponent(item.group_handle):'/account';
-  if (item.kind === 'follow') return `/people/${item.sender_id}`;
+  if (item.kind === 'follow') return personLinkPath(item.sender_id);
   const tail = item.source?.startsWith('node:') ? `#${item.source.slice(5)}` : item.source?.startsWith('comment:') ? `?thread=${item.source.slice(8)}${item.first_update_id ? `&comment=${encodeURIComponent(item.first_update_id)}` : ''}` : '';
   return `/a/${item.artifact_id}${tail}`;
 }

@@ -41,7 +41,7 @@ export function MenuPanel(props: { close: () => void; phone?: boolean; top?: num
   return (
     <Drawer label="Menu" role="navigation" side={props.phone ? 'bottom' : 'right'} top={props.top ?? BAR_HEIGHT} onClose={close}>
       <Button variant="secondary" size="sm" icon aria-label="Dismiss menu" onClick={close} style={{ top: 'max(12px, env(safe-area-inset-top))' }} class="absolute right-3 top-3 sm:hidden"><X size={17} stroke-width={1.5} /></Button>
-      <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
+      <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/af/img/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
       {link('/', 'Artifacts', <FileText size={15} stroke-width={1.5} />)}
       {link('/notifications', 'Notifications', <User size={15} stroke-width={1.5} />)}
       {link('/account', 'Account', <User size={15} stroke-width={1.5} />)}

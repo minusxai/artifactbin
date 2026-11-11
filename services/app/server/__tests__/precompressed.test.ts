@@ -33,14 +33,14 @@ afterAll(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true
 function fixture() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'precompressed-'));
   dirs.push(dir);
-  mkdirSync(path.join(dir, 'story')); mkdirSync(path.join(dir, 'assets')); mkdirSync(path.join(dir, '.vite'));
-  for (const file of ['story/entry-abc.js', 'assets/app-abc.js']) {
+  mkdirSync(path.join(dir, 'story')); mkdirSync(path.join(dir, 'af/app'), { recursive: true }); mkdirSync(path.join(dir, '.vite'));
+  for (const file of ['story/entry-abc.js', 'af/app/app-abc.js']) {
     writeFileSync(path.join(dir, file), CODE);
     writeFileSync(path.join(dir, file + '.br'), brotliCompressSync(Buffer.from(CODE)));
     writeFileSync(path.join(dir, file + '.gz'), gzipSync(Buffer.from(CODE), { level: 9 }));
   }
   writeFileSync(path.join(dir, 'story/plain-abc.js'), CODE);
-  writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'assets/app-abc.js' } }));
+  writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'af/app/app-abc.js' } }));
   return { dir, br: readFileSync(path.join(dir, 'story/entry-abc.js.br')), gz: readFileSync(path.join(dir, 'story/entry-abc.js.gz')) };
 }
 const listen = async (app: { fetch: (request: Request) => Response | Promise<Response> }) => {
@@ -116,7 +116,7 @@ describe('precompressedStatic', () => {
 describe('the build-asset door, direct and through the auth host', () => {
   it('serves the brotli sibling of a manifest-listed asset through the app, in-process and over HTTP', async () => {
     const tree = fixture();
-    const br = readFileSync(path.join(tree.dir, 'assets/app-abc.js.br'));
+    const br = readFileSync(path.join(tree.dir, 'af/app/app-abc.js.br'));
     const app = new Hono(); mountBuildAssets(app, tree.dir);
     app.all('*', c => c.text('protected fallback', 403));
     const secret = 'precompressed-test-secret-000000000';
@@ -129,7 +129,7 @@ describe('the build-asset door, direct and through the auth host', () => {
       overHttp: await listen(createAuthHost(await testAuthOptions({ sessions: { resolve: session }, upstream: overHttp(appServer.base, secret) }))),
     };
     for (const [door, server] of Object.entries(doors)) {
-      const path = door === 'app' ? '/api/internal/build-assets/assets/app-abc.js' : '/assets/app-abc.js';
+      const path = door === 'app' ? '/api/internal/build-assets/af/app/app-abc.js' : '/af/app/app-abc.js';
       const res = await readRawResponse(server.port, path, { headers: { 'accept-encoding': BROWSER } });
       expect(res.status, door).toBe(200);
       expect(res.headers['content-encoding'], door).toBe('br');

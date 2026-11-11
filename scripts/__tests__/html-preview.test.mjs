@@ -88,21 +88,21 @@ test('a linked local data file is served as a file, never as a dataset session: 
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 
-test('platform modules come only from closed /af/, /libraries/ and /af/components/ paths, fetched once from the selected server',async()=>{
+test('platform modules come only from closed /af/, /af/lib/ and /af/components/ paths, fetched once from the selected server',async()=>{
  const {platformModules,LEGACY_CORE_PATH}=await import('../../services/app/skills/artifactbin/scripts/preview-platform.mjs');
  // The raw-shipped preview platform keeps the one copy of the app's legacy core address: pinned equal here.
  assert.equal(LEGACY_CORE_PATH,(await import('../../services/app/lib/html-page/core-script.ts')).LEGACY_CORE_PATH);
  const {withHttpServer}=await import('../../services/test-support/src/net.ts');
  const requests=[];
- const files={'/af/core.js':'core()','/af/apollo.js':'export const apollo=1;','/af/state.js':'export const state=1;','/af/reader.js':'export const reader=1;','/af/components/tabs.js':'import "./chunk-abc.js";','/af/components/chunk-abc.js':'export {};','/libraries/fixture-1.0.0/index.js':'export const value=1;','/af/import-map.json':JSON.stringify({imports:{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js','@afbin/evil':'https://evil.test/x.js','not-reserved':'/af/components/tabs.js'}})};
+ const files={'/af/core.js':'core()','/af/apollo.js':'export const apollo=1;','/af/state.js':'export const state=1;','/af/reader.js':'export const reader=1;','/af/components/tabs.js':'import "./chunk-abc.js";','/af/components/chunk-abc.js':'export {};','/af/lib/fixture-1.0.0/index.js':'export const value=1;','/af/import-map.json':JSON.stringify({imports:{'@afbin/fixture':'/af/lib/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js','@afbin/evil':'https://evil.test/x.js','not-reserved':'/af/components/tabs.js'}})};
  const server=await withHttpServer((incoming,reply)=>{requests.push(incoming.url);const body=files[incoming.url];reply.writeHead(body===undefined?404:200,{'content-type':incoming.url.endsWith('.json')?'application/json':'text/javascript'});reply.end(body??'missing');});
  try{
   const platform=platformModules({origin:server.base});
   assert.equal(String(await platform.module('/af/core.js')),'core()');assert.equal(String(await platform.module('/af/v1/core.js')),'core()');
   assert.equal(String(await platform.module('/af/components/chunk-abc.js')),'export {};');
-  for(const refused of ['/af/../secret.js','/af/components/nested/x.js','/libraries/fixture/index.js','/index.html','/af/styles.css'])assert.equal(await platform.module(refused),null,refused);
+  for(const refused of ['/af/../secret.js','/af/components/nested/x.js','/af/lib/fixture/index.js','/index.html','/af/styles.css'])assert.equal(await platform.module(refused),null,refused);
   assert.equal(await platform.module('/af/components/absent.js'),null);
-  assert.deepEqual(await platform.importMap(),{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js'});
+  assert.deepEqual(await platform.importMap(),{'@afbin/fixture':'/af/lib/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js'});
   const runtime=await platform.runtimeAssets();assert.equal(runtime.core,'core()');assert.equal(runtime.apolloPath,'/af/apollo.js');assert.equal(runtime.statePath,'/af/state.js');assert.equal(runtime.chrome,undefined);
   await platform.module('/af/core.js');assert.equal(requests.filter(url=>url==='/af/core.js').length,1);
   assert.equal(await platformModules({origin:null}).module('/af/core.js'),null);
@@ -113,10 +113,10 @@ test('platform modules come only from closed /af/, /libraries/ and /af/component
 test('private preview mounts only admitted versioned library bytes without eval permissions',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'preview-libraries-'));let session;
  try {
-  await writeFile(join(dir,'index.html'),'<script type="module">import * as vega from "/libraries/vega-6.3.1/index.js";</script>');
-  session=await startPreview({root:dir,libraryAssets:{'/libraries/vega-6.3.1/index.js':'export const version="6.3.1";'}});
-  const response=await fetch(session.url+'libraries/vega-6.3.1/index.js'); assert.equal(response.status,200); assert.equal(await response.text(),'export const version="6.3.1";');
-  assert.equal((await fetch(session.url+'libraries/vega-999.0.0/index.js')).status,404); assert.doesNotMatch(response.headers.get('content-security-policy'),/'unsafe-eval'/);
+  await writeFile(join(dir,'index.html'),'<script type="module">import * as vega from "/af/lib/vega-6.3.1/index.js";</script>');
+  session=await startPreview({root:dir,libraryAssets:{'/af/lib/vega-6.3.1/index.js':'export const version="6.3.1";'}});
+  const response=await fetch(session.url+'af/lib/vega-6.3.1/index.js'); assert.equal(response.status,200); assert.equal(await response.text(),'export const version="6.3.1";');
+  assert.equal((await fetch(session.url+'af/lib/vega-999.0.0/index.js')).status,404); assert.doesNotMatch(response.headers.get('content-security-policy'),/'unsafe-eval'/);
  }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
 });
 
@@ -125,8 +125,8 @@ test('explicit export packs local component graphs and registered libraries with
  try{
   const html='<script type="module">import {lazy} from "./components/main.js";lazy();</script>';
   await mkdir(join(dir,'components'));await writeFile(join(dir,'index.html'),html);
-  await writeFile(join(dir,'components/main.js'),'export const lazy=()=>import("./lazy.js");');await writeFile(join(dir,'components/lazy.js'),'export {value} from "/libraries/fixture-1.0.0/index.js";');
-  session=await startPreview({root:dir,libraryAssets:{'/libraries/fixture-1.0.0/index.js':'export const value=42;'}});
+  await writeFile(join(dir,'components/main.js'),'export const lazy=()=>import("./lazy.js");');await writeFile(join(dir,'components/lazy.js'),'export {value} from "/af/lib/fixture-1.0.0/index.js";');
+  session=await startPreview({root:dir,libraryAssets:{'/af/lib/fixture-1.0.0/index.js':'export const value=42;'}});
   const response=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(response.status,200);const packed=await response.json();assert.equal(packed.html,html);assert.match(packed.renderedHtml,/data:text\/javascript;base64,/);assert.match(packed.renderedHtml,/@afbin\/local-export/);assert.equal(await readFile(join(dir,'index.html'),'utf8'),html);
   for(const source of ['<script type="module">import "https://foreign.test/a.js";</script>','<script src="./missing.js"></script>','<script src="../outside.js"></script>']){await writeFile(join(dir,'index.html'),source);const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Local export failed/);assert.equal(await readFile(join(dir,'index.html'),'utf8'),source);}
   await writeFile(join(dir,'index.html'),'<script src="./link.js"></script>');await symlink(join(dir,'components/main.js'),join(dir,'link.js'));const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Symlink/);

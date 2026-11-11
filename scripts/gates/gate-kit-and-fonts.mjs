@@ -58,7 +58,7 @@ const face = (name) => {
     (file) => file.startsWith(name) && file.endsWith(".woff2"),
   );
   if (!file) throw Error(`Missing font ${name}`);
-  return "/fonts/" + file;
+  return "/af/fonts/" + file;
 };
 const bodyFace = face("noto-serif-latin-400-normal.");
 const displayFace = face("cormorant-garamond-latin-wght-normal.");
@@ -713,7 +713,7 @@ try {
           );
           check(
             new Set(result.fetched).size === result.fetched.length &&
-              result.fetched.every((url) => url.startsWith("/fonts/")),
+              result.fetched.every((url) => url.startsWith("/af/fonts/")),
             `shell ${path} fetches each local font once`,
           );
         } finally {

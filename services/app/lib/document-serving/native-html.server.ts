@@ -14,6 +14,7 @@ const JS='application/javascript; charset=utf-8';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { scriptFingerprint } from '@/lib/html-autofix';
 import type { HtmlPageLink } from '@artifactbin/contracts';
+import { withLegacy } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
@@ -93,7 +94,7 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     // Its page functions too (html-runtime/fn-fetch): the page's own function path, a prefix source.
     // The exporter's capture alone also reads its `sql` from the page SQL door (lib/page-doors `opaqueSqlRead`).
     const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
-    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
+    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${withLegacy(PLATFORM_FONTS_PATH).map(dir=>new URL(dir,base).href).join(' ')}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions,framers:embedTrustedOrigins()}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }

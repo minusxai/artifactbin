@@ -9,7 +9,7 @@
 import { createContext, createEffect, createSignal, on, onCleanup, onMount, Show, useContext, type Accessor, type JSX } from 'solid-js';
 import type { MembershipStatus } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { isPersonMentionHref } from '@/lib/document/person-mentions';
+import { personMentionId } from '@/lib/document/person-mentions';
 
 const MentionStatuses = createContext<Accessor<Record<string, MembershipStatus>>>(() => ({}));
 
@@ -34,6 +34,6 @@ export function PersonMentionProvider(props: { artifactId?: string; backend?: Ar
 
 export function PersonMention(props: { href: string; class?: string; children: JSX.Element }): JSX.Element {
   const statuses = useContext(MentionStatuses);
-  const status = () => isPersonMentionHref(props.href) ? statuses()[props.href.slice('/people/'.length)] : undefined;
+  const status = () => { const id = personMentionId(props.href); return id ? statuses()[id] : undefined; };
   return <a href={props.href} class={props.class}>{props.children}<Show when={status() === 'pending'}><span class="ml-1 text-xs text-muted-foreground" aria-label="Invitation pending">· Pending</span></Show></a>;
 }

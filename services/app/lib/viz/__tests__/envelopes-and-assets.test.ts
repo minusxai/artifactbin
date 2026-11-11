@@ -32,9 +32,9 @@ describe('geo boundaries',()=>{
   await expect(loadGeoFeatures('atlantis')).rejects.toThrow('unknown geo boundary "atlantis"');
   expect(await loadGeoFeatures('india-states')).toEqual(features);
   expect(await loadGeoFeatures('india-states')).toEqual(features);
-  expect(fetch).toHaveBeenCalledOnce();expect(fetch).toHaveBeenCalledWith('/geojson/india-states.json');
+  expect(fetch).toHaveBeenCalledOnce();expect(fetch).toHaveBeenCalledWith('/af/geojson/india-states.json');
   vi.stubGlobal('fetch',vi.fn(async()=>new Response('missing',{status:404})));
-  await expect(loadGeoFeatures('world')).rejects.toThrow('Failed to load boundary asset /geojson/world-atlas-countries-110m.json');
+  await expect(loadGeoFeatures('world')).rejects.toThrow('Failed to load boundary asset /af/geojson/world-atlas-countries-110m.json');
  });
 });
 

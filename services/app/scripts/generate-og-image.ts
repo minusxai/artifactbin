@@ -54,7 +54,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
   <div class="row">
-    <img class="logo" src="/logo.png" alt="">
+    <img class="logo" src="/af/img/logo.png" alt="">
     <div>
       <div class="title">artifactbin</div>
       <div class="tagline">agents publish HTML artifacts, you get a link</div>
@@ -73,7 +73,7 @@ async function main() {
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: HTML });
       }
       try {
-        const body = readFileSync(path.join(PUBLIC_DIR, url.pathname.replace(/^\//, '')));
+        const body = readFileSync(path.join(PUBLIC_DIR, url.pathname.replace(/^\/(?:af\/)?/, '')));
         const type = url.pathname.endsWith('.woff2') ? 'font/woff2'
           : url.pathname.endsWith('.png') ? 'image/png'
           : 'application/octet-stream';

@@ -84,12 +84,12 @@ describe('appendCspExtensions', () => {
 describe('fontPreloadTags', () => {
   it('writes one crossorigin preload per distinct url, escaped, high priority on request', () => {
     expect(fontPreloadTags([])).toBe('');
-    const tags = fontPreloadTags(['/fonts/a.woff2', '/fonts/a.woff2', '/fonts/b"&.woff2']);
+    const tags = fontPreloadTags(['/af/fonts/a.woff2', '/af/fonts/a.woff2', '/af/fonts/b"&.woff2']);
     expect(tags.match(/<link /g)).toHaveLength(2);
-    expect(tags).toContain('href="/fonts/b&quot;&amp;.woff2"');
+    expect(tags).toContain('href="/af/fonts/b&quot;&amp;.woff2"');
     expect(tags).toContain('as="font" type="font/woff2" crossorigin>');
     expect(tags).not.toContain('fetchpriority');
-    expect(fontPreloadTags(['/fonts/a.woff2'], true)).toContain('fetchpriority="high" rel="preload"');
+    expect(fontPreloadTags(['/af/fonts/a.woff2'], true)).toContain('fetchpriority="high" rel="preload"');
   });
 });
 
@@ -104,6 +104,6 @@ describe('APP_SHELL_FONT_PRELOADS', () => {
   it('names distinct hashed woff2 files of the shell face', () => {
     expect(APP_SHELL_FONT_PRELOADS.length).toBeGreaterThan(0);
     expect(new Set(APP_SHELL_FONT_PRELOADS).size).toBe(APP_SHELL_FONT_PRELOADS.length);
-    for (const url of APP_SHELL_FONT_PRELOADS) expect(url).toMatch(/^\/fonts\/jetbrains-mono[\w-]*\.[a-f0-9]{8}\.woff2$/);
+    for (const url of APP_SHELL_FONT_PRELOADS) expect(url).toMatch(/^\/af\/fonts\/jetbrains-mono[\w-]*\.[a-f0-9]{8}\.woff2$/);
   });
 });

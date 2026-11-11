@@ -17,7 +17,7 @@ it('offers every current system as a thumbnail, with the existing system selecte
     const option = screen.getByRole('button', { name: `Design system ${system.label}` });
     expect(option).toHaveAttribute('aria-pressed', String(system.name === 'signout'));
     expect(option.querySelector('[data-design-specimen]')).not.toBeNull();
-    expect(option.querySelector('img')).toHaveAttribute('src', `/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
+    expect(option.querySelector('img')).toHaveAttribute('src', `/af/img/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
   }
   expect(document.querySelector('link[href*="design-system"]')).toBeNull();
   expect(screen.queryByRole('button', { name: /Modernist/ })).toBeNull();
@@ -46,7 +46,7 @@ it('resolves each specimen in the document mode without putting design tokens on
   for (const system of STORY_SYSTEMS) {
     const option = screen.getByRole('button', { name: `Design system ${system.label}` });
     const specimen = option.querySelector<HTMLElement>('[data-design-specimen]')!;
-    expect(specimen.querySelector('img')).toHaveAttribute('src', `/design-systems/${system.name}-dark.webp`);
+    expect(specimen.querySelector('img')).toHaveAttribute('src', `/af/img/design-systems/${system.name}-dark.webp`);
     expect(specimen.style.getPropertyValue('--font-display')).toBe('');
     expect(option.style.getPropertyValue('--background')).toBe('');
   }

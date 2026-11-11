@@ -78,7 +78,7 @@ const chartHtml=await chartResponse.text(),chartFile=path.join(work,'native-data
 check(!chartHtml.includes(token),'dataviz download contains no account credential');
 const registered=new Map();
 for(const library of ['vega-6.3.1','vega-lite-6.4.3']){
- const url=`${BASE}/libraries/${library}/index.js`,response=await fetch(url);if(response.status!==200)throw Error(`Registered library ${library}: ${response.status}`);
+ const url=`${BASE}/af/lib/${library}/index.js`,response=await fetch(url);if(response.status!==200)throw Error(`Registered library ${library}: ${response.status}`);
  const bytes=Buffer.from(await response.arrayBuffer());registered.set(url,bytes);check.note(`registered ${library} SHA256 ${createHash('sha256').update(bytes).digest('hex')}`);
 }
 const authorDocument=new JSDOM(chartSource),authorModule=authorDocument.window.document.querySelector('script[type="module"]').textContent;authorDocument.window.close();

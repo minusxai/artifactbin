@@ -1,8 +1,7 @@
 /** Anonymous default hosts: typed owners, eligible HTML, native read doors only. */
 import type { Context, MiddlewareHandler } from 'hono';
 import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
-import { isBuildAssetPath } from '@artifactbin/utils';
+import { ACTOR_HEADER, ownerHostServes } from '@artifactbin/contracts';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
 import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
@@ -28,16 +27,15 @@ import { GET as avatarGet } from '@/app/api/users/[id]/avatar/route';
 type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
 
 /**
- * Static trees the served document and its runtime load from; passed on to the app's own static handlers.
- * Only the native runtime and public static resources are admitted.
+ * The public files a served document and its runtime load from, passed on to the app's own static handlers: the
+ * reader's part of each `/af/` directory and the fixed files the URL map marks `owner` (contracts `ownerHostServes`:
+ * the reader runtime, styles, components, fonts, libraries, boundaries, the app's built css and fonts, the icon; never
+ * the editing chrome or an app script).
  */
-const STATIC = /^\/(?:fonts|libraries|geojson)\/|^\/favicon\.ico$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/(?:apollo|reader)\.js$|^\/af\/styles\.css$|^\/af\/fonts\/[a-z0-9-]+\.woff2$/;
-/** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
-const buildStyle = (path: string): boolean => isBuildAssetPath(path) && /\.(?:css|woff2)$/.test(path);
 /** The dev shell stylesheet is public CSS, never Vite's executable source graph. */
 export function userHostStaticPath(path:string):boolean {
  if (/%|\\/.test(path)) return false;
- return STATIC.test(path)||buildStyle(path)||(IS_DEV&&path==='/shell.css');
+ return ownerHostServes(path)||(IS_DEV&&path==='/shell.css');
 }
 /** Credentials never reach a handler on an anonymous owner host: the reader is a guest, by construction. */
 export const USER_HOST_CREDENTIAL_HEADERS = ['cookie', 'authorization', 'proxy-authorization', ACTOR_HEADER];

@@ -2,7 +2,7 @@
 /** One protected document bar, independent of routing, accounts and transports. */
 import X from 'lucide-solid/icons/x';
 import { Show, type JSX } from 'solid-js';
-import logoUrl from '../../public/logo-128.png';
+import logoUrl from '../../public/img/logo-128.png';
 import { CHROME_IDENTITY } from './chrome-identity';
 import { Button } from '../ui/Button';
 

@@ -5,7 +5,7 @@
  * (`<origin>/a/<id>/query`), its own live stream (`<origin>/a/<id>/events`) and
  * that stream's `/frame` sub-path, its own write endpoint
  * (`<origin>/a/<id>/mutate`), its anonymous asset resolver
- * (`<origin>/a/<id>/resolve`), the static `/geojson/` boundary files, and
+ * (`<origin>/a/<id>/resolve`), the `/af/geojson/` boundary files, and
  * `blob:`/`data:` for the local URLs GLB loaders build, its own published files
  * (`<origin>/a/<id>/assets`) — and nothing else on the origin. A configured asset
  * origin adds itself, and nothing else again.
@@ -25,7 +25,7 @@
  * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
  * __tests__/raw-document.test.ts.
  */
-import { BASEMAP_PATH } from '@artifactbin/contracts';
+import { BASEMAP_PATH, withLegacy } from '@artifactbin/contracts';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document';
 /** Where each kind of subresource may come from — content-independent. */
@@ -104,14 +104,15 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
 /**
  * …and the one static directory: the boundary geometry the geo charts fetch
- * (`loadGeoFeatures` → `/geojson/<file>.json`, an allowlisted registry of
- * public files under `public/`). A trailing slash makes a CSP source a
+ * (`loadGeoFeatures` → `/af/geojson/<file>.json`, an allowlisted registry of
+ * public files under `public/`; saved pages may still name the old `/geojson/`,
+ * which `withLegacy` adds from the legacy table). A trailing slash makes a CSP source a
  * directory-prefix match, so this admits exactly those files and nothing
  * else on the origin. Without it every choropleth/point map rendered inside
  * a served document failed its boundary fetch — connect-src governs fetch()
  * even same-origin.
  */
-const GEOJSON_DIR_PATH = '/geojson/';
+const GEOJSON_DIRS = withLegacy('/af/geojson/');
 
 /**
  * …and the bundled font files (public/fonts, the manifest's faces): the kit
@@ -120,7 +121,9 @@ const GEOJSON_DIR_PATH = '/geojson/';
  * page's fonts otherwise (lib/mermaid-images/mermaid-fonts). Public, immutable
  * files, like /geojson/ and /story/.
  */
-const FONTS_DIR_PATH = '/fonts/';
+const FONTS_DIRS = withLegacy('/af/fonts/');
+/** The hosted libraries' directory (and its old address, which saved pages import by URL). */
+const LIBRARY_DIRS = withLegacy('/af/lib/');
 
 export function markupCsp(origin: string, id: string, assetOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour
@@ -130,12 +133,12 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string): str
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${[...GEOJSON_DIRS, BASEMAP_PATH, ...FONTS_DIRS].map((dir) => self + dir).join(' ')} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // The hosted library and component directories stay explicit for documents that
     // import them (`@afbin/<name>`). This grants neither API fetches nor navigation.
-    const source=d.startsWith('script-src ')?d+` ${self}/libraries/ ${self}/af/components/`:d;
+    const source=d.startsWith('script-src ')?d+` ${[...LIBRARY_DIRS, '/af/components/'].map((dir) => self + dir).join(' ')}`:d;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
   // Its own published files (lib/html-publication-bundle) are read at the address publish wrote into a link.

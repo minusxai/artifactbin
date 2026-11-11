@@ -21,7 +21,7 @@ const packageDir = (pkg) => path.dirname(require.resolve(`${pkg}/package.json`))
  * STORY FONTS — from @fontsource packages (the Google Fonts binaries,
  * versioned through package-lock) into content-hashed files under
  * public/fonts, plus a manifest lib/html-systems/font-catalog reads. The hash in
- * the filename is what makes the app server's `immutable` cache rule on /fonts/* honest;
+ * the filename is what makes the app server's `immutable` cache rule on /af/fonts/* honest;
  * the manifest is generated (gitignored) so the registry can never name a
  * file that does not exist.
  *
@@ -122,7 +122,7 @@ function copyFont(pkg, file) {
   const name = `${file.replace(/\.woff2$/, '')}.${hash}.woff2`;
   if (!copied.has(name)) writeFileSync(`public/fonts/${name}`, bytes);
   copied.set(name, true);
-  return `/fonts/${name}`;
+  return `/af/fonts/${name}`;
 }
 const families = {};
 for (const { family, pkg, file, weight, style, preload } of FONT_FILES) {

@@ -26,7 +26,7 @@ describe('shared design-system thumbnails', () => {
   });
   it('ships every light/dark thumbnail as a compact 2x WebP', async () => {
     for (const slug of ROSTER) for (const suffix of ['', '-dark']) {
-      const bytes = readFileSync(path.join(REPO, 'services/app/public/design-systems', `${slug}${suffix}.webp`));
+      const bytes = readFileSync(path.join(REPO, 'services/app/public/img/design-systems', `${slug}${suffix}.webp`));
       expect(await sharp(bytes).metadata()).toMatchObject({ format: 'webp', width: 480, height: 436 });
       expect(bytes.length).toBeLessThan(40_000);
     }

@@ -23,13 +23,13 @@ it('maps every hosted library, highlight included, and every hosted component to
  // A library name wins: the legacy deck.gl and Mermaid wrapper elements are not hosted components.
  expect(libraryPathForSpecifier('@afbin/deck-gl')).toBe(libraryUrls()['deck-gl']);expect(libraryPathForSpecifier('@afbin/mermaid')).toBeUndefined();expect(libraryPathForSpecifier('@afbin/register-component')).toBeUndefined();
  for(const name of names)expect(imports['@afbin/'+name]).toBe(libraryUrls()[name]);
- expect(imports['@afbin/highlight']).toBe('/libraries/highlight-11.12.0/index.js');
+ expect(imports['@afbin/highlight']).toBe('/af/lib/highlight-11.12.0/index.js');
  expect(libraryVersions().vega).toBe('6.3.1');
 });
 it('resolves through one seam that ignores recorded pins until retained builds exist',()=>{
  expect(resolveLibraryUrl('vega','1.0.0')).toBe(resolveLibraryUrl('vega'));
- expect(libraryImports({vega:'1.0.0',unknown:'9'})['@afbin/vega']).toBe('/libraries/vega-6.3.1/index.js');
- expect(libraryPathForSpecifier('@afbin/vega')).toBe('/libraries/vega-6.3.1/index.js');
+ expect(libraryImports({vega:'1.0.0',unknown:'9'})['@afbin/vega']).toBe('/af/lib/vega-6.3.1/index.js');
+ expect(libraryPathForSpecifier('@afbin/vega')).toBe('/af/lib/vega-6.3.1/index.js');
  for(const bad of ['vega','@afbin/apollo','@afbin/nope','@afbin/__proto__','@afbin/vega/x'])expect(libraryPathForSpecifier(bad)).toBeUndefined();
 });
 it('exposes library URLs in the runtime JSON, never overriding an author import map key, and omits them offline',()=>{
@@ -55,14 +55,14 @@ it('packs a bare @afbin/vega import into the offline copy',async()=>{
  const html='<script type="module">import * as vega from "@afbin/vega";console.log(vega);</script>';
  const baseUrl='https://page.example/a/PAGE12/download';
  const resources=await referencedLibraryResources(html,[],baseUrl);
- expect(resources.map(r=>r.url)).toEqual(['/libraries/vega-6.3.1/index.js']);
+ expect(resources.map(r=>r.url)).toEqual(['/af/lib/vega-6.3.1/index.js']);
  const packed=await packOfflineDependencies({html,baseUrl,resources});
  expect(packed.embeddedUrls).toHaveLength(1);expect(packed.html).not.toContain('@afbin/vega');
 });
 it('local preview resolves and exports a bare @afbin/vega import',async()=>{
- const platform=platformModules({libraryAssets:{'/libraries/vega-6.3.1/index.js':'export const marker=1;','/libraries/pele-flowchart-1.12.0/index.js':'export {};'}});
+ const platform=platformModules({libraryAssets:{'/af/lib/vega-6.3.1/index.js':'export const marker=1;','/af/lib/pele-flowchart-1.12.0/index.js':'export {};'}});
  const map=await platform.importMap();
- expect(map).toEqual({'@afbin/vega':'/libraries/vega-6.3.1/index.js','@afbin/pele-flowchart':'/libraries/pele-flowchart-1.12.0/index.js'});
+ expect(map).toEqual({'@afbin/vega':'/af/lib/vega-6.3.1/index.js','@afbin/pele-flowchart':'/af/lib/pele-flowchart-1.12.0/index.js'});
  const html='<!doctype html><html><head></head><body><script type="module">import {marker} from "@afbin/vega";console.log(marker);</script></body></html>';
  const out=await packPreviewExport({html,pathname:'/index.html',libraries:map,load:async(name:string)=>{const bytes=await platform.module(name);if(bytes)return {contentType:'text/javascript',bytes};throw Error('missing '+name);}});
  expect(out).not.toContain('"@afbin/vega"');expect(out).toContain('importmap');
@@ -78,7 +78,7 @@ it('builds the highlight library with the web language set and tok- classes',asy
 it('changes the script fingerprint when a versioned path becomes @afbin/<name>, but import-map entries never enter it',async()=>{
  const {scriptFingerprint}=await import('../../html-autofix');
  const page=(spec:string)=>`<html><head></head><body><script type="module">import * as vega from "${spec}";console.log(vega);</script></body></html>`;
- const versioned=scriptFingerprint(page('/libraries/vega-6.3.1/index.js')),bare=scriptFingerprint(page('@afbin/vega'));
+ const versioned=scriptFingerprint(page('/af/lib/vega-6.3.1/index.js')),bare=scriptFingerprint(page('@afbin/vega'));
  expect(versioned).not.toBe(bare);
  // The fingerprint reads the authored source only; the generated map and runtime JSON are added at assembly.
  expect(scriptFingerprint(page('@afbin/vega'))).toBe(bare);

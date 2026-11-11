@@ -13,7 +13,8 @@ export async function buildPortableChrome():Promise<string>{
  let stylesheet=compiler.build(new Scanner({sources:compiler.sources}).scan());
  const manifest=JSON.parse(await readFile(path.join(app,'lib/html-systems/font-manifest.json'),'utf8')) as {app:{family:string;url:string;weight:string;style:string;format:string;unicodeRange?:string}[]};
  for(const font of manifest.app.filter(font=>['JetBrains Mono Variable','IBM Plex Sans'].includes(font.family)&&/^U\+0+(?:-|,|$)/i.test(font.unicodeRange??''))){
-  const bytes=await readFile(path.join(app,'public',font.url));
+  // `/af/fonts/<file>` is public/fonts/<file> (server/public-files).
+  const bytes=await readFile(path.join(app,'public/fonts',path.basename(font.url)));
   stylesheet+=`@font-face{font-family:${JSON.stringify(font.family)};font-style:${font.style};font-weight:${font.weight};font-display:swap;src:url(data:font/woff2;base64,${bytes.toString('base64')}) format(${JSON.stringify(font.format)});}`;
  }
  const solid:Plugin={name:'portable-solid',setup(builder){builder.onLoad({filter:/\.[jt]sx$/},async args=>{

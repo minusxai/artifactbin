@@ -13,14 +13,14 @@ import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePret
  *    explicit raw/export responses retain their document sandbox policy;
  *  - the app's pages: one SPA (web/, built by Vite) served for the app's
  *    paths under the app CSP;
- *  - the static tree under public/, with its cache rules set here
- *    (content-addressed → immutable; /geojson a day).
+ *  - every public file under /af/, and the old addresses that still
+ *    answer for some of them (server/public-files).
  *
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
 import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/agent-copy';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
@@ -37,7 +37,8 @@ import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { appBuildId, mountBuildAssets } from './build-assets';
-import { compressDynamic, dynamicEncoding, negotiateEncoding, precompressedStatic } from './content-encoding';
+import { compressDynamic, dynamicEncoding, negotiateEncoding } from './content-encoding';
+import { mountPublicFiles, publicFilePath } from './public-files';
 import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
 import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/user-pages';
@@ -227,9 +228,6 @@ const APP_SECURITY_HEADERS = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
-const IMMUTABLE = 'public, max-age=31536000, immutable';
-/** A VERSION-addressed file (`/libraries/<name>-<version>/`): a rebuild of the same version may change its bytes, so a day, revalidated in the background for a week, never immutable. */
-const VERSIONED = 'public, max-age=86400, stale-while-revalidate=604800';
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -324,7 +322,8 @@ const buildHeader = (build: string) => async (c: Context, next: () => Promise<vo
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Every composition (server.ts, src/main.ts, server/host) serves through here: facts project into inboxes.
   setEventProjection(projectNotifications);
-  const app = new Hono();
+  // An old public address is routed as the one that owns it now (server/public-files, the legacy table).
+  const app = new Hono({ getPath: publicFilePath });
   app.use('*', serverTiming);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   // The build this server serves: the built tree's (production); development's Vite-served shell is none.
@@ -337,8 +336,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
-  // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -563,26 +560,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return id && id !== found?.id ? admit(id, true) : byId;
   };
 
-  // Static: content-addressed trees are immutable, version-addressed libraries a day; everything else is served plainly.
-  app.use('/libraries/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', VERSIONED); c.header('access-control-allow-origin', '*'); });
-  // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
-  // Every file is content-addressed; both requests need CORS and immutable caching.
-  app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
-  app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
-  app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
-  app.use('/assets/*', async (c, next) => {
-    await next();
-    // Signed exports own their grant-bounded private policy, including refusals.
-    if (!c.req.path.startsWith('/assets/export/')) c.header('cache-control', IMMUTABLE);
-  });
-  // In development Vite owns /assets and dist/web does not exist yet. Avoid
-  // registering a static root that can only warn; production builds it first.
-  if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
+  // Every public file (server/public-files): /af/, its old addresses, the two root files.
+  mountPublicFiles(app, { webDir, publicDir });
   app.all('/chat/*', async c => c.notFound());
   app.all('/install.sh', async c => c.notFound());
   app.all('/login/cli', async c => c.notFound());
-  // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
-  app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {
     if (customShell) return screen(c);

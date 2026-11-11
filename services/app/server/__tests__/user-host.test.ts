@@ -154,8 +154,8 @@ it('exposes the same eligible public-view URL on reads, replacements and the app
 });
 
 it('shares one static allowlist with dev ingress and rejects encoded or executable Vite paths',()=>{
- for(const path of ['/af/apollo.js','/af/reader.js','/af/components/chunk-ab12.js','/af/styles.css','/fonts/test.woff2','/assets/app-123.css'])expect(userHostStaticPath(path),path).toBe(true);
- for(const path of ['/solid-entry.tsx','/@vite/client','/@fs/private.ts','/islands/entry.js','/assets/app-123.js','/fonts/%2f../private.ts','/api/internal/build-assets/assets/app.css'])expect(userHostStaticPath(path),path).toBe(false);
+ for(const path of ['/af/apollo.js','/af/reader.js','/af/components/chunk-ab12.js','/af/styles.css','/fonts/test.woff2','/af/app/app-123.css','/af/lib/vega-6.3.1/index.js','/geojson/world.json'])expect(userHostStaticPath(path),path).toBe(true);
+ for(const path of ['/solid-entry.tsx','/@vite/client','/@fs/private.ts','/islands/entry.js','/af/app/app-123.js','/assets/app-123.css','/af/chrome.js','/fonts/%2f../private.ts','/api/internal/build-assets/assets/app.css'])expect(userHostStaticPath(path),path).toBe(false);
 });
 
 it('review: unframed function calls can pass the owner-host boundary',async()=>{

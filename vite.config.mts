@@ -15,6 +15,8 @@ import { declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
 const webRoot = path.resolve(import.meta.dirname, 'services/app/web');
 const outDir = path.resolve(import.meta.dirname, 'services/app/dist/web');
+/** The build's files are public files: served at /af/app/ (services/app/server/public-files, contracts APP_BUILD_PREFIX). */
+const APP_ASSETS_DIR = 'af/app';
 
 /**
  * Brotli/gzip siblings for the content-addressed build (server/content-encoding
@@ -29,7 +31,7 @@ const precompressAssets = (): Plugin => {
     configResolved(config) { writesFiles = config.build.write !== false; },
     async writeBundle() {
       if (!writesFiles) return;
-      this.info(describePrecompression('dist/web/assets', await precompressTree(path.join(outDir, 'assets'))));
+      this.info(describePrecompression('dist/web/af/app', await precompressTree(path.join(outDir, APP_ASSETS_DIR))));
     },
   };
 };
@@ -37,8 +39,8 @@ const precompressAssets = (): Plugin => {
 /**
  * The shell's @font-face rules, from the generated font manifest
  * (services/app/scripts/copy-assets.mjs → lib/app-fonts). They name the
- * content-addressed /fonts files the app server serves immutable — the SAME
- * files a story names — rather than Vite /assets copies of those bytes, so a
+ * content-addressed /af/fonts files the app server serves immutable — the SAME
+ * files a story names — rather than Vite /af/app copies of those bytes, so a
  * document read inside the app fetches each face once.
  */
 const FONT_MANIFEST = path.resolve(import.meta.dirname, 'services/app/lib/html-systems/font-manifest.json');
@@ -121,13 +123,13 @@ export default defineConfig({
     ],
   },
   build: {
-    outDir, emptyOutDir: true, sourcemap: false, manifest: true,
+    outDir, assetsDir: APP_ASSETS_DIR, emptyOutDir: true, sourcemap: false, manifest: true,
     rolldownOptions: {
       input: {
         'solid-app': path.join(webRoot, 'solid-app.html'),
       },
-      // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.
-      external: [/^\/fonts\//],
+      // The shell's /af/fonts files are the app server's (appFontFaces above), never Vite assets.
+      external: [/^\/af\/fonts\//],
       output: { codeSplitting: { groups: [{ name: uiChunkName, includeDependenciesRecursively: false }] } },
     },
   },
