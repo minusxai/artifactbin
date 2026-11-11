@@ -10,6 +10,7 @@
  *   aria-label names the trigger verbatim and the current value becomes its description.
  */
 import { registerComponent } from './register-component';
+import { NamedHost, hostName, movingName } from './host-name';
 import { floatingVisibility, identifyFloating, positionFloating,
   topFloating } from './floating-position';
 import { calendarBody, calendarIcon, clampDate, inBounds, keyTarget, localToday,
@@ -21,7 +22,7 @@ interface DatePickerClock { clock: () => Date }
 export interface AfDatePickerContract { label: string; value: string | null; disabled: boolean;
   showYearNavigation: boolean; showClear: boolean }
 /** Author-owned controlled value, or viewer-local default; never persists data. */
-export class AfDatePicker extends HTMLElement implements DatePickerClock, AfDatePickerContract {
+export class AfDatePicker extends NamedHost implements DatePickerClock, AfDatePickerContract {
   /** Inject local time for deterministic viewer behavior. */
   clock: () => Date = () => new Date();
   private focusedDate: string | null = null;
@@ -90,9 +91,8 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock, AfDate
     this.ownerDocument.defaultView?.removeEventListener('resize',this.position);
     this.ownerDocument.removeEventListener('scroll',this.position,true); this.close(false);
   }
-  attributeChangedCallback(): void {
-    if(this.locked && this.open) this.close(!this.disabled); else this.render();
-  }
+  attributeChangedCallback(): void { if(movingName(this)) return;
+    if(this.locked && this.open) this.close(!this.disabled); else this.render(); }
   // Only the topmost floating layer reacts to outside presses and Escape.
   private outside = (event: Event): void => {
     if(this.open && topFloating(this) && !event.composedPath().includes(this)) this.close(false);
@@ -155,13 +155,13 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock, AfDate
     const doc=this.ownerDocument; const active=doc.activeElement as HTMLElement | null;
     const restore=!!active && this.popup.contains(active);
     const activeDate=active?.dataset.date; const activeLabel=active?.getAttribute('aria-label');
-    const label=this.getAttribute('aria-label') || this.getAttribute('label') || 'Date';
+    const explicitLabel=hostName(this);
+    const label=explicitLabel || this.getAttribute('label') || 'Date';
     const visibleLabel=this.getAttribute('label') ?? '';
     if(visibleLabel) { this.labelNode!.textContent=visibleLabel;
       if(this.labelNode!.parentElement!==this) this.insertBefore(this.labelNode!,this.trigger);
     } else this.labelNode?.remove();
     this.valueNode!.textContent=this.value ?? this.getAttribute('placeholder') ?? 'Pick a date';
-    const explicitLabel=this.getAttribute('aria-label');
     this.trigger.setAttribute('aria-label',
       explicitLabel ?? `${label}: ${this.value ?? 'Pick a date'}`);
     if(explicitLabel===null) this.trigger.removeAttribute('aria-description');

@@ -32,7 +32,7 @@ const components: Record<string, { style?: string; tags: string[] }> = {
   tooltip: { style: 'af-tooltip-styles', tags: ['af-tooltip', 'af-tooltip-provider', 'af-tooltip-trigger', 'af-tooltip-content'] },
   user: { style: 'af-user-styles', tags: ['af-user'] },
 };
-const helpers = ['accordion-model', 'date-calendar', 'deck-gl-engine', 'deck-gl-model', 'file-upload-model', 'floating-geometry', 'floating-position', 'icon-glyphs', 'isometric-model', 'register-component', 'select-model', 'slide-navigation', 'tab-navigation', 'table-model', 'text-control',
+const helpers = ['accordion-model', 'date-calendar', 'deck-gl-engine', 'deck-gl-model', 'file-upload-model', 'floating-geometry', 'floating-position', 'host-name', 'icon-glyphs', 'isometric-model', 'register-component', 'select-model', 'slide-navigation', 'tab-navigation', 'table-model', 'text-control',
   // Parts split out of their components to keep each source under 200 lines.
   'isometric-geometry', 'isometric-mesh', 'isometric-scene', 'isometric-visibility',
   'markdown-styles', 'row-identity', 'table-comparison', 'table-values', 'avatar-model', 'data-table-cells', 'data-table-compare', 'data-table-frame', 'data-table-grid', 'data-table-measure', 'date-picker-styles', 'dialog-model', 'popover-model', 'segmented-model', 'slide-deck-parts', 'tooltip-model', 'user-model'];

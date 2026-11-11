@@ -10,6 +10,7 @@
  *   becomes the native button's aria-label, so give icon-only buttons one.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
+import { NamedHost, hostName, movingName } from './host-name';
 /** Public attributes and forwarded properties supported by the native light-DOM button. */
 export type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
 export type ButtonSize = 'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' |
@@ -25,7 +26,7 @@ export interface ButtonContract {
   focus(options?: FocusOptions): void;
 }
 
-export class AfButton extends HTMLElement implements ButtonContract {
+export class AfButton extends NamedHost implements ButtonContract {
 static observedAttributes = ['type', 'disabled', 'busy', 'variant', 'size', 'label', 'aria-label',
     'name', 'value'];
   private nativeButton: HTMLButtonElement | undefined;
@@ -66,7 +67,7 @@ set label(value: string | undefined) { if (value === undefined) this.removeAttri
     this.sync();
   }
 
-  attributeChangedCallback(): void { this.sync(); }
+  attributeChangedCallback(): void { if (!movingName(this)) this.sync(); }
 focus(options?: FocusOptions): void { (this.nativeButton ?? this.querySelector('button'))?.focus(
     options); }
   click(): void {
@@ -84,7 +85,7 @@ focus(options?: FocusOptions): void { (this.nativeButton ?? this.querySelector('
     if (this.busy) button.setAttribute('aria-busy', 'true');
     button.dataset.variant = this.variant;
     button.dataset.size = this.size;
-    const name = this.getAttribute('aria-label') ?? this.getAttribute('label');
+    const name = hostName(this) ?? this.getAttribute('label');
 if (name === null) button.removeAttribute('aria-label'); else button.setAttribute('aria-label',
       name);
     for (const attr of ['name', 'value']) {

@@ -15,6 +15,7 @@
  *   change meanwhile. Light DOM; the popup is a manual popover positioned fixed.
  */
 import { registerComponent } from './register-component';
+import { NamedHost, hostName, movingName } from './host-name';
 import { buildSelectDom, draftCommit, moveHighlight, normalizeOptions, normalizeSelection,
   optionInput, placeSelectPopup, renderSelectOptions, selectStyles, upgradeProperties
 } from './select-model';
@@ -27,7 +28,7 @@ let nextSelectId = 0;
 
 /** Light DOM picker. Controlled values report intent; uncontrolled values commit accepted
  * intent. */
-export class AfSelect extends HTMLElement implements AfSelectContract {
+export class AfSelect extends NamedHost implements AfSelectContract {
 static observedAttributes = ['options', 'value', 'default-value', 'multiple', 'disabled',
     'allow-create', 'label', 'aria-label', 'placeholder'];
   private readonly popupId = `af-select-${++nextSelectId}`;
@@ -84,7 +85,8 @@ disconnectedCallback(): void { this.close(false); this.ownerDocument.removeEvent
     'pointerdown', this.outside); this.ownerDocument.removeEventListener('focusin', this.outside);
     this.ownerDocument.defaultView?.removeEventListener('resize', this.position);
     this.ownerDocument.removeEventListener('scroll', this.position, true); }
-  attributeChangedCallback(): void { if (this.disabled) this.close(false); this.update(); }
+  attributeChangedCallback(): void { if (movingName(this)) return; if (this.disabled) this.close(
+    false); this.update(); }
 private outside = (event: Event): void => { if (!event.composedPath().includes(this)) this.close(
     true); };
   private entries(): {value: AfSelectScalar | null; label: string}[] {
@@ -166,8 +168,7 @@ let id = this.optionIds.get(key); if (!id) { id = `${this.popupId}-option-${++th
   private update(): void {
 if (!this.trigger || !this.labelNode || !this.popup || !this.search || !this.list ||
       !this.done) return;
-const label = this.getAttribute('label') ?? ''; const name = this.getAttribute('aria-label') ||
-      label;
+const label = this.getAttribute('label') ?? ''; const name = hostName(this) || label;
     this.labelNode.textContent = label; this.labelNode.hidden = !label;
 this.trigger.setAttribute('aria-label', name); this.trigger.setAttribute('aria-expanded', String(
       this.expanded)); this.trigger.disabled = this.disabled;

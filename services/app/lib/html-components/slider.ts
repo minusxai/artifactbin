@@ -1,13 +1,14 @@
 /**
  * <af-slider>: numeric range control.
  * Usage: import '@afbin/slider';  (registers the tags; this .ts is the readable contract)
- * Props: value (number), min, max, step, disabled, label.
+ * Props: value (number), min, max, step, disabled, label, aria-label (names the range input).
  * Events: af-change (bubbles) with event.detail.value.
  * Examples:
  *   <af-slider label="Volume" min="0" max="100" value="40"></af-slider>
  * Gotchas: reflect your state value back for controlled use.
  */
 import { registerComponent } from './register-component';
+import { NamedHost, hostName, movingName } from './host-name';
 import { format as d3format } from 'd3-format';
 
 /** Numeric value exposed by the author-facing range control. */
@@ -21,9 +22,9 @@ function numeric(value: string | null): number | null {
 }
 
 let nextId = 0;
-export class AfSlider extends HTMLElement implements SliderContract {
+export class AfSlider extends NamedHost implements SliderContract {
 static observedAttributes = ['value', 'default-value', 'min', 'max', 'step', 'label', 'format',
-    'prefix', 'suffix', 'disabled', 'readonly'];
+    'prefix', 'suffix', 'disabled', 'readonly', 'aria-label'];
   private initialized = false;
   private controlled = false;
   private propertyValue: number | null = null;
@@ -59,7 +60,7 @@ static observedAttributes = ['value', 'default-value', 'min', 'max', 'step', 'la
     this.sync();
   }
   disconnectedCallback(): void { this.input?.removeEventListener('input', this.onInput); }
-  attributeChangedCallback(): void { this.sync(); }
+  attributeChangedCallback(): void { if (!movingName(this)) this.sync(); }
 
   private ensureParts(): void {
     this.header = this.querySelector<HTMLElement>('[part="header"]') ?? undefined;
@@ -119,6 +120,8 @@ if (this.dispatchEvent(change) && !this.controlled && !this.hasAttribute('value'
     const min = Number.isFinite(Number(input.min)) ? Number(input.min) : 0;
     input.value = String(value ?? min);
     this.labelElement!.htmlFor = input.id;
+    const name = hostName(this);
+    if (name) input.setAttribute('aria-label', name); else input.removeAttribute('aria-label');
     if (this.hasAttribute('label')) {
       this.labelElement!.textContent = this.getAttribute('label') ?? '';
     }
