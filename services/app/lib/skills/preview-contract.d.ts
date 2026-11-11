@@ -6,8 +6,6 @@ export interface PreviewOptions {
   root: string;
   /** Zero chooses a free port. */
   port?: number;
-  /** Optional prebuilt public core/module assets, mounted at /af/. */
-  runtimeDir?: string;
   /** Origin supplying the platform files a source checkout lacks; defaults to the archive's selected server, null for none. */
   platformOrigin?: string | null;
   /** Trusted source-owned pinned browser modules (tests); never read from page markup. */

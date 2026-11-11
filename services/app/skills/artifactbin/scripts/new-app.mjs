@@ -130,9 +130,6 @@ export async function newAppCommand({values, positionals}, options = {}) {
     `--kind ${kind} is not a starter.`, 'Use --kind tracker, --kind list or --kind api.');
   if (kind !== 'api' && values.url !== undefined) throw invalid('url_not_for_kind',
     `--url is for --kind api: --kind ${kind} reads no API.`, 'Drop --url, or use --kind api.');
-  if (values.data !== undefined) throw invalid(`data_not_for_${kind}`, kind === 'api' ?
-    'The items come from the API: people add the notes.' : 'A tracker starts empty: people ' +
-    'add the entries.', 'Drop --data and rerun.');
   const base = options.cwd ?? process.cwd(), dir = resolve(base, values.dir ?? '.');
   const server = serverOrigin(selectedServer(values, options.env));
   const at = name => path.join(dir, name), project = {title, dir, at, server, options};

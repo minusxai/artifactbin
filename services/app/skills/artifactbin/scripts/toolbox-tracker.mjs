@@ -16,7 +16,7 @@ const CLOSE = /^\s*(?:<!--|\/\*|\/\/)\s*@end\s+(!?[\w-]+)/;
 const ONLY = /\s*(?:<!--|\/\*|\/\/)\s*@only\s+(!?[\w-]+)\s*(?:\*\/|-->)?\s*$/;
 const EXAMPLES = new URL('../examples/', import.meta.url);
 /** Template file → its name in the project. */
-export const TRACKER_FILES = [['tracker.html', 'index.html'], ['tracker.ts', 'tracker.ts'],
+const TRACKER_FILES = [['tracker.html', 'index.html'], ['tracker.ts', 'tracker.ts'],
   ['tracker-steps.mjs', 'steps.mjs'], ['tracker-guest.mjs', 'guest.mjs'],
   ['tracker-cleanup.mjs', 'cleanup.mjs']];
 

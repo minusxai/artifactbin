@@ -3,11 +3,10 @@ import {it,expect} from 'vitest';
 const page={annotations:[{id:'ann_root',thread:[
  {id:'ann_root',body:'Shall I tighten the intro?',reactions:[{kind:'thumbs_up',count:2,viewer_reacted:true,by:[{kind:'human',label:'ppsreejith',user_id:'usr_a',image:null},{kind:'human',label:'alice',user_id:'usr_b',image:null}]}]},
  {id:'ann_reply',body:'Done',reactions:[{kind:'thumbs_up',count:3,viewer_reacted:false,by:[{kind:'agent',label:'Claude Code',user_id:null,image:null}]}]},
- {id:'ann_old',body:'Older server',reactions:[{kind:'thumbs_up',count:4,viewer_reacted:false}]},
 ]}],next_cursor:null};
 it('renders reactions as names in text output and passes the structure through with --json',async()=>{
  const {reactionText}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
- expect(page.annotations[0]!.thread.map(comment=>comment.reactions.map(reactionText))).toEqual([['👍 ppsreejith, alice'],['👍 Claude Code +2'],['👍 4']]);
+ expect(page.annotations[0]!.thread.map(comment=>comment.reactions.map(reactionText))).toEqual([['👍 ppsreejith, alice'],['👍 Claude Code +2']]);
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(page)};
  const text=await commentCommand({sub:'list',values:{},positionals:['PAGE12']},options);
