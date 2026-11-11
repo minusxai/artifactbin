@@ -281,7 +281,9 @@ export function DocumentPage(): JSX.Element {
         htmlContext: page.surface?.format === 'html' ? () => ({
           revision: String(page.archived?.version ?? (htmlHead().version || 1)),
           readOnly: !!page.archived,
-          uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
+          // A browser session's scripted browser acts as the account it browses as (its writes, like an account's, are
+          // judged by the dataset's rules): signed in, with no account for the chrome to name.
+          uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:session()?.liveEditor===true?{state:'signed-in' as const}:{state:'signed-out' as const},
         }) : undefined,
         // Cells open for a browser that edits live: a person signed in, or a browser session's scripted browser.
         liveEditor: () => session()?.liveEditor === true,

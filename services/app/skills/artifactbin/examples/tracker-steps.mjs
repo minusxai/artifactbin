@@ -18,7 +18,9 @@ const testRow=()=>page.locator('[data-af-id^="entry-"]').filter({has:page.getByT
 await loaded();
 await step('every group has a section and the owner gets the add form',async()=>{
   if(!await page.locator('#lists > section').count())throw Error('no group sections');
-  if(!await page.locator('#add').isVisible())throw Error('the add form is hidden for the owner');
+  // The form follows the sign-in hint, which may arrive just after the rows.
+  await page.locator('#add').waitFor({state:'visible',timeout:3000}).catch(()=>{
+    throw Error('the add form is hidden for the owner');});
   if((await page.locator('main').textContent()).includes('[')||(await page.title()).includes('['))
     throw Error('example text left in the page: replace every [bracketed] part of APP');});
 if(page.viewportSize().width>800){
