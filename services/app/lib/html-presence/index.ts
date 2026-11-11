@@ -2,7 +2,7 @@
 export { presenceChannel } from './channel.server';
 export { PRESENCE_EVENT } from './contract';
 export type {
-  PresenceFrame, PresenceGeometry, PresencePaint, PresencePublication, PresenceRange, PresenceViewer, ReaderPreferences,
+  PresenceIdentity, PresenceFrame, PresenceGeometry, PresencePaint, PresencePublication, PresenceRange, PresenceViewer, ReaderPreferences,
 } from './contract';
-export { publishPresence } from './publish.server';
+export { publishPresence, presenceAccountIdentity } from './publish.server';
 export { createPresenceRoom } from './room';

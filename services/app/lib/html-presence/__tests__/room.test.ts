@@ -1,4 +1,4 @@
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {createPresenceRoom} from '../room';
 import type {PresenceFrame} from '../contract';
 it('coalesces geometry without ACL reads, serializes checks and stops immediately on access revocation',async()=>{
@@ -6,7 +6,7 @@ it('coalesces geometry without ACL reads, serializes checks and stops immediatel
  let initial=true;let checks=0,concurrent=0,maximum=0,dropped=0,closed=0,cleared=0;const sent:PresenceFrame[]=[],delays:number[]=[];
  const room=await createPresenceRoom({revision:'1',authorize:()=>{if(initial){initial=false;return Promise.resolve(true);}checks++;maximum=Math.max(maximum,++concurrent);return new Promise<boolean>(r=>{pending=value=>{concurrent--;r(value);};});},
   subscribe:async receive=>{notification=receive;return async()=>{dropped++;};},subscribeAcl:async callback=>{changed=callback;return async()=>{dropped++;};},send:frame=>sent.push(frame),close:()=>{closed++;},
-  clock:{now:()=>now,setTimeout:(work,ms)=>{delays.push(ms);flush=work;return 1;},clearTimeout:()=>{cleared++;},setInterval:work=>{heartbeat=work;return 2;},clearInterval:()=>{cleared++;}}
+  clock:{now:()=>now,setTimeout:(work,ms)=>{if(ms<=1000){delays.push(ms);flush=work;}return 1;},clearTimeout:()=>{cleared++;},setInterval:work=>{heartbeat=work;return 2;},clearInterval:()=>{cleared++;}}
  });
  // The first frame on join is immediate, even when the room is empty.
  expect(sent).toEqual([{viewers:[],total:0}]);expect(delays).toEqual([]);
@@ -16,13 +16,13 @@ it('coalesces geometry without ACL reads, serializes checks and stops immediatel
  now=1_100;flush();expect(sent).toHaveLength(2);expect(sent[1]).toEqual({viewers:[entry],total:1});
  heartbeat();heartbeat();expect(checks).toBe(1);notification(JSON.stringify({...entry,cursor:null}));flush();expect(sent).toHaveLength(2);
  pending!(true);await Promise.resolve();expect(checks).toBe(2);expect(maximum).toBe(1);pending!(true);await Promise.resolve();now=2_100;flush();expect(sent).toHaveLength(3);
- changed();notification(JSON.stringify(entry));flush();expect(sent).toHaveLength(3);pending!(false);await Promise.resolve();expect(closed).toBe(1);expect(dropped).toBe(2);expect(cleared).toBe(2);
+ changed();notification(JSON.stringify(entry));flush();expect(sent).toHaveLength(3);pending!(false);await Promise.resolve();expect(closed).toBe(1);expect(dropped).toBe(2);expect(cleared).toBeGreaterThanOrEqual(3);
  notification(JSON.stringify(entry));room.dispose();expect(closed).toBe(1);
 });
 it('sends each viewer at most one frame per second, latest state wins, and never repeats an unchanged frame',async()=>{
  let now=0,notification=(_payload:string)=>{},flush=()=>{};const sent:PresenceFrame[]=[],delays:number[]=[];
  await createPresenceRoom({revision:'1',authorize:async()=>true,subscribe:async receive=>{notification=receive;return async()=>{};},subscribeAcl:async()=>async()=>{},send:frame=>sent.push(frame),close:()=>{},
-  clock:{now:()=>now,setTimeout:(work,ms)=>{delays.push(ms);flush=work;return 1;},clearTimeout:()=>{},setInterval:()=>2,clearInterval:()=>{}}});
+  clock:{now:()=>now,setTimeout:(work,ms)=>{if(ms<=1000){delays.push(ms);flush=work;}return 1;},clearTimeout:()=>{},setInterval:()=>2,clearInterval:()=>{}}});
  const a='a'.repeat(64),b='b'.repeat(64);
  const at=(id:string,x:number,seen=now)=>JSON.stringify({id,label:'Guest',revision:'1',seen,cursor:{nodeId:'p',x,y:.5},selection:null});
  expect(sent).toHaveLength(1);
@@ -65,4 +65,23 @@ it('re-authorizes at once on an ACL wakeup and otherwise only on the 60s safety 
  bySafety.state.tick();await settle();expect(bySafety.state.checks).toBe(2);expect(bySafety.state.closed).toBe(0);
  bySafety.state.allowed=false;await settle();expect(bySafety.state.closed).toBe(0);
  bySafety.state.tick();await settle();expect(bySafety.state.closed).toBe(1);
+});
+it('expires unique counts without activity and converges after reconnect heartbeats',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(1000);
+ let receive=(_payload:string)=>{};const sent:PresenceFrame[]=[];
+ const ports={revision:'1',readerIdentity:'a'.repeat(64),authorize:async()=>true,subscribe:async(fn:(payload:string)=>void)=>{receive=fn;return async()=>{};},subscribeAcl:async()=>async()=>{},send:(frame:PresenceFrame)=>sent.push(frame),close:()=>{},clock:{now:Date.now,setTimeout:(fn:()=>void,ms:number)=>setTimeout(fn,ms),clearTimeout:(id:unknown)=>clearTimeout(id as ReturnType<typeof setTimeout>),setInterval:(fn:()=>void,ms:number)=>setInterval(fn,ms),clearInterval:(id:unknown)=>clearInterval(id as ReturnType<typeof setInterval>)}};
+ try{
+ let room=await createPresenceRoom(ports);
+ const publish=()=>{for(let i=0;i<35;i++)receive(JSON.stringify({id:i.toString(16).padStart(64,'0'),colorId:'b'.repeat(64),label:'Same label',revision:'1',seen:Date.now(),cursor:null,selection:null}));};
+ publish();await vi.advanceTimersByTimeAsync(1000);expect(sent.at(-1)?.readers?.total).toBe(1);
+ room.dispose();room=await createPresenceRoom(ports);publish();await vi.advanceTimersByTimeAsync(1000);expect(sent.at(-1)?.readers?.total).toBe(1);
+ await vi.advanceTimersByTimeAsync(44000);expect(sent.at(-1)?.readers?.total).toBe(0);expect(sent.at(-1)?.viewers).toEqual([]);
+ room.dispose();expect(vi.getTimerCount()).toBe(0);
+ }finally{vi.useRealTimers();}
+});
+it('closes explicitly on state overload instead of publishing a silently truncated count',async()=>{
+ let receive=(_payload:string)=>{},closed=0;const sent:PresenceFrame[]=[];
+ const room=await createPresenceRoom({revision:'1',readerIdentity:'own',authorize:async()=>true,subscribe:async fn=>{receive=fn;return async()=>{};},subscribeAcl:async()=>async()=>{},send:frame=>sent.push(frame),close:()=>{closed++;},clock:{now:()=>1000,setTimeout:()=>1,clearTimeout:()=>{},setInterval:()=>2,clearInterval:()=>{}}});
+ for(let i=0;i<2049;i++)receive(JSON.stringify({id:i.toString(16).padStart(64,'0'),label:'Guest',revision:'1',seen:1000,cursor:null,selection:null}));
+ expect(closed).toBe(1);expect(sent).toHaveLength(1);room.dispose();expect(closed).toBe(1);
 });

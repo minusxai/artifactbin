@@ -24,18 +24,18 @@ it('coalesces pointer activity at 250ms and sends hide after an in-flight heartb
  expect(delay).toBe(250);expect(sent).toHaveLength(1);scheduled();expect(sent.at(-1)?.cursor).toMatchObject({x:1,y:1});
  session.dispose();expect(sent.at(-1)?.visible).toBe(true);resolve!('own');await Promise.resolve();expect(sent.at(-1)?.visible).toBe(false);
 });
-it('counts readers outside the capped roster and leaves itself out of the total',async()=>{
+it('uses personalized complete counts and a visible unique lower bound on legacy servers',async()=>{
  let incoming=(_frame:PresenceFrame)=>{},prefs={...readerDefaults};const counts:Array<[string[],number]>=[];
  const session=createReaderPresenceSession({session:'tab',revision:'1',nonce:'n',readPreferences:()=>prefs,active:()=>true,publish:async()=> 'own',connect:receive=>{incoming=receive;return()=>{};},paint:()=>{},changed:(viewers,total)=>counts.push([viewers.map(v=>v.id),total]),clock:{now:()=>0,setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>2,clearTimeout:()=>{}}});
  await Promise.resolve();
  const peer=(id:string)=>({id,label:'Guest',revision:'1',seen:0,cursor:null,selection:null});
- // Visible: this tab is one of the room's readers whether or not the cap kept its own entry.
- incoming({viewers:[peer('a'),peer('b')],total:40});expect(counts.at(-1)).toEqual([['a','b'],39]);
- incoming({viewers:[peer('own'),peer('a')],total:40});expect(counts.at(-1)).toEqual([['a'],39]);
+ // New servers supply the complete other-reader count even when self is outside the geometry cap.
+ incoming({viewers:[peer('a'),peer('b')],total:40,readers:{total:39,expiresAt:45000}});expect(counts.at(-1)).toEqual([['a','b'],39]);
+ incoming({viewers:[peer('own'),peer('a')],total:40,readers:{total:39,expiresAt:45000}});expect(counts.at(-1)).toEqual([['a'],39]);
  // Hidden: the room no longer holds this tab, so every reader it counts is someone else.
  prefs={...prefs,visible:false};session.preferencesChanged();await Promise.resolve();
- incoming({viewers:[peer('a')],total:39});expect(counts.at(-1)).toEqual([['a'],39]);
- // A total below what is shown never hides a reader.
+ incoming({viewers:[peer('a')],total:39,readers:{total:39,expiresAt:45000}});expect(counts.at(-1)).toEqual([['a'],39]);
+ // Old servers have session totals; only the visible unique lower bound is safe.
  incoming({viewers:[peer('a'),peer('b')],total:0});expect(counts.at(-1)).toEqual([['a','b'],2]);
  session.dispose();
 });
@@ -65,4 +65,24 @@ it('does not expose any unresolved own identity through the roster before public
  incoming({viewers:[peer('own'),peer('other')],total:2});
  expect(shown.at(-1)).toEqual([]);
  resolve('own');await Promise.resolve();expect(shown.at(-1)).toEqual(['other']);session.dispose();
+});
+it('excludes every own-account tab even hidden or capped, retains peer geometry and expires stale counts',async()=>{
+ let now=1,incoming=(_frame:PresenceFrame)=>{},expiry=()=>{},prefs={...readerDefaults};const counts:Array<[string[],number]>=[];
+ const session=createReaderPresenceSession({session:'tab',revision:'1',nonce:'n',readPreferences:()=>prefs,active:()=>true,publish:async()=>({id:'own',colorId:'account-a'}),connect:receive=>{incoming=receive;return()=>{};},paint:()=>{},changed:(viewers,total)=>counts.push([viewers.map(v=>v.id),total]),clock:{now:()=>now,setInterval:()=>1,clearInterval:()=>{},setTimeout:work=>{expiry=work;return 2;},clearTimeout:()=>{}}});
+ await Promise.resolve();
+ const peer=(id:string,colorId:string)=>({id,colorId,label:'Same label',revision:'1',seen:1,cursor:null,selection:null});
+ incoming({viewers:[peer('own','account-a'),peer('own2','account-a'),peer('own3','account-a')],total:3,readers:{total:0,expiresAt:45001}});expect(counts.at(-1)).toEqual([[],0]);
+ prefs={...prefs,visible:false};session.preferencesChanged();await Promise.resolve();
+ incoming({viewers:[peer('own2','account-a'),peer('b1','account-b'),peer('b2','account-b'),peer('b3','account-b')],total:40,readers:{total:1,expiresAt:45001}});expect(counts.at(-1)).toEqual([['b1','b2','b3'],1]);
+ incoming({viewers:[peer('b1','account-b'),peer('c','account-c')],total:40,readers:{total:2,expiresAt:45001}});expect(counts.at(-1)?.[1]).toBe(2);
+ now=45001;expiry();await Promise.resolve();expect(counts.at(-1)).toEqual([[],0]);session.dispose();
+});
+
+it('withholds an unresolved legacy account roster, then converges when own trusted entry arrives',async()=>{
+ let incoming=(_frame:PresenceFrame)=>{};const counts:number[]=[];
+ const session=createReaderPresenceSession({session:'tab',revision:'1',nonce:'n',readPreferences:()=>readerDefaults,active:()=>true,publish:async()=> 'own',connect:receive=>{incoming=receive;return()=>{};},paint:()=>{},changed:(_viewers,total)=>counts.push(total),clock:{now:()=>0,setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>2,clearTimeout:()=>{}}});
+ await Promise.resolve();
+ const peer=(id:string,colorId:string)=>({id,colorId,label:'Same label',revision:'1',seen:0,cursor:null,selection:null});
+ incoming({viewers:[peer('own-other-tab','a'),peer('b','b')],total:40});expect(counts.at(-1)).toBe(0);
+ incoming({viewers:[peer('own','a'),peer('own-other-tab','a'),peer('b','b')],total:40});expect(counts.at(-1)).toBe(1);session.dispose();
 });

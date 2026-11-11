@@ -24,7 +24,7 @@ export function ReaderPresenceControls(props:{
  const [open,setOpen]=createSignal(false);
  // Account identity is server-derived; labels are not unique and guests remain separate.
  const readers=createMemo(()=>Array.from(new Map(props.viewers.map(viewer=>[viewer.colorId??viewer.id,viewer])).values()));
- const count=()=>Math.max(props.total,props.viewers.length)-(props.viewers.length-readers().length);
+ const count=()=>Math.max(props.total,readers().length);
  return <Popover open={open()} onOpenChange={setOpen} label="Reader presence" align="end" class="w-72 max-w-[calc(100vw-2rem)] p-4"
   trigger={attrs=><Button {...attrs} variant="ghost" size="sm" onClick={()=>setOpen(value=>!value)} aria-label={`Readers · ${count()}`}>Readers · {count()}</Button>}>
   <p class="mb-2 font-sans text-sm font-medium">Here now · {count()}</p>

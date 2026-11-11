@@ -49,7 +49,7 @@ it('retains the latest peer snapshot received while the session chunk loads',asy
  let presence!:ReturnType<typeof createReaderPresence>;
  const view=render(()=>{presence=createReaderPresence({id:'p',revision:'1',nonce:()=> 'n',enabled:()=>true,runtimeRef:{current:controller},backend:{publishPresence:async()=> 'own'}},load);return <div/>;});
  const peer={id:'peer',label:'Reader',revision:'1',seen:Date.now(),cursor:null,selection:null};
- presence.receive({viewers:[peer],total:31});resolve(await import('../reader-presence-engine'));
+ presence.receive({viewers:[peer],total:31,readers:{total:30,expiresAt:Date.now()+45000}});resolve(await import('../reader-presence-engine'));
  await waitFor(()=>expect(presence.viewers()).toEqual([peer]));expect(presence.total()).toBe(30);view.unmount();
 });
 

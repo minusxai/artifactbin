@@ -35,3 +35,7 @@ it('keeps local live reads and ephemeral presence anonymous even with ambient ac
  const fetch=vi.fn().mockImplementation(async(url)=>Response.json(String(url).includes('annotations')?{annotations:[]}:{id:'Guest'}));vi.stubGlobal('fetch',fetch);const urls:string[]=[];vi.stubGlobal('EventSource',class{onmessage=null;onopen=null;onerror=null;constructor(url:string){urls.push(url);}addEventListener(){}close(){}});
  const backend=createReaderHttpBackend('Page123',{anonymous:true});await backend.load();await backend.liveFrame();await backend.listAnnotations();await backend.publishPresence({session:'s',revision:'1',visible:true,cursor:null,selection:null});for(const call of fetch.mock.calls)expect(call[1]).toMatchObject({credentials:'omit'});const stop=backend.live({onPing:vi.fn(),onData:vi.fn(),onAnnotations:vi.fn()},{since:'cursor/1'});expect(urls).toEqual(['/a/Page123/events?anonymous=1&since=cursor%2F1']);stop();
 });
+it('retains the trusted publication identity, including a hidden account',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({id:'a'.repeat(64),colorId:'b'.repeat(64)})));
+ expect(await createReaderHttpBackend('Page123').publishPresence({session:'s',revision:'1',visible:false,cursor:null,selection:null})).toEqual({id:'a'.repeat(64),colorId:'b'.repeat(64)});
+});

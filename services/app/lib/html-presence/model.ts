@@ -46,15 +46,18 @@ export function presenceGeometry(input: unknown): PresenceGeometry {
   const region = regionCaret(raw.region);
   return { cursor, selection, ...(region ? { region } : {}) };
 }
-/** Bounded ephemeral roster; the injected clock makes expiration independent of delivery timing. */
+/** Live ephemeral roster; the injected clock makes expiration independent of delivery timing. */
 export function presenceRoster(entries: readonly PresenceViewer[], revision: string, now: number): PresenceViewer[] {
-  return entries.filter(entry => entry.revision === revision && entry.seen <= now && now - entry.seen < PRESENCE_TTL_MS).slice(-100).map(entry => ({...entry,...presenceGeometry(entry)}));
+  return entries.filter(entry => entry.revision === revision && entry.seen <= now && now - entry.seen < PRESENCE_TTL_MS).map(entry => ({...entry,...presenceGeometry(entry)}));
 }
-/** The frame a room sends: named readers first, then the most recently active, capped; `total` counts every live reader. */
-export function presenceFrame(entries: readonly PresenceViewer[], revision: string, now: number): PresenceFrame {
+/** The frame a room sends: named readers first, then the most recently active, capped; `total` preserves legacy session counts; `readers` counts unique other identities. */
+export function presenceFrame(entries: readonly PresenceViewer[], revision: string, now: number, readerIdentity?: string): PresenceFrame {
   const live = presenceRoster(entries, revision, now);
   const named = (entry: PresenceViewer) => entry.label === PRESENCE_GUEST_LABEL ? 1 : 0;
   // Index breaks ties toward the later arrival, so equal `seen` stays deterministic.
   const ranked = live.map((entry, index) => ({entry, index})).sort((a, b) => named(a.entry) - named(b.entry) || b.entry.seen - a.entry.seen || b.index - a.index);
-  return {viewers: ranked.slice(0, PRESENCE_ROSTER_CAP).map(item => item.entry), total: live.length};
+  const identities = new Set(live.map(entry => entry.colorId ?? entry.id));
+  if (readerIdentity) identities.delete(readerIdentity);
+  return {viewers: ranked.slice(0, PRESENCE_ROSTER_CAP).map(item => item.entry), total: live.length,
+    ...(readerIdentity ? {readers:{total:identities.size,expiresAt:live.reduce((expiry, entry)=>Math.min(expiry,entry.seen+PRESENCE_TTL_MS),now+PRESENCE_TTL_MS)}} : {})};
 }

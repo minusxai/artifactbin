@@ -29,8 +29,13 @@ it('counts readers beyond the capped roster and names how many are not listed',(
 });
 it('lists an account once across tabs without merging different readers with the same name',()=>{
  const people=[{...viewers[0]!,colorId:'account-a'},{...viewers[0]!,id:'second-tab',colorId:'account-a'},{...viewers[0]!,id:'other-account',colorId:'account-b'},viewers[1]!,{...viewers[1]!,id:'another-guest'}];
- const view=render(()=><ReaderPresenceControls preferences={defaults} viewers={people} total={5} onChange={()=>{}}/>);
+ const view=render(()=><ReaderPresenceControls preferences={defaults} viewers={people} total={4} onChange={()=>{}}/>);
  fireEvent.click(view.getByRole('button',{name:'Readers · 4'}));
  expect(screen.getAllByText('Alex')).toHaveLength(2);
  expect(screen.getAllByText('Guest reader')).toHaveLength(2);
+});
+it('uses the complete unique total without subtracting visible duplicate sessions',()=>{
+ const people=[{...viewers[0]!,colorId:'account-a'},{...viewers[0]!,id:'tab-two',colorId:'account-a'}];
+ const view=render(()=><ReaderPresenceControls preferences={defaults} viewers={people} total={40} onChange={()=>{}}/>);
+ fireEvent.click(view.getByRole('button',{name:'Readers · 40'}));expect(screen.getByText('+39 more')).toBeVisible();
 });
