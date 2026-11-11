@@ -1,11 +1,22 @@
 import {inviteGroupMember,acceptGroupInvitations} from '@/lib/groups';
 /**
- * THE APP TEST HARNESS. One deep module behind every route-level test: one PGLite per FILE,
- * every table wiped before each test (FK-safe order derived from the schema, never a hand-written list), the
- * rate limiter reset, the test's session (`setSession`) cleared and its live subscriptions dropped, the database
- * released at the end, and the typed request/actor/cookie helpers.
+ * THE APP TEST HARNESS. One deep module behind every route-level test: every file starts on a database in exactly
+ * the state a fresh one gives it, every table wiped before each test (FK-safe order derived from the schema, never
+ * a hand-written list), the rate limiter reset, the test's session (`setSession`) cleared and its live subscriptions
+ * dropped, the database released or recycled at the end, and the typed request/actor/cookie helpers.
+ *
+ * ONE DATABASE PER WORKER in the shared-graph `api` project (vitest.config.ts provides `harnessReusesDatabase`):
+ * opening a PGLite from the schema image was a third of a small api file's time (~200ms locally, ~600ms on a CI
+ * runner, per file). So at a file's end the harness returns the database to a fresh one's state (`recycle`: rows
+ * wiped, sequences restarted, the session discarded) and keeps it only when nothing a wipe cannot undo changed: the
+ * catalog fingerprint (`catalogState`: schemas, tables, columns, constraints, indexes, views, functions, types,
+ * triggers, extensions, roles, role and database settings, policies, grants, sequences, prepared transactions, large
+ * objects, advisory locks, listening channels, non-default settings, every table's row count) must equal the one
+ * taken when it opened, no LISTEN may still be held, and no method of the database object may have been replaced.
+ * Otherwise it closes it, says which file changed what, and the next file opens a fresh one, as every file did
+ * before. Every other project, and a file that closed the database itself, still opens one per file.
  */
-import { afterAll, beforeAll, beforeEach } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, inject } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { createBearerReader, ensureAuthSchema, ensureHumanAuthSchema } from '@artifactbin/auth';
 import type { Actor, Credential } from '@artifactbin/contracts';
@@ -16,7 +27,7 @@ import { resetAllowances } from '@/lib/allowances';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
-import { getDb, resetDb, type Queryable } from '@/lib/platform/db';
+import { getDb, recycleDbSession, resetDb, type Db, type Queryable } from '@/lib/platform/db';
 import { syncIdentitySettings } from '@/lib/platform';
 import { resetExportRenderer } from '@/lib/export';
 import { flushViews } from '@/lib/analytics';
@@ -33,6 +44,78 @@ const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   return table ? [table] : [];
 });
 const WIPE_SQL = SCHEMA_TABLES.toReversed().map((table) => `DELETE FROM ${table};`).join('\n');
+
+declare module 'vitest' {
+  interface ProvidedContext { harnessReusesDatabase?: boolean }
+}
+
+/** Everything about a database a file can change that the per-test wipe cannot undo, outside the temporary schemas. */
+const USER_SCHEMA = "n.nspname NOT IN ('pg_catalog','information_schema','pg_toast') AND n.nspname !~ '^pg_(toast_)?temp_'";
+const CATALOG_SQL = `SELECT x FROM (
+  SELECT 'n:'||n.nspname||':'||coalesce(n.nspacl::text,'') FROM pg_namespace n WHERE n.nspname !~ '^pg_(toast_)?temp_'
+  UNION ALL SELECT 'c:'||c.oid::regclass::text||':'||c.relkind::text||c.relpersistence::text||':'||coalesce(c.relacl::text,'')||':'||c.relrowsecurity::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE ${USER_SCHEMA}
+  UNION ALL SELECT 'a:'||c.oid::regclass::text||'.'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text||':'||coalesce(pg_get_expr(d.adbin,d.adrelid),'') FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE a.attnum>0 AND NOT a.attisdropped AND ${USER_SCHEMA}
+  UNION ALL SELECT 'k:'||k.conrelid::regclass::text||':'||k.conname||':'||pg_get_constraintdef(k.oid) FROM pg_constraint k JOIN pg_namespace n ON n.oid=k.connamespace WHERE ${USER_SCHEMA}
+  UNION ALL SELECT 'i:'||pg_get_indexdef(i.indexrelid) FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE ${USER_SCHEMA}
+  UNION ALL SELECT 'v:'||c.oid::regclass::text||':'||pg_get_viewdef(c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('v','m') AND ${USER_SCHEMA}
+  UNION ALL SELECT 'f:'||p.oid::regprocedure::text||':'||md5(coalesce(p.prosrc,''))||':'||coalesce(p.proacl::text,'') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE ${USER_SCHEMA}
+  UNION ALL SELECT 't:'||t.oid::regtype::text||':'||t.typtype::text FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE ${USER_SCHEMA} AND t.typtype IN ('e','d','r','m')
+  UNION ALL SELECT 'e:'||e.enumtypid::regtype::text||':'||e.enumlabel FROM pg_enum e
+  UNION ALL SELECT 'g:'||g.tgrelid::regclass::text||':'||g.tgname||':'||g.tgenabled::text FROM pg_trigger g WHERE NOT g.tgisinternal
+  UNION ALL SELECT 'r:'||c.ev_class::regclass::text||':'||c.rulename FROM pg_rewrite c JOIN pg_class r ON r.oid=c.ev_class JOIN pg_namespace n ON n.oid=r.relnamespace WHERE ${USER_SCHEMA} AND c.rulename<>'_RETURN'
+  UNION ALL SELECT 'x:'||extname||':'||extversion FROM pg_extension
+  UNION ALL SELECT 'o:'||rolname||':'||concat_ws(',',rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolbypassrls)||':'||coalesce(array_to_string(rolconfig,','),'') FROM pg_roles
+  UNION ALL SELECT 'm:'||m.roleid::regrole::text||':'||m.member::regrole::text FROM pg_auth_members m
+  UNION ALL SELECT 'd:'||coalesce(setdatabase,0)::text||':'||setrole::text||':'||array_to_string(setconfig,',') FROM pg_db_role_setting
+  UNION ALL SELECT 'p:'||polrelid::regclass::text||':'||polname||':'||coalesce(pg_get_expr(polqual,polrelid),'') FROM pg_policy
+  UNION ALL SELECT 'q:'||seqrelid::regclass::text||':'||concat_ws(',',seqstart,seqincrement,seqmax,seqcycle) FROM pg_sequence
+  UNION ALL SELECT 'qv:'||schemaname||'.'||sequencename||':'||coalesce(last_value::text,'') FROM pg_sequences
+  UNION ALL SELECT 's:'||name||'='||setting||':'||source FROM pg_settings WHERE source NOT IN ('default','override')
+  UNION ALL SELECT 'l:'||locktype::text||':'||mode FROM pg_locks WHERE locktype='advisory'
+  UNION ALL SELECT 'ln:'||ch FROM pg_listening_channels() ch
+  UNION ALL SELECT 'px:'||gid FROM pg_prepared_xacts
+  UNION ALL SELECT 'lo:'||count(*)::text FROM pg_largeobject_metadata
+  UNION ALL SELECT 'ps:'||name FROM pg_prepared_statements
+  UNION ALL SELECT 'cu:'||name FROM pg_cursors
+) f(x) ORDER BY x`;
+
+/** The catalog fingerprint above, then every user table's row count (one generated statement). */
+async function catalogState(db: Queryable): Promise<string> {
+  const catalog = (await db.query<{ x: string }>(CATALOG_SQL)).rows.map((row) => row.x);
+  const tables = (await db.query<{ t: string }>(`SELECT c.oid::regclass::text AS t FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND ${USER_SCHEMA} ORDER BY 1`)).rows.map((row) => row.t);
+  const counts = tables.length
+    ? (await db.query<{ x: string }>(tables.map((table) => `SELECT ${quoteLiteral(`rows:${table}:`)} || count(*)::text AS x FROM ${table}`).join(' UNION ALL '))).rows.map((row) => row.x)
+    : [];
+  return [...catalog, ...counts].join('\n');
+}
+const quoteLiteral = (text: string) => `'${text.replaceAll("'", "''")}'`;
+
+/** Each method an object answers to, by name, as its own or its prototypes' data properties (a spy left installed shows here). */
+const ownMethods = (object: object): Map<string, unknown> => {
+  const methods = new Map<string, unknown>();
+  for (let at: object | null = object; at && at !== Object.prototype; at = Object.getPrototypeOf(at)) {
+    for (const name of Object.getOwnPropertyNames(at)) {
+      const value = Object.getOwnPropertyDescriptor(at, name)?.value;
+      if (!methods.has(name) && typeof value === 'function') methods.set(name, value);
+    }
+  }
+  return methods;
+};
+const sameMethods = (a: Map<string, unknown>, b: Map<string, unknown>) => a.size === b.size && [...a].every(([name, value]) => b.get(name) === value);
+
+/** The PGLite instance under the harness's database (the harness only ever opens PGLite). */
+function pgliteOf(db: Db): object {
+  const raw = db.raw();
+  if (raw.kind !== 'pglite') throw new Error('The harness database is PGLite.');
+  return raw.instance as object;
+}
+
+/** What the worker's reused database looked like when it opened fresh. Kept on the process global, like the database. */
+interface ReusedDatabase { db: Promise<Db>; state: string; methods: Map<string, unknown>; rawMethods: Map<string, unknown> }
+declare global {
+  // eslint-disable-next-line no-var
+  var __artifact_bin_harness_db__: ReusedDatabase | undefined;
+}
 
 /** Authenticated route fixtures always belong to an email account. Explicit null
  * remains available for legacy-credential rejection and historical alias tests. */
@@ -162,7 +245,7 @@ interface AppHarness {
 }
 
 /**
- * Call ONCE at the top level of a test file. Registers `beforeAll` (boot one PGLite), `beforeEach` (drop live subscriptions,
+ * Call ONCE at the top level of a test file (harness-reuse.test.ts calls it once per describe, each running as a file). Registers `beforeAll` (boot one PGLite), `beforeEach` (drop live subscriptions,
  * wipe every table in FK-safe order + resetAllowances), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
  * SAME database instance; no row written by one test survives into the next; a table added to the schema later is wiped
  * without anyone editing a list.
@@ -196,8 +279,31 @@ export function useAppHarness(): AppHarness {
     await syncIdentitySettings(db);
   };
 
-  beforeAll(() => {
+  const reuse = inject('harnessReusesDatabase') === true;
+
+  /**
+   * The database back to a fresh one's state: session discarded, every row wiped, every sequence restarted, and the
+   * events service's schema gone (a fresh database has none: each file's writer, test/setup/vitest.setup.ts, creates it
+   * on its first emit, its counter starting again at the stored maximum, so leaving it would carry positions over).
+   */
+  const recycle = async () => {
+    await recycleDbSession();
+    const db = await database!;
+    await db.query(`DROP SCHEMA IF EXISTS ${EVENTS_SCHEMA} CASCADE`);
+    await wipe();
+    const sequences = (await db.query<{ s: string; start: string }>("SELECT format('%I.%I',schemaname,sequencename) AS s, start_value::text AS start FROM pg_sequences")).rows;
+    for (const { s: sequence, start } of sequences) await db.query('SELECT setval($1::regclass,$2::bigint,false)', [sequence, start]);
+  };
+
+  beforeAll(async () => {
     database = getDb();
+    const db = await database;
+    if (!reuse) return database;
+    const held = globalThis.__artifact_bin_harness_db__;
+    if (held?.db === database) return database;
+    // A fresh database: recycled once so its state is taken exactly as a reused one's will be compared.
+    await recycle();
+    globalThis.__artifact_bin_harness_db__ = { db: database, state: await catalogState(db), methods: ownMethods(db), rawMethods: ownMethods(pgliteOf(db)) };
     return database;
   });
 
@@ -225,7 +331,32 @@ export function useAppHarness(): AppHarness {
     resetRenderCache();
     // Its listeners hold connections on this file's database, which closes next.
     await resetLiveSubscriptions();
+    const mine = database;
     database = undefined;
+    const held = globalThis.__artifact_bin_harness_db__;
+    if (!reuse || !held || !mine || held.db !== mine || globalThis.__artifact_bin_db__ !== mine) { globalThis.__artifact_bin_harness_db__ = undefined; await resetDb(); return; }
+    const drift = await (async () => {
+      database = mine;
+      try {
+        const db = await mine;
+        if (!sameMethods(ownMethods(db), held.methods) || !sameMethods(ownMethods(pgliteOf(db)), held.rawMethods)) return 'replaced a method of the database object';
+        const listening = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM pg_listening_channels()')).rows[0]?.n ?? 0;
+        if (listening) return `left ${listening} LISTEN channel(s) open`;
+        await recycle();
+        const state = await catalogState(db);
+        if (state === held.state) return null;
+        const before = new Set(held.state.split('\n')), after = new Set(state.split('\n'));
+        const changed = [...[...after].filter((line) => !before.has(line)).map((line) => `+${line}`), ...[...before].filter((line) => !after.has(line)).map((line) => `-${line}`)];
+        return `changed the database: ${changed.slice(0, 6).join(' ')}${changed.length > 6 ? ` (+${changed.length - 6} more)` : ''}`;
+      } catch (error) {
+        return `left the database unrecyclable (${error instanceof Error ? error.message : String(error)})`;
+      } finally {
+        database = undefined;
+      }
+    })();
+    if (drift === null) return;
+    process.stderr.write(`harness: ${expect.getState().testPath ?? 'a test file'} ${drift}; the next file opens a fresh database\n`);
+    globalThis.__artifact_bin_harness_db__ = undefined;
     await resetDb();
   });
 
@@ -289,6 +420,8 @@ export async function setDatasetPolicy(actor: AccessActor, id: string, policy: u
  */
 export async function recordStatements<T>(work: () => Promise<T>): Promise<{ value: T; sql: string[]; transactions: number; count: number }> {
   const db = await getDb();
+  // Restored exactly as found (an own property only if there was one), so the harness's reuse check sees no change.
+  const own = { query: Object.getOwnPropertyDescriptor(db, 'query'), transaction: Object.getOwnPropertyDescriptor(db, 'transaction') };
   const query = db.query.bind(db), transaction = db.transaction.bind(db);
   const sql: string[] = [];
   let transactions = 0;
@@ -302,7 +435,12 @@ export async function recordStatements<T>(work: () => Promise<T>): Promise<{ val
     const { measureQueries } = await import('@/lib/platform');
     const { value, stats } = await measureQueries(work);
     return { value, sql, transactions, count: stats.count };
-  } finally { db.query = query; db.transaction = transaction; }
+  } finally {
+    for (const name of ['query', 'transaction'] as const) {
+      const descriptor = own[name];
+      if (descriptor) Object.defineProperty(db, name, descriptor); else delete (db as Partial<Db>)[name];
+    }
+  }
 }
 
 /** Admit fixtures through verified-email acceptance, never role PUT. */

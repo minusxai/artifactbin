@@ -490,6 +490,19 @@ export function getDb(): Promise<Db> {
   return global.__artifact_bin_db__;
 }
 
+/**
+ * Test hook, the app test harness's alone (services/app/__tests__/harness.ts reuses one in-memory PGLite per worker):
+ * returns the open database to the session a fresh open gives it. DISCARD ALL drops session settings, temporary
+ * tables, prepared statements, advisory locks and LISTENs; then the identity read path is set again, as at open.
+ * Refuses anything but PGLite, and throws inside an open transaction block.
+ */
+export async function recycleDbSession(): Promise<void> {
+  const db = await getDb();
+  if (db.raw().kind !== 'pglite') throw new Error('recycleDbSession: the harness reuses in-memory PGLite only');
+  await db.query('DISCARD ALL');
+  await db.query(READ_PATH_SQL, [IDENTITY_READ_SCHEMA]);
+}
+
 /** Test hook — closes and forgets the cached instance. */
 export async function resetDb(): Promise<void> {
   const promise = global.__artifact_bin_db__;

@@ -95,13 +95,17 @@ export default defineConfig({
           name: 'api',
           environment: 'node',
           // One module graph per worker, not per file: re-importing the app for each of ~260 files
-          // was a third of every api shard. The harness gives each file a fresh database (restored
-          // from the worker's schema image, test/setup/vitest.setup.ts) and resets the rate limiter, so files stay
+          // was a third of every api shard. The harness starts each file on a database in a fresh one's state
+          // (recycled, or restored from the worker's schema image) and resets the rate limiter, so files stay
           // independent; a file that leaves process-level state behind must clean it up itself.
           isolate: false,
           include: API_INCLUDE,
           exclude: [...API_EXCLUDE, ...API_MOCKING],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
+          // And one database per worker: the harness recycles it between files and opens a fresh one after any file
+          // that changed what a wipe cannot undo (services/app/__tests__/harness.ts). Both keys: a project's
+          // `provide` is its own.
+          provide: { schemaImageDir: schemaImageDir(import.meta.dirname), harnessReusesDatabase: true },
         },
       },
       {

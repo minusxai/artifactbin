@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const APP = path.resolve(import.meta.dirname, '..');
-const OWN = new Set(['__tests__/harness.ts', '__tests__/harness.test.ts', '__tests__/harness-request.test.ts', '__tests__/harness-rollout.test.ts']);
+const OWN = new Set(['__tests__/harness.ts', '__tests__/harness.test.ts', '__tests__/harness-request.test.ts', '__tests__/harness-reuse.test.ts', '__tests__/harness-rollout.test.ts']);
 
 const testFiles = (): string[] => {
   const out: string[] = [];
@@ -78,7 +78,7 @@ describe('the harness owns the four mechanisms', () => {
    expect(definesRequestBuilder('const request=(path:string)=>new Request(path);')).toBe(true);
    expect(definesRequestBuilder('function api(path:string){return new Request(path)}')).toBe(true);
   });
-  it('1. no test file resets the database itself — one PGLite per file is the harness\'s job', () => {
+  it('1. no test file resets the database itself — a fresh database per file (opened or recycled) is the harness\'s job', () => {
     expect(offenders('reset', (t) => /\bresetDb\(/.test(t) || (/new PGlite\(/.test(t)&&/from ['"]@\/lib\/(?:db|platform)(?:['"/])/.test(t)))).toEqual([]);
   });
   it('2. no test file encodes an agent cookie itself', () => {
@@ -99,6 +99,15 @@ describe('the harness owns the four mechanisms', () => {
     const opensDb = (t: string) => /from ['"]@\/lib\/db['"]/.test(t) && /\bgetDb\(/.test(t);
     const missing = files.filter(({ rel, text }) => opensDb(text) && !/\buseAppHarness\(/.test(text) && !exemptions(text).has('reset') && !rel.startsWith('lib/__tests__/db')).map(({ rel }) => rel);
     expect(missing).toEqual([]);
+  });
+  it('8. the per-worker reuse is the harness\'s alone: no other file recycles the database\'s session', () => {
+    const recycles = (t: string) => /\brecycleDbSession\b/.test(t);
+    expect(files.filter(({ text }) => recycles(text)).map(({ rel }) => rel)).toEqual([]);
+    expect(recycles(fs.readFileSync(path.join(APP, '__tests__/harness.ts'), 'utf8'))).toBe(true);
+    const product = (dir: string): string[] => fs.readdirSync(path.join(APP, dir), { recursive: true, encoding: 'utf8' })
+      .filter((file) => /\.tsx?$/.test(file) && !/__tests__/.test(file)).map((file) => path.join(dir, file));
+    expect(['lib', 'server', 'app'].flatMap(product).filter((file) => file !== path.join('lib', 'platform', 'db.ts')
+      && recycles(fs.readFileSync(path.join(APP, file), 'utf8')))).toEqual([]);
   });
   it('7. no test file mocks @/auth — a session is the harness\'s setSession, so the file keeps the shared api graph', () => {
     expect(files.filter(({ text }) => /\bvi\.(?:mock|doMock)\(\s*['"]@\/auth['"]/.test(text)).map(({ rel }) => rel)).toEqual([]);
