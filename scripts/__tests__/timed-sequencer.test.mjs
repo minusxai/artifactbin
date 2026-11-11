@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CI_RUNNER, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
-import { JOBS, mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
+import { JOBS, LENSES, medianTimings, mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);
@@ -84,6 +84,23 @@ describe('timed shard packing', () => {
     const merged = mergeTimings({ files: { 'api-isolated': { 'a.test.ts': 9000, 'b.test.ts': 4000 }, api: { 'c.test.ts': 1000 } } },
       { api: { 'a.test.ts': 7000 } });
     expect(merged).toEqual({ files: { 'api-isolated': { 'b.test.ts': 4000 }, api: { 'a.test.ts': 7000, 'c.test.ts': 1000 } } });
+  });
+
+  it('keeps a lens project\'s times beside the full suite\'s: a batch or guard runner\'s time moves no file', () => {
+    const merged = mergeTimings({ files: { node: { 'n.test.mjs': 900, 'g.test.mjs': 2000 }, 'node-batch': { 'n.test.mjs': 30 } } },
+      { 'node-batch': { 'n.test.mjs': 40 }, 'pr-guards': { 'g.test.mjs': 700 } });
+    expect(merged).toEqual({ files: { node: { 'n.test.mjs': 900, 'g.test.mjs': 2000 }, 'node-batch': { 'n.test.mjs': 40 }, 'pr-guards': { 'g.test.mjs': 700 } } });
+    expect(LENSES).toEqual(expect.arrayContaining(['node-batch', 'pr-guards', 'pr-contracts']));
+    // And the full suite's time of a file leaves its lens times alone.
+    expect(mergeTimings(merged, { node: { 'n.test.mjs': 800 } }).files['node-batch']).toEqual({ 'n.test.mjs': 40 });
+  });
+
+  it('records each file\'s median over several runs, so one slow runner sets no file\'s weight', () => {
+    expect(medianTimings([
+      { api: { 'a.test.ts': 17580, 'b.test.ts': 100 } },
+      { api: { 'a.test.ts': 6790 } },
+      { api: { 'a.test.ts': 8948, 'b.test.ts': 301 }, ui: { 'u.test.ts': 5 } },
+    ])).toEqual({ api: { 'a.test.ts': 8948, 'b.test.ts': 201 }, ui: { 'u.test.ts': 5 } });
   });
 
   it('reports each job\'s shard loads, every file counted once', () => {
