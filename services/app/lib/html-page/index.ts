@@ -1,6 +1,7 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
-import {SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlDeclaredQuery,type HtmlDefaultConnectionLink} from '@artifactbin/contracts';
+// Types only: the skill's scripts run this module's parsers under plain Node, where the contracts index cannot load.
+import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
@@ -177,7 +178,8 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
    if(queries.some(query=>query.name===name))throw new Error(`Two declared queries are named ${name}`);
    if(attribute(element,'src')!==null)throw new Error(`Declared query ${name} is written inline, never loaded from src`);
    const sql=element.childNodes.map(node=>'value' in node?String(node.value):'').join('').trim();
-   if(!sql||new TextEncoder().encode(sql).length>SQL_READ_LIMITS.sqlBytes)throw new Error(`Declared query ${name} is one SQL statement of at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
+   // Its size is judged at publish with the SQL limits (lib/live-datasets), where the contracts load.
+   if(!sql)throw new Error(`Declared query ${name} is one SQL statement`);
    queries.push({name,link,sql});
    if(queries.length>DECLARED_QUERIES_MAX)throw new Error(`A page declares at most ${DECLARED_QUERIES_MAX} queries`);
    continue;

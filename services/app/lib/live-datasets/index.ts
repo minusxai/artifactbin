@@ -348,6 +348,7 @@ export async function livePageDeclarations(reader: AccessActor, publisher: Acces
     const row = live.get(query.link);
     if (!row) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} runs on data-af-dataset="${query.link}", which is not a live dataset link on this page`);
     if (!isAdmin(await datasetRole(row, publisher))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `declared query ${query.name} runs on ${query.link}, a live dataset you do not own or edit: only its owner and editors may declare queries on it`);
+    if (new TextEncoder().encode(query.sql).length > SQL_READ_LIMITS.sqlBytes) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} is at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
     const dialect = specOf(liveConnectionOf(row.meta)!.connector).dialect;
     try { colonParameters(dialect, query.sql); } catch (e) { throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name}: ${connectorError(e).message}`); }
   }

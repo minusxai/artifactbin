@@ -50,6 +50,11 @@ it('routes the page runtime\'s sql, sent through the one GraphQL relay as operat
   expect(viaGraphql?.init.headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': key });
   // Only {sql, params} travel, under the trusted revision and read-only state; nothing else the frame sent.
   expect(JSON.parse(viaGraphql!.init.body as string)).toEqual({ sql: 'select 1', params: { p0: 1 }, revision: '7', readOnly: true });
+  // A declared query (`sql.query`): its name and values only, never SQL text, under the trusted revision.
+  const declared = relayedRequest(win, 'p1', { path: '/api/artifacts/p1/graphql', method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'mine', params: { year: 2026 }, operation: 'sql', revision: 'spoof' }) }, { revision: '7', readOnly: false });
+  expect(declared?.path).toBe('/api/artifacts/p1/sql');
+  expect(JSON.parse(declared!.init.body as string)).toEqual({ query: 'mine', params: { year: 2026 }, revision: '7' });
+  expect(relayedRequest(win, 'p1', { path: '/api/artifacts/p1/graphql', method: 'POST', headers: {}, body: JSON.stringify({ query: 7, operation: 'sql' }) }, { revision: '7', readOnly: false })).toBeNull();
   // Malformed, or without trusted context: refused, never relayed to GraphQL instead.
   expect(relayedRequest(win, 'p1', { path: '/api/artifacts/p1/graphql', method: 'POST', headers: {}, body: JSON.stringify({ sql: 7, operation: 'sql' }) }, { revision: '7', readOnly: false })).toBeNull();
   expect(relayedRequest(win, 'p1', { path: '/api/artifacts/p1/graphql', method: 'POST', headers: {}, body: JSON.stringify({ sql: 'select 1', operation: 'sql' }) })).toBeNull();
