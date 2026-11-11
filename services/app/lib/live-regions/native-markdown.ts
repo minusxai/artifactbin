@@ -2,6 +2,7 @@
 import { defaultMarkdownParser, defaultMarkdownSerializer, MarkdownSerializer, schema as baseMarkdownSchema } from 'prosemirror-markdown';
 import { Schema, type Node as PMNode } from 'prosemirror-model';
 import type { JSONContent } from '@tiptap/core';
+import { LiveRegionRefusal } from './refusal';
 import { safeHref } from './href';
 const names:Record<string,string>={code_block:'codeBlock',bullet_list:'bulletList',ordered_list:'orderedList',list_item:'listItem',horizontal_rule:'horizontalRule',hard_break:'hardBreak'};
 export function nativeMarkdownJson(source:string):JSONContent {
@@ -29,6 +30,9 @@ export function nativeMarkdownJson(source:string):JSONContent {
  };return convert(defaultMarkdownParser.parse(source));
 }
 export function writeNativeMarkdown(doc:PMNode):string {
+ // CommonMark cannot express attribute presence or disabled ARIA semantics.
+ // HTML reads/revisions and native editor saves remain fully lossless.
+ doc.descendants(node=>{if(node.type.name==='listItem'&&node.attrs.legacyChecked!==null)throw new LiveRegionRefusal('unsupported_content',['legacy checkbox requires HTML']);});
  const markdownSchema=new Schema({nodes:baseMarkdownSchema.spec.nodes.update('list_item',{...baseMarkdownSchema.nodes.list_item!.spec,attrs:{checked:{default:null}}}),marks:baseMarkdownSchema.spec.marks});
 const serializer=new MarkdownSerializer({...defaultMarkdownSerializer.nodes,text(state,node,parent,index){const value=node.text!;const spaces=index===0&&parent.type.name!=='code_block'?/^ +/.exec(value)?.[0].length??0:0;if(spaces)state.write('&#32;'.repeat(spaces));state.text(value.slice(spaces));},list_item(state,node){if(typeof node.attrs.checked==='boolean')state.write(node.attrs.checked?'[x] ':'[ ] ');state.renderContent(node);}},defaultMarkdownSerializer.marks);
 

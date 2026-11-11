@@ -66,3 +66,27 @@ it('renders the nested code anchor in the editor DOM schema',async()=>{
  const node=nativeSchema.nodes.codeBlock!.create({afId:'af-1',codeAfId:'af-2',language:'javascript'},nativeSchema.text('const x=1;'));
  expect(JSON.stringify(node.type.spec.toDOM!(node))).toContain('af-2');
 });
+
+it.each(['true','false'])('losslessly migrates legacy checkbox checked=%s and preserves native save identities',async checked=>{
+ const {convertLegacyPage,compactRegion,editableRegions,openRegionDoc}=await import('..');
+ const {canonicalizeHtmlPage}=await import('../../html-page');
+ const Y=await import('yjs');
+ const source=`<article data-af-id="af-1" data-af-editable="rich"><p data-af-id="af-2">Tasks</p><ul data-af-id="af-3"><li data-af-id="af-4" role="checkbox" aria-checked="${checked}" aria-disabled="true"><p data-af-id="af-5">Example task</p></li></ul></article>`;
+ const converted=convertLegacyPage(source);
+ expect(converted.html).toBe(source.replace('"rich"','"rich-native-v1"'));
+ const state=converted.states[0]!.state;
+ expect(regionHtml('rich-native-v1',state)).toBe(editableRegions(source)[0]!.inner);
+ const doc=openRegionDoc(state,{kind:'rich-native-v1'});
+ const p=doc.getXmlFragment('native-v1').get(0) as import('yjs').XmlElement;
+ (p.get(0) as import('yjs').XmlText).insert(5,' updated');
+ const page=canonicalizeHtmlPage(converted.html);
+ const saved=compactRegion({savedHtml:page.html,ledger:page.ledger,regionId:'af-1',state:Y.encodeStateAsUpdate(doc)});
+ Y.applyUpdate(doc,saved.update);
+ expect(regionHtml('rich-native-v1',Y.encodeStateAsUpdate(doc))).toBe(editableRegions(source)[0]!.inner.replace('Tasks','Tasks updated'));
+});
+it('preserves mixed nested legacy checkbox lists and absent/false disabled attributes',async()=>{
+ const {convertLegacyPage}=await import('..');
+ const inner='<ul data-af-id="af-2"><li data-af-id="af-3"><p data-af-id="af-4">Plain</p><ol data-af-id="af-5"><li data-af-id="af-6" role="checkbox" aria-checked="false"><p data-af-id="af-7">Nested</p></li></ol></li><li data-af-id="af-8" role="checkbox" aria-checked="true" aria-disabled="false"><p data-af-id="af-9">Enabled</p></li></ul>';
+ const result=convertLegacyPage(`<article data-af-id="af-1" data-af-editable="rich">${inner}</article>`);
+ expect(regionHtml('rich-native-v1',result.states[0]!.state)).toBe(inner);
+});

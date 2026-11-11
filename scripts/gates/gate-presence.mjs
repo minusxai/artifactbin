@@ -19,9 +19,16 @@ function observe(page){page.on('response',response=>{
  if(page===owner&&response.request().postDataJSON()?.cursor)ownerCursorAcks++;
 });}
 [owner,other,guest].forEach(observe);
-const until=async(read,want)=>{const end=Date.now()+12000;let value;do{value=await read();if(want(value))return value;await new Promise(r=>setTimeout(r,150));}while(Date.now()<end);return value;};
+const until=async(read,want,budget=12000)=>{const end=Date.now()+budget;let value;do{value=await read();if(want(value))return value;await new Promise(r=>setTimeout(r,150));}while(Date.now()<end);return value;};
 const frame=async page=>{await page.locator('iframe[data-mx-document-frame]').waitFor();const target=await documentFrame(page);await target.locator('[data-af-id="words"]').waitFor();return target;};
 const setPreference=async(page,label)=>{await openArtifactControls(page);await page.getByRole('button',{name:/^Readers ·/}).click();await page.getByRole('switch',{name:label,exact:true}).click();await page.keyboard.press('Escape');await page.locator('[aria-label="Dismiss artifact controls"]').click();};
+// Assert rendered unique counts through the real controls, not a duplicate of the model.
+const readers=async(page,total,label)=>{
+ await openArtifactControls(page);
+ const button=page.getByRole('button',{name:/^Readers ·/});
+ check(await until(()=>button.getAttribute('aria-label'),name=>name===`Readers · ${total}`,20000)===`Readers · ${total}`,label);
+ await page.locator('[aria-label="Dismiss artifact controls"]').click();
+};
 const move=async page=>{const target=await frame(page);const box=await target.locator('[data-af-id="words"]').boundingBox();await page.mouse.move(box.x+20,box.y+10);await page.mouse.move(box.x+70,box.y+10);};
 const select=async target=>target.locator('[data-af-id="words"]').evaluate(node=>{const range=document.createRange();range.selectNodeContents(node);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.dispatchEvent(new Event('selectionchange'));});
 try{
@@ -52,16 +59,38 @@ try{
  await setPreference(owner,'Share my selections');await move(owner);await select(ownFrame);
  const same=await contexts[0].newPage();observe(same);await same.goto(`${BASE}/a/${doc.id}`,{waitUntil:'load'});const sameFrame=await frame(same);
  await until(()=>Promise.resolve(publicIds.has(same)),Boolean);
+ await readers(same,2,'same account is excluded from other readers across tabs');
+ const third=await contexts[0].newPage();observe(third);
+ // Extra fixture tabs do not need the unrelated account-notification stream. Keep the existing two-tab socket check isolated.
+ await third.route('**/api/my/people/events',route=>route.abort());
+ await third.goto(`${BASE}/a/${doc.id}`,{waitUntil:'load'});await frame(third);await until(()=>Promise.resolve(publicIds.has(third)),Boolean);
+ check(publicIds.has(third),'third own-account tab really published a distinct live session');
+ await readers(owner,2,'three own-account tabs add zero other readers');
+ const peerTabs=await Promise.all([0,1].map(()=>contexts[1].newPage()));
+ for(const tab of peerTabs){observe(tab);await tab.route('**/api/my/people/events',route=>route.abort());await tab.goto(`${BASE}/a/${doc.id}`,{waitUntil:'load'});await frame(tab);await until(()=>Promise.resolve(publicIds.has(tab)),Boolean);check(publicIds.has(tab),'peer tab really published its own live session');}
+ await readers(owner,2,'three peer-account tabs count as one other reader');
  check(/^[a-f0-9]{64}$/.test(publicIds.get(same))&&publicIds.get(same)!==publicIds.get(owner),'same account windows receive distinct server presence IDs');
+ await third.close();for(const tab of peerTabs)await tab.close();
  await owner.bringToFront();await ownFrame.locator('[data-af-id="words"]').click();const beforeAck=ownerCursorAcks;await move(owner);
  check(await until(()=>Promise.resolve(ownerCursorAcks),n=>n>beforeAck)>beforeAck,'two tabs leave HTTP connections available for fresh cursor publication');
  check(await until(()=>sameFrame.locator('[data-af-presence-cursor]').count(),n=>n>0)>0,'another window of the same account sees the live cursor');
  await setPreference(owner,'Show me to other readers');
  check(await until(()=>sameFrame.locator('[data-af-presence-cursor]').count(),n=>n===0)===0,'hidden reader clears their live cursor');
  check(await until(()=>sameFrame.locator('[data-af-presence-selection]').count(),n=>n===0)===0,'hidden reader clears their live text selection');
+ await readers(owner,2,'hidden self still excludes its other visible tabs');
  await move(guest);
  check(await peerReload.locator('[data-af-presence-cursor]').count()===0,'receiver cursor preference stays hidden for anonymous senders');
  check(await until(()=>sameFrame.locator('[data-af-presence-cursor]').count(),n=>n>0)>0,'anonymous reader can share a cursor without account credentials');
+ // Stop peer publications without a departure. Counts must expire from idle room timers.
+ for(const tab of [other])await tab.route('**/api/artifacts/*/presence',route=>route.abort());
+ await openArtifactControls(owner);
+ const readerButton=owner.getByRole('button',{name:/^Readers ·/});
+ await owner.waitForFunction(()=>{const roots=[document];for(let i=0;i<roots.length;i++)for(const el of roots[i].querySelectorAll('*'))if(el.shadowRoot)roots.push(el.shadowRoot);return roots.some(root=>root.querySelector('button[aria-label="Readers · 1"]'));},null,{timeout:50_000});
+ check(await readerButton.getAttribute('aria-label')==='Readers · 1','peer account expires without geometry or count activity');
+ await owner.locator('[aria-label="Dismiss artifact controls"]').click();
+ for(const tab of [other])await tab.unroute('**/api/artifacts/*/presence');
+ await other.reload({waitUntil:'load'});await frame(other);
+ await readers(owner,2,'reload and reconnect converge to one peer account again');
  check(presenceStreams===0,'presence shares the existing document stream instead of opening another SSE connection');
 }finally{await browser.close();await sink.close();}
 check.done();

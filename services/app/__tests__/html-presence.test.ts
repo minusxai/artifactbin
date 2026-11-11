@@ -113,3 +113,21 @@ it('sends a signed-out reader no presence while a signed-in reader on the same p
   expect(await guest.stream.named('presence',1,500)).toEqual([]);
  }finally{for(const c of [guest,member]){c.abort.abort();c.stream.close();}}
 });
+it('personalizes unique other-reader counts across hidden self tabs and same-label peer tabs',async()=>{
+ const peer=await createUser({email:'mxmx_test_presence_peer@example.com'});
+ const peerActor={credential:'session' as const,userId:peer.id,email:peer.email,emailVerified:true};
+ const abort=new AbortController(),req=attachActor(new Request(request('/a/presMixed/events'),{signal:abort.signal}),actor());
+ const response=await runWithRequest(req,()=>GET(req,params('presMixed'))),stream=sseStream(response.body!);
+ const count=async(wanted:number)=>{const deadline=Date.now()+3000;while(Date.now()<deadline){const frames=await stream.named('presence',1,deadline-Date.now());if(frames.some(frame=>(frame.data.readers as {total?:number}|undefined)?.total===wanted))return true;}return false;};
+ try{
+  await stream.named('presence');
+  for(let i=1;i<=3;i++)await publish('presMixed',{session:session.replace(/1$/,String(i)),revision:'1',visible:true},{actor:actor()});
+  expect(await count(0)).toBe(true);
+  for(let i=1;i<=3;i++)await publish('presMixed',{session:session.replace(/1$/,String(i)),revision:'1',visible:true},{actor:peerActor});
+  expect(await count(1)).toBe(true);
+  const hidden=await(await publish('presMixed',{session,revision:'1',visible:false,colorId:'forged'},{actor:actor()})).json();
+  expect(hidden.colorId).toMatch(/^[a-f0-9]{64}$/);expect(JSON.stringify(hidden)).not.toContain(owner.id);
+  // Two own tabs remain visible, but the authenticated account still contributes zero other readers.
+  expect(await count(1)).toBe(true);
+ }finally{abort.abort();stream.close();}
+});

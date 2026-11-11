@@ -40,3 +40,15 @@ it('carries a region caret only as a region id and two base64 relative positions
  expect(presenceRoster([{id:'one',label:'A',revision:'2',seen:1,cursor:null,selection:null,region:{regionId:'af-6',anchor,head:anchor}}],'2',2)[0]!.region).toEqual({regionId:'af-6',anchor,head:anchor});
  expect(JSON.stringify({session:'0'.repeat(36),revision:'2',visible:true,cursor:{nodeId:'x'.repeat(256),x:1,y:1},selection:Array.from({length:8},()=>({nodeId:'x'.repeat(256),start:0,end:1,length:1,fingerprint:'12345678'})),region:{regionId:'r'.repeat(128),anchor,head:anchor}}).length).toBeLessThan(6000);
 });
+it('computes personalized unique readers from the complete room before capping geometry',()=>{
+ const peer=(id:string,colorId:string)=>({id,colorId,label:'Same label',revision:'1',seen:1,cursor:null,selection:null});
+ const own=Array.from({length:3},(_,i)=>peer(`own-${i}`,'account-a'));
+ expect(presenceFrame(own,'1',2,'account-a').readers?.total).toBe(0);
+ const others=Array.from({length:30},(_,i)=>peer(`b-${i}`,'account-b'));
+ const frame=presenceFrame([...own,...others,peer('c','account-c')],'1',2,'account-a');
+ expect(frame.viewers).toHaveLength(25);expect(frame.readers?.total).toBe(2);
+ expect(presenceFrame(others,'1',2,'account-a').readers?.total).toBe(1);
+ expect(presenceFrame([...others,peer('guest-a','guest-a'),peer('guest-b','guest-b')],'1',2,'account-a').readers?.total).toBe(3);
+ const many=Array.from({length:125},(_,i)=>peer(`tab-${i}`,`account-${i}`));
+ expect(presenceFrame(many,'1',2,'absent').readers?.total).toBe(125);
+});

@@ -5,7 +5,7 @@
  */
 import * as Y from 'yjs';
 import { createNativeState, nativeHtml, nativeDocument, reviseNative } from './native-state';
-import { nativeMarkdownJson } from './native-markdown';
+import { nativeMarkdownJson, writeNativeMarkdown } from './native-markdown';
 import { nativeSchema } from './native-schema';
 import { readNativeHtml, writeNativeHtml } from './native-html';
 import type { Node as PMNode } from 'prosemirror-model';
@@ -233,6 +233,8 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   const { kind } = input;
   if ((input.html === undefined) === (input.markdown === undefined)) throw new TypeError('applyRegionRevision takes exactly one of html or markdown');
   if (kind === 'rich-native-v1') {
+    // Refuse a representation that cannot carry the existing ARIA attributes.
+    if (input.markdown !== undefined) writeNativeMarkdown(nativeDocument(openRegionDoc(input.live,{kind})));
     return reviseNative(input.live, input.savedSnapshot, input.html ?? writeNativeHtml(nativeSchema.nodeFromJSON(nativeMarkdownJson(input.markdown!))));
   }
   const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!, kind), 'refuse');
