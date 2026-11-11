@@ -384,7 +384,7 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
     if (!used.length) return null;
     const first = used[0]!;
     if (used.length > 1) throw new LiveDatasetRefusal(400, 'validation_failed', `a statement reads one source: ${used.map((u) => u.link.name).join(' and ')} are two live datasets; query them separately`);
-    const other = page.links.find((l) => l.kind !== 'backend' && l.name !== first.link.name && words.has(l.name.toLowerCase()));
+    const other = page.links.find((l) => l.name !== first.link.name && words.has(l.name.toLowerCase()));
     if (other) throw new LiveDatasetRefusal(400, 'validation_failed', `a statement reads one source: ${first.link.name} is a live dataset and ${other.name} another source; query them separately`);
     if (!first.row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${first.link.name} names a live dataset that is gone`);
     const dialect = specOf(liveConnectionOf(first.row.meta)!.connector).dialect;
