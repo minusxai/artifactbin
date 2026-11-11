@@ -19,7 +19,7 @@ import configuredServer from './toolbox-config.mjs';
 
 // No remote sources, frames, forms, workers or popup permissions. This is a
 // browser resource policy, not an OS/network sandbox for hostile JavaScript.
-export const PRIVATE_CSP =
+const PRIVATE_CSP =
   "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; "+
   "img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src "+
   "'self'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action "+
@@ -28,7 +28,7 @@ export const PRIVATE_CSP =
  * `platformOrigin` (default: the archive's selected server)
  * supplies the runtime, libraries, components, fonts and boundaries (./preview-platform); a source
  * checkout's own build outputs come first. */
-export async function startPreview({root,port=0,runtimeDir,platformOrigin,
+export async function startPreview({root,port=0,platformOrigin,
   libraryAssets,revisionIntervalMs=1000,autofix={}}) {
 if(!Number.isInteger(port)||port<0||port>65535)throw Error(
    'Port must be an integer from 0 to 65535');
@@ -36,7 +36,6 @@ const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())th
    'Root must be a directory');
  const origin=platformOrigin??configuredServer??null;
  const platform=platformModules({origin,libraryAssets});
- const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
  const platformFont=platformFonts(origin),platformBoundary=platformBoundaries(origin);
  // Only the page's own design system stylesheet, fetched on demand.
  const platformCss=html=>{const name=pageDesignSystem(html);
@@ -72,7 +71,7 @@ if(!pathname.startsWith('/')||pathname.includes('\\')||pathname.includes('\0'))r
 if(pathname==='/__af_preview/export-runtime'){res.setHeader('Content-Type','application/json');
      try{return end(200,JSON.stringify(await platform.runtimeAssets()));}catch(error){
      return end(503,JSON.stringify({error:error.message+' (the preview loads the runtime from '+
-     'the selected server; check the network or pass --runtime-dir)'}));}}
+     'the selected server; check the network)'}));}}
    const handled=await handleSourceRoute(pathname,{req,res,end,base,platform,platformFont,
      platformCss});
    if(handled!==null)return;
@@ -82,33 +81,27 @@ const font=await platformFont(pathname);if(font){res.setHeader('Content-Type','f
      res.setHeader('Content-Length',font.length);return end(200,font);}
    const boundary=await platformBoundary(pathname);if(boundary){res.setHeader('Content-Type',
      'application/json');res.setHeader('Content-Length',boundary.length);return end(200,boundary);}
-   // --runtime-dir replaces the server's runtime (/af/*), but not its hosted components.
-   const module=!(runtime&&pathname.startsWith('/af/')&&!pathname.startsWith('/af/components/'))?
-     await platform.module(pathname):null;
+   const module=await platform.module(pathname);
 if(module){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader(
      'Content-Length',module.length);return end(200,module);}
 const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,
      'Not found');
-   const isRuntime=runtime&&pathname.startsWith('/af/');const selected=isRuntime?runtime:base;
-   const requested=isRuntime?pathname.slice('/af/'.length):pathname.slice(1);
-let file=resolve(selected,requested||'index.html');if(!inside(selected,file))return end(404,
+let file=resolve(base,pathname.slice(1)||'index.html');if(!inside(base,file))return end(404,
      'Not found');
-file=await realpath(file);if(!inside(selected,file)||relative(selected,file).split(sep).some(part=>
+file=await realpath(file);if(!inside(base,file)||relative(base,file).split(sep).some(part=>
      part.startsWith('.')))return end(404,'Not found');
 const info=await stat(file);if(!info.isFile())return end(404,'Not found');if(
      info.size>PREVIEW_LIMITS.maxFileBytes)throw new PreviewLimitError(
      'Preview file exceeds 32 MiB; reduce the file or select a smaller project.');
-const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; charset=utf-8':
-     'application/octet-stream');
+const type=types[extname(file).toLowerCase()]||'application/octet-stream';
    res.setHeader('Content-Type',type);
-if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,
-     file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString(
-     'utf8'))).html;const revision=await revisions.current({fresh:true});const config={pageId:
-     'local:'+pathname,revision,backends:[],offline:true,libraries:await platform.importMap().catch(
-     ()=>({}))};const body=previewHtml(html,changeNotice(revision),config,await platformCss(html)
-     .catch(()=>null));res.setHeader('Content-Length',Buffer.byteLength(body));
-     return end(200,body);}
-   const bytes=await readPreviewFile(selected,file);res.setHeader('Content-Length',bytes.length);
+if(type.startsWith('text/html')){const html=(await served(file,(await readPreviewFile(base,
+     file)).toString('utf8'))).html;const revision=await revisions.current({fresh:true});
+     const config={pageId:'local:'+pathname,revision,backends:[],offline:true,libraries:
+     await platform.importMap().catch(()=>({}))};const body=previewHtml(html,changeNotice(
+     revision),config,await platformCss(html).catch(()=>null));
+     res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
+   const bytes=await readPreviewFile(base,file);res.setHeader('Content-Length',bytes.length);
    if(req.method==='HEAD')return end(200);
    end(200,bytes);
   }catch(error){

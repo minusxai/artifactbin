@@ -28,14 +28,10 @@ return {cursor:checkpoint.cursor,eventIds:records.filter(record=>record.kind==='
    record.event.event_id)};
 }
 const REACTION_MARKS={thumbs_up:'👍'};
-/** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors, or
- * the bare count from an older server. */
+/** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors. */
 export function reactionText(reaction){
-const mark=REACTION_MARKS[reaction?.kind]??String(reaction?.kind),by=Array.isArray(
-   reaction?.by)?reaction.by:null;
- if(!by)return `${mark} ${reaction?.count??0}`;
-const names=by.map(reactor=>reactor?.label||(reactor?.kind==='agent'?'agent':'someone')),more=(
-   reaction.count??names.length)-names.length;
+const mark=REACTION_MARKS[reaction.kind]??String(reaction.kind),names=reaction.by.map(reactor=>
+   reactor.label||(reactor.kind==='agent'?'agent':'someone')),more=reaction.count-names.length;
  return `${mark} ${names.join(', ')}${more>0?` +${more}`:''}`;
 }
 /** A comment listing as text output shows it: each comment's reactions as reactionText lines.

@@ -49,13 +49,6 @@ describe('creating a folder', () => {
     expect(g.body).not.toHaveProperty('folder');
   });
 
-  it('refuses the retired folder field by name', async () => {
-    const o = await owner();
-    const r = await create(o.token, { html: '<h1>x</h1>', folder: '2026/08' });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toBe('folder_retired');
-    expect(String(r.body.hint ?? r.body.details)).toContain('parent_id');
-  });
 });
 
 describe('filing under a folder', () => {

@@ -10,7 +10,7 @@ import path from 'node:path';
 import {ToolError,platform} from './toolbox-client.mjs';
 
 /** True when the page shows nothing: no element or text outside <head>, and no script. */
-export function emptyPage(source) {
+function emptyPage(source) {
   const rest = source.replace(/<!--[\s\S]*?-->/g, '').replace(/<head\b[\s\S]*?<\/head\s*>/i, '')
     .replace(/<(title|style)\b[\s\S]*?<\/\1\s*>/gi, '');
   const shell = ['html', 'head', 'body', 'meta', 'link', 'base'];
@@ -28,7 +28,7 @@ export function refuseEmpty(source, file) {
 let starters;
 /** Each shipped starter (examples/*.html): its header line ("Example: …", which starters say to
  * keep) and its bracketed placeholder texts, e.g. "[Company]". */
-export function starterIndex(directory) {
+function starterIndex(directory) {
   if (!directory && starters) return starters;
   const found = [], from = directory ?? new URL('../examples/', import.meta.url);
   try {
@@ -49,7 +49,7 @@ export const starterTexts = directory =>
   new Set(starterIndex(directory).flatMap(starter => [...starter.texts]));
 /** The placeholders to look for in a page: all of the starter whose header line it still carries;
  * otherwise only multi-word ones ("[Market size in one sentence]"), never a page's "[Draft]". */
-export function pagePlaceholders(source, index = starterIndex()) {
+function pagePlaceholders(source, index = starterIndex()) {
   const copied = index.filter(starter => starter.header && source.includes(starter.header));
   return new Set(copied.length ? copied.flatMap(starter => [...starter.texts]) :
     index.flatMap(starter => [...starter.texts].filter(text => /\s/.test(text))));

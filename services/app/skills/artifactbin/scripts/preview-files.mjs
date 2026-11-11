@@ -10,7 +10,7 @@ export const PREVIEW_LIMITS=Object.freeze({maxFiles:2000,maxFileBytes:32*1024*10
   128*1024*1024});
 export class PreviewLimitError extends Error {constructor(message){super(message);this.code=
   'PREVIEW_LIMIT';}}
-export function withinRoot(root,path){const tail=relative(root,path);return tail!== '..'&&
+function withinRoot(root,path){const tail=relative(root,path);return tail!== '..'&&
   !tail.startsWith('..'+sep)&&!tail.startsWith(sep)&&!tail.split(sep).some(part=>part.startsWith(
   '.'));}
 /** Hold one descriptor while checking identity and reading bounded bytes. O_NOFOLLOW

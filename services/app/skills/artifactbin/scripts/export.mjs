@@ -39,7 +39,7 @@ import {
 } from './toolbox-client.mjs';
 // Read width/height from the PNG header or JPEG frame marker so the receipt can show what was
 // captured.
-export function imageDimensions(bytes, format) {
+function imageDimensions(bytes, format) {
   const data = Buffer.from(bytes);
   if (
     format === 'png' &&

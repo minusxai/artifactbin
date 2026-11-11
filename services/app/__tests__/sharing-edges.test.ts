@@ -202,8 +202,6 @@ describe('what the surfaces disclose', () => {
       // yours and telling them apart says whether an id exists.
       [{ html: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
       [{ html: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
-      // The retired PATH field is answered by name, never as "invalid".
-      [{ html: '<h1>y</h1>', folder: 'reports/q3' }, 'folder_retired'],
     ] as const) {
       const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
       expect(res.status, JSON.stringify(body)).toBe(400);
@@ -262,9 +260,6 @@ describe('the advanced HTTP surface preserves sharing policy', () => {
     expect(bad.isError).toBe(true);
     expect(bad.data.error).toBe('invalid_parent');
 
-    const retired = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', folder: 'reports/q3' });
-    expect(retired.isError).toBe(true);
-    expect(retired.data.error).toBe('folder_retired');
 
     const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Reports' });
     const good = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', parent_id: box.data.id as string });

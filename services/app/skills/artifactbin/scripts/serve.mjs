@@ -1,10 +1,9 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Private loopback preview of a local project; Ctrl-C stops it.
 Never publishes, signs in or reads credentials.
-Usage: node scripts/serve.mjs PROJECT_DIR [--port N] [--autofix] [--runtime-dir DIR]
+Usage: node scripts/serve.mjs PROJECT_DIR [--port N] [--autofix]
 Flags: --port N (default 0 picks a free port); --autofix also writes autofix fixes into each served
-  HTML file (default: serve the fixed bytes and leave the file unchanged); --runtime-dir DIR
-  (repository users: prebuilt runtime assets instead of the server's).
+  HTML file (default: serve the fixed bytes and leave the file unchanged).
   Common: --json, --output FILE, --help. --server is refused.
 Examples:
   node scripts/serve.mjs ./project --port 7474  # open the printed loopback URL;
@@ -32,7 +31,7 @@ import {runTool, positional, integer, ToolError} from './toolbox-client.mjs';
 import {startPreview} from './preview-server.mjs';
 // Start the preview and print one JSON receipt with the loopback URL; the process then stays up
 // until a signal.
-export async function serveCommand({values, positionals}) {
+async function serveCommand({values, positionals}) {
   if (values.server)
     throw new ToolError(
       'unsupported_server', 'Private serve does not connect to a remote server.', 2);
@@ -41,7 +40,6 @@ export async function serveCommand({values, positionals}) {
   const session = await startPreview({
     root: positional(positionals),
     port: values.port === undefined ? 0 : integer(values.port, 'port', 0, 65535),
-    runtimeDir: values['runtime-dir'],
     autofix: {write: values.autofix === true, report: text => process.stderr.write(text)}
   });
   const receipt = {
