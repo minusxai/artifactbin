@@ -21,11 +21,14 @@ export function limitsOf(query: Pick<ConnectorQuery, 'limits'>): ConnectorLimits
   return { rows: lower('rows'), bytes: lower('bytes'), timeoutMs: lower('timeoutMs') };
 }
 
-/** A namespace is one identifier (BigQuery: `project.dataset` too): it is quoted, never spliced, but kept plain. */
-export function checkedNamespace(dialect: ConnectorDialect, namespace: string | undefined): string | undefined {
+/**
+ * What follows `default:`: on Postgres and MySQL the database a session opens, passed through as written (a gateway's
+ * `warehouse/finance` included) in the handshake, never into SQL text; on BigQuery a dataset. Bounded and plain.
+ */
+export const NAMESPACE = /^[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127}$/;
+export function checkedNamespace(_dialect: ConnectorDialect, namespace: string | undefined): string | undefined {
   if (namespace === undefined || namespace === '') return undefined;
-  const part = '[A-Za-z_][A-Za-z0-9_$-]{0,62}';
-  if (!new RegExp(dialect === 'bigquery' ? `^(?:[a-z][a-z0-9-]{4,61}[a-z0-9]\\.)?${part}$` : `^${part}$`).test(namespace)) throw new ConnectorFailure('invalid_query', 'the namespace must be one identifier: letters, digits, _, $ or -');
+  if (!NAMESPACE.test(namespace)) throw new ConnectorFailure('invalid_query', 'what follows default: is a database name: letters, digits and _ $ . : / -, at most 128');
   return namespace;
 }
 

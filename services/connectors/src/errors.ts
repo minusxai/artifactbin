@@ -46,7 +46,11 @@ export function driverFailure(raw: unknown, secrets: readonly string[]): Connect
   const state = e.name === 'PostgresError' ? code : typeof e.sqlState === 'string' ? e.sqlState : undefined;
   if (state) {
     const text = `${state} ${e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message)}`;
-    if (AUTH_STATES.has(state)) return fail('auth_failed', `the database refused the sign-in (${state})`);
+    if (AUTH_STATES.has(state) || e.errno === 1045) return fail('auth_failed', `the database refused the sign-in (${state})`);
+    // No such database (Postgres 3D000, MySQL 1049): what followed default: names nothing there.
+    if (state === '3D000' || e.errno === 1049) return fail('invalid_config', `the database does not exist (${state}): ${e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message)}`);
+    // The database refused this person (Postgres 42501, MySQL 1227/1142/1044): its own message says why.
+    if (state === '42501' || e.errno === 1227 || e.errno === 1142 || e.errno === 1044) return fail('permission_denied', e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message));
     if (READ_ONLY_STATES.has(state)) return fail('read_only', `this connection is read-only: ${text}`);
     if (isTimeout(state, e.errno)) return fail('timeout', 'the query ran past its time limit');
     return fail('database_error', text);

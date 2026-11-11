@@ -161,8 +161,8 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
  }
  return carried;
 }
-/** What may follow `default:`: empty, one identifier, or (BigQuery) `project.dataset`; quoted per dialect when used. */
-const DEFAULT_NAMESPACE=/^(?:[A-Za-z_][A-Za-z0-9_$-]{0,62}(?:\.[A-Za-z_][A-Za-z0-9_$-]{0,62})?)?$/;
+/** What may follow `default:`: empty, or the database the session opens, as written (`warehouse/finance`); never SQL text. */
+const DEFAULT_NAMESPACE=/^(?:[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127})?$/;
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const names=new Set<string>();
@@ -181,7 +181,7 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
   // The install's default connection: `default:` and the namespace (schema, database, dataset) it reads, never pinned.
   const fallback=/^default:(.*)$/s.exec(attribute(element,'href')??'');
   if(fallback){
-   if(!DEFAULT_NAMESPACE.test(fallback[1]!))throw new Error('A default-connection href is default: and one schema name (letters, digits, _, $ or -)');
+   if(!DEFAULT_NAMESPACE.test(fallback[1]!))throw new Error('A default-connection href is default: and a database name (letters, digits and _ $ . : / -)');
    if(attribute(element,'data-af-mode')!==null||attribute(element,'data-af-revision')!==null)throw new Error('The default connection is always live: it has no mode or revision');
    connections.push({kind:'default-connection',name,namespace:fallback[1]!});continue;
   }

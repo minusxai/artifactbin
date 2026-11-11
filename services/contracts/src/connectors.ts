@@ -13,16 +13,20 @@
  * time); past the row limit the rows stop and `truncated` is set. A failure is one shape, `ConnectorError`: a code
  * from `CONNECTOR_ERROR_CODES` and a one-line message that never carries a secret.
  *
- * THE VIEWER. Every query carries the person it runs for (`viewer`, null for nobody) as metadata, apart from the SQL and
- * from the connection's one credential: `viewer_id`, `viewer_email` and `viewer_groups` (the IDs of the groups they
- * belong to, as JSON array text, sorted: `["g1","g2"]`). The database protocols have no per-query metadata, so the
- * connector sets them on the session immediately before each statement, inside that statement's own read-only
- * transaction, every time (a pooled session never carries another person's values): Postgres
- * `set_config('app.viewer_id' | 'app.viewer_email' | 'app.viewer_groups', value, true)`, MySQL the session variables
- * `@app_viewer_id` / `@app_viewer_email` / `@app_viewer_groups` (reset to NULL when the session is returned). Nobody:
- * empty strings and `[]`. A database that relies on them must read them as the statement starts and ignore changes a
- * statement makes itself, which a gateway built for this does; a plain database cannot guarantee that, so there they
- * are ADVISORY whenever the reader writes the SQL (other databases, maybe in future).
+ * THE VIEWER. Every query, `schema()` and `test()` carries the person it runs for (`viewer`) as metadata, apart from the
+ * SQL and from the connection's one credential: `viewer_id`, `viewer_email` and `viewer_groups` (the IDs of the groups
+ * they belong to directly, as JSON array text, sorted: `["g1","g2"]`). The database protocols have no per-query
+ * metadata, so the connector names the viewer on the session immediately before each statement, inside that
+ * statement's own read-only transaction, every time (a pooled session never carries another person's values):
+ *   Postgres  Q `BEGIN READ ONLY` · extended `SELECT set_config('app.viewer_id', $1, true),
+ *             set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)` · extended: the
+ *             statement · Q `COMMIT` (`ROLLBACK` after an error)
+ *   MySQL     `START TRANSACTION READ ONLY` · text `SET @app.viewer_id='…', @app.viewer_email='…',
+ *             @app.viewer_groups='…'` (escaped literals) · the statement · `COMMIT` (`ROLLBACK` after an error) ·
+ *             `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''`
+ * Nobody: empty strings and `[]`. A database that relies on them must read them as the statement starts and ignore
+ * changes a statement makes itself, which a gateway built for this does; a plain database cannot guarantee that, so
+ * there they are ADVISORY whenever the reader writes the SQL (other databases, maybe in future).
  */
 import { SQL_READ_LIMITS } from './sql';
 
@@ -61,8 +65,8 @@ export interface ConnectorSpec {
   /** One line for people and agents: what it connects to. */
   readonly summary: string;
   /**
-   * What the text after `default:` in a page's link (and an agent's `default:<name>`) selects on this connector:
-   * the schema, database or dataset unqualified table names resolve in. Empty: the connection's own default.
+   * What the text after `default:` in a page's link (and an agent's `default:<name>`) selects on this connector (a
+   * database, a dataset). Empty: the connection's own default.
    */
   readonly namespace: string;
   readonly fields: readonly ConnectorField[];
@@ -79,14 +83,14 @@ export const CONNECTORS: readonly ConnectorSpec[] = Object.freeze([
   {
     id: 'postgres', label: 'PostgreSQL', group: 'live', dialect: 'postgres',
     summary: 'PostgreSQL and servers speaking its protocol (Amazon RDS and Aurora, Cloud SQL, Supabase, Neon, CockroachDB, Redshift).',
-    namespace: 'the schema (search_path) unqualified tables resolve in',
+    namespace: 'the database the session opens (the startup packet\'s `database`), passed through as written; empty: the configured database',
     fields: [host, { name: 'port', label: 'Port', kind: 'integer', required: false, secret: false, shown: true, default: 5432, description: 'The server\'s port.' },
       { name: 'database', label: 'Database', kind: 'string', required: true, secret: false, shown: true, description: 'The database to connect to.' }, user, password, tls, ca],
   },
   {
     id: 'mysql', label: 'MySQL', group: 'live', dialect: 'mysql',
     summary: 'MySQL and servers speaking its protocol (MariaDB, Amazon Aurora MySQL, PlanetScale, TiDB, SingleStore).',
-    namespace: 'the database (USE) unqualified tables resolve in',
+    namespace: 'the database the session opens (the handshake\'s `database`), passed through as written; empty: the configured database',
     fields: [host, { name: 'port', label: 'Port', kind: 'integer', required: false, secret: false, shown: true, default: 3306, description: 'The server\'s port.' },
       { name: 'database', label: 'Database', kind: 'string', required: true, secret: false, shown: true, description: 'The default database.' }, user, password, tls, ca],
   },
@@ -152,7 +156,7 @@ export interface ConnectorQuery {
   readonly params: Readonly<Record<string, ConnectorScalar>>;
   /** Who the query runs for (the session values above); null sets them empty. */
   readonly viewer: ConnectorViewer | null;
-  /** The connector's namespace for this query (see `ConnectorSpec.namespace`); absent: the connection's default. */
+  /** What the text after `default:` selects (see `ConnectorSpec.namespace`); absent or empty: the configured default. */
   readonly namespace?: string;
   readonly limits?: Partial<ConnectorLimits>;
   readonly signal?: AbortSignal;
@@ -167,7 +171,7 @@ export interface ConnectorAnswer {
 }
 
 export interface ConnectorSchemaTable {
-  /** The schema, database or dataset it lives in. */
+  /** The schema (Postgres), database (MySQL) or dataset it lives in. */
   readonly namespace: string;
   readonly name: string;
   readonly kind: 'table' | 'view';
@@ -196,6 +200,8 @@ export const CONNECTOR_ERROR_CODES = [
   'connect_failed',
   /** The server refused the sign-in. */
   'auth_failed',
+  /** The database refused this person (Postgres 42501, MySQL 1227 and 1142): its message says why. */
+  'permission_denied',
   /** The statement tried to write: sessions are read-only. */
   'read_only',
   'timeout',
@@ -218,10 +224,10 @@ export interface Connection {
   readonly connector: ConnectorId;
   readonly dialect: ConnectorDialect;
   query(query: ConnectorQuery): Promise<ConnectorAnswer>;
-  /** Tables and views the signed-in account can read, in `namespace` (absent: every namespace it can read). */
-  schema(options?: { namespace?: string; signal?: AbortSignal }): Promise<ConnectorSchema>;
-  /** Opens a session and runs a trivial read; never throws. */
-  test(): Promise<ConnectorTestResult>;
+  /** Tables and views the viewer can read in `namespace`'s database (absent: the configured one), from information_schema. */
+  schema(options: { viewer: ConnectorViewer | null; namespace?: string; signal?: AbortSignal }): Promise<ConnectorSchema>;
+  /** Opens a session and runs `SELECT 1` as the viewer, as a query does; never throws. */
+  test(options: { viewer: ConnectorViewer | null; namespace?: string }): Promise<ConnectorTestResult>;
   close(): Promise<void>;
 }
 

@@ -2,16 +2,21 @@
  * THE MYSQL-PROTOCOL CONNECTOR (mysql2), adapted from the runner's `caps.db` client
  * (services/runner/src/worker-database.mjs `mysqlClient`). On the wire:
  *
- *  1. Handshake (once per session; sessions are shared): the TCP socket goes to the address ./network judged; TLS
- *     (verify-full, TLS 1.2+) unless the install allows `tls: 'disable'`; the configured user and database; LOCAL
- *     INFILE and multiple statements off; connection attribute `program_name=artifactbin`. Then
- *     `SET time_zone = '+00:00'`.
- *  2. Each query, on one session, each a statement of its own: `SET SESSION max_execution_time = <ms>`;
- *     `SET @app_viewer_id = ?, @app_viewer_email = ?, @app_viewer_groups = ?` (prepared, bound); for a namespace
- *     `USE \`<namespace>\``; `START TRANSACTION READ ONLY`; the reader's statement (prepared with `?` when it binds
- *     values, a text query otherwise; never escaped into the text), read row by row up to one past the limit;
- *     `ROLLBACK`; `SET @app_viewer_id = NULL, @app_viewer_email = NULL, @app_viewer_groups = NULL`; and after a
- *     namespace `USE` the configured database again. A stopped read or a failed statement closes the session.
+ *  1. Handshake, once per session (sessions are shared by viewers, one database each): TCP to the address ./network
+ *     judged; TLS (verify-full, TLS 1.2+, `ca` if configured) unless the install allows `tls: 'disable'`;
+ *     HandshakeResponse41 with `user` (the configured account) and `database` (what followed `default:`, as written,
+ *     else the configured database), LOCAL INFILE and multiple statements off, connection attribute
+ *     `program_name=artifactbin`; the password as the server asks (caching_sha2_password full authentication inside
+ *     TLS). Then, best effort (a server that refuses them still serves): `SET time_zone = '+00:00'` and
+ *     `SET SESSION max_execution_time = <CONNECTOR_LIMITS.timeoutMs>`.
+ *  2. Each query, `schema()` and `test()`, on one session, each a COM_QUERY of its own unless it binds values:
+ *       `START TRANSACTION READ ONLY`
+ *       `SET @app.viewer_id='<id>', @app.viewer_email='<email>', @app.viewer_groups='<groups>'` (text, literals:
+ *          each `\` doubled and each `'` doubled, so the value stays one literal with or without NO_BACKSLASH_ESCAPES)
+ *       the statement, one (prepared with `?` when it binds values, COM_QUERY otherwise; never escaped into the
+ *          text), read row by row up to one past the limit (a stopped read closes the session)
+ *       `COMMIT` (`ROLLBACK` after an error)
+ *       `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''`
  *
  * A database can use the viewer in a view only through a function (MySQL views refuse user variables), e.g.
  * `CREATE FUNCTION app_viewer_id() RETURNS VARCHAR(255) DETERMINISTIC RETURN @app_viewer_id`.
@@ -24,10 +29,10 @@ import { Collector, checkedNamespace, limitsOf, numberValue, plainValue, timesta
 import { connectionSecrets } from './config';
 import { ConnectorFailure, driverFailure } from './errors';
 import { connectTarget, targetOf, type NetworkSeams } from './network';
-import { tablesOf } from './postgres';
+import { tablesOf, typeOfName } from './postgres';
 import { SessionPool } from './sessions';
-import { bindStatement, quoteIdentifier, readOnlyStatement } from './statement';
-import type { ConnectorModule, InternalRead } from './module';
+import { bindStatement, readOnlyStatement } from './statement';
+import type { ConnectorModule } from './module';
 
 const NUMBER = new Set([0, 1, 2, 3, 4, 5, 8, 9, 13, 246]), DATE = new Set([10, 14]), DATETIME = 12, TIMESTAMP = 7, JSON_TYPE = 245, BIT = 16;
 function typeOf(field: FieldPacket): ConnectorValueType {
@@ -47,16 +52,11 @@ function cell(field: FieldPacket, type: ConnectorValueType, value: unknown): Con
   if (type === 'date') return String(value);
   return plainValue(value);
 }
-/** By information_schema's DATA_TYPE (schema listing). */
-function typeOfName(name: string): ConnectorValueType {
-  const n = name.toLowerCase();
-  if (['tinyint', 'smallint', 'mediumint', 'int', 'integer', 'bigint', 'decimal', 'numeric', 'float', 'double', 'real', 'year'].includes(n)) return 'number';
-  if (n === 'date') return 'date';
-  if (n === 'datetime' || n === 'timestamp') return 'timestamp';
-  if (n === 'json') return 'json';
-  if (n === 'bit') return 'boolean';
-  return 'text';
-}
+/** A MySQL string literal for any value: `\\` and `'` doubled, so it stays one literal whether or not
+ * NO_BACKSLASH_ESCAPES is on (with it, a backslash in the value arrives doubled: changed, never escaping). */
+export const mysqlLiteral = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`;
+const viewerStatement = (v: { id: string; email: string; groups: string }) => `SET @app.viewer_id=${mysqlLiteral(v.id)}, @app.viewer_email=${mysqlLiteral(v.email)}, @app.viewer_groups=${mysqlLiteral(v.groups)}`;
+const CLEARED = "SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''";
 
 const call = <T = unknown>(c: MysqlConnection, text: string, values?: unknown[]) => new Promise<T>((resolve, reject) => {
   const done = (error: unknown, result: unknown) => (error ? reject(error) : resolve(result as T));
@@ -67,9 +67,8 @@ export const mysqlConnector: ConnectorModule = {
   open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}) {
     const target = targetOf(config, policy);
     const secrets = connectionSecrets(config);
-    const database = String(config.database);
     const sessions = new SessionPool<MysqlConnection>({
-      async open() {
+      async open(database) {
         const socket = await connectTarget(target, policy, seams);
         const connection = mysql.createConnection({
           host: target.host, port: target.port, database, user: String(config.user), password: typeof config.password === 'string' ? config.password : undefined,
@@ -82,7 +81,7 @@ export const mysqlConnector: ConnectorModule = {
         } as never);
         connection.on('error', () => {});
         await new Promise<void>((resolve, reject) => connection.connect((error) => (error ? (connection.destroy(), reject(error)) : resolve())));
-        await call(connection, 'SET time_zone = \'+00:00\'');
+        for (const setting of ['SET time_zone = \'+00:00\'', `SET SESSION max_execution_time = ${CONNECTOR_LIMITS.timeoutMs}`]) await call(connection, setting).catch(() => undefined);
         return connection;
       },
       async close(connection) {
@@ -96,16 +95,17 @@ export const mysqlConnector: ConnectorModule = {
     async function run(query: ConnectorQuery, guarded: boolean): Promise<ConnectorAnswer> {
       if (guarded) readOnlyStatement('mysql', query.text);
       const bound = guarded ? bindStatement('mysql', query.text, query.params) : { text: query.text, values: Object.values(query.params) };
-      const limits = limitsOf(query), viewer = viewerValues(query), namespace = checkedNamespace('mysql', query.namespace);
-      return sessions.use(async (c, dropSession) => {
+      const limits = limitsOf(query), viewer = viewerValues(query);
+      const database = checkedNamespace('mysql', query.namespace) ?? String(config.database);
+      let open = false;
+      return sessions.use(database, async (c, dropSession) => {
         let gone = false;
         const discard = () => { gone = true; dropSession(); };
         try {
           return await withinTime(limits.timeoutMs + 1000, query.signal, () => { discard(); c.destroy(); }, async () => {
-            await call(c, `SET SESSION max_execution_time = ${Math.floor(limits.timeoutMs)}`);
-            await call(c, 'SET @app_viewer_id = ?, @app_viewer_email = ?, @app_viewer_groups = ?', [viewer.id, viewer.email, viewer.groups]);
-            if (namespace) await call(c, `USE ${quoteIdentifier('mysql', namespace)}`);
             await call(c, 'START TRANSACTION READ ONLY');
+            open = true;
+            await call(c, viewerStatement(viewer));
             const answer = await new Promise<ConnectorAnswer>((resolve, reject) => {
               let collector: Collector | undefined, fields: FieldPacket[] = [], types: ConnectorValueType[] = [], stopped = false;
               const start = (f: FieldPacket[]) => { fields = f ?? []; types = fields.map(typeOf); collector = new Collector(limits, uniqueColumns(fields.map((x, i) => ({ name: x.name, type: types[i]! })))); };
@@ -124,6 +124,8 @@ export const mysqlConnector: ConnectorModule = {
               command.on('error', (error: unknown) => { if (!stopped) reject(error); });
               command.on('end', () => { if (stopped) return; if (!collector) start([]); resolve(collector!.answer()); });
             });
+            await call(c, 'COMMIT');
+            open = false;
             return answer;
           });
         } catch (error) {
@@ -133,30 +135,27 @@ export const mysqlConnector: ConnectorModule = {
           // Back to the session's own state before anyone else's query: no transaction, no viewer, its database.
           if (!gone) {
             try {
-              await call(c, 'ROLLBACK');
-              await call(c, 'SET @app_viewer_id = NULL, @app_viewer_email = NULL, @app_viewer_groups = NULL');
-              if (namespace) await call(c, `USE ${quoteIdentifier('mysql', database)}`);
+              if (open) await call(c, 'ROLLBACK');
+              await call(c, CLEARED);
             } catch { discard(); }
           }
         }
       });
     }
 
-    const read: InternalRead = (text, params, limits) => run({ text, params, viewer: null, limits }, false);
     return {
       connector: 'mysql', dialect: 'mysql',
       query: (q) => run(q, true),
-      async schema(options = {}): Promise<ConnectorSchema> {
-        const namespace = checkedNamespace('mysql', options.namespace);
-        const answer = await read(`select c.table_schema as ns, c.table_name as name, t.table_type as kind, c.column_name as col, c.data_type as type
-          from information_schema.columns c join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
-          where c.table_schema not in ('mysql', 'information_schema', 'performance_schema', 'sys')${namespace ? ' and c.table_schema = ?' : ''}
-          order by c.table_schema, c.table_name, c.ordinal_position`, namespace ? { ns: namespace } : {}, { rows: CONNECTOR_LIMITS.rows });
+      async schema(options): Promise<ConnectorSchema> {
+        const answer = await run({ viewer: options.viewer, ...(options.namespace ? { namespace: options.namespace } : {}), ...(options.signal ? { signal: options.signal } : {}), limits: { rows: CONNECTOR_LIMITS.rows },
+          text: `SELECT c.table_schema AS ns, c.table_name AS name, t.table_type AS kind, c.column_name AS col, c.data_type AS type
+            FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+            WHERE c.table_schema = DATABASE() ORDER BY c.table_name, c.ordinal_position`, params: {} }, false);
         return tablesOf(answer, (r) => ({ namespace: String(r.ns), name: String(r.name), kind: r.kind === 'VIEW' ? 'view' : 'table', column: { name: String(r.col), type: typeOfName(String(r.type)) } }));
       },
-      async test() {
+      async test(options) {
         const started = Date.now();
-        try { await read('select 1 as ok', {}, { rows: 1 }); return { ok: true, latencyMs: Date.now() - started }; }
+        try { await run({ text: 'SELECT 1 AS ok', params: {}, viewer: options.viewer, ...(options.namespace ? { namespace: options.namespace } : {}), limits: { rows: 1 } }, false); return { ok: true, latencyMs: Date.now() - started }; }
         catch (error) { const e = driverFailure(error, secrets); return { ok: false, error: { code: e.code, message: e.message } }; }
       },
       close: () => sessions.close(),

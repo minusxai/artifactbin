@@ -9,13 +9,13 @@
  * configuration's secrets removed.
  *
  * A PAGE reads it through the page SQL door (`pageConnectionSql`, lib/page-doors), after the door decided the reader
- * may read the page. THE NAME RULE: a page links it as `<link rel="af-dataset" data-af-name="NAME" href="default:NS">`,
- * and a statement names it as a qualifier, `NAME.table`. Such a statement runs WHOLLY on the connection, its text
- * passed through in the database's own dialect except that each `NAME.` becomes the link's namespace, quoted
- * (`"NS".table`), or is removed when the link names none (`default:`; the connection's own default schema). Every
- * `${…}` stays a bound value. One statement may name several default-connection links (one source); naming a stored
- * dataset link too is refused (no joins across sources). Anonymous readers are refused, as is a statement when the
- * install has no default connection.
+ * may read the page. THE NAME RULE: a page links it as `<link rel="af-dataset" data-af-name="NAME" href="default:DB">`,
+ * and a statement names it as a qualifier, `NAME.table` (`NAME.schema.table` on Postgres). Such a statement runs WHOLLY
+ * on the connection: the link selects the database the session opens (DB, passed through as written; empty: the
+ * configured one) and each `NAME.` qualifier is removed, the rest of the text passed through in the database's own
+ * dialect, every `${…}` a bound value. One statement may name several default-connection links of the same DB;
+ * links of different DBs, or a stored dataset link too, are refused (one source per statement). Anonymous readers
+ * are refused, as is a statement when the install has no default connection.
  *
  * AN AGENT reads it at `/api/default-connection/{schema,sql}` as its signed-in account (`agentConnectionSql`), its
  * statement passed through unchanged with an optional namespace.
@@ -53,9 +53,10 @@ export function defaultConnectionStatus(): { configured: false } | ({ configured
 }
 export const hasDefaultConnection = (): boolean => !!defaultConnectionSetting();
 
-export async function testDefaultConnection(): Promise<ConnectorTestResult> {
+/** "Test connection", run as the signed-in person who asked (a gateway answers nothing for nobody). */
+export async function testDefaultConnection(actor: AccessActor & { userId: string }): Promise<ConnectorTestResult> {
   const c = configured();
-  return c ? c.connection.test() : { ok: false, error: { code: 'unavailable', message: 'this install has no default connection' } };
+  return c ? c.connection.test({ viewer: await viewerOf(actor) }) : { ok: false, error: { code: 'unavailable', message: 'this install has no default connection' } };
 }
 
 /** Closes the connection's sessions (process shutdown, tests). */
@@ -76,6 +77,8 @@ function refused(e: ConnectorError): ConnectionSqlReply {
   switch (e.code) {
     case 'invalid_query': case 'database_error': return reply(400, 'validation_failed', e.message);
     case 'read_only': return reply(403, 'permission_denied', `the default connection is read-only: ${e.message}`);
+    // The database refused this person: its own message (which says, for one, which database to name instead).
+    case 'permission_denied': return reply(403, 'permission_denied', e.message);
     case 'timeout': return reply(408, 'timeout', e.message);
     case 'result_too_large': return reply(413, 'result_too_large', e.message);
     default: return reply(503, 'dataset_not_found', `the default connection is unavailable (${e.code}): ${e.message}`);
@@ -120,28 +123,30 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   const call = checkedCall(raw);
   if ('status' in call) return call;
   if (!configured()) return reply(404, 'dataset_not_found', `${used[0]!.name} reads the install's default connection, and this install has none`);
-  for (const l of used) try { checkedNamespace(dialect, l.namespace); } catch (e) { return refused(connectorError(e)); }
+  const databases = [...new Set(used.map((l) => l.namespace))];
+  if (databases.length > 1) return reply(400, 'validation_failed', `a statement reads one database: ${used.map((l) => `${l.name} is default:${l.namespace}`).join(', ')}; query them separately`);
+  try { checkedNamespace(dialect, databases[0]); } catch (e) { return refused(connectorError(e)); }
   let text: string;
-  try { text = mapQualifiers(dialect, call.sql, new Map(used.map((l) => [l.name.toLowerCase(), l.namespace]))); } catch (e) { return refused(connectorError(e)); }
-  return run(actor, text, call.params, undefined, signal);
+  try { text = mapQualifiers(dialect, call.sql, new Map(used.map((l) => [l.name.toLowerCase(), '']))); } catch (e) { return refused(connectorError(e)); }
+  return run(actor, text, call.params, databases[0] || undefined, signal);
 }
 
-/** An agent's statement, as its signed-in account, passed through; `namespace` selects the schema. */
+/** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */
 export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
   if (!actor.userId) return reply(403, 'permission_denied', 'sign in to read the default connection');
   const call = checkedCall(raw);
   if ('status' in call) return call;
-  if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply(400, 'validation_failed', 'namespace is a schema name');
+  if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply(400, 'validation_failed', 'namespace is what follows default:, a database name');
   return run(actor, call.sql, call.params, (raw.namespace as string | undefined) || undefined, signal);
 }
 
-/** The tables and columns the connection's account can read (in `namespace`), for a signed-in person. */
+/** The tables and columns a signed-in person can read in `namespace`'s database (absent: the configured one). */
 export async function defaultConnectionSchema(actor: AccessActor, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
   if (!actor.userId) return reply(403, 'permission_denied', 'sign in to read the default connection');
   const c = configured();
   if (!c) return reply(404, 'dataset_not_found', 'this install has no default connection');
   try {
-    const schema: ConnectorSchema = await c.connection.schema({ ...(namespace ? { namespace } : {}), signal });
+    const schema: ConnectorSchema = await c.connection.schema({ viewer: await viewerOf(actor), ...(namespace ? { namespace } : {}), signal });
     return { status: 200, body: { connector: c.summary.connector, ...schema } };
   } catch (e) {
     if (e instanceof ConnectorFailure) return refused(connectorError(e));

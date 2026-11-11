@@ -6,7 +6,7 @@
  * real servers in services/app/lib/connections/__tests__/connectors-docker.test.ts (integration project).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connectionSummary, connectorError, connectorList, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
+import { connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 
 const DEV = { allowPrivateNetwork: true }, PUBLIC = { allowPrivateNetwork: false };
@@ -21,6 +21,17 @@ describe('statement rules', () => {
     expect(mapQualifiers('postgres', 'select $$ wh.a $$, $q$wh.b$q$ from wh.t', map)).toBe('select $$ wh.a $$, $q$wh.b$q$ from "sales".t');
     expect(mapQualifiers('postgres', 'select * from wh.t', new Map([['wh', 'a"b']]))).toBe('select * from "a""b".t');
     expect([...qualifierNames('mysql', "select `wh`.a, 'raw.x', s.t from wh.t")]).toEqual(['s', 'wh']);
+  });
+});
+
+describe('the MySQL viewer literal', () => {
+  it('keeps any value one literal, with or without NO_BACKSLASH_ESCAPES', () => {
+    expect(mysqlLiteral("o'brien@example.com")).toBe("'o''brien@example.com'");
+    expect(mysqlLiteral("x\\' , @app.viewer_id='admin")).toBe("'x\\\\'' , @app.viewer_id=''admin'");
+    expect(mysqlLiteral('["g1","g2"]')).toBe(`'["g1","g2"]'`);
+    // Read back as MySQL reads it (backslash escapes on): the original value, and the literal ends where it should.
+    const read = (literal: string) => { let out = '', i = 1; for (; i < literal.length - 1; i++) { const c = literal[i]!; if (c === '\\') out += literal[++i]; else if (c === "'") { if (literal[i + 1] !== "'") throw Error('literal ended early'); out += "'"; i++; } else out += c; } return out; };
+    for (const value of ["a'b", "\\'; drop table t; --", "''", '\\\\', 'x\\']) expect(read(mysqlLiteral(value)), value).toBe(value);
   });
 });
 
@@ -55,9 +66,9 @@ describe('the network rule', () => {
     expect(opened(config('db.example.com', { tls: 'disable' }))).toMatchObject({ code: 'tls_required' });
     // A name is judged by every address it resolves to, at connect time.
     const c = opened(config('db.example.com'), PUBLIC, async () => [{ address: '203.0.113.9', family: 4 }, { address: '10.0.0.5', family: 4 }]) as OpenConnection;
-    expect(await c.test()).toEqual({ ok: false, error: { code: 'forbidden_address', message: 'the host resolves to an address that is not public' } });
+    expect(await c.test({ viewer: null })).toEqual({ ok: false, error: { code: 'forbidden_address', message: 'the host resolves to an address that is not public' } });
     const metadata = opened(config('metadata.internal', { tls: 'disable' }), DEV, async () => [{ address: '169.254.169.254', family: 4 }]) as OpenConnection;
-    expect(await metadata.test()).toMatchObject({ ok: false, error: { code: 'forbidden_address' } });
+    expect(await metadata.test({ viewer: null })).toMatchObject({ ok: false, error: { code: 'forbidden_address' } });
     await c.close(); await metadata.close();
   });
 });
@@ -120,13 +131,61 @@ describe('postgres, end to end', () => {
     expect((await pg.query({ text: 'select 1 as one', params: {}, viewer: null, limits: { rows: 1e9 } })).rows).toEqual([{ one: 1 }]);
   });
 
-  it('selects a namespace, lists the schema and tests the connection', async () => {
-    expect((await pg.query({ text: 'select count(*) as n from orders', params: {}, viewer: null, namespace: 'sales' })).rows).toEqual([{ n: 3 }]);
-    expect(await failure(pg.query({ text: 'select 1', params: {}, viewer: null, namespace: 'sales"; drop' }))).toMatchObject({ code: 'invalid_query' });
-    const schema = await pg.schema({ namespace: 'sales' });
-    expect(schema.tables.map((t) => [t.name, t.kind, t.columns.length])).toEqual([['my_orders', 'view', 2], ['orders', 'table', 9]]);
-    expect(schema.tables[1]!.columns[3]).toEqual({ name: 'amount', type: 'number' });
-    expect(await pg.test()).toMatchObject({ ok: true });
+  it('opens the database a namespace names, in its own session, and lists the schema as the viewer', async () => {
+    // PGlite has one database whatever the startup packet names; a second session is opened for it all the same.
+    expect((await pg.query({ text: 'select count(*) as n from sales.orders', params: {}, viewer: null, namespace: 'warehouse/finance' })).rows).toEqual([{ n: 3 }]);
+    expect(pg.sessions()).toBe(2);
+    for (const namespace of ['sales"; drop', 'a b', "x'"]) expect(await failure(pg.query({ text: 'select 1', params: {}, viewer: null, namespace })), namespace).toMatchObject({ code: 'invalid_query' });
+    const schema = await pg.schema({ viewer: alice });
+    const sales = schema.tables.filter((t) => t.namespace === 'sales');
+    expect(sales.map((t) => [t.name, t.kind, t.columns.length])).toEqual([['my_orders', 'view', 2], ['orders', 'table', 9]]);
+    expect(sales[1]!.columns[3]).toEqual({ name: 'amount', type: 'number' });
+    expect(await pg.test({ viewer: alice })).toMatchObject({ ok: true });
+  });
+
+  it('runs every statement as begin read only, the viewer statement, the statement, commit', async () => {
+    wire.messages.length = 0;
+    await pg.query({ text: 'select id from sales.orders where id = $id', params: { id: 1 }, viewer: alice });
+    const sent = wire.messages.map((m) => (m.sql ? `${m.type} ${m.sql}` : m.type)).join('\n');
+    expect(sent).toBe([
+      'Q BEGIN READ ONLY',
+      "P SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)",
+      'D', 'H', 'B', 'E', 'S',
+      'P select id from sales.orders where id = $1',
+      'D', 'H', 'B', 'E', 'H', 'S',
+      'Q COMMIT',
+    ].join('\n'));
+    // Transaction-scoped: nothing of the last viewer is left on the session once it committed.
+    expect((await pg.query({ text: "select current_setting('app.viewer_id', true) as v", params: {}, viewer: null })).rows).toEqual([{ v: '' }]);
+  });
+
+  it('keeps to the limits: rows stop with truncated, bytes refuse', async () => {
+    const some = await pg.query({ text: 'select g from generate_series(1, 5000) g', params: {}, viewer: null, limits: { rows: 1200 } });
+    expect([some.rows.length, some.truncated, some.rows.at(-1)]).toEqual([1200, true, { g: 1200 }]);
+    expect(await failure(pg.query({ text: "select repeat('x', 1000) as x from generate_series(1, 100)", params: {}, viewer: null, limits: { bytes: 20_000 } }))).toMatchObject({ code: 'result_too_large' });
+    expect((await pg.query({ text: 'select 1 as one', params: {}, viewer: null, limits: { rows: 1e9 } })).rows).toEqual([{ one: 1 }]);
+  });
+
+  it('opens the database a namespace names, in its own session, and lists the schema as the viewer', async () => {
+    // PGlite has one database whatever the startup packet names; a second session is opened for it all the same.
+    expect((await pg.query({ text: 'select count(*) as n from sales.orders', params: {}, viewer: null, namespace: 'warehouse/finance' })).rows).toEqual([{ n: 3 }]);
+    expect(pg.sessions()).toBe(2);
+    for (const namespace of ['sales"; drop', 'a b', "x'"]) expect(await failure(pg.query({ text: 'select 1', params: {}, viewer: null, namespace })), namespace).toMatchObject({ code: 'invalid_query' });
+    const schema = await pg.schema({ viewer: alice });
+    const sales = schema.tables.filter((t) => t.namespace === 'sales');
+    expect(sales.map((t) => [t.name, t.kind, t.columns.length])).toEqual([['my_orders', 'view', 2], ['orders', 'table', 9]]);
+    expect(sales[1]!.columns[3]).toEqual({ name: 'amount', type: 'number' });
+    expect(await pg.test({ viewer: alice })).toMatchObject({ ok: true });
+  });
+
+  it('runs every statement as begin read only, the viewer statement, the statement, commit', async () => {
+    const log: string[] = [];
+    const watch = wire.db.query.bind(wire.db);
+    void watch;
+    await pg.query({ text: 'select 1 as one', params: {}, viewer: alice });
+    log.push(...(await wire.db.query<{ v: string }>("select current_setting('app.viewer_id', true) as v")).rows.map((r) => r.v ?? ''));
+    // Transaction-scoped: nothing of the last viewer is left on the session once it committed.
+    expect(log).toEqual(['']);
   });
 
   it('never puts the password in an error', async () => {

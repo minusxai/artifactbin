@@ -43,5 +43,6 @@ export { connectionSummary, parseConnectionConfig } from './config';
 export { ConnectorFailure, connectorError } from './errors';
 export { leadingWords, mapQualifiers, qualifierNames } from './statement';
 export { checkedNamespace } from './answer';
+export { mysqlLiteral } from './mysql';
 export type { OpenConnection } from './module';
 export type { NetworkSeams } from './network';
