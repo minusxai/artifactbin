@@ -118,6 +118,17 @@ describe('the region toolbar', () => {
 });
 
 describe('the link dialog', () => {
+  it('clearing an existing link URL and applying removes it', async () => {
+    const page = chrome();
+    page.state(['link'], 'paragraph');
+    page.setLink({ regionId: 'notes', href: 'https://example.com/qa' });
+    const field = await screen.findByRole('textbox', { name: 'Link URL' });
+    fireEvent.input(field, { target: { value: '   ' } });
+    fireEvent.submit(field.closest('form')!);
+    expect(page.commands).toEqual([['link', { href: null }]]);
+    expect(screen.queryByRole('textbox', { name: 'Link URL' })).toBeNull();
+  });
+
   it('refuses a URL a region may not hold, and applies a safe one', async () => {
     const page = chrome();
     page.state([], 'paragraph');

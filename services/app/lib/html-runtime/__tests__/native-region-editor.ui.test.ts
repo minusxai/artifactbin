@@ -1,7 +1,9 @@
 import { afterEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { TextSelection } from 'prosemirror-state';
-import { createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
+import { canonicalizeHtmlPage } from '../../html-page';
+import { compactRegion, createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
+import { createHtmlAnnotationPainter, revealHtmlAnnotation } from '../../html-bridge/annotations';
 import { mountRegionEditor } from '../native-region-editor';
 import type { RegionEditor } from '../region-editor-contract';
 const cleanup:Array<()=>void>=[];
@@ -231,8 +233,8 @@ it('native mounted editable child replays buffered Enter as a separate paragraph
  e.replay([{text:' fastX'},{key:'Backspace'},{text:'Y'},{key:'Enter'},{text:'next-line'}]);
  expect(e.view.dom.getAttribute('contenteditable')).toBe('true');
  expect([...e.view.dom.children].map(n=>n.textContent)).toEqual(['Before fastY','next-line']);
- expect(e.view.dom.children[1]?.getAttribute('data-af-id')).toBe('original');
- expect(e.view.dom.children[0]?.hasAttribute('data-af-id')).toBe(false);
+ expect(e.view.dom.children[0]?.getAttribute('data-af-id')).toBe('original');
+ expect(e.view.dom.children[1]?.hasAttribute('data-af-id')).toBe(false);
 });
 
 it('native task node view toggles and undoes while preserving validated peer typing',()=>{
@@ -257,4 +259,82 @@ it('native task node view toggles and undoes while preserving validated peer typ
  expect(b.view.dom.querySelector('li')?.getAttribute('data-af-id')).toBe('task');
  expect(regionHtml('rich-native-v1',state)).toContain('data-checked="true"');
  expect(regionHtml('rich-native-v1',state)).toContain('Task work remote');
+});
+
+it('keeps the comment target on unchanged task text through task exit, ordered nesting and save',()=>{
+ const inner='<ul data-af-id="af-2" data-type="taskList"><li data-af-id="af-3" data-type="taskItem" data-checked="false"><p data-af-id="af-4">Task work</p></li></ul>';
+ const page=canonicalizeHtmlPage(`<article data-af-id="af-1" data-af-editable="rich-native-v1">${inner}</article>`);
+ let state=createRegionState('rich-native-v1',inner).state;
+ const root=document.createElement('article');document.body.append(root);
+ const e=mountRegionEditor({win:window,root,regionId:'af-1',kind:'rich-native-v1',clientId:951,state,post:m=>{if(m.kind==='region-update')state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,951).doc);}});
+ cleanup.push(()=>{e.destroy();root.remove();});
+ // An existing html-node comment stores this stable nodeId, not an editor position.
+ const anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'af-4',quote:'Task work',presentation:'block' as const};
+ const painter=createHtmlAnnotationPainter(document,{blockPresentation:'source-node'});
+ cleanup.push(()=>painter.dispose());
+ const paint=()=>{
+  const pin={id:'synthetic-comment',path:anchor.nodeId,anchor};
+  expect(painter.paint({pins:[pin],mode:'on',openId:pin.id,hoverId:null})[0]?.status).toBe('exact');
+  let revealed:string|null=null;
+  const node=e.view.dom.querySelector(`[data-af-id="${anchor.nodeId}"]`) as HTMLElement;
+  node.scrollIntoView=()=>{revealed=node.textContent;};
+  revealHtmlAnnotation(document,pin);expect(revealed).toBe(anchor.quote);
+ };
+ const target=()=>e.view.dom.querySelector(`[data-af-id="${anchor.nodeId}"]`)?.textContent;
+ expect(target()).toBe(anchor.quote);paint();
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.atEnd(e.view.state.doc)));
+ e.replay([{key:'Enter'},{key:'Enter'},{text:'1. alpha'},{key:'Enter'},{text:'beta'}]);
+ e.command('indent');
+ expect(e.view.dom.querySelector('ol ol')?.textContent).toBe('beta');
+ expect(target()).toBe(anchor.quote);paint();
+ e.flush();
+ const saved=compactRegion({savedHtml:page.html,ledger:page.ledger,regionId:'af-1',state});
+ e.remote([saved.update]);
+ expect(target()).toBe(anchor.quote);paint();
+ const reload=single(regionHtml('rich-native-v1',Y.mergeUpdates([state,saved.update])));
+ expect(reload.view.dom.querySelector(`[data-af-id="${anchor.nodeId}"]`)?.textContent).toBe(anchor.quote);
+ const ids=[...reload.view.dom.querySelectorAll('[data-af-id]')].map(n=>n.getAttribute('data-af-id'));
+ expect(new Set(ids).size).toBe(ids.length);
+ expect(reload.view.dom.querySelector('ol ol p')?.getAttribute('data-af-id')).not.toBe(anchor.nodeId);
+});
+
+it('Enter at the beginning keeps the anchor with the original paragraph content',()=>{
+ const e=single('<p data-af-id="original">Original content</p>');
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,1)));
+ e.replay([{key:'Enter'}]);
+ expect(e.view.dom.querySelector('[data-af-id="original"]')?.textContent).toBe('Original content');
+ expect(e.view.dom.children[0]?.hasAttribute('data-af-id')).toBe(false);
+});
+
+it('prepended typing and deletion keep the original-content anchor through a later split',()=>{
+ const e=single('<p data-af-id="original">Original content</p>');
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,1)));
+ e.replay([{text:'Hi'},{key:'Backspace'},{text:'!'},{key:'Enter'},{text:'Next '}]);
+ expect(e.view.dom.querySelector('[data-af-id="original"]')?.textContent).toBe('Next Original content');
+ expect(e.view.dom.children[0]?.textContent).toBe('H!');
+ expect(e.view.dom.children[0]?.hasAttribute('data-af-id')).toBe(false);
+});
+
+it('two peers preserve a task comment identity through split, peer typing and local undo/redo',()=>{
+ const initial=createRegionState('rich-native-v1','<ul data-type="taskList"><li data-af-id="task" data-type="taskItem" data-checked="false"><p data-af-id="task-text">Task work</p></li></ul>').state;
+ let state=initial;
+ let a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{
+  const root=document.createElement('article');document.body.append(root);
+  const e=mountRegionEditor({win:window,root,regionId:'synthetic-task',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});
+  cleanup.push(()=>{e.destroy();root.remove();});return e;
+ };
+ a=make(961,()=>b);b=make(962,()=>a);
+ a.view.dispatch(a.view.state.tr.setSelection(TextSelection.atEnd(a.view.state.doc)));
+ a.replay([{key:'Enter'},{key:'Enter'},{text:'1. alpha'},{key:'Enter'},{text:'beta'}]);a.command('indent');a.flush();
+ const target=(e:RegionEditor)=>e.view.dom.querySelector('[data-af-id="task-text"]')?.textContent;
+ expect(target(a)).toBe('Task work');expect(target(b)).toBe('Task work');
+ let end=0;b.view.state.doc.descendants((node,pos)=>{if(node.attrs.afId==='task-text')end=pos+1+node.content.size;});
+ b.view.dispatch(b.view.state.tr.insertText(' peer',end));b.flush();
+ a.command('undo');a.flush();
+ expect(target(a)).toBe('Task work peer');expect(target(b)).toBe('Task work peer');
+ a.command('redo');a.flush();
+ expect(target(a)).toBe('Task work peer');expect(target(b)).toBe('Task work peer');
+ expect(regionHtml('rich-native-v1',state)).toContain('data-af-id="task-text">Task work peer');
+ expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
 });

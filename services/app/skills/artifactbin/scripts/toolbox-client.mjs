@@ -169,8 +169,8 @@ try{parsed=parseCommand(name,args);}catch(error){throw new ToolError('invalid_in
     error.message,2,'Read --help.');}
   if(parsed.values.help){process.stdout.write(commandHelp(name)+
  "\n--no-update disables update checks and activation.\n");return;}
-  // read decides about an existing --output itself (it refreshes an unchanged pair in place).
-if(parsed.values.output&&!parsed.values.append&&name!=='read'){const destination=await safeParent(
+  // read refreshes an existing --output in place; watch --next resumes its log there.
+if(parsed.values.output&&!parsed.values.next&&name!=='read'){const destination=await safeParent(
     parsed.values.output);let exists=false;try{await lstat(destination);exists=true;}catch(error){
     if(error.code!=='ENOENT')throw error;}if(exists)throw new ToolError('output_exists',
     'Output already exists.',2,'Choose a new output path; existing files are retained.');}

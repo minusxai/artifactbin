@@ -56,6 +56,16 @@ it('--bounded stops after 15 quiet minutes, and is refused without --next',async
   await expect(eventsCommand({sub:'watch',values:{next:true,wait:'5'}},options)).rejects.toMatchObject({code:'wait_too_short',exit:2});
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('--next --output LOG resumes that log on the next call',async()=>{
+ const {rm}=await import('node:fs/promises'),path=await import('node:path');
+ const {root,state,watch}=await harness(n=>n===2?[other('j1','annotated')]:[]);
+ try{
+  const output=path.join(root,'feed.ndjson');
+  expect(await watch({output})).toEqual(['j1',expect.stringMatching(/^next:/)]);
+  await watch({output});
+  expect(state.queries.map(q=>q.after).slice(0,3)).toEqual(['now','c1','c2']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('documents the filters, the event shape and the comment alias',async()=>{
  const {DESCRIPTION}=await import('../../../skills/artifactbin/scripts/events.mjs');
  const flat=DESCRIPTION.replace(/\n\s+/g,' ');

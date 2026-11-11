@@ -29,29 +29,32 @@ it('logs reaction events like comments, checkpoints them and deduplicates them o
  const root=await mkdtemp(path.join(tmpdir(),'reaction-watch-')),output=path.join(root,'feed.ndjson');
  const reaction={...reactionEvent('evt_reaction_9','ann_root'),position:9,at:'2026-10-28T00:00:00.000Z',schema_version:1,resource:{kind:'artifact',id:'PAGE12'}};
  try{
-  const cursors:string[]=[];let calls=0;
-  const client={server:'https://example.test',request:async(route:string)=>{expect(new URL(route,'https://example.test').searchParams.get('category')).toBe('comments');cursors.push(afterOf(route));calls++;return {events:[reaction],next:'c'+calls};}};
-  await watchComments(client,'PAGE12',{once:true,output,cursor:'c0'});
+  // The baseline is empty, then the reaction arrives and is printed; later polls repeat it, each one past the wait.
+  const cursors:string[]=[];let calls=0,clock=0;
+  const client={server:'https://example.test',request:async(route:string)=>{if(isListing(route))return {annotations:[],next_cursor:null};
+   expect(new URL(route,'https://example.test').searchParams.get('category')).toBe('comments');cursors.push(afterOf(route));calls++;if(calls>2)clock+=300000;
+   return {events:calls===1?[]:[reaction],next:'c'+calls};}};
+  const printed:unknown[]=[],options={now:()=>clock,deliver:async(value:unknown)=>{printed.push(value);}};
+  expect(await watchComments(client,'PAGE12',{next:true,output},options)).toEqual({events:1,timedOut:false,stopped:false});
   const records=(await readFile(output,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
-  expect(records.map(record=>record.kind)).toEqual(['watch','event','checkpoint']);
-  expect(records[1]).toEqual({kind:'event',server:'https://example.test',artifact:'PAGE12',stream:'comments',event:reaction});
+  expect(records.filter(record=>['event','checkpoint'].includes(record.kind)).map(record=>record.kind)).toEqual(['checkpoint','event','checkpoint']);
+  expect(records.find(record=>record.kind==='event')).toEqual({kind:'event',server:'https://example.test',artifact:'PAGE12',stream:'comments',event:reaction});
+  expect(printed[0]).toEqual({kind:'event',server:'https://example.test',artifact:'PAGE12',stream:'comments',event:reaction});
   // Resuming from the log continues at its checkpoint and does not repeat the delivered reaction.
-  await watchComments(client,'PAGE12',{once:true,append:true,output});
-  expect(cursors).toEqual(['c0','c1']);
+  expect(await watchComments(client,'PAGE12',{next:true,append:true,output},options)).toEqual({events:0,timedOut:true,stopped:false});
+  expect(cursors).toEqual(['start','c1','c2']);
   expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('refuses a log or checkpoint saved under another stream name',async()=>{
+it('refuses a log saved under another stream name',async()=>{
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'other-stream-watch-')),log=path.join(root,'old.ndjson'),checkpoint=path.join(root,'old-checkpoint.json');
+ const root=await mkdtemp(path.join(tmpdir(),'other-stream-watch-')),log=path.join(root,'old.ndjson');
  const server='https://example.test',old={server,artifact:'PAGE12',stream:'human-comments'};
  try{
   await writeFile(log,[{kind:'watch',schema:1,...old},{kind:'checkpoint',schema:1,...old,cursor:'old1'}].map(r=>JSON.stringify(r)).join('\n')+'\n');
-  await writeFile(checkpoint,JSON.stringify({kind:'comment-checkpoint',schema:1,...old,cursor:'old2',eventIds:[]})+'\n');
   const client={server,request:async()=>{throw Error('must not request');}};
-  await expect(watchComments(client,'PAGE12',{once:true,append:true,output:log})).rejects.toMatchObject({code:'log_mismatch'});
-  await expect(watchComments(client,'PAGE12',{once:true,cursor:checkpoint},{deliver:async()=>{}})).rejects.toMatchObject({code:'checkpoint_mismatch'});
+  await expect(watchComments(client,'PAGE12',{next:true,append:true,output:log})).rejects.toMatchObject({code:'log_mismatch'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('watch --next baselines once, resumes from its default checkpoint, skips own events and never overlaps requests',async()=>{
@@ -99,7 +102,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   expect(maxInflight).toBe(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('watch --next honours an explicit log and rejects --once',async()=>{
+it('watch --next honours an explicit log',async()=>{
  const {mkdtemp,readFile,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'watch-next-log-')),output=path.join(root,'feed.ndjson');
@@ -116,7 +119,22 @@ it('watch --next honours an explicit log and rejects --once',async()=>{
   const cut=path.join(root,'cut.ndjson');await writeFile(cut,JSON.stringify({kind:'watch',schema:2,server:'https://example.test',artifact:'PAGE12',stream:'comments'})+'\n');
   await watchComments(client,'PAGE12',{next:true,output:cut,append:true,wait:'0'},{deliver:async()=>{}});
   expect(afters).toEqual(['start','k1','start']);
-  await expect(watchComments(client,'PAGE12',{next:true,once:true})).rejects.toMatchObject({code:'invalid_invocation',exit:2});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('watch --next --output LOG resumes that log on the next call',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-next-output-')),server='https://example.test',output=path.join(root,'feed.ndjson');
+ const afters:string[]=[];let n=0;
+ const fetcher=async(url:any)=>{if(isListing(String(url)))return Response.json({annotations:[{id:'A'}],next_cursor:null});
+  afters.push(afterOf(String(url)));n++;return Response.json({events:n===2?[ev('e1','A')]:[],next:'c'+n});};
+ const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,replyFirst:false,deliver:async()=>{}};
+ try{
+  await commentCommand({sub:'watch',values:{next:true,output},positionals:['PAGE12']},options);
+  // The second call continues from the log's checkpoint (thread A still waits on an answer, so it stops there).
+  await commentCommand({sub:'watch',values:{next:true,output},positionals:['PAGE12']},options);
+  expect(afters).toEqual(['start','c1','c2']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
@@ -139,18 +157,24 @@ it('a first watch --next prints threads still waiting on an answer, from before 
 
 it('an expired checkpoint (410 cursor_expired) starts over: --next replays the page, a plain watch logs that it expired',async()=>{
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
- const afters:string[]=[];let n=0;
- const client={server:'https://example.test',request:async(route:string)=>{if(isListing(route))return {annotations:[{id:'A'}],next_cursor:null};const after=afterOf(route);afters.push(after);
-  if(after==='old')throw Object.assign(new Error('expired'),{code:'cursor_expired'});n++;return {events:n===2?[ev('e1','A')]:[],next:'q'+n};}};
- expect(await watchComments(client,'PAGE12',{next:true,cursor:'old'},{deliver:async()=>{}})).toEqual({events:1,timedOut:false,stopped:false});
- expect(afters).toEqual(['old','start','q1']);
- const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
- const root=await mkdtemp(path.join(tmpdir(),'watch-expired-')),output=path.join(root,'feed.ndjson');
+ const {mkdtemp,readFile,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-expired-')),server='https://example.test';
+ // A log whose last checkpoint the feed no longer keeps.
+ const expiredLog=async(name:string)=>{const log=path.join(root,name),id={server,artifact:'PAGE12',stream:'comments'};
+  await writeFile(log,[{kind:'watch',schema:2,...id},{kind:'checkpoint',schema:2,...id,cursor:'old'}].map(r=>JSON.stringify(r)).join('\n')+'\n');return log;};
+ const afters:string[]=[];let n=0;const controller=new AbortController();
+ const client={server,request:async(route:string)=>{if(isListing(route))return {annotations:[{id:'A'}],next_cursor:null};const after=afterOf(route);afters.push(after);
+  if(after==='old')throw Object.assign(new Error('expired'),{code:'cursor_expired'});
+  // A plain watch runs until stopped: stop it once the request after the restart is answered.
+  if(after==='now')controller.abort();n++;return {events:n===2?[ev('e1','A')]:[],next:'q'+n};}};
  try{
+  expect(await watchComments(client,'PAGE12',{next:true,output:await expiredLog('next.ndjson'),append:true},{deliver:async()=>{}})).toEqual({events:1,timedOut:false,stopped:false});
+  expect(afters).toEqual(['old','start','q1']);
   afters.length=0;n=0;
-  await watchComments(client,'PAGE12',{once:true,cursor:'old',output});
+  const output=await expiredLog('plain.ndjson');
+  await watchComments(client,'PAGE12',{output,append:true},{signal:controller.signal});
   expect(afters).toEqual(['old','now']);
-  expect((await readFile(output,'utf8')).trim().split('\n').map(line=>JSON.parse(line).kind)).toEqual(['watch','expired','checkpoint']);
+  expect((await readFile(output,'utf8')).trim().split('\n').map(line=>JSON.parse(line).kind)).toEqual(['watch','checkpoint','expired','checkpoint']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

@@ -8,8 +8,6 @@ Usage: node scripts/comment.mjs watch ID --next [--replied]
        node scripts/comment.mjs edit ID --comment C --body TEXT
        node scripts/comment.mjs resolve|reopen ID --thread T
        node scripts/comment.mjs react ID --comment C --active true|false [--kind thumbs_up]
-       node scripts/comment.mjs watch ID [--once] [--cursor CHECKPOINT_OR_LOG]
-         [--output LOG --append]
 Flags: --body TEXT the comment text, inline; --body-file FILE reads it from a file instead.
   --expected-revision R (resolve, reopen, edit, reply --resolve) the thread revision you read;
   omitted, the command reads the thread's current revision itself. Write commands also take
@@ -38,7 +36,7 @@ Watch --next: Nothing may hold back your reply: it is every link the user asked 
   15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
   second --next of this agent session on the same page takes over from the running one, which
   stops; another agent's watch runs on. It resumes from events/<server>/ID/comments.<session>.ndjson
-  in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or --output LOG --append / --cursor.
+  in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or from --output LOG if you name one.
 Examples:
   node scripts/comment.mjs watch ID --next
   node scripts/comment.mjs reply ID --thread T --body "Done: the intro is two lines now."
@@ -53,8 +51,8 @@ Anchors: read the page first (read.mjs ID --json). ANCHOR.json is
 Gotchas: a plain reply never conflicts; a stale --expected-revision fails resolve and reopen (reply
   plus a stale resolve keeps the reply and reports status_conflict). Reactions are idempotent
   desired state per account (retry the same call, never invert it); counts are unique accounts,
-  only thumbs_up exists, and they change no source or revision. watch --once sets "now" without
-  a cursor; events deduplicate by id and only delivered ones advance checkpoints.
+  only thumbs_up exists, and they change no source or revision. Watch events deduplicate by id
+  and only delivered ones advance checkpoints.
 Reactions: each listed comment's reactions are
   [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]: who reacted (at most
   50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints
@@ -115,20 +113,21 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     // structure.
     return values.json || values.output ? page : listText(page);
   }
-  // watch: events.mjs watch on this page's comments (--once drains the backlog; --next returns
-  // after the next one); its checkpoint lives beside the saved sign-in, so a loop that changes
-  // directory never rebaselines.
+  // watch: events.mjs watch on this page's comments (--next returns after the next one); its
+  // checkpoint lives beside the saved sign-in, so a loop that changes directory never rebaselines.
   if (sub === 'watch') {
     if (values.next && Number(values.wait ?? 240) < 60) throw new ToolError('wait_too_short',
       '--next waits for the next comment: drop --wait; it returns as soon as someone comments.', 2);
     const controller = new AbortController(), stop = () => controller.abort();
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, stop);
     let watchValues = values;
-    if (values.next && !values.output) {
+    if (values.next) {
       // An unidentified session (no key) keeps one shared log per page, as before sessions.
       const session = identity.session ?? 'shared',
-        output = watchLogPath(credentialRoot(options.env), client.server, id, 'comments', session);
-      mkdirSync(path.dirname(output), {recursive: true, mode: 0o700});
+        output = values.output ?? watchLogPath(credentialRoot(options.env), client.server, id,
+          'comments', session);
+      if (!values.output) mkdirSync(path.dirname(output), {recursive: true, mode: 0o700});
+      // A log that exists resumes from its checkpoint.
       watchValues = {...values, output, append: existsSync(output)};
     }
     try {

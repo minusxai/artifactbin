@@ -10,7 +10,7 @@
 import {open} from 'node:fs/promises';
 import {withWatchLock,windowOf,awaitingOf,readWatchLog,replyState,QUIET_MINUTES} from
   './toolbox-watch-state.mjs';
-import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
+import {ToolError,integer} from './toolbox-client.mjs';
 const SCHEMA=2;
 const RETRY=['network_unavailable','http_429','too_many_event_waits','http_502','http_503',
   'http_504'];
@@ -24,20 +24,18 @@ export const eventsPresenter=command=>({wakes:()=>true,hydrate:async records=>re
    'this one stopped: nothing to do here',
   quiet:'no new events yet: run the same watch --next command again',
   stopped:quiet=>`no new events for ${quiet}: stop watching`,
-  once:`--once waited for nothing; to watch for new events: ${command} --next`,
   next:()=>'next: handle the events above, then run the same watch --next command again'}});
-async function checkpointInput(value,id){
- const file=await optionalFile(value).catch(error=>{if(error.code==='ENAMETOOLONG')return null;
-  throw error;});if(!file)return {cursor:value,eventIds:[]};
- let records;try{records=file.toString().trim().split('\n').map(line=>JSON.parse(line));}catch{
-  throw new ToolError('invalid_checkpoint','Checkpoint file/log is malformed.',2);}
+/** Where a log resumes: its last checkpoint and the events it already holds. A log cut off before
+ * its first checkpoint (a killed first call) starts over. */
+function resumePoint(records,id){
+ const eventIds=records.filter(record=>record.kind==='event').map(record=>record.event?.id),
+  checkpoint=[...records].reverse().find(record=>record.kind==='checkpoint');
+ if(!checkpoint)return {cursor:undefined,eventIds};
  if(records.some(record=>!same(record,id)))throw new ToolError('checkpoint_mismatch',
   'Log contains another origin, artifact or stream.',2);
- const checkpoint=[...records].reverse().find(record=>record.kind==='checkpoint');
- if(typeof checkpoint?.cursor!=='string')throw new ToolError('checkpoint_mismatch',
+ if(typeof checkpoint.cursor!=='string')throw new ToolError('checkpoint_mismatch',
   'Checkpoint belongs to another origin, artifact or stream.',2);
- return {cursor:checkpoint.cursor,eventIds:records.filter(record=>record.kind==='event').map(
-  record=>record.event?.id)};
+ return {cursor:checkpoint.cursor,eventIds};
 }
 /** Streams scope's events ({artifact, category, types}) into a log, stdout or deliver. With
  * values.next it stops after the first batch holding someone else's waking event (own events
@@ -53,8 +51,6 @@ async function checkpointInput(value,id){
  * (replyState) waits for nothing either and, nobody else having written, prints that line and
  * returns {replyDue}; only a --replied after the line lets the watch wait. */
 export async function watchEvents(client,scope,values,options={},presenter=eventsPresenter('')){
- if(values.next&&values.once)throw new ToolError('invalid_invocation',
-  'Use --next or --once, not both.',2);
  if(!values.next||!values.output)return watchFeed(client,scope,values,options,presenter);
  // One --next watch per log (two would print the same events twice): a later one takes over.
  const lock=await withWatchLock(values.output+'.lock',({touch,signal})=>watchFeed(client,scope,
@@ -70,19 +66,13 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
  const next=Boolean(values.next),threads=next?presenter.threads:null,seen=new Set();
  let cursor,records=[],handle;
  const deadline=next?now()+integer(values.wait??'240','wait',0,3600)*1000:Infinity;
- if(values.cursor){const initial=await checkpointInput(values.cursor,id);cursor=initial.cursor;
-  initial.eventIds.forEach(e=>seen.add(e));}
+ // values.append (set by the command when its log exists): resume it from its last checkpoint.
  if(values.append){
-  if(!values.output)throw new ToolError('output_required','--append requires --output.',2);
   records=await readWatchLog(values.output);if(!records)throw new ToolError('invalid_log',
    'Existing NDJSON log is malformed.',2);
   if(records[0]?.kind!=='watch'||records[0].schema!==SCHEMA||!same(records[0],id))
    throw new ToolError('log_mismatch','Log belongs to another origin, artifact or stream.',2);
-  // A log cut off before its first checkpoint (a killed first call) starts over.
-  const previous=records.some(record=>record.kind==='checkpoint')?await checkpointInput(
-   values.output,id):{cursor,eventIds:records.filter(r=>r.kind==='event').map(r=>r.event?.id)};
-  if(cursor&&cursor!==previous.cursor)throw new ToolError('cursor_mismatch',
-   'Explicit cursor differs from the append log checkpoint.',2);cursor=previous.cursor;
+  const previous=resumePoint(records,id);cursor=previous.cursor;
   previous.eventIds.forEach(e=>seen.add(e));handle=await open(values.output,'a');
  }else if(values.output){handle=await open(values.output,'wx',0o600);await handle.writeFile(
   JSON.stringify({kind:'watch',schema:SCHEMA,...id})+'\n');await handle.sync();}
@@ -120,14 +110,14 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
    if(next&&cursor&&!replay&&remaining()<=0){timedOut=true;break;}
    let result;
    // No cursor and a replay: the whole retained history; no cursor otherwise: from now.
-   try{result=await client.request(route(cursor??(replay?null:'now'),values.once||!cursor||
-    replay||gate?'0':String(next?Math.min(30,remaining()):30)),{timeoutMs:40000,signal});
+   try{result=await client.request(route(cursor??(replay?null:'now'),!cursor||replay||gate?
+    '0':String(next?Math.min(30,remaining()):30)),{timeoutMs:40000,signal});
     failures=0;}
    catch(error){
     if(signal?.aborted)break;
     if(error.code==='cursor_expired'&&cursor){cursor=undefined;replay=Boolean(threads);
      await (next?write:emit)({kind:'expired',...id});continue;}
-    if(values.once||error.exit===3||!RETRY.includes(error.code)||++failures>4)throw error;
+    if(error.exit===3||!RETRY.includes(error.code)||++failures>4)throw error;
     await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**failures,10000)));continue;
    }
    if(typeof result?.next!=='string'||!Array.isArray(result.events))throw new ToolError(
@@ -177,7 +167,6 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
       awaiting.delete(thread));await write({kind:'answered',...id,threads:closed});}
       if(awaiting.size){unanswered=[...awaiting];break;}gate=false;}}
    }
-   if(values.once&&!more)break;
    if(next&&events>0&&!more)break;
    if(due&&!replay&&!more){asked=true;if(owed==='owed'||fresh)await write({...mark({at:now()}),
     kind:'reply-due'});break;}
@@ -191,7 +180,6 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
  const lines=presenter.lines;
  if(unanswered)await print(lines.unanswered(unanswered));
  else if(stopped)await print(lines.stopped(quiet));else if(timedOut)await print(lines.quiet);
- else if(values.once)await print(lines.once);
  else if(next&&events>0)await print(lines.next(reacted));
  else if(asked)await print(lines.replyDue(client.server));
  return {events,timedOut,stopped,...(unanswered?{unanswered}:{}),...(asked?{replyDue:true}:{})};

@@ -139,12 +139,7 @@ const CONTENT_FIELDS = {
   csvUrl: z.string().optional().describe(CSV_URL_FIELD_GUIDANCE),
   title: z.string().optional(),
   description: z.string().optional().describe('shown on the owner dashboard, never on the document'),
-  // A string, NOT an enum: the publish pipeline owns theme validation, and its
-  // unknown_theme refusal carries `allowed`, the vocabulary an agent needs; a
-  // zod enum would swallow it into a generic schema error.
-  theme: z.string().optional().describe('design personality (fonts, radius, light+dark palettes): modernist | organic | industry | terminal | manuscript | pop'),
   template: z.enum(STORY_TEMPLATE_NAMES).optional(),
-  colorMode: z.enum(['light', 'dark']).optional().describe("the AUTHOR's default mode; every theme has both palettes and readers can flip at view time"),
   // A FOLDER IS AN ARTIFACT, so the create door's `format` takes exactly one
   // value: everything else is named by its content field, and only a folder
   // has none.
@@ -177,7 +172,6 @@ const CONTENT_ERRORS: OperationError[] = [
   {status:400,code:'portable_copy_unverified',fix:'This HTML is an exported copy edited outside the source it carries: publish the original source, or export the page again.'},
   {status:400,code:'invalid_backend',fix:'Fix the backend file\'s exports (default functions, roles, secrets, schedule); the detail names the problem (invalid_functions, invalid_roles, invalid_schedule, schedule_limit). HTML and backend versions publish together.'},
   {status:400,code:'invalid_dataset_binding',fix:'Use a valid dataset link that the authenticated publisher can read.'},
-  { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the live theme and design-system names' },
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
   { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
   { status: 413, code: 'pdf_too_large', fix: 'the file is over the PDF cap named in maxBytes — link a smaller copy' },
@@ -401,7 +395,7 @@ const updateMetadataOp: Operation = {
   visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
   shares:CONTENT_FIELDS.shares,expectedSharingRevision:z.number().int().min(0).optional(),policy:z.record(z.string(),z.unknown()).nullable().optional(),expectedPolicyRevision:z.number().int().min(0).optional()},
  annotations:{},example:{input:{id:'aB3xK9',title:'Updated title',expectedState:'a'.repeat(64)}},
- errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},VERSION_CONFLICT],
+ errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},{status:400,code:'unknown_theme',fix:'the 400 carries allowed — the live theme and design-system names'},VERSION_CONFLICT],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
 };
 

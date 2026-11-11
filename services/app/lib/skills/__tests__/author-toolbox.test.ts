@@ -35,20 +35,23 @@ it('retains exact journal snapshots after unknown writes and refuses cross-origi
   await expect(resumeJournal(journal,{...client,server:'https://other.test'},'publish')).rejects.toMatchObject({code:'invalid_journal'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('flushes watch events before checkpoints, deduplicates replay and validates append identity',async()=>{
+it('flushes watch events before checkpoints, deduplicates replay and validates the log identity',async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'author-watch-')),output=path.join(root,'feed.ndjson');
+ const root=await mkdtemp(path.join(tmpdir(),'author-watch-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const event={id:'e1',type:'artifact.annotated',payload:{annotation_id:'A'},actor:{kind:'user',id:'usr_bob',you:false}};
  try{
-  // A full first page (limit 2) asks again at once; the redelivered event is deduplicated by its id.
-  const event=(id:string)=>({id,type:'artifact.annotated',payload:{annotation_id:'A'}});
-  let calls=0;const client={server:'https://example.test',request:async()=>({events:calls===0?[event('e1'),event('e2')]:[event('e2')],next:'opaque'+(++calls)})};
-  await watchComments(client,'PAGE12',{once:true,output},{limit:2});
+  // A full first page (limit 2) of the replay asks again at once; every page repeats e1, deduplicated by its id. Thread A
+  // stays open, so a resumed call stops on its owed answer.
+  const afters:string[]=[];let calls=0;const client={server,request:async(route:string)=>{const url=new URL(route,server);if(url.pathname.endsWith('/annotations'))return {annotations:[{id:'A'}],next_cursor:null};
+   afters.push(url.searchParams.get('after')??'start');calls++;return {events:calls===1?[event,event]:[event],next:'opaque'+calls};}};
+  await watchComments(client,'PAGE12',{next:true,output},{deliver:async()=>{},limit:2});
   const records=(await readFile(output,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
-  expect(records.map(record=>record.kind)).toEqual(['watch','event','event','checkpoint','checkpoint']);
-  await watchComments(client,'PAGE12',{once:true,append:true,output},{limit:2});
-  expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(2);
-  await expect(watchComments({...client,server:'https://other.test'},'PAGE12',{once:true,append:true,output})).rejects.toMatchObject({code:'log_mismatch'});
+  expect(records.map(record=>record.kind)).toEqual(['watch','window','event','printed','checkpoint']);
+  await watchComments(client,'PAGE12',{next:true,append:true,output},{deliver:async()=>{},limit:2});
+  expect(afters).toEqual(['start','opaque1','opaque2']);
+  expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(1);
+  await expect(watchComments({...client,server:'https://other.test'},'PAGE12',{next:true,append:true,output})).rejects.toMatchObject({code:'log_mismatch'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('classifies unreadable successful write bodies as unknown without automatic replay',async()=>{

@@ -87,6 +87,7 @@ function LinkControl(props: { ui: RegionUi; state: Accessor<RegionToolbarState> 
     if (!done && fromEditor) props.ui.command('resume');
   };
   const apply = () => {
+    if (!href().trim()) { props.ui.command('link', { href: null }); close(true); return; }
     const safe = safeHref(href());
     if (!safe) { setError('Use an http, https or mailto link, or a path on this site.'); return; }
     props.ui.command('link', { href: safe });

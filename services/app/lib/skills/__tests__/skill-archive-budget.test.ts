@@ -34,9 +34,9 @@ import {archiveFor} from '@/lib/skills';
 // graphql library and the local GraphQL dataset preview (preview-datasets.mjs, its sessions and routes) went, leaving
 // the archive at 1,650,778 bytes (1.574 MiB, down from 1,859,312); the cap keeps the usual few KB of headroom.
 // 1.579 MiB: the unused and retired paths left the scripts (serve --runtime-dir among them), leaving 1,651,541 bytes.
-// 1.589 MiB: this branch adds the events watch (scripts/events.mjs, toolbox-events.mjs) and the service sign-in
-// (auth.mjs --audience), about 14 KB, on top of main's 1.579.
-const SKILL_ARCHIVE_MAX_BYTES=1.589*1024*1024;
+// 1.577 MiB: comment watch --once, --cursor and --append went, leaving 1,650,146 bytes.
+// 1.586 MiB: this branch adds the events watch (scripts/events.mjs, toolbox-events.mjs) and service sign-in (auth.mjs --audience).
+const SKILL_ARCHIVE_MAX_BYTES=1.586*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

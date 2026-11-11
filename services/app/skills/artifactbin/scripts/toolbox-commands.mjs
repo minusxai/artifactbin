@@ -104,9 +104,6 @@ const commands = {
       reopen: {thread: flag(), 'expected-revision': flag(), request: flag(), resume: flag()},
       react: {comment: flag(), kind: flag(), active: flag(), request: flag(), resume: flag()},
       watch: {
-        cursor: flag(),
-        once: flag('boolean'),
-        append: flag('boolean'),
         next: flag('boolean'),
         replied: flag('boolean'),
         wait: flag()
@@ -115,8 +112,8 @@ const commands = {
   },
   // The one events watch; comment.mjs watch is its comment alias.
   events: {sub: {watch: {
-    artifact: flag(), category: flag(), types: flag(), cursor: flag(), once: flag('boolean'),
-    append: flag('boolean'), next: flag('boolean'), wait: flag(), bounded: flag('boolean')
+    artifact: flag(), category: flag(), types: flag(), next: flag('boolean'), wait: flag(),
+    bounded: flag('boolean')
   }}},
   policy: {sub: {
     get: {}, explain: {}, template: {'owner-column': flag()},

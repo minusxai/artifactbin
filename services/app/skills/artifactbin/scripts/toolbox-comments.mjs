@@ -68,8 +68,6 @@ function comments(id){
     'this one stopped: nothing to do here',quiet:quietLine,
    stopped:quiet=>`no new comments for ${quiet}: stop watching and end your turn; if the `+
     'person asks you to watch again, run watch --next',
-   once:'--once waited for nothing; to watch for new comments: node scripts/comment.mjs '+
-    `watch ${id} --next`,
    unanswered:threads=>`answer the comment(s) printed above first (${threads.join(', ')}): `+
     `${answer} THREAD --body TEXT; then run watch --next again`,
    // Agents re-watched before replying and missed the person's wait: print the order here.
@@ -78,7 +76,7 @@ function comments(id){
    replyDue:server=>replyDueLine(server,id)}};
 }
 /** comment.mjs watch: `events watch --artifact ID --category comments --bounded`, presented as
- * comments (see watchEvents for --next, --once, logs and checkpoints). */
+ * comments (see watchEvents for --next, logs and checkpoints). */
 export function watchComments(client,id,values,options={}){
  return watchEvents(client,{artifact:id,category:'comments'},{...values,bounded:true},options,
   comments(id));
