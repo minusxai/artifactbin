@@ -21,7 +21,7 @@ import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
-import {createIdentityStore,ensureIdentitySchema} from './identity-store';
+import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const text=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=256;
 /** A job event as MinusX publishes it: the only envelope another product may put on this installation's feed. */
@@ -80,6 +80,17 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   await ensureIdentitySchema(db,{auth:authSchema,app:appSchema,read:readSchema});
   return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
  })().catch(error=>{identity=null;throw error;});
+ // The identity host's boot, started with the part: the app's boot waits for the views this creates, and this waits
+ // (retrying while IdentityNotReady: the app's own tables come first) for the app's. Never awaited by a request.
+ if(transactional(o.identityDb)&&(o.appSchema??readEnv(o.env,'APP__SCHEMA'))){
+  let attempts=0;
+  const boot=()=>{void store().catch(error=>{
+   if(!(error instanceof IdentityNotReady)||++attempts>300)return;
+   if(attempts===1)console.warn(`[identity] ${error.message} (retrying every 2 s)`);
+   setTimeout(boot,2000).unref?.();
+  });};
+  boot();
+ }
  app.all(IDENTITY_CALL_PATH,async c=>{
   const input=await admit(c);if(input instanceof Response)return input;
   const method=input.method as IdentityMethod;
