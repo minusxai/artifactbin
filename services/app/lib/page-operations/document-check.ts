@@ -11,7 +11,7 @@
  *   API name that cannot be local (it carries arguments in a query, which local fields refuse, or it is a mutation
  *   field on a page that registers no local mutations).
  *
- * A dataset field written under the dataset's own API name (what `graphql.mjs schema DATASET_ID` lists) while the
+ * A dataset field written under the dataset's own API name (the name its direct GraphQL schema serves) while the
  * page links it under another names the exact replacement (`renames`); any other unknown root lists the closest
  * root names. Extraction is conservative: only a plain string or expression-free template literal (directly, or
  * through a module `const` declared once) that parses as an executable GraphQL document counts; everything dynamic is

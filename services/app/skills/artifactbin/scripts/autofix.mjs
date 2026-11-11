@@ -28,7 +28,7 @@ import {runTool, positional, ToolError, within} from './toolbox-client.mjs';
  * A local reference exists when it is a file inside the project root, or a dependency the baseline
  * already published (`mapped`, root-relative).
  */
-export function localExists(file, root, mapped = () => false) {
+function localExists(file, root, mapped = () => false) {
   const directory = path.dirname(file);
   return relative => {
     const full = path.resolve(directory, relative);
@@ -57,7 +57,7 @@ export const autofixDetail = (result, report) => ({
   ...(report ? {report} : {})
 });
 // Write beside the file and rename, so an interrupted run never leaves half a page.
-export async function replaceFile(file, text) {
+async function replaceFile(file, text) {
   const temporary = `${file}.autofix-${process.pid}.tmp`;
   await writeFile(temporary, text);
   await rename(temporary, file);

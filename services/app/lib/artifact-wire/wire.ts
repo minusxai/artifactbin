@@ -221,18 +221,8 @@ export function parseSharingRevision(body: Record<string, unknown>): number | un
  * runs only after the ownership scope has resolved the row being written. A
  * shape check may run first; a database read may not, or an id nobody can
  * reach answers 400 where it owes the uniform 404.
- *
- * `folder` was a materialized PATH of names and is answered BY NAME, the same
- * shape the retired `markdown`/`html` inputs use: an agent sending the old
- * field learns what replaced it instead of reading "invalid".
  */
 export function parseParentField(body: Record<string, unknown>): string | null | undefined | Response {
-  if (body.folder !== undefined && body.folder !== null) {
-    return json({
-      error: 'folder_retired',
-      hint: "send parent_id: the id of a folder artifact (create one with format: 'folder')",
-    }, 400);
-  }
   const p = body.parent_id;
   if (p === undefined) return undefined;
   if (p === null) return null;

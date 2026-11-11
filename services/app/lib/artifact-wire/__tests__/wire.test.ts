@@ -29,7 +29,6 @@ describe('body parsers', () => {
     expect(parseParentField({ parent_id: null })).toBeNull();
     expect(parseParentField({ parent_id: 'Abc123' })).toBe('Abc123');
     expect(await refusal(parseParentField({ parent_id: '../x' }))).toEqual([400, 'invalid_parent']);
-    expect(await refusal(parseParentField({ folder: 'a/b' }))).toEqual([400, 'folder_retired']);
     expect(parseVisibilityValue(undefined, true)).toBeUndefined();
     expect(parseVisibilityValue('private', true)).toBe('private');
     expect(await refusal(parseVisibilityValue('private', false))).toEqual([400, 'private_requires_account']);

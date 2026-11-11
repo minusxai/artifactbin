@@ -45,7 +45,7 @@ export function markerOf(file,source,server){
 }
 /** Canonical HTML drops resolver (af-resolver) hrefs; put the author's local
  * path back so later backend edits are published. */
-export function restoreBackendHrefs(source,links){
+function restoreBackendHrefs(source,links){
 const hrefs=new Map((links??[]).filter(link=>link.name&&link.href).map(link=>[link.name,
    link.href]));if(!hrefs.size)return source;
  return source.replace(/<link\b[^>]*>/gi,tag=>{

@@ -41,7 +41,7 @@ const WRAPPERS=new Set(['sh','bash','zsh','dash','fish','ksh','mksh','tcsh','csh
   'gtimeout','nohup','sandbox-exec','sudo','script','stdbuf','nice','ionice','time','xargs',
   'bwrap','firejail','setsid','caffeinate','login']);
 /** One process: its parent pid, start time and command, from /proc on Linux, else ps. */
-export function psProcess(pid){
+function psProcess(pid){
  if(process.platform==='linux'){const stat=readFileSync(`/proc/${pid}/stat`,'utf8'),end=stat
   .lastIndexOf(')'),fields=stat.slice(end+2).split(' ');return {ppid:Number(fields[1]),
   started:fields[19],command:stat.slice(stat.indexOf('(')+1,end)};}

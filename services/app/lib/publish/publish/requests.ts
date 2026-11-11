@@ -92,7 +92,7 @@ async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):P
  catch(error){return json({error:'invalid_backend',details:[thrownMessage(error,'Invalid backend')]},400);}
 }
 
-const PAGE_GRAPHQL_HINT='A resolver\'s caps.query and the page\'s own queries run on the page\'s GraphQL, where a linked dataset is named by its data-af-name, not by its own API name (graphql.mjs schema DATASET_ID). Use the names given (graphql.mjs schema PAGE_ID lists them all) and publish again.';
+const PAGE_GRAPHQL_HINT='A resolver\'s caps.query and the page\'s own queries run on the page\'s GraphQL, where a linked dataset is named by its data-af-name, not by its own API name. Use the names given and publish again.';
 /**
  * A save carrying resolver sources: the GraphQL documents its resolvers pass to caps.query, and the page's own static
  * gql documents, against the page's names (lib/page-operations `pageDocumentProblems`, over each linked dataset's

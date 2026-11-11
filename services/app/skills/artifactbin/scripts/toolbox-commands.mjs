@@ -27,7 +27,7 @@ const commands = {
     status: {},
     logout: {local: flag('boolean')}
   }},
-  serve: {flags: {port: flag(), 'runtime-dir': flag(), autofix: flag('boolean')}},
+  serve: {flags: {port: flag(), autofix: flag('boolean')}},
   autofix: {listed: false, flags: {'dry-run': flag('boolean'), root: flag()}},
   publish: {
     flags: {

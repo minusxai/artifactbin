@@ -155,7 +155,7 @@ it('lists content the hosted check browser cannot reach (it has no internet) wit
  expect(local.unreachable).toEqual([]);expect(local.failedRequests).toHaveLength(2);
 });
 
-it('captures each failed sql statement, function call and older GraphQL field with its owner detail, and keeps a detail-less read for an owner re-run',async()=>{
+it('captures each failed sql statement and function call with its owner detail, keeps a detail-less read for an owner re-run, and parses nothing of an older page\'s GraphQL replies',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};
  const respond=(url:string,body:unknown,sent:unknown,status=200,method='POST')=>listeners.response!({url:()=>url,status:()=>status,json:async()=>body,request:()=>({postDataJSON:()=>sent,method:()=>method})});
@@ -166,7 +166,8 @@ it('captures each failed sql statement, function call and older GraphQL field wi
    listeners.console!({type:()=>'error',text:()=>'before any call'});
    respond(graphql,{data:null,errors:[{message:failed,path:['pipeline','addNote'],extensions:{code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page'}}]},{query:'mutation{pipeline{addNote}}',operation:'mutation',revision:'3'});
    respond(graphql,{data:null,errors:[{message:failed,path:['weather','forecast'],extensions:{code:'backend_failed'}}]},{query:'query Q{weather{forecast}}',variables:{city:'Pune'},operationName:'Q',revision:'3'});
-   // A detail-less write is never kept for a re-run; a success and other JSON are not failures.
+   // An older page's GraphQL replies (answered 200 with errors) are read as nothing: the skill carries no GraphQL.
+   // A success and other JSON are not failures.
    respond(graphql,{data:null,errors:[{message:failed,path:['pipeline','move'],extensions:{code:'backend_failed'}}]},{query:'mutation{pipeline{move}}',revision:'3'});
    respond(graphql,{data:{ok:true}},{query:'{ok}',revision:'3'});
    respond('https://example.test/data.json',{errors:[{message:'not GraphQL'}]},null);
@@ -184,9 +185,6 @@ it('captures each failed sql statement, function call and older GraphQL field wi
  const evidence=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
  const at={pageErrorsBefore:0,consoleErrorsBefore:1};
  expect(evidence.callErrors).toEqual([
-  {field:'pipeline.addNote',kind:'graphql',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',...at},
-  {field:'weather.forecast',kind:'graphql',message:failed,code:'backend_failed',...at,replay:{query:'query Q{weather{forecast}}',variables:{city:'Pune'},operationName:'Q',revision:'3'}},
-  {field:'pipeline.move',kind:'graphql',message:failed,code:'backend_failed',...at},
   {field:'sql',kind:'sql',message:'your role may not insert rows of notes',code:'permission_denied',...at},
   {field:'sql',kind:'sql',message:'no such column: nme',code:'validation_failed',...at,replay:{sql:'select nme from notes',params:{},revision:'3'}},
   {field:'fn/items',kind:'fn',message:'The function failed',code:'backend_failed',detail:'secret_unavailable: API_KEY',...at},

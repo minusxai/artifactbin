@@ -19,7 +19,8 @@ describe('docs addresses', () => {
     expect(response.status).toBe(404);
     const refusal=await response.json();
     expect(refusal.help).toBe('/llms/datasets');
-    expect(refusal.details.join(' ')).toContain('/graphql');
+    expect(refusal.details.join(' ')).toContain('/api/artifacts/<pageId>/sql');
+    expect(refusal.details.join(' ')).not.toMatch(/graphql/i);
     expect((await app.request(refusal.help)).status).toBe(200);
   });
   useAppHarness();
