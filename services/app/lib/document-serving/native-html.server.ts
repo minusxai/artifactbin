@@ -17,7 +17,7 @@ import type { HtmlPageLink } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
-import { ASSETS_ORIGIN } from '@/lib/platform';
+import { ASSETS_ORIGIN, embedTrustedOrigins } from '@/lib/platform';
 import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem } from '@/lib/html-systems';
 import {libraryImports} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
@@ -90,7 +90,7 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
     return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
-  return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
+  return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions,framers:embedTrustedOrigins()}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
 /** Stored metadata wins; native head text supplies the same first-paint name for older heads. */
 export function nativeHtmlTitle(row:Pick<ArtifactRow,'title'|'source'>):string {

@@ -33,6 +33,7 @@ CREATE OR REPLACE VIEW identity.tokens AS
     ((t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials member
       JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
+        AND (family.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=family.payload->>'session_id' AND bound."expiresAt">now()))
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id

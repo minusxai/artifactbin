@@ -12,7 +12,7 @@
  *  - connections to this origin (its own doors, server/pages-host), this document's doors on the app
  *    origin path-exact, and the same CDNs — never the app's other routes;
  *  - frames: the default players (`FRAME_HOSTS`) and any host the document declares with `csp-frame`;
- *  - `frame-ancestors`: the app alone.
+ *  - `frame-ancestors`: the app, and the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS), never anyone else.
  *
  * `extensions` are the https origins a document declares in its Helmet (`csp-*` metas, lib/document/csp-extensions)
  * that this reader trusts (lib/trust/document-trust `cspExtensionsFor`), appended per directive — except `connect`: a
@@ -34,6 +34,8 @@ interface DocumentCspInput {
   /** A configured public asset origin (APP__ASSETS_ORIGIN), admitted for its bytes. */
   assetOrigin?: string | null;
   extensions?: CspExtensions;
+  /** Other origins that may frame the document (lib/platform `embedTrustedOrigins`); none by default. */
+  framers?: readonly string[];
 }
 
 
@@ -52,7 +54,7 @@ function httpsOrigins(list: readonly string[]): string[] {
 
 const join = (...parts: ReadonlyArray<string | readonly string[]>): string => parts.flat().filter(Boolean).join(' ');
 
-export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions = EMPTY_CSP_EXTENSIONS }: DocumentCspInput): string {
+export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions = EMPTY_CSP_EXTENSIONS, framers = [] }: DocumentCspInput): string {
   new URL(self); // a malformed origin is a thrown error, never a policy
   const appOrigin = new URL(app).origin;
   const asset = assetOrigin ? [new URL(assetOrigin).origin] : [];
@@ -80,6 +82,6 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     join('frame-src', FRAME_HOSTS, ext.frame),
     "form-action 'none'",
     "base-uri 'none'",
-    `frame-ancestors ${appOrigin}`,
+    join('frame-ancestors', appOrigin, framers.map((origin) => new URL(origin).origin)),
   ].join('; ');
 }

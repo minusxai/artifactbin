@@ -68,7 +68,7 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
       FROM ${settings} s WHERE s.id = 'installation'), false) AS active
   FROM ${auth}.users u`);
     } else if (table === 'tokens') {
-      const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`});
+      const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false});
       statements.push(`CREATE OR REPLACE VIEW ${read}.tokens AS
   SELECT ${plain('tokens', 't', ['scopes', 'live']).join(', ')},
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes,

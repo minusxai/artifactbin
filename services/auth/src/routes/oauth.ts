@@ -10,20 +10,24 @@ import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, type ServiceAudience} from '@arti
  * default) or the origin of a configured service (IDENTITY__SERVICE_AUDIENCES; scope empty): a token for a
  * service is the person's own credential at that service, which the bearer admission never accepts at this API
  * (its audience is not ours). `/api/authentication/token` takes the service by id (`{"audience": "<id>"}`).
+ *
+ * A FIRST-PARTY client (IDENTITY__OAUTH_CLIENTS `first_party`, identity/oauth `parseOAuthClients`) is part of this
+ * deployment's own sign-in: `/oauth/authorize` answers a signed-in browser with its code at once (no consent page) and
+ * sends a signed-out one to the login page and back; the code, and the grant it becomes, carry the approving browser
+ * session, so the grant ends with it.
  */
 import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   authServerMetadata,
+  clientRedirects,
   consumeAuthCode,
   createAuthCode,
-  isAllowedRedirectUri,
   isValidCodeChallenge,
   isValidCodeVerifier,
   ARTIFACT_SCOPE,
   type OAuthStore,
   protectedResourceMetadata,
-  sameRedirectTarget,
 } from '../identity/oauth';
 import type { AuthApp, SessionStore } from '../parts';
 
@@ -175,12 +179,22 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       !client ? 'Unknown client.'
       : q.get('response_type') !== 'code' ? 'Unsupported response type.'
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
-      : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
+      : !clientRedirects(client, redirectUri) ? 'Redirect URI not registered.'
       : !acceptsResource(c.req.raw, requestedResource) ? 'Invalid API resource.'
       : scope === null ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${escapeHtml(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
+    const retryPath = `/oauth/authorize?${q.toString()}`;
+    if (client?.firstParty) {
+      // Part of this deployment's sign-in: no consent page. Signed out, the login page, then here again.
+      if (actor.credential !== 'session' || !actor.userId) return new Response(null, { status: 303, headers: { Location: `/login?callbackUrl=${encodeURIComponent(retryPath)}`, ...NO_STORE } });
+      if (!actor.sessionId) return page('artifactbin — error', '<h1>Can’t connect</h1><p class="err">Sign in again.</p>', 400);
+      const url = new URL(redirectUri);
+      url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope: scope!, sessionId: actor.sessionId }, codeChallenge));
+      if (state) url.searchParams.set('state', state);
+      return new Response(null, { status: 303, headers: { Location: url.href, ...NO_STORE, 'Referrer-Policy': 'no-referrer' } });
+    }
     const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope ?? '')}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
     const service = serviceFor(requestedResource);
     // Only an operator-registered client is named: a dynamic client's name is whatever it registered with.
@@ -190,7 +204,6 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       ${service ? `<p>${who} wants to act as you at <strong>${escapeHtml(service.id)}</strong> (${escapeHtml(service.origin)}), as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>. It cannot use this site as you.</p>` : client?.configured ? `<p>${who} wants to use this site as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>: read what you may and publish as you.</p>` : `<p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>`}
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
     }
-    const retryPath = `/oauth/authorize?${q.toString()}`;
     return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
     <p>Your coding agent wants to publish artifacts — shareable pages it creates and updates. Log in with your email to connect it; artifacts will belong to your account.</p>
     <form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${escapeHtml(retryPath)}"><button type="submit" aria-label="Log in to connect">Log in with email</button></form>
@@ -211,18 +224,20 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scopeFor(requestedResource, scope) !== scope) {
+    if (!client || !clientRedirects(client, redirectUri) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scopeFor(requestedResource, scope) !== scope) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
+    // A first-party grant is always bound to the browser session that approved it, also when approved by form.
+    if (client.firstParty && !actor.sessionId) return c.json({ error: 'unauthorized' }, 401);
     const url = new URL(redirectUri);
     if (form.get('action') === 'deny') {
       url.searchParams.set('error','access_denied');
       if (typeof state === 'string' && state) url.searchParams.set('state',state);
       return Response.redirect(url,303);
     }
-    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope }, codeChallenge));
+    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope, ...(client.firstParty ? { sessionId: actor.sessionId } : {}) }, codeChallenge));
     if (typeof state === 'string' && state) url.searchParams.set('state', state);
     return Response.redirect(url, 303);
   });
@@ -273,7 +288,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
         // New grants always bind the canonical resource, also when the code was spent through an alias; a service's is its origin.
         const bound = serviceFor(requestedResource) ? requestedResource : expectedResource;
         const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: bound, scope: grant.scope });
-        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: bound, scope: grant.scope, accessTokenId: minted.id });
+        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: bound, scope: grant.scope, accessTokenId: minted.id, sessionId: grant.sessionId ?? null });
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
       } catch (error) {
         return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);

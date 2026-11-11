@@ -20,7 +20,7 @@ const REDIRECT = 'http://127.0.0.1:9987/callback';
 const verifier = 'v'.repeat(43);
 let pg: PGlite;
 let app: ReturnType<typeof assemble<any>>;
-let session: { userId: string; email: string; emailVerified?:boolean } | null = null;
+let session: { userId: string; email: string; emailVerified?:boolean; sessionId?: string } | null = null;
 let mintedCount = 0;
 const identities = new Map<string, { userId: string; email: string; emailVerified: boolean }>();
 
@@ -30,7 +30,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
     env: { APP__PUBLIC_BASE_URL: BASE },
     sessions: {
       identity: async userId => identities.get(userId) ?? null,
-      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true } : null,
+      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true, ...(session.sessionId ? { sessionId: session.sessionId } : {}) } : null,
     },
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
@@ -603,6 +603,85 @@ describe('an operator-registered client (IDENTITY__OAUTH_CLIENTS): a fixed id, n
   expect(await(await app.request(authorize(RESOURCE,'&scope=artifacts'),{headers:asUser()})).text()).toContain('Unknown client.');
   const options=await optionsOf();
   for(const bad of ['{}',JSON.stringify([{client_id:'afbin_x',name:'X',redirect_uris:[REGISTERED_REDIRECT]}]),JSON.stringify([{client_id:'web',name:'X',redirect_uris:['http://evil.example/cb']}]),JSON.stringify([{client_id:'web',name:'<b>',redirect_uris:[REGISTERED_REDIRECT]}])])
+   expect(()=>assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:bad}})),bad).toThrow(/IDENTITY__OAUTH_CLIENTS/);
+ });
+});
+
+describe('a first-party client (IDENTITY__OAUTH_CLIENTS first_party): part of the sign-in, no consent page, ended with the browser session', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const WEB='http://warehouse.lvh.me:7444/auth/callback';
+ const CLIENTS=[{client_id:'warehouse-web',name:'Warehouse',redirect_uris:[WEB],first_party:true},{client_id:'reports-web',name:'Reports',redirect_uris:[WEB]}];
+ const withClients=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:JSON.stringify(CLIENTS),IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:SERVICE}])}}));};
+ const authorize=(client:string,resource:string,scope='')=>`/oauth/authorize?response_type=code&client_id=${client}&redirect_uri=${encodeURIComponent(WEB)}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st-1&resource=${encodeURIComponent(resource)}${scope}`;
+ /** A real Better Auth browser session row: the grant's liveness reads it. */
+ const browserSession=async(userId:string,sessionId:string)=>{
+  const {query}=testDb();
+  await query(`INSERT INTO auth."user" (id,name,email,"emailVerified","createdAt","updatedAt") VALUES ($1,$1,$2,true,now(),now()) ON CONFLICT (id) DO NOTHING`,[userId,`${userId}@example.com`]);
+  await query(`INSERT INTO auth.session (id,"expiresAt",token,"createdAt","updatedAt","userId") VALUES ($1,now()+interval '1 day',$2,now(),now(),$3)`,[sessionId,`tok-${sessionId}`,userId]);
+  session={userId,email:`${userId}@example.com`,sessionId};identities.set(userId,{userId,email:`${userId}@example.com`,emailVerified:true});
+  return {cookie:'sess=1',end:()=>query('DELETE FROM auth.session WHERE id=$1',[sessionId])};
+ };
+ const exchange=async(host:ReturnType<typeof assemble<any>>,client:string,location:string,resource:string)=>{
+  const code=new URL(location).searchParams.get('code')!;
+  const r=await host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:client,code,code_verifier:verifier,redirect_uri:WEB,resource})});
+  expect(r.status,await r.clone().text()).toBe(200);
+  return await r.json() as {access_token:string;refresh_token:string};
+ };
+ const refresh=(host:ReturnType<typeof assemble<any>>,client:string,token:string,resource:string)=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:client,refresh_token:token,resource})});
+
+ it('a signed-out browser goes straight to the login page and back; a signed-in one gets its code with no consent page', async () => {
+  const host=await withClients();
+  const out=await host.request(authorize('warehouse-web',SERVICE));
+  expect(out.status).toBe(303);
+  const login=new URL(out.headers.get('location')!,BASE);
+  expect(login.pathname).toBe('/login');
+  expect(login.searchParams.get('callbackUrl')).toBe(authorize('warehouse-web',SERVICE));
+  const browser=await browserSession('usr_fp1','sess_fp1');
+  const signedIn=await host.request(authorize('warehouse-web',SERVICE),{headers:{cookie:browser.cookie}});
+  expect(signedIn.status).toBe(303);
+  const back=new URL(signedIn.headers.get('location')!);
+  expect(`${back.origin}${back.pathname}`).toBe(WEB);
+  expect(back.searchParams.get('state')).toBe('st-1');
+  expect(signedIn.headers.get('cache-control')).toContain('no-store');
+  const grant=await exchange(host,'warehouse-web',back.href,SERVICE);
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken(grant.access_token)).toMatchObject({userId:'usr_fp1',audience:SERVICE});
+  // The same browser, Artifactbin's own API as the person: also no consent page.
+  const api=await host.request(authorize('warehouse-web',RESOURCE,'&scope=artifacts'),{headers:{cookie:browser.cookie}});
+  expect(api.status).toBe(303);
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken((await exchange(host,'warehouse-web',api.headers.get('location')!,RESOURCE)).access_token)).toMatchObject({userId:'usr_fp1',audience:RESOURCE,scope:'artifacts'});
+  // A client that is not first-party still asks every time.
+  expect(await(await host.request(authorize('reports-web',SERVICE),{headers:{cookie:browser.cookie}})).text()).toContain('<strong>Reports</strong> wants to act as you');
+  await browser.end();
+ });
+
+ it('its grants end when the approving browser session ends, refresh included; a consented client\'s grant does not', async () => {
+  const host=await withClients();
+  const browser=await browserSession('usr_fp2','sess_fp2');
+  const first=await exchange(host,'warehouse-web',(await host.request(authorize('warehouse-web',SERVICE),{headers:{cookie:browser.cookie}})).headers.get('location')!,SERVICE);
+  const form=new URLSearchParams({client_id:'reports-web',redirect_uri:WEB,code_challenge:s256(verifier),resource:SERVICE,scope:'',state:'st',grant:'user',action:'approve'});
+  const consented=await exchange(host,'reports-web',(await host.request('/oauth/authorize/approve',{method:'POST',headers:{cookie:browser.cookie,origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form})).headers.get('location')!,SERVICE);
+  const reader=createBearerReader({db:{query:testDb().query}});
+  const rotated=await refresh(host,'warehouse-web',first.refresh_token,SERVICE);
+  expect(rotated.status,await rotated.clone().text()).toBe(200);
+  const live=await rotated.json() as {access_token:string;refresh_token:string};
+  expect(await reader.byToken(live.access_token)).toMatchObject({userId:'usr_fp2'});
+  await browser.end();
+  expect(await reader.byToken(live.access_token),'signed out: the first-party grant is no credential').toBeNull();
+  expect(await(await refresh(host,'warehouse-web',live.refresh_token,SERVICE)).json()).toMatchObject({error:'invalid_grant'});
+  expect(await reader.byToken(consented.access_token),'a consented grant is independent of the browser').toMatchObject({userId:'usr_fp2'});
+ });
+
+ it('refuses to issue an unbound first-party grant, and only operator-registered clients may redirect over local-development http', async () => {
+  const host=await withClients();
+  asUser('usr_fp3','fp3@example.com');
+  const noSession=await host.request(authorize('warehouse-web',SERVICE),{headers:{cookie:'sess=1'}});
+  expect(noSession.status).toBe(400);
+  const form=new URLSearchParams({client_id:'warehouse-web',redirect_uri:WEB,code_challenge:s256(verifier),resource:SERVICE,scope:'',state:'st',grant:'user',action:'approve'});
+  expect((await host.request('/oauth/authorize/approve',{method:'POST',headers:{cookie:'sess=1',origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form})).status).toBe(401);
+  const dynamic=await host.request('/oauth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client_name:'X',redirect_uris:[WEB]})});
+  expect(dynamic.status).toBe(400);
+  const options=await optionsOf();
+  for(const bad of [JSON.stringify([{client_id:'web-x',name:'X',redirect_uris:['http://evil.example/cb'],first_party:true}]),JSON.stringify([{client_id:'web-x',name:'X',redirect_uris:[WEB],first_party:'yes'}])])
    expect(()=>assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:bad}})),bad).toThrow(/IDENTITY__OAUTH_CLIENTS/);
  });
 });

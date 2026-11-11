@@ -85,6 +85,7 @@ Bodies below are JSON; absent bodies are omitted. Server access checks remain au
 | List | `GET /api/groups` | `{groups:[...]}` |
 | Detail | `GET /api/groups/GROUP` | `{group,members,linked_groups,...}` |
 | Pages | `GET /api/artifacts?group_id=GROUP_ID` | Owned or shared, caller-visible; retain actual owner; follow `next_cursor` |
+| Through group | `GET /api/groups/ID/artifacts` | Members: pages the group or a parent owns or shares; `{artifacts:[...]}` |
 | Create | `POST /api/groups` | `{handle,name,description?,parent_id?}` |
 | Reparent | `PUT /api/groups/ID/parent` | `{parent_id,from_parent_id}` |
 | Update | `PATCH /api/groups/ID` | `{name?,description?}`; nonempty patch |

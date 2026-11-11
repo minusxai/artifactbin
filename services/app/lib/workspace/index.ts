@@ -1,6 +1,7 @@
 /** The workspace module's interface: only what other modules import. */
 export { VIEW_SERIES_DAYS, dailyViewsByUser, eventsTablePresent, forkCountByUser, likeSummaryByUser, viewSeriesByUser } from './analytics';
 export { crumbsFor } from './breadcrumb';
+export { groupArtifactsFor } from './group-artifacts';
 export { accountWorkspaceCoreFor, accountWorkspaceFor, accountWorkspaceInsightsFor } from './dashboard';
 export { homeBootstrapFor } from './home';
 export { listAccountTokenRows, listArtifactsByUser, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail } from './listings';

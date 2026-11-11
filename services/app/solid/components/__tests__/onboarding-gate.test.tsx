@@ -8,10 +8,20 @@ import { OnboardingGate } from '../OnboardingGate';
 
 const [session, setSession] = createSignal<{ user: { id: string } | null; onboarded: boolean } | null>(null);
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session }) }));
+const view = vi.hoisted(() => ({ embedded: false }));
+vi.mock('@/solid/lib/embedded', () => ({ isEmbeddedView: () => view.embedded }));
 let navigate: ReturnType<typeof useNavigate> | undefined;
 function Where() { const location = useLocation(); navigate = useNavigate(); return <p data-testid="where">{location.pathname}{location.search}{location.hash}</p>; }
 function at(path: string) { const history = createMemoryHistory(); history.set({ value: path, replace: true }); return render(() => <MemoryRouter history={history}><Route path="*" component={() => <OnboardingGate><Where /></OnboardingGate>} /></MemoryRouter>); }
-afterEach(() => { cleanup(); setSession(null); navigate = undefined; });
+afterEach(() => { cleanup(); setSession(null); navigate = undefined; view.embedded = false; });
+
+it('defers welcome inside a trusted embedder\'s frame: the embedded page stays the page', async () => {
+  view.embedded = true;
+  setSession({ user: { id: 'new' }, onboarded: false });
+  at('/a/Ab3xK9?embed=1');
+  await new Promise((done) => setTimeout(done, 20));
+  expect(screen.getByTestId('where')).toHaveTextContent('/a/Ab3xK9?embed=1');
+});
 
 it('waits for identity and sends an unonboarded account to welcome with its return address', async () => {
   at('/@owner/story?tab=2#note');

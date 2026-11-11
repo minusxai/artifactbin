@@ -1,5 +1,5 @@
 import {getDeploymentState} from '@/lib/deployment';
-import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
+import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
@@ -425,13 +425,26 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': new URL(c.req.url).pathname==='/local/connect' ? pageCsp(c.req.raw).replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*") : pageCsp(c.req.raw),
+      'content-security-policy': framedPolicy(new URL(c.req.url), pageCsp(c.req.raw)),
       ...readerHeaders(found?.reader),
       // A document's address carries the agent pointer as a header too, for a fetch that reads no body.
       ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),
     } }));
   };
 
+  /**
+   * Who may frame this app page: the app alone; `/local/connect` its local hosts; a document's address (`/a/<id>`, its
+   * `/app/` form) also the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS, empty by default); and that
+   * address's EMBEDDED view (`?embed=1`, the page without the app's bar, solid/lib/embedded) the trusted embedders
+   * ONLY, no one when there are none, so the bar can be hidden only inside a frame they draw. Nothing else.
+   */
+  const framedPolicy = (url: URL, csp: string): string => {
+    if (url.pathname === '/local/connect') return csp.replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*");
+    if (!/^\/a\/[^/]+(?:\/app)?\/?$/.test(url.pathname)) return csp;
+    const embedders = embedTrustedOrigins();
+    if (url.searchParams.get('embed') === '1') return csp.replace("frame-ancestors 'self'", `frame-ancestors ${embedders.length ? embedders.join(' ') : "'none'"}`);
+    return embedders.length ? csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`) : csp;
+  };
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');
 
