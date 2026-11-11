@@ -124,7 +124,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(plan.dependencies.find(dep=>dep.path==='examples/deliveries.csv')).toMatchObject({kind:'dataset'});expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain("roles={add:'signed_in'}");expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain("roles={add:'signed_in',save:'signed_in'}");expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });
