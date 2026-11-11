@@ -155,9 +155,17 @@ async function steps(dom: JSDOM, source: string): Promise<{labels: string[]; fai
   const locator = (selector: string): Record<string, unknown> => ({count: async () => doc.querySelectorAll(selector).length,
     textContent: async () => doc.querySelector(selector)?.textContent ?? '', waitFor: async () => {},
     click: async () => { const target = doc.querySelector(selector) as HTMLElement | null; if (!target) throw Error('no element ' + selector); target.click(); },
-    first: () => locator(selector), nth: () => locator(selector)});
+    fill: async (value: string) => { const target = doc.querySelector(selector) as HTMLInputElement | null; if (!target) throw Error('no element ' + selector); target.value = value; },
+    allTextContents: async () => [...doc.querySelectorAll(selector)].map(n => n.textContent ?? ''),
+    isVisible: async () => !!doc.querySelector(selector) && !(doc.querySelector(selector) as HTMLElement).hidden,
+    locator: (inner: string) => locator(selector + ' ' + inner), first: () => locator(selector), nth: () => locator(selector)});
+  // Text anywhere in the page; a reload keeps this page as it is (persistence is check.mjs's to show).
+  const getByText = (text: string): Record<string, unknown> => ({first: () => getByText(text),
+    count: async () => doc.body.textContent!.includes(text) ? 1 : 0,
+    waitFor: async () => { if (!doc.body.textContent!.includes(text)) throw Error('no text ' + text); }});
   const evaluate = async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg);
   const page = {evaluate, mainFrame: () => ({evaluate}), locator, getByRole: () => locator('button'), keyboard: {press: async () => {}},
+    getByText, title: async () => doc.title, reload: async () => {},
     url: () => 'http://127.0.0.1:4100/index.html', viewportSize: () => ({width: 1280, height: 800}),
     // Polls like Playwright's, for a few ticks: a click's answer arrives on a later task.
     waitForFunction: async (fn: (arg: unknown) => unknown, arg: unknown) => {
@@ -609,6 +617,11 @@ it('groups the API starter\'s items with totals, shows every note on its item an
   // Remove only on the reader's own notes (own-rows); a form on every item for a signed-in reader.
   expect([...doc.querySelectorAll('[data-af-id$="-remove"]')].map(n => (n as HTMLElement).dataset.afId)).toEqual(['note-n1-remove']);
   expect(doc.querySelector('[data-af-id="note-n1-remove"]')!.getAttribute('aria-label')).toBe('Remove note: Call Tuesday');
+  // Edit on the same notes: the rules that let a reader remove a note let them change it; the owner changes every note.
+  expect([...doc.querySelectorAll('[data-af-id$="-edit"]')].map(n => (n as HTMLElement).dataset.afId)).toEqual(['note-n1-edit']);
+  expect(doc.querySelector('[data-af-id="note-n1-edit"]')!.getAttribute('aria-label')).toBe('Edit note: Call Tuesday');
+  const owner = await apiPage({body: DEALS}, NOTES, {signedIn: true, id: 'usr_o', role: 'owner'});
+  expect(owner.dom.window.document.querySelectorAll('[data-af-id$="-edit"]')).toHaveLength(3);
   expect(doc.querySelectorAll('form.add-note')).toHaveLength(4);
   expect((doc.querySelector('#signin') as HTMLElement).hidden).toBe(true);
   expect(doc.querySelector('#board')!.getAttribute('aria-busy')).toBe('false');
@@ -633,9 +646,78 @@ it('says why the API starter\'s items cannot load, still shows the notes, and gi
   const doc = page.dom.window.document;
   expect(doc.querySelector('#status')!.textContent).toMatch(/The function failed[^]*API_KEY[^]*Resolvers/);
   expect(doc.querySelector('[data-af-id="other-notes"]')!.textContent).toContain('Call Tuesday');
-  expect(doc.querySelectorAll('form.add-note,[data-af-id$="-remove"]')).toHaveLength(0);
+  expect(doc.querySelectorAll('form.add-note,[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
   expect((doc.querySelector('#signin') as HTMLElement).hidden).toBe(false);
   expect(doc.querySelector('#board')!.getAttribute('aria-busy')).toBe('false');
+});
+
+/** The notes dataset as the page SQL door keeps it under own-rows rules: an insert is the reader's, an update or delete
+ *  reaches only their own rows (every row for the owner), and a refused one changes nothing (affected 0). */
+const notesStore = (notes: Array<Record<string, unknown>>, me: () => Me = () => READER): Answer => {
+  let made = 0;
+  return (text, params) => {
+    const mine = (id: unknown) => notes.find(n => n._id === id && me().signedIn && (me().role === 'owner' || n.created_by === me().id));
+    if (/^\s*insert/i.test(text)) { notes.push({_id: 'new' + ++made, item: params.p0, note: params.p1, created_by: me().id}); return {affected: 1, returning: []}; }
+    const row = /^\s*update/i.test(text) ? mine(params.p1) : /^\s*delete/i.test(text) ? mine(params.p0) : undefined;
+    if (/^\s*update/i.test(text)) { if (row) row.note = params.p0; return {affected: row ? 1 : 0, returning: []}; }
+    if (/^\s*delete/i.test(text)) { if (row) notes.splice(notes.indexOf(row), 1); return {affected: row ? 1 : 0, returning: []}; }
+    return notesAnswer(notes)(text, params);
+  };
+};
+
+it('lets a reader change their own note in place, keeps an open edit through the page\'s refreshes and says when the rules refuse', async () => {
+  const notes = NOTES.map(n => ({...n})), store = notesStore(notes);
+  let me = READER, refuse = false;
+  const page = await load(fill(read('api-dashboard.html')), (text, params) => refuse && /^\s*update/i.test(text)
+    ? {affected: 0, returning: []} : store(text, params), name => apiFns({body: DEALS}, me)(name, {}, 'GET'));
+  expect(page.error).toBeUndefined();
+  const doc = page.dom.window.document, wait = () => new Promise(resolve => setTimeout(resolve, 5));
+  const el = (id: string) => doc.querySelector(`[data-af-id="${id}"]`) as HTMLInputElement | null;
+  const submit = async () => { el('note-n1-form')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true})); await wait(); };
+  el('note-n1-edit')!.click();
+  const input = el('note-n1-input')!;
+  expect(input.value).toBe('Call Tuesday');
+  input.value = 'Call Wednesday';
+  // The dataset changes (another reader's note): the open edit is the same node, with what was typed.
+  notes.push({_id: 'n4', item: '8', note: 'Pilot booked', created_by: 'usr_other'});
+  page.change!(['notes']);await wait();
+  expect(el('note-n1-input')).toBe(input);expect(input.value).toBe('Call Wednesday');
+  // Refused: the page says nothing changed and keeps the form open with the typed text.
+  refuse = true;await submit();
+  expect(page.writes.at(-1)).toEqual({text: 'update notes set note = $p0 where _id = $p1', params: {p0: 'Call Wednesday', p1: 'n1'}});
+  expect(doc.querySelector('#status')!.textContent).toMatch(/^Nothing changed/);
+  expect(el('note-n1-input')!.value).toBe('Call Wednesday');
+  // Saved: one bound update, the form closed, the list caught up.
+  refuse = false;await submit();
+  expect(doc.querySelector('#status')!.textContent).toBe('Changed a note.');
+  expect(el('note-n1-input')).toBeNull();expect(el('note-n1-text')!.textContent).toBe('Call Wednesday');
+  expect(el('note-n4-text')!.textContent).toBe('Pilot booked');
+  // Cancel closes without a write.
+  const writes = page.writes.length;
+  el('note-n1-edit')!.click();el('note-n1-cancel')!.click();
+  expect(el('note-n1-input')).toBeNull();expect(page.writes).toHaveLength(writes);
+  // Signing out with a note open closes it: a signed-out reader gets no form and no controls.
+  el('note-n1-edit')!.click();me = GUEST;page.change!(['viewer']);await wait();
+  expect(doc.querySelectorAll('form,[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
+  expect(el('note-n1-text')!.textContent).toBe('Call Wednesday');
+});
+
+it('passes its own steps: a note added and changed through the page, a guest offered no controls, cleanup removing it', async () => {
+  const notes = NOTES.map(n => ({...n})), html = fill(read('api-dashboard.html'));
+  const signedIn = await load(html, notesStore(notes), apiFns({body: DEALS}));
+  const wide = await steps(signedIn.dom, read('api-dashboard-steps.mjs'));
+  expect(wide.failure).toBeNull();expect(wide.labels[1]).toMatch(/added, changed/);
+  const test = notes.filter(n => String(n.note).startsWith('Check note (test)'));
+  expect(test).toHaveLength(1);expect(test[0]!.note).not.toBe('Check note (test)');expect(test[0]!.created_by).toBe('usr_me');
+  const guest = await load(html, notesStore(notes, () => GUEST), apiFns({body: DEALS}, GUEST));
+  const read2 = await steps(guest.dom, read('api-dashboard-guest.mjs'));
+  expect(read2.failure).toBeNull();expect(read2.labels[1]).toMatch(/Edit/);
+  // A guest offered an Edit fails them.
+  const offered = await load(html.replace('canChange=n=>', 'canChange=n=>true||'), notesStore(notes, () => GUEST), apiFns({body: DEALS}, GUEST));
+  expect((await steps(offered.dom, read('api-dashboard-guest.mjs'))).failure).toMatch(/guest sees/);
+  const cleanup = await load(html, notesStore(notes), apiFns({body: DEALS}));
+  expect((await steps(cleanup.dom, read('api-dashboard-cleanup.mjs'))).failure).toBeNull();
+  expect(notes.filter(n => String(n.note).startsWith('Check note (test)'))).toEqual([]);
 });
 
 it('reads the API starter\'s list from the body or its first list, keeps only scalar fields and lets an unset key throw', async () => {

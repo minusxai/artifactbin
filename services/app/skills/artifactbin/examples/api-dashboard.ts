@@ -49,7 +49,7 @@ export default {
     return 'Read ' + rows.length + ' items from ' + HOST + PATH + '; fields: ' +
       Object.keys(shown(rows[0] ?? {})).join(', ');
   },
-  // Who reads: the page shows the note form and Remove from it; the notes rules judge writes.
+  // Who reads: the page shows the note form, Edit and Remove from it; the rules judge writes.
   me(_input: unknown, principal: Principal) {
     return { signedIn: principal.subject !== null, id: principal.subject, role: principal.role };
   },
