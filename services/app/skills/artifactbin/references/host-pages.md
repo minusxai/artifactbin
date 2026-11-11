@@ -121,7 +121,8 @@ discussion (`hostComments` in the manifest): selection actions by role, pins, th
 mentions, live updates and new versions. `openComments(panel)` draws the rail in your element
 (none: the right edge), `closeComments()`. Events: `af-document-comments`
 (`{open, unread, panel}`), `af-document-thread` (`{id}`), `af-document-presence`
-(`{viewers, total}`), `af-document-sign-in` (`preventDefault()` routes it). Your theme tokens
+(`{viewers, total}`), `af-document-sign-in` (`preventDefault()` routes it),
+`af-document-comments-unavailable`. Your theme tokens
 restyle it. Not included: uploads (refused), region and cell editing.
 
 ## Sign-in in that shell

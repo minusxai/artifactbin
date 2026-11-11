@@ -126,15 +126,18 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
     const linked = () => { const query = new URLSearchParams(win.location.search); return !!(query.get('comment') || query.get('thread')); };
     return <>{page() && <ReaderDiscussion id={id} role={page()!.role ?? 'viewer'} accountSession={page()!.kind === 'account'} archived={!!page()!.archived}
       runtimeRef={runtimeRef} ready={ready()} nonce={nonce()} editId={head().editId} canDeleteAny={page()!.role === 'owner'}
-      railOpen={railOpen()} onRailOpenChange={(open) => { if (open) setRailOpen(true); else hostComments.close(); }} liveAnnotations={live()} openCount={openCount()} linked={linked()}
+      railOpen={railOpen()} onRailOpenChange={(open) => { if (open) hostComments.open(lastPanel); else hostComments.close(); }} liveAnnotations={live()} openCount={openCount()} linked={linked()}
       onAnnotationsChange={setListed} onOpenThreadChange={(thread) => options.emit('af-document-thread', { id: thread })} onSignIn={signIn}
       membershipRevision={membershipRevision()} topOffset={Math.max(0, Math.round(bridge.getViewportRect().top))}
       railHost={panel()?.content} frame={options.frame} />}</>;
   }, overlay.content);
 
+  /** The element the shell last gave the rail: a rail the comments open themselves (a mark pressed) opens there too. */
+  let lastPanel: HTMLElement | null = null;
   const dropPanel = () => { const root = panel(); if (!root) return; roots.delete(root); root.dispose(); setPanel(null); };
   const hostComments: HostComments = {
     open(target) {
+      lastPanel = target ?? null;
       if (!target) dropPanel();
       else if (panel()?.host.parentElement !== target) { dropPanel(); setPanel(dress(createTrustedOverlayHost({ doc, parent: target }), target)); }
       setRailOpen(true);

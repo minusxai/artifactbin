@@ -80,7 +80,7 @@ it('grants the frame its comment action exactly as the app page does: a commente
 it('reports the open threads, draws the rail inside the shell\'s panel in the shell\'s tokens, and follows its light or dark', async () => {
   // The shell sets the documented tokens on its page.
   document.documentElement.style.setProperty('--background', 'rgb(247, 243, 234)');
-  const { comments, events, sent } = mount({ role: 'commenter', kind: 'account', openAnnotations: 1 });
+  const { comments, events, sent, fromFrame } = mount({ role: 'commenter', kind: 'account', openAnnotations: 1 });
   await waitFor(() => expect(events).toContainEqual({ name: 'af-document-comments', detail: { open: 1, unread: 0, panel: false } }));
   // The open thread is pinned in the frame.
   await waitFor(() => expect(sent.some((command) => command.type === 'mx:annotations' && (command.pins as Array<{ id: string }>)?.some((pin) => pin.id === ANN.id))).toBe(true));
@@ -99,6 +99,11 @@ it('reports the open threads, draws the rail inside the shell\'s panel in the sh
   comments.close();
   expect(panel.querySelector('[data-trusted-ui]')).toBeNull();
   expect(events.at(-1)).toEqual({ name: 'af-document-comments', detail: { open: 1, unread: 0, panel: false } });
+  // A mark pressed in the frame opens the thread in the shell's panel again, never in a column of its own.
+  fromFrame({ type: 'mx:annotation-pin', nonce: NONCE, id: ANN.id, rect: { x: 0, y: 0, width: 1, height: 1 } });
+  const again = await waitFor(() => { const root = panel.querySelector('[data-trusted-ui]'); expect(root).not.toBeNull(); return root!; });
+  await within(again.shadowRoot as unknown as HTMLElement).findByRole('region', { name: 'Annotation sidebar' });
+  await waitFor(() => expect(events.at(-1)).toEqual({ name: 'af-document-comments', detail: { open: 1, unread: 0, panel: true } }));
   knobs.open = [];
 });
 
