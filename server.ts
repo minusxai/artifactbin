@@ -205,6 +205,11 @@ async function main(): Promise<void> {
 
   }
 
+  // COMBINED MODE: the shared identity views MinusX reads (lib/groups identity-views), created once the auth
+  // tables they read exist. Standalone Artifactbin creates none.
+  const { minusxSettings } = await import('@/lib/platform');
+  if (minusxSettings()) await (await import('@/lib/groups')).ensureIdentityViews(db, authSchema);
+
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.
   const { startAppBackgroundTasks } = await import('@/lib/runtime');

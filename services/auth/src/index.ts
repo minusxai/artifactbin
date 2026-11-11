@@ -1,6 +1,6 @@
 export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,type SessionStore,type SessionInfo} from './parts';
 export {ensureAuthSchema} from './schema';
-export {createBearerReader} from './identity/bearer';
+export {bearerLiveSql,createBearerReader} from './identity/bearer';
 export { createHumanAuth, ensureHumanAuthSchema, type HumanAuth, type OutgoingMail } from './auth/human';
 export { resendMailer, mailerForRuntime } from './mail';
 export {authEnvNamesRead,readEnv} from './env';

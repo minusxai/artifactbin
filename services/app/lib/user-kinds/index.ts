@@ -30,12 +30,19 @@ export async function userKindOf(userId: string | null | undefined, query?: Quer
 }
 
 /** Credentials require an email account. Disposable test users are delegated
- * by such an account; legacy guest owners are only retained for adoption. */
-const LIVE_TESTUSER_WITH_PARENT_SQL = `(u.kind = 'testuser' AND (u.expires_at IS NULL OR u.expires_at > now()) AND EXISTS
-  (SELECT 1 FROM users parent WHERE parent.id = u.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))`;
+ * by such an account; legacy guest owners are only retained for adoption.
+ * SQL over the `users` row aliased `alias`: a live test user whose parent is an email account. */
+export const liveTestuserWithParentSql = (alias: string): string => `(${alias}.kind = 'testuser' AND (${alias}.expires_at IS NULL OR ${alias}.expires_at > now()) AND EXISTS
+  (SELECT 1 FROM users parent WHERE parent.id = ${alias}.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))`;
+const LIVE_TESTUSER_WITH_PARENT_SQL = liveTestuserWithParentSql('u');
+/**
+ * SQL over the `users` row aliased `alias`: may this identity hold a credential at all. The ONE spelling
+ * `canAuthenticateUser` runs and the shared `identity.users` view (lib/groups identity-views) is built from.
+ */
+export const authenticatingUserSql = (alias: string): string => `((${alias}.kind='account' AND ${alias}.email IS NOT NULL) OR ${liveTestuserWithParentSql(alias)})`;
 export async function canAuthenticateUser(userId:string|null|undefined,query?:Queryable):Promise<boolean> {
  if(!userId)return false;const db=query??await getDb();
- return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ((u.kind='account' AND u.email IS NOT NULL) OR ${LIVE_TESTUSER_WITH_PARENT_SQL})`,[userId])).rows.length>0;
+ return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ${authenticatingUserSql('u')}`,[userId])).rows.length>0;
 }
 /** Live delegated identities use the same kind/expiry/parent predicate as credential authentication. */
 export async function authenticatingTestParent(userId:string,query?:Queryable):Promise<string|null> {

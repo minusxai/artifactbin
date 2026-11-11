@@ -30,12 +30,16 @@ export interface BearerReaderOptions {
 
 interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; email: string | null; email_verified: boolean | null }
 
-export function createBearerReader(o: BearerReaderOptions): TokenReader {
-  const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
-  const tokens = `${o.appSchema ? `${identifier(o.appSchema, 'app schema')}.` : ''}tokens`;
-  const sql = (key: 'token_hash' | 'id') => `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
-    FROM ${tokens} t
-    LEFT JOIN LATERAL (
+/**
+ * THE BEARER READ'S LIVENESS, as SQL over a `tokens` row aliased `t`: the lateral `fence` join and the predicate
+ * that reads it (row not revoked, not expired, an OAuth token only with a live family). One spelling, used by
+ * `createBearerReader` below and by the app's shared `identity.tokens` view, so the two cannot disagree. `auth` and
+ * `tokens` are interpolated: the auth schema and the (possibly schema-qualified) tokens table.
+ */
+export function bearerLiveSql(o: { auth: string; tokens: string }): { fence: string; live: string } {
+  const { auth, tokens } = o;
+  return {
+    fence: `LEFT JOIN LATERAL (
       SELECT 1 AS live FROM ${auth}.credentials member
       JOIN ${auth}.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
@@ -44,11 +48,21 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
             AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))
       LIMIT 1
-    ) fence ON true
+    ) fence ON true`,
+    live: `t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
+      AND (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL)`,
+  };
+}
+
+export function createBearerReader(o: BearerReaderOptions): TokenReader {
+  const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
+  const tokens = `${o.appSchema ? `${identifier(o.appSchema, 'app schema')}.` : ''}tokens`;
+  const { fence, live } = bearerLiveSql({ auth, tokens });
+  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
+    FROM ${tokens} t
+    ${fence}
     LEFT JOIN ${auth}."user" u ON u.id=t.user_id
-    WHERE t.${key}=$1 AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
-      AND (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL)`;
-  const byHash = sql('token_hash'), byId = sql('id');
+    WHERE t.token_hash=$1 AND ${live}`;
   const read = async (statement: string, key: string): Promise<TokenRecord | null> => {
       const row = (await o.db.query<BearerRow>(statement, [key])).rows[0];
       if (!row) return null;
@@ -66,9 +80,6 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
       // The shape check comes FIRST: a guess never reaches the hash or the database.
       if (!TOKEN_RE.test(presented)) return null;
       return read(byHash, hashToken(presented));
-    },
-    async byId(id) {
-      return id ? read(byId, id) : null;
     },
   };
 }

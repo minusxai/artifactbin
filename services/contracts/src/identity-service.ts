@@ -1,46 +1,38 @@
 /**
- * THE IDENTITY ENDPOINTS (cross-repository contract §2): what MinusX asks Artifactbin about a user, a token and
- * their groups. Service-authenticated exactly like `HUMAN_SESSION_LIVE_PATH` (SERVICE_AUTH_HEADER carrying
- * INTERNAL__SERVICE_SECRET), JSON in and out, every answer read from committed state at request time.
+ * WHAT MINUSX LEARNS FROM ARTIFACTBIN ABOUT WHO SOMEONE IS (cross-repository contract §2), in two parts:
  *
- * The auth host serves them in front of its internal boundary: it answers `introspect` from its own bearer read
- * and relays `resolve` and `groups` to the app, which owns groups and accounts.
+ *  - IDENTITY FACTS as SHARED READS: the views of schema `identity` in the one database both products use
+ *    (`IDENTITY_VIEWS`, created by the app: lib/groups identity-views, rendered to IDENTITY.sql). Groups, direct
+ *    memberships, the hierarchy revision, whether an account is active, and whether a browser session or an agent
+ *    token is still live, by id. No column carries a secret, a hash of one or an email address; MinusX's database
+ *    role holds USAGE on the schema and SELECT on these views, and nothing on the tables behind them.
+ *  - PRESENTING A BEARER (`IDENTITY_INTROSPECT_PATH`): verifying a raw Artifactbin access token needs its hash, which
+ *    no view exposes, so it stays a service-authenticated call (SERVICE_AUTH_HEADER carrying INTERNAL__SERVICE_SECRET)
+ *    to the auth host's bearer read. JSON in and out, read from committed state at request time.
  */
-export const IDENTITY_PATHS = {
-  resolve: '/api/internal/identity/resolve',
-  introspect: '/api/internal/identity/introspect',
-  groups: '/api/internal/identity/groups',
-} as const;
-
-/**
- * Every field is optional: a MinusX service principal sends only `group_id` (for its chain); an agent's open
- * session sends its `token_id`.
- */
-export interface IdentityResolveRequest { user_id?: string; session_id?: string; group_id?: string; token_id?: string }
-
-export interface IdentityResolveResponse {
-  /** The account exists and may sign in; null when no `user_id` was sent. */
-  active: boolean | null;
-  /** null when no `session_id` was sent. */
-  session_live: boolean | null;
-  /**
-   * null when no `token_id` was sent; otherwise whether that Artifactbin access token is still live, by the bearer
-   * read's own rule (row, expiry, OAuth family fence, admission). The auth host answers it, before the app's facts.
-   */
-  token_active: boolean | null;
-  /** null when no `group_id` was sent or the group does not exist (or is deleted). */
-  group: {
-    id: string;
-    /** A DIRECT membership row in exactly this group (false without a `user_id`); a descendant's or an ancestor's is not. */
-    member: boolean;
-    /** The group, then its parent, up to the root. */
-    chain: string[];
-    /** Installation-wide; increases on every group create, delete and reparent. */
-    hierarchy_revision: number;
-  } | null;
-}
+export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
 
 export type IdentityIntrospectResponse = { active: true; user_id: string; token_id: string; scopes: string[] } | { active: false };
 
-/** The groups the user is a DIRECT member of. */
-export interface IdentityGroupsResponse { groups: Array<{ id: string; handle: string; name: string; parent_id: string | null }> }
+/** The schema the shared identity views live in. */
+export const IDENTITY_SCHEMA = 'identity';
+
+/**
+ * Every shared identity view and its columns, in order: the cross-repository contract MinusX reads. Adding a column
+ * at the end is compatible; anything else is a contract change on both sides.
+ *  - groups: live groups only (a deleted group has no row); `parent_id` null at a root.
+ *  - memberships: DIRECT membership rows of live groups. Membership of a descendant or an ancestor is not one.
+ *  - hierarchy: one row, the installation-wide revision; it increases on every group create, delete and reparent.
+ *  - users: every account row; `active` is "may sign in and act on this deployment" (Artifactbin's one rule).
+ *  - sessions: browser sessions; `live` while unexpired.
+ *  - tokens: access tokens; `live` by the bearer read's own rule (row, expiry, OAuth family fence, this deployment's
+ *    API audiences, an active account). `scopes` is the granted scope list.
+ */
+export const IDENTITY_VIEWS = {
+  groups: ['id', 'handle', 'name', 'parent_id'],
+  memberships: ['group_id', 'user_id'],
+  hierarchy: ['revision'],
+  users: ['id', 'active'],
+  sessions: ['id', 'user_id', 'live'],
+  tokens: ['id', 'user_id', 'scopes', 'live'],
+} as const;

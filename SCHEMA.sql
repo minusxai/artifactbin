@@ -30,6 +30,19 @@ create index "verification_identifier_idx" on "auth"."verification" ("identifier
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.identity_settings (
+  id TEXT NOT NULL,
+  deployment_mode TEXT NOT NULL,
+  api_audiences TEXT[] NOT NULL DEFAULT '{}',
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS deployment_mode TEXT NOT NULL;
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS api_audiences TEXT[] NOT NULL DEFAULT '{}';
+
 CREATE TABLE IF NOT EXISTS app.group_mail_outbox (
   id TEXT NOT NULL,
   email TEXT NOT NULL,

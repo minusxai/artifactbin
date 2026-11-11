@@ -189,4 +189,4 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
 
 export {recordGroupMutation,groupQuota} from './mutations';
 export {reachedGroupsSql,subtreeSql,lockHierarchy,lockMembershipGroups,subtreeMemberIds} from './hierarchy';
-export {resolveIdentity,directGroups} from './identity';
+export {ensureIdentityViews,identityViewStatements,syncIdentitySettings} from './identity-views';

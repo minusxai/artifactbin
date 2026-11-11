@@ -14,7 +14,8 @@ No product rules live here. Server-only.
   A rename is `renamedFrom` (copies, then drops). A row migration is an idempotent statement in `applyBackfills`.
 - `dropped` (columns) and `DROPPED_TABLES` delete data on every boot, with no undo: only for data nothing reads.
 - Schema procedure: edit the table in `schema.ts` (a new table also joins `TABLES`), then `npm run render:schema`,
-  which rewrites `SCHEMA.sql`, `roles.sql` and `grants.sql` at the repo root. `schema-sql-fresh.test.ts` fails on a
+  which rewrites `SCHEMA.sql`, `roles.sql`, `grants.sql` and `IDENTITY.sql` (the shared identity views MinusX reads, from
+  lib/groups `identity-views.ts`; MinusX copies it byte for byte) at the repo root. `schema-sql-fresh.test.ts` fails on a
   stale file; `schema-ownership.test.ts` fails when two packages declare one table.
 - Settings procedure: read it in `config.ts`, the only file that reads the process environment, through
   `env(module, name)` (one `MODULE__NAME` spelling, no fallback), and export it through the index. Add it to
