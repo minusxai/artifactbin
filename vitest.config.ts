@@ -41,7 +41,7 @@ const leaking = (include: string[], exclude: string[]) => globSync(include, { cw
   .map((file) => file.split(path.sep).join('/'));
 const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
-const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
+const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
  * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS, and the
  * authorization lock order across two real Postgres connections: `integration` only, as the Docker proofs are.

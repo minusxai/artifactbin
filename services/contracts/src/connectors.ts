@@ -13,10 +13,16 @@
  * time); past the row limit the rows stop and `truncated` is set. A failure is one shape, `ConnectorError`: a code
  * from `CONNECTOR_ERROR_CODES` and a one-line message that never carries a secret.
  *
- * THE VIEWER. A query run for a signed-in person carries `viewer`; the connector hands it to the database as session
- * values, never as text: Postgres `app.viewer_id` / `app.viewer_email` (`set_config(name, value, true)` inside the
- * query's own transaction), MySQL the session variables `@app_viewer_id` / `@app_viewer_email` (set on the checked-out
- * connection before the statement, reset to NULL when it is returned). A query without a viewer sets them empty.
+ * THE VIEWER. Every query carries the person it runs for (`viewer`, null for nobody) as metadata, apart from the SQL and
+ * from the connection's one credential: `viewer_id`, `viewer_email` and `viewer_groups` (the IDs of the groups they
+ * belong to, as JSON array text, sorted: `["g1","g2"]`). The database protocols have no per-query metadata, so the
+ * connector sets them on the session immediately before each statement, inside that statement's own read-only
+ * transaction, every time (a pooled session never carries another person's values): Postgres
+ * `set_config('app.viewer_id' | 'app.viewer_email' | 'app.viewer_groups', value, true)`, MySQL the session variables
+ * `@app_viewer_id` / `@app_viewer_email` / `@app_viewer_groups` (reset to NULL when the session is returned). Nobody:
+ * empty strings and `[]`. A database that relies on them must read them as the statement starts and ignore changes a
+ * statement makes itself, which a gateway built for this does; a plain database cannot guarantee that, so there they
+ * are ADVISORY whenever the reader writes the SQL (other databases, maybe in future).
  */
 import { SQL_READ_LIMITS } from './sql';
 
@@ -130,21 +136,21 @@ export const CONNECTOR_LIMITS = Object.freeze({
   sqlBytes: SQL_READ_LIMITS.sqlBytes,
   params: SQL_READ_LIMITS.params,
   connectTimeoutMs: 10_000,
-  poolSize: 4,
+  poolSize: 8,
   idleMs: 30_000,
   /** Tables and views `schema()` lists, at most. */
   schemaTables: 2000,
 });
 
-/** The person a query runs for. `email` is null for an account without one. */
-export interface ConnectorViewer { readonly id: string; readonly email: string | null }
+/** The person a query runs for. `email` is null for an account without one; `groups` their group IDs. */
+export interface ConnectorViewer { readonly id: string; readonly email: string | null; readonly groups: readonly string[] }
 
 export interface ConnectorQuery {
   /** One statement in the connector's dialect; `$name` marks a bound parameter. */
   readonly text: string;
   /** Every `$name` the text uses, by name. A name the text uses without a value is `invalid_query`. */
   readonly params: Readonly<Record<string, ConnectorScalar>>;
-  /** Who the query runs for (the session values above); null runs it with empty ones. */
+  /** Who the query runs for (the session values above); null sets them empty. */
   readonly viewer: ConnectorViewer | null;
   /** The connector's namespace for this query (see `ConnectorSpec.namespace`); absent: the connection's default. */
   readonly namespace?: string;

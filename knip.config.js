@@ -109,6 +109,7 @@ export default {
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
     'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'], includeEntryExports: true },
     'services/events': { entry: ['src/server.ts'], includeEntryExports: true },
+    'services/connectors': { includeEntryExports: true },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'], includeEntryExports: true },
   },
   ignoreIssues: {

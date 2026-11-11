@@ -44,7 +44,7 @@ const ts = createRequire(import.meta.url)('typescript');
 
 const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
-const PACKAGES = ['auth', 'browser', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
+const PACKAGES = ['auth', 'browser', 'connectors', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured

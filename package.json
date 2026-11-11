@@ -81,7 +81,8 @@
     "services/events",
     "services/auth",
     "services/test-support",
-    "services/runner"
+    "services/runner",
+    "services/connectors"
   ],
   "overrides": {
     "seroval": "1.7.3",
