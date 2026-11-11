@@ -30,7 +30,7 @@ only frame the app page `/a/<id>` (its origin must be in the deployment's truste
   beside it under the same digest and are listed in `integrity` too.
 - `styles`: every design system in one sheet; `designSystems.<name>.styles`: one system's sheet
   (`label`, `defaultMode` light or dark). Fonts load from `fonts` (`/af/fonts/`) as text uses them.
-- `host`: the document host module (second example).
+- `host`: the document host module (second example); `hostComments`, the comments it loads.
 - `theme`: `attributes` and `tokens`, the contract below. URLs are paths on the manifest's origin.
 
 A design system applies when `<html>` carries `data-af-design-system="NAME"` and
@@ -116,16 +116,19 @@ on the container: `af-document-ready`, `af-document-selection`, `af-document-eve
 event), `af-document-scroll`, `af-document-url-values` (`{search, push}`: replace or push),
 `af-document-navigate` (a link to an app page: `preventDefault()` routes it yourself; a link to
 another document loads in the tab), `af-document-closed`.
-Not included: uploads (refused), comments, presence, region and cell editing, and the live
-version stream; call `followVersion` and `notifyData` from your own stream.
+Comments: `mountDocument(container, { id, comments: true, presence: true })` loads the
+discussion (`hostComments` in the manifest): selection actions by role, pins, threads, replies,
+mentions, live updates and new versions. `openComments(panel)` draws the rail in your element
+(none: the right edge), `closeComments()`. Events: `af-document-comments`
+(`{open, unread, panel}`), `af-document-thread` (`{id}`), `af-document-presence`
+(`{viewers, total}`), `af-document-sign-in` (`preventDefault()` routes it). Your theme tokens
+restyle it. Not included: uploads (refused), region and cell editing.
 
 ## Sign-in in that shell
 
-That shell also draws `/login` (query kept) for a browser without a session. Sign in with
-[HTTP authentication](http-auth.md) steps 1 and 2, same-origin `fetch`, then load `/login`
-again: a browser with a session gets `302` to its `callbackUrl` when that is a path on this
-origin, else `/`, so never follow `callbackUrl` yourself. Send: `400` `INVALID_EMAIL`. Sign-in:
-`200` sets the HttpOnly session cookie; `400` `INVALID_OTP`; five wrong codes `403`
-`TOO_MANY_ATTEMPTS` (send again); `403` `deployment_admission_required`. Call from this origin:
-a send, or a call carrying the cookie, that names another `Origin` is `403`. Sign-out:
-`POST /api/auth/sign-out` `{}`. Store nothing; OAuth consent stays the app's.
+That shell also draws `/login` (query kept) when there is no session. Sign in with
+[HTTP authentication](http-auth.md) steps 1 and 2 by same-origin `fetch`, then load `/login`
+again: it answers `302` to `callbackUrl` when that is a path on this origin, else `/`. Send:
+`400` `INVALID_EMAIL`. Sign-in: `200` sets the HttpOnly cookie; `400` `INVALID_OTP`; five wrong
+codes `403` `TOO_MANY_ATTEMPTS`; `403` `deployment_admission_required`; another `Origin` `403`.
+Sign-out: `POST /api/auth/sign-out` `{}`. OAuth consent stays the app's.
