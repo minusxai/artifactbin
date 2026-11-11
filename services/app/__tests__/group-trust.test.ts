@@ -17,6 +17,7 @@ import { createUser } from '@/lib/accounts';
 import { mintAccountToken } from '@/__tests__/harness';
 import * as groups from '@/lib/groups';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
+import { getDb } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
 
 useAppHarness();
@@ -79,6 +80,8 @@ describe('a group approval', () => {
 
     const removed = await call(removeRoute, top.id, editor.actor, { connect: [API] });
     expect(removed.status).toBe(200);
+    const audit = await (await getDb()).query<{ action: string; actor_user_id: string }>('SELECT action, actor_user_id FROM group_audit WHERE group_id = $1 AND action LIKE $2 ORDER BY created_at, id', [top.id, 'addresses_%']);
+    expect(audit.rows).toEqual([{ action: 'addresses_allowed', actor_user_id: editor.id }, { action: 'addresses_removed', actor_user_id: editor.id }]);
     expect(await csp(id, viewer.actor)).not.toContain(API);
     const listed = await listRoute(request(`/api/groups/${top.id}/allowed-addresses`, { actor: viewer.actor }), params(top.id));
     expect(((await listed.json()) as { addresses: unknown[] }).addresses).toEqual([expect.objectContaining({ directive: 'img', host: IMG, approved_by: expect.objectContaining({ id: editor.id }) })]);
