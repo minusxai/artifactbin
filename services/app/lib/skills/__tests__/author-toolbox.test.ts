@@ -5,6 +5,21 @@ it('binds targets to one origin and rejects target/server mismatches',async()=>{
  expect(()=>resolveTarget('https://example.test/a/PAGE12','https://other.test')).toThrow();
  expect(()=>resolveTarget('https://user:secret@example.test/a/PAGE12')).toThrow();
 });
+it('counts an older page\'s /graphql post as a page call and reports its refusal like any other, with no GraphQL replay',async()=>{
+ const {callKind,calls}=await import('../../../skills/artifactbin/scripts/toolbox-check-calls.mjs');
+ expect(callKind('https://h.test/api/artifacts/PAGE12/graphql')).toEqual({kind:'graphql'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/sql')).toEqual({kind:'sql'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/fn/notes')).toEqual({kind:'fn',name:'notes'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/annotations')).toBeNull();
+ const response=(status:number,body:unknown)=>({url:()=>'https://h.test/api/artifacts/PAGE12/graphql',status:()=>status,json:async()=>body,
+  request:()=>({postDataJSON:()=>({query:'query{sales{amount}}'}),method:()=>'POST'})});
+ const into:any[]=[],waits:Promise<void>[]=[];
+ // A 200 is not a refusal; a refused one keeps its status as the code and is never asked again.
+ calls(response(200,{data:{sales:[]}}),{pageErrorsBefore:0},into,waits,callKind);
+ calls(response(403,{errors:[{message:'denied'}]}),{pageErrorsBefore:0},into,waits,callKind);
+ await Promise.all(waits);
+ expect(into).toEqual([{field:'graphql',kind:'graphql',message:'http_403',code:'http_403',pageErrorsBefore:0}]);
+});
 it('retains exact journal snapshots after unknown writes and refuses cross-origin replay',async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {makeClient,createJournal,journalIntent,resumeJournal}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
