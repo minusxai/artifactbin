@@ -6,7 +6,7 @@
  * Globals: `base` (the serving origin), `credentialPath` (where the author scripts keep that origin's
  * credentials), `authenticationInstruction`, `references` (the relative link prefix: `references/` from
  * SKILL.md, empty from a reference) and `shipped` (true for the downloadable zip, which leaves out prose
- * that links guides served only over HTTP).
+ * that links guides served only over HTTP) and `extras` (true when the zip carries this deployment's `extras/`).
  */
 import { credentialPaths } from '@artifactbin/utils/node/credentials';
 import path from 'node:path';
@@ -18,6 +18,8 @@ export interface RenderOptions {
   base: string;
   /** Render for the downloadable skill folder: prose that links guides served only over HTTP is left out. */
   shipped?: boolean;
+  /** The downloadable skill carries deployment extras (./extras): SKILL.md names their index. */
+  extras?: boolean;
 }
 
 const env = new nunjucks.Environment(new nunjucks.FileSystemLoader(path.resolve(process.cwd(), 'skills/artifactbin'), { noCache: true }), {
@@ -34,6 +36,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       base: opts.base,
       credentialPath: credentialPaths(opts.base, '~/.artifactbin').backingPath,
       shipped: opts.shipped === true,
+      extras: opts.extras === true,
       authenticationInstruction: AUTHENTICATION_INSTRUCTION,
       references: file.ref ? '' : 'references/',
     }).replace(/\n{3,}/g, '\n\n');

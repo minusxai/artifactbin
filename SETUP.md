@@ -61,7 +61,7 @@ Set, at least:
 
 Optional, each described where it is declared in `.env.example`: a dedicated assets origin, alias origins,
 outbound IPs for database firewalls, anonymous publishing hosts (`APP__USER_PAGES_HOST`), a custom shell
-(`APP__SHELL_FILE`), company mode,
+(`APP__SHELL_FILE`), skill extras (`SKILLS__EXTRA_DIR`), company mode,
 test-domain accounts for automated runs, and split services (`SQL__SERVICE_URL`, `BROWSER__SERVICE_URL`,
 `EVENTS__SERVICE_URL`, `RUNNER__SERVICE_URL`, with `INTERNAL__SERVICE_SECRET` and `CONTRACT__ACTOR_SECRET`
 matching across them; keep that network private).

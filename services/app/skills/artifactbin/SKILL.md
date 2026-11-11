@@ -273,7 +273,9 @@ Page scripts execute on the page's runner origin, separately from account creden
 [% if shipped %]Commands stage updates hourly; when notified, reread SKILL.md and reload your
 harness (`node scripts/update.mjs --help`). Scripts are helpers inside this skill, not global
 commands; keep your own pages outside it.
-[% else %][Download the author skill]([[ base ]]/skills/artifactbin.zip) and install it with the
-managed recipe in https://artifactbin.dev/install.sh, which enables updates; reload skills after
-installing.
+[% if extras %]This server adds guides and scripts of its own: `extras/README.md` lists
+them.
+[% endif %][% else %][Download the author skill]([[ base ]]/skills/artifactbin.zip) and
+install it with the managed recipe in https://artifactbin.dev/install.sh, which enables updates;
+reload skills after installing.
 [% endif %]

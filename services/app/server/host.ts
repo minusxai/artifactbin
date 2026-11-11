@@ -7,6 +7,7 @@ import {useSqlExtensions} from '@/lib/sql';
 import type {Actor,Upstream} from '@artifactbin/contracts';
 import {getDb, type Db, setServices, services, type Services} from '@/lib/platform';
 import {inProcess} from '@artifactbin/utils';
+import {skillExtras} from '@/lib/skills';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
  services?:Partial<Services>;
@@ -30,6 +31,8 @@ interface AppHost {
 }
 /** Shared host composition; no local SQL/browser implementation or deployment identity is imported here. */
 export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
+ // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot.
+ skillExtras();
  setDocumentEditorPolicy(options.documentEditorPolicy);
  setNotificationDelivery(options.notificationDelivery);
  const db=await getDb();

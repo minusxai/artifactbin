@@ -467,6 +467,16 @@ env('APP', 'SHELL_FILE');
 export const shellFile = (): string | null => env('APP', 'SHELL_FILE')?.trim() || null;
 
 /**
+ * SKILLS__EXTRA_DIR: a directory this process can read whose files the author skill this origin serves
+ * (`/skills/artifactbin.zip`) carries under `extras/`, beside, never in place of, the product's own files
+ * (lib/skills/extras says which files, and the limits). Off by default. They are the operator's content, shipped to
+ * agents as instructions and code, and public: never put a secret there. Read once at boot; an invalid directory
+ * refuses the boot.
+ */
+env('SKILLS', 'EXTRA_DIR');
+export const skillExtrasDir = (): string | null => env('SKILLS', 'EXTRA_DIR')?.trim() || null;
+
+/**
  * TRUSTED EMBEDDERS: `EMBED__TRUSTED_ORIGINS`, comma-separated origins (https, or http on a local development host)
  * that may frame a document's address, the `/a/<id>` app page and the document it frames on its own origin, and
  * nothing else of the app. `?embed=1` on that address is the EMBEDDED view, which only these origins may frame (no

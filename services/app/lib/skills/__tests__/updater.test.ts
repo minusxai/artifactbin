@@ -159,3 +159,30 @@ it('verifies and installs the resolvers/ library folder and still refuses unknow
   expect(await readFile(path.join(base,'artifactbin','SKILL.md'),'utf8')).toBe('first');
  }finally{await server.close();await rm(base,{recursive:true,force:true});}
 });
+
+it('installs, updates and rolls back deployment extras, and refuses any other extras/ shape',async()=>{
+ const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
+ const {update}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
+ for(const name of ['extras/sub/a.mjs','extras/A.md','extras/a.sh','extras/.env','extras/readme.md']){
+  const bad=storedRelease({'SKILL.md':'s',[name]:'x'},'https://example.test');
+  expect(()=>decodeRelease(bad.bytes,bad.manifest),name).toThrow('Unsafe archive member');
+ }
+ const base=await mkdtemp(path.join(tmpdir(),'skill-extras-update-'));
+ const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ let release:ReturnType<typeof skillRelease>;
+ const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
+ try{
+  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:server.base,version:'0'.repeat(64)}));
+  release=skillRelease({'SKILL.md':'first','extras/README.md':'# Extras\n','extras/tool.mjs':'export {};\n'},server.base);
+  expect((await update(root)).status).toBe('activated');
+  expect(await readFile(path.join(base,'artifactbin','extras/tool.mjs'),'utf8')).toBe('export {};\n');
+  const first=release.manifest.version;
+  release=skillRelease({'SKILL.md':'first','extras/README.md':'# Extras\n','extras/tool.mjs':'export const second = 1;\n'},server.base);
+  expect(release.manifest.version).not.toBe(first);
+  expect((await update(root)).status).toBe('activated');
+  expect(await readFile(path.join(base,'artifactbin','extras/tool.mjs'),'utf8')).toBe('export const second = 1;\n');
+  // Rollback re-verifies the previous installed tree, extras/ included.
+  expect((await update(root,{rollback:true})).status).toBe('rolled-back');
+  expect(await readFile(path.join(base,'artifactbin','extras/tool.mjs'),'utf8')).toBe('export {};\n');
+ }finally{await server.close();await rm(base,{recursive:true,force:true});}
+});
