@@ -308,3 +308,16 @@ it('loads the native trial in a separate module without server HTML parsers',asy
  const graph=await build({entryPoints:[fileURLToPath(new URL('../native-region-editor.ts',import.meta.url))],bundle:true,write:false,minify:true,format:'esm',platform:'browser',conditions:['production'],metafile:true,logLevel:'silent'});
  expect(Object.keys(graph.metafile.inputs).filter(input=>/parse5|lib\/html-page\/|live-regions\/(?:compaction|native-state|native-html)\.ts/.test(input))).toEqual([]);
 });
+
+it('ships the document host module (/af/host.js) as its own small module: no app framework, no page runtime, no credential',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.hostPath).toBe('/af/host.js');
+ const host=assets.host!;
+ // The parent half of the bridge and its relays, gzipped as served (8,012 B measured 2026-11-11).
+ expect(gzipSync(host).byteLength).toBeLessThanOrEqual(10*1024);
+ expect(host).toMatch(/export\s*\{[^}]*mountDocument/);
+ expect(host).not.toMatch(/solid-js|@afbin\//);
+ // Loaded by another shell, never by a page: not in the core's import map, and no skew guard tied to a core.
+ expect(assets.core).not.toContain('/af/host.js');
+ expect(host).not.toContain('afbin:runtime-reload');
+});
