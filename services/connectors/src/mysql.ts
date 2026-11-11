@@ -98,6 +98,7 @@ export const mysqlConnector: ConnectorModule = {
       const limits = limitsOf(query), viewer = viewerValues(query);
       const database = checkedNamespace('mysql', query.namespace) ?? String(config.database);
       let open = false;
+      // A session that fails to open (sign-in, database, network) fails before the query's own mapping below.
       return sessions.use(database, async (c, dropSession) => {
         let gone = false;
         const discard = () => { gone = true; dropSession(); };
@@ -140,7 +141,7 @@ export const mysqlConnector: ConnectorModule = {
             } catch { discard(); }
           }
         }
-      });
+      }).catch((error) => { throw error instanceof ConnectorFailure ? error : driverFailure(error, secrets); });
     }
 
     return {

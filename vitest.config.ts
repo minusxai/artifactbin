@@ -46,7 +46,7 @@ const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services
  * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS, and the
  * authorization lock order across two real Postgres connections: `integration` only, as the Docker proofs are.
  */
-const REAL_DATABASE_RESOLVER_TESTS = ['services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
+const REAL_DATABASE_RESOLVER_TESTS = ['services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
