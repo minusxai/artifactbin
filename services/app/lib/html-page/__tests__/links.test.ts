@@ -26,3 +26,8 @@ it('stores a dataset link as its name, dataset and mode only, whatever the page 
   expect(htmlPageDeclarations(page('const q=gql`{items(where:{qty:{_gt:1}}){item qty}}`;', ' data-af-api="legacy"')).datasets).toEqual([link]);
   expect(htmlPageDeclarations(page('', ' data-af-api="hasura"')).datasets).toEqual([link]);
 });
+
+test('a default: link stores the default-connection shape: its page name and the database after the colon', () => {
+ expect(htmlPageDeclarations('<link rel="af-dataset" data-af-name="wh" href="default:warehouse/finance"><link rel="af-dataset" data-af-name="raw" href="default:">').connections)
+  .toEqual([{ kind: 'default-connection', name: 'wh', namespace: 'warehouse/finance' }, { kind: 'default-connection', name: 'raw', namespace: '' }]);
+});

@@ -5,6 +5,7 @@
  * a loopback socket (test-support pglite-wire), whose view keyed on `current_setting('app.viewer_id')` shows what the
  * database sees of each reader.
  */
+import {htmlPageDeclarations} from '@/lib/html-page';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 import { request, setSession, useAppHarness } from './harness';
@@ -51,7 +52,7 @@ it('publish refuses a default: link where the install has none, and records it w
   configure();
   const page = await publish(alice, { html: PAGE() });
   expect(page.status, JSON.stringify(page.body)).toBe(201);
-  expect((await getArtifactById(page.body.id))!.meta.htmlLinks).toEqual([{ kind: 'default-connection', name: 'wh', namespace: 'warehouse/finance' }, { kind: 'default-connection', name: 'raw', namespace: '' }]);
+  expect((await getArtifactById(page.body.id))!.meta.htmlLinks).toEqual(htmlPageDeclarations(PAGE()).connections);
   for (const bad of ['default:sa;les', 'default:a b', `default:x'`]) expect((await publish(alice, { html: PAGE().replace('default:warehouse/finance', bad) })).status, bad).toBe(400);
   expect((await publish(alice, { html: PAGE().replace('href="default:warehouse/finance"', 'href="default:warehouse/finance" data-af-mode="pinned" data-af-revision="1"') })).status).toBe(400);
 });
