@@ -26,6 +26,7 @@ export async function platformOrigin():Promise<RunningServer&{requests:string[]}
   else if(url.pathname.startsWith('/af/fonts/'))answer=await font(request,{params:Promise.resolve({name:url.pathname.slice('/af/fonts/'.length)})});
   else if(url.pathname.startsWith('/af/components/'))answer=await component(request,{params:Promise.resolve({file:url.pathname.slice('/af/components/'.length)})});
   else if(/^\/libraries\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/.test(url.pathname))answer=new Response(await readFile(path.resolve('public',url.pathname.slice(1))),{headers:{'content-type':'text/javascript'}});
+  else if(/^\/geojson\/[a-z0-9-]+\.json$/.test(url.pathname))answer=await readFile(path.resolve('public',url.pathname.slice(1))).then(bytes=>new Response(bytes,{headers:{'content-type':'application/json'}}),()=>new Response('Not found',{status:404}));
   else answer=new Response('Not found',{status:404});
   reply.writeHead(answer.status,Object.fromEntries(answer.headers));reply.end(Buffer.from(await answer.arrayBuffer()));
  });

@@ -38,3 +38,11 @@ export async function referencedLibraryResources(html:string,resources:readonly 
  const libraries=await Promise.all([...chosen].sort().map(async url=>({url,contentType:'text/javascript' as const,bytes:await readFile(path.join(publicDir,url.slice(1)))})));
  return [...libraries,...[...components].sort(([a],[b])=>a.localeCompare(b)).map(([url,bytes])=>({url,contentType:'text/javascript' as const,bytes}))];
 }
+/** The platform's boundary files (public/geojson, at /geojson/NAME.json on every origin a page runs on) that a page or
+ * its modules name, by that path: an offline copy carries them so the same fetch reads them from disk. */
+export async function referencedBoundaryFiles(sources:readonly string[]):Promise<Record<string,Uint8Array>>{
+ const paths=new Set(sources.flatMap(source=>[...source.matchAll(/\/geojson\/[a-z0-9-]+\.json/g)].map(match=>match[0])));
+ const files:Record<string,Uint8Array>={};
+ for(const url of [...paths].sort())try{files[url]=await readFile(path.join(publicDir,url.slice(1)));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+ return files;
+}

@@ -104,3 +104,28 @@ describe('what the table leaves alone',()=>{
   expect(details).toContain('notes.json');expect(details).toContain("fetch('./notes.json')");expect(details).not.toContain('data.json');
  });
 });
+
+describe('a platform boundary file a page fetches by its path',()=>{
+ it('is the same line on the page\'s own origin for a signed-out reader of an unlisted page, and carried in an exported copy',async()=>{
+  const {readFileSync}=await import('node:fs');const path=await import('node:path');
+  const {pagesOriginFor}=await import('@/lib/http');const {createAppServer}=await import('@/server/app');
+  const geo=readFileSync(path.resolve('public/geojson/india-states.json'));
+  const html='<!doctype html><html><head><title>States</title></head><body><script type="module">const states=await (await fetch("/geojson/india-states.json")).json();document.body.dataset.states=String(states.features.length);</script></body></html>';
+  const owner=await mintAccountToken('boundary_unlisted');
+  const created=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html,visibility:'unlisted'}}));
+  expect(created.status).toBe(201);const {id}=await created.json() as {id:string};
+  const site=testPagesSite('pages.example.test','https://app.example.test'),self=pagesOriginFor(id,site);
+  const app=createAppServer({indexHtml:async()=>'<html><body><div id="root"></div></body></html>',pagesSite:site});
+  const page=await app.request(self+'/');expect(page.status).toBe(200);
+  expect(await page.text()).toContain('fetch("/geojson/india-states.json")');
+  expect(page.headers.get('content-security-policy')).toMatch(/connect-src 'self'/);
+  const read=await app.request(self+'/geojson/india-states.json');expect(read.status).toBe(200);
+  expect(read.headers.get('content-type')).toMatch(/^application\/json/);
+  expect(Buffer.from(await read.arrayBuffer())).toEqual(geo);
+  // A download has no origin to fetch from: it carries the file under the same path.
+  const copy=await download(request(`/a/${id}/download`,{token:owner.token}),params(id));expect(copy.status).toBe(200);
+  const files=runtimeOf(await copy.text()).files!;
+  expect(Object.keys(files)).toEqual(['/geojson/india-states.json']);
+  expect(Buffer.from(files['/geojson/india-states.json']!.replace('data:application/json;base64,',''),'base64')).toEqual(geo);
+ });
+});

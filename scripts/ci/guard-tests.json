@@ -30,6 +30,7 @@
   "services/app/lib/platform/__tests__/test-database-isolation.test.ts",
   "services/app/lib/skills/__tests__/retired-phrasing.test.ts",
   "services/app/lib/skills/__tests__/skill-archive-budget.test.ts",
+  "services/app/lib/skills/__tests__/skill-boundary-files.test.ts",
   "services/app/lib/skills/__tests__/skill-code-shape.test.ts",
   "services/app/lib/skills/__tests__/skill-description.test.ts",
   "services/app/lib/skills/__tests__/skill-public-budget.test.ts",

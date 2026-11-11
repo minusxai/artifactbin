@@ -153,3 +153,16 @@ it.each(['create','update','invite','uninvite','role','remove','leave','share','
  if(sub==='invite')expect(await pending).toMatchObject({ok:false,code:'partial_failure',results:[{ok:false,code:'forbidden',exit:3}]});
  else await expect(pending).rejects.toMatchObject({code:'forbidden',exit:3});expect(writes).toBe(1);
 });
+it('an editor grant says what it gives, refused without --yes and once made; a viewer grant says nothing',async()=>{
+ const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
+ const {EDITOR_GRANT}=await import('../../../skills/artifactbin/scripts/toolbox-groups.mjs');
+ expect(EDITOR_GRANT).toBe('An editor can rewrite pages and their rules (a group editor: the group\'s pages and members), which a viewer cannot; letting people change a page\'s entries needs only a viewer share with --datasets.');
+ const cases:[string,string[],Record<string,unknown>][]=[['share',['PAGE12'],{group:'design_crit'}],['invite',['design_crit','a@example.test'],{}],['role',['design_crit','teammate'],{}]];
+ for(const [sub,positionals,values] of cases){
+  const refused=groupsCommand({sub,positionals,values:{...values,role:'editor'}},{fetcher:async()=>{throw Error('unexpected');}});
+  await expect(refused,sub).rejects.toMatchObject({code:'confirmation_required',recovery:expect.stringContaining(EDITOR_GRANT)});
+  expect((await harness(sub,positionals,{...values,role:'editor',yes:true})).result.note,sub).toBe(EDITOR_GRANT);
+  expect((await harness(sub,positionals,{...values,role:'viewer'})).result.note,sub).toBeUndefined();
+ }
+ await expect(groupsCommand({sub:'remove',positionals:['design_crit','teammate'],values:{}},{fetcher:async()=>{throw Error('unexpected');}})).rejects.toMatchObject({recovery:expect.not.stringContaining(EDITOR_GRANT)});
+});
