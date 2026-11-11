@@ -46,7 +46,7 @@ export const JOBS = {
   node: { projects: ['node'], count: 6 },
   api: { projects: ['api', 'api-isolated'], count: 4 },
   ui: { projects: ['ui', 'islands'], count: 2 },
-  'pr-api': { projects: ['api', 'api-isolated'], count: 22 },
+  'pr-api': { projects: ['api', 'api-isolated'], count: 24 },
   'pr-ui': { projects: ['ui', 'islands'], count: 6 },
   // pr-fast.yml's guard runners (vitest.guard.config.ts), packed by their own recorded times (`LENSES`).
   'pr-guards': { projects: ['pr-guards', 'pr-guards-isolated', 'pr-contracts', 'pr-contracts-isolated'], count: 3 },
