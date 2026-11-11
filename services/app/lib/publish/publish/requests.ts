@@ -137,7 +137,7 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
-  if (liveConnectionOf(current.meta) && (CONTENT_FIELDS.some((f) => body[f] !== undefined) || body.connection !== undefined)) {
+  if (liveConnectionOf(current.meta) && (CONTENT_FIELDS.some((f) => body![f] !== undefined) || body!.connection !== undefined)) {
     return json({ error: 'live_dataset_connection', message: 'A live dataset\'s content is its connection: change it with PATCH /api/artifacts/ID/connection (owner and editors); its rows stay in its database.' }, 400);
   }
   if(body.destination!==undefined)return json({error:'ownership_requires_transfer',hint:'Use the transfer endpoint to change owner.'},400);

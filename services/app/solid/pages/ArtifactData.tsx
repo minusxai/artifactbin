@@ -27,6 +27,7 @@ import { AssetWorkspace, type AssetSection } from '../datasets/AssetWorkspace';
 import { DatasetActionsView } from '../datasets/DatasetActionsView';
 import { PageChrome, useChromeVisibility } from '../components/PageChrome';
 import { DatasetCatalogView } from '../datasets/DatasetCatalogView';
+import { LiveDatasetView } from '../datasets/LiveDatasetView';
 import { FileViewer, fileKindOf } from '../components/FileViewer';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkArtifact } from '../document/ForkArtifact';
@@ -47,6 +48,8 @@ export interface DataAnswer {
     /** The data tiers' content: a viz recipe's source, a dataset's legacy rows (JSON) — null for readers where withheld. */
     source?: string | null; dataPreview: string; columns: Array<{ name: string; type?: string }>;
     catalog?: DatasetCatalog;
+    /** A live dataset: its connection's summary (datasets/LiveDatasetView reads the rest). */
+    liveConnection?: { connector: string; label: string; fields: Record<string, string | number> };
     /** With a catalog: may this reader run SQL in the explorer (their rules allow it)? Without, tables browse by name. */
     canRunSql?: boolean;
     /** pdf / file: the two facts a person picks a file by, and a stored file's own name (its viewer's extension). */
@@ -152,8 +155,9 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           <FileViewer tall name={fileName()} size={surface.bytes ?? 0} url={rawUrl()} pdfUrl={format === 'pdf' ? rawUrl() : null} />
         </div>}</Show>
       </Show>
-      <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={false} canRunSql={surface.canRunSql === true} />}</Show>
-      <Show when={format === 'dataset' && !catalog()}>
+      <Show when={format === 'dataset' && surface.liveConnection}><LiveDatasetView id={id} /></Show>
+      <Show when={format === 'dataset' && !surface.liveConnection && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={false} canRunSql={surface.canRunSql === true} />}</Show>
+      <Show when={format === 'dataset' && !surface.liveConnection && !catalog()}>
         <p class="mt-4 font-sans text-xs text-muted" aria-label="Dataset summary">
           {formatCount(rows().length)} rows · {surface.columns.length} columns
           <Show when={rows().length > 50}><span class="text-faint"> · showing the first 50</span></Show>

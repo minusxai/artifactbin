@@ -31,7 +31,8 @@ const GroupsPage = lazy(() => import('./pages/Groups').then(m=>({default:m.Group
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
 const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((m) => ({ default: m.ArtifactAddressRoute })));
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
-const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
+// The new-dataset screen (source picker, then that source's form) loads with the dataset editor it opens into.
+const NewDatasetPage = lazy(() => import('./datasets/NewDataset').then((m) => ({ default: m.NewDatasetPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
 const LocalPublishPage = lazy(() => import('./pages/LocalPublish').then(m => ({default:m.LocalPublishPage})));
 const LocalDocumentPage = lazy(() => import('./pages/LocalDocument').then(m => ({default:m.LocalDocumentPage})));
@@ -121,7 +122,7 @@ export function App(): JSX.Element {
       {/* The old tokens page lives in account settings now. */}
       <Route path="/tokens" component={() => <Navigate href="/account" />} />
       <Route path="/assets" component={AssetsPage} />
-      <Route path="/datasets/new" component={DatasetEditorPage} />
+      <Route path="/datasets/new" component={NewDatasetPage} />
       <Route path="/files/new" component={FileUploadPage} />
       <Route path="/a/:id/edit" component={ArtifactEditRoute} />
       <Route path="/local/publish" component={LocalPublishPage} />
