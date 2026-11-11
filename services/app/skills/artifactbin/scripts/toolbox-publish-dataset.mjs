@@ -3,7 +3,22 @@
  * and the counted routine server changes (routineChanges).
  * Used by: toolbox-publish.mjs.
  */
+import {readFileSync} from 'node:fs';
 import {ToolError} from './toolbox-client.mjs';
+/** --type connection: a live dataset from FILE (its connector JSON, no secret) and the secret from
+ * --secret-file (- reads stdin). Sent once: never journaled, printed or kept. */
+export async function publishConnection(client,file,values){
+ const connection=JSON.parse(readFileSync(file,'utf8')),secret=(await client.request(
+  '/api/connections')).connectors.find(c=>c.id===connection.connector)?.fields.find(f=>f.secret);
+ if(values['secret-file']!==undefined&&secret)connection[secret.name]=readFileSync(values[
+  'secret-file']==='-'?0:values['secret-file'],'utf8').trim();
+ let destination;if(values.group!==undefined){const g=(await client.request('/api/groups/'+
+  encodeURIComponent(values.group.replace(/^@/,'')))).group;destination={type:'group',id:g.id};}
+ const made=await client.request('/api/artifacts',{method:'POST',body:{connection,title:values.
+  title??file.replace(/^.*\//,'').replace(/\.json$/,''),...destination?{destination}:{}},
+  unsafe:true});
+ return {id:made.id,url:made.url,ref:`ref:${made.id}`,next:`sql.mjs schema ${made.id}`};
+}
 export const TEMPLATES=['read-only','own-rows','editors-only'];
 /** --template: the named starting permissions, applied right after the dataset is created. */
 export async function applyTemplate(client,id,name,owner){

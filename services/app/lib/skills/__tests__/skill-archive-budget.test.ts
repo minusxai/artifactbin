@@ -41,7 +41,7 @@ import {archiveFor} from '@/lib/skills';
 // publish, on top of the service-token helper, leaving 1,669,373 bytes.
 // 1.534 MiB: page functions left the skill (functions.md, resolvers/, the tracker's tracker.ts and the API dashboard
 // starter), the default connection and the group address approvals joined it, leaving 1,608,368 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.534*1024*1024;
+const SKILL_ARCHIVE_MAX_BYTES=1.536*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

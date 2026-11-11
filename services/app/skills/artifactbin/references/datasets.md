@@ -11,8 +11,8 @@ A dataset is stored CSV or JSON rows; a page links it and reads and writes it wi
 ```
 
 Publishing the page makes a CSV linked by path a dataset named by the file, updated as it
-changes; link a published one as `ref:ID`. `data-af-name` is unique per page. Live is the
-default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
+changes; link a published one as `ref:ID`. `data-af-name` is unique per page. A link follows the
+latest rows; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
 `node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
 `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
 from page HTML:
@@ -138,3 +138,10 @@ under the same permissions. Pinned bindings cannot upload.
 `<link rel="af-dataset" data-af-name="wh" href="default:DB">` reads the install's database
 ([[ connectors ]]; empty DB: its default), signed in, read-only: `wh.table` in its own SQL.
 Agents: `sql.mjs query default:DB 'SQL'`; `schema default:DB`.
+
+## Live datasets
+
+A database: `publish.mjs db.json --type connection --secret-file -`. Owner/editors' `sql` names
+`NAME.table`; others run only declared queries, `sql.query('mine', {…})` for
+`<script type="application/sql" data-af-query="mine" data-af-dataset="NAME">SQL</script>`;
+the server fills `:viewer_id`, `:viewer_email`, `:viewer_groups`.

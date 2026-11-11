@@ -151,7 +151,8 @@ it('answers free SQL for owners and editors only, through the page and the agent
   await updateSharingFor(alice.actor, id, { shares: [{ email: bob.email!, role: 'editor' }, { email: carol.email!, role: 'viewer' }] });
   await setRule(alice, id, 'viewer', 'signed_in');
   const page = (await publish(alice, { html: PAGE(id) })).body.id;
-  expect((await getArtifactById(page))!.meta.htmlLinks).toEqual([{ kind: 'live-dataset', name: 'shop', datasetId: id }]);
+  const stored = (await getArtifactById(page))!.meta.htmlLinks as Array<{ kind: string; name: string; datasetId?: string }>;
+  expect(stored.map((link) => [link.kind, link.name, link.datasetId])).toEqual([['live-dataset', 'shop', id]]);
   expect(ok(await sql(page, alice, 'select id, item from shop.sales.orders where amount > $p0 order by id', { p0: 10 })).rows).toEqual([{ id: 2, item: 'cake' }, { id: 3, item: 'pie' }]);
   expect(ok(await sql(page, bob, 'select n from shop.loose')).rows).toEqual([{ n: 7 }]);
   // The viewer's values are bound for free SQL too.

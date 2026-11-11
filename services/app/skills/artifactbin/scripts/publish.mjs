@@ -30,6 +30,7 @@ Examples:
   node scripts/publish.mjs index.html --artifact ID       # index.html replaces page ID
   node scripts/publish.mjs page.html --create --group design_team  # new page in a group
   node scripts/publish.mjs signups.csv --template own-rows --owner-column created_by
+  node scripts/publish.mjs db.json --type connection --secret-file - < pw  # live dataset
   node scripts/publish.mjs --resume JOURNAL               # after exit 5 (unknown outcome);
                                                             replays the exact request
 Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written against the old

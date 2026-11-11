@@ -22,6 +22,7 @@ Gotchas: quote the SQL in single quotes, so the shell leaves $name alone. schema
   rules, so a write works wherever your role may write, and affected 0 means the rules let you
   change no row it named; a write through a dataset ID needs its owner or an editor and answers
   returning [] (read the rows after it). Pass values in --params, never inside the SQL text.
+  A live dataset ID runs its database's own SQL (owner/editor; :name or $name binds).
   Exit 5 means a write's outcome is unknown: repeat it with the printed --idempotency-key (a
   page write applies at most once).
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
@@ -92,6 +93,8 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
     throw new ToolError('dataset_flag_unsupported', 'A dataset serves its current rows; ' +
       'only page writes take a key.', 2, 'Drop --revision and --idempotency-key for a dataset ID.');
   if (sub === 'schema') {
+    if (head.meta?.connection) return {target: 'live dataset', ...await client.request(
+      `/api/artifacts/${id}/connection/schema`)};
     if (!page) {
       const read = await client.request(`/api/artifacts/${id}/query`, {method: 'POST',
         body: {sql: 'select * from rows limit 0'}, safeToRepeat: true});
@@ -145,12 +148,12 @@ async function datasetRead(client, id, sql, values, limit) {
   do {
     const read = await client.request(`/api/artifacts/${id}/query`, {method: 'POST',
       safeToRepeat: true, body: {sql, values, limit: PAGE, ...cursor ? {cursor} : {}}});
-    const table = read.results?.[0] ?? {};
+    var table = read.results?.[0] ?? {};
     columns = table.columns ?? columns;
     rows.push(...table.rows ?? []);
     cursor = table.next_cursor;
   } while (cursor && rows.length < limit);
-  const truncated = !!cursor || rows.length > limit;
+  const truncated = !!cursor || rows.length > limit || !!table.truncated;
   return {columns, rows: rows.slice(0, limit), ...truncated ? {truncated: true} : {}};
 }
 await runTool('sql', import.meta.url, sqlCommand);

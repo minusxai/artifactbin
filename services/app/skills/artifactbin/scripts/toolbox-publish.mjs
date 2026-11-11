@@ -17,7 +17,8 @@ import {refuseEmpty,placeholderProblems,headBaseline,markedBaseline,unmarked,emp
   updateNext} from './toolbox-publish-guard.mjs';
 import {markerOf,stripMarker} from './toolbox-source.mjs';
 import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
-import {TEMPLATES,applyTemplate,routineChanges} from './toolbox-publish-dataset.mjs';
+import {TEMPLATES,applyTemplate,publishConnection,routineChanges} from
+  './toolbox-publish-dataset.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};
@@ -35,6 +36,7 @@ const client=makeClient(server,options),done=await finishPublication(await resum
 const file=await realpath(positional(positionals)),server=serverOrigin(selectedServer(values,
    options.env)),client=makeClient(server,options),bytes=await readFile(file),extension=
    path.extname(file).toLowerCase();
+if(values.type==='connection')return publishConnection(client,file,values);
 const type=values.type?enumValue(values.type,['html','dataset','asset'],'type'):['.html',
    '.htm'].includes(extension)?'html':['.csv','.json'].includes(extension)?'dataset':media[
    extension]?'asset':null;
