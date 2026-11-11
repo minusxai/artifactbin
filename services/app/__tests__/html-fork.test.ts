@@ -1,32 +1,10 @@
-import {expect,it,vi} from 'vitest';
+import {expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST} from '@/app/api/artifacts/route';
-import {readHtmlPage} from '@/lib/html-publication';
-import {getHtmlBackendVersion} from '@/lib/html-backends';
 import { identityForUser } from '@/lib/accounts';
 import {getArtifactById} from '@/lib/artifacts';
-import {backendSecrets} from '@/lib/html-backend-secrets';
 import {forkArtifact} from '@/lib/publish';
-vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>({typeDefs:'type Query { count: Int } type Mutation { increment: Int }',compiled:source,secretBindings:['API_KEY'],secretHosts:{API_KEY:'api.example.com'}})}));
 const harness=useAppHarness();
-it('forks immutable resolver code with its secret names and hosts, never values, under the fork owner',async()=>{
- const owner=await mintAccountToken('source');const viewer=await mintAccountToken('forker');
- const created=await (await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><link rel="af-resolver" data-af-name="db" href="./db.ts"></head><body>Counter</body></html>',resolverSources:{db:'counter-code'},visibility:'public'}}))).json();
- const source=await readHtmlPage(identityForUser(owner.userId,owner.id),created.id);const original=source.links[0];if(original?.kind!=='backend')throw Error('missing backend');
- await backendSecrets.put({ownerId:owner.userId!,backendId:original.backendId},'API_KEY','source-credential');
- const actor={...identityForUser(viewer.userId,viewer.id),tokenId:viewer.id};
- const fork=await forkArtifact(actor,(await getArtifactById(created.id))!);expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)throw Error(await fork.text());
- const page=await readHtmlPage(actor,fork.artifact.id);const link=page.links[0];if(link?.kind!=='backend')throw Error('missing fork backend');
- expect(link.backendId).not.toBe(original.backendId);
- const backend=await getHtmlBackendVersion(link.backendId,link.version);expect(backend).toMatchObject({pageId:page.pageId,ownerId:viewer.userId!,source:'counter-code'});
- expect(backend?.secretBindings).toEqual(['API_KEY']);expect(backend?.secretHosts).toEqual({API_KEY:'api.example.com'});
- expect(await backendSecrets.names({ownerId:viewer.userId!,backendId:link.backendId})).toEqual([]);
- await expect(backendSecrets.get({ownerId:owner.userId!,backendId:link.backendId},['API_KEY'],'API_KEY')).rejects.toThrow('backend_secret_unavailable');
- await expect(backendSecrets.get({ownerId:viewer.userId!,backendId:link.backendId},backend!.secretBindings!,'API_KEY')).rejects.toThrow('backend_secret_unavailable');
- await backendSecrets.put({ownerId:viewer.userId!,backendId:link.backendId},'API_KEY','fork-credential');
- expect(await backendSecrets.get({ownerId:owner.userId!,backendId:original.backendId},['API_KEY'],'API_KEY')).toBe('source-credential');
- expect(fork.artifact.forked_from).toBe(created.id);
-});
 it('does not grant a fork owner access to a private linked dataset or commit a partial copy',async()=>{
  const owner=await mintAccountToken('dataset-source');const viewer=await mintAccountToken('dataset-forker');
  const dataset=await (await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{value:1}],visibility:'private'}}))).json();

@@ -14,7 +14,8 @@ export async function readHtmlPage(actor:AccessActor,pageId:string,revision?:str
   const archived=(await (await getDb()).query<typeof row>(`SELECT v.source,v.version,v.meta,v.format FROM artifact_versions v JOIN artifacts a ON a.id=v.artifact_id AND a.deleted_at IS NULL WHERE v.artifact_id=$1 AND v.version=$2`,[pageId,Number(revision)])).rows[0];
   if(!archived||archived.format!=='html')throw new Error('Page revision not found');row=archived;
  }
- return {pageId,version:row.version,revision:String(row.version),html:row.source??'',nextNodeId:(row.meta.htmlIdentity as HtmlIdentityLedger|undefined)?.nextNodeId??1,links:(row.meta.htmlLinks??[]) as HtmlPageLink[]};
+ return {pageId,version:row.version,revision:String(row.version),html:row.source??'',nextNodeId:(row.meta.htmlIdentity as HtmlIdentityLedger|undefined)?.nextNodeId??1,links:((row.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>(link as {kind:string}).kind!=='backend')};
 }
 
 export {planHtmlClone} from './clone';
+export {htmlLiveLinks,htmlSharedRevisions,changedHtmlSharedRevisions} from './live';

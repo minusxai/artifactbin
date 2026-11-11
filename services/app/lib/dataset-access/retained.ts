@@ -19,7 +19,7 @@ interface RetainedReadOptions {
  /** Through a page's generated API: the page (`X-Hasura-Page-Id`) the read's session names. */
  pageId?:string;
  /**
-  * The caller checks every retained fence before anything read leaves (a query's reply, a resolver's tables): the
+  * The caller checks every retained fence before anything read leaves (a query's reply): the
   * snapshot and each statement are then authorized once, by the snapshot, and not again. Without it (a page's
   * schema, a mutation's load) the snapshot checks its fence after loading and every statement checks around itself.
   */

@@ -65,16 +65,17 @@ function htmlCore(): Promise<string> {
   return htmlAssets().then(assets=>assets.core);
 }
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
-  const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
-  const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),...(input.live!==undefined?{live:input.live}:{}),backends:links.map(link=>link.name),...(links.some(link=>link.kind==='dataset')?{datasets:links.flatMap(link=>link.kind==='dataset'?[link.name]:[])}:{}),bindings:Object.fromEntries(links.flatMap(link=>link.kind==='backend'?[[link.name,link.backendId]]:link.kind==='dataset'?[[link.name,link.datasetId]]:[])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.domainReads&&!input.offline?{domainReads:true as const}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
+  // A stored link of a removed kind (a page function's) is no link.
+  const links=((input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[]).filter(link=>(link as {kind:string}).kind!=='backend');
+  const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),...(input.live!==undefined?{live:input.live}:{}),backends:links.map(link=>link.name),...(links.some(link=>link.kind==='dataset')?{datasets:links.flatMap(link=>link.kind==='dataset'?[link.name]:[])}:{}),bindings:Object.fromEntries(links.flatMap(link=>link.kind==='dataset'?[[link.name,link.datasetId]]:[])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.domainReads&&!input.offline?{domainReads:true as const}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
   // A page script's fetch of a file its publication recorded reads it at the page's asset door, on every surface
-  // (html-runtime fn-fetch); the address is relative, so it resolves on whichever origin serves the page.
+  // (html-runtime page-fetch); the address is relative, so it resolves on whichever origin serves the page.
   const captureKey=input.offline?null:input.captureKey??null;
   const files=input.offline?input.files:publishedFileTable(input.row.meta as PublicationRecord,input.row.id,input.row.version,captureKey?receipt=>`/a/${input.row.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}&version=${input.row.version}&key=${encodeURIComponent(captureKey)}`:undefined);
   if(files&&Object.keys(files).length)config.files=files;
   const source=input.row.source??'';
   // The hosts the page declares it connects to: its core sends a GET to one through the page's own fetch door
-  // (html-runtime fn-fetch), which checks this reader's trust. A download and a publishing host have no door.
+  // (html-runtime page-fetch), which checks this reader's trust. A download and a publishing host have no door.
   const connect=input.offline||input.domainReads?[]:declaredCspExtensions(source).connect;
   if(connect.length)config.connect=connect;
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
@@ -91,9 +92,8 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
     // On a anonymous owner host, and in the exporter's capture, the page reads its data from its own page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
-    // Its page functions too (html-runtime/fn-fetch): the page's own function path, a prefix source.
     // The exporter's capture alone also reads its `sql` from the page SQL door (lib/page-doors `opaqueSqlRead`).
-    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
+    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
     return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${withLegacy(PLATFORM_FONTS_PATH).map(dir=>new URL(dir,base).href).join(' ')}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions,framers:embedTrustedOrigins()}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");

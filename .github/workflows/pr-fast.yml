@@ -47,7 +47,7 @@ jobs:
       matrix:
         part: [ types, lint, tests, guards, guards-2 ]
         # The guard and contract tests were one 35-59s Vitest step, ~100s of worker CPU on the runner's 4 vCPUs (the
-        # contracts boot a database and real resolver runners per file). Two jobs split them by measured time
+        # contracts boot a database per file). Two jobs split them by measured time
         # (vitest.guard.config.ts's timed sequencer), each file once.
         include:
           - part: guards
@@ -156,7 +156,7 @@ jobs:
             batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      # Node 22, the install cache's (its key says node22; isolated-vm in it is compiled for that major's ABI). The runner's
+      # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
       # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
       # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
       - id: runner-node

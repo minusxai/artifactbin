@@ -1,8 +1,7 @@
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {planHtmlClone} from '@/lib/html-publication';
-import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
-import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, ScheduleRefusal, unservable } from '@/lib/artifacts';
+import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';
 import { DatasetError } from '@/lib/datasets';
@@ -107,8 +106,7 @@ export async function forkArtifact(
   if (input instanceof Response) return input;
   let row: ArtifactRow;
   try { row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role, ...(source.format==='dataset'?{datasetPolicy:{policy:source.dataset_policy??null,revision:source.policy_revision??0}}:{}) }); }
-  // The copy's schedules would be the forker's: over the forker's capacity, nothing is created.
-  catch (error) { if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if (error instanceof ScheduleRefusal) return json({ error: error.code, details: error.details }, error.status); throw error; }
+  catch (error) { if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409); throw error; }
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
@@ -161,7 +159,7 @@ async function forkInput(
   if(source.format==='html'){
     const {htmlLinks,htmlIdentity,htmlLibraries,...meta}=source.meta;
     try{
-      const plan=await planHtmlClone(actor,source.id,(htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[],{backend:getHtmlBackendVersion,authorizeDataset:authorizeDatasetBinding});
+      const plan=await planHtmlClone(actor,(htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[],{authorizeDataset:authorizeDatasetBinding});
       return {...carried,format:'html',source:source.source,meta,...plan};
     }catch(error){
       if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);

@@ -338,15 +338,15 @@ describe('CI avoids duplicate integration setup', () => {
     const line = (file, id = 'a'.repeat(40)) => `100644 ${id} 0\t${file}`;
     const base = ['services/app/lib/html-components/tabs.ts', 'services/contracts/src/index.ts', 'services/app/lib/libraries/registry.json',
       'services/app/scripts/build-libraries.mjs', 'scripts/lib/html-components-build.mjs', 'package-lock.json', 'services/app/server/app.ts',
-      'services/app/lib/html-components/__tests__/tabs.test.ts', 'services/app/lib/platform/schema.ts', 'services/runner/src/schema.ts',
+      'services/app/lib/html-components/__tests__/tabs.test.ts', 'services/app/lib/platform/schema.ts',
       'services/app/lib/platform/__tests__/config.test.ts'].map(file => line(file)).join('\n');
     const { key, inputs } = testBuildsKey(base);
-    expect(inputs).toBe(8);
+    expect(inputs).toBe(7);
     // Outside the inputs (server code, tests): the same key.
     expect(testBuildsKey(base.replace(line('services/app/server/app.ts'), line('services/app/server/app.ts', 'b'.repeat(40)))).key).toBe(key);
     expect(testBuildsKey(base.replace(line('services/app/lib/html-components/__tests__/tabs.test.ts'), line('services/app/lib/html-components/__tests__/tabs.test.ts', 'b'.repeat(40)))).key).toBe(key);
     // A component, a contract, a library, a build tool, or the schema the cached schema image is built from: a new key.
-    for (const file of ['services/app/lib/html-components/tabs.ts', 'services/contracts/src/index.ts', 'services/app/lib/libraries/registry.json', 'services/app/scripts/build-libraries.mjs', 'package-lock.json', 'services/app/lib/platform/schema.ts', 'services/runner/src/schema.ts']) {
+    for (const file of ['services/app/lib/html-components/tabs.ts', 'services/contracts/src/index.ts', 'services/app/lib/libraries/registry.json', 'services/app/scripts/build-libraries.mjs', 'package-lock.json', 'services/app/lib/platform/schema.ts']) {
       expect(testBuildsKey(base.replace(line(file), line(file, 'c'.repeat(40)))).key, file).not.toBe(key);
     }
   });

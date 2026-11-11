@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
-    RUNNER_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
+    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
   } = await import('@/lib/platform');
 
   /*
@@ -128,18 +128,6 @@ async function main(): Promise<void> {
     } catch (error) {
       console.error('[events] schema setup failed:', error);
     }
-  }
-  let closeRunner:()=>Promise<void>=async()=>{};
-  if(!RUNNER_SERVICE_URL){
-    // Native worker/compiler loaded only by the local composition, never a remote app image.
-    const {createRunner}=await import('@artifactbin/runner/local');
-    const {runnerConfig}=await import('./services/runner/src/config');
-    const {localPageBackendCapability}=await import('@/lib/page-operations');
-    const {resolverDatasets}=await import('@/lib/graphql-compat');
-    const config=runnerConfig(env);for(const name of config.names)sessionEnvNames.add(name);
-    const runner=await createRunner({db:queryable,dockerImage:config.image,maxConcurrent:config.concurrent,database:{allowLoopback:config.databaseLoopback},capabilities:async(ctx,operation,args)=>{
-      return localPageBackendCapability(ctx.request,operation,args,ctx.signal,resolverDatasets);
-    }});setServices({runner});closeRunner=()=>runner.close();
   }
   /*
    * ONE `events` FOR THE WHOLE PROCESS. The authentication parts and Better Auth's
@@ -301,7 +289,6 @@ async function main(): Promise<void> {
   });
   const { installShutdown } = await import('@/lib/runtime');
   installShutdown({ steps: [
-    closeRunner,
     stopBackgroundTasks,
     () => services().events.close?.() ?? Promise.resolve(),
     () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())),

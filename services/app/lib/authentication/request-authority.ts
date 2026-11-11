@@ -1,11 +1,11 @@
 import {hostedCredentialDescriptor} from '@/lib/accounts';
-import type {RunnerJson} from '@artifactbin/contracts';
+import type {HtmlJson} from '@artifactbin/contracts';
 /** What a request's credential allows; resolved from token identity, never from caller headers. */
 export type HostedOperationAuthorization =
  | {kind:'ordinary'}
  | {kind:'allowed';requestScope?:string}
  | {kind:'denied';code:string;message:string}
- | {kind:'deferred';body:RunnerJson};
+ | {kind:'deferred';body:HtmlJson};
 /** Default grants are resolved by their trusted owner from token identity. Headers
  * and transcript contents cannot promote a credential into request authority. */
 export async function hostedAuthorization(owner:string|null|undefined,tokenId:string|null|undefined,_name:string,_input:unknown):Promise<HostedOperationAuthorization>{

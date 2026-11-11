@@ -14,8 +14,8 @@ import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, type ServiceA
  * THE EXCHANGE (contracts `SERVICE_TOKEN_PATH`, `{"audience": "<id>"}`): a credential the caller already holds here, a
  * browser session (same Origin, as every cookie-borne write) or an ordinary API bearer, for a short-lived token for one
  * configured service (../identity/service-tokens, `parent` naming that credential), and no refresh token: the browser
- * page or agent asks again before it expires. A service token, a viewer token or an exchanged one is no bearer here, so
- * none is exchanged again.
+ * page or agent asks again before it expires. A service token or an exchanged one is no bearer here, so none is
+ * exchanged again.
  *
  * A FIRST-PARTY client (IDENTITY__OAUTH_CLIENTS `first_party`, identity/oauth `parseOAuthClients`) is part of this
  * deployment's own sign-in: `/oauth/authorize` answers a signed-in browser with its code at once (no consent page) and
@@ -35,7 +35,7 @@ import {
   type OAuthStore,
   protectedResourceMetadata,
 } from '../identity/oauth';
-import { signViewerToken } from '../identity/service-tokens';
+import { signServiceToken } from '../identity/service-tokens';
 import type { AuthApp, SessionStore } from '../parts';
 
 type App = AuthApp;
@@ -92,7 +92,7 @@ interface OAuthRoutesOptions {
   aliasOrigins?: readonly string[];
   /** IDENTITY__SERVICE_AUDIENCES: the other resources a grant may be for. */
   serviceAudiences?: readonly ServiceAudience[];
-  /** The exchanged tokens' signing key (service-tokens `viewerTokenKey` of AUTH__SECRET); null: the exchange answers 503. */
+  /** The exchanged tokens' signing key (service-tokens `serviceTokenKey` of AUTH__SECRET); null: the exchange answers 503. */
   serviceTokenKey?: Buffer | null;
 }
 
@@ -180,7 +180,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     // The same account rule as every grant here: a verified email account this deployment admits.
     const identity=await o.sessions.identity?.(actor.userId).catch(()=>null);
     if(!identity?.email||!identity.emailVerified||identity.userId!==actor.userId||(o.admitIdentity&&!await o.admitIdentity(identity)))return refuse(403,'deployment_admission_required');
-    const issued=signViewerToken(o.serviceTokenKey,service,{userId:actor.userId,parent});
+    const issued=signServiceToken(o.serviceTokenKey,service,{userId:actor.userId,parent});
     return new Response(JSON.stringify({access_token:issued.token,token_type:'Bearer',expires_in:Math.round((Date.parse(issued.expiresAt)-Date.now())/1000),expires_at:issued.expiresAt,audience:service.id,resource:service.origin}),{status:200,headers:{'Content-Type':'application/json',...NO_STORE}});
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });

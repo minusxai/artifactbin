@@ -4,8 +4,8 @@
  * `seat()` names the place this copy of the page runs, from facts the core already holds (the runtime config and the
  * window), never by asking the network: `app` (framed by the app at `/a/<id>`), `address` (its own address, unframed,
  * or an anonymous publishing host), `raw` (the `/a/<id>/raw` sandbox, an opaque origin), `offline` (a downloaded copy)
- * or `preview` (the toolbox's local preview). With it, what its data doors can do right now: `sql` reads, shared
- * writes, `fetch('/fn/NAME')` calls. The server still decides every call; this only says whether one can be made.
+ * or `preview` (the toolbox's local preview). With it, what its data doors can do right now: `sql` reads and shared
+ * writes. The server still decides every call; this only says whether one can be made.
  *
  * `route` keeps a page's screen in the address's `$` values (`?$screen=detail&$id=42`), never in its path: a page has
  * one address, and a path under it is not the page anywhere it is served. `set` replaces them all, `push` making a new
@@ -24,8 +24,6 @@ export interface PageSeat {
   sql: boolean;
   /** Shared writes can be sent (the dataset's rules still decide). Only the framed page has them. */
   writes: boolean;
-  /** `fetch('/fn/NAME')` reaches the page's functions (GET only on a publishing host). */
-  functions: boolean;
 }
 /** The runtime facts a seat is read from (./contract HtmlRuntimeConfig, ./browser-reader). */
 export interface SeatFacts { pageId: string; appOrigin?: string; offline?: boolean; domainReads?: true; localPreview?: unknown; online(): boolean }
@@ -34,7 +32,7 @@ export function pageSeat(win: Window, facts: SeatFacts): PageSeat {
   const framed = win.parent !== win && !!facts.appOrigin && !facts.offline;
   const kind: PageSeatKind = facts.localPreview ? 'preview' : facts.offline ? 'offline' : framed ? 'app' : win.origin === 'null' ? 'raw' : 'address';
   const guest = !!facts.domainReads && !framed;
-  return { kind, pageId: facts.pageId, sql: framed || guest || facts.online() || kind === 'offline', writes: framed, functions: framed || guest };
+  return { kind, pageId: facts.pageId, sql: framed || guest || facts.online() || kind === 'offline', writes: framed };
 }
 
 export type RouteValues = Record<string, string>;

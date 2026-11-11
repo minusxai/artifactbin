@@ -26,10 +26,10 @@ export interface HtmlRuntimeConfig {
   publishOrigin?: string;
   /**
    * The files the page's publication recorded: the path a script fetches each by (relative to the page) -> where it is
-   * read (the page's asset door, or an offline copy's bytes). The core's fetch maps exactly these (./fn-fetch).
+   * read (the page's asset door, or an offline copy's bytes). The core's fetch maps exactly these (./page-fetch).
    */
   files?: Readonly<Record<string, string>>;
-  /** The https origins the page declares in `csp-connect`: its core sends a GET to one through the page's fetch door (./fn-fetch). */
+  /** The https origins the page declares in `csp-connect`: its core sends a GET to one through the page's fetch door (./page-fetch). */
   connect?: readonly string[];
   /** `@afbin/<name>` -> platform library URL, resolved server-side from the page's recorded pins. */
   libraries?: Readonly<Record<string, string>>;

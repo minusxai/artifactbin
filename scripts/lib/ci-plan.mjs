@@ -63,7 +63,7 @@ export function buildKey(stagedIndex) {
  * image (the lockfile above covers PGLite). The image's file is named by a hash of the statements themselves, so here
  * too a path missing costs a fresh image, never a stale one.
  */
-const TEST_BUILD_INPUTS = /^(?:package-lock\.json|services\/app\/lib\/platform\/(?:schema|db)\.ts|services\/runner\/src\/schema\.ts|services\/app\/test\/setup\/(?:database|schema-image-file)\.ts|services\/app\/package\.json|services\/app\/scripts\/(?:build-server-reader|server-reader-cache|build-libraries|precompress)\.mjs|scripts\/build\/build-html-components\.mjs|scripts\/lib\/(?:html-components-build|component-asset-proof)\.mjs|services\/app\/lib\/(?:html-components|html-component-specs|libraries|dataflow|markdown|mermaid-images|ui-runtime)\/|services\/(?:contracts|utils)\/src\/)/;
+const TEST_BUILD_INPUTS = /^(?:package-lock\.json|services\/app\/lib\/platform\/(?:schema|db)\.ts|services\/app\/test\/setup\/(?:database|schema-image-file)\.ts|services\/app\/package\.json|services\/app\/scripts\/(?:build-server-reader|server-reader-cache|build-libraries|precompress)\.mjs|scripts\/build\/build-html-components\.mjs|scripts\/lib\/(?:html-components-build|component-asset-proof)\.mjs|services\/app\/lib\/(?:html-components|html-component-specs|libraries|dataflow|markdown|mermaid-images|ui-runtime)\/|services\/(?:contracts|utils)\/src\/)/;
 
 /**
  * The test-builds cache key from `git ls-files -s` output, over the paths `TEST_BUILD_INPUTS` accepts, tests excluded.

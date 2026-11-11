@@ -3,23 +3,23 @@
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
  *  - session-live (INTERNAL__SERVICE_SECRET): is a human session still live (the pages sessions' revalidation);
  *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`): a presented token, answered with its user, id,
- *    scopes, audience, expiry and, for a viewer token, the first-party actor and the page and function that asked. An
+ *    scopes, audience, expiry and, for an exchanged token, the credential it was issued for. An
  *    access token is read by the one bearer read every API request is admitted by (token, OAuth family fence,
  *    identity) and must be bound to this deployment's API or to a configured service (IDENTITY__SERVICE_AUDIENCES); a
- *    viewer or exchanged token is verified by its signature (./identity/service-tokens), an exchanged one also by its
+ *    exchanged token is verified by its signature (./identity/service-tokens) and by its
  *    parent credential's `live` in the identity views (`tokens` or `sessions`, the rule every reader re-checks with).
  *    Every kind needs an ACTIVE account. Asked
  *    with INTERNAL__SERVICE_SECRET the answer covers every token; asked with a configured service's own introspection
  *    secret it covers only tokens bound to that service's origin, every other one answering `{active: false}`;
  *  - THE IDENTITY MODULE's calls (contracts `IDENTITY_CALL_PATH`, `IdentityService`, INTERNAL__SERVICE_SECRET only):
- *    every write to users, tokens, handles, groups, memberships, invitations and the group mail outbox, and the
- *    viewer-token mint, run by the identity store (`./identity-store`) on `identityDb` (which must offer
+ *    every write to users, tokens, handles, groups, memberships, invitations and the group mail outbox, run by the
+ *    identity store (`./identity-store`) on `identityDb` (which must offer
  *    transactions: `identityDbOf(pool)`) against the app's tables (`appSchema`). `{method, input}` in; `{result}` or
  *    `{refused: {code, status, retry_after?, detail?}}` out, both 200; anything else (no transactional database, a
  *    failure) is 503 and the caller's call throws.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {API_RESOURCE_PATH,FIRST_PARTY_ACTOR,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -27,7 +27,7 @@ import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
-import {isViewerToken,verifyViewerToken,viewerTokenKey} from './identity/service-tokens';
+import {isServiceToken,verifyServiceToken,serviceTokenKey} from './identity/service-tokens';
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
 /** The configured service whose introspection secret `presented` is, compared in constant time; undefined when none. */
@@ -39,7 +39,7 @@ const serviceOf=(audiences:readonly ServiceAudience[],presented:string|undefined
 export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sessionAuthority',mount:app=>{
  const secret=readEnv(o.env,'INTERNAL__SERVICE_SECRET');
  const audiences=parseServiceAudiences(readEnv(o.env,'IDENTITY__SERVICE_AUDIENCES'));
- const viewerKey=o.cookieSecret?viewerTokenKey(o.cookieSecret):null;
+ const tokenKey=o.cookieSecret?serviceTokenKey(o.cookieSecret):null;
  /** A refusal Response, or the parsed JSON object body. `admitted` decides the credential (default: the installation's). */
  const admit=async(c:Context<AuthEnv>,admitted:(presented:string|undefined)=>boolean=presented=>serviceSecretMatches(presented,secret)):Promise<Response|Record<string,unknown>>=>{
   if(c.req.method!=='POST')return answer({error:'method_not_allowed'},405);
@@ -78,15 +78,14 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   if(typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
   const inactive=answer({active:false} satisfies IdentityIntrospectResponse);
   try{
-   if(isViewerToken(input.token)){
-    const claims=viewerKey?verifyViewerToken(viewerKey,audiences,input.token):null;
-    if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub)||(claims.par&&!await parentLive(claims.par,claims.sub)))return inactive;
-    return answer({active:true,user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),
-     actor:claims.par?null:{id:FIRST_PARTY_ACTOR,artifact_id:claims.act.artifact_id??null,function:claims.act.function??null},parent:claims.par??null} satisfies IdentityIntrospectResponse);
+   if(isServiceToken(input.token)){
+    const claims=tokenKey?verifyServiceToken(tokenKey,audiences,input.token):null;
+    if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub)||!await parentLive(claims.par,claims.sub))return inactive;
+    return answer({active:true,user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par} satisfies IdentityIntrospectResponse);
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;
-   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,actor:null,parent:null} satisfies IdentityIntrospectResponse);
+   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
@@ -98,7 +97,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   const db=o.identityDb,appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
   if(!transactional(db)||!appSchema)throw Error('identity_unavailable');
   await ensureIdentitySchema(db,{auth:authSchema,app:appSchema,read:readSchema});
-  return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain,serviceTokens:{secret:o.cookieSecret,audiences}});
+  return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
  })().catch(error=>{identity=null;throw error;});
  // The identity host's boot, started with the part: the app's boot waits for the views this creates, and this waits
  // (retrying while IdentityNotReady: the app's own tables come first) for the app's. Never awaited by a request.

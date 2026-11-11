@@ -35,11 +35,9 @@ interface Crumb {
 const PAGE_NAMES: Record<string, string> = {
   '/': 'artifacts',
   '/assets': 'assets',
-  '/schedules': 'schedules',
   '/chat': 'connected agents',
   '/datasets/new': 'new dataset',
   '/files/new': 'upload file',
-  '/programs/new': 'new program',
   '/connect': 'connect',
   '/start': 'get started',
   '/welcome': 'welcome',
@@ -76,7 +74,6 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
   if (path === '/docs-human') return [{ label: 'docs' }];
   if (path === '/getting-started') return [{ label: 'docs', href: '/docs-human' }, { label: 'getting started' }];
 
-  if (/^\/programs\/[^/]+\/edit$/.test(path)) return [{ label: named ?? 'edit program' }];
 
   const name = PAGE_NAMES[path] ?? named;
   return name ? [{ label: name }] : [];

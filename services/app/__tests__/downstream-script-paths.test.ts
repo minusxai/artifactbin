@@ -44,7 +44,6 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/app/scripts/copy-assets.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:5 (runs it from the toolkit root for the native build)'] },
   { path: 'services/app/scripts/build-server-reader.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:6 (runs it from toolkit/services/app)'] },
   { path: 'services/app/lib/html-runtime/build.server.ts', repo: SERVER, usedAt: ['scripts/build-native-core.mjs:9,33 (imports the runtime build)'] },
-  { path: 'services/runner/src/', repo: SERVER, holds: ['model.mjs', 'runner-worker.mjs', 'server.ts'], usedAt: ['services/runner/application.ts:1 (imports model.mjs)', 'scripts/build-source.mjs:35 (copies every .mjs beside the worker)', 'scripts/source-api.mjs:14 (aliases src/server.ts)'] },
   { path: 'services/sql/src/', repo: SERVER, holds: ['pool-worker.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:40 (emits pool-worker beside the bundle)', 'scripts/source-api.mjs:14'] },
   { path: 'services/browser/src/', repo: SERVER, holds: ['upload-gateway-server.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:41 (bundles the upload gateway)', 'services/browser/main.mjs:1', 'scripts/source-api.mjs:14'] },
   { path: 'services/events/src/server.ts', repo: SERVER, usedAt: ['scripts/source-api.mjs:14 (aliases @artifactbin/events/server)'] },

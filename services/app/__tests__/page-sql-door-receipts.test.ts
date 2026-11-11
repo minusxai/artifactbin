@@ -6,7 +6,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { admitGroupMember, setSession, useAppHarness } from './harness';
 import { getDb, services } from '@/lib/platform';
-import { resolverDatasets } from '@/lib/graphql-compat';
 import { createGroup, removeGroupMember } from '@/lib/groups';
 import { person, publish, sql, gql, ROWS, POLICY, fixture, stored, refused } from './page-sql-door-fixture';
 
@@ -277,25 +276,6 @@ it('review2: GraphQL aliases cannot bypass receipt redaction', async () => {
   expect((await gql(f.page, f.viewer, text, undefined, key)).body.data?.update_staff.leaked).toEqual([{ name: 'bo', team: 'blue' }]);
   await db.query("UPDATE artifact_shares SET role='viewer' WHERE artifact_id=$1 AND user_id=$2", [f.staff, f.viewer.userId]);
   expect((await gql(f.page, f.viewer, text, undefined, key)).body.data?.update_staff).toEqual({ affected_rows: 0, leaked: [] });
-});
-
-it('review2: resolver caps.query loses page authority before commit', async () => {
-  const f = await fixture(), engine = services().sql, original = engine.mutate.bind(engine);
-  const before = await stored(f.staff);
-  let moved = false;
-  const spy = vi.spyOn(engine, 'mutate').mockImplementation(async input => {
-    const result = await original(input);
-    if (!moved) {
-      moved = true;
-      await (await getDb()).query("UPDATE artifacts SET visibility='private', sharing_revision=sharing_revision+1 WHERE id=$1", [f.page]);
-    }
-    return result;
-  });
-  try {
-    await resolverDatasets.query!({pageId: f.page, caller: {subject: f.other.userId!, role: 'viewer'}, operation: 'mutation', args: {query: 'mutation { insert_staff_one(object: {name: "revoked-resolver"}) { name } }'}}).catch(() => null);
-  } finally { spy.mockRestore(); }
-  expect(moved).toBe(true);
-  expect(await stored(f.staff)).toEqual(before);
 });
 
 it('review2: same role with changed filter withholds SQL receipt rows', async () => {

@@ -22,7 +22,6 @@ import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { EXTERNALS } from './runtime-externals.mjs';
-import { copyRunnerAssets } from './copy-runner-assets.mjs';
 import { prebuiltHtmlCore, prebuiltPreviewAssets } from './html-core.mjs';
 
 const out = process.argv[2] ?? 'dist/server.mjs';
@@ -60,5 +59,3 @@ await esbuild.build({
 if (!existsSync(out)) { console.error(`build-server: ${out} missing`); process.exit(1); }
 console.log(`build-server: ${entry} → ${out}`);
 
-// Only compositions owning local execution launch these workers. Packaged CLI hosts use HTTP.
-await copyRunnerAssets(dirname(out),{remoteRunner:process.argv.includes('--remote-runner')});

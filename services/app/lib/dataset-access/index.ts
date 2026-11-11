@@ -15,7 +15,6 @@ export {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 export {authorityShape,readAuthorityIn,rowsNow,shownRows,type ReadAuthority,type WrittenOutcome} from './write-reply';
 export type {DatasetSnapshot,DatasetStatement} from './types';
 export {runPageSql,type PageSqlAnswer,type PageSqlCall} from './page-sql';
-export {planLinkedDatasetTables} from './sql-read';
 export {executePageSql} from './page-sql-door';
 export {offlinePageSqlData} from './offline-sql';
 export {datasetPermissionTemplates,readDatasetPermissions,writeDatasetPermissions} from './policy';

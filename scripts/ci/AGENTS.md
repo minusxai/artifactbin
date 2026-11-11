@@ -18,7 +18,7 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
 - `CI_BUDGETS` in `scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`, owns these
   numbers. Never raise a budget, skip coverage, subtract queues or rerun unchanged code to hide slowness,
   and never move a file out of the lane: investigate the critical path and repetition.
-- `ci.yml`, page-speed, credential-platform and runner-design run on main or by hand, never on automatic PRs.
+- `ci.yml`, page-speed and credential-platform run on main or by hand, never on automatic PRs.
   Never add an unbounded PR workflow or wait for full release checks before merging; a green `pr fast` is
   never tested-release evidence. The 40/60 policy holds in the application, proxy, evaluator and deployment
   repositories alike.

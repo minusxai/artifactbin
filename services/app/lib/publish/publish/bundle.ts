@@ -13,7 +13,7 @@ class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_no
  * even when an editor saves); `dependencies` are the page's recorded receipts, the
  * only mappings reused without an edit-access check.
  */
-export interface BundlePage {id:string;resolvedBackendNames:readonly string[];dependencies:readonly unknown[];creator:TokenHoldingActor;newFilesRefused?:boolean}
+export interface BundlePage {id:string;dependencies:readonly unknown[];creator:TokenHoldingActor;newFilesRefused?:boolean}
 const MAPPING_ID=/^[A-Za-z0-9]{6,128}$/;
 /** Why a project file cannot publish with its page, and what to do instead. */
 const unsupportedFile=(path:string):string=>/\.html?$/i.test(path)?`unsupported_file_type: ${path} is a page: publish it on its own and link its address`:`unsupported_file_type: ${path}; a page publishes files of these types: ${FILE_EXTENSIONS.join(', ')}`;
@@ -29,12 +29,7 @@ function csvDatasetFields(path:string,csv:string):{title:string;name?:string;col
 export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Response>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
- try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle,resolvedBackendNames:[...page?.resolvedBackendNames??[],...Object.entries(body.resolverSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
- if(Object.keys(plan.resolverSources).length){
-  const explicit=body.resolverSources as Record<string,unknown>|undefined;
-  if(explicit&&Object.entries(plan.resolverSources).some(([name,source])=>explicit[name]!==undefined&&explicit[name]!==source))return json({error:'conflicting_backend_sources'},400);
-  body={...body,resolverSources:{...explicit,...plan.resolverSources}};
- }
+ try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
  if(!bundle)return {body,receipts:[]};
  const key=request?.headers.get('Idempotency-Key');if(!key||!/^[-_A-Za-z0-9]{16,128}$/.test(key))return json({error:'bundle_idempotency_required'},400);
  // Each file is authorized on its own, before anything is written: a recorded,
@@ -78,7 +73,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
    const row=reusable(path,mapping)?await getArtifactById(mapping.id):await getArtifactFor(actor,mapping.id);
    if(!row&&!reusable(path,mapping))throw new BundleFileRefusal('bundle_file_not_editable',path);
    // An unchanged file keeps what it published. An asset is served at its exact revision, so it must still be that
-   // one. A dataset is linked live (`ref:ID`) and is written to after publish (the page's sql, a scheduled function):
+   // one. A dataset is linked live (`ref:ID`) and is written to after publish (the page's sql):
    // its head moving past the recorded revision is the dataset being used, not a conflict, and an unchanged CSV is
    // never re-imported over those rows. A CHANGED CSV takes `update`: a conditional replace of the recorded revision,
    // refused when a newer one exists (the content write's expectedVersion/expectedState), so newer rows are never overwritten.

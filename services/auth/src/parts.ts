@@ -5,7 +5,7 @@ import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
-import {viewerTokenKey} from './identity/service-tokens';
+import {serviceTokenKey} from './identity/service-tokens';
 import {createOAuthStore,parseOAuthClients} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
@@ -183,7 +183,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
         aliasOrigins: aliasOriginsOf(o),
         serviceAudiences: parseServiceAudiences(readEnv(o.env, 'IDENTITY__SERVICE_AUDIENCES')),
-        serviceTokenKey: o.cookieSecret ? viewerTokenKey(o.cookieSecret) : null,
+        serviceTokenKey: o.cookieSecret ? serviceTokenKey(o.cookieSecret) : null,
       });
     },
   };

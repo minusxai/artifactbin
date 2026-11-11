@@ -1,5 +1,5 @@
 export type { Part, Upstream } from './part';
-export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type RunnerCaller, type RunnerAdmission, runnerAdmissionOf, type HumanSessionAuthority, type Credential } from './actor';
+export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type HumanSessionAuthority, type Credential } from './actor';
 export type { Queryable } from './db';
 export * from './sql';
 export * from './sql-analysis';
@@ -10,7 +10,6 @@ export * from './testusers';
 export * from './test-domain';
 export * from './mx';
 export * from './service-audiences';
-export * from './viewer-connections';
 export * from './events';
 export * from './event-feed';
 export * from './relations';
@@ -45,11 +44,6 @@ export * from './document-update';
 
 export * from './mutation-operations';
 
-export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunWait, RunEvent, RunReceipt, RunSnapshot, RunnerService } from './runner';
-
-export type {ResolverFetchReceipt} from './runner';
-export {FUNCTION_SCHEDULE_LIMIT,RESOLVER_LIMITS,RESOLVER_DATABASE_LIMITS,RESOLVER_DATABASE_OPERATION,RESOLVER_DATABASE_CHECK_OPERATION,RESOLVER_DATABASE_KINDS,isResolverDatabaseKind} from './runner';
-export type {ResolverDatabaseKind} from './runner';
 
 // Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
 // makes esbuild's split reader graph load that chunk through unrelated contract imports.

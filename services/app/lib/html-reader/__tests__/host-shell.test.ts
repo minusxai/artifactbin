@@ -1,6 +1,6 @@
 /**
  * THE DOCUMENT HOST MODULE (lib/html-reader/host-shell, /af/host.js) through the real app server: a plain HTML host
- * page on the app's own origin mounts a document, and the page's `fetch('/fn/NAME')` and `sql` reach the real doors as
+ * page on the app's own origin mounts a document, and the page's `sql` reaches the real door as
  * the signed-in reader, pinned to the served revision exactly as the app page's bridge pins them. A signed-out or
  * unauthorised reader gets the app page's refusals; a host page on another origin is refused by the module.
  *
@@ -9,12 +9,10 @@
  * played by messages from the frame's window on the document's origin, as its door sends them.
  */
 import { JSDOM } from 'jsdom';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createRunner } from '@artifactbin/runner/local';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { getDb, setServices } from '@/lib/platform';
-import { localPageBackendCapability } from '@/lib/page-operations';
 import { createArtifactFromBody } from '@/lib/publish';
 import { identityForUser } from '@/lib/accounts';
 import { pagesOriginFor, pagesSite } from '@/lib/http';
@@ -29,16 +27,9 @@ import { guideExamples } from '@/test/helpers/skill-docs';
 const site = pagesSite();
 const APP = site.app;
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><body><div id="root"></div></body></html>', pagesSite: site });
-const API = `export const roles={mine:'signed_in'};
-export default { async whoami(args,principal){return {args,principal};}, async mine(_a,p){return p.subject;} };`;
 
 const harness = useAppHarness();
-let runner: Awaited<ReturnType<typeof createRunner>>;
-beforeAll(async () => {
-  runner = await createRunner({ db: await harness.db(), capabilities: (context, operation, args) => localPageBackendCapability(context.request, operation, args) });
-  setServices({ runner, humanSessions: { live: async (ref) => ref.startsWith('host-') } });
-});
-afterAll(async () => { await runner?.close(); });
+beforeAll(() => { setServices({ humanSessions: { live: async (ref) => ref.startsWith('host-') } }); });
 
 const world = harness.shared(async () => {
   const owner = await mintAccountToken('host_owner'), stranger = await mintAccountToken('host_stranger');
@@ -47,9 +38,9 @@ const world = harness.shared(async () => {
   const people = (await dataset.json() as { id: string }).id;
   await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [people, JSON.stringify({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [
     { role: 'signed_in', permission: { columns: '*', filter: {} } }, { role: 'anonymous', permission: { columns: ['name'], filter: {} } }] }] })]);
-  const head = `<link rel="af-resolver" data-af-name="api" href="./api.ts"><link rel="af-dataset" data-af-name="people" href="ref:${people}">`;
+  const head = `<link rel="af-dataset" data-af-name="people" href="ref:${people}">`;
   const publish = async (visibility: string) => {
-    const created = await createArtifactFromBody({ visibility, html: `<html><head>${head}</head><body><h1 data-af-id="title">Plan</h1></body></html>`, resolverSources: { api: API } }, actor, APP);
+    const created = await createArtifactFromBody({ visibility, html: `<html><head>${head}</head><body><h1 data-af-id="title">Plan</h1></body></html>` }, actor, APP);
     const body = await created.json() as { id: string };
     expect(created.status, JSON.stringify(body)).toBe(201);
     return body.id;
@@ -92,7 +83,7 @@ function framedDocument(win: Window & typeof globalThis, mounted: MountedDocumen
 }
 
 describe('a host page on the app\'s own origin', () => {
-  it('mounts a private document for its signed-in reader, whose functions and sql run as that reader on the served revision', async () => {
+  it('mounts a private document for its signed-in reader, whose sql runs as that reader on the served revision', async () => {
     const w = world();
     const { win, container } = hostPage(session(w.owner));
     const ready: unknown[] = [];
@@ -111,14 +102,13 @@ describe('a host page on the app\'s own origin', () => {
     expect(doc.attach.message.payload).toMatchObject({ kind: 'attach', id: w.privatePage });
     expect(ready).toEqual([{ nonce: 'n'.repeat(16) }]);
 
-    const who = await doc.fetchThrough(`/api/artifacts/${w.privatePage}/fn/whoami`, 'POST', '{"limit":5}');
-    expect(who.status).toBe(200);
-    expect(who.body).toEqual({ args: { limit: 5 }, principal: { tenant: w.privatePage, subject: w.owner.userId, role: 'owner' } });
     const rows = await doc.fetchThrough(`/api/artifacts/${w.privatePage}/sql`, 'POST', JSON.stringify({ sql: 'select name from people order by name', params: {} }));
     expect(rows.status, JSON.stringify(rows.body)).toBe(200);
     expect(rows.body.rows).toEqual([{ name: 'ada' }, { name: 'bo' }]);
     // The relays stay pinned as on the app page: another document's door is never reached.
-    expect(await doc.fetchThrough(`/api/artifacts/${w.publicPage}/fn/whoami`, 'POST', '{}')).toMatchObject({ error: 'refused' });
+    expect(await doc.fetchThrough(`/api/artifacts/${w.publicPage}/sql`, 'POST', JSON.stringify({ sql: 'select 1', params: {} }))).toMatchObject({ status: 403 });
+    // A path no relay knows (a page function's, which no longer exists) is refused, never reached.
+    expect(await doc.fetchThrough(`/api/artifacts/${w.privatePage}/fn/whoami`, 'POST', '{}')).toMatchObject({ error: 'refused' });
     // The parent's commands reach the frame through the bridge.
     mounted.setMode('dark');
     mounted.select('title', { reveal: true });
@@ -143,13 +133,13 @@ describe('a host page on the app\'s own origin', () => {
       expect((refused as HostShellError).code).toBe('not_found');
       expect(container.querySelector('iframe')).toBeNull();
     }
-    // A public document mounts signed out; a function that needs a reader says so, and sql reads the anonymous view.
+    // A public document mounts signed out, and its sql reads the anonymous view.
     const { win, container } = hostPage(null);
     const mounted = await mountDocument(container, { id: w.publicPage }, win);
     const doc = framedDocument(win, mounted);
-    expect(await doc.fetchThrough(`/api/artifacts/${w.publicPage}/fn/mine`, 'POST', '{}')).toMatchObject({ status: 403, body: { error: 'sign_in_required' } });
-    const who = await doc.fetchThrough(`/api/artifacts/${w.publicPage}/fn/whoami`, 'GET', null);
-    expect(who.body.principal).toEqual({ tenant: w.publicPage, subject: null, role: 'anonymous' });
+    const rows = await doc.fetchThrough(`/api/artifacts/${w.publicPage}/sql`, 'POST', JSON.stringify({ sql: 'select name from people order by name', params: {} }));
+    expect(rows.status, JSON.stringify(rows.body)).toBe(200);
+    expect(rows.body.rows).toEqual([{ name: 'ada' }, { name: 'bo' }]);
     mounted.destroy();
   });
 });

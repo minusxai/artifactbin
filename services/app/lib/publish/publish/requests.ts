@@ -1,18 +1,15 @@
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
-import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, ScheduleRefusal, setMetadataFor } from '@/lib/artifacts';
+import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
-import {htmlAssetLinks, htmlBackendNames, htmlGraphqlSources, htmlPageDeclarations} from '@/lib/html-page';
+import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
-import {compilePageBackend,composePageSchema,pageDocumentProblems} from '@/lib/page-operations';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
-import {pageDatasetCheckSources,pageDatasetRoots} from '@/lib/graphql-compat';
-import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlPageLink} from '@artifactbin/contracts';
+import {pageDatasetRoots} from '@/lib/graphql-compat';
+import type {HtmlDatasetLink,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
 import {hasDefaultConnection} from '@/lib/connections';
-import {credentialNames,type PreparedHtmlBackend} from '@/lib/html-backends';
-import {pageFunctionPublishRefusal} from './function-rules';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
  * auth modes and the operations registry run over one pipeline. Story owns the
@@ -25,7 +22,7 @@ import {pageFunctionPublishRefusal} from './function-rules';
 import { CONTENT_FIELDS, PAGE_SQL_ROOT, PAGE_SQL_TYPES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { prepareCatalog, catalogOf, DatasetError, graphqlRootNameProblem } from '@/lib/datasets';
-import { json, thrownMessage } from '@/lib/http';
+import { json } from '@/lib/http';
 import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
@@ -41,11 +38,11 @@ async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:str
 async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]|undefined|Response>{
  if(typeof body.html!=='string')return undefined;
  try{
-  const {backends,datasets,connections}=htmlPageDeclarations(body.html);
+  const {datasets,connections}=htmlPageDeclarations(body.html);
   // `default:` reads the install's default connection: refused where the install has none.
   if(connections.length&&!hasDefaultConnection())return json({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
-  const collision=await graphqlRootCollision(actor,backends,datasets);
+  const collision=await graphqlRootCollision(actor,datasets);
   if(collision)return json({error:'graphql_root_collision',details:[collision]},400);
   return [...datasets,...connections];
  }catch(error){
@@ -59,12 +56,11 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
  * another link's generated root or type refuses the page, naming both links; so does one meeting the built-in viewer
  * or `_sql`.
  */
-async function graphqlRootCollision(actor:AccessActor,backends:readonly string[],datasets:readonly HtmlDatasetLink[]):Promise<string|null>{
+async function graphqlRootCollision(actor:AccessActor,datasets:readonly HtmlDatasetLink[]):Promise<string|null>{
  const reserved=(name:string)=>name===PAGE_VIEWER_ROOT||name===PAGE_VIEWER_TYPE?'the built-in viewer query':name===PAGE_SQL_ROOT||(PAGE_SQL_TYPES as readonly string[]).includes(name)?'the built-in read-only SQL query':null;
  const builtIn=(link:string,name:string)=>`link "${link}" ${link===name?'names':'generates'} ${name}, ${reserved(name)}; rename the link`;
  // Every page answers the built-in viewer and `_sql`: no link may be named, or generate, their roots or types.
- for(const name of backends)if(name===PAGE_VIEWER_ROOT||name===PAGE_SQL_ROOT)return builtIn(name,name);
- const owner=new Map<string,string>([...backends,...datasets.map(link=>link.name)].map(name=>[name,name]));
+ const owner=new Map<string,string>(datasets.map(link=>[link.name,link.name]));
  for(const link of datasets){
   for(const name of await pageDatasetRoots(actor,link)){
    if(reserved(name))return builtIn(link.name,name);
@@ -74,46 +70,6 @@ async function graphqlRootCollision(actor:AccessActor,backends:readonly string[]
   }
  }
  return null;
-}
-
-async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
- // preparePublicationBundle adds the bundle's resolver files to resolverSources for every html save.
- if(body.resolverSources===undefined){
-  if(creating&&typeof body.html==='string'&&htmlBackendNames(body.html).length)return json({error:'unresolved_backend_link'},400);
-  return undefined;
- }
- if(typeof body.html!=='string'||!body.resolverSources||typeof body.resolverSources!=='object'||Array.isArray(body.resolverSources))return json({error:'invalid_backend_sources'},400);
- const entries=Object.entries(body.resolverSources as Record<string,unknown>);
- if(entries.length>20||entries.some(([name,source])=>!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||typeof source!=='string'||Buffer.byteLength(source)>4_000_000))return json({error:'invalid_backend_sources'},400);
- try{
-  const names=htmlBackendNames(body.html);
-  if(entries.some(([name])=>!names.includes(name))||creating&&names.some(name=>!entries.some(([key])=>key===name)))throw Error('Backend sources must match HTML links');
-  const prepared=await Promise.all(entries.map(async([name,source])=>({name,source:source as string,...await compilePageBackend(source as string)})));
-  if(prepared.length)composePageSchema(prepared.map(backend=>({name:backend.name,fileId:backend.name,version:'prepared',typeDefs:backend.typeDefs})));
-  return prepared;
- }
- catch(error){return json({error:'invalid_backend',details:[thrownMessage(error,'Invalid backend')]},400);}
-}
-
-const PAGE_GRAPHQL_HINT='A resolver\'s caps.query and the page\'s own queries run on the page\'s GraphQL, where a linked dataset is named by its data-af-name, not by its own API name. Use the names given and publish again.';
-/**
- * A save carrying resolver sources: the GraphQL documents its resolvers pass to caps.query, and the page's own static
- * gql documents, against the page's names (lib/page-operations `pageDocumentProblems`, over each linked dataset's
- * role-independent schema). A field the page lacks refuses the save before anything is written, naming the fix:
- * every such call would otherwise fail at run time with a detail only the owner sees. Nothing checkable is no refusal.
- */
-async function pageGraphqlRefusal(actor:AccessActor,html:unknown,links:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]|undefined,backends:readonly PreparedHtmlBackend[]|undefined):Promise<Response|null>{
- if(typeof html!=='string'||!backends?.length)return null;
- let schema:Awaited<ReturnType<typeof pageDatasetCheckSources>>;
- const datasets=links?.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
- try{schema=await pageDatasetCheckSources(actor,datasets??[]);}catch{return null;}
- const {resolverFiles,scripts}=htmlGraphqlSources(html),prepared=new Set(backends.map(backend=>backend.name));
- const problems=await pageDocumentProblems({
-  datasetSdl:schema?.sdl??null,datasets:schema?.sources??[],
-  backends:backends.map(({name,typeDefs})=>({name,typeDefs})),unchecked:htmlBackendNames(html).filter(name=>!prepared.has(name)),
-  resolvers:backends.map(backend=>({label:`resolver ${resolverFiles[backend.name]??backend.name+'.ts'}`,source:backend.source})),scripts,
- });
- return problems.length?json({error:'invalid_page_graphql',details:problems,hint:PAGE_GRAPHQL_HINT},400):null;
 }
 
 /**
@@ -203,7 +159,7 @@ export async function replaceArtifactWithBody(
       const sharing=await getSharingFor(actor,id);
       body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
     }
-    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),{id,resolvedBackendNames:((current.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>link.kind==='backend').map(link=>link.name),dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
+    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
     if(bundled instanceof Response)return bundled;
     body=bundled.body;bundleReceipts=bundled.receipts;bundleEntryPath=bundled.entryPath;
   }
@@ -283,15 +239,11 @@ export async function replaceArtifactWithBody(
   if (changed) return json(versionConflict(current, changed), 409);
   const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
-  const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
-  const functionRefusal=await pageFunctionPublishRefusal(actor.userId,id,htmlBackends,(current.meta.htmlLinks??[]) as HtmlPageLink[]);if(functionRefusal)return functionRefusal;
-  const graphqlRefusal=await pageGraphqlRefusal(owner,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
     meta:{...parsed.meta,...(bundleSupplied?publicationRecord(bundleReceipts,bundleEntryPath):current.meta.htmlPublicationDependencies?publicationRecord(current.meta.htmlPublicationDependencies as unknown[],current.meta.htmlPublicationEntryPath):{})},
-    ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
     ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : parsed.format==='html'?{description:parsed.derivedDescription??null}:{}),
@@ -328,7 +280,7 @@ export async function replaceArtifactWithBody(
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, {...expected,expectedSharingRevision})
     : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
-  } catch(error) {if(error instanceof ScheduleRefusal)return json({error:error.code,details:error.details},error.status);if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
+  } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
   // uniform 404 below for a governed dataset the caller is looking straight
@@ -422,11 +374,6 @@ async function createArtifactFromBodyPrepared(
 
   const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
-  const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
-  const functionRefusal=await pageFunctionPublishRefusal(actor.userId,null,htmlBackends,[]);if(functionRefusal)return functionRefusal;
-  // A credential is a person's (lib/html-backends authority): a group-owned page carries governed bindings only, as its republish does.
-  if(destination.type==='group'&&htmlBackends?.some(backend=>credentialNames(backend).length))return json({error:'backend_credentials_owner_required',details:htmlBackends.flatMap(backend=>credentialNames(backend).map(name=>`resolver "${backend.name}" declares ${name}, a credential: a group-owned page holds no one's credentials; publish it as your own page, or use a 'viewer' connection`))},403);
-  const graphqlRefusal=await pageGraphqlRefusal(publicationActor,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup,receiptOwner)});
@@ -434,7 +381,6 @@ async function createArtifactFromBodyPrepared(
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
     meta:{...parsed.meta,...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
-    ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
     description: body.description===null || typeof body.description === 'string' ? body.description : parsed.derivedDescription??null,
@@ -442,7 +388,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof ScheduleRefusal)return json({error:error.code,details:error.details},error.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

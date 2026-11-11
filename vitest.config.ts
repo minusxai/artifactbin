@@ -41,12 +41,12 @@ const leaking = (include: string[], exclude: string[]) => globSync(include, { cw
   .map((file) => file.split(path.sep).join('/'));
 const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
-const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
+const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
- * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS, and the
- * authorization lock order across two real Postgres connections: `integration` only, as the Docker proofs are.
+ * The authorization lock order across two real Postgres connections and the split-role grants: `integration` only,
+ * as the Docker proofs are.
  */
-const REAL_DATABASE_RESOLVER_TESTS = ['services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
+const REAL_DATABASE_TESTS = ['services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
@@ -129,7 +129,7 @@ export default defineConfig({
             '**/*.ui.test.{ts,tsx}',
             ...CHROMIUM_TESTS,
             'scripts/__tests__/reserved-ids-proof.test.mjs',
-            ...REAL_DATABASE_RESOLVER_TESTS,
+            ...REAL_DATABASE_TESTS,
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
             ...PROPERTY_SOAK_TESTS,
           ],
@@ -158,7 +158,7 @@ export default defineConfig({
             // a disposable Postgres (a `skipIf` on the image).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             // caps.db end to end: a resolver through the tunnel to a disposable TLS Postgres and MySQL (a `skipIf` on each image).
-            ...REAL_DATABASE_RESOLVER_TESTS,
+            ...REAL_DATABASE_TESTS,
             ...SERVER_BOOT_TESTS,
             ...PROPERTY_SOAK_TESTS,
           ],

@@ -23,7 +23,7 @@ const byIsolation = (name: string, list: string, test: Record<string, unknown>) 
 //    nothing they spawn opens the dev server's store (services/app/lib/platform/__tests__/test-database-isolation).
 //  - pr-contracts (scripts/ci/contract-tests.json): route-level contracts another repository runs against its
 //    production composition after merge (minusxai/artifactbin-server's native acceptance). They need the real
-//    handlers, a database and the resolver runner, so they take the full suite's environment and setup file.
+//    handlers and a database, so they take the full suite's environment and setup file.
 // pr fast runs this config as two `--shard` jobs (`guards`, `guards-2`): on a 4-vCPU runner the whole list was ~100s
 // of worker CPU, a 35-59s step on its own. The full suite's timed sequencer packs both projects' files by their
 // measured CI time (scripts/ci/test-timings.json) onto the shards, longest first, so each file runs exactly once.
@@ -43,8 +43,8 @@ export default defineConfig({
         setupFiles: ['./services/app/test/setup/guard.setup.ts'],
         env: { APP_PACKAGE_ROOT: new URL('./services/app', import.meta.url).pathname, DATABASE_URL: suiteEnv(import.meta.dirname).DATABASE_URL },
         // The first database use in a worker pays the cold boot, in a hook or in a test body, and on a loaded runner
-        // that alone has passed 5s: html-backends/store.test.ts in `beforeAll` (run 42819140233) and
-        // operations/registry.test.ts in a test that locally takes 0.7s (7.2s, run 42828858143). Both get the
+        // that alone has passed 5s: operations/registry.test.ts in a test that locally takes 0.7s (7.2s, run
+        // 42828858143). It gets the
         // contract project's 20s; the lane's own 60s clock is what fails a slow run.
         testTimeout: 20000,
         hookTimeout: 20000,

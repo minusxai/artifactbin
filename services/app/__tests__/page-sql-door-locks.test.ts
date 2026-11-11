@@ -9,7 +9,6 @@ import { getDb, TransactionConflict } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
-import { resolverDatasets } from '@/lib/graphql-compat';
 import { createGroup, deleteGroup } from '@/lib/groups';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
@@ -39,7 +38,7 @@ it('review3: malformed requests do not distinguish an unreadable page from a mis
   expect(await call(f.page)).toEqual(await call('missing_review3_page'));
 });
 
-it.each(['graphql', 'resolver'] as const)('review3: a group revoke between dataset authorization and page locks prevents %s commit', async door => {
+it('review3: a group revoke between dataset authorization and page locks prevents a graphql commit', async () => {
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle:'review3_group', name:'Review group'});
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
@@ -60,8 +59,7 @@ it.each(['graphql', 'resolver'] as const)('review3: a group revoke between datas
   }));
   try {
     const query = 'mutation { update_staff(where: {}, _set: {team: "black"}) { affected_rows } }';
-    if (door === 'graphql') await gql(f.page, f.other, query);
-    else await resolverDatasets.query!({pageId:f.page, caller:{subject:f.other.userId!, role:'viewer'}, operation:'mutation', args:{query}});
+    await gql(f.page, f.other, query);
   } finally { spy.mockRestore(); }
   expect(revoked).toBe(true);
   expect(await stored(f.staff)).toEqual(before);
@@ -171,7 +169,6 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
     path = 'sql door'; await sql(f.page, f.other, "insert into staff (name) values ('o1')");
     path = 'sql door, cross-link read'; await sql(f.page, f.other, 'insert into staff (name) select note from notes');
     path = 'graphql'; await gql(f.page, f.other, 'mutation { insert_staff_one(object: {name: "o2"}) { name } }');
-    path = 'resolver'; await resolverDatasets.query!({ pageId: f.page, caller: { subject: f.other.userId!, role: 'viewer' }, operation: 'mutation', args: { query: 'mutation { insert_staff_one(object: {name: "o3"}) { name } }' } });
     path = 'sharing'; await updateSharingFor(f.owner.actor, f.page, { shares: [] });
     path = 'group share'; await setArtifactGroupShare(f.owner.actor, f.page, group.id, 'viewer');
     path = 'group-owned publish'; await createArtifact(null, f.owner.userId, { format: 'html', source: '<p>group page</p>', meta: {}, title: 'Group page', destination: { type: 'group', id: group.id } });
@@ -180,9 +177,9 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
   expect(bad, JSON.stringify(bad)).toEqual([]);
   // Each path locked something it is pinned for; the guarded ones locked their page before the dataset.
   // (A test user's erasure, the third competing writer, is pinned in lib/operations' own test: testusers-erase.test.ts.)
-  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'resolver', 'sharing', 'group share'])
+  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'sharing', 'group share'])
     expect(traces.some((t) => t.path === p && (t.artifacts.length || t.facts)), p).toBe(true);
-  for (const p of ['sql door', 'graphql', 'resolver']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
+  for (const p of ['sql door', 'graphql']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
   expect(traces.find((t) => t.path === 'sql door, cross-link read' && t.artifacts.length)?.artifacts.slice(0, 3)).toEqual([f.page, ...[f.staff, f.notes].sort(lockOrder)]);
 });
 
@@ -200,16 +197,15 @@ describe('retry on deadlock and serialization failure', () => {
       return transaction(callback);
     });
   };
-  it.each(['40P01', '40001'])('guarded writes (SQL door, page GraphQL, caps.query) retry whole and apply once (%s)', async (code) => {
+  it.each(['40P01', '40001'])('guarded writes (SQL door, page GraphQL) retry whole and apply once (%s)', async (code) => {
     const f = await fixture(), db = await getDb();
     for (const [door, write] of [
       ['sql', () => sql(f.page, f.other, "insert into staff (name) values ('retried-sql')")],
       ['graphql', () => gql(f.page, f.other, 'mutation { insert_staff_one(object: {name: "retried-gql"}) { name } }')],
-      ['resolver', () => resolverDatasets.query!({ pageId: f.page, caller: { subject: f.other.userId!, role: 'viewer' }, operation: 'mutation', args: { query: 'mutation { insert_staff_one(object: {name: "retried-resolver"}) { name } }' } })],
     ] as const) {
       const spy = failing(db, 1, code);
       try { await write(); } finally { spy.mockRestore(); }
-      expect([door, (await stored(f.staff)).filter((r) => String(r.name).startsWith(`retried-${door === 'sql' ? 'sql' : door === 'graphql' ? 'gql' : 'resolver'}`)).length]).toEqual([door, 1]);
+      expect([door, (await stored(f.staff)).filter((r) => String(r.name).startsWith(`retried-${door === 'sql' ? 'sql' : 'gql'}`)).length]).toEqual([door, 1]);
     }
   });
   it('an exhausted retry is a clean retryable conflict, nothing is written, and its key replays the refusal', async () => {

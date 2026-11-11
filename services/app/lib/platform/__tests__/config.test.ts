@@ -35,7 +35,6 @@ describe('settings', () => {
       IMAGES__MAX_BYTES: '13', PDF__MAX_BYTES: '14', FILES__MAX_BYTES: '15', EMAIL__RESEND_API_KEY: 'resend',
       EXPORT__INTERNAL_ORIGIN: ' http://export ', APP__USER_PAGES_HOST: 'U.Example.net.', BROWSER__SERVICE_URL: 'http://browser',
       AUTH__SERVICE_URL:'http://auth', INTERNAL__SERVICE_SECRET: 'internal', EVENTS__SERVICE_URL: 'http://events', EVENTS__SCHEMA: 'facts',
-      RUNNER__SERVICE_URL: 'http://runner',
     });
     expectSettings(config, [
       ['IS_TEST', false],
@@ -73,7 +72,6 @@ describe('settings', () => {
       ['AUTH_SERVICE_URL','http://auth'], ['INTERNAL_SERVICE_SECRET', 'internal'],
       ['EVENTS_SERVICE_URL', 'http://events'],
       ['EVENTS_SCHEMA', 'facts'],
-      ['RUNNER_SERVICE_URL', 'http://runner'],
     ]);
     expect(config.requirePagesHost()).toBe('pages.example.com');
   });
@@ -110,7 +108,7 @@ describe('settings', () => {
       ['EXPORT_INTERNAL_ORIGIN', 'http://127.0.0.1:3000'],
       ['USER_PAGES_HOST', null],
       ['EVENTS_SCHEMA', 'events'],
-      ['RUNNER_ACTOR_SECRET', undefined],
+      ['ACTOR_SECRET', undefined],
     ]);
     expect(config.MAX_IMAGE_BYTES).toBe(config.MAX_PDF_BYTES);
     expect(config.MAX_FILE_BYTES).toBeGreaterThan(0);

@@ -23,6 +23,5 @@ export {parseSharingEntries} from './sharing';
 export { isBuildAssetPath, buildAssetRequest, buildAssetResponse } from './build-assets';
 export { renderConnectionPage } from './connection-page';
 
-export {runnerClient} from "./runner-client";
 export {humanSessionClient} from './human-session';
 export {identityClient} from './identity-client';

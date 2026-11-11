@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb,type Queryable} from '@/lib/platform/db';
-import {dataServices,overrideConfig,pageSchedulesEnabled,serviceAudiences} from '@/lib/platform/config';
+import {overrideConfig,serviceAudiences} from '@/lib/platform/config';
 import {canUseDeploymentIdentity} from '@/lib/accounts';
 import {DeploymentError,admitDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
 useAppHarness();
@@ -128,23 +128,18 @@ describe('deployment configuration and public mode',()=>{
  });
 });
 
-describe('service audiences, data services and the page-schedules switch at boot',()=>{
- const unset={APP__DEPLOYMENT_MODE:'public',AUTH__ALLOWED_EMAIL_PATTERNS:undefined,IDENTITY__SERVICE_AUDIENCES:undefined,DATA_SERVICES__TRUSTED:undefined,SCHEDULES__PAGE_SCHEDULES:undefined};
+describe('service audiences at boot',()=>{
+ const unset={APP__DEPLOYMENT_MODE:'public',AUTH__ALLOWED_EMAIL_PATTERNS:undefined,IDENTITY__SERVICE_AUDIENCES:undefined};
  const hash='a'.repeat(64);
- it('none set: no service, no data service, page schedules on',()=>{
+ it('none set: no service',()=>{
   overrideConfig({},unset);
   expect(()=>validateDeploymentConfiguration()).not.toThrow();
   expect(serviceAudiences()).toEqual([]);
-  expect(dataServices()).toEqual([]);
-  expect(pageSchedulesEnabled()).toBe(true);
  });
  it('a complete set boots and normalizes origins',()=>{
-  overrideConfig({},{...unset,IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:'https://Data.Example.com/',introspection_secret_sha256:hash}]),
-   DATA_SERVICES__TRUSTED:JSON.stringify([{id:'warehouse',session_url:'https://data.example.com/v1/sessions',audience:'warehouse'}]),SCHEDULES__PAGE_SCHEDULES:'off'});
+  overrideConfig({},{...unset,IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:'https://Data.Example.com/',introspection_secret_sha256:hash}])});
   expect(()=>validateDeploymentConfiguration()).not.toThrow();
   expect(serviceAudiences()).toEqual([{id:'warehouse',origin:'https://data.example.com',introspectionSecretSha256:hash}]);
-  expect(dataServices()).toEqual([{id:'warehouse',sessionUrl:'https://data.example.com/v1/sessions',audience:'warehouse'}]);
-  expect(pageSchedulesEnabled()).toBe(false);
  });
  it('a malformed value refuses the boot by name',()=>{
   for(const [bad,message] of [
@@ -154,10 +149,6 @@ describe('service audiences, data services and the page-schedules switch at boot
    [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'https://a.example/path'}])},/IDENTITY__SERVICE_AUDIENCES/],
    [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'https://a.example',introspection_secret_sha256:'secret'}])},/IDENTITY__SERVICE_AUDIENCES/],
    [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'https://a.example'},{id:'w',origin:'https://b.example'}])},/repeats/],
-   [{DATA_SERVICES__TRUSTED:JSON.stringify([{id:'w',session_url:'http://data.example.com/s',audience:'w'}])},/DATA_SERVICES__TRUSTED/],
-   [{DATA_SERVICES__TRUSTED:JSON.stringify([{id:'w',session_url:'https://u:p@data.example.com/s',audience:'w'}])},/DATA_SERVICES__TRUSTED/],
-   [{DATA_SERVICES__TRUSTED:JSON.stringify([{id:'w',session_url:'https://data.example.com/s'}])},/DATA_SERVICES__TRUSTED/],
-   [{SCHEDULES__PAGE_SCHEDULES:'never'},/SCHEDULES__PAGE_SCHEDULES must be on \(the default\) or off/],
   ] as const){
    overrideConfig({},{...unset,...bad});
    expect(()=>validateDeploymentConfiguration(),JSON.stringify(bad).slice(0,80)).toThrow(message);

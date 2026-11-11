@@ -44,7 +44,7 @@ const ts = createRequire(import.meta.url)('typescript');
 
 const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
-const PACKAGES = ['auth', 'browser', 'connectors', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
+const PACKAGES = ['auth', 'browser', 'connectors', 'contracts', 'events', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
@@ -254,8 +254,8 @@ export const DEEP_MODULES = {
 /**
  * Rule 5's table: the deprecated GraphQL compatibility layer (lib/graphql-compat/AGENTS.md) as path prefixes or exact
  * paths without extension, the header each of its files opens with, and the only files outside it that may import
- * it, each with why. New code reads data through `sql` (lib/dataset-access) and calls functions through
- * `fetch('/fn/<name>')` (lib/page-doors); an entry here is a reviewed edit, and the list only shrinks.
+ * it, each with why. New code reads and writes data through `sql` (lib/dataset-access, lib/page-doors); an entry here
+ * is a reviewed edit, and the list only shrinks.
  */
 export const GRAPHQL_COMPAT = {
   paths: ['services/app/lib/graphql-compat/', 'services/app/lib/html-runtime/apollo/graphql-compat'],
@@ -265,9 +265,7 @@ export const GRAPHQL_COMPAT = {
     'services/app/lib/operations/registry.ts': "the dataset GraphQL route's operation (executeDatasetGraphql)",
     'services/app/lib/local-connection/server.ts': "the local connection's page GraphQL route",
     'services/app/lib/html-runtime/browser-client.ts': 'the browser client entry: `client` and `gql` in @afbin/apollo',
-    'services/app/lib/publish/publish/requests.ts': "publishing checks a page's gql documents and generated root names",
-    'server.ts': "a resolver's caps.query in process (resolverDatasets)",
-    'services/app/app/api/runner/operations/route.ts': "a remote resolver's caps.query (resolverDatasets)",
+    'services/app/lib/publish/publish/requests.ts': "publishing checks a page's generated root names",
   },
 };
 /** A lib module without a row: entered only through its index (rule 4's default). */

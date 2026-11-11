@@ -1,1 +1,0 @@
-{"name":"artifactbin-isolate-worker","private":true,"type":"module","dependencies":{"isolated-vm":"5.0.4","postgres":"3.4.9","mysql2":"3.24.6"}}

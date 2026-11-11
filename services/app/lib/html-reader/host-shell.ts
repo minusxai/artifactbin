@@ -10,7 +10,7 @@
  *   doc.setMode('dark');
  *
  * What a host gets: the document in its frame as the signed-in reader (the frame's ticket comes from
- * /api/page/frame/<id> with this origin's session), its `sql` and `fetch('/fn/NAME')` relayed exactly as on the app
+ * /api/page/frame/<id> with this origin's session), its `sql` relayed exactly as on the app
  * page (path, revision and read-only pinning: frame-bridge/parent), reader mode and design system, selecting or
  * revealing a node, the address's hash, a top inset, following a new version, dataset wakeups, the frame's events
  * and link navigations, and the raw bridge (`bridge`) for the rest.

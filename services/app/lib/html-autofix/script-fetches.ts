@@ -3,7 +3,7 @@
  * substitution, `window.fetch(…)` alike. Read from the script's tokens, so comments and other strings never count; a
  * script that does not tokenize gives what precedes its error. Publish carries the project file each names
  * (lib/html-publication-bundle plan, the skill's snapshot in preview-html.mjs) and the page's core maps the path to it
- * (lib/html-runtime fn-fetch); autofix warns about a file a script names any other way. A fetch resolves against the
+ * (lib/html-runtime page-fetch); autofix warns about a file a script names any other way. A fetch resolves against the
  * document, never the file the call is in, so each path is the page's.
  */
 import {tokenizer,tokTypes as tt,type Token as AcornToken} from 'acorn';

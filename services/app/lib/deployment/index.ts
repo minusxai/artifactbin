@@ -3,7 +3,7 @@ import {recordGroupChanges} from '../groups';
 import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
-import { getDb, type Queryable, dataServices, deploymentConfig, embedTrustedOrigins, env, pageSchedulesEnabled, serviceAudiences, services } from '../platform';
+import { getDb, type Queryable, deploymentConfig, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
 import {groupTrustApprovalsEnabled} from '../platform';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
@@ -11,7 +11,7 @@ const ID='company';
 export class DeploymentError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
 /** Run at boot (server.ts): a refused setting stops the start with its name. */
 export function validateDeploymentConfiguration():void {
- serviceAudiences();dataServices();pageSchedulesEnabled();embedTrustedOrigins();
+ serviceAudiences();embedTrustedOrigins();
  // DATASETS__DEFAULT_CONNECTION (lib/connections): here too, so a downstream composition refuses a bad value at boot.
  validateDefaultConnection();
  const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});

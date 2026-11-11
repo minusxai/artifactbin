@@ -1,6 +1,6 @@
 import {documentOwner} from '@/lib/user-pages';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
-import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, ScheduleRefusal, transferArtifact } from '@/lib/artifacts';
+import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
@@ -125,7 +125,6 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  */
 const CONTENT_FIELDS = {
   publicationBundle:z.object({entryPath:z.string(),files:z.array(z.object({path:z.string(),contentType:z.string(),base64:z.string()})).max(99),mappings:z.record(z.string(),z.object({kind:z.enum(['asset','dataset']),id:z.string(),revision:z.string(),state:z.string().regex(/^[a-f0-9]{64}$/).optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional()})).optional()}).optional(),
-  resolverSources:z.record(z.string(),z.string()).optional().describe('Named backend TypeScript files (functions a page calls with fetch(\'/fn/NAME\'); see /llms/functions), one per <link rel="af-resolver" data-af-name>, validated and published atomically with html.'),
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
@@ -164,13 +163,10 @@ const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "fold
 const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
 
 /** The shared write refusals, stated once and spread into each writer's table. */
-const SCHEDULE_LIMIT: OperationError = { status: 400, code: 'schedule_limit', fix: 'the page would give its publishing account more than 20 active scheduled functions: remove a schedule from it or another page that account published first' };
-const SCHEDULES_DISABLED: OperationError = { status: 409, code: 'page_schedules_disabled', fix: 'Page schedules are off on this server: use a version or a page without the schedule export' };
 const CONTENT_ERRORS: OperationError[] = [
   {status:400,code:'native_html_required',fix:'Use the html field with a complete HTML document.'},
   {status:400,code:'invalid_html',fix:'Fix the named HTML identities or declaration problem and resubmit the complete source.'},
   {status:400,code:'portable_copy_unverified',fix:'This HTML is an exported copy edited outside the source it carries: publish the original source, or export the page again.'},
-  {status:400,code:'invalid_backend',fix:'Fix the backend file\'s exports (default functions, roles, secrets, schedule); the detail names the problem (invalid_functions, invalid_roles, invalid_schedule, schedule_limit). HTML and backend versions publish together.'},
   {status:400,code:'invalid_dataset_binding',fix:'Use a valid dataset link that the authenticated publisher can read.'},
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
   { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
@@ -179,8 +175,6 @@ const CONTENT_ERRORS: OperationError[] = [
   { status: 400, code: 'public_not_enabled', fix: 'this deployment has not opened public documents — use "unlisted"' },
   { status: 400, code: 'private_requires_account', fix: 'private needs a logged-in owner — claim the token or use unlisted' },
   INVALID_PARENT,
-  SCHEDULE_LIMIT,
-  SCHEDULES_DISABLED,
 ];
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
@@ -201,7 +195,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, optional resolverSources, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
+  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
   input: { ...CONTENT_FIELDS, name: z.string().optional().describe("dataset only: the new dataset's GraphQL root name (default from the title, else data), stored as its policy configuration.custom_name and never changeable. ^[A-Za-z][A-Za-z0-9_]*$, at most 64 characters, not reserved (__*, _id, _and, _or, _not, true, false, null) and generating no shared type (Query, String, order_by, dataset_meta…); single-table stored datasets only, not with forked_from"), destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
@@ -427,8 +421,6 @@ const revertArtifactOp: Operation = {
     { status: 409, code: 'version_not_archived', fix: 'that checkpoint was never archived (save-less edits coalesce) — list_versions shows the real ones' },
     { status: 400, code: 'version_required', fix: 'version must be a positive integer from list_versions' },
     POLICY_LOCKED,
-    SCHEDULE_LIMIT,
-    SCHEDULES_DISABLED,
   ],
   async run(ctx, input) {
     if (typeof input.version !== 'number' || !Number.isInteger(input.version) || input.version < 1) {
@@ -436,9 +428,7 @@ const revertArtifactOp: Operation = {
     }
     const expected = parseExpectedVersion(input);
     if (expected instanceof Response) return fromResponse(expected);
-    let row: Awaited<ReturnType<typeof revertArtifactFor>>;
-    try { row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected); }
-    catch (error) { if (error instanceof ScheduleRefusal) return reply({ error: error.code, details: error.details }, error.status); throw error; }
+    const row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected);
     // Distinct from not_found: the artifact is yours, that checkpoint just was
     // never archived (save-less edits coalesce). list_versions has the real ones.
     if (isVersionNotArchived(row)) {
@@ -493,13 +483,9 @@ const restoreArtifactOp: Operation = {
     // the trash is not something this door can act on, and saying which would
     // tell a stranger whether the id exists.
     NOT_FOUND,
-    SCHEDULE_LIMIT,
-    SCHEDULES_DISABLED,
   ],
   async run(ctx, input) {
-    let restored: Awaited<ReturnType<typeof restoreArtifactFor>>;
-    try { restored = await restoreArtifactFor(ctx.actor, String(input.id)); }
-    catch (error) { if (error instanceof ScheduleRefusal) return reply({ error: error.code, details: error.details }, error.status); throw error; }
+    const restored = await restoreArtifactFor(ctx.actor, String(input.id));
     if (!restored) return reply({ error: 'not_found' }, 404);
     return reply({ id: restored.id, url: `${ctx.base}/a/${restored.id}`, parent_id: restored.ancestor_ids.at(-1) ?? null, ancestor_ids: restored.ancestor_ids });
   },

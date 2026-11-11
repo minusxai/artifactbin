@@ -21,11 +21,6 @@
  *   2. datasets: the dataset written (FOR UPDATE) and those its values were read from (FOR SHARE), by `lockOrder`
  *   3. app facts, as the decision reads them: named shares, group shares
  *
- * Two tails come after the artifacts too: a transaction that activates scheduled functions takes each affected
- * publisher's schedule-capacity advisory lock, by `lockOrder` (lib/artifacts schedule-capacity.ts); a page function
- * call's write locks its schedule row FOR SHARE last (lib/function-schedules claims.ts), which is neither an artifact
- * nor an access fact.
- *
  * Writers that lock several artifacts take them by `lockOrder` too (publishing a page locks it, then its linked
  * datasets). SQL that locks artifacts in one statement orders `id COLLATE "C"`, the same code-unit order.
  *

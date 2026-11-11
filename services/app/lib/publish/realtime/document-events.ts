@@ -14,7 +14,7 @@
  */
 import {presenceAccountIdentity, createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
 import { getDb, ID_RE } from '@/lib/platform';
-import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
+import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-publication';
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';

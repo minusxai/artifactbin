@@ -1,4 +1,3 @@
-import {RUN_TABLES} from '@artifactbin/runner/schema';
 /**
  * Schema as data → idempotent DDL.
  *
@@ -78,12 +77,6 @@ const ARTIFACTS: Table = {
     // version row when this state is archived, so history can say who.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
-    // WHO PUBLISHED THE HEAD'S CONTENT — the account whose creation, fork, publication or revert made the content now at
-    // the head. Unlike actor_user_id (the last accepted writer of anything, metadata included), only those writes stamp
-    // it, in the same statement; metadata, sharing, transfer, trash restore and live-region saves keep it. A page's
-    // scheduled functions run as this account (lib/function-schedules), so an edit that is not a publication never
-    // lends its author's authority to code someone else published. NULL: no account published it (a token).
-    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     // PROVENANCE: the artifact this one was FORKED from — the immediate
@@ -127,8 +120,9 @@ const ARTIFACTS: Table = {
   ],
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a
-  // rename breaks nothing — and the old column is dead data, dropped on boot.
-  dropped: ['folder', 'content'],
+  // rename breaks nothing — and the old column is dead data, dropped on boot. `content_publisher_user_id` named
+  // the account removed page schedules ran as.
+  dropped: ['folder', 'content', 'content_publisher_user_id'],
 };
 
 // Append-only; a row is the state BEFORE a PUT replaced it.
@@ -680,7 +674,6 @@ const MERMAID_HARVESTS: Table = {
 };
 
 /** At-most-once mutation admission, before the content transaction. */
-// RUN_TABLES remain internal: the native backend controller performs boot recovery against them.
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
  columns:[
@@ -913,46 +906,6 @@ const OWNERSHIP_TRANSFERS:Table={name:'ownership_transfers',columns:[
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_ownership_transfers_artifact',columns:['artifact_id','created_at']}]};
 
-/** Immutable backend modules referenced by exact versions from HTML artifact snapshots. */
-const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
- {name:'backend_id',type:'TEXT',notNull:true},{name:'version',type:'TEXT',notNull:true},
- {name:'page_id',type:'TEXT',notNull:true},{name:'name',type:'TEXT',notNull:true},
- {name:'source',type:'TEXT',notNull:true},{name:'type_defs',type:'TEXT',notNull:true},
- {name:'compiled',type:'TEXT',notNull:true},{name:'owner_id',type:'TEXT',notNull:true},
- {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
- // Resolver contract: name->host bindings of the secrets map.
- {name:'secret_hosts',type:'JSONB',notNull:true,default:"'{}'::jsonb"},
- // A typeDefs-free file's functions and the role each needs (page-operations/functions); null for a legacy (typeDefs) file.
- {name:'function_roles',type:'JSONB'},
- // Such a file's `export const schedule`, {name: intervalMs} (page-operations/schedule); null without one.
- {name:'function_schedules',type:'JSONB'},
-],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']},{name:'idx_html_backend_scheduled',columns:['page_id'],where:'function_schedules IS NOT NULL'}],
- // `api` marked the removed resolver format (1 = caps.store/secrets.get); dead data.
- dropped:['api']};
-
-/**
- * A scheduled page function's run state (lib/function-schedules), one row per (page, backend link, function) the page
- * HEAD schedules: derived from the heads on every tick, so a republish without the schedule, a trash or a delete
- * removes it. `lease_until`/`claim_token` hold a run open (no overlap, across processes); `failures` drives backoff;
- * `last_*` is what the owner's Resolvers panel shows. Due times are the scheduler's clock; the lease is database time.
- */
-const PAGE_FUNCTION_SCHEDULES:Table={name:'page_function_schedules',columns:[
- {name:'page_id',type:'TEXT',notNull:true},{name:'link',type:'TEXT',notNull:true},{name:'function',type:'TEXT',notNull:true},
- {name:'every_ms',type:'BIGINT',notNull:true},{name:'next_run_at',type:'TIMESTAMPTZ',notNull:true},
- // The lease is DATABASE time (now()), never a process clock; claim_epoch is the fencing token: it grows by one per claim,
- // and every effect a run commits checks, inside its transaction, that its (claim_token, claim_epoch) is still current.
- {name:'lease_until',type:'TIMESTAMPTZ'},{name:'claim_token',type:'TEXT'},{name:'claim_epoch',type:'BIGINT',notNull:true,default:'0'},
- {name:'failures',type:'INTEGER',notNull:true,default:'0'},
- {name:'last_started_at',type:'TIMESTAMPTZ'},{name:'last_finished_at',type:'TIMESTAMPTZ'},
- {name:'last_status',type:'TEXT'},{name:'last_error',type:'TEXT'},{name:'last_message',type:'TEXT'},{name:'last_detail',type:'TEXT'},
-
-],primaryKey:['page_id','link','function'],indexes:[{name:'idx_page_function_schedules_due',columns:['next_run_at']}]};
-
-const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
- {name:'owner_id',type:'TEXT',notNull:true},{name:'backend_id',type:'TEXT',notNull:true},
- {name:'name',type:'TEXT',notNull:true},{name:'ciphertext',type:'TEXT',notNull:true},
-],primaryKey:['owner_id','backend_id','name']};
-
 /** Host-only migration attribution/provenance. Multiple verified source aliases may share one account. */
 const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'source_namespace',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},
@@ -963,7 +916,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
@@ -971,13 +924,15 @@ export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_Q
  * copied web fonts, the shared rate-limit counter, browser test-user leases, hosted agents and their branches,
  * remote agents and work, the api 1 resolvers' `caps.store` state, the retired mutation-notification jobs and
  * their inbox rows (both empty when dropped), and the deleted connected Postgres datasets' encrypted connection
- * secrets and result cache, and the retired comment feed's reaction log (the events feed records reactions now).
+ * secrets and result cache, the retired comment feed's reaction log (the events feed records reactions now), and
+ * the removed page functions' modules, credentials, schedules and runner runs.
  */
 export const DROPPED_TABLES: readonly string[] = [
   'custom_domains', 'artifact_node_aliases', 'node_identity_migration_jobs', 'login_codes', 'oauth_codes', 'webfonts',
   'rate_limit_hits', 'browser_test_users', 'hosted_conversations', 'hosted_branches', 'remote_agents', 'remote_work',
   'html_backend_stores', 'notification_jobs', 'mutation_notifications', 'dataset_secrets', 'dataset_result_cache',
-  'comment_reaction_events',
+  'comment_reaction_events', 'html_backend_versions', 'html_backend_secrets', 'page_function_schedules', 'runner_runs',
+  'runner_events',
 ];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */

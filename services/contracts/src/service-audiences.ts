@@ -8,11 +8,7 @@
  * Two kinds of token carry such an audience, and the identity module issues both:
  *  - a PERSON's token for that service (OAuth with `resource=<origin>`, or `/api/authentication/token` with
  *    `{"audience": "<id>"}`): a stored, refreshable grant, never admitted at this installation's own API;
- *  - a VIEWER token (`IdentityService.issueViewerToken`): minted only by a trusted first-party caller (the identity
- *    call path is service-authenticated) for the viewer it already knows, for ONE audience, living
- *    `VIEWER_TOKEN_TTL_SECONDS`, naming the page and function that asked. It is signed, not stored, and verified only
- *    by introspection;
- *  - an EXCHANGED token (`POST SERVICE_TOKEN_PATH` `{"audience": "<id>"}`): the same signed form, for a person who
+ *  - an EXCHANGED token (`POST SERVICE_TOKEN_PATH` `{"audience": "<id>"}`): signed, not stored, for a person who
  *    already holds a credential here, a browser session (same Origin) or an ordinary API bearer, living
  *    `SERVICE_TOKEN_TTL_SECONDS`, with no refresh token. It names that credential (`parent`), and introspection answers
  *    for it only while the parent is live, so signing out or revoking the parent ends it on the next check.
@@ -20,19 +16,13 @@
 import { normalizeOrigin } from './server-identity';
 
 export interface ServiceAudience {
-  /** Lower-case id, e.g. `warehouse`: what a binding, a login (`--audience`) and the mint name the service by. */
+  /** Lower-case id, e.g. `warehouse`: what a login (`--audience`) and the exchange name the service by. */
   id: string;
   /** The audience its tokens carry: an origin (HTTPS, or HTTP on a local development host). */
   origin: string;
   /** Hex SHA-256 of the secret the service introspects with; null: it introspects with nothing of its own. */
   introspectionSecretSha256: string | null;
 }
-
-/** Who acts for the viewer in a viewer token's introspection answer (`actor.id`): this product's own server. */
-export const FIRST_PARTY_ACTOR = 'artifactbin';
-
-/** A viewer token's whole life (`exp - iat`): minted per use, never stored or refreshed. */
-export const VIEWER_TOKEN_TTL_SECONDS = 60;
 
 /** The exchange: a short-lived token for one configured service, for the caller's own session or API bearer. */
 export const SERVICE_TOKEN_PATH = '/api/authentication/service-token';
@@ -41,9 +31,7 @@ export const SERVICE_TOKEN_TTL_SECONDS = 300;
 /** The credential an exchanged token was issued for: an access token (`tokens` row) or a browser session (`sessions` row). */
 export interface ServiceTokenParent { kind: 'token' | 'session'; id: string }
 
-/** What asked for a viewer token, recorded in it and answered by introspection (for the service's audit). */
-export interface ViewerTokenActor { artifactId?: string | null; function?: string | null }
-export interface IssuedViewerToken {
+export interface IssuedServiceToken {
   /** The bearer: handed only to the one service, never to page code, a URL, a log or storage. */
   token: string;
   /** The origin it is bound to. */

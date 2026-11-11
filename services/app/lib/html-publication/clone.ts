@@ -1,24 +1,18 @@
 import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlPageLink} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import type {PreparedHtmlBackend,HtmlBackendVersionRecord} from '@/lib/html-backends';
-/** A clone contains code and authorized references only; runtime stores and credentials never cross pages. */
-export interface HtmlClonePlan {htmlBackends:readonly PreparedHtmlBackend[];htmlDatasets:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]}
+/** A clone carries authorized dataset references only; nothing of the source page's access crosses to the copy. */
+export interface HtmlClonePlan {htmlDatasets:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]}
 export interface HtmlClonePorts {
- backend(id:string,version:string):Promise<HtmlBackendVersionRecord|null>;
  authorizeDataset(actor:AccessActor,binding:HtmlDatasetLink):Promise<void>;
 }
-export async function planHtmlClone(actor:AccessActor,pageId:string,links:readonly HtmlPageLink[],ports:HtmlClonePorts):Promise<HtmlClonePlan>{
- const htmlBackends:PreparedHtmlBackend[]=[];const htmlDatasets:(HtmlDatasetLink|HtmlDefaultConnectionLink)[]=[];
+export async function planHtmlClone(actor:AccessActor,links:readonly HtmlPageLink[],ports:HtmlClonePorts):Promise<HtmlClonePlan>{
+ const htmlDatasets:(HtmlDatasetLink|HtmlDefaultConnectionLink)[]=[];
  for(const link of links){
-  if(link.kind==='dataset'){await ports.authorizeDataset(actor,link);htmlDatasets.push(link.mode==='pinned'?{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'pinned',revision:link.revision}:{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'live'});continue;} // Only the link's own fields: a stored link may carry retired keys.
+  // Only the link's own fields: a stored link may carry retired keys.
+  if(link.kind==='dataset'){await ports.authorizeDataset(actor,link);htmlDatasets.push(link.mode==='pinned'?{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'pinned',revision:link.revision}:{kind:'dataset',name:link.name,datasetId:link.datasetId,mode:'live'});continue;}
   // The default connection carries no reference to authorize: the copy names it as the source did.
-  if(link.kind==='default-connection'){htmlDatasets.push({kind:'default-connection',name:link.name,namespace:link.namespace});continue;}
-  const backend=await ports.backend(link.backendId,link.version);
-  if(!backend||backend.pageId!==pageId||backend.name!==link.name)throw Error('backend_link_mismatch');
-  // Declaration names are immutable code metadata; secret rows are scoped to the fresh backend ID.
-  // Never spread owner authority, credential values, or store state. A schedule is code metadata (it is in the
-  // source): the copy's runs are its own owner's, with their own run state (lib/function-schedules).
-  htmlBackends.push({name:link.name,source:backend.source,typeDefs:backend.typeDefs,...(backend.functions?{functions:{...backend.functions}}:{}),...(backend.schedule?{schedule:{...backend.schedule}}:{}),compiled:backend.compiled,...(backend.secretBindings?{secretBindings:[...backend.secretBindings]}:{}),...(backend.secretHosts?{secretHosts:{...backend.secretHosts}}:{})});
+  if(link.kind==='default-connection')htmlDatasets.push({kind:'default-connection',name:link.name,namespace:link.namespace});
+  // Any other stored link (a removed page function's) is not copied.
  }
- return {htmlBackends,htmlDatasets};
+ return {htmlDatasets};
 }

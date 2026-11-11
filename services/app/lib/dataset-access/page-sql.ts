@@ -6,10 +6,9 @@
  * `<link>.<table>`; every table carries `_id`, the row's GraphQL id. Each table is the role view's: hidden columns
  * absent, the rule's filter and limit applied, tables the role cannot select absent.
  *
- * SQL can aggregate, so like a resolver's caps.sql (lib/page-operations sql) only the links the SQL text names are
- * mounted, and a mounted table whose rule for the reader does not allow SQL (`allow_aggregations`,
- * dataset-permissions `canRunSql`) refuses the call (owner and editor always may). caps.sql reads the page HEAD's links (a resolver run names a page, not a revision); `_sql`
- * answers for the revision the reader has open. Limits: SQL_READ_LIMITS rows and statement deadline; the page
+ * SQL can aggregate, so only the links the SQL text names are mounted, and a mounted table whose rule for the reader
+ * does not allow SQL (`allow_aggregations`, dataset-permissions `canRunSql`) refuses the call (owner and editor always
+ * may). `_sql` answers for the revision the reader has open. Limits: SQL_READ_LIMITS rows and statement deadline; the page
  * response's own 4 MiB cap bounds the answer.
  *
  * Mounts are keyed by content (object, columns, row IDs, role view), so repeated reads of unchanged rows under one

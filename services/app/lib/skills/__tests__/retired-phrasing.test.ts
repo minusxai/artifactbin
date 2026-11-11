@@ -196,7 +196,7 @@ const RETIRED: Retired[] = [
   {pattern: /confidential or\s+internal|calls? the data\s+confidential|Published private:/, scopes: AGENT_TEXT,
     reason: 'V2: a page is private on the user\'s own word, never the agent\'s view of the data (one called a sales pipeline internal and published it where the team it was for could not open it)'},
   {pattern: /reaches (?:a|another) file only through a link|fetch its href/, scopes: [...AGENT_TEXT, 'runtime'],
-    reason: 'A script fetches a file published with its page by the path it wrote (fetch(\'./data.json\'), html-runtime fn-fetch); no link-and-href recipe'},
+    reason: 'A script fetches a file published with its page by the path it wrote (fetch(\'./data.json\'), html-runtime page-fetch); no link-and-href recipe'},
   // The 2026-11-11 product hints (Q5): a dataset's create reply handed agents a gql page and the removed graphql.mjs.
   {pattern: /graphql\.mjs/, scopes: ['product'],
     reason: 'Q5: no product text names graphql.mjs, which the skill no longer ships: sql.mjs reads and writes datasets'},

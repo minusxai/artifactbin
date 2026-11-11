@@ -100,12 +100,6 @@ export default {
     'services/test-support': { includeEntryExports: true },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
     'services/auth': { ignoreBinaries: ['openssl'], includeEntryExports: true },
-    'services/runner': {
-      entry: ['src/server.ts', 'prove-postgres.ts'],
-      // Bundled into each user program by specifier (src/compiler.ts).
-      ignoreDependencies: ['abort-controller', 'fast-text-encoding', 'core-js'],
-      includeEntryExports: true,
-    },
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
     'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'], includeEntryExports: true },
     'services/events': { entry: ['src/server.ts'], includeEntryExports: true },

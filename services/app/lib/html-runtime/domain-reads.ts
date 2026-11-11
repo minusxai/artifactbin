@@ -1,6 +1,5 @@
 import {DOMAIN_READ_ONLY_MESSAGE} from '@artifactbin/contracts/domain-footer';
 import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
-import type {FunctionCaller} from './fn-fetch';
 /**
  * A page served on a anonymous owner host (server/user-host), or as the exporter's capture (document-serving/raw), is a
  * top-level sandboxed page with no app frame, so the frame relay never attaches. Its reads go straight to the same
@@ -38,20 +37,5 @@ export function createDomainSql(page:{pageId:string;revision:string},location:Pi
   try{response=await send(new URL(`/api/artifacts/${encodeURIComponent(page.pageId)}/sql`,location.href),{method:'POST',credentials:'omit',redirect:'error',cache:'no-store',headers:{'content-type':'text/plain;charset=UTF-8'},body:JSON.stringify({sql:request.sql,params:request.params,revision:page.revision,readOnly:true,key})});}
   catch{throw new RemoteUnreachable('This page could not reach its data');}
   return response.json().catch(()=>({error:'unexpected',message:`Data request failed (${response.status})`}));
- };
-}
-/**
- * A page function call (./fn-fetch) from the same unframed page: straight to the page's function path on its own
- * host, credentials omitted, a POST body as text/plain (no preflight). The host reads as nobody and runs reads only
- * (lib/page-doors `pageFunction`); an export capture's key is not carried, so a private page answers 404.
- */
-export function createDomainFunctionCall(page:{pageId:string;revision:string},location:Pick<Location,'href'>,send:typeof fetch):FunctionCaller{
- return async(request,signal)=>{
-  const url=new URL(`/api/artifacts/${encodeURIComponent(page.pageId)}/fn/${request.name}${request.search}`,location.href);
-  // The served revision, as a query parameter (no preflight): an archived copy never runs newer backend code.
-  url.searchParams.set('revision',page.revision);
-  const response=await send(url,{method:request.method,credentials:'omit',redirect:'error',cache:'no-store',...(signal?{signal}:{}),...(request.method==='POST'?{headers:{'content-type':'text/plain;charset=UTF-8'},body:request.body??''}:{})});
-  const headers:Record<string,string>={};const type=response.headers.get('content-type');if(type)headers['content-type']=type;
-  return {status:response.status,headers,body:await response.text()};
  };
 }

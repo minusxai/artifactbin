@@ -126,25 +126,6 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   const bytes=Buffer.from(file.base64,'base64');if(bytes.toString('base64')!==file.base64||bytes.length>MAX_FILE||(total+=bytes.length)>MAX_BYTES)throw Error('Bundle byte limit exceeded');
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }
- const resolverSources:Record<string,string>={},backends:Array<{name:string;path:string;bytes:number}>=[],backendPaths=new Set<string>(),backendEdits:Array<{start:number;end:number}>=[];
- const backendNames=new Set<string>();
- const backendDocument=parse(html,{sourceCodeLocationInfo:true});
- const findBackends=(node:DefaultTreeAdapterMap['node']):void=>{
-  const rel='tagName'in node&&node.tagName==='link'?node.attrs.find(attr=>attr.name==='rel')?.value.split(/\s+/)??[]:[];
-  if('tagName'in node&&rel.includes('af-resolver')){
-   const href=node.attrs.find(attr=>attr.name==='href')?.value,name=node.attrs.find(attr=>attr.name==='data-af-name')?.value;
-   const local=href&&resolve(href,entryPath);
-   if(local){
-    if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||backendNames.has(name))throw Error('Invalid or duplicate backend namespace');
-    backendNames.add(name);
-    const file=files.get(local);if(!file&&!context.resolvedBackendNames?.includes(name))throw Error('Unresolved local dependencies: '+local);
-    if(file){resolverSources[name]=file.bytes.toString('utf8');backends.push({name,path:local,bytes:file.bytes.byteLength});}backendPaths.add(local);
-    const location=node.sourceCodeLocation?.attrs?.href;if(location)backendEdits.push({start:location.startOffset,end:location.endOffset});
-   }
-  }
-  if('childNodes'in node)for(const child of node.childNodes)findBackends(child);
- };findBackends(backendDocument);
- for(const edit of backendEdits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+html.slice(edit.end);
  const ordered:BundleDependency[]=[],visiting=new Set<string>(),visited=new Map<string,'asset'|'dataset'>(),missing=new Set<string>();
  const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{
   if(link.runtimeModule)return [];
@@ -163,7 +144,6 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   return name?[{...link,path:name}]:[];
  });
  const visit=(name:string,kind:'asset'|'dataset',hyperlink=false)=>{
-  if(backendPaths.has(name))throw Error('Backend files cannot also be uploaded assets: '+name);
   if(visiting.has(name))throw Error('Dependency cycle: '+name);
   if(visited.has(name)){if(visited.get(name)!==kind)throw Error('Conflicting dependency kind: '+name);return;}
   const file=files.get(name);if(!file){if(!bundle.mappings?.[name]&&!(hyperlink&&context.linksAsWritten))missing.add(name);return;}
@@ -173,22 +153,22 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   visiting.delete(name);visited.set(name,kind);ordered.push({path:name,kind,contentType:file.contentType,bytes:file.bytes,dependencies:nested.map(d=>d.path)});
  };
  // A literal fetch is never rewritten: the page's core maps the path it names to the published file wherever the page
- // is read (html-runtime fn-fetch, the runtime config's `files`). It resolves against the page, from any file; a path
+ // is read (html-runtime page-fetch, the runtime config's `files`). It resolves against the page, from any file; a path
  // the project does not hold, or that leaves it, names no file of it and stays the script's own.
  const fetched:string[]=fetchedPaths(html,true);
  for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind,dep.hyperlink);
  for(let at=0;at<fetched.length;at++){
   let name:string|null;try{name=resolve(fetched[at]!,entryPath);}catch{continue;}
-  if(name&&name!==entryPath&&!visited.has(name)&&!backendPaths.has(name)&&(files.has(name)||bundle.mappings?.[name]))visit(name,'asset');
+  if(name&&name!==entryPath&&!visited.has(name)&&(files.has(name)||bundle.mappings?.[name]))visit(name,'asset');
  }
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
  // Every published file is one the page links or a script fetches by its path: nothing else reaches it.
- const unlinked=[...files.keys()].filter(name=>name!==entryPath&&!backendPaths.has(name)&&!visited.has(name)).sort();
+ const unlinked=[...files.keys()].filter(name=>name!==entryPath&&!visited.has(name)).sort();
  if(unlinked.length){
   let first=path.posix.relative(path.posix.dirname(entryPath),unlinked[0]!);if(!first.startsWith('.'))first='./'+first;
   throw Error(`Not linked from the page: ${unlinked.join(', ')}: a file publishes with its page when the page links it (<a href="${first}">) or a script fetches it by that literal path (fetch('${first}'))`);
  }
- return {resolverSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
+ return {html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
   for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address){if(edit.hyperlink&&context.linksAsWritten)continue;throw Error('Unresolved local dependency: '+edit.path);}const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
@@ -196,7 +176,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
 export function inspectPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}){
  const plan=planPublicationBundle(html,bundle,context);
- return {entryPath:plan.entryPath,backends:plan.backends,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
+ return {entryPath:plan.entryPath,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
 }
 /** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. `captureKey`: an
  * export capture's verified key (lib/export read-key), set on each own-door address so the capture's next request is

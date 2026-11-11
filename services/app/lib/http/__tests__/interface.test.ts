@@ -159,8 +159,8 @@ describe('redirects and login', () => {
 
 describe('paths', () => {
   it('knows the app\'s own pages, profiles included, and the development-only kit page', () => {
-    for (const path of ['/', '/login', '/account', '/datasets/new', '/programs/p1/edit']) expect(isAppPagePath(path), path).toBe(true);
-    for (const path of ['/a/x', '/programs/new/x', '/dev/ui', '/@Bad']) expect(isAppPagePath(path), path).toBe(false);
+    for (const path of ['/', '/login', '/account', '/datasets/new', '/files/new']) expect(isAppPagePath(path), path).toBe(true);
+    for (const path of ['/a/x', '/schedules', '/programs/new', '/dev/ui', '/@Bad']) expect(isAppPagePath(path), path).toBe(false);
     expect(isAppPagePath('/@alice_1')).toBe(true);
     expect(spaPaths({ dev: false })).toBe(SPA_PATHS);
     expect(spaPaths({ dev: true })).toBe(DEV_SPA_PATHS);

@@ -80,9 +80,9 @@ describe('crumbsFor — the unknown', () => {
 });
 
 it.each([
-  ['/assets', 'assets'], ['/schedules', 'schedules'], ['/chat', 'connected agents'],
+  ['/assets', 'assets'], ['/chat', 'connected agents'],
   ['/notifications', 'notifications'], ['/trash', 'trash'], ['/datasets/new', 'new dataset'],
-  ['/files/new', 'upload file'], ['/programs/new', 'new program'], ['/programs/abc123/edit', 'edit program'],
+  ['/files/new', 'upload file'],
   ['/connect', 'connect'], ['/start', 'get started'], ['/welcome', 'welcome'],
 ])('names workspace page %s in the breadcrumb', (path, label) => {
   expect(crumbsFor(path)).toEqual([{ label }]);

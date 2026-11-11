@@ -39,7 +39,7 @@ const refuse=(why:string)=>new VersionRefused(why);
 export const LOADED_SOURCE=Symbol.for(LOADED_SOURCE_KEY);
 
 interface Runtime {revision?:string;live?:number;savedNodeIds?:string[];scriptFingerprint?:string;appearance?:{designSystem?:string};files?:Record<string,string>}
-/** The files a version published (./fn-fetch), each address without its version pin: what the scripts read. */
+/** The files a version published (./page-fetch), each address without its version pin: what the scripts read. */
 const filesOf=(runtime:Runtime)=>JSON.stringify(Object.entries(runtime.files??{}).map(([name,address])=>[name,address.replace(/&version=\d+$/,'')]).sort());
 const runtimeOf=(doc:Document):Runtime=>{try{return JSON.parse(doc.querySelector('script[data-af="runtime"]')?.textContent??'{}') as Runtime;}catch{return {};}};
 const ID='data-af-id';

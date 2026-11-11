@@ -37,7 +37,7 @@ function parse(argv: string[]) {
   };
 }
 
-/** Nearest-rank percentile, as resolver-latency.ts reports it. */
+/** Nearest-rank percentile. */
 function percentile(values: readonly number[], p: number): number {
   if (!values.length) return NaN;
   const sorted = [...values].sort((a, b) => a - b);

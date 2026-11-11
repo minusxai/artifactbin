@@ -36,7 +36,6 @@
     "@artifactbin/auth": "0.1.0",
     "@artifactbin/browser": "0.1.0",
     "@artifactbin/events": "0.1.0",
-    "@artifactbin/runner": "0.1.0",
     "@artifactbin/sql": "0.1.0",
     "@artifactbin/utils": "0.1.0",
     "@electric-sql/pglite": "0.4.6",
@@ -81,7 +80,6 @@
     "services/events",
     "services/auth",
     "services/test-support",
-    "services/runner",
     "services/connectors"
   ],
   "overrides": {

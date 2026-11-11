@@ -1,6 +1,6 @@
 /**
  * AN APP INVARIANT'S LOCK ON SOMETHING THE APP DOES NOT OWN. A per-account quota or count (comment images, follows,
- * scheduled functions, artifact memberships) needs its writers serialized on the account, but the account row is
+ * artifact memberships) needs its writers serialized on the account, but the account row is
  * the identity module's: the app never row-locks it (a split-role database gives the app SELECT only, and an
  * identity write must never wait on an app write). These are transaction-scoped advisory locks instead, keyed on
  * (`scope`, id), taken one id at a time in `COLLATE "C"` order so two writers never take them in opposite orders,

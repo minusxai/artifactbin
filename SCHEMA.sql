@@ -173,119 +173,6 @@ ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS created_at TIME
 
 CREATE INDEX IF NOT EXISTS idx_native_identity_imports_target ON app.native_identity_imports (kind, target_id);
 
-CREATE TABLE IF NOT EXISTS app.html_backend_secrets (
-  owner_id TEXT NOT NULL,
-  backend_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  ciphertext TEXT NOT NULL,
-  PRIMARY KEY (owner_id, backend_id, name)
-);
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS ciphertext TEXT NOT NULL;
-
-CREATE TABLE IF NOT EXISTS app.html_backend_versions (
-  backend_id TEXT NOT NULL,
-  version TEXT NOT NULL,
-  page_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  source TEXT NOT NULL,
-  type_defs TEXT NOT NULL,
-  compiled TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
-  secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb,
-  function_roles JSONB,
-  function_schedules JSONB,
-  PRIMARY KEY (backend_id, version)
-);
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS version TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS type_defs TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS compiled TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_schedules JSONB;
-
-ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;
-
-CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
-
-CREATE INDEX IF NOT EXISTS idx_html_backend_scheduled ON app.html_backend_versions (page_id) WHERE function_schedules IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS app.page_function_schedules (
-  page_id TEXT NOT NULL,
-  link TEXT NOT NULL,
-  function TEXT NOT NULL,
-  every_ms BIGINT NOT NULL,
-  next_run_at TIMESTAMPTZ NOT NULL,
-  lease_until TIMESTAMPTZ,
-  claim_token TEXT,
-  claim_epoch BIGINT NOT NULL DEFAULT 0,
-  failures INTEGER NOT NULL DEFAULT 0,
-  last_started_at TIMESTAMPTZ,
-  last_finished_at TIMESTAMPTZ,
-  last_status TEXT,
-  last_error TEXT,
-  last_message TEXT,
-  last_detail TEXT,
-  PRIMARY KEY (page_id, link, function)
-);
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS link TEXT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS function TEXT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS every_ms BIGINT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS next_run_at TIMESTAMPTZ NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS claim_token TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS claim_epoch BIGINT NOT NULL DEFAULT 0;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS failures INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_started_at TIMESTAMPTZ;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_finished_at TIMESTAMPTZ;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_status TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_error TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_message TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_detail TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_page_function_schedules_due ON app.page_function_schedules (next_run_at);
-
 CREATE TABLE IF NOT EXISTS app.group_links (
   group_id TEXT NOT NULL,
   linked_group_id TEXT NOT NULL,
@@ -355,55 +242,6 @@ ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS next_owner JSONB NO
 ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_ownership_transfers_artifact ON app.ownership_transfers (artifact_id, created_at);
-
-CREATE TABLE IF NOT EXISTS app.runner_runs (
-  id TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  request_key TEXT NOT NULL,
-  fingerprint TEXT NOT NULL,
-  status TEXT NOT NULL,
-  request JSONB NOT NULL,
-  admitted_at TEXT NOT NULL,
-  started_at TEXT,
-  receipt JSONB,
-  output JSONB,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS request_key TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS fingerprint TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS status TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS request JSONB NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS admitted_at TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS started_at TEXT;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS receipt JSONB;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS output JSONB;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key);
-
-CREATE TABLE IF NOT EXISTS app.runner_events (
-  run_id TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
-  event JSONB NOT NULL,
-  PRIMARY KEY (run_id, sequence)
-);
-
-ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS run_id TEXT NOT NULL;
-
-ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL;
-
-ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS event JSONB NOT NULL;
 
 CREATE TABLE IF NOT EXISTS app.pages_sessions (
   id_hash TEXT NOT NULL,
@@ -827,7 +665,6 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   edit_id TEXT NOT NULL DEFAULT md5(random()::text),
   actor_user_id TEXT,
   actor_token_id TEXT,
-  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   forked_from TEXT,
@@ -881,8 +718,6 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
-ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
-
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
@@ -907,6 +742,8 @@ ALTER TABLE app.artifacts ALTER COLUMN token_id DROP NOT NULL;
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS content;
+
+ALTER TABLE app.artifacts DROP COLUMN IF EXISTS content_publisher_user_id;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
 
@@ -1629,6 +1466,16 @@ DROP TABLE IF EXISTS app.dataset_secrets;
 DROP TABLE IF EXISTS app.dataset_result_cache;
 
 DROP TABLE IF EXISTS app.comment_reaction_events;
+
+DROP TABLE IF EXISTS app.html_backend_versions;
+
+DROP TABLE IF EXISTS app.html_backend_secrets;
+
+DROP TABLE IF EXISTS app.page_function_schedules;
+
+DROP TABLE IF EXISTS app.runner_runs;
+
+DROP TABLE IF EXISTS app.runner_events;
 
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 

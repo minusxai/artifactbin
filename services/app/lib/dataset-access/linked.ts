@@ -2,7 +2,7 @@
  * THE DATASETS A REQUEST READS AND WRITES: one dataset directly (its own sharing decides the role) or a page's dataset
  * links (the page audience rule), loaded once per request for the caller: the read snapshot through the retained port
  * (./retained), the write decision, and per table the model both doors read: its columns, what the role may write
- * (`write`) and change (`can`). The page SQL door (./page-sql-door, ./sql-read) and the GraphQL compatibility layer
+ * (`write`) and change (`can`). The page SQL door (./page-sql-door) and the GraphQL compatibility layer
  * (lib/graphql-compat) both load through here, so a role reads and writes exactly the same rows through either.
  *
  * The table model keeps its generated-API names (`root`, each column's `field`; ./table-model): a link's tables are
@@ -97,7 +97,7 @@ export interface LoadMode {
 
 /**
  * The caller's read snapshot and write decision, and the table models they give. Directly the dataset's own
- * sharing decides the role; through a page (page GraphQL, a resolver's caps.query) the page audience rule applies
+ * sharing decides the role; through a page (the page SQL door, page GraphQL) the page audience rule applies
  * (a reader with no sharing of their own is signed_in or anonymous) and the session names the page. A pinned link
  * reads its recorded revision and never writes. Throws `dataset_not_found` when the role may neither read nor
  * write (the uniform 404). One authorization: the read and write decisions share the head and the request's facts.

@@ -1,6 +1,6 @@
 /**
  * A page script's plain `fetch('./data.json')` of a file published with the page: publish finds the literal path and
- * uploads the file, and every surface the page is read from tells its core (html-runtime/fn-fetch) where that path
+ * uploads the file, and every surface the page is read from tells its core (html-runtime/page-fetch) where that path
  * now lives — the page's own asset door, which answers exactly whoever may read the page. Only paths the page's own
  * publication recorded are in the table.
  */

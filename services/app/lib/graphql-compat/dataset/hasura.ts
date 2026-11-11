@@ -163,27 +163,27 @@ async function run(actor: AccessActor, loaded: readonly Loaded[], document: Docu
 
 
 interface LinkedDatasetGraphqlOptions {
-  /** The resolver operation the call runs inside: mutations only inside a mutation resolver. */
+  /** The operation the caller asked for: mutations only when it is `mutation`. */
   operation: 'query' | 'mutation' | undefined;
   /** Serialized `data` bytes the answer may carry. */
   resultBytes: number;
-  /** The page whose resolver calls (`X-Hasura-Page-Id`). */
+  /** The page the call reads through (`X-Hasura-Page-Id`). */
   pageId?: string;
   /** A mutation commits only while the page holds (lib/page-doors `pageCommitGuard`). */
   commitGuard?: PageCommitGuard;
 }
 
 /**
- * THE PAGE'S DATASETS FOR A RESOLVER'S `caps.query`, run as the caller (never owner rights): reads always; writes
- * only inside a mutation resolver, through the one generated mutation path under each dataset's rules for the
- * caller's role through the page.
+ * A PAGE'S LINKED DATASETS AS ONE GENERATED API, run as the caller (never owner rights): reads always; writes only
+ * when the call is a mutation, through the one generated mutation path under each dataset's rules for the caller's
+ * role through the page.
  */
 export async function executeLinkedDatasetGraphql(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: LinkedDatasetGraphqlOptions, signal: AbortSignal): Promise<DatasetGraphqlReply> {
   const parsed = parsedOperation(request);
   if ('errors' in parsed) return parsed;
   const kind = parsed.operation.operation;
-  if (kind === 'subscription') return { errors: [error('caps.query has no subscription root', 'validation_failed')] };
-  if (kind === 'mutation' && options.operation !== 'mutation') return { errors: [error('a dataset mutation runs only inside a mutation resolver', 'permission_denied')] };
+  if (kind === 'subscription') return { errors: [error('there is no subscription root', 'validation_failed')] };
+  if (kind === 'mutation' && options.operation !== 'mutation') return { errors: [error('a dataset mutation runs only as a mutation call', 'permission_denied')] };
   let loaded: Loaded[];
   try { loaded = await loadLinked(actor, links, { ...(options.pageId ? { pageId: options.pageId } : {}), fenced: kind === 'query' }, signal); } catch (e) {
     if (e instanceof GraphQLError) return { errors: [error(e.message, 'validation_failed')] };
@@ -226,8 +226,7 @@ export interface PageDatasetCheckSource {
 /**
  * THE PAGE'S DATASETS AS PUBLISH CHECKS SEE THEM: every link under its page name with every root, column and write
  * a role could be given (role-independent, from the declared tables, as `pageDatasetRoots`), so a document
- * valid for any reader is never refused; `sdl` is all of them as one API, what a resolver's caps.query validates
- * against. Null when no dataset is linked.
+ * valid for any reader is never refused; `sdl` is all of them as one API. Null when no dataset is linked.
  */
 export async function pageDatasetCheckSources(actor: AccessActor, links: readonly HtmlDatasetLink[]): Promise<{ sdl: string; sources: PageDatasetCheckSource[] } | null> {
   if (!links.length) return null;

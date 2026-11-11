@@ -2,7 +2,7 @@ import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
-import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, isLocalDevelopmentHost, parseAliasOrigins, parseDataServices, parseServiceAudiences, parseTestDomainSignIn, type DataService, type ServiceAudience } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, isLocalDevelopmentHost, parseAliasOrigins, parseServiceAudiences, parseTestDomainSignIn, type ServiceAudience } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -262,9 +262,8 @@ export { parseAliasOrigins };
 export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
- * THE ADDRESSES THIS DEPLOYMENT'S OUTBOUND TRAFFIC LEAVES FROM: resolver database connections, `caps.fetch`, web
- * ingestion, webhooks. Served publicly at `GET /api/outbound-ips` and shown beside each database connection in the
- * Resolvers panel, so an owner knows what to allow in a database firewall. Comma-separated IP addresses (IPv4 or
+ * THE ADDRESSES THIS DEPLOYMENT'S OUTBOUND TRAFFIC LEAVES FROM: web ingestion, webhooks. Served publicly at
+ * `GET /api/outbound-ips`, so an owner knows what to allow in a firewall. Comma-separated IP addresses (IPv4 or
  * IPv6); deployment-specific, so empty by default. A malformed entry throws at module load (`parseOutboundIps`).
  */
 export let OUTBOUND_IPS = parseOutboundIps(env('APP', 'OUTBOUND_IPS'));
@@ -390,20 +389,10 @@ export let EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
 export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
 
 /**
- * A SHORTER FUNCTION SCHEDULE for local checks: whole minutes (at least 1) that a development or test process allows
- * below the product minimum (lib/page-operations FUNCTION_SCHEDULE_MIN_MINUTES). Any other process ignores it, so a
- * production deployment cannot lower the minimum. Read at each publish (a test's `overrideConfig` environment applies).
+ * The secret signed actor requests carry (proxy to app, browser to app): read by a composition that signs them
+ * (`services/utils` signActor), never by the app's own request path.
  */
-env('SCHEDULES', 'MIN_INTERVAL_MINUTES');
-export function functionScheduleMinimumMinutes(): number | undefined {
-  if (!IS_DEV && !IS_TEST) return undefined;
-  const minutes = Number(env('SCHEDULES', 'MIN_INTERVAL_MINUTES'));
-  return Number.isInteger(minutes) && minutes >= 1 ? minutes : undefined;
-}
-
-/** Optional runner HTTP boundary; otherwise the composition root registers a local runner. */
-export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
-export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
+export const ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
 
 /**
  * THE TEST OVERRIDE for configuration: replaces the settings below, and `env()` reads, without touching the
@@ -459,13 +448,6 @@ env('IDENTITY', 'SERVICE_AUDIENCES');
 export const serviceAudiences = (): readonly ServiceAudience[] => parseServiceAudiences(env('IDENTITY', 'SERVICE_AUDIENCES'));
 
 /**
- * DATA_SERVICES__TRUSTED (contracts `parseDataServices`): the services a page function's `'viewer'` connection may be
- * bound to, each with its session endpoint and the identity audience its viewer tokens are minted for. Empty by
- * default: then a declaration of that kind is refused at publish (`data_service_not_configured`).
- */
-env('DATA_SERVICES', 'TRUSTED');
-export const dataServices = (): readonly DataService[] => parseDataServices(env('DATA_SERVICES', 'TRUSTED'));
-
 /**
  * DATASETS__DEFAULT_CONNECTION: the install's default connection, one connector configuration JSON object
  * (contracts `CONNECTORS`; `{"connector":"postgres","host":…,"password":…}`), secrets included. Every signed-in person
@@ -538,15 +520,3 @@ export function embedTrustedOrigins(): string[] {
   });
 }
 
-/**
- * SCHEDULES__PAGE_SCHEDULES: `on` (unset, the default) runs the page-function scheduler; `off` does not start it, and
- * a publish, fork, restore or revert that would create or reactivate a page schedule is refused
- * (`page_schedules_disabled`). On-demand functions and every other background task are unaffected. Any other value
- * refuses the boot.
- */
-env('SCHEDULES', 'PAGE_SCHEDULES');
-export function pageSchedulesEnabled(): boolean {
-  const value = env('SCHEDULES', 'PAGE_SCHEDULES')?.trim() || 'on';
-  if (value !== 'on' && value !== 'off') throw new Error('SCHEDULES__PAGE_SCHEDULES must be on (the default) or off.');
-  return value === 'on';
-}
