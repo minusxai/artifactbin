@@ -2,7 +2,7 @@ import {designSystemChoice} from '@/lib/html-systems';
 import {withOfflineSystemStyle} from '@/lib/html-systems/server';
 import {packOfflineDependencies,type OfflineDependencyInput} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources,publishedFileTable,type PublicationRecord} from '@/lib/html-publication-bundle';
-import {referencedLibraryResources} from '@/lib/libraries/server';
+import {referencedBoundaryFiles,referencedLibraryResources} from '@/lib/libraries/server';
 /**
  * The offline file: one self-contained `.html` a reader can open without a
  * network and pass on. Assembly and access live in lib/offline/assemble.server
@@ -59,10 +59,15 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     // A script's fetch of a file the page published reads it from disk too (html-runtime fn-fetch): the copy carries the
     // bytes this reader was just admitted to, or, past the size limit, the file's address on the platform.
     const published=new Map(resources.map(resource=>[resource.url,resource]));
-    const files=(embed:boolean)=>publishedFileTable(row.meta as PublicationRecord,id,row.version,receipt=>{
-      const resource=published.get(`/a/${id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`);if(!resource)return null;
-      return embed?`data:${resource.contentType.split(';')[0]!.trim()||'application/octet-stream'};base64,${Buffer.from(resource.bytes).toString('base64')}`:`${platformOrigin}/a/${id}/assets?dependency=${receipt.id}&revision=${receipt.revision}&version=${row.version}`;
-    });
+    // The platform's boundary files the page fetches by their path (/geojson/NAME.json) ride in the same table.
+    const boundaries=await referencedBoundaryFiles([row.source??'',...resources.filter(resource=>/javascript/.test(resource.contentType)).map(resource=>Buffer.from(resource.bytes).toString('utf8'))]);
+    const files=(embed:boolean)=>{
+      const table={...publishedFileTable(row.meta as PublicationRecord,id,row.version,receipt=>{
+        const resource=published.get(`/a/${id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`);if(!resource)return null;
+        return embed?`data:${resource.contentType.split(';')[0]!.trim()||'application/octet-stream'};base64,${Buffer.from(resource.bytes).toString('base64')}`:`${platformOrigin}/a/${id}/assets?dependency=${receipt.id}&revision=${receipt.revision}&version=${row.version}`;
+      }),...Object.fromEntries(Object.entries(boundaries).map(([url,bytes])=>[url,embed?`data:application/json;base64,${Buffer.from(bytes).toString('base64')}`:platformOrigin+url]))};
+      return Object.keys(table).length?table:undefined;
+    };
     try{resources.push(...await referencedLibraryResources(packed,resources,request.url));}catch{return json({error:'offline_dependency_unavailable'},422);}
     // The platform stylesheet, active system only: its rules inline, its fonts embedded by the packer.
     try{const styled=withOfflineSystemStyle(packed,request.url,designSystemChoice(artifact.meta));packed=styled.html;resources.push(...styled.resources);}catch{return json({error:'offline_dependency_unavailable'},422);}
