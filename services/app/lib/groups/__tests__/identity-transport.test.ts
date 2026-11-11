@@ -16,7 +16,7 @@ import {acceptGroupInvitations,createGroup,deleteGroup,getGroupRole,inviteGroupM
 useAppHarness();
 const secret='identity-transport-secret';
 const appDb:TransactionalQueryable={query:async(sql,params)=>(await getDb()).query(sql,params),transaction:async fn=>(await getDb()).transaction(fn)};
-const host=(identityDb?:TransactionalQueryable|{query:TransactionalQueryable['query']})=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},upstream:async()=>new Response('app'),...(identityDb?{identityDb}:{})});
+const host=(identityDb?:TransactionalQueryable|{query:TransactionalQueryable['query']})=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},upstream:async()=>new Response('app'),appSchema:'public',...(identityDb?{identityDb}:{})});
 let calls=0;
 beforeEach(()=>{const app=host(appDb);calls=0;setServices({identity:identityClient('http://auth.invalid',{serviceSecret:secret,fetch:async request=>{calls++;return app.fetch(request);}})});});
 afterEach(()=>setServices({identity:undefined}));

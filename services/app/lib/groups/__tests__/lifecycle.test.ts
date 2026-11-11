@@ -41,7 +41,8 @@ it('updates presentation, protects default/nonempty groups, retains handle tombs
  await trashArtifactFor(actor,page.id);await groups.setAccountPreferences(viewer.id,{type:'group',id:group.id});
  await groups.deleteGroup(owner.id,group.id,group.handle);
  expect(await groups.getGroupById(group.id)).toBeNull();
- expect(await groups.getAccountPreferences(viewer.id)).toEqual({default_destination:{type:'inherit'}});
+ // No cleanup across modules: the preference still names the group, which grants nothing (the home page says unavailable).
+ expect(await groups.getAccountPreferences(viewer.id)).toEqual({default_destination:{type:'group',id:group.id}});
  expect(await restoreArtifactFor({...actor,groupId:group.id},page.id)).toBeNull();
  await expect(groups.createGroup(owner.id,{handle:group.handle,name:'Reclaim'})).rejects.toMatchObject({code:'handle_taken'});
 });
