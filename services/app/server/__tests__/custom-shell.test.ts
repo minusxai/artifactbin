@@ -16,6 +16,7 @@ import {shellFile} from '@/lib/platform';
 import {URL_SPACE,isScreenPath,LEGACY_PUBLIC_PATHS} from '@artifactbin/contracts';
 import {SPA_PATHS} from '@/lib/http/app-pages';
 import {createAppServer} from '../app';
+import {customShellResponse,loadCustomShell} from '../custom-shell';
 import {useAppHarness} from '@/__tests__/harness';
 useAppHarness();
 
@@ -123,6 +124,27 @@ describe('with a custom shell',()=>{
   for(const path of [`/a/${secret}`,`/a/${ID}`,'/','/account',`/@${owner.username}`])expect(await headOf(path),path).toBe('');
   const owned=await app.request(`/a/${secret}`,{headers:{accept:'text/html',authorization:`Bearer ${t.token}`}});
   expect(await owned.text()).not.toContain('Private Plans');
+ });
+ it('fills __CSP_NONCE__ only inside attribute values and __HEAD_TAGS__ only at its first markup occurrence in <head>; every other occurrence stays literal',async()=>{
+  const write=async(name:string,body:string)=>{const file=join(dir,name);await writeFile(file,body);return loadCustomShell(file);};
+  const answer=async(shell:ReturnType<typeof loadCustomShell>)=>{const r=customShellResponse(shell,'GET',"script-src 'self'; style-src 'self'",{},'<title>T</title>');
+   return {body:await r.text(),nonce:/'nonce-([^']+)'/.exec(r.headers.get('content-security-policy')!)?.[1]??null};};
+  const src=(n:string,h:string)=>'<!doctype html><HTML><head data-x="__HEAD_TAGS__"><!-- __HEAD_TAGS__ __CSP_NONCE__ --><title>__HEAD_TAGS__</title>'+
+   `<meta name="af-style-nonce" content="${n}"><SCRIPT nonce=${n} type=module>const a="__HEAD_TAGS__",b="__CSP_NONCE__";</SCRIPT>`+
+   `<style>/* __HEAD_TAGS__ __CSP_NONCE__ */</style>${h} __HEAD_TAGS__</head><body data-y='__HEAD_TAGS__'>__HEAD_TAGS__ __CSP_NONCE__<textarea>__CSP_NONCE__</textarea></body></HTML>`;
+  const mixed=await write('mixed.html',src('__CSP_NONCE__','__HEAD_TAGS__'));
+  expect([mixed.nonced,mixed.headed]).toEqual([true,true]);
+  const {body,nonce}=await answer(mixed);
+  expect(nonce).toBeTruthy();
+  expect(body).toBe(src(nonce!,'<title>T</title>'));
+  // Only in code, a comment or text: nothing is a slot, and the policy is the app's unchanged.
+  const inert='<html><head><script>x="__HEAD_TAGS__";y="__CSP_NONCE__"</script><!--__HEAD_TAGS__--></head><body>__HEAD_TAGS__ __CSP_NONCE__</body></html>';
+  const code=await write('code.html',inert);
+  expect([code.nonced,code.headed]).toEqual([false,false]);
+  expect(await answer(code)).toEqual({body:inert,nonce:null});
+  // No <head> element of its own: no head slot.
+  const headless=await write('headless.html','<html>__HEAD_TAGS__<body></body></html>');
+  expect(headless.headed).toBe(false);
  });
  it('refuses to boot on a file it cannot read, naming the setting',()=>{
   expect(()=>server(join(dir,'missing.html'))).toThrow(/APP__SHELL_FILE .*missing\.html.*cannot be read/);
