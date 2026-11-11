@@ -11,23 +11,32 @@
  *
  * The caller keeps the document's live stream (its threads arrive as `liveAnnotations`), the rail's open state and
  * the count it shows; the layer itself loads only once there is something to show (needsCommentPresentation): open
- * threads, a linked comment, the rail opened, or a selection to comment on.
+ * threads, a linked comment, the rail opened, or a selection to comment on. Everything that only feeds the layer lives
+ * behind that lazy boundary (./ReaderDiscussionLayer), so this module, eager on every document view (the app shell's JS,
+ * size target 4 in scripts/build/size-targets.mjs), keeps just the selection bridge and the decision to load it.
  */
-import { createEffect, createSignal, lazy, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createSignal, lazy, Show, Suspense, type Accessor, type JSX, type Setter } from 'solid-js';
 import type { ArtifactRole } from '@artifactbin/contracts';
-import type { AnnotationWire } from '@/lib/annotations';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
-import { commentAccess } from './comment-access';
+import { commentAccess, type CommentAccess } from './comment-access';
 import { needsCommentPresentation } from './comment-presentation';
+import type { LayerProps } from './ReaderDiscussionLayer';
 import { SelectionActions } from './SelectionActions';
 
 /** Discussion tools load when there are comments or the reader asks for them. SelectionActions stays eager so the
  * first native selection or right-click keeps its capability bridge. */
-const AnnotationLayer = lazy(() => import('./AnnotationLayer').then(m => ({ default: m.AnnotationLayer })));
+const ReaderDiscussionLayer = lazy(() => import('./ReaderDiscussionLayer').then(m => ({ default: m.ReaderDiscussionLayer })));
 
-export interface ReaderDiscussionProps {
-  id: string;
+/**
+ * What the comments layer takes as it is (./ReaderDiscussionLayer `LAYER_PROPS`: the document's `id`; `editId`, the head
+ * the page shows, which comments and their screenshots are made against; `canDeleteAny` for the document owner; the
+ * rail's open state; the open threads from the document's live stream, null until its first frame; where the rail
+ * starts and app chrome over the document's top; `railHost`, an element the rail renders INTO instead of its own fixed
+ * column; `frame`, the document's frame when the page around it can resize it without the window resizing), plus what
+ * this composition decides from.
+ */
+export interface ReaderDiscussionProps extends LayerProps {
   role: ArtifactRole;
   /** The reader is signed in with an account (not a guest, not signed out). */
   accountSession: boolean;
@@ -37,31 +46,22 @@ export interface ReaderDiscussionProps {
   runtimeRef: DocumentRuntimeRef;
   ready: boolean;
   nonce: string | null;
-  /** The head the page shows: comments and their screenshots are made against it. */
-  editId?: string;
-  /** The document owner may delete any comment. */
-  canDeleteAny: boolean;
-  railOpen: boolean;
-  onRailOpenChange: (open: boolean) => void;
-  /** The open threads from the document's live stream, null until its first frame. */
-  liveAnnotations: AnnotationWire[] | null;
   /** The open threads the page knows of before the layer loads (its served count). */
   openCount: number;
   /** A notification's link (`?comment=` / `?thread=`) is in the address. */
   linked: boolean;
-  onAnnotationsChange: (annotations: AnnotationWire[]) => void;
-  onOpenThreadChange?: (id: string | null) => void;
   /** The reader must sign in to comment. */
   onSignIn: () => void;
-  beforeComment?: (subject: StoryEditSelection) => Promise<StoryEditSelection>;
-  membershipRevision?: number;
-  /** Where the rail and the composer start (under the page's bar), and app chrome over the document's top. */
-  topOffset?: number;
-  documentTopInset?: number;
-  /** The rail renders INTO this element (a host's panel) instead of its own fixed column. */
-  railHost?: HTMLElement | null;
-  /** The document's frame, when the page around it can resize it without the window resizing (a host's panel). */
-  frame?: Element;
+}
+
+/** What this composition decided, handed to the lazy layer as accessors (one object, no forwarding getters). */
+export interface ReaderDiscussionState {
+  comments: Accessor<CommentAccess>;
+  /** Sends a signed-out reader to sign in; nothing for anyone else. */
+  signIn: () => void;
+  initialSelection: Accessor<StoryEditSelection | null>;
+  setInitialSelection: Setter<StoryEditSelection | null>;
+  pickRequested: Accessor<boolean>;
 }
 
 export function ReaderDiscussion(props: ReaderDiscussionProps): JSX.Element {
@@ -77,18 +77,14 @@ export function ReaderDiscussion(props: ReaderDiscussionProps): JSX.Element {
     setActive(needsCommentPresentation({ canRead: comments().canReadComments, active: active(), linked: props.linked, railOpen: props.railOpen,
       composing: !!initialSelection(), picking: pickRequested(), openCount: props.openCount, liveCount: props.liveAnnotations?.length ?? 0 }));
   });
+  const state: ReaderDiscussionState = { comments, signIn, initialSelection, setInitialSelection, pickRequested };
   return <>
     <Show when={props.ready && props.nonce}>
       <SelectionActions runtimeRef={props.runtimeRef} nonce={props.nonce} canAnnotate={canStartComment()} onSelect={() => { if (annotatable()) setPickRequested(true); }}
         onAnnotate={(selection) => { if (annotatable()) setInitialSelection(selection); else signIn(); }} />
     </Show>
     <Show when={props.ready && active() && comments().canReadComments}>
-      <Suspense fallback={null}><AnnotationLayer id={props.id} canCreateComment={annotatable()} beforeComment={props.beforeComment}
-        onSignIn={!props.accountSession && !props.archived ? signIn : undefined} canDeleteAny={props.canDeleteAny} editId={props.editId} runtimeRef={props.runtimeRef} sessionNonce={props.nonce}
-        railOpen={props.railOpen} onRailOpenChange={props.onRailOpenChange} membershipRevision={props.membershipRevision} showViewComments={comments().canReadComments} liveAnnotations={props.liveAnnotations}
-        initialSelection={initialSelection()} onSelectionConsumed={() => setInitialSelection(null)} onOpenThreadChange={props.onOpenThreadChange}
-        pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={props.onAnnotationsChange} topOffset={props.topOffset} documentTopInset={props.documentTopInset}
-        railHost={props.railHost} frame={props.frame} /></Suspense>
+      <Suspense fallback={null}><ReaderDiscussionLayer discussion={props} state={state} /></Suspense>
     </Show>
   </>;
 }
