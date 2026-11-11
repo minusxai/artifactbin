@@ -33,6 +33,9 @@ export type EventFeedType = (typeof EVENT_CATEGORIES)[keyof typeof EVENT_CATEGOR
 export const EVENT_FEED_SCHEMA_VERSION = 1;
 /** `wait` holds a request until an event arrives, at most this long. */
 export const EVENT_FEED_MAX_WAIT_SECONDS = 30;
+/** The removed comment feed's wait, kept only until the production proxy (artifactbin-server) moves its long-poll
+ * deadline to EVENT_FEED_MAX_WAIT_SECONDS: the pin moves on every merge here, so dropping it first breaks that build. */
+export const COMMENT_CHANGES_MAX_WAIT_SECONDS = 60;
 export const EVENT_FEED_DEFAULT_LIMIT = 100;
 export const EVENT_FEED_MAX_LIMIT = 200;
 /** A cursor whose next event was accepted longer ago than this is expired (410 `cursor_expired`): resynchronize. */
