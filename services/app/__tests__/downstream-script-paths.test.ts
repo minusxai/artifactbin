@@ -10,7 +10,7 @@
  * artifactbin-evals 9c5618b, with the server's build paths added on 2026-11-10 at 80fc0cd; `usedAt` is the consuming file and line there. Removing or changing a row is a
  * change to that contract: do it only together with the named repository.
  */
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -25,13 +25,18 @@ interface DownstreamPath {
   usedAt: string[];
   /** Files a directory entry must hold for its consumer. */
   holds?: string[];
+  /** Names the consumer imports from this file: removing or renaming one breaks it as a moved file does. */
+  exports?: string[];
 }
 
 const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/app/scripts/migrate-legacy-pages.ts', repo: SERVER, usedAt: ['scripts/build-source.mjs (bundles the privileged maintenance CLI into the app image)'] },
   { path: 'services/app/testing/native-acceptance.mjs', repo: SERVER, usedAt: ['scripts/accept-native-html.mjs:10 (imports the scenario from toolkit/services/app/testing/native-acceptance.mjs)', '.github/workflows/ci.yml native-html (runs it)'] },
   { path: 'scripts/build/build-islands.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:7 (run from toolkit/services/app)', 'test/source-runtime.test.mjs:44'] },
-  { path: 'scripts/build/html-core.mjs', repo: SERVER, usedAt: ['scripts/build-native-core.mjs:38 (imports prebuiltPreviewAssets from toolkit/scripts/build/html-core.mjs)', 'test/native-core.test.mjs:33 (reads it)'] },
+  { path: 'scripts/build/html-core.mjs', repo: SERVER, exports: ['prebuiltPreviewAssets'], usedAt: ['scripts/build-native-core.mjs:38 (imports prebuiltPreviewAssets from toolkit/scripts/build/html-core.mjs)', 'test/native-core.test.mjs:33 (reads it)'] },
+  // The server's native build test imports these by name through its bundle. Removing `buildPreviewDatasets` here on
+  // 2026-11-11 (the skill dropped GraphQL) failed the server's composition for five pins and held every deploy.
+  { path: 'services/app/lib/skills/preview-assets.server.ts', repo: SERVER, exports: ['compactSkillScript', 'buildPreviewParser', 'buildToolboxPlatform'], usedAt: ['test/native-core.test.mjs:34 (re-exports them by name from the bundled entry)'] },
   // A setup file, not a script: the server's suite lists it behind an existsSync, so a move would only drop its in-memory
   // database seam there, silently. It stays importable alone, with no provided schemaImageDir, env or build step.
   { path: 'services/app/test/setup/database.ts', repo: SERVER, usedAt: ['vitest.config.ts setupFiles (toolkit/services/app/test/setup/database.ts, guarded by existsSync; read 2026-11-10)'] },
@@ -70,6 +75,19 @@ function missingDownstreamPaths(rows: DownstreamPath[], exists: (path: string, d
   return problems;
 }
 
+/** One line per name a consumer imports that its file no longer exports. */
+function missingDownstreamExports(rows: DownstreamPath[], read: (path: string) => string): string[] {
+  const problems: string[] = [];
+  for (const { path, repo, usedAt, exports = [] } of rows) {
+    if (!exports.length) continue;
+    const source = read(path);
+    for (const name of exports)
+      if (!new RegExp(`export\\s+(?:async\\s+)?(?:function|const|class)\\s+${name}\\b`).test(source))
+        problems.push(`${path} no longer exports ${name}, but ${repo} imports it (${usedAt.join('; ')}): remove it only with a paired change there`);
+  }
+  return problems;
+}
+
 const onDisk = (path: string, directory: boolean) => {
   const full = join(ROOT, path);
   return existsSync(full) && statSync(full).isDirectory() === directory;
@@ -79,7 +97,7 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(21);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(22);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(4);
   });
 
@@ -93,5 +111,11 @@ describe('scripts/ paths other repositories depend on', () => {
 
   it('every one exists in this tree', () => {
     expect(missingDownstreamPaths(DOWNSTREAM_SCRIPT_PATHS, onDisk).join('\n')).toBe('');
+  });
+
+  it('names the repository when a name it imports is removed, and every such name is exported here', () => {
+    const withoutParser = (path: string) => readFileSync(join(ROOT, path), 'utf8').replace(/export async function buildPreviewParser\b/, 'async function buildPreviewParser');
+    expect(missingDownstreamExports(DOWNSTREAM_SCRIPT_PATHS, withoutParser)).toEqual([expect.stringMatching(/^services\/app\/lib\/skills\/preview-assets\.server\.ts no longer exports buildPreviewParser, but minusxai\/artifactbin-server imports it/)]);
+    expect(missingDownstreamExports(DOWNSTREAM_SCRIPT_PATHS, (path) => readFileSync(join(ROOT, path), 'utf8')).join('\n')).toBe('');
   });
 });
