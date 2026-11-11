@@ -178,7 +178,7 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const exact=steps.find(step=>step.id==='install'),near=steps.find(step=>step.id==='near-install');
  expect(near.uses).toMatch(/^actions\/cache\/restore@/);
- expect(near.if).toBe("${{ !matrix.install && steps.install.outputs.cache-hit != 'true' }}");
+ expect(near.if).toBe("${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' }}");
  expect(near.with.path).toBe(exact.with.path);
  expect(near.with.key).toBe(exact.with.key);
  expect(near.with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
@@ -187,16 +187,17 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(reconcile.if).toContain("steps.near-install.outputs.cache-matched-key != ''");
  expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
- expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
+ expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
  // No stale install is ever saved from a pull request: the one install save is the `install` runner's clean `npm ci`,
  // only when this lock's exact key is missing, and every other runner skips it. The other save is the test builds.
- const saves=steps.filter(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'));
+ // (The slim install's own save, from the same runner, is scripts/__tests__/slim-install.test.mjs's.)
+ const saves=steps.filter(step=>(step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))&&!step.with.key.startsWith('install-slim-'));
  expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}']);
  const own=steps.find(step=>step.id==='own-install');
  expect(own).toMatchObject({if:'matrix.install',with:{path:exact.with.path,key:exact.with.key,'lookup-only':true}});
  expect(saves[0]).toMatchObject({if:"matrix.install && steps.own-install.outputs.cache-hit != 'true'",with:{path:exact.with.path,key:exact.with.key}});
- expect(steps.indexOf(cold[0])).toBe(steps.indexOf(own)+1);expect(steps.indexOf(saves[0])).toBe(steps.indexOf(cold[0])+1);
- expect(exact.if).toBe('${{ !matrix.install }}');
+ expect(steps.indexOf(cold[0])).toBe(steps.findIndex(step=>step.id==='own-slim')+1);expect(steps.indexOf(saves[0])).toBe(steps.indexOf(cold[0])+1);
+ expect(exact.if).toBe("${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}");
  expect(workflow('pr-fast.yml').jobs.fast.strategy.matrix.include.filter(entry=>entry.install)).toEqual([{part:'install',install:true}]);
 });
 it('fails the pull request lane past 60 seconds with the plain budget message',()=>{

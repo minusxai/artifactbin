@@ -596,6 +596,36 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      # And the SLIM install pr-fast.yml's Vitest runners restore: this install minus what no test there can load (its
+      # restore step and scripts/__tests__/slim-install.test.mjs say what and why). Same paths and key as that step, so
+      # the entry they look up is this one.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: slim
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          lookup-only: true
+      - if: steps.slim.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       # The root type check's incremental build info, which pr-fast.yml's `types` job starts from so a pull
       # request re-checks only what it changed (scripts/ci/ci.mjs `type-info` finds the newest upload). The same
       # command as that job, so the same compiler writes it (scripts/lib/type-check.mjs).

@@ -227,6 +227,21 @@ jobs:
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
           lookup-only: true
+      - if: matrix.install
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: own-slim
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          lookup-only: true
       - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
       - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
@@ -238,7 +253,50 @@ jobs:
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
-      - if: ${{ !matrix.install }}
+      # The slim install of a lock whose whole install exists but whose slim one does not (this pull request's first
+      # run after the slim entry was introduced): the whole one, restored, is what it is cut from.
+      - if: matrix.install && steps.own-install.outputs.cache-hit == 'true' && steps.own-slim.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - if: matrix.install && steps.own-slim.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      # THE SLIM INSTALL, for the runners that only run Vitest: the whole install minus what no test here can load
+      # (scripts/__tests__/slim-install.test.mjs names each and refuses an import of one): the native TypeScript compiler
+      # (the `types` runner's), the @fontsource packages (copy-assets reads them at install; the fonts they make are kept),
+      # lucide-static's icon font. About 29 MB of the 166 MB compressed entry. Exact key only: on a miss the whole install
+      # is restored as before, so a lock main has not slimmed yet (this entry's first merge included) costs nothing.
+      - if: matrix.suite || matrix.shard || matrix.batch
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: slim
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -254,7 +312,7 @@ jobs:
       # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
       # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
       # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
-      - if: ${{ !matrix.install && steps.install.outputs.cache-hit != 'true' }}
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: near-install
         with:
@@ -265,7 +323,7 @@ jobs:
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
           restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
-      - if: ${{ !matrix.install && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
         name: Reconcile the nearest install to this lock
         run: |
           npm install --no-audit --no-fund
@@ -275,7 +333,7 @@ jobs:
             git checkout -- package-lock.json package.json 'services/*/package.json'
             npm ci --no-audit --no-fund
           fi
-      - if: ${{ !matrix.install && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
         run: npm ci --no-audit --no-fund
       # The root type check is incremental: start from the newest native build info any run of this repository
       # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
