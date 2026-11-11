@@ -175,6 +175,13 @@ jobs:
           # recorded under 200ms that no other list here runs, plus the post-merge failures it guards, one shared module
           # graph per worker; ci.yml's node job still runs every one of them. 236 files: ~4.3s per runner locally on two
           # runners (3 workers each), so three runners, predicted ~10s each on CI (an estimate: none has run there yet).
+          # THE PULL REQUEST'S OWN INSTALL: a lock this branch changed misses main's install on every push, and every runner
+          # reconciles main's tree to it (~2.7s: the miss probe and `npm install`, run 43039126177). This runner, only on
+          # that miss, runs a clean `npm ci` (never a reconciled tree: nothing stale is saved) and saves it under this
+          # lock's key, in this pull request's cache scope; from the next push every runner restores an exact hit.
+          # A clean install is ~14-24s; it runs beside the test runners, on the first push of each new lock only.
+          - part: install
+            install: true
           - part: node-1
             batch: 1/3
           - part: node-2
@@ -194,9 +201,33 @@ jobs:
         with:
           node-version: 22
       # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
-      # `warm-caches` and every ci.yml miss save it; this lane only restores.
+      # `warm-caches` and every ci.yml miss save it; in this lane only the `install` runner saves, a clean `npm ci` of a
+      # lock main has not installed yet (its matrix entry says why).
       - run: node scripts/ci/ci.mjs lock-fingerprint
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      - if: matrix.install
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: own-install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          lookup-only: true
+      - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - if: ${{ !matrix.install }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
           path: |
@@ -211,7 +242,7 @@ jobs:
       # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
       # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
       # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
-      - if: steps.install.outputs.cache-hit != 'true'
+      - if: ${{ !matrix.install && steps.install.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: near-install
         with:
@@ -222,7 +253,7 @@ jobs:
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
           restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
-      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != ''
+      - if: ${{ !matrix.install && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
         name: Reconcile the nearest install to this lock
         run: |
           npm install --no-audit --no-fund
@@ -232,7 +263,7 @@ jobs:
             git checkout -- package-lock.json package.json 'services/*/package.json'
             npm ci --no-audit --no-fund
           fi
-      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''
+      - if: ${{ !matrix.install && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
         run: npm ci --no-audit --no-fund
       # The root type check is incremental: start from the newest native build info any run of this repository
       # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
