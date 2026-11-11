@@ -81,3 +81,4 @@ export * from './page-operation';
 
 export type {PortableIdentity} from './portable-document';
 export * from './region-sessions';
+export * from './connectors';

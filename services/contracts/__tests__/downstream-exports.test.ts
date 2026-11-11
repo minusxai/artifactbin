@@ -36,3 +36,21 @@ it('exports the URL map the deployment classifies paths with', () => {
 it('exports the types the deployment imports', () => {
   expectTypeOf<[Actor, DatasetPolicy, EventEnvelope, EventPayload<'artifact', 'created'>, EventVerb<'artifact'>, EventsService, MutationInput, MutationOutcome, ObjectKind, Part, Queryable, RunSnapshot, RunStart, RunnerService, SqlService, TokenReader, TokenRecord, Upstream]>().not.toBeNever();
 });
+
+// The connector contract (./src/connectors.ts) a deployment's own data endpoint and the live-dataset screens build on.
+import {
+  CONNECTORS, CONNECTOR_ERROR_CODES, CONNECTOR_LIMITS, CONNECTOR_VALUE_TYPES,
+  type Connection, type ConnectionConfig, type ConnectionSummary, type ConnectorAnswer, type ConnectorColumn, type ConnectorError,
+  type ConnectorErrorCode, type ConnectorField, type ConnectorId, type ConnectorNetworkPolicy, type ConnectorQuery, type ConnectorSchema,
+  type ConnectorSpec, type ConnectorTestResult, type ConnectorValueType, type ConnectorViewer, type ConnectorFieldKind, type ConnectorDialect,
+  type ConnectorScalar, type ConnectorJson, type ConnectorLimits, type ConnectorSchemaTable,
+} from '@artifactbin/contracts';
+
+it('exports the connector contract', () => {
+  expect(CONNECTORS.map((c) => c.id)).toEqual(['postgres', 'mysql', 'bigquery']);
+  expect(CONNECTOR_VALUE_TYPES).toEqual(['text', 'number', 'boolean', 'date', 'timestamp', 'json']);
+  for (const c of CONNECTORS) for (const f of c.fields) expect(f.secret && f.shown, `${c.id}.${f.name}`).toBe(false);
+  expect(CONNECTOR_ERROR_CODES).toContain('read_only');
+  expect(CONNECTOR_LIMITS.rows).toBeGreaterThan(0);
+  expectTypeOf<[Connection, ConnectionConfig, ConnectionSummary, ConnectorAnswer, ConnectorColumn, ConnectorError, ConnectorErrorCode, ConnectorField, ConnectorId, ConnectorNetworkPolicy, ConnectorQuery, ConnectorSchema, ConnectorSpec, ConnectorTestResult, ConnectorValueType, ConnectorViewer, ConnectorFieldKind, ConnectorDialect, ConnectorScalar, ConnectorJson, ConnectorLimits, ConnectorSchemaTable]>().not.toBeNever();
+});
