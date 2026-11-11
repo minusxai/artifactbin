@@ -2,10 +2,7 @@ import {runOperation} from '../operations';
 /** HTTP identity adapter; group persistence never imports authentication modules. */
 import { browserActor, withTokenAuth } from '@/lib/authentication';
 import { type RequestIdentity } from '@/lib/accounts';
-import {json,readJson,PayloadTooLarge,SMALL_BODY_LIMIT} from '../http';
-import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
-import {serviceSecretMatches} from '@artifactbin/utils';
-import {INTERNAL_SERVICE_SECRET} from '../platform';
+import {json,readJson} from '../http';
 import {GroupError} from '../groups';
 export function groupRoute(handler:(request:Request,userId:string,params:Record<string,string>,actor:RequestIdentity)=>Promise<Response>,readOnly=false){
  const run=async(request:Request,actor:RequestIdentity,params:Record<string,string>)=>{
@@ -29,17 +26,3 @@ export function groupOperation(name:string,readOnly=false){return groupRoute(asy
  return runOperation(name,request,actor,{...input,...params});
 },readOnly);}
 
-/**
- * An IDENTITY endpoint (contracts `IDENTITY_PATHS`): refused without the service secret, exactly as the auth
- * host's session-live; then one JSON object in, `answer`'s JSON out (null: the input is malformed). Never cached.
- */
-export function identityServiceRoute(answer:(body:Record<string,unknown>)=>Promise<unknown>){
- return async(request:Request):Promise<Response>=>{
-  const noStore={'Cache-Control':'no-store'};
-  if(!serviceSecretMatches(request.headers.get(SERVICE_AUTH_HEADER),INTERNAL_SERVICE_SECRET))return json({error:'unauthorized'},401,noStore);
-  let body:Record<string,unknown>|null;
-  try{body=await readJson(request,{limit:SMALL_BODY_LIMIT});}catch(error){if(error instanceof PayloadTooLarge)return json({error:'too_large'},413,noStore);throw error;}
-  const result=body&&await answer(body);
-  return result?json(result,200,noStore):json({error:'invalid_request'},400,noStore);
- };
-}

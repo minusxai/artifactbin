@@ -46,6 +46,19 @@ ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS receipt JSONB NO
 
 ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.identity_settings (
+  id TEXT NOT NULL,
+  deployment_mode TEXT NOT NULL,
+  api_audiences TEXT[] NOT NULL DEFAULT '{}',
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS deployment_mode TEXT NOT NULL;
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS api_audiences TEXT[] NOT NULL DEFAULT '{}';
+
 CREATE TABLE IF NOT EXISTS app.group_mail_outbox (
   id TEXT NOT NULL,
   email TEXT NOT NULL,

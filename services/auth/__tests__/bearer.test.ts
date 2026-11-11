@@ -1,6 +1,6 @@
 import {afterAll,beforeEach,describe,expect,it} from 'vitest';
 import type {Queryable} from '@artifactbin/contracts';
-import {createBearerReader} from '../src/identity/bearer';
+import {bearerLiveSql,createBearerReader} from '../src/identity/bearer';
 import {createOAuthStore} from '../src/identity/oauth';
 import {mintTestToken,resetTestDb,testDb} from './helpers';
 
@@ -70,25 +70,23 @@ describe('createBearerReader',()=>{
   expect(await reader.byToken(orphan)).toBeNull();
  });
 
- it('reads by token id with the same liveness: deleted, expired, a revoked OAuth family and admission all refuse',async()=>{
-  const reader=createBearerReader({db});
+ it('bearerLiveSql, the fragment the shared identity.tokens view is built from, has the same liveness by id: deleted, expired and a revoked OAuth family refuse',async()=>{
+  const {fence,live}=bearerLiveSql({auth:'auth',tokens:'tokens'});
+  const byId=async(id:string)=>(await testDb().query<{live:boolean}>(`SELECT (${live}) AS live FROM tokens t ${fence} WHERE t.id=$1`,[id])).rows[0]?.live??null;
   await mintTestToken({id:'tok_by_id',userId:'usr_1',query:testDb().query});
-  expect(await reader.byId!('tok_by_id')).toEqual({id:'tok_by_id',userId:'usr_1',email:'one@example.com',emailVerified:true});
-  expect(await reader.byId!('tok_missing')).toBeNull();
-  expect(await reader.byId!('')).toBeNull();
+  expect(await byId('tok_by_id')).toBe(true);
+  expect(await byId('tok_missing')).toBeNull();
   await mintTestToken({id:'tok_expired_id',userId:'usr_1',query:testDb().query});
   await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id='tok_expired_id'");
-  expect(await reader.byId!('tok_expired_id')).toBeNull();
+  expect(await byId('tok_expired_id')).toBe(false);
   await testDb().query("UPDATE tokens SET deleted_at=now() WHERE id='tok_by_id'");
-  expect(await reader.byId!('tok_by_id')).toBeNull();
+  expect(await byId('tok_by_id')).toBe(false);
   await oauth('tok_fenced_id');
-  expect(await reader.byId!('tok_fenced_id')).toBeNull();
+  expect(await byId('tok_fenced_id')).toBe(false);
   const refresh=await member('tok_fenced_id');
-  expect(await reader.byId!('tok_fenced_id')).toMatchObject({id:'tok_fenced_id',scope:'artifacts'});
+  expect(await byId('tok_fenced_id')).toBe(true);
   await store().revokeRefresh(refresh,'client');
-  expect(await reader.byId!('tok_fenced_id')).toBeNull();
-  await mintTestToken({id:'tok_policy_id',userId:'usr_1',query:testDb().query});
-  expect(await createBearerReader({db,admitBearer:async()=>false}).byId!('tok_policy_id')).toBeNull();
+  expect(await byId('tok_fenced_id')).toBe(false);
  });
 
  it('applies the owning service admission policy after the read',async()=>{

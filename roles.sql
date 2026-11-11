@@ -17,8 +17,12 @@ CREATE SCHEMA app AUTHORIZATION artifactbin_app;
 CREATE SCHEMA auth AUTHORIZATION artifactbin_auth;
 -- The events service is the log's ONLY writer; every other process reads it.
 CREATE SCHEMA events AUTHORIZATION artifactbin_events;
+-- Combined mode: the app's shared identity views (IDENTITY.sql), which MinusX reads.
+CREATE SCHEMA identity AUTHORIZATION artifactbin_app;
 
 -- The auth must reach the app schema at all to read its tokens table.
 GRANT USAGE ON SCHEMA app TO artifactbin_auth;
 -- …and the app must reach the events schema at all to read the log.
 GRANT USAGE ON SCHEMA events TO artifactbin_app;
+-- …and the auth schema, for the session and credential rows its identity views read.
+GRANT USAGE ON SCHEMA auth TO artifactbin_app;

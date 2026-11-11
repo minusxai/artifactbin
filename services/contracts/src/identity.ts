@@ -17,12 +17,6 @@ export interface TokenRecord {
 export interface TokenReader {
   /** The bearer path. Refuses a value that is not token-shaped BEFORE hashing or touching the database. */
   byToken(presented: string): Promise<TokenRecord | null>;
-  /**
-   * The same read keyed by the token's id (a credential already presented, asked about again: the identity
-   * `resolve` endpoint's `token_id`). Same liveness: row, expiry, OAuth family fence and admission. A reader without
-   * it answers nothing live.
-   */
-  byId?(id: string): Promise<TokenRecord | null>;
 }
 
 /** ONE implementation of an app-owned one-time-code store; auth credentials have their own broader lifecycle. */

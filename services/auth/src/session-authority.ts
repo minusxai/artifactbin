@@ -2,15 +2,14 @@
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
  * is service-authenticated (SERVICE_AUTH_HEADER carrying INTERNAL__SERVICE_SECRET) and refused without it:
  *  - session-live: is a human session still live (the pages sessions' revalidation);
- *  - the identity endpoints (contracts `IDENTITY_PATHS`, cross-repository contract §2): token questions are answered
- *    here from the one bearer read every API request is admitted by (token, OAuth family fence, identity): all of
- *    `introspect`, and `resolve`'s `token_active`. The rest of `resolve`, and `groups`, are relayed to the
- *    application, which owns accounts and groups and checks the secret again;
+ *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`, cross-repository contract §2): a presented bearer
+ *    is answered here from the one bearer read every API request is admitted by (token, OAuth family fence,
+ *    identity). Every other identity fact MinusX reads from the shared `identity` views, not from here;
  *  - MinusX's job events (contracts `EVENTS_PUBLISH_PATH`, cross-repository contract §6): the durable publish onto
  *    this process's events service, accepting only `source: 'minusx'` job envelopes with a catalogued verb and the ids
  *    the feed authorizes on. 2xx only once stored; a storage failure is 503, so MinusX's outbox keeps the batch.
  */
-import {ANONYMOUS,API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_PATHS,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type Part,type TokenRecord} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type Part,type TokenRecord} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -53,34 +52,13 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`))return null;
   return !o.admitIdentity||await o.admitIdentity({userId})?{...token,userId}:null;
  };
- app.all(IDENTITY_PATHS.introspect,async c=>{
+ app.all(IDENTITY_INTROSPECT_PATH,async c=>{
   const input=await admit(c);if(input instanceof Response)return input;
   if(typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
   let token:(TokenRecord&{userId:string})|null;
   try{token=await live(c,await o.tokens.byToken(input.token));}catch{return answer({error:'session_unavailable'},503);}
   if(!token)return answer({active:false} satisfies IdentityIntrospectResponse);
   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[]} satisfies IdentityIntrospectResponse);
- });
- // The application answers the account, session and group; this host adds `token_active` (null without a token_id).
- app.all(IDENTITY_PATHS.resolve,async c=>{
-  const input=await admit(c);if(input instanceof Response)return input;
-  const tokenId=input.token_id;
-  if(tokenId!==undefined&&tokenId!==null&&(typeof tokenId!=='string'||!tokenId))return answer({error:'bad_request'},400);
-  const {token_id:_omitted,...forwarded}=input;
-  const headers=new Headers(c.req.raw.headers);headers.delete('content-length');
-  const relayed=await o.upstream(new Request(c.req.raw.url,{method:'POST',headers,body:JSON.stringify(forwarded)}),ANONYMOUS);
-  if(!relayed.ok)return relayed;
-  let tokenActive:boolean|null=null;
-  if(typeof tokenId==='string'){
-   if(!o.tokens.byId)tokenActive=false;
-   else try{tokenActive=!!await live(c,await o.tokens.byId(tokenId));}catch{return answer({error:'session_unavailable'},503);}
-  }
-  return answer({...await relayed.json() as Record<string,unknown>,token_active:tokenActive});
- });
- // The application answers this; this host only refuses a caller without the secret before relaying it.
- app.all(IDENTITY_PATHS.groups,async c=>{
-  const refused=await admit(c,false);if(refused instanceof Response)return refused;
-  return o.upstream(c.req.raw,ANONYMOUS);
  });
  app.all(EVENTS_PUBLISH_PATH,async c=>{
   const refused=await admit(c,false);if(refused instanceof Response)return refused;

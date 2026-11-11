@@ -11,6 +11,7 @@ interface RenderedSchema {
   schema: string;
   roles: string;
   grants: string;
+  identity: string;
   tables: Record<string, 'app' | 'auth' | 'events'>;
 }
 
