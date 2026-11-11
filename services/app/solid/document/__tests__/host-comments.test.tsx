@@ -45,7 +45,7 @@ function mount(page: Parameters<typeof serve>[0], { signIn = true } = {}) {
   } as unknown as FrameBridgeParent;
   const events: Array<{ name: string; detail: unknown }> = [];
   const comments = mountHostComments({
-    win: window, id: 'doc1', stylesheet: '', bridge, version: 3, editId: 'e3', mode: null, presence: false,
+    win: window, id: 'doc1', stylesheet: '', bridge, frame: document.createElement('iframe'), version: 3, editId: 'e3', mode: null, presence: false,
     emit: (name, detail) => { events.push({ name, detail }); return name === 'af-document-sign-in' ? signIn : true; },
     nonce: () => NONCE, onNonce: () => () => {}, followVersion: vi.fn(), notifyData: vi.fn(),
   });

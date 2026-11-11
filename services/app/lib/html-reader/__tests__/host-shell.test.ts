@@ -189,7 +189,7 @@ describe('a host page that asks for comments', () => {
     module.arrive();
     await expect.poll(() => module.handed()).not.toBeNull();
     const handed = module.handed()!;
-    expect(handed).toMatchObject({ id: w.privatePage, stylesheet: '.sheet{}', version: 1, mode: 'dark', presence: true, bridge: mounted.bridge });
+    expect(handed).toMatchObject({ id: w.privatePage, stylesheet: '.sheet{}', version: 1, mode: 'dark', presence: true, bridge: mounted.bridge, frame: mounted.frame });
     expect(handed.editId).toBeTruthy();
     expect(module.calls).toEqual(['open:panel']);
     handed.onNonce((nonce) => nonces.push(nonce));

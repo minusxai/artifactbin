@@ -167,7 +167,7 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
   void commentsModule?.then(({ mountHostComments, stylesheet }) => {
     if (destroyed) return;
     comments = mountHostComments({
-      win, id, stylesheet, emit, bridge, mode, presence: options.presence === true,
+      win, id, stylesheet, emit, bridge, frame, mode, presence: options.presence === true,
       nonce: () => bridge.nonce, onNonce: (listener) => { nonceListeners.add(listener); return () => { nonceListeners.delete(listener); }; },
       version: Number(first.revision) || 0, editId: first.editId,
       followVersion: (version, live) => { void followVersion(version, live); },

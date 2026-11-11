@@ -129,7 +129,7 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
       railOpen={railOpen()} onRailOpenChange={(open) => { if (open) setRailOpen(true); else hostComments.close(); }} liveAnnotations={live()} openCount={openCount()} linked={linked()}
       onAnnotationsChange={setListed} onOpenThreadChange={(thread) => options.emit('af-document-thread', { id: thread })} onSignIn={signIn}
       membershipRevision={membershipRevision()} topOffset={Math.max(0, Math.round(bridge.getViewportRect().top))}
-      railHost={panel()?.content} />}</>;
+      railHost={panel()?.content} frame={options.frame} />}</>;
   }, overlay.content);
 
   const dropPanel = () => { const root = panel(); if (!root) return; roots.delete(root); root.dispose(); setPanel(null); };

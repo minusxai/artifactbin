@@ -126,6 +126,8 @@ export interface AnnotationLayerProps {
   pickRequested?: boolean;
   /** A notification's comment or thread id; read from `?comment=`/`?thread=` when absent. */
   linkTarget?: string | null;
+  /** The document's frame, when something other than the window can resize it (a host page's own panel): its marks follow. */
+  frame?: Element;
   /** The thread the rail has open, open or resolved (null when none): a host page reports it. */
   onOpenThreadChange?: (id: string | null) => void;
 }
@@ -256,7 +258,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   onMount(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
     window.addEventListener('resize', resize);
-    onCleanup(() => window.removeEventListener('resize', resize));
+    const observer = props.frame && typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
+    if (props.frame) observer?.observe(props.frame);
+    onCleanup(() => { window.removeEventListener('resize', resize); observer?.disconnect(); });
   });
 
   /** The rail is about to open FOR A THREAD (a pin, a marker): that opening must not start a pick. */

@@ -17,6 +17,8 @@ export interface HostCommentsOptions {
   emit(name: string, detail: unknown, cancelable?: boolean): boolean;
   /** The parent half of the document's bridge: the comments and selection actions talk to the frame through it. */
   bridge: FrameBridgeParent;
+  /** The document's frame: the shell's layout may resize it (its panel opening), and the comments' marks follow it. */
+  frame: HTMLIFrameElement;
   /** The frame controller's signing nonce ('' while none runs), and its changes (a reloaded frame signs anew). */
   nonce(): string;
   onNonce(listener: (nonce: string) => void): () => void;

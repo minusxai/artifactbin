@@ -60,6 +60,8 @@ export interface ReaderDiscussionProps {
   documentTopInset?: number;
   /** The rail renders INTO this element (a host's panel) instead of its own fixed column. */
   railHost?: HTMLElement | null;
+  /** The document's frame, when the page around it can resize it without the window resizing (a host's panel). */
+  frame?: Element;
 }
 
 export function ReaderDiscussion(props: ReaderDiscussionProps): JSX.Element {
@@ -86,7 +88,7 @@ export function ReaderDiscussion(props: ReaderDiscussionProps): JSX.Element {
         railOpen={props.railOpen} onRailOpenChange={props.onRailOpenChange} membershipRevision={props.membershipRevision} showViewComments={comments().canReadComments} liveAnnotations={props.liveAnnotations}
         initialSelection={initialSelection()} onSelectionConsumed={() => setInitialSelection(null)} onOpenThreadChange={props.onOpenThreadChange}
         pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={props.onAnnotationsChange} topOffset={props.topOffset} documentTopInset={props.documentTopInset}
-        railHost={props.railHost} /></Suspense>
+        railHost={props.railHost} frame={props.frame} /></Suspense>
     </Show>
   </>;
 }
