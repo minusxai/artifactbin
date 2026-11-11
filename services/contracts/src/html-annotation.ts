@@ -58,28 +58,29 @@ export function htmlTextFingerprint(text: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+const canonicalizeHtmlText = (value: string) => value.replace(/\s+/g, ' ').trim();
+
 /** Resolve captured offsets only against exact source text, otherwise require a unique canonical quote.
  * Callers must first resolve the persisted identity; never search other nodes.
  */
 export function resolveHtmlTextRange(text: string, anchor: Pick<HtmlNodeAnchor, 'range' | 'quote'>): { status: 'exact' | 'missing' | 'ambiguous'; start: number; end: number } {
+  const quote = canonicalizeHtmlText(anchor.quote);
   let start = -1, end = -1;
-  if (anchor.range && anchor.range.length === text.length && anchor.range.fingerprint === htmlTextFingerprint(text) && text.slice(anchor.range.start, anchor.range.end).replace(/\s+/g, ' ').trim() === anchor.quote.replace(/\s+/g, ' ').trim()) {
+  if (anchor.range && anchor.range.length === text.length && anchor.range.fingerprint === htmlTextFingerprint(text) && canonicalizeHtmlText(text.slice(anchor.range.start, anchor.range.end)) === quote) {
     start = anchor.range.start; end = anchor.range.end;
   } else if (anchor.quote) {
-    let canonical = '';
-    const starts: number[] = [], ends: number[] = [];
-    for (let index = 0; index < text.length; index++) {
-      const character = text[index]!;
-      if (/\s/.test(character)) {
-        if (canonical && canonical.at(-1) !== ' ') { canonical += ' '; starts.push(index); ends.push(index + 1); }
-        else if (canonical) ends[ends.length - 1] = index + 1;
-      } else { canonical += character; starts.push(index); ends.push(index + 1); }
-    }
-    canonical = canonical.trimEnd();
-    const quote = anchor.quote.replace(/\s+/g, ' ').trim();
+    const canonical = canonicalizeHtmlText(text);
     const index = canonical.indexOf(quote);
-    if (index >= 0 && canonical.indexOf(quote, index + 1) >= 0) return { status: 'ambiguous', start: -1, end: -1 };
-    if (index >= 0 && quote) { start = starts[index]!; end = ends[index + quote.length - 1]!; }
+    if (canonical.indexOf(quote, index + 1) >= 0) return { status: 'ambiguous', start, end };
+    if (index >= 0 && quote) {
+      // Walk UTF-16 code units, counting each whitespace run as one canonical space.
+      let position = 0;
+      for (const match of text.matchAll(/\S\s*/g)) {
+        if (position === index) start = match.index;
+        if (position === index + quote.length - 1) { end = match.index + 1; break; }
+        position += match[0].length > 1 ? 2 : 1;
+      }
+    }
   }
   if (start < 0 || end <= start || end > text.length) return { status: 'missing', start: -1, end: -1 };
   return { status: 'exact', start, end };

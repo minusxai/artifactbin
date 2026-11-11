@@ -13,18 +13,18 @@ export function resolveHtmlRange(node: Element, anchor: HtmlNodeAnchor, boundary
   const {status,start,end} = resolveHtmlTextRange(text,anchor);
   if(status!=='exact')return {status,range:null};
   const walk = node.ownerDocument.createTreeWalker(node, 4);
-  let offset = 0, first: Text | null = null, last: Text | null = null, firstOffset = 0, lastOffset = 0;
+  const forward = boundary.endAffinity === 'forward';
+  const range = node.ownerDocument.createRange();
+  let offset = 0;
   for (let current = walk.nextNode(); current; current = walk.nextNode()) {
-    const next = offset + (current.textContent?.length ?? 0);
-    if (!first && start >= offset && start < next) { first = current as Text; firstOffset = start - offset; }
-    if(boundary.endAffinity==='forward'&&end===offset&&next>offset){last=current as Text;lastOffset=0;break;}
-    if (end > offset && end <= next) {
-      last = current as Text; lastOffset = end - offset;
-      if(boundary.endAffinity!=='forward'||end<next)break;
+    const next = offset + (current as Text).length;
+    if (start >= offset && start < next) range.setStart(current, start - offset);
+    if (end > offset && end <= next || forward && end === offset && next > offset) {
+      range.setEnd(current, end - offset);
+      if(!forward||end<next)break;
     }
     offset = next;
   }
-  if (!first || !last) return { status: 'missing', range: null };
-  const range = node.ownerDocument.createRange(); range.setStart(first, firstOffset); range.setEnd(last, lastOffset);
+  if (range.collapsed) return { status: 'missing', range: null };
   return { status: 'exact', range };
 }
