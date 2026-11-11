@@ -11,13 +11,14 @@
  * Postgres wire listener in front of a real PGlite: it admits only a session credential MinusX issued, for exactly
  * the user and connection it was issued for, and records every login.
  */
+// harness-exempt: reset the PGlite built here is the stand-in warehouse behind the governed endpoint, never the app database
 import {createHash,generateKeyPairSync,randomBytes,type KeyObject} from 'node:crypto';
-import http from 'node:http';
 import net from 'node:net';
 import {Hono} from 'hono';
 import {jwtVerify,type JWTPayload,type ProtectedHeaderParameters} from 'jose';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
+import {withHttpServer} from '@artifactbin/test-support/net';
 import {createRunner} from '@artifactbin/runner/local';
 import {createDatabaseTunnels} from '@artifactbin/runner/database-tunnel';
 import {DELEGATION_AUDIENCE,DELEGATION_ISSUER,DELEGATION_TYPE,type MinusxConnectionSession,type RunnerJson} from '@artifactbin/contracts';
@@ -92,7 +93,7 @@ async function minusx(key:KeyObject,gatewayPort:()=>number,sessions:Map<string,S
  const seen:Seen[]=[],jtis=new Set<string>();
  const visible:Record<string,string[]>={};
  const PURPOSE:Record<string,string>={'/api/v1/connections':'catalog.read','/api/v1/catalog':'catalog.read','/api/v1/context':'context.read','/api/v1/connection-sessions':'database.connect'};
- const server=http.createServer(async(req,res)=>{
+ const server=await withHttpServer(async(req,res)=>{
   const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk as Buffer);
   const body=Buffer.concat(chunks),url=new URL(req.url??'/','http://minusx');
   const entry:Seen={method:req.method??'',path:url.pathname,url:req.url??'',token:/^Bearer (.+)$/.exec(req.headers.authorization??'')?.[1]??'',body:body.toString()};
@@ -122,8 +123,7 @@ async function minusx(key:KeyObject,gatewayPort:()=>number,sessions:Map<string,S
   const session:MinusxConnectionSession={protocol:'postgres',host:'127.0.0.1',port:gatewayPort(),user:claims.sub!,password,database:connectionId,tls:sessionTls.mode as MinusxConnectionSession['tls'],expires_at:new Date(Date.now()+15*60_000).toISOString(),policy_revision:3};
   return reply(200,sessionTls.mode===undefined?{...session,tls:undefined}:session);
  });
- await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {seen,visible,url:`http://127.0.0.1:${(server.address() as net.AddressInfo).port}`,close:()=>new Promise<void>(resolve=>server.close(()=>resolve()))};
+ return {seen,visible,url:server.base,close:()=>server.close()};
 }
 
 const SOURCE=`export const secrets={FIN:'minusx'};

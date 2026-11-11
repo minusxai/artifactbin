@@ -42,7 +42,9 @@ describe('a verified-email browser request', () => {
     await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_1','g1','invited@example.com','editor','usr_invited')");
     const { transactions, sql } = await recordStatements(() => sessionActor(request('/api/my/artifacts', { actor })));
     expect(transactions).toBe(1);
-    expect(sql.some((text) => /FOR UPDATE OF g,i/.test(text))).toBe(true);
+    // The group and its ancestors are locked first (lib/groups lockMembershipGroups), then the invitation rows.
+    expect(sql.some((text) => /FROM groups WHERE id=ANY\(\$1::text\[\]\) ORDER BY id COLLATE "C" FOR UPDATE/.test(text))).toBe(true);
+    expect(sql.some((text) => /FOR UPDATE OF i/.test(text))).toBe(true);
     expect((await db.query("SELECT role FROM group_members WHERE group_id='g1' AND user_id='usr_invited'")).rows).toEqual([{ role: 'editor' }]);
     expect((await db.query("SELECT id FROM group_invitations WHERE id='gin_1'")).rows).toEqual([]);
   });

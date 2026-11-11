@@ -34,7 +34,8 @@ import {archiveFor} from '@/lib/skills';
 // lets an agent on a combined installation discover a group's MinusX connections and bind a page to one; the events
 // watch (scripts/events.mjs and its loop toolbox-events.mjs, ~9 KB net of the comment watch it replaces) is one watch
 // over GET /api/events for every page and a group's job runs, and comment.mjs watch is now its comments alias.
-// 1.79 MiB: main's 1.78 and this branch's 1.78 each held their own additions; merged they store 1,873,284 bytes.
+// 1.79 MiB: main's 1.78 and this branch's 1.78 each held their own additions; merged they store 1,873,284 bytes,
+// and the governed-data guide ships in the archive too (about 3.5 KB), which fits after trimming it.
 const SKILL_ARCHIVE_MAX_BYTES=1.79*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
