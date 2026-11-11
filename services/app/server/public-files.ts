@@ -14,7 +14,8 @@
  * Every `/af/` answer carries `Access-Control-Allow-Origin: *` (an opaque-origin document, a raw frame, a portable
  * copy and a host page all load these cross-origin), and no `/af/` handler reads a credential
  * (server/__tests__/url-space.test.ts). Beside them, two root files by convention: `/favicon.ico`, `/og.png`.
- * `/assets/` is NOT here: it is stored user content with its own sandboxed policy (app/assets, APP__ASSETS_ORIGIN).
+ * `/assets/` is NOT here: it is stored user content with its own sandboxed policy (app/assets, APP__ASSETS_ORIGIN);
+ * its immutable cache rule is set below only because it shared the old static block, and its routes own the rest.
  *
  * OLD ADDRESSES (`/libraries/`, `/geojson/`, `/fonts/`, and the short links `/people/`, `/email/`,
  * `/workspace/`) answer through `publicFilePath`: the router sees the new address, so the answer is the same

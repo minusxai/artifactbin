@@ -1,4 +1,4 @@
-/** Released portable files validate /workspace/* replies. Recheck write permissions before opening the hosted document. */
+/** Compatibility only: the target of the legacy `/workspace/<id>` row (contracts legacy-public-paths), which portable files released long ago may open. Nothing emits it. Recheck write permissions before opening the hosted document. */
 import { browserActor } from '@/lib/authentication';
 import {getEditableArtifactFor} from '@/lib/artifacts';
 import {baseUrl,json} from '@/lib/http';

@@ -74,7 +74,7 @@ export const LEGACY_PUBLIC_PATHS: readonly LegacyPublicPath[] = [
     from: '/email/',
     to: '/api/email/',
     why: 'Notification e-mails already delivered carry click links `<origin>/email/<id>` (written by the deployment\'s mail extension through `emailLinkPath` since the move).',
-    deleteWhen: '90 days after the release that moved it is deployed: a notification e-mail older than that is not expected to be clicked, and its click record is expired.',
+    deleteWhen: '90 days after the deployment\'s mail extension starts writing `emailLinkPath` links: a notification e-mail older than that is not expected to be clicked.',
   },
   {
     kind: 'link',
