@@ -520,7 +520,7 @@
    "services/app/lib/groups/__tests__/mutations.test.ts": 3385,
    "services/app/lib/html-autofix/__tests__/autofix.test.ts": 97,
    "services/app/lib/html-autofix/__tests__/local-references.test.ts": 16,
-   "services/app/__tests__/native-acceptance.test.ts": 4602,
+   "services/app/lib/page-operations/__tests__/native-acceptance.test.ts": 4602,
    "services/app/lib/html-bridge/__tests__/comment-presentation.test.ts": 6,
    "services/app/lib/html-bridge/__tests__/comment-view-session.test.ts": 7,
    "services/app/lib/html-component-specs/__tests__/deck-spec.test.ts": 15,

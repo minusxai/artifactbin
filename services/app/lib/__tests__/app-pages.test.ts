@@ -7,7 +7,7 @@ it('answers /dev/ui only in development', () => {
   expect(DEV_SPA_PATHS.test('/dev/ui')).toBe(true);
   expect(spaPaths({ dev: false })).toBe(SPA_PATHS);
   expect(spaPaths({ dev: true })).toBe(DEV_SPA_PATHS);
-  for (const path of ['/', '/trash', '/programs/x/edit', '/datasets/new']) expect(DEV_SPA_PATHS.test(path)).toBe(true);
+  for (const path of ['/', '/trash', '/files/new', '/datasets/new']) expect(DEV_SPA_PATHS.test(path)).toBe(true);
   for (const path of ['/dev', '/dev/ui/x', '/dev/uix']) expect(DEV_SPA_PATHS.test(path)).toBe(false);
 });
 

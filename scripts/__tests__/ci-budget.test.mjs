@@ -252,7 +252,7 @@ it('enrolls existing node-project guard tests that the full suite also runs, onc
 it('enrolls node-project contract tests that the full suite also runs, once each, outside the other lists',()=>{
  const read=path=>JSON.parse(readFileSync(new URL(`../../${path}`,import.meta.url),'utf8'));
  const contracts=read('scripts/ci/contract-tests.json'),guards=read('scripts/ci/guard-tests.json'),fast=read('scripts/ci/fast-tests.json');
- expect(contracts).toContain('services/app/__tests__/native-acceptance.test.ts');
+ expect(contracts).toContain('services/app/lib/page-operations/__tests__/native-acceptance.test.ts');
  expect(contracts).toEqual([...new Set(contracts)].sort());
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain("byIsolation('pr-contracts', 'contract-tests.json'");
  for(const file of contracts){

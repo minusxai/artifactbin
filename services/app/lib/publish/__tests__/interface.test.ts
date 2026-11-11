@@ -144,8 +144,9 @@ describe('preparePublicationBundle',()=>{
  });
  it('reads no function source: a resolverSources field is never read, and an af-resolver link\'s file is an ordinary asset',async()=>{
   const owner=await actor();const html='<link rel="af-resolver" data-af-name="api" href="./api.ts">';
+  // The link names a local file the save does not carry, so it is refused like any other; the field is never read.
   const bare=await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused);
-  expect(bare).toEqual({body:{html,resolverSources:{api:'source'}},receipts:[]});
+  expect(bare instanceof Response?await errorOf(bare):bare).toEqual([400,'unresolved_publication_dependencies']);
   const missing=await preparePublicationBundle({html,publicationBundle:{entryPath:'index.html',files:[]}},owner,BASE,keyed('publish_interface_bundle_03'),unused,unused);
   expect(missing instanceof Response?await errorOf(missing):missing).toEqual([400,'unresolved_publication_dependencies']);
  });

@@ -113,7 +113,7 @@ it('tokens: a service grant and an API grant are live until revoked; introspect 
  const service=await host.signIn(email,'warehouse');
  expect(service.status).toBe(201);expect(service.grant).toMatchObject({scope:'',resource:WAREHOUSE});
  const user=await userIdOf(email);
- expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),actor:null,parent:null}});
+ expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),parent:null}});
  expect(await token(service.grant.id)).toEqual({user_id:user,scopes:[],live:true});
  const plain=await host.signIn(email);
  expect(plain.grant.scope).toBe('artifacts');
@@ -165,8 +165,8 @@ it('the exchange: a signed-in page and an agent\'s one API bearer each get a fiv
  }
  expect((await host.get('/api/artifacts',{authorization:`Bearer ${signed.grant.access_token}`})).status).toBe(200);
  expect(await introspect(page.body.access_token)).toEqual({active:true,user_id:user,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience:WAREHOUSE,
-  expires_at:page.body.expires_at,actor:null,parent:{kind:'session',id:session!.id}});
- expect(await introspect(agent.body.access_token)).toMatchObject({active:true,user_id:user,actor:null,parent:{kind:'token',id:signed.grant.id}});
+  expires_at:page.body.expires_at,parent:{kind:'session',id:session!.id}});
+ expect(await introspect(agent.body.access_token)).toMatchObject({active:true,user_id:user,parent:{kind:'token',id:signed.grant.id}});
  // What the service re-checks by the parent's id is the view's `live`: the bearer read's own rule.
  expect(await token(signed.grant.id)).toMatchObject({live:true});
  // Revoking the agent's grant ends what it was exchanged for, on the next check; the page's is untouched.

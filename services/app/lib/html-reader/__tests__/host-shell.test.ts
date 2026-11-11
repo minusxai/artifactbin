@@ -106,7 +106,7 @@ describe('a host page on the app\'s own origin', () => {
     expect(rows.status, JSON.stringify(rows.body)).toBe(200);
     expect(rows.body.rows).toEqual([{ name: 'ada' }, { name: 'bo' }]);
     // The relays stay pinned as on the app page: another document's door is never reached.
-    expect(await doc.fetchThrough(`/api/artifacts/${w.publicPage}/sql`, 'POST', JSON.stringify({ sql: 'select 1', params: {} }))).toMatchObject({ status: 403 });
+    expect(await doc.fetchThrough(`/api/artifacts/${w.publicPage}/sql`, 'POST', JSON.stringify({ sql: 'select 1', params: {} }))).toMatchObject({ error: 'refused' });
     // A path no relay knows (a page function's, which no longer exists) is refused, never reached.
     expect(await doc.fetchThrough(`/api/artifacts/${w.privatePage}/fn/whoami`, 'POST', '{}')).toMatchObject({ error: 'refused' });
     // The parent's commands reach the frame through the bridge.

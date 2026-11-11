@@ -439,7 +439,7 @@ describe('module graph', () => {
 
 it('permits test-support in package tests while rejecting it in product code', () => {
   const testImport = "import { testDb } from '@artifactbin/test-support/db';";
-  for (const name of ['events', 'runner']) {
+  for (const name of ['events', 'connectors']) {
     const root = tree({ [`services/${name}/__tests__/db.test.ts`]: testImport });
     expect(checkModuleGraph(scanModuleGraph(root), allowList([])).violations).toEqual([]);
     fs.mkdirSync(path.join(root, `services/${name}/src`));

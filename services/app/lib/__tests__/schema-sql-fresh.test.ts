@@ -13,11 +13,9 @@ const read = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const rendered = renderedSchema;
 
 describe('the rendered schema', () => {
-  it('fresh app initialization omits retired agents, schedules and terminal relay while retaining the native controller store',()=>{
+  it('fresh app initialization omits retired agents, schedules, the runner\'s store and the page functions\' tables',()=>{
     const schema=rendered().schema;
-    for(const table of ['hosted_conversations','hosted_branches','runner_schedules','runner_schedule_occurrences','runner_schedule_attempts','remote_agents','remote_work'])expect(schema).not.toContain('CREATE TABLE IF NOT EXISTS app.'+table+' (');
-    expect(schema).toContain('CREATE TABLE IF NOT EXISTS app.runner_runs (');
-    expect(schema).toContain('CREATE TABLE IF NOT EXISTS app.runner_events (');
+    for(const table of ['hosted_conversations','hosted_branches','runner_schedules','runner_schedule_occurrences','runner_schedule_attempts','remote_agents','remote_work','runner_runs','runner_events','html_backend_versions','html_backend_secrets','page_function_schedules'])expect(schema).not.toContain('CREATE TABLE IF NOT EXISTS app.'+table+' (');
   });
   it('records queryable compile versions for filtered backfills', () => {
     const schema = read('SCHEMA.sql');
@@ -70,7 +68,7 @@ describe('the rendered schema', () => {
   });
   it('every table has exactly one owning package, and the declared set is the literal below', () => {
     const owners = rendered().tables;
-    expect(Object.keys(owners).sort()).toEqual(['app.legacy_page_migrations','app.identity_settings','app.artifact_group_shares','app.group_quotas','app.group_audit','app.native_identity_imports','app.html_backend_secrets','app.html_backend_versions','app.page_function_schedules','app.group_links','app.account_preferences','app.deployment_state','app.deployment_members','app.ownership_transfers','app.runner_runs','app.runner_events','app.event_outbox','events.deliveries','app.member_notifications', 'app.user_blocks', 'app.export_image_cache', 'app.export_images', 'app.mermaid_images', 'app.mermaid_harvests', 'app.annotations', 'app.mutation_receipts', 'app.artifact_creation_operations', 'app.artifact_edits','app.region_states','app.region_updates','app.region_snapshots','app.artifact_id_registry','app.id_reservation_batches', 'app.artifact_shares', 'app.artifact_source_ids', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.artifact_view_totals', 'app.codes', 'app.comment_images', 'app.comment_reactions', 'app.dataset_images', 'app.dataset_policy_audit', 'app.dataset_usage',
+    expect(Object.keys(owners).sort()).toEqual(['app.legacy_page_migrations','app.identity_settings','app.artifact_group_shares','app.group_quotas','app.group_audit','app.native_identity_imports','app.group_links','app.account_preferences','app.deployment_state','app.deployment_members','app.ownership_transfers','app.event_outbox','events.deliveries','app.member_notifications', 'app.user_blocks', 'app.export_image_cache', 'app.export_images', 'app.mermaid_images', 'app.mermaid_harvests', 'app.annotations', 'app.mutation_receipts', 'app.artifact_creation_operations', 'app.artifact_edits','app.region_states','app.region_updates','app.region_snapshots','app.artifact_id_registry','app.id_reservation_batches', 'app.artifact_shares', 'app.artifact_source_ids', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.artifact_view_totals', 'app.codes', 'app.comment_images', 'app.comment_reactions', 'app.dataset_images', 'app.dataset_policy_audit', 'app.dataset_usage',
       'app.document_trust', 'app.group_trust', 'app.pages_sessions', 'app.prepared_pages', 'app.data_snapshots', 'app.relations', 'app.web_assets', 'auth.clients', 'auth.credentials',
       'auth.users', 'auth.tokens', 'auth.handle_reservations', 'auth.groups', 'auth.group_hierarchy', 'auth.group_members', 'auth.group_invitations', 'auth.group_mail_outbox', 'events.events', 'events.feed_head'].sort());
     expect(new Set(Object.values(owners))).toEqual(new Set(['app', 'auth', 'events']));

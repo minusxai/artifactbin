@@ -64,7 +64,7 @@ it('the emitted @afbin/state exports seat() and route beside state: a page reads
  const reader=dataUrl('const r=globalThis.__seatReader;export const {config,remote}=r;');
  const state=await import(/* @vite-ignore */ dataUrl(assets.state!.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(reader))));
  expect(state.state.getState()).toEqual({});
- expect(state.seat()).toEqual({kind:'address',pageId:'seat-page',sql:false,writes:false,functions:false});
+ expect(state.seat()).toEqual({kind:'address',pageId:'seat-page',sql:false,writes:false});
  expect(state.route.get()).toEqual({screen:'home'});
  state.route.set({screen:'detail',id:'4'},{push:true});
  expect(pushed).toEqual(['https://abc.pages.test/?$screen=detail&$id=4']);

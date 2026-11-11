@@ -29,11 +29,11 @@ function pageWindow(href:string,{framed=false,origin=new URL(href).origin}={}){
 describe('seat()',()=>{
  it('names each place a page runs and what its doors can do there',()=>{
   const online=()=>false;
-  expect(pageSeat(pageWindow('https://abc.pages.test/',{framed:true}).win,{pageId:'p1',appOrigin:APP,online})).toEqual({kind:'app',pageId:'p1',sql:true,writes:true,functions:true});
-  expect(pageSeat(pageWindow('https://abc.pages.test/').win,{pageId:'p1',appOrigin:APP,online})).toEqual({kind:'address',pageId:'p1',sql:false,writes:false,functions:false});
-  expect(pageSeat(pageWindow('https://me.u.test/report').win,{pageId:'p1',appOrigin:APP,domainReads:true,online})).toEqual({kind:'address',pageId:'p1',sql:true,writes:false,functions:true});
-  expect(pageSeat(pageWindow('https://app.test/a/p1/raw',{origin:'null'}).win,{pageId:'p1',appOrigin:APP,online})).toEqual({kind:'raw',pageId:'p1',sql:false,writes:false,functions:false});
-  expect(pageSeat(pageWindow('file:///tmp/copy.html',{origin:'null'}).win,{pageId:'p1',offline:true,online})).toEqual({kind:'offline',pageId:'p1',sql:true,writes:false,functions:false});
+  expect(pageSeat(pageWindow('https://abc.pages.test/',{framed:true}).win,{pageId:'p1',appOrigin:APP,online})).toEqual({kind:'app',pageId:'p1',sql:true,writes:true});
+  expect(pageSeat(pageWindow('https://abc.pages.test/').win,{pageId:'p1',appOrigin:APP,online})).toEqual({kind:'address',pageId:'p1',sql:false,writes:false});
+  expect(pageSeat(pageWindow('https://me.u.test/report').win,{pageId:'p1',appOrigin:APP,domainReads:true,online})).toEqual({kind:'address',pageId:'p1',sql:true,writes:false});
+  expect(pageSeat(pageWindow('https://app.test/a/p1/raw',{origin:'null'}).win,{pageId:'p1',appOrigin:APP,online})).toEqual({kind:'raw',pageId:'p1',sql:false,writes:false});
+  expect(pageSeat(pageWindow('file:///tmp/copy.html',{origin:'null'}).win,{pageId:'p1',offline:true,online})).toEqual({kind:'offline',pageId:'p1',sql:true,writes:false});
   expect(pageSeat(pageWindow('http://127.0.0.1:4000/').win,{pageId:'local:/',offline:true,localPreview:{},online:()=>true})).toMatchObject({kind:'preview',sql:true,writes:false});
  });
 });
