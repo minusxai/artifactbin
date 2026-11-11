@@ -4,7 +4,7 @@ import {
   type HtmlSelectionActions,
 } from "../selection-actions";
 import { htmlSelection } from "../../html-bridge/selection";
-import { REGION_EDITOR_ATTR } from "../region-editor";
+import { REGION_EDITOR_ATTR } from "../region-editor-contract";
 let actions: HtmlSelectionActions | undefined;
 afterEach(() => {
   actions?.dispose();

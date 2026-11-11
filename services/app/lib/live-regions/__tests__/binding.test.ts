@@ -7,7 +7,8 @@
 import { TextSelection } from 'prosemirror-state';
 import { afterEach, describe, expect, it } from 'vitest';
 import type * as Y from 'yjs';
-import { absolutePosition, regionText, relativePosition } from '..';
+import {regionText} from '..';
+import {absolutePosition,relativePosition} from './legacy-binding';
 import { bare, Room, type Client } from './harness';
 
 let rooms: Room[] = [];

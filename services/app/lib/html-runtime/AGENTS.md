@@ -8,10 +8,11 @@ build that serve them. Access decisions belong to the doors behind the trusted p
 - Keep the trust boundaries apart. Author scripts get no credential and never reach the app API: `sql`,
   `fetch('/fn/NAME')` and uploads go through the reader's frame bridge to the parent, which adds the reader's
   sign-in and the trusted revision; `frame-door.ts` swallows every bridge envelope before author listeners
-  run. Editing code (`region-editor.ts`) loads only when the parent opens a region session for an editor, never for readers.
+  run. Editing code (`native-region-editor.ts`) loads only when the parent opens a region session for an editor, never for readers.
 - Anything assembly writes inside a `<script>` is escaped as `assembleHtmlPage` does (`<` in JSON, `</script`
   in code). Viewer state stays in this viewer's browser storage; only an explicit local Save reads it
   (`readViewerDocument`).
+- Page editing uses only the native engine. `@afbin/regions` remains a small native re-export for old import maps; legacy page sessions are refused before decoding. Keep the cell Y.Text engine and historical storage compatibility. Deploy removal only after zero active and trashed legacy page heads are verified.
 - Runtime modules are public code: no page, viewer, cookie or credential is an input to their bytes, so they
   never carry viewer state (`native-html.server.ts`). A retained content-addressed alias serves its exact bytes.
 - A page's extra script, frame or connect origins come only from publish-validated `<head>` declarations

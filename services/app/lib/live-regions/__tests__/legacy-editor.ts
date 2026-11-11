@@ -1,3 +1,4 @@
+/** Test-only historical editor oracle for storage/CRDT compatibility; never shipped by production entries. */
 /**
  * The editor side of a live region: the ProseMirror state a browser edits, bound to the region's Y.Text by
  * binding.ts (sync and per-person undo). This adds the id dedupe filter, Markdown input rules, the flat-block commands
@@ -11,10 +12,10 @@ import { DOMParser, DOMSerializer, Fragment, Slice, type Node as PMNode, type Sc
 import { EditorState, Plugin, PluginKey, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import type * as Y from 'yjs';
 import { Decoration, DecorationSet } from 'prosemirror-view';
-import { bindingPlugin, redo, undo } from './binding';
-import { readRegion, writeRegion, type SourceNode } from './html';
-import { readText } from './lines';
-import { ID_ATTRS, MAX_DEPTH, regionSchema, safeHref, type ListType, type RegionKind } from './schema';
+import { bindingPlugin, redo, undo } from './legacy-binding';
+import { readRegion, writeRegion, type SourceNode } from '../html';
+import { readText } from '../lines';
+import { ID_ATTRS, MAX_DEPTH, regionSchema, safeHref, type ListType, type RegionKind } from '../schema';
 
 /** A browser DOM subtree as html.ts's element tree. */
 function domSource(nodes: ArrayLike<Node>): SourceNode[] {

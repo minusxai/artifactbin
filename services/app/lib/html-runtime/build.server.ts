@@ -31,7 +31,7 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const portableBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./portable-session.ts',import.meta.url))],format:'esm',external:['@afbin/chrome']});
  // The live morph (./live-morph) loads only when a new version reaches an open framed page.
  const morphBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./live-morph.ts',import.meta.url))],format:'esm'});
- // The region editor (./region-editor: ProseMirror and Yjs) loads only when the parent opens a region session for an editor.
+ // The native region editor (./native-region-editor: Tiptap and Yjs) loads only when the parent opens a region session for an editor.
  const regionPlugins:Plugin[]=[{
   name:'pure-lib0-dom-schemas',
   setup(builder){builder.onLoad({filter:/[/\\]lib0[/\\]dom\.js$/},async({path})=>({
@@ -41,7 +41,8 @@ async function compile():Promise<HtmlRuntimeAssets>{
    contents:(await readFile(path,'utf8')).replaceAll('= $.$custom(', '= /* @__PURE__ */ $.$custom('),loader:'js',
   }));},
  }];
- const regionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:regionPlugins});
+ // Keep the public name for existing import maps without shipping the retired engine.
+ const regionsSource='export {mountRegionEditor} from "@afbin/native-regions";';
  // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
  const nativeMarkdownBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./native-region-markdown.ts',import.meta.url))],format:'esm'});
  const nativeRegionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./native-region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:regionPlugins});
@@ -53,7 +54,7 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const chrome=await buildPortableChrome();
  // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
  // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
- const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsBuild.outputFiles![0]!.text,nativeRegions:nativeRegionsBuild.outputFiles![0]!.text,nativeMarkdown:nativeMarkdownBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text,offlineSql:offlineSqlBuild.outputFiles![0]!.text};
+ const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsSource,nativeRegions:nativeRegionsBuild.outputFiles![0]!.text,nativeMarkdown:nativeMarkdownBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text,offlineSql:offlineSqlBuild.outputFiles![0]!.text};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
  const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
