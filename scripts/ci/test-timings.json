@@ -1108,6 +1108,7 @@
    "scripts/__tests__/runtime-asset-paths.test.mjs": 1,
    "scripts/__tests__/script-paths.test.mjs": 187,
    "scripts/__tests__/server-reader-cache.test.mjs": 3,
+   "scripts/__tests__/shell-size.test.mjs": 9000,
    "scripts/__tests__/stored-shape-pins.test.mjs": 25,
    "scripts/__tests__/v3-ci.test.mjs": 466,
    "scripts/__tests__/workflows.test.mjs": 261,

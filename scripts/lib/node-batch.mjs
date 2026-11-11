@@ -47,6 +47,9 @@ export const NODE_BATCH_GUARDED = Object.freeze([
   // skill's own tests (a guard list) do not cover what the check reports for a page's calls.
   'services/app/lib/html-publication-bundle/__tests__/author-check.test.ts',
   'services/app/lib/html-publication-bundle/__tests__/check-steps.test.ts',
+  // The hosted libraries' served URLs: failed on main after the public files moved to `/af/lib/`, in a file too slow
+  // for the batch (it bundles Vega); the URL assertion now lives apart.
+  'services/app/lib/libraries/__tests__/library-urls.test.ts',
 ]);
 
 /** The pr fast lists whose files already run on every pull request. */

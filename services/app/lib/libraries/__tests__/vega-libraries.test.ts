@@ -4,7 +4,6 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {expect,it,vi} from 'vitest';
-import {libraryUrls} from '../index';
 const directory=fileURLToPath(new URL('../',import.meta.url));
 const require=createRequire(import.meta.url);
 async function bundled(name:string) {
@@ -18,9 +17,6 @@ async function bundled(name:string) {
  const module=await import(/* @vite-ignore */`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
  return {module,result};
 }
-it('advertises separate explicitly pinned Vega and Vega-Lite module URLs',()=>{
- expect(libraryUrls('https://example.invalid')).toMatchObject({vega:'https://example.invalid/libraries/vega-6.3.1/index.js','vega-lite':'https://example.invalid/libraries/vega-lite-6.4.3/index.js'});
-});
 it('keeps the pinned compiler Vega import boundary to four direct utility reexports without a second runtime',async()=>{
  const source=await readFile(require.resolve('vega-lite'),'utf8');
  const imports=[...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]vega['"]/g)].flatMap(match=>match[1]!.split(',').map(binding=>binding.trim().split(/\s+as\s+/)[0]));

@@ -17,6 +17,7 @@
   "scripts/__tests__/runtime-asset-paths.test.mjs",
   "scripts/__tests__/script-paths.test.mjs",
   "scripts/__tests__/server-reader-cache.test.mjs",
+  "scripts/__tests__/shell-size.test.mjs",
   "scripts/__tests__/slim-install.test.mjs",
   "scripts/__tests__/stored-shape-pins.test.mjs",
   "scripts/__tests__/v3-ci.test.mjs",
