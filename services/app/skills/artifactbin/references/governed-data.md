@@ -13,8 +13,7 @@ models that group may see. Anywhere else
 
 ## Discover
 
-Pick the group the analysis is for (one you are a direct member of; `node scripts/groups.mjs
-list`), then ask MinusX what it may read:
+Pick a group you are a direct member of (`node scripts/groups.mjs list`), then ask MinusX what it may read:
 
 ```bash
 node scripts/minusx.mjs connections --group finance
@@ -22,8 +21,7 @@ node scripts/minusx.mjs catalog --group finance --connection conn_finance
 node scripts/minusx.mjs context --group finance --connection conn_finance
 ```
 
-`catalog` lists only what that group may query; models are in schema `_views`
-(`select month, net_revenue_usd from _views.monthly_revenue`). `context` gives the group's docs,
+`catalog` lists only what that group may query; models are in schema `_views`. `context` gives the group's docs,
 metric definitions and model versions. Prefer a model
 to raw tables. Everything runs under that one group, never the union of your groups.
 
@@ -51,7 +49,7 @@ node scripts/minusx.mjs bind PAGE12 --name FIN --group finance --connection conn
 
 The server checks that you are a direct member of the group and that the group can see the
 connection, and stores only `{connection_id, group_id}`. Every later publish checks it again
-for whoever publishes; to change the group or connection, bind again. A group-owned page
+for whoever publishes; bind again to change it. A group-owned page
 (`publish --group`) may carry a binding: any editor of the owning group who is a direct member
 of the pinned group binds it.
 
@@ -61,7 +59,7 @@ Each call runs as its viewer: the server asks MinusX for a short-lived session f
 under the pinned group, and MinusX checks their membership and the group's rules on every
 statement. A viewer outside the group, or a signed-out reader, gets the page with a
 `data_access_denied` error (`e.code`) from `caps.db`, never your rows: catch it and show a
-clear state. Uncaught, the call answers `500 {"error":"backend_failed","message":"data_access_denied: FIN"}`.
+clear state. Uncaught, the call answers 500 `backend_failed`.
 `data_unavailable` means MinusX did not answer: show that the data is unavailable and retry
 later. Sharing a page with the group grants no data access by itself.
 
