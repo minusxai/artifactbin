@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  A CUSTOM SHELL FIXTURE (APP__SHELL_FILE) for scripts/gates/gate-host-comments.mjs: another deployment's face on the app's
+  origin that shows a document with the host module (/af/host.js) and asks for its discussion (`comments: true`). It
+  sets the documented theme tokens in its own palette, light and dark, keeps a comments button with the open count, and
+  gives the module a panel for the rail. Every event the module sends is kept in `window.hostEvents` for the gate.
+-->
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Host shell</title>
+<style>
+:root {
+  color-scheme: light;
+  --background: #f7f3ea; --foreground: #2a2016; --card: #fffaf0; --card-foreground: #2a2016; --popover: #fffaf0;
+  --popover-foreground: #2a2016; --primary: #7a3410; --primary-foreground: #ffffff; --secondary: #eee5d6;
+  --secondary-foreground: #2a2016; --muted: #efe6d7; --muted-foreground: #6a5946; --accent: #eee5d6;
+  --accent-foreground: #2a2016; --destructive: #b42318; --destructive-foreground: #ffffff; --border: #dccdb6;
+  --input: #cfbd9f; --ring: #7a3410; --radius: 10px; --font-display: Georgia, serif; --font-body: Georgia, serif;
+  --font-mono: ui-monospace, monospace;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #17120d; --foreground: #f1e8da; --card: #221a12; --card-foreground: #f1e8da; --popover: #221a12;
+  --popover-foreground: #f1e8da; --primary: #e39a62; --primary-foreground: #17120d; --secondary: #2e241a;
+  --secondary-foreground: #f1e8da; --muted: #2a2117; --muted-foreground: #b9a78f; --accent: #2e241a;
+  --accent-foreground: #f1e8da; --destructive: #f0705f; --destructive-foreground: #17120d; --border: #3d3024;
+  --input: #4a3b2c; --ring: #e39a62;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--background); color: var(--foreground); font: 15px/1.4 var(--font-body); display: flex; flex-direction: column; }
+header { flex: none; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+header h1 { font-size: 16px; margin: 0; flex: 1; }
+header button { font: inherit; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: inherit; cursor: pointer; }
+main { flex: 1; min-height: 0; display: flex; }
+#doc { flex: 1; min-width: 0; display: flex; }
+#doc iframe { flex: 1; border: 0; }
+#panel { width: 360px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--card); }
+#panel[hidden] { display: none; }
+@media (max-width: 640px) { #panel { display: none; } }
+</style>
+<script type="module" nonce="__CSP_NONCE__">
+window.hostEvents = [];
+const id = /^\/a\/([A-Za-z0-9_-]+)/.exec(location.pathname)?.[1];
+const container = document.querySelector('#doc'), panel = document.querySelector('#panel');
+const button = document.querySelector('#comments'), modeButton = document.querySelector('#mode');
+for (const name of ['af-document-ready', 'af-document-comments', 'af-document-thread', 'af-document-presence', 'af-document-sign-in'])
+  container.addEventListener(name, (event) => window.hostEvents.push({ name, detail: event.detail }));
+container.addEventListener('af-document-comments', (event) => {
+  const { open, unread, panel: shown } = event.detail;
+  button.textContent = `Comments ${open}${unread ? ` (${unread} new)` : ''}`;
+  button.setAttribute('aria-label', `Comments, ${open} open`);
+  button.setAttribute('aria-pressed', String(shown));
+  panel.hidden = !shown || matchMedia('(max-width: 640px)').matches;
+});
+const phone = () => matchMedia('(max-width: 640px)').matches;
+const doc = id ? await import('/af/host.js').then(({ mountDocument }) => mountDocument(container, { id, title: 'Story', comments: true, presence: true })) : null;
+window.hostDocument = doc;
+button.addEventListener('click', () => {
+  if (button.getAttribute('aria-pressed') === 'true') doc?.closeComments();
+  else doc?.openComments(phone() ? null : panel);
+});
+modeButton.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  modeButton.textContent = next === 'dark' ? 'Light' : 'Dark';
+  doc?.setMode(next);
+});
+doc?.setMode('light');
+</script>
+</head>
+<body>
+<header><h1>Host shell</h1><button id="mode" type="button">Dark</button><button id="comments" type="button" aria-pressed="false">Comments</button></header>
+<main><div id="doc"></div><aside id="panel" hidden aria-label="Comments panel"></aside></main>
+</body>
+</html>

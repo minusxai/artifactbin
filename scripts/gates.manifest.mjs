@@ -89,6 +89,9 @@ export const GATE_SPECS = Object.freeze([
   // with no save pressed a signed-out reader sees the text and follows new typing. Two pause saves are waited for.
   { name: 'new-doc', needsMail: true, seconds: 20, timeoutMs: 90_000 },
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
+  // A custom shell's document discussion through /af/host.js: three accounts, boots its own server with the fixture shell.
+  // Measured locally (see the gate's header); CI weight pending its first run.
+  { name: 'host-comments', needsMail: true, seconds: 25, timeoutMs: 90_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
   { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'reading-geometry', needsMail: false, seconds: 74, timeoutMs: 190_000 },
