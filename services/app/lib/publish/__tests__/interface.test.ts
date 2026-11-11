@@ -136,21 +136,18 @@ describe('preparePublicationBundle',()=>{
    [{html:'<img src="./logo.svg">',publicationBundle:bundle},undefined,'bundle_idempotency_required'],
    [{html:'<img src="./logo.svg">',publicationBundle:bundle},keyed('short'),'bundle_idempotency_required'],
    [{html:'<img src="./missing.svg">',publicationBundle:bundle},keyed('publish_interface_bundle_01'),'unresolved_publication_dependencies'],
-   [{html:'<link rel="af-resolver" data-af-name="api" href="./api.graphql">',resolverSources:{api:'type Query{b:Int}'},publicationBundle:{entryPath:'index.html',files:[file('api.graphql','type Query{a:Int}','text/plain')]}},keyed('publish_interface_bundle_01'),'conflicting_backend_sources'],
   ];
   for(const [body,req,error] of refusals){
    const result=await preparePublicationBundle(body,owner,BASE,req,unused,unused);
    expect(result instanceof Response?await errorOf(result):result).toEqual([400,error]);
   }
  });
- it('reads resolverSources as the resolver field and leaves the removed backendSources field unread',async()=>{
+ it('reads no function source: a resolverSources field is never read, and an af-resolver link\'s file is an ordinary asset',async()=>{
   const owner=await actor();const html='<link rel="af-resolver" data-af-name="api" href="./api.ts">';
-  expect(await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused)).toEqual({body:{html,resolverSources:{api:'source'}},receipts:[]});
-  // The removed field resolves nothing: the af-resolver link stays unresolved.
-  const removed=await preparePublicationBundle({html,backendSources:{api:'source'}},owner,BASE,undefined,unused,unused);
-  expect(removed instanceof Response?await errorOf(removed):removed).toEqual([400,'unresolved_publication_dependencies']);
-  const bundled=await preparePublicationBundle({html,resolverSources:{api:'other'},publicationBundle:{entryPath:'index.html',files:[file('api.ts','source','text/plain')]}},owner,BASE,keyed('publish_interface_bundle_03'),unused,unused);
-  expect(bundled instanceof Response?await errorOf(bundled):bundled).toEqual([400,'conflicting_backend_sources']);
+  const bare=await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused);
+  expect(bare).toEqual({body:{html,resolverSources:{api:'source'}},receipts:[]});
+  const missing=await preparePublicationBundle({html,publicationBundle:{entryPath:'index.html',files:[]}},owner,BASE,keyed('publish_interface_bundle_03'),unused,unused);
+  expect(missing instanceof Response?await errorOf(missing):missing).toEqual([400,'unresolved_publication_dependencies']);
  });
  it('creates each new file through the caller under a reserved id and rewrites the page to its address',async()=>{
   const owner=await actor();

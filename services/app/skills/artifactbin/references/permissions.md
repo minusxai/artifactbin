@@ -6,8 +6,8 @@ description: "Read before deciding who may see, add or change a dataset's rows: 
 
 Every dataset has one permission document in Hasura's metadata format (version 3). It decides who
 can see, add, change and delete rows, through every door: the page's `sql` reads and writes,
-everything a [function](functions.md) does for a reader (`caps.sql`), `sql.mjs`, downloads and
-exports. Read it, change it and save it only with `node scripts/policy.mjs` (`--help`). Only the
+`sql.mjs`, downloads and exports. It is the only check on a write: no code of yours runs on the
+server. Read it, change it and save it only with `node scripts/policy.mjs` (`--help`). Only the
 dataset's owner and editors can.
 
 ## Contents
@@ -27,9 +27,7 @@ Each request has exactly one role, decided by the dataset's own sharing, never b
 
 Someone reading a page that links the dataset, with no share of their own on the dataset, is
 `signed_in` if signed in, otherwise `anonymous`: linking grants nothing by default. Rules match one
-role exactly, so a rule for `signed_in` does not cover `viewer`: list every role it is for. (A
-function's `roles` entry is different: it means "at least" on the page, anonymous < signed_in <
-viewer < editor < owner; see [functions](functions.md#roles).)
+role exactly, so a rule for `signed_in` does not cover `viewer`: list every role it is for.
 
 ## The document
 
@@ -48,13 +46,12 @@ viewer < editor < owner; see [functions](functions.md#roles).)
 
 A CSV or JSON dataset is one table, `public.rows`. Rules name source columns (as in the file).
 `select`: `columns` (`"*"` or a list), `filter`, `limit` (at most 1000), `allow_aggregations`
-(lets a function's `caps.sql` and direct dataset SQL read the table; the page's `sql` needs only
-the select rule).
+(lets direct dataset SQL read the table; the page's `sql` needs only the select rule).
 `insert`: `columns`, `check`, `set`. `update`: `columns`, `filter`, `check`, `set`. `delete`: `filter`. Filters use the query `where` grammar.
 Hidden columns cannot be read, filtered, sorted or aggregated. A table's `collaborative_columns` (text
 columns) are typed in live together with `@afbin/collab`
-([datasets](datasets.md#type-together-afbincollab)). `backend_only:true` limits an entry
-to the owner's trusted page programs, not the page's `sql` or functions. `configuration` is
+([datasets](datasets.md#type-together-afbincollab)). `backend_only:true` makes an entry
+apply to no page `sql`, so leave it out. `configuration` is
 server-owned: omit it or send it unchanged.
 
 Session values, filled by the server: `X-Hasura-User-Id` (the account), `X-Hasura-Page-Id` (the page
@@ -80,13 +77,13 @@ a group gets there through `groups.mjs share PAGE --group GROUP --datasets`, nev
 
 ## What this viewer may change
 
-The rules judge every write; the page only chooses which controls to show. Learn who reads from
-a function that returns its `principal` (`me` in `examples/tracker.ts`: signed in, account ID,
-role on the page), then follow the rules' shape: owner and editors change everything; with
-`own-rows`, a signed-in reader adds and changes rows whose owner column is their ID. `role` is
-the page role, not the dataset's: a write the rules refuse still fails. A write changes only
-rows the reader may: `affected: 0` means not allowed (or changed meanwhile), and the page must
-say so. A guest gets no write controls.
+The rules judge every write; the page only chooses which controls to show. A page knows whether
+its reader is signed in (`watchUploadContext` from `@afbin/apollo`, [runtime](runtime.md)), not
+their account or role: show the write controls to a signed-in reader (`examples/tracker.html`)
+and let the rules decide. A write changes only rows the reader may: `affected: 0` means not
+allowed (or changed meanwhile), and the page must say so; a refused insert fails with
+`permission_denied`. A guest gets no write controls. Rules decide who may write which rows; they
+cannot cap how many rows there are (at most N per group).
 
 ## Change permissions: dry run, read-back, set
 

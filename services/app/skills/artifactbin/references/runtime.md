@@ -1,6 +1,6 @@
 ---
 name: runtime
-description: "Read for page state and behaviour: viewer-local state with @afbin/state, its defaults and versions, datasets and functions from the page, elements a script creates and their comments, and offline or downloaded pages."
+description: "Read for page state and behaviour: viewer-local state with @afbin/state, its defaults and versions, datasets from the page, elements a script creates and their comments, and offline or downloaded pages."
 ---
 ## Read first
 
@@ -35,7 +35,7 @@ The reader starts immediately. `@afbin/state` and `@afbin/apollo` load on their 
 - [Saved state](#saved-state)
 - [Dynamic elements and comments](#dynamic-elements-and-comments)
 - [Saved comment views](#saved-comment-views)
-- [Datasets and functions](#datasets-and-functions)
+- [Datasets](#datasets)
 - [Offline and downloaded pages](#offline-and-downloaded-pages)
 
 ## Saved state
@@ -72,7 +72,7 @@ Use a distinct prefix per list and role, keep each ID unique on the page, never 
 
 ## Saved comment views
 
-A comment saves the reader's view: every top-level field of the state block's JSON (linked dataset and backend names excepted). Keep typed text (drafts, notes, search boxes), tokens and personal information out of the state block, or exclude it:
+A comment saves the reader's view: every top-level field of the state block's JSON (linked dataset names excepted). Keep typed text (drafts, notes, search boxes), tokens and personal information out of the state block, or exclude it:
 
 ```html
 <script type="application/json" data-af="state" data-af-comment-exclude='["draft"]'>
@@ -82,28 +82,28 @@ A comment saves the reader's view: every top-level field of the state block's JS
 
 `data-af-comment-fields='["screen","tab"]'` saves only the named fields instead. Lists hold unique simple field names; an invalid one saves no view and `autofix` refuses it. A saved view restores only while the field set (or an explicit `data-af-comment-version`) is unchanged. Views are bounded JSON (32 KiB): fields that do not fit are left out; incompatible snapshots show a message without changing state.
 
-Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. Dataset rows, function answers and writes are never captured or replayed. Target identity rules still apply if the restored screen no longer contains that element.
+Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. Dataset rows and writes are never captured or replayed. Target identity rules still apply if the restored screen no longer contains that element.
 
-## Datasets and functions
+## Datasets
 
 An HTML link declares one unique `data-af-name` (never `viewer`), bound by the page version to
-an authorized dataset or an immutable backend version. Read and write rows with `` sql`…` ``
-([datasets](datasets.md)); call a backend function with `fetch('/fn/NAME')`
-([functions](functions.md)); browsers never fetch its source. Who reads (signed in, account ID,
-page role) is a function's `principal`: return it from one (`me` in `examples/tracker.ts`). Give
-guests read-only controls; dataset rules and `roles` still decide. Calls wait up to 3 s for the
-hosted parent; with no app connection `sql` rejects with `unavailable` and `/fn` with a
-`TypeError`. Do not depend on platform-internal bridge functions.
+an authorized dataset. Read and write rows with `` sql`…` `` ([datasets](datasets.md)); no code
+of the page's runs on the server, so the dataset's rules are the only check on a write. Whether
+the reader is signed in comes from `watchUploadContext` (`state` is `signed-in`, `signed-out` or
+`read-only`): a hint for which controls to show, never a grant. Give guests read-only controls.
+Calls wait up to 3 s for the hosted parent; with no app connection `sql` rejects with
+`unavailable`. Do not depend on platform-internal bridge functions.
 
 ```js
-import {onResolverChange} from '@afbin/apollo';
-const changes=onResolverChange(names=>{
- if(names.includes('viewer'))void refreshWho(); // signed in or out: ask the function again
+import {watchUploadContext} from '@afbin/apollo';
+const who=watchUploadContext(({state})=>{
+ showControls(state==='signed-in'); // signed in or out: the controls follow
 });
-// When removing this UI: changes.unsubscribe();
+// When removing this UI: who.unsubscribe();
 ```
 
-Names identify changed links (and `viewer`), not results or grants; `sql.watch` reruns on its
+`onResolverChange(names=>…)` names changed links (and `viewer` on sign-in or out), not results
+or grants; `sql.watch` reruns on its
 own. Writes never retry: an unknown outcome needs a read before any new write, never a success
 message. Errors must reach the UI. Clear private UI on a completed refusal (signed out, access
 removed): the rows and the controls that depended on who read, not only a status. Never copy
@@ -113,7 +113,7 @@ dataset rows into persisted local state; keep selections and filters local.
 
 A downloaded copy has no app connection: its `sql` reads answer from the rows its downloader could read, carried in the file; writes and `/fn` calls fail, so link to the original for those. Local state works offline. `remoteReadOnly` from `@afbin/apollo` is true in a downloaded copy: disable shared writes when it is. Open the original for sign-in, comments or shared changes. Test downloads.
 
-A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared backend data.
+A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared dataset rows.
 
 ## Portable images
 

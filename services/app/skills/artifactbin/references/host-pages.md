@@ -12,7 +12,7 @@ with an `integrity` hash per file. Read it when you build or deploy the shell, a
 it gives you: they never change, while the flat `/af/components/<name>.js` addresses follow every
 deploy.
 
-Showing a document itself (its frame, its `sql` and `fetch('/fn/NAME')`) works only for a shell
+Showing a document itself (its frame and its `sql`) works only for a shell
 served at the app's own origin, for example a front door that passes the app's API through
 ([second example](#a-document-in-a-shell-on-the-apps-origin)). A shell on any other origin can
 only frame the app page `/a/<id>` (its origin must be in the deployment's trusted embed list).
@@ -92,8 +92,8 @@ thing such a policy still drops: `af-markdown` aligns table columns with a `styl
 
 `/af/host.js` (pinned as `host`) runs the trusted parent's half of the page bridge without the
 app: it asks `/api/page/frame/<id>` for the frame's one-time ticket with this origin's session,
-draws the frame with the app page's sandbox, and relays the document's `sql` and
-`fetch('/fn/NAME')` as the signed-in reader, pinned to the served revision exactly as the app
+draws the frame with the app page's sandbox, and relays the document's `sql` as the signed-in
+reader, pinned to the served revision exactly as the app
 page does. It refuses to mount on any origin but the app's; the document's door ignores every
 other parent. A reader who may not read the document gets `HostShellError` `not_found`. It shows
 the current version only (relays pin the head's revision), never an archived one. The shell's

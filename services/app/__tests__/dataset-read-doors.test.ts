@@ -81,7 +81,7 @@ it('SQL doors (/a/:id/tables, query_resource) run over the role view: hidden col
   sees(JSON.stringify(await run(viewer.actor)), false);
 });
 
-it('query_resource SQL needs allow_aggregations, as caps.sql does: a flagless role reads rows by table name only', async () => {
+it('query_resource SQL needs allow_aggregations: a flagless role reads rows by table name only', async () => {
   const { owner, viewer, other, id } = await setup();
   const db = await getDb();
   const editor = await person('editor');

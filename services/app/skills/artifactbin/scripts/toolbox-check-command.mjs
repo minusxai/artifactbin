@@ -145,8 +145,7 @@ export async function checkCommand({values, positionals}, options = {}) {
           ]))
         );
     }
-    // Failed calls get the owner detail; what only an unset secret blocked is
-    // Not tested, not failed.
+    // Failed calls get the owner detail.
     const checks = [...result.checks, ...extra];
     const found = await explainCalls(client, id, checks, viewer === 'guest');
     result = Object.assign(summarizeCheck(checks), found);

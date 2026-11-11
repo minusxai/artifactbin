@@ -161,16 +161,14 @@ const RETIRED: Retired[] = [
     reason: 'P3: no cost steering; check and export help say what they do (the owner-approved exception is SKILL.md Known failure modes, each note under 50 words)'},
   {pattern: /Original Chart defaults|old compact default|Previously downloaded|Mermaid\.js `initialize`|KEPT FOR EXISTING/,
     scopes: AGENT_TEXT, reason: 'P4: no legacy or migration notes in agent text (no backward-compat prose)'},
-  {pattern: /no connected databases|no raw TCP|out of reach/, scopes: AGENT_TEXT,
-    reason: 'P5: backend functions reach Postgres and MySQL with caps.db (references/functions.md)'},
   {pattern: /head -30 scripts|read the top of it|New page, steps|served; skip|don't read the CSS|This file is for reading/,
     scopes: [...AGENT_TEXT, 'designSystems'], reason: 'P6: scripts are learned with --help; design-system CSS needs no reading'},
   {pattern: /Household budget|qa-1\.json|older starter title|\^(?:Pitch deck|Shared dashboard)\$/, scopes: AGENT_TEXT,
     reason: 'P1: starters carry neutral placeholders and no one-prompt constants'},
   {pattern: /\((?:rulings? )?[HMSL]\d{1,2}(?:, [HMSL]\d{1,2})*\)/, scopes: AGENT_TEXT,
     reason: 'P6: internal ruling tags stay out of agent-readable text'},
-  // The 2026-11-10 SQL model (Q): new pages read and write datasets with sql, call their own API with
-  // fetch('/fn/NAME') and keep viewer state in @afbin/state. GraphQL is deprecated: the skill carries nothing for it.
+  // The SQL model (Q): new pages read and write datasets with sql and keep viewer state in @afbin/state. GraphQL is
+  // deprecated: the skill carries nothing for it.
   {pattern: /client\s*\.\s*(?:query|mutate|watchQuery|updateQuery|addResolvers)\b/, scopes: AGENT_TEXT,
     reason: 'Q1: datasets are read and written with sql, viewer state with @afbin/state, never the Apollo client'},
   {pattern: /\bgql\s*[`(\[]|`gql`/, scopes: AGENT_TEXT,
@@ -178,8 +176,12 @@ const RETIRED: Retired[] = [
   {pattern: /downloaded copy has no app connection: `sql` rejects|show that the data lives in the original page/, scopes: AGENT_TEXT,
     reason: 'Q4: a downloaded copy answers its sql reads from the rows it carries (lib/html-runtime offline-sql)'},
   {pattern: /\btypeDefs\b/, scopes: AGENT_TEXT,
-    reason: 'Q2: a backend file exports functions, roles, secrets and schedule; never GraphQL SDL'},
-  {pattern: /@auth\b/, scopes: AGENT_TEXT, reason: 'Q2: export const roles = {name: role} says who may call a function'},
+    reason: 'Q2: no GraphQL SDL: a page links datasets and reads them with sql'},
+  {pattern: /@auth\b/, scopes: AGENT_TEXT, reason: 'Q2: the dataset rules say who may read and write rows'},
+  // No author code runs on the server (F): page functions, their secrets and schedules are gone; the dataset rules
+  // are the only check on a write.
+  {pattern: /\/fn\/|\bcaps\.[a-z]|af-resolver|resolverSources|export const (?:schedule|roles|secrets)\b|Resolvers (?:settings|tab)|backend function/i,
+    scopes: AGENT_TEXT, reason: 'F1: no page functions: a page reads and writes datasets with sql, and their rules decide'},
   {pattern: /(?<![\w.$])_sql\b/, scopes: [...AGENT_TEXT, 'registry'],
     reason: 'Q1: a page computes with the sql tag (sql`…`), not the _sql GraphQL field'},
   {pattern: /\bGraphQL\b|\bApollo (?:state|client|value)/i, scopes: DOCS,
@@ -230,10 +232,10 @@ describe('retired skill phrasing', () => {
       'P1: deck steps': 'every title states only what its slide shows', 'P1: the generator': 'use this count, not wc -l',
       'P2: the reply': '(separate from the reply, even a link-only one)', 'P2: permissions.md': 'write no owner steps that expect a refusal',
       'P3:': 'Republish only to fix a failed requirement', 'P4:': 'Original Chart defaults: transparent',
-      'P5:': 'there are no connected databases', 'P6: scripts': 'read `head -30 scripts/NAME.mjs`',
+      'F1:': "fetch('/fn/me')", 'P6: scripts': 'read `head -30 scripts/NAME.mjs`',
       'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
-      'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
-      'E1: the comment feed': 'GET /api/artifacts/ID/annotations/changes?after=now', 'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
+      'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: no GraphQL SDL': 'export const typeDefs = `',
+      'E1: the comment feed': 'GET /api/artifacts/ID/annotations/changes?after=now', 'Q2: the dataset rules': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
       'Q1: the skill ships': 'node scripts/graphql.mjs schema ID',
       'W1:': 'Watching is part of every task, however short the reply.',
       'V1:': 'so "my team can view" needs\n  nothing more.',

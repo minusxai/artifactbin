@@ -215,7 +215,7 @@ export interface SqlService {
 }
 
 /**
- * ONE PAGE READ'S SQL BUDGET: a resolver's `caps.sql` call. Inputs (inline and
+ * ONE PAGE READ'S SQL BUDGET: a page's `sql` read. Inputs (inline and
  * dataset rows together) are bounded before the engine runs; `timeoutMs` is each `run`'s engine interrupt and
  * `wallMs` the whole call, dataset reads included.
  */

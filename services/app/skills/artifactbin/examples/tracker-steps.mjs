@@ -4,9 +4,8 @@
  *   features' steps (and the -guest and -cleanup files); no edits needed: node scripts/check.mjs
  *   index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs
  * Gotchas: the wide viewport adds TEST to the first group, edits it and re-reads it after a
- *   reload (the guest reads it next; cleanup.mjs removes every TEST entry, even on failure); with
- *   limits it fills the first group, moves a TEST entry out, then back (refused). It fails on
- *   [placeholders] left in the page.
+ *   reload (the guest reads it next; cleanup.mjs removes every TEST entry, even on failure). It
+ *   fails on [placeholders] left in the page.
  */
 const TEST='Check entry (test)',NOTE='edited by check',TYPED='typed together';
 const loaded=()=>page.waitForFunction(()=>document.querySelector('#lists')
@@ -63,36 +62,6 @@ if(page.viewportSize().width>800){
     await page.locator('[data-af-id$="-name-input"]').waitFor({timeout:3000});
     await page.getByRole('button',{name:'Cancel',exact:true}).click();});
   // @end table
-  // @feature limits
-  const [limit,groups]=await page.evaluate(()=>[window.APP.limit,window.APP.groups]);
-  const section=i=>page.locator('#lists > section').nth(i),entries='li[data-af-id^="entry-"]';
-  const fill=async()=>{for(let i=await section(0).locator(entries).count();i<limit;i++){
-    await page.locator('#add-name').fill(TEST);await page.locator('#add-button').click();
-    await settled();}};
-  const move=async(from,to)=>{
-    await section(from).getByRole('button',{name:'Edit '+TEST}).first().click();
-    await page.locator('[data-af-id$="-group-input"]').selectOption(groups[to]);
-    await page.getByRole('button',{name:'Save',exact:true}).click();await settled();};
-  await step('a full group refuses one more entry',async()=>{
-    await fill();await page.locator('#add-name').fill(TEST);
-    await page.locator('#add-button').click();await settled();
-    if(!/full/.test(await status()))throw Error('the first group took more than its limit: '+
-      await status());});
-  if(groups.length>1){
-    await step('an entry moves into a group with room',async()=>{
-      await move(0,1);
-      if(!/^Saved/.test(await status()))throw Error('the move failed: '+await status());
-      await section(1).getByText(TEST,{exact:true}).first().waitFor({timeout:2000});});
-    await step('a move into a full group is refused and the entry stays where it was',async()=>{
-      await fill();const there=await section(1).locator(entries).count();await move(1,0);
-      if(!/full/.test(await status()))throw Error('the first group took a move past its limit: '+
-        await status());
-      await page.getByRole('button',{name:'Cancel',exact:true}).click();
-      const now=[await section(0).locator(entries).count(),
-        await section(1).locator(entries).count()];
-      if(now[0]!==limit||now[1]!==there)throw Error(`the groups hold ${now.join(' and ')}`);});
-  }
-  // @end limits
   return {steps:'wide'};
 }
 return {steps:'narrow'};

@@ -42,7 +42,6 @@ const salesId = await publish({ dataset: [{ region: 'North', amount: 428 }, { re
 const source = `<!doctype html><html><head><title>Portable native page</title>
 <link rel="af-dataset" data-af-name="sales" href="ref:${salesId}">
 <style>body{font-family:system-ui;background:#fff;color:#17202b}.status{color:rgb(20,90,40)}</style>
-<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">
 <script type="application/json" data-af="state">{"count":3}</script>
 <script src="/af/core.js"></script></head><body>
 <h1 class="status">Portable native page</h1><output id="count">Starting</output>
@@ -57,13 +56,14 @@ document.querySelector('#sql-table tbody').innerHTML=rows.map(r=>'<tr><td>'+r.re
 <img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
 <script type="module">
 import {state} from '@afbin/state';
+import {sql as write} from '@afbin/apollo';
 const show=({count})=>{document.querySelector('#count').textContent=String(count);};
 show(state.getState());state.subscribe(show);
 document.querySelector('#increment').onclick=()=>state.setState(({count})=>({count:count+1}));
-// tracker.ts's add, as the starter page calls it: an offline copy has no app connection, so the call rejects (TypeError).
-document.querySelector('#shared').onclick=async()=>{let outcome;try{const res=await fetch('/fn/add',{method:'POST',body:JSON.stringify({name:'Offline',grp:'Later'})});outcome='answered '+res.status;}catch(error){outcome=error instanceof TypeError?'offline':'rejected '+error?.name;}document.querySelector('#outcome').textContent=outcome;};
+// A shared write, as a starter page makes it: an offline copy reads the rows it carries and refuses every write.
+document.querySelector('#shared').onclick=async()=>{let outcome;try{await write\`insert into sales (region, amount) values ('West', 1)\`;outcome='written';}catch(error){outcome=/read-only|permission_denied|unavailable/.test(String(error?.code??'')+' '+String(error?.message??''))?'offline':'rejected '+error?.name;}document.querySelector('#outcome').textContent=outcome;};
 </script></body></html>`;
-const id = await publish({ html: source, visibility: 'private', resolverSources: { tracker: readFileSync(path.join(ROOT, 'services/app/skills/artifactbin/examples/tracker.ts'), 'utf8') } });
+const id = await publish({ html: source, visibility: 'private' });
 const response = await fetch(`${BASE}/a/${id}/download`, { headers });
 if (response.status !== 200) throw new Error(`download -> ${response.status}: ${await response.text()}`);
 const html = await response.text();

@@ -165,19 +165,16 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
 const DEFAULT_NAMESPACE=/^(?:[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127})?$/;
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
- const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const names=new Set<string>();
+ const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const names=new Set<string>();
  for(const element of allElements(html).all){
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
-  // One link names one kind, once.
-  const backend=rel.includes('af-resolver'),dataset=rel.includes('af-dataset');
-  if(!backend&&!dataset)continue;
-  if(backend&&dataset)throw new Error('A link declares one namespace kind');
+  // A dataset link names one dataset, once.
+  if(!rel.includes('af-dataset'))continue;
   const name=attribute(element,'data-af-name');
   if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__'))throw new Error('Invalid namespace');
   if(names.has(name))throw new Error('Duplicate namespace');names.add(name);
   if(names.size>20)throw new Error('Too many namespaces');
-  if(backend){backends.push(name);continue;}
   // The install's default connection: `default:` and the namespace (schema, database, dataset) it reads, never pinned.
   const fallback=/^default:(.*)$/s.exec(attribute(element,'href')??'');
   if(fallback){
@@ -193,23 +190,7 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
   else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'pinned',revision});
   else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
  }
- return {backends,datasets,connections};
-}
-export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
-/**
- * What publish checks the page's GraphQL documents in (lib/page-operations `pageDocumentProblems`): each resolver
- * link's file name by its data-af-name, and every inline script's code (a script with src has none here).
- */
-export function htmlGraphqlSources(html:string):{resolverFiles:Record<string,string>;scripts:string[]}{
- const resolverFiles:Record<string,string>={},scripts:string[]=[];
- for(const element of allElements(html).all){
-  if(element.tagName==='link'&&(attribute(element,'rel')??'').split(/\s+/).includes('af-resolver')){
-   const name=attribute(element,'data-af-name'),file=(attribute(element,'href')??'').split(/[?#]/,1)[0]!.split('/').at(-1);
-   if(name&&file)resolverFiles[name]=file;
-  }
-  if(element.tagName==='script'&&attribute(element,'src')===null)scripts.push(element.childNodes.map(node=>'value' in node?String(node.value):'').join(''));
- }
- return {resolverFiles,scripts};
+ return {datasets,connections};
 }
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{
@@ -242,7 +223,7 @@ export function htmlPwaSettings(html:string):HtmlPwaSettings {
 }
 
 const assetAttributes=(element:import('./html-source').Element):string[]=>element.tagName==='img'||element.tagName==='source'?['src']:element.tagName==='video'?['poster']:element.tagName==='a'?['href']:[];
-/** Only byte-bearing HTML attributes are asset references; backend links and script text are excluded. */
+/** Only byte-bearing HTML attributes are asset references; links and script text are excluded. */
 export function htmlAssetLinks(html:string):HtmlAssetLinks {
  const refs=new Set<string>(),imageUrls=new Set<string>();
  for(const element of parseSource(html).elements)for(const name of assetAttributes(element)){

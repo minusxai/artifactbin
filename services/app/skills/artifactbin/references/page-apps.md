@@ -39,15 +39,14 @@ not in `state`, when a link should open it; keep private choices (a draft, a fil
 `seat()` returns where this copy runs and what its data doors can do now:
 
 ```js
-const {kind,pageId,sql,writes,functions}=seat();
+const {kind,pageId,sql,writes}=seat();
 // kind: 'app' (in the app at /a/ID), 'address' (its own address, or a publishing host),
 // 'raw' (/a/ID/raw), 'offline' (a downloaded copy), 'preview' (scripts/serve.mjs)
 if(!writes)saveButton.disabled=true;
 ```
 
 `sql` is true where `sql` reads answer (the app, a publishing host's guest reads, a copy's
-carried rows), `writes` only in the app (dataset rules still decide), `functions` where
-`fetch('/fn/NAME')` reaches the page's functions. Do not sniff `window.parent` or the runtime's
+carried rows), `writes` only in the app (dataset rules still decide). Do not sniff `window.parent` or the runtime's
 own tags.
 
 ## Opening a page with values
@@ -88,5 +87,5 @@ it with GET: in the app and at the page's own address the browser never connects
 runtime sends the request through the page's own fetch door, which answers only once this reader
 trusts the host (whoever published it does; anyone else is asked on the bar above the page) with
 the body and its type, up to 5 MB within 10 s; a refusal is a JSON `{error,detail}` with a 4xx or
-5xx status. Request headers, cookies and other methods never pass: for a POST, a key or anything
-the server must check, write a backend function ([functions](functions.md)).
+5xx status. Request headers, cookies and other methods never pass, and no code of yours runs on
+the server: a POST, a key or a check is not something a page can do.

@@ -1,42 +1,32 @@
-/** Command: a shared tracker (examples/tracker.html, trimmed) or API dashboard, in one call. */
+/** Command: a shared tracker (examples/tracker.html, trimmed), in one call. */
 export const DESCRIPTION = `Set up a shared-app starter in one call: files, dataset, rules and id.
 --kind tracker (default) writes examples/tracker.html as index.html with only the chosen
-  features, plus steps.mjs, guest.mjs and cleanup.mjs (its checks) and tracker.ts (its functions);
-  publishes an empty entries dataset (name, grp, note, created_by; description with collab)
-  with the rules the features need. --kind list is the tracker's list preset.
---kind api: copies examples/api-dashboard.html as index.html with its steps files and
-  api-dashboard.ts as api.ts, backend functions reading --url with the API_KEY secret; publishes an
-  empty notes dataset (item, note, created_by) with own-rows rules.
-All fill the ref: id and title into index.html.
+  features, plus steps.mjs, guest.mjs and cleanup.mjs (its checks); publishes an empty entries
+  dataset (name, grp, note, created_by; description with collab) with the rules the features
+  need, and fills its ref: id and title into index.html. --kind list is the tracker's list preset.
 Tracker features: own-rows (signed-in people add entries and change or remove only their own);
   team (needs own-rows: a group the page is shared with by groups.mjs share PAGE --group GROUP
   --datasets changes every entry; a page share alone lets members change only theirs); collab
-  (an entry's description is typed in together); table (a sortable table view); limits (needs
-  own-rows: at most --limit entries per group, enforced on the server by tracker.ts in one
-  statement for an add or a move).
-Usage: node scripts/new-app.mjs --title NAME [--kind tracker|list|api] [--preset tasks|list]
-  [--without FEATURE,…] [--limit N] [--url URL] [--dir DIR]
+  (an entry's description is typed in together); table (a sortable table view).
+Usage: node scripts/new-app.mjs --title NAME [--kind tracker|list] [--preset tasks|list]
+  [--without FEATURE,…] [--dir DIR]
 Flags: --title NAME the app's name, for <title> (a bare title argument works too);
   --preset tasks (default: every feature, a team task tracker) or list (own-rows only: a sign-up
   sheet, RSVP or roster); --kind list is --preset list; --without FEATURE,… drops features;
-  --limit N the most entries a group holds (limits only; default 5; written to APP.limit and to
-  tracker.ts); --kind api (a dashboard of an HTTP API's items behind a key, with shared notes)
-  with --url URL the API's https:// address that answers a JSON list; --dir DIR the project
-  directory (default: the current one; created when missing). Common: --server ORIGIN, --json,
-  --output FILE, --help.
+  --dir DIR the project directory (default: the current one; created when missing). Common:
+  --server ORIGIN, --json, --output FILE, --help.
 Examples:
   node scripts/new-app.mjs --title "Launch tasks"
   node scripts/new-app.mjs --kind list --title "Riverside cleanup volunteers"
-  node scripts/new-app.mjs --title "Bug triage" --without collab,limits
-  node scripts/new-app.mjs --title "Workshop seats" --without team,collab,table --limit 12
-  node scripts/new-app.mjs --kind api --url https://api.example.com/v1/orders --title "Orders"
+  node scripts/new-app.mjs --title "Bug triage" --without collab
+  node scripts/new-app.mjs --title "Workshop seats" --without team,collab,table
 Gotchas: an unknown feature, or one whose requirement you drop, is refused (exit 2) with the fix.
   A rerun is safe: an existing file is kept (and listed as kept), never overwritten, and the
   dataset the kept index.html links (its ref:) is reused, so nothing is created twice. The steps,
-  guest and cleanup files, tracker.ts and api.ts need no reading or editing. Who may do what
-  lives in the dataset's rules (node scripts/policy.mjs explain ID); the page only shows the
-  controls they allow and reports a write they refuse. The API's key never goes on the command
-  line or into a file: only the page owner sets it, in the page's Resolvers settings.
+  guest and cleanup files need no reading or editing. Who may do what lives in the dataset's
+  rules (node scripts/policy.mjs explain ID), and only there: the page shows its controls to a
+  signed-in reader and reports a write the rules refuse. Rules decide who may write which rows;
+  they cannot cap how many rows a group holds.
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (sign in, then
   rerun); 5 unknown write outcome (the error names the journal for publish.mjs --resume).
   Results never contain credentials.`;
@@ -44,8 +34,7 @@ Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed); 3 auth/access (s
 import path from 'node:path';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {runTool,ToolError,makeClient,selectedServer,serverOrigin} from './toolbox-client.mjs';
-import {EXAMPLES,check,resolve,create,dataset,fill,apiUrl,ownRowsApp} from
-  './toolbox-new-app.mjs';
+import {EXAMPLES,check,resolve,create,dataset,fill} from './toolbox-new-app.mjs';
 import {trackerFeatures,trackerFiles} from './toolbox-tracker.mjs';
 import {FEATURES,columns,rules,template} from '../examples/tracker-features.mjs';
 
@@ -65,7 +54,7 @@ async function applyRules(client, id, keep) {
     body: {policy, expectedPolicyRevision: read.revision}});
   return true;
 }
-/** The preset and kept features --kind, --preset and --without name; the --limit they allow. */
+/** The preset and kept features --kind, --preset and --without name. */
 function choose(values, kind) {
   if (kind === 'list' && values.preset !== undefined && values.preset !== 'list')
     throw invalid('preset_conflict', '--kind list is the list preset.',
@@ -73,20 +62,12 @@ function choose(values, kind) {
   const preset = kind === 'list' ? 'list' : values.preset ?? 'tasks';
   const without = String(values.without ?? '').split(',').map(name => name.trim())
     .filter(Boolean);
-  const keep = trackerFeatures({preset, without});
-  if (values.limit === undefined) return {preset, keep};
-  if (!keep.has('limits')) throw invalid('limit_without_limits',
-    '--limit needs the limits feature, which this tracker does not keep.',
-    'Drop --limit, or keep limits (--preset tasks has it).');
-  const limit = Number(values.limit);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw invalid('invalid_limit',
-    `--limit ${values.limit} is not a whole number from 1 to 1000.`, 'Pass --limit 5, say.');
-  return {preset, keep, limit};
+  return {preset, keep: trackerFeatures({preset, without})};
 }
 /** The tracker: the template trimmed to its features, the entries dataset and its rules. */
 async function trackerApp(kind, values, {title, dir, at, server, options}) {
-  const {preset, keep, limit} = choose(values, kind), created = [], kept = [];
-  const files = await trackerFiles(keep, {preset, limit});
+  const {preset, keep} = choose(values, kind), created = [], kept = [];
+  const files = await trackerFiles(keep, {preset});
   files['entries.csv'] = columns(keep).join(',') + '\n';
   await mkdir(dir, {recursive: true});
   for (const [name, text] of Object.entries(files))
@@ -103,7 +84,7 @@ async function trackerApp(kind, values, {title, dir, at, server, options}) {
   if (filledPage !== page) await writeFile(at('index.html'), filledPage);
   // Who may do what, from the kept features (a table view changes no rule).
   const said = [...keep].filter(name => name !== 'table')
-    .map(name => FEATURES[name].summary.replace('APP.limit', String(limit ?? 5)));
+    .map(name => FEATURES[name].summary);
   const rulesText = ['entries: everyone reads', ...keep.has('own-rows') ? [] :
     ['only you and editors change entries'], ...said].join('; ');
   const note = [created.length ? `created ${created.join(', ')}` : '',
@@ -116,7 +97,7 @@ async function trackerApp(kind, values, {title, dir, at, server, options}) {
     'the stages entries move through';
   return {project: dir, title, kind, preset, features: [...keep], created, kept,
     datasets: {entries: {id: entries.id, rows: 0, reused: entries.reused}},
-    ...limit === undefined ? {} : {limit}, rules: rulesText, note,
+    rules: rulesText, note,
     next: `Next: in index.html edit only APP: its [bracketed] text and groups (${groups}); ` +
       `then ${await check(at('index.html'))}` + (keep.has('team') ? '; for a team to edit ' +
       'every entry: node scripts/groups.mjs share PAGE --group GROUP --datasets' : '')};
@@ -126,17 +107,11 @@ export async function newAppCommand({values, positionals}, options = {}) {
     .replace(/^\[(.*)\]$/, '$1').trim();
   if (!title) throw invalid('missing_title', 'The app needs a name.', 'Run ' + USAGE);
   const kind = values.kind ?? 'tracker';
-  if (!['tracker', 'list', 'api'].includes(kind)) throw invalid('invalid_kind',
-    `--kind ${kind} is not a starter.`, 'Use --kind tracker, --kind list or --kind api.');
-  if (kind !== 'api' && values.url !== undefined) throw invalid('url_not_for_kind',
-    `--url is for --kind api: --kind ${kind} reads no API.`, 'Drop --url, or use --kind api.');
+  if (!['tracker', 'list'].includes(kind)) throw invalid('invalid_kind',
+    `--kind ${kind} is not a starter.`, 'Use --kind tracker or --kind list.');
   const base = options.cwd ?? process.cwd(), dir = resolve(base, values.dir ?? '.');
   const server = serverOrigin(selectedServer(values, options.env));
   const at = name => path.join(dir, name), project = {title, dir, at, server, options};
-  if (kind !== 'api') return trackerApp(kind, values, project);
-  for (const flag of ['preset', 'without', 'limit']) if (values[flag] !== undefined)
-    throw invalid('not_for_api', `--${flag} is for the tracker: --kind api has no features.`,
-      `Drop --${flag}, or drop --kind api.`);
-  return ownRowsApp('api', {...project, url: apiUrl(values.url)});
+  return trackerApp(kind, values, project);
 }
 await runTool('new-app', import.meta.url, newAppCommand);

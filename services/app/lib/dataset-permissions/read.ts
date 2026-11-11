@@ -115,7 +115,7 @@ export function canRunSql(decision: DatasetReadDecision, table: DatasetTableName
  * THE ONE SQL CHECK for a door that runs caller-written SQL over a whole dataset (query_resource, the dataset explorer,
  * a document's queries): the first readable table whose rule does not allow SQL, or null. Tables the role cannot read
  * are skipped (they answer no rows). The SQL is never inspected (a count hides in subqueries, windows and scalar
- * calls). A page's `_sql` and a resolver's caps.sql refuse the same way per mounted table; a flagless role reads
+ * calls). A page's `_sql` refuses the same way per mounted table; a flagless role reads
  * rows through GraphQL or the server-built table read.
  */
 export function sqlRefusal(decision: DatasetReadDecision): DatasetTableName | null {

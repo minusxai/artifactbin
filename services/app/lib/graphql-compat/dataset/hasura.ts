@@ -43,12 +43,12 @@ import { completeMutationReceipt, durableMutation, getArtifactById, getArtifactH
 import { datasetWriteAccess, filterAdmits } from '@/lib/dataset-permissions';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
 import {
-  authorityShape, columnsOf, datasetBindingCatalog, fenced, ID_COLUMN, linkedRoot, load, loadLinked, notFound, readAuthorityIn, refusal,
+  authorityShape, datasetBindingCatalog, fenced, ID_COLUMN, linkedRoot, load, loadLinked, notFound, readAuthorityIn, refusal,
   resolveDatasetBinding, rowIdsForObject, rowsNow, runPageSql, shownRows, tableIdentity,
   type DatasetSnapshot, type DatasetStatement, type Loaded, type LoadedTable, type PageCommitGuard, type PageScope, type PageSqlAnswer,
   type PageSqlCall, type ReadAuthority, type WrittenOutcome,
 } from '@/lib/dataset-access';
-import { CAN_FIELD, hasuraSdl, type HasuraTableModel } from './hasura-schema';
+import { CAN_FIELD, hasuraSdl } from './hasura-schema';
 import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraGeneratedNames, hasuraNames, storedConfiguration } from './hasura-names';
 import { compileRows, HasuraReadError, type HasuraReadArgs } from './hasura-read';
@@ -213,42 +213,6 @@ export async function pageDatasetRoots(actor: AccessActor, link: HtmlDatasetLink
   return roots.flatMap(({ root }) => hasuraGeneratedNames(linkedRoot(link.name, roots.length, root)));
 }
 
-/** One link's publish-check schema (lib/page-operations `PageDocumentDataset`). */
-export interface PageDatasetCheckSource {
-  name: string;
-  fileId: string;
-  version: string;
-  typeDefs: string;
-  /** The dataset's own API names (its direct GraphQL) → this link's page names. */
-  renames: Record<string, string>;
-}
-
-/**
- * THE PAGE'S DATASETS AS PUBLISH CHECKS SEE THEM: every link under its page name with every root, column and write
- * a role could be given (role-independent, from the declared tables, as `pageDatasetRoots`), so a document
- * valid for any reader is never refused; `sdl` is all of them as one API. Null when no dataset is linked.
- */
-export async function pageDatasetCheckSources(actor: AccessActor, links: readonly HtmlDatasetLink[]): Promise<{ sdl: string; sources: PageDatasetCheckSource[] } | null> {
-  if (!links.length) return null;
-  const all: HasuraTableModel[] = [], sources: PageDatasetCheckSource[] = [];
-  for (const link of links) {
-    const row = await resolveDatasetBinding(actor, link);
-    const declared = datasetBindingCatalog(row);
-    const names = hasuraNames(declared.tables, { title: row.title, configuration: storedConfiguration(row.dataset_policy) });
-    const models = declared.tables.map((table, i): HasuraTableModel => {
-      const columns = columnsOf(table, names[i]!);
-      return { root: linkedRoot(link.name, declared.tables.length, names[i]!.root), table: { schema: table.schema, name: table.name }, columns, write: { insert: columns, update: columns, delete: true } };
-    });
-    const renames: Record<string, string> = {};
-    names.forEach(({ root }, i) => {
-      const page = hasuraGeneratedNames(models[i]!.root);
-      if (root !== models[i]!.root) hasuraGeneratedNames(root).forEach((own, j) => { renames[own] = page[j]!; });
-    });
-    all.push(...models);
-    sources.push({ name: link.name, fileId: link.datasetId, version: link.mode === 'pinned' ? link.revision : 'live', typeDefs: hasuraSdl(models), renames });
-  }
-  return { sdl: hasuraSdl(all), sources };
-}
 
 /** One hasura link's composition source: its role's SDL, mounted flat at the top of the page schema. */
 interface PageDatasetSource {

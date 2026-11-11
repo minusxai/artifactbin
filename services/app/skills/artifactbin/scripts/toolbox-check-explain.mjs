@@ -1,24 +1,13 @@
 /**
- * Internal: what check.mjs makes of the page's failed calls after a hosted run (sql and functions,
- * captured in the browser by toolbox-check-calls.mjs). A guest's failure carries no owner detail:
- * it takes the detail the same call showed the owner in another viewport, or its read (a SELECT, a
- * GET function) is asked again as the owner; a write is never re-run. A call the server refused
- * only because a secret has no value yet (its exact refusal, secret_unavailable or
- * connection_unavailable, naming a declared secret the owner has not set) is not a failure: when
- * every failed call of a viewport is such a refusal, its unfinished step and the page and console
- * errors logged after the first refusal become a Not tested item. Secret values never reach the
- * check; tokens are never printed.
+ * Internal: what check.mjs makes of the page's failed calls after a hosted run (its sql, captured
+ * in the browser by toolbox-check-calls.mjs). A guest's failure carries no owner detail: it takes
+ * the detail the same call showed the owner in another viewport, or its read (a SELECT) is asked
+ * again as the owner; a write is never re-run. Tokens are never printed.
  * Used by: toolbox-check-command.mjs.
  */
 
-/** The owner detail of an unset secret (lib/page-operations public-fetch.ts and database.ts;
- * backend.ts prefixes an upstream HTTP status the resolver saw first). */
-const UNSET = /^(?:HTTP \d{3}: )?(?:secret_unavailable|connection_unavailable): (\S+)$/;
-const named = failure => UNSET.exec(failure.detail ?? failure.ownerDetail ?? '')?.[1];
-const unique = values => [...new Set(values)];
-
-/** Fills the owner detail and excuses unset secrets on the checks in place; returns the result's
- * callFailures and needsSecrets, each only when present. Never throws. */
+/** Fills the owner detail on the checks in place; returns the result's callFailures, only when
+ * present. Never throws. */
 export async function explainCalls(client, id, checks, guestRun = false) {
   const failures = checks.flatMap(check => check?.callErrors ?? []);
   if (!failures.length) return {};
@@ -30,59 +19,28 @@ export async function explainCalls(client, id, checks, guestRun = false) {
       if (failure.detail || !(guestRun || check.viewer === 'guest')) continue;
       failure.guest = true;
       if (shown.has(failure.field)) failure.ownerDetail = shown.get(failure.field);
-      else if (replay) Object.assign(failure, await asOwner(client, id, failure, replay));
+      else if (replay) Object.assign(failure, await asOwner(client, id, replay));
       else failure.notReplayed = true;
     }
-  // Which declared secrets have no value: the owner's Resolvers settings, read only when needed.
-  let unset = [];
-  if (failures.some(named)) {
-    const read = await client.request(`/api/my/artifacts/${id}/resolvers`).catch(() => null);
-    unset = (Array.isArray(read?.resolvers) ? read.resolvers : []).flatMap(resolver =>
-      Object.keys(resolver?.secrets ?? {}).filter(name => !resolver.set?.includes(name)));
-  }
-  for (const failure of failures)
-    if (unset.includes(named(failure))) failure.needsSecret = named(failure);
-  const needsSecrets = new Map();
-  for (const check of checks) {
-    const errors = check?.callErrors ?? [];
-    if (!errors.length || !errors.every(failure => failure.needsSecret)) continue;
-    const item = {
-      ...(check.error ? {step: check.failedStep ?? null} : {}),
-      fields: unique(errors.map(failure => failure.field)),
-      secrets: unique(errors.map(failure => failure.needsSecret))
-    };
-    check.needsSecret = {...item, ...(check.error ? {error: check.error} : {})};
-    delete check.error;
-    // What the page logged from the first refusal on came from it; what came before still counts.
-    const first = key => Math.min(...errors.map(failure => failure[key + 'Before'] ?? Infinity));
-    check.pageErrors = (check.pageErrors ?? []).slice(0, first('pageErrors'));
-    check.consoleErrors = (check.consoleErrors ?? []).slice(0, first('consoleErrors'));
-    needsSecrets.set(JSON.stringify(item), item);
-  }
   const failed = new Map();
-  for (const failure of failures.filter(failure => !failure.needsSecret)) {
+  for (const failure of failures) {
     const {field, kind, message, code, detail, guest, ownerDetail, ownerPasses, notReplayed} =
       failure;
     const shape = {field, kind, message, code, detail, guest, ownerDetail, ownerPasses,
       notReplayed};
     failed.set(JSON.stringify(shape), JSON.parse(JSON.stringify(shape)));
   }
-  return {
-    ...(failed.size ? {callFailures: [...failed.values()].slice(0, 8)} : {}),
-    ...(needsSecrets.size ? {needsSecrets: [...needsSecrets.values()]} : {})
-  };
+  return failed.size ? {callFailures: [...failed.values()].slice(0, 8)} : {};
 }
 
 /** The same read as the owner: the detail of the same call, or that it succeeds. */
-async function asOwner(client, id, {kind, field}, replay) {
-  const read = {safeToRepeat: true, timeoutMs: 8000};
+async function asOwner(client, id, replay) {
   try {
-    if (kind === 'sql') await client.request(`/api/artifacts/${id}/sql`,
-      {...read, method: 'POST', body: replay});
-    else await client.request(`/api/artifacts/${id}/${field}${replay.search ?? ''}`, read);
+    await client.request(`/api/artifacts/${id}/sql`,
+      {safeToRepeat: true, timeoutMs: 8000, method: 'POST', body: replay});
     return {ownerPasses: true};
   } catch (error) {
-    // sql and functions refuse with a status: the refusal's owner detail, or its message.
+    // sql refuses with a status: the refusal's detail, or its message.
     const refusal = error?.details, said = refusal?.detail ?? refusal?.message;
     return typeof said === 'string' ? {ownerDetail: said.slice(0, 200)} : {};
   }

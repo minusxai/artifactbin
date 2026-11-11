@@ -200,9 +200,9 @@ it('concurrent read-modify-write statements never lose an update', async () => {
   expect((await stored(f.staff))[0]!.salary).toBe(16);
 });
 
-it('a capped insert (the tracker\'s limit) holds under concurrency: the count and the insert commit together', async () => {
+it('a capped insert holds under concurrency: the count and the insert commit together', async () => {
   const f = await fixture();
-  // examples/tracker.ts add: one statement, so a write that lost the head re-runs its count on the head that won.
+  // One statement, so a write that lost the head re-runs its count on the head that won.
   const LIMIT = 5, capped = (name: string) => sql(f.page, f.owner,
     'insert into staff (name, team) select $name, $team where (select count(*) from staff where team = $team) < $limit',
     { name, team: 'red', limit: LIMIT });
@@ -219,9 +219,9 @@ it('a capped insert (the tracker\'s limit) holds under concurrency: the count an
   expect((await stored(f.staff)).filter((row) => row.team === 'red')).toHaveLength(LIMIT);
 });
 
-it('a capped move (the tracker\'s save) holds under concurrency, as the rule-bound caller: never past the limit', async () => {
+it('a capped move holds under concurrency, as the rule-bound caller: never past the limit', async () => {
   const f = await fixture();
-  // examples/tracker.ts save: the room check is part of the update, so a move that lost the head re-counts on the winner.
+  // The room check is part of the update, so a move that lost the head re-counts on the winner.
   for (let i = 0; i < 6; i++) expect((await sql(f.page, f.other, "insert into staff (name, team) values ($p0, 'green')", { p0: 'm' + i })).status).toBe(200);
   const LIMIT = 3, move = (name: string) => sql(f.page, f.other,
     'update staff set team = $to where name = $name and (team = $to or (select count(*) from staff where team = $to) < $limit)',

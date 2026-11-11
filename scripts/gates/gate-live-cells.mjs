@@ -15,10 +15,10 @@
  *   5. both leave: the typing is saved as the cell's value through the dataset, and the signed-out reader, reloading,
  *      reads exactly it;
  *   6. typing before the session arrives (a slowed open) is kept and merged in, not lost or doubled;
- *   7. the generated tracker (new-app.mjs's tasks preset, toolbox-tracker): a signed-in link holder adds an entry and
- *      gets no controls on the owner's (own-rows); owner and author type its description together and the save reaches
- *      a signed-out reader; the table's Edit opens the form with no page or console error; tracker.ts's `add`
- *      (`/fn/add`) refuses a full group in its one capped insert and the page counts the group with SQL;
+ *   7. the generated tracker (new-app.mjs's tasks preset, toolbox-tracker): a signed-in link holder adds an entry, and
+ *      the rules (own-rows) refuse their removing the owner's, which the page reports and the entry survives; owner and
+ *      author type its description together and the save reaches a signed-out reader; the table's Edit opens the form
+ *      with no page or console error, and the page counts each group with SQL;
  *   8. a downloaded copy opened from disk with no network loads the library and shows the field read-only.
  *
  *   node scripts/gates/gate-live-cells.mjs [base]
@@ -208,22 +208,18 @@ try {
     await context.close();
   });
 
-  await section('the generated tracker (every feature): own entries, typing together, the table and the limit', async () => {
-    // The page new-app.mjs writes for `--preset tasks --limit 3`, with the rules its features need.
+  await section('the generated tracker (every feature): own entries, typing together and the table', async () => {
+    // The page new-app.mjs writes for `--preset tasks`, with the rules its features need.
     const keep = trackerFeatures({});
-    const files = await trackerFiles(keep, { limit: 3 });
+    const files = await trackerFiles(keep);
     const { id: entriesId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ dataset: [{ name: 'Ada task', grp: 'To do', note: '', created_by: '', description: 'Start here' }], title: 'Tracker entries', visibility: 'unlisted' }), headers: { 'idempotency-key': randomUUID() } });
     const { revision, templates } = await api(`/api/artifacts/${entriesId}/policy/templates?ownerColumn=created_by`);
     const own = templates.find((t) => t.name === 'own-rows').policy;
     const saved = await api(`/api/artifacts/${entriesId}/policy`, { method: 'PUT', body: JSON.stringify({ policy: { ...own, tables: own.tables.map((t) => trackerRules(t, keep)) }, expectedPolicyRevision: revision }) });
     check(saved.saved === true && /Typed live together/.test(saved.readBack), 'the tracker\'s rules are own-rows, team and collab (the read-back says description is typed live)');
     const html = files['index.html'].replaceAll('ref:DATASET_ID', `ref:${entriesId}`).replace(/'\[([^\]']+)\]'/g, "'$1'").replace('[Tracker name]', 'Launch tasks');
-    const { id: trackerId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ html, title: 'Launch tasks', visibility: 'public', resolverSources: { tracker: files['tracker.ts'] } }), headers: { 'idempotency-key': randomUUID() } });
-    // The starter's doors: its backend functions (fetch('/fn/NAME') in the page) and the page's SQL door (sql`…`).
-    const trackerFn = async (name, input) => {
-      const response = await fetch(`${BASE}/api/artifacts/${trackerId}/fn/${name}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(input) });
-      return { status: response.status, body: await response.json().catch(() => null) };
-    };
+    const { id: trackerId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ html, title: 'Launch tasks', visibility: 'public' }), headers: { 'idempotency-key': randomUUID() } });
+    // The starter's one door: the page's SQL door (sql`…`), the dataset's rules deciding every write.
     const trackerSql = async (sql, params = {}) => (await api(`/api/artifacts/${trackerId}/sql`, { method: 'POST', body: JSON.stringify({ sql, params, revision: '1' }), headers: { 'idempotency-key': randomUUID().replaceAll('-', '') } })).rows;
     const [TA, TB, TC] = await Promise.all(contexts.map((context) => context.newPage()));
     const errors = [];
@@ -243,7 +239,12 @@ try {
     const added = await until(() => tb.locator('#status').textContent(), (text) => /^Added Bo task/.test(text ?? ''));
     check(/^Added Bo task/.test(added ?? ''), `the signed-in link holder adds an entry through the page (${JSON.stringify(added)})`);
     await row(tb, 'Bo task').getByRole('button', { name: 'Edit Bo task' }).waitFor({ timeout: 5000 });
-    check(await row(tb, 'Ada task').getByRole('button').count() === 0, 'the link holder gets no Edit or Remove on the owner\'s entry (own-rows, from _can)');
+    // The page offers every signed-in reader the controls; the rules refuse the owner's entry, and the page says so.
+    await row(tb, 'Ada task').getByRole('button', { name: 'Remove Ada task' }).click();
+    const refusedRemove = await until(() => tb.locator('#status').textContent(), (text) => /^Nothing changed/.test(text ?? ''));
+    check(/^Nothing changed/.test(refusedRemove ?? ''), `the rules refuse the link holder removing the owner's entry, and the page says so (${JSON.stringify(refusedRemove)})`);
+    const ada = await trackerSql("select count(*) as n from entries where name = 'Ada task'");
+    check(Number(ada?.[0]?.n) === 1, `the owner's entry is still there (${JSON.stringify(ada)})`);
     check(await tc.locator('#add').isVisible() === false && await tc.getByRole('button', { name: /^(?:Edit|Remove) / }).count() === 0, 'the signed-out reader gets no add form and no controls');
 
     // collab: the owner and the link holder type into the link holder's entry at once.
@@ -266,16 +267,8 @@ try {
     check(await ta.locator('[data-af-id$="-name-input"]').isVisible(), 'the table\'s Edit opens the entry\'s form in the grouped view');
     await ta.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-    // limits: tracker.ts's add refuses a fourth entry in a group on the server, whoever asks (one capped insert).
-    for (const name of ['One', 'Two', 'Three']) {
-      const added = await trackerFn('add', { name, grp: 'Done' });
-      check(added.status === 200 && added.body?.affected === 1, `"${name}" fits in Done (${added.status} ${JSON.stringify(added.body)})`);
-    }
-    const refused = await trackerFn('add', { name: 'Four', grp: 'Done' });
-    check(refused.status === 500 && /Done is full \(3 entries\)/.test(refused.body?.message ?? ''), `the fourth entry is refused by the server (${refused.status} ${JSON.stringify(refused.body?.message)})`);
-    const inDone = await trackerSql("select count(*) as n from entries where grp = 'Done'");
-    check(Number(inDone?.[0]?.n) === 3, `the refused entry wrote nothing: Done holds 3 (${JSON.stringify(inDone)})`);
-    check(await until(() => tb.locator('[data-af-id="group-done-count"]').textContent(), (text) => text === '3 of 3', 10_000) === '3 of 3', 'the page counts the group with SQL: 3 of 3');
+    const inTodo = await trackerSql("select count(*) as n from entries where grp = 'To do'");
+    check(await until(() => tb.locator('[data-af-id="group-to-do-count"]').textContent(), (text) => text === String(inTodo?.[0]?.n), 10_000) === String(inTodo?.[0]?.n), `the page counts the group with SQL (${JSON.stringify(inTodo)})`);
     check(errors.length === 0, `no page or console error, the table included (${errors.join(' | ') || 'none'})`);
     // Typing is saved as one dataset version about 5 s after its last editor leaves the page.
     await Promise.all([TA, TB].map((p) => p.close({ runBeforeUnload: true })));

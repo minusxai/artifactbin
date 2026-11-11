@@ -9,7 +9,7 @@
  * page changes behaviour.
  */
 export {authorizeDatasetBinding,datasetBindingCatalog,DatasetBindingUnsupportedError,resolveDatasetBinding} from './authority';
-export {columnsOf,fenced,linkedRoot,load,loadLinked,notFound,refusal,type Loaded,type LoadedTable,type PageCommitGuard,type PageScope} from './linked';
+export {fenced,linkedRoot,load,loadLinked,notFound,refusal,type Loaded,type LoadedTable,type PageCommitGuard,type PageScope} from './linked';
 export type {HasuraColumn,HasuraRowCan,HasuraScalar,HasuraTableModel} from './table-model';
 export {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 export {authorityShape,readAuthorityIn,rowsNow,shownRows,type ReadAuthority,type WrittenOutcome} from './write-reply';

@@ -258,7 +258,7 @@ describe('CI avoids duplicate integration setup', () => {
     expect(jobs.integration.needs).toEqual(['plan']);
     expect(jobs.integration.if).toBe("needs.plan.outputs.integration == 'true'");
     const run = steps.findIndex(step => step.run === 'npm run test:integration');
-    for (const provision of [step => step.id === 'playwright', step => step.run === 'npx playwright install chromium', step => step.run === 'docker pull postgres:17-alpine', step => step.run === 'docker pull mysql:8']) {
+    for (const provision of [step => step.id === 'playwright', step => step.run === 'npx playwright install chromium', step => step.run === 'docker pull postgres:17-alpine']) {
       const at = steps.findIndex(provision);
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(run);

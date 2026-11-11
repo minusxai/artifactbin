@@ -88,8 +88,6 @@ export default {
       ],
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },
-      // Makes the disposable TLS certificates of the real-Postgres resolver test (page-operations database-postgres).
-      ignoreBinaries: ['openssl'],
     },
     // THE PACKAGES: an export of a package entry (its package.json `exports`, or a server) that nothing imports is
     // reported too (`includeEntryExports`). What the private deployment imports is pinned, by name, in each

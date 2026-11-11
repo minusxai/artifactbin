@@ -1,10 +1,10 @@
 /**
  * Example: the tracker's features (examples/tracker.html): what each needs, the columns and files
  *   it adds, and how it changes the entries dataset's rules; the presets new-app.mjs offers.
- * Usage: node scripts/new-app.mjs --kind tracker [--preset tasks|list] [--without F,…] [--limit N]
- *   reads it; no edits needed.
+ * Usage: node scripts/new-app.mjs --kind tracker [--preset tasks|list] [--without F,…] reads it;
+ *   no edits needed.
  * Gotchas: own-rows and team change who may do what, so they live in the dataset rules: the
- *   page only shows matching controls (from tracker.ts me), and the rules judge every write.
+ *   page shows its controls to a signed-in reader, and the rules judge every write.
  */
 export const FEATURES = {
   'own-rows': {requires: [],
@@ -15,8 +15,6 @@ export const FEATURES = {
   collab: {requires: [], columns: ['description'],
     summary: 'descriptions are typed in together, live'},
   table: {requires: [], summary: 'a sortable table view of every entry'},
-  limits: {requires: ['own-rows'],
-    summary: 'each group holds at most APP.limit entries'},
 };
 /** Each preset's features, and the [bracketed] APP texts it starts from (tasks: the page's own). */
 export const PRESETS = {

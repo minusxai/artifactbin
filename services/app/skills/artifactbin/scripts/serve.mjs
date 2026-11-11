@@ -20,8 +20,8 @@ Gotchas:
     isolation) and does not run publication validation.
   - Edits on disk show "File changed - Reload" (the project is polled every 1.5 s); the running
     page is never patched.
-  - sql and backend functions (fetch('/fn/NAME')) run only in the published page: here sql
-    rejects with unavailable and functions never run; publish, then check the published page.
+  - sql runs only in the published page: here it rejects with unavailable; publish, then check
+    the published page.
   - The toolbar's Save HTML downloads a packed portable copy; it never overwrites the file or
     publishes.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.

@@ -28,7 +28,7 @@ const combos = () => Array.from({length: 1 << NAMES.length}, (_, mask) =>
   new Set(NAMES.filter((_, i) => mask & (1 << i))));
 const label = (keep: Set<string>) => [...keep].join('+') || 'core';
 
-/** One program over every combination's scripts: page modules, the config script, the steps bodies, the resolver. */
+/** One program over every combination's scripts: page modules, the config script, the steps bodies. */
 function brokenNames(sets: Array<[string, Files]>): Map<string, string[]> {
   const files = new Map<string, string>([['/v/ambient.d.ts', AMBIENT]]);
   for (const [name, out] of sets) {
@@ -37,7 +37,6 @@ function brokenNames(sets: Array<[string, Files]>): Map<string, string[]> {
     files.set(`/v/${name}/page.js`, scripts[1]!);
     for (const steps of ['steps.mjs', 'guest.mjs', 'cleanup.mjs'])
       files.set(`/v/${name}/${steps.replace('.mjs', '.js')}`, `export async function run(){${out[steps]}\n}`);
-    if (out['tracker.ts']) files.set(`/v/${name}/tracker.ts`, out['tracker.ts']);
   }
   const host = ts.createCompilerHost({}), base = {...host};
   host.getSourceFile = (f, v) => files.has(f) ? ts.createSourceFile(f, files.get(f)!, v, true) : base.getSourceFile(f, v);
@@ -62,14 +61,9 @@ function leftovers(keep: Set<string>, out: Files): string[] {
     for (const name of NAMES) if (!keep.has(name) && new RegExp(`@(?:feature|only) ${name}\\b`).test(text))
       problems.push(`${file}: ${name} code is left`);
   }
-  // tracker.ts is always there (me says who reads); only limits adds add and save, and only limits calls them.
-  if (!/rel="af-resolver" data-af-name="tracker"/.test(out['index.html']!) || !('tracker.ts' in out)) problems.push('tracker.ts is not linked');
-  if (keep.has('limits') !== /\badd\(input/.test(out['tracker.ts'] ?? '')) problems.push('tracker.ts add and limits disagree');
-  if (keep.has('limits') !== /call\('add'/.test(out['index.html']!)) problems.push('the page\'s add and limits disagree');
-  // With limits every edit is tracker.ts's save (a move needs room); without, the page updates entries itself.
-  if (keep.has('limits') !== /\bsave\(input/.test(out['tracker.ts'] ?? '')) problems.push('tracker.ts save and limits disagree');
-  if (keep.has('limits') !== /call\('save'/.test(out['index.html']!)) problems.push('the page\'s save and limits disagree');
-  if (keep.has('limits') === /update entries set/.test(out['index.html']!)) problems.push('the page updates entries past tracker.ts');
+  // No page code runs on the server: the page reads and writes the entries itself, and links nothing else.
+  if ('tracker.ts' in out || /af-resolver|\/fn\/|\bfetch\(/.test(out['index.html']!)) problems.push('the page calls server code');
+  if (!/update entries set/.test(out['index.html']!)) problems.push('the page does not update entries itself');
   return problems;
 }
 async function generateAll(from = EXAMPLES) {
@@ -89,12 +83,12 @@ async function generateAll(from = EXAMPLES) {
 const temps: string[] = [];
 afterAll(() => Promise.all(temps.map(dir => rm(dir, {recursive: true, force: true}))));
 
-it('generates every valid feature combination clean and refuses the 12 that miss a requirement', async () => {
+it('generates every valid feature combination clean and refuses the 4 that miss a requirement', async () => {
   const {clean, refused} = await generateAll();
-  expect(clean).toHaveLength(20);
-  expect(refused).toHaveLength(12);
-  // Every refusal names a feature whose requirement was dropped: team or limits without own-rows.
-  expect(refused.every(name => !name.includes('own-rows') && /team|limits/.test(name))).toBe(true);
+  expect(clean).toHaveLength(12);
+  expect(refused).toHaveLength(4);
+  // Every refusal names a feature whose requirement was dropped: team without own-rows.
+  expect(refused.every(name => !name.includes('own-rows') && /team/.test(name))).toBe(true);
   for (const [name, out] of clean) expect(leftovers(new Set(name === 'core' ? [] : name.split('+')), out), name).toEqual([]);
   expect(Object.fromEntries(brokenNames(clean))).toEqual({});
 }, 60_000);
@@ -135,13 +129,9 @@ it('keeps a kept feature\'s markers, drops a negated one\'s, and keeps a !featur
   expect(trim(source, new Set(['collab']))).toBe('a\nc\n/* @feature collab */\nd\n/* @end collab */');
 });
 
-it('writes one --limit into the page and the resolver, the preset\'s texts, and the columns and rules each feature needs', async () => {
-  const tasks = await trackerFiles(trackerFeatures({}), {limit: 12});
-  expect(tasks['index.html']).toMatch(/^ {2}limit: 12,/m);
-  expect(tasks['tracker.ts']).toMatch(/^const LIMIT=12;/m);
+it('writes the preset\'s texts, and the columns and rules each feature needs', async () => {
   const list = await trackerFiles(trackerFeatures({preset: 'list'}), {preset: 'list'});
-  expect(Object.keys(list).sort()).toEqual(['cleanup.mjs', 'guest.mjs', 'index.html', 'steps.mjs', 'tracker.ts']);
-  expect(list['tracker.ts']!.slice(list['tracker.ts']!.indexOf('*/'))).not.toMatch(/LIMIT|add|save|roles/);
+  expect(Object.keys(list).sort()).toEqual(['cleanup.mjs', 'guest.mjs', 'index.html', 'steps.mjs']);
   for (const [from, to] of Object.entries(PRESETS.list.texts)) {
     expect(list['index.html'], from).not.toContain(`'${from}'`);
     expect(list['index.html'], to).toContain(`'${to}'`);

@@ -36,8 +36,6 @@ const USE_CASES: UseCase[] = [
     starters: {'examples/tracker.html': 'tracker.html', 'new-app --kind tracker': 'node scripts/new-app.mjs --title'}},
   {use: 'a sign-up sheet, RSVP or roster', trigger: /sign-up sheet/i,
     starters: {'new-app --kind list': 'node scripts/new-app.mjs --kind list'}},
-  {use: 'a dashboard of an HTTP API', trigger: /dashboard[^.]*\bHTTP API\b/i,
-    starters: {'examples/api-dashboard.html': 'api-dashboard.html', 'new-app --kind api': 'node scripts/new-app.mjs --kind api'}},
   {use: 'a dashboard, report or chart from a CSV', trigger: /\b(?:report|chart|dashboard)\b[^.]*\bCSV\b/i,
     starters: {'examples/csv-dashboard.html': 'csv-dashboard.html', 'scripts/new-page.mjs': 'node scripts/new-page.mjs --data'}},
   {use: 'a report analysing a codebase', trigger: /report analysing this codebase or repo\b/i,

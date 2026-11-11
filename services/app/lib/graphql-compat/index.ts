@@ -4,4 +4,4 @@
  * page schema composes them. Who may import this module: GRAPHQL_COMPAT in scripts/ci/module-graph.mjs; the rules for editing it: AGENTS.md.
  */
 export {pageGraphql} from './page';
-export {datasetGraphqlSchema,executeDatasetGraphql,executeLinkedDatasetGraphql,isDatasetGraphqlTarget,pageDatasetCheckSources,pageDatasetRoots} from './dataset/hasura';
+export {datasetGraphqlSchema,executeDatasetGraphql,executeLinkedDatasetGraphql,isDatasetGraphqlTarget,pageDatasetRoots} from './dataset/hasura';

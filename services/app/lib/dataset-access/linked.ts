@@ -78,7 +78,7 @@ function writeRules(decision: WriteDecision, table: DatasetTable, names: HasuraT
   };
 }
 
-export const columnsOf = (table: DatasetTable, names: HasuraTableNames, collaborative: readonly string[] = []): HasuraColumn[] =>
+const columnsOf = (table: DatasetTable, names: HasuraTableNames, collaborative: readonly string[] = []): HasuraColumn[] =>
   table.columns.map((c) => ({ field: names.columns[c.name] ?? (() => { throw notFound(); })(), source: c.name, type: scalarOf(c.type), ...(c.type === 'string' && collaborative.includes(c.name) ? { collaborative: true } : {}) }));
 
 /** How a load reaches the dataset: directly (its own sharing decides), or through a page (the page audience rule). */

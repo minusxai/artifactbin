@@ -83,7 +83,7 @@ grants writes. Pinned links and archived page versions read only.
 ## Live views
 
 `sql.watch(statement, rows=>…, error=>…)` runs it now and again whenever a dataset it names
-changes (another reader's write, a schedule's), one request at a time; it returns the stop
+changes (another reader's write), one request at a time; it returns the stop
 function. The statement must name its tables in its text. Never poll.
 
 ```js
@@ -93,9 +93,8 @@ const stop=sql.watch(sql`select count(*) as open from tasks where not done`,
 ```
 
 `onResolverChange(names=>…)` from `@afbin/apollo` names changed links (and `viewer` on sign-in
-or out): re-call [functions](functions.md) whose answers depend on them.
-`examples/csv-dashboard.html` watches its SQL group-bys; `examples/tracker.html` writes rows
-directly, counts with SQL and, with its limits feature, adds through a function.
+or out). `examples/csv-dashboard.html` watches its SQL group-bys; `examples/tracker.html` writes
+rows directly and counts with SQL.
 
 ## Type together (`@afbin/collab`)
 

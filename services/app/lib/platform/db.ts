@@ -448,8 +448,6 @@ async function createDb(): Promise<Db> {
 // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
 const BACKFILLS: readonly string[] = [
   "UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL",
-  // A page links datasets only: the removed page-function links leave every head and archived version.
-  ...['artifacts', 'artifact_versions'].map((table) => `UPDATE ${table} SET meta=jsonb_set(meta,'{htmlLinks}',COALESCE((SELECT jsonb_agg(link) FROM jsonb_array_elements(meta->'htmlLinks') AS link WHERE link->>'kind' IS DISTINCT FROM 'backend'),'[]'::jsonb)) WHERE jsonb_typeof(meta->'htmlLinks')='array' AND meta->'htmlLinks' @> '[{"kind":"backend"}]'`),
 ];
 
 /**

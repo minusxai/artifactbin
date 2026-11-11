@@ -536,7 +536,7 @@ function graphqlFenceViolations(imports, fenced, fence) {
   const stale = Object.keys(fence.importers).filter(file => !used.has(file)).sort();
   const unheaded = fenced.filter(({ opening }) => opening !== fence.header).map(({ file }) => `  ${file}`);
   return [
-    ...(refused.length ? ['The GraphQL compatibility layer (lib/graphql-compat, html-runtime/apollo/graphql-compat) is deprecated: only its routes, the browser client entry and the files in GRAPHQL_COMPAT.importers (scripts/ci/module-graph.mjs) import it. Read data with `sql` (lib/dataset-access) and call functions with fetch(\'/fn/<name>\') (lib/page-doors) instead:', ...[...new Set(refused)]] : []),
+    ...(refused.length ? ['The GraphQL compatibility layer (lib/graphql-compat, html-runtime/apollo/graphql-compat) is deprecated: only its routes, the browser client entry and the files in GRAPHQL_COMPAT.importers (scripts/ci/module-graph.mjs) import it. Read and write data with `sql` (lib/dataset-access, lib/page-doors) instead:', ...[...new Set(refused)]] : []),
     ...(stale.length ? ['GraphQL compatibility importers that no longer import it; remove them from GRAPHQL_COMPAT.importers in scripts/ci/module-graph.mjs:', ...stale.map(file => `  ${file}`)] : []),
     ...(unheaded.length ? [`Every file of the GraphQL compatibility layer opens with its header line: ${fence.header}`, ...unheaded] : []),
   ];

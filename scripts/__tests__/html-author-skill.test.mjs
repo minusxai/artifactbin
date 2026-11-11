@@ -41,7 +41,7 @@ describe('native author resources',()=>{
    expect(script).toContain(name==='report'?"from '@afbin/state'":"from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.publicationBundle.files.map(file=>file.path)).toContain('examples/deliveries.csv');
-   if(name==='tracker'){const resolver=saved.body.publicationBundle.files.find(file=>file.path==='examples/tracker.ts');expect(Buffer.from(resolver.base64,'base64').toString()).toContain("roles={add:'signed_in',save:'signed_in'}");expect(saved.body.html).toContain('href="ref:abc123"');}
+   if(name==='tracker'){expect(saved.body.publicationBundle.files.map(file=>file.path)).not.toContain('examples/tracker.ts');expect(saved.body.html).toContain('href="ref:abc123"');}
   }
  });
  it('generates every shipped design-system stylesheet from the retained specification',async()=>{

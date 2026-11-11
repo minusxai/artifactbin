@@ -3,24 +3,23 @@
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {publicationLocalReferences,publicationScriptFetches,previewBackendLinks} from
+import {publicationLocalReferences,publicationScriptFetches} from
   './preview-html.mjs';
 import {serverOrigin} from './toolbox-client.mjs';
 const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg',
   '.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.csv':'text/csv','.json':
   'application/json','.js':'text/javascript','.mjs':'text/javascript','.woff2':'font/woff2'};
 /** @typedef {{root:string,entry:string,server:string,entryHtml?:string,
-  mappings?:import('../../../lib/html-publication-bundle/contracts').PublicationBundle['mappings'],
-  retainedBackends?:{name:string,href:string}[]}} BundlePreparationOptions */
+  mappings?:import('../../../lib/html-publication-bundle/contracts').PublicationBundle['mappings']}}
+  BundlePreparationOptions */
 /** entryHtml replaces only selected entry bytes after filesystem admission, before snapshot
  * limits/discovery.
  * @param {BundlePreparationOptions} options */
-export async function prepareBundle({root,entry,server,entryHtml,mappings={},
-  retainedBackends=[]}){
+export async function prepareBundle({root,entry,server,entryHtml,mappings={}}){
 const origin=serverOrigin(server);
 if(entryHtml!==undefined&&typeof entryHtml!=='string')throw Error(
    'Entry HTML override must be a string');
- const project=await realpath(root),files=new Map(),retainedPaths=new Set();let size=0;
+ const project=await realpath(root),files=new Map();let size=0;
  async function load(name){
 if(typeof name!=='string'||!name||name.includes('\\')||path.isAbsolute(name))throw Error(
     'Invalid project path');
@@ -28,7 +27,7 @@ name=path.posix.normalize(name);if(name==='..'||name.startsWith('../'))throw Err
     'Dependency escapes project root: '+name);
   const full=path.join(project,name),parts=name.split('/');let parent=project;
 for(const part of parts){parent=path.join(parent,part);let info;try{info=await lstat(parent);}catch(
-    error){if(error.code==='ENOENT'&&(mappings[name]||retainedPaths.has(name)))return;
+    error){if(error.code==='ENOENT'&&mappings[name])return;
     // A missing local components/<name>.js: point at the hosted @afbin/<name> import instead.
     const component=error.code==='ENOENT'&&
       /^(?:.*\/)?components\/([a-z][a-z0-9-]*)\.js$/.exec(name);
@@ -47,10 +46,6 @@ const contentType=types[path.extname(name).toLowerCase()]??'application/octet-st
     name,{path:name,contentType,base64:bytes.toString('base64')});
   if(name===entry||contentType==='text/css'||contentType==='text/javascript'){
    const source=bytes.toString('utf8');
-if(name===entry)for(const link of previewBackendLinks(source)){if(retainedBackends.some(saved=>
-     saved.name===link.name&&saved.href===link.href)&&! /^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(
-     link.href))retainedPaths.add(path.posix.normalize(path.posix.join(path.posix.dirname(entry),
-     link.href)));}
    const urls=publicationLocalReferences(source,contentType);
 for(const url of urls){if(/^\/(?!\/)/.test(url)){await loadRooted(url);continue;}
     if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=

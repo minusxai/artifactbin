@@ -7,7 +7,7 @@
  */
 import {readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
-import {ToolError,platform} from './toolbox-client.mjs';
+import {ToolError} from './toolbox-client.mjs';
 
 /** True when the page shows nothing: no element or text outside <head>, and no script. */
 function emptyPage(source) {
@@ -90,14 +90,14 @@ export async function headBaseline(client, id, type) {
   if (format !== type) throw new ToolError('type_mismatch', `Page ${id} holds ${head.format ??
     'another format'}, not ${type}.`, 2, 'Publish a file of the same kind over it.');
   return {id, version: head.version, state: head.state, dependencyReceipts: receiptsOf(head),
-    retainedBackends: [], ...(Number.isSafeInteger(head.sharing_revision) ?
+    ...(Number.isSafeInteger(head.sharing_revision) ?
       {sharingRevision: head.sharing_revision} : {}),
     ...(head.filename ? {filename: head.filename} : {}),
     ...(head.contentType ? {contentType: head.contentType} : {})};
 }
 
 /** The baseline a marker names: its version, which must still be the page's head (a newer one is
- * never overwritten), with the receipts the page recorded and the backends the source links. */
+ * never overwritten), with the receipts the page recorded. */
 export async function markedBaseline(client, marker, name, source) {
   const head = await client.request(`/api/artifacts/${marker.id}`);
   if (head.version !== marker.version) throw new ToolError('version_conflict',
@@ -106,8 +106,7 @@ export async function markedBaseline(client, marker, name, source) {
     'edited file is kept and the read goes beside it), reapply your edits there and publish ' +
     'that file.');
   return {id: marker.id, version: marker.version, state: marker.state,
-    dependencyReceipts: receiptsOf(head), retainedBackends: (await platform())
-      .previewBackendLinks(source), ...(Number.isSafeInteger(marker.sharingRevision) ?
+    dependencyReceipts: receiptsOf(head), ...(Number.isSafeInteger(marker.sharingRevision) ?
       {sharingRevision: marker.sharingRevision} : {})};
 }
 

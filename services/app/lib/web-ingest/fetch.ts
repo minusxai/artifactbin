@@ -112,7 +112,7 @@ interface WebHopResponse { status: number; headers: IncomingHttpHeaders; bytes: 
  * ONE request to an already-vetted URL, any method and status, no redirect following: the caller decides
  * whether a 3xx is followed and re-vets the next URL. The socket dials only addresses `guardedLookup` approved.
  */
-export const requestWebHop = (url: URL, opts: WebHopRequest): Promise<WebHopResponse> =>
+const requestWebHop = (url: URL, opts: WebHopRequest): Promise<WebHopResponse> =>
   new Promise((resolve, reject) => {
     const remaining = opts.deadline - Date.now();
     if (remaining <= 0) { reject(new WebIngestError('timeout', 'the fetch deadline passed')); return; }

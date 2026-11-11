@@ -1,6 +1,6 @@
 /**
  * Internal: the HTML parser surface of the skill: page decoration for the preview, local reference
- * and dataset/backend link discovery, platform styles, and re-exported autofix and export packing.
+ * and dataset link discovery, platform styles, and re-exported autofix and export packing.
  * The downloadable archive bundles this parser (buildPreviewParser); installed previews need only
  * Node.
  * Used by: preview-server.mjs, preview-*.mjs, toolbox-platform.mjs,
@@ -111,12 +111,3 @@ for(const node of parseFragment(notice).childNodes){node.parentNode=body;body.ch
  return serialize(document);
 }
 
-/** Backend hrefs are source declarations; a read may explicitly retain their saved remote
- * binding. */
-export function previewBackendLinks(source){
-const found=[];function walk(node){if(node.tagName==='link'&&node.attrs.some(attr=>
-   attr.name==='rel'&&attr.value.split(/\s+/).includes('af-resolver'))){const value=name=>
-   node.attrs.find(attr=>attr.name===name)?.value;found.push({name:value('data-af-name'),href:value(
-   'href')??''});}for(const child of node.childNodes??[])walk(child);if(node.content)walk(
-   node.content);}walk(parse(source));return found;
-}

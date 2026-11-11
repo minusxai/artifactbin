@@ -665,6 +665,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   edit_id TEXT NOT NULL DEFAULT md5(random()::text),
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   forked_from TEXT,
@@ -718,6 +719,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
+
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
@@ -742,8 +745,6 @@ ALTER TABLE app.artifacts ALTER COLUMN token_id DROP NOT NULL;
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS content;
-
-ALTER TABLE app.artifacts DROP COLUMN IF EXISTS content_publisher_user_id;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
 
@@ -774,6 +775,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_versions (
   meta JSONB NOT NULL DEFAULT '{}',
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (artifact_id, version)
 );
@@ -798,6 +800,8 @@ ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
+ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
+
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifact_versions DROP COLUMN IF EXISTS content;
@@ -816,6 +820,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_edits (
   document_state JSONB,
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (seq),
   UNIQUE (edit_id)
@@ -846,6 +851,8 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS document_state JSONB;
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
@@ -893,6 +900,7 @@ CREATE TABLE IF NOT EXISTS app.region_updates (
   update BYTEA NOT NULL,
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (artifact_id, region_id, seq)
 );
@@ -910,6 +918,8 @@ ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS update BYTEA NOT NULL;
 ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
 
 ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
@@ -1466,16 +1476,6 @@ DROP TABLE IF EXISTS app.dataset_secrets;
 DROP TABLE IF EXISTS app.dataset_result_cache;
 
 DROP TABLE IF EXISTS app.comment_reaction_events;
-
-DROP TABLE IF EXISTS app.html_backend_versions;
-
-DROP TABLE IF EXISTS app.html_backend_secrets;
-
-DROP TABLE IF EXISTS app.page_function_schedules;
-
-DROP TABLE IF EXISTS app.runner_runs;
-
-DROP TABLE IF EXISTS app.runner_events;
 
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 

@@ -77,6 +77,8 @@ const ARTIFACTS: Table = {
     // version row when this state is archived, so history can say who.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     // PROVENANCE: the artifact this one was FORKED from — the immediate
@@ -120,9 +122,8 @@ const ARTIFACTS: Table = {
   ],
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a
-  // rename breaks nothing — and the old column is dead data, dropped on boot. `content_publisher_user_id` named
-  // the account removed page schedules ran as.
-  dropped: ['folder', 'content', 'content_publisher_user_id'],
+  // rename breaks nothing — and the old column is dead data, dropped on boot.
+  dropped: ['folder', 'content'],
 };
 
 // Append-only; a row is the state BEFORE a PUT replaced it.
@@ -140,6 +141,8 @@ const ARTIFACT_VERSIONS: Table = {
     // Who produced THIS state (artifacts.actor_* at the moment it was archived).
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'version'],
@@ -169,6 +172,8 @@ const ARTIFACT_EDITS: Table = {
     // Who made the splice — NULL on rows that predate attribution.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['seq'],
@@ -215,6 +220,8 @@ const REGION_UPDATES: Table = {
     { name: 'update', type: 'BYTEA', notNull: true },
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'region_id', 'seq'],
@@ -922,17 +929,15 @@ export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_Q
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
  * annotation-anchor aliases and node-identity migration cursors, the login/OAuth code tables merged into `codes`,
  * copied web fonts, the shared rate-limit counter, browser test-user leases, hosted agents and their branches,
- * remote agents and work, the api 1 resolvers' `caps.store` state, the retired mutation-notification jobs and
+ * remote agents and work, the api 1 resolvers' store state, the retired mutation-notification jobs and
  * their inbox rows (both empty when dropped), and the deleted connected Postgres datasets' encrypted connection
- * secrets and result cache, the retired comment feed's reaction log (the events feed records reactions now), and
- * the removed page functions' modules, credentials, schedules and runner runs.
+ * secrets and result cache, and the retired comment feed's reaction log (the events feed records reactions now).
  */
 export const DROPPED_TABLES: readonly string[] = [
   'custom_domains', 'artifact_node_aliases', 'node_identity_migration_jobs', 'login_codes', 'oauth_codes', 'webfonts',
   'rate_limit_hits', 'browser_test_users', 'hosted_conversations', 'hosted_branches', 'remote_agents', 'remote_work',
   'html_backend_stores', 'notification_jobs', 'mutation_notifications', 'dataset_secrets', 'dataset_result_cache',
-  'comment_reaction_events', 'html_backend_versions', 'html_backend_secrets', 'page_function_schedules', 'runner_runs',
-  'runner_events',
+  'comment_reaction_events',
 ];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */

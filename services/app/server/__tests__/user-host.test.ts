@@ -158,15 +158,10 @@ it('shares one static allowlist with dev ingress and rejects encoded or executab
  for(const path of ['/solid-entry.tsx','/@vite/client','/@fs/private.ts','/islands/entry.js','/af/app/app-123.js','/assets/app-123.css','/af/chrome.js','/fonts/%2f../private.ts','/api/internal/build-assets/assets/app.css'])expect(userHostStaticPath(path),path).toBe(false);
 });
 
-it('review: unframed function calls can pass the owner-host boundary',async()=>{
- const user=await owner(),post=await page(user.token),server=app();
- const res=await server.request(`${base}/api/artifacts/${post.id}/fn/missing?revision=1`,{headers:{origin:'null'}});
- expect(res.headers.get('content-type')).toContain('application/json');
- expect(await res.json()).toMatchObject({error:'unknown_function'});
-});
-it('review: unframed CSP admits the page function endpoint',async()=>{
+it('an owner host has no function door: its unframed CSP admits no function path, and a function path is not found',async()=>{
  const user=await owner(),post=await page(user.token),server=app();
  const res=await server.request(`${base}/${post.id}`);
  const connect=res.headers.get('content-security-policy')!.split(';').find(part=>part.trim().startsWith('connect-src'))!;
- expect(connect).toContain(`/api/artifacts/${post.id}/fn/`);
+ expect(connect).not.toContain('/fn/');
+ expect((await server.request(`${base}/api/artifacts/${post.id}/fn/missing?revision=1`,{headers:{origin:'null'}})).status).toBe(404);
 });

@@ -10,7 +10,6 @@ export { DatasetError } from './errors';
 export { CatalogQueryFailure, executeCatalog, executeMounted, mutateMounted, readMountRows, type CatalogMount } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';
 export { datasetResponse } from './http';
-export { createSharedReads } from './shared-reads';
 export { storedMediaReferences } from './media-references';
 export { throttlePublicMutation } from './policy/usage';
 export { keepDatasetConfiguration, LEGACY_POLICY_REFUSED, readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from './policy/validation';

@@ -66,7 +66,7 @@ describe('installable shared skill folder',()=>{
   }
   for(const shim of ['scripts/publication-bundle.mjs','scripts/preview.mjs'])expect(expected[shim]).toBeUndefined();
   expect(expected['scripts/toolbox-publish-legacy.mjs']).toBeUndefined();
-  expect(expected['resolvers/resolver-public-url.ts']).toContain("export const roles = { test: 'owner' };");
+  expect(Object.keys(expected).some(name=>name.startsWith('resolvers/'))).toBe(false);
   expect(expected['references/datasets.md']).toContain('dataset');
   expect(expected['components/file-upload.ts']).toContain('uploadFile');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
