@@ -1,3 +1,4 @@
+import {createHistoricalPage} from './historical-page';
 /**
  * TWO APP PROCESSES, ONE DATABASE (production runs two). Two RegionSessions instances share nothing but the database:
  * each has its own document cache, client-id memory, LISTEN subscriptions, stream registry and timers, exactly what
@@ -15,7 +16,6 @@ import * as Y from 'yjs';
 import pg from 'pg';
 import { randomBytes } from 'node:crypto';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
-import { createArtifact } from '@/lib/artifacts';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { editableRegions, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { createRegionSessions, type RegionSessions } from '@/lib/region-sessions';
@@ -117,7 +117,7 @@ async function concurrentTyping(scenario: Scenario) {
 describe('two instances over the harness database', () => {
   it('serialize concurrent updates from both into one order that both streams deliver whole', async () => {
     const [alice, bob] = await Promise.all(['alice', 'bob'].map((name) => createUser({ email: `mxmx_test_region_two_${name}@example.com` })));
-    const row = await createArtifact(null, alice!.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
+    const row = await createHistoricalPage(null, alice!.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
     await (await getDb()).query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, 'editor')", [row.id, bob!.email]);
     await concurrentTyping({
       pageId: row.id, regionId: editableRegions(row.source!)[0]!.id,

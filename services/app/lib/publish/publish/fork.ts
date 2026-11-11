@@ -1,3 +1,4 @@
+import {LiveRegionRefusal} from '@/lib/live-regions';
 import {planHtmlClone} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
@@ -107,7 +108,7 @@ export async function forkArtifact(
   let row: ArtifactRow;
   try { row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role, ...(source.format==='dataset'?{datasetPolicy:{policy:source.dataset_policy??null,revision:source.policy_revision??0}}:{}) }); }
   // The copy's schedules would be the forker's: over the forker's capacity, nothing is created.
-  catch (error) { if (error instanceof ScheduleLimitError) return json({ error: error.code, details: [error.message] }, error.status); throw error; }
+  catch (error) { if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409); if (error instanceof ScheduleLimitError) return json({ error: error.code, details: [error.message] }, error.status); throw error; }
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });

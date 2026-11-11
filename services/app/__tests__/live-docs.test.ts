@@ -1,3 +1,4 @@
+import {createHistoricalPage} from './historical-page';
 /**
  * LIVE TEXT IS THE DOCUMENT (lib/artifacts current-page): every read of an HTML page serves its saved source with each
  * region's unsaved live text composed in, with no save. The served document, the app page, the API GETs, a reader's
@@ -7,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { artifactState, createArtifact, currentPage, getArtifactById } from '@/lib/artifacts';
+import { artifactState, currentPage, getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { runWithRequest } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
@@ -34,12 +35,12 @@ async function join(person: Person) {
   const req = request(`/api/artifacts/${pageId}/regions/${regionId}/open`, { method: 'POST', actor: as(person), origin: 'same' });
   const response = await runWithRequest(req, () => openRoute(req, { params: Promise.resolve({ id: pageId, regionId }) }));
   expect(response.status).toBe(200);
-  const reply = await response.json() as { clientId: number; state: string };
-  const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
+  const reply = await response.json() as { clientId: number; state: string;kind: 'rich-native-v1'|'rich' };
+  const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), {kind:reply.kind, clientId: reply.clientId });
   const pending: Uint8Array[] = [];
   doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== 'server') pending.push(update); });
   return {
-    text: regionText(doc),
+    text: reply.kind==='rich-native-v1'?(doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(0) as Y.XmlText:regionText(doc),
     async push() {
       const update = Buffer.from(Y.mergeUpdates(pending.splice(0))).toString('base64');
       const sent = request(`/api/artifacts/${pageId}/regions/${regionId}/updates`, { method: 'POST', json: { clientId: reply.clientId, update }, actor: as(person), origin: 'same' });
@@ -59,7 +60,7 @@ const runtimeOf = (html: string) => JSON.parse(/<script[^>]*data-af="runtime"[^>
 beforeEach(async () => {
   const person = async (name: string) => { const user = await createUser({ email: `mxmx_test_livedocs_${name}@example.com` }); return { id: user.id, email: user.email! }; };
   [owner, editor] = await Promise.all(['owner', 'editor'].map(person));
-  const row = await createArtifact(null, owner.id, { format: 'html', source: DOC, title: 'Untitled document', meta: { template: 'doc' }, visibility: 'public' });
+  const row = await createHistoricalPage(null, owner.id, { format: 'html', source: DOC, title: 'Untitled document', meta: { template: 'doc' }, visibility: 'public' });
   pageId = row.id;
   regionId = editableRegions(row.source!)[0]!.id;
   await (await harness.db()).query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [pageId, editor.email, 'editor']);

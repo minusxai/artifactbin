@@ -211,17 +211,25 @@ it('ships the region editor only as its own lazily loaded module, at most 100 Ki
  const regions=assets.regions!;
  // Production conditions, minified, gzipped as served: the budget the brief sets (100 KiB = 102,400 bytes).
  expect(gzipSync(regions).byteLength).toBeLessThanOrEqual(100*1024);
- expect(regions).toContain('ProseMirror');
+ expect(regions).not.toContain('ProseMirror');
  // Readers never carry editor bytes: neither the core nor the reader module holds ProseMirror or Yjs.
  for(const source of [assets.core,assets.reader,assets.morph!])expect(source).not.toContain('ProseMirror');
- expect(assets.reader).toContain('@afbin/regions');
+ expect(assets.reader).toContain('@afbin/native-regions');
  // Only framed live pages map the module (it is loaded after a region session only).
  expect(assets.core).toMatch(/"@afbin\/regions":new URL\("\/af\/regions\.js"/);
  const {build}=await import('esbuild');
- const graph=await build({entryPoints:[fileURLToPath(new URL('../region-editor.ts',import.meta.url))],bundle:true,write:false,minify:true,format:'esm',platform:'browser',conditions:['production'],metafile:true,logLevel:'silent'});
+ const graph=await build({entryPoints:[fileURLToPath(new URL('../native-region-editor.ts',import.meta.url))],bundle:true,write:false,minify:true,format:'esm',platform:'browser',conditions:['production'],metafile:true,logLevel:'silent'});
  const inputs=Object.keys(graph.metafile.inputs);
  expect(inputs.some(input=>input.includes('prosemirror-view'))).toBe(true);
  expect(inputs.filter(input=>/parse5|prosemirror-markdown|markdown-it|lib\/html-page\/|live-regions\/(?:compaction|source-html|state)\.ts/.test(input))).toEqual([]);
+});
+
+it('ships one native editor without the retired rich editor or binding',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.regions?.includes('export {mountRegionEditor} from "@afbin/native-regions"')).toBe(true);
+ const {build}=await import('esbuild');
+ const graph=await build({entryPoints:[fileURLToPath(new URL('../native-region-editor.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'browser',metafile:true,logLevel:'silent'});
+ expect(Object.keys(graph.metafile.inputs).filter(input=>/live-regions\/(?:editor|binding|browser)\.ts$/.test(input))).toEqual([]);
 });
 
 it('ships @afbin/collab as its own small module over the page reader: Yjs, no ProseMirror, mapped for every hosted page',async()=>{

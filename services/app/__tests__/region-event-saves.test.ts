@@ -1,3 +1,4 @@
+import {createHistoricalPage} from './historical-page';
 /**
  * Versions are saved on EVENTS (contract region-sessions): when the last editor stream of a page closes (after a
  * grace a reconnect fits in), and by the idle backstop, which the open streams drive: a region dirty and quiet for
@@ -8,7 +9,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
-import { createArtifact, getArtifactById } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { createRegionSessions, type RegionSessions } from '@/lib/region-sessions';
 import { getDb } from '@/lib/platform';
@@ -62,7 +63,7 @@ beforeEach(async () => {
   intervals = [];
   const user = await createUser({ email: 'mxmx_test_region_saves@example.com' });
   owner = identityForUser(user.id, null);
-  const row = await createArtifact(null, user.id, { format: 'html', source: nativeHtml('<article data-af-editable="rich"><p>Hello</p></article>'), meta: {}, visibility: 'private' });
+  const row = await createHistoricalPage(null, user.id, { format: 'html', source: nativeHtml('<article data-af-editable="rich"><p>Hello</p></article>'), meta: {}, visibility: 'private' });
   pageId = row.id;
   regionId = editableRegions(row.source!)[0]!.id;
 });

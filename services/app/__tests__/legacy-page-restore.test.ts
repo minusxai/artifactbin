@@ -1,7 +1,8 @@
+import {createHistoricalPage} from './historical-page';
 import * as Y from 'yjs';
 import {openRegionDoc} from '@/lib/live-regions';
 import {expect,it} from 'vitest';
-import {createArtifact,migrateLegacyPage,revertArtifactFor} from '@/lib/artifacts';
+import {migrateLegacyPage,revertArtifactFor} from '@/lib/artifacts';
 import {createUser,identityForUser} from '@/lib/accounts';
 import {editableRegions} from '@/lib/live-regions';
 import {useAppHarness,mintAccountToken,request} from './harness';
@@ -9,7 +10,7 @@ import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();
 it('restores a legacy archive into native editing without rewriting the archive',async()=>{
  const user=await createUser({email:'mxmx_test_restore_native@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
  await migrateLegacyPage(row.id,{apply:true});
  const db=await harness.db();
  const before=(await db.query('SELECT source FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[row.id,row.version])).rows;
@@ -22,7 +23,7 @@ it('restores a legacy archive into native editing without rewriting the archive'
 it('normalizes migrated publications, refuses text, and preserves stale writer conflicts',async()=>{
  const {replaceArtifactFor,isVersionConflict}=await import('@/lib/artifacts');
  const user=await createUser({email:'mxmx_test_restore_write@example.com'}),actor=identityForUser(user.id);
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
  await migrateLegacyPage(row.id,{apply:true});
  const db=await harness.db();
  const head=async()=>(await db.query<{source:string;version:number}>('SELECT source,version FROM artifacts WHERE id=$1',[row.id])).rows[0]!;
@@ -39,11 +40,12 @@ it('normalizes migrated publications, refuses text, and preserves stale writer c
  await replaceArtifactFor(actor,row.id,{format:'html',source:changed.source.replace('Changed','Fresh'),meta:{}},{expectedVersion:changed.version});
  expect((await head()).source).toContain('Fresh');
 });
-it('refuses an incompatible archived restore without modifying persisted state',async()=>{
+it.each([true,false])('refuses an incompatible archived restore without modifying persisted state (receipt=%s)',async receipt=>{
  const user=await createUser({email:'mxmx_test_restore_refusal@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
  await migrateLegacyPage(row.id,{apply:true});
  const db=await harness.db();
+ if(!receipt)await db.query('DELETE FROM legacy_page_migrations WHERE artifact_id=$1',[row.id]);
  await db.query("UPDATE artifact_versions SET source=replace(source,'editable=\"rich\"','editable=\"text\"') WHERE artifact_id=$1",[row.id]);
  const state=async()=>{
   const result=[];
@@ -67,7 +69,7 @@ it('refuses an incompatible archived restore without modifying persisted state',
 
 it('guards authenticated HTTP agent writes with both version and state conditions',async()=>{
  const account=await mintAccountToken('mxmx_test_migration_http');
- const row=await createArtifact(null,account.userId!,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,account.userId!,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
  const path=`/api/artifacts/${row.id}`,params={params:Promise.resolve({id:row.id})};
  const before=await (await read(request(path,{token:account.token}),params)).json();
  await migrateLegacyPage(row.id,{apply:true});

@@ -4,7 +4,7 @@
  * Small on purpose: everyone who reads a framed page carries this, and nothing else of the editor. The parent says
  * which regions this viewer may edit (`regions-enabled`, only ever sent to people with edit access); pressing or
  * focusing one asks for it (`region-open`); the parent opens the session with the server and sends `region-session`,
- * and only then is the editor module (`@afbin/regions`, ./region-editor) fetched and mounted on the region's own
+ * and only then is the editor module (`@afbin/native-regions`, ./native-region-editor) fetched and mounted on the region's own
  * element. Messages for a region whose editor is still loading wait for it, in order. `region-closed` unmounts it and
  * puts back the region's SAVED HTML from the newest version this document drew (./live-morph keeps that source), so a
  * reader sees exactly what readers see.
@@ -22,7 +22,7 @@
 import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts';
 import { LOADED_SOURCE_KEY } from './live-morph-contract';
 import type { RegionCaretPaint } from '../html-bridge/region-carets';
-import type { RegionEditor, RegionEditorOptions, RegionKeyEntry } from './region-editor';
+import type { RegionEditor, RegionEditorOptions, RegionKeyEntry } from './region-editor-contract';
 
 interface RegionEditorModule { mountRegionEditor(options: RegionEditorOptions): RegionEditor }
 export interface FrameRegionsOptions {

@@ -1,14 +1,15 @@
+import {createHistoricalPage} from './historical-page';
 import * as Y from 'yjs';
 import {createRegionState,editableRegions,openRegionDoc,regionText,regionHtml} from '@/lib/live-regions';
 import {expect,it} from 'vitest';
-import {createArtifact,migrateLegacyPage} from '@/lib/artifacts';
+import {migrateLegacyPage} from '@/lib/artifacts';
 import {createRegionSessions} from '@/lib/region-sessions';
 import {identityForUser,createUser} from '@/lib/accounts';
 import {useAppHarness} from './harness';
 const harness=useAppHarness();
 it('defaults to dry run, retains exact old head and repeats without publication',async()=>{
  const user=await createUser({email:'mxmx_test_migration@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello</p></article>',meta:{},visibility:'private'});
  const db=await harness.db();
  await db.query(`INSERT INTO annotations(id,artifact_id,body,author_kind,quote,anchor_version,html_anchor) VALUES('ann_migration',$1,'Retain comment','human','Hello',$2,$3::jsonb)`,[row.id,row.version,JSON.stringify({nodeId:editableRegions(row.source!)[0]!.id})]);
  const comments=(await db.query('SELECT to_jsonb(a) AS value FROM annotations a WHERE artifact_id=$1',[row.id])).rows;
@@ -24,7 +25,7 @@ it('defaults to dry run, retains exact old head and repeats without publication'
 
 it('refuses an unrepresentable empty mark without changing any rows',async()=>{
  const user=await createUser({email:'mxmx_test_migration_refuse@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello<strong data-af-id="af-98"></strong></p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello<strong data-af-id="af-98"></strong></p></article>',meta:{},visibility:'private'});
  const db=await harness.db();
  const before=(await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows;
  await expect(migrateLegacyPage(row.id,{apply:true})).rejects.toThrow();
@@ -34,7 +35,7 @@ it('refuses an unrepresentable empty mark without changing any rows',async()=>{
 
 it('preserves trash timestamp',async()=>{
  const user=await createUser({email:'mxmx_test_migration_trash@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Trashed</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Trashed</p></article>',meta:{},visibility:'private'});
  const db=await harness.db();
  await db.query("UPDATE artifacts SET deleted_at='2025-01-01T00:00:00Z' WHERE id=$1",[row.id]);
  const before=(await db.query('SELECT deleted_at FROM artifacts WHERE id=$1',[row.id])).rows;
@@ -44,7 +45,7 @@ it('preserves trash timestamp',async()=>{
 
 it.each(['true','false'])('folds checklist %s state and pending log bytes and retains exact attributed backup bytes',async checked=>{
  const user=await createUser({email:'mxmx_test_migration_dirty@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:`<article data-af-editable="rich"><p>Hello</p><ul><li role="checkbox" aria-checked="${checked}" aria-disabled="true"><p>Task</p></li></ul></article>`,meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:`<article data-af-editable="rich"><p>Hello</p><ul><li role="checkbox" aria-checked="${checked}" aria-disabled="true"><p>Task</p></li></ul></article>`,meta:{},visibility:'private'});
  const db=await harness.db();
  const region=editableRegions(row.source!)[0]!;
  const initial=createRegionState('rich',region.inner);
@@ -69,7 +70,7 @@ it.each(['true','false'])('folds checklist %s state and pending log bytes and re
 it('rejects old sessions in warm and cold processes after conversion',async()=>{
  const user=await createUser({email:'mxmx_test_migration_stale@example.com'});
  const actor=identityForUser(user.id);
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello</p></article>',meta:{},visibility:'private'});
  const region=editableRegions(row.source!)[0]!;
  const make=()=>createRegionSessions({db:()=>harness.db(),keepaliveFrame:()=>'',subscribe:async(channel,handler,onLost)=>(await harness.db()).listen(channel,handler,onLost)});
  const warm=make(),cold=make();
@@ -88,7 +89,7 @@ it('rejects old sessions in warm and cold processes after conversion',async()=>{
 it.each(['true','false'])('migrates legacy checkbox %s through the real operator with exact backup and comments',async checked=>{
  const user=await createUser({email:`mxmx_test_checkbox_${checked}@example.com`});
  const source=`<article data-af-id="af-1" data-af-editable="rich"><p data-af-id="af-2">Tasks</p><ul data-af-id="af-3"><li data-af-id="af-4" role="checkbox" aria-checked="${checked}" aria-disabled="true"><p data-af-id="af-5">Example task</p></li></ul></article>`;
- const row=await createArtifact(null,user.id,{format:'html',source,meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source,meta:{},visibility:'private'});
  const db=await harness.db();
  await db.query(`INSERT INTO annotations(id,artifact_id,body,author_kind,quote,anchor_version,html_anchor) VALUES($1,$2,'Keep','human','Example task',$3,$4::jsonb)`,[`ann_checkbox_${checked}`,row.id,row.version,JSON.stringify({nodeId:'af-5'})]);
  const before=(await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows;
@@ -103,7 +104,7 @@ it.each(['true','false'])('migrates legacy checkbox %s through the real operator
 });
 it.each(['aria-checked="mixed"','aria-checked="true" aria-disabled="yes"','aria-checked="true" aria-label="unmodelled"','aria-checked="true" data-checked="true"'])('refuses invalid checkbox attributes atomically: %s',async attrs=>{
  const user=await createUser({email:'mxmx_test_checkbox_invalid@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:`<article data-af-editable="rich"><ul><li role="checkbox" ${attrs}><p>Invalid</p></li></ul></article>`,meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:`<article data-af-editable="rich"><ul><li role="checkbox" ${attrs}><p>Invalid</p></li></ul></article>`,meta:{},visibility:'private'});
  const db=await harness.db();
  const before=(await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows;
  await expect(migrateLegacyPage(row.id,{apply:true})).rejects.toThrow();
