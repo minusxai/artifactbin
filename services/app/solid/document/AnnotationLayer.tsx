@@ -126,6 +126,8 @@ export interface AnnotationLayerProps {
   pickRequested?: boolean;
   /** A notification's comment or thread id; read from `?comment=`/`?thread=` when absent. */
   linkTarget?: string | null;
+  /** The thread the rail has open, open or resolved (null when none): a host page reports it. */
+  onOpenThreadChange?: (id: string | null) => void;
 }
 
 const cardClass = 'rounded-panel border border-edge bg-raised text-sm';
@@ -460,6 +462,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   // Closing the rail drops what only the rail was showing; the pins stay.
   createEffect(on(railOpen, (open) => { if (!open) setOpenId(null); }));
+  createEffect(on(openId, (id) => props.onOpenThreadChange?.(id), { defer: true }));
   onCleanup(() => postToFrame({ type: 'mx:annotations', mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage));
 
   // What the document says: pin clicks always; selections only while a pick or a composer is open.
