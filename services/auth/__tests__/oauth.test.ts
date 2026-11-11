@@ -599,10 +599,12 @@ describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here fo
   expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${body.access_token}`}})).json()).toMatchObject({credential:'none'});
   expect((await exchange(host,{authorization:`Bearer ${body.access_token}`})).status).toBe(401);
  });
- it('the long grant is for clients outside any page: a request a page makes (any Sec-Fetch-*) is refused, and the page uses the exchange',async()=>{
+ it('the long grant is for clients outside any page: a request a page makes (Sec-Fetch-Site or Sec-Fetch-Dest) is refused, and the page uses the exchange',async()=>{
   const host=await withService();
   const grant=(headers:Record<string,string>,body:unknown={})=>host.request(`${BASE}/api/authentication/token`,{method:'POST',headers:{...signedIn(),origin:BASE,'content-type':'application/json',...headers},body:JSON.stringify(body)});
-  const pages:Record<string,string>[]=[{'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'},{'sec-fetch-site':'same-origin'},{'sec-fetch-mode':'navigate'},{'sec-fetch-dest':'document'}];
+  const pages:Record<string,string>[]=[{'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'},{'sec-fetch-site':'same-origin'},{'sec-fetch-dest':'document'}];
+  // Node's fetch, which the skill's sign-in uses, sends Sec-Fetch-Mode alone: that is a client outside any page.
+  expect((await grant({'sec-fetch-mode':'cors'})).status).toBe(201);
   for(const page of pages){
    for(const body of [{},{audience:'warehouse'}]){
     const refused=await grant(page,body);

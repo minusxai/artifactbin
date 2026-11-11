@@ -135,12 +135,13 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   /*
    * Direct integrations obtain a bearer from an email-verified session, without device/browser grants: a 24 h access
    * token and a 30-day refresh token, for a client outside any page (the skill's sign-in, curl, a server). A page's
-   * script never receives one: a browser marks every request a page makes with `Sec-Fetch-*`, which page code cannot
-   * remove, so a request carrying any is refused, and a page asks SERVICE_TOKEN_PATH for a short-lived token instead.
+   * script never receives one: a browser marks every request a page makes with `Sec-Fetch-Site` and `Sec-Fetch-Dest`,
+   * which page code cannot remove, so a request carrying either is refused, and a page asks SERVICE_TOKEN_PATH for a
+   * short-lived token instead. `Sec-Fetch-Mode` alone is NOT a page: Node's own fetch (the skill's sign-in) sends it.
    * The app's own pages never call this.
    */
   app.post('/api/authentication/token', async (c) => {
-    if(['sec-fetch-site','sec-fetch-mode','sec-fetch-dest'].some(name=>c.req.header(name)!==undefined))
+    if(['sec-fetch-site','sec-fetch-dest'].some(name=>c.req.header(name)!==undefined))
       return new Response(JSON.stringify({error:'page_context_refused',hint:`A page uses POST ${SERVICE_TOKEN_PATH} for a short-lived token.`}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
     const actor=c.get('actor') ?? ANONYMOUS;
     if(actor.credential!=='session'||!actor.userId||!actor.email||actor.emailVerified!==true)
