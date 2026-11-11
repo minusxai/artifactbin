@@ -143,8 +143,11 @@ it('review: SQLite expressions cannot expose hidden values or forge identities',
 it('review: changing receipt keys cannot bypass the public mutation quota', async () => {
   const f = await fixture();
   const db = await getDb();
-  const bucket = `mutation:${f.staff}:${Math.floor(Date.now() / 60000)}`;
-  await db.query('INSERT INTO dataset_usage(bucket,calls) VALUES($1,30)', [bucket]);
+  // The quota counts per minute. This minute's bucket and the next are both full, so a run that crosses a minute
+  // boundary between here and the writes is still refused (it was let through on main, run 42975200518).
+  const minute = Math.floor(Date.now() / 60000);
+  for (const at of [minute, minute + 1])
+    await db.query('INSERT INTO dataset_usage(bucket,calls) VALUES($1,30)', [`mutation:${f.staff}:${at}`]);
   for (const key of ['review_quota_00000001', 'review_quota_00000002'])
     await refused(f, sql(f.page, null, "insert into staff (name) values ('quota')", {}, { key }));
 });
@@ -170,8 +173,8 @@ it('charges the public-write rate limit once per call, even when the head moved 
     expect((await sql(f.page, null, "insert into staff (name) values ('once')")).body.affected).toBe(1);
   } finally { spy.mockRestore(); }
   expect(phases).toBe(3); // the anonymous write twice, the owner's once
-  const bucket = `mutation:${f.staff}:${Math.floor(Date.now() / 60000)}`;
-  expect((await (await getDb()).query<{ calls: number }>('SELECT calls FROM dataset_usage WHERE bucket=$1', [bucket])).rows[0]?.calls).toBe(1);
+  // Charged once in all, whichever minute's bucket the write fell in (the minute can turn between the write and here).
+  expect((await (await getDb()).query<{ calls: number }>("SELECT coalesce(sum(calls),0)::int AS calls FROM dataset_usage WHERE bucket LIKE $1", [`mutation:${f.staff}:%`])).rows[0]?.calls).toBe(1);
 });
 
 it('bounds a write\'s reply and its receipt by the output budget; the write stands', async () => {
