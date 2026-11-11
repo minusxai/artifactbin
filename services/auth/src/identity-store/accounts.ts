@@ -50,7 +50,7 @@ async function insertToken(t: IdentityTables, q: Queryable, input: Parameters<Id
 }
 
 type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
-  | 'createTestUser' | 'eraseTestUser' | 'mintToken' | 'ensureWebToken' | 'revokeToken' | 'touchToken' | 'setTokenHarness' | 'markRequestAuthority'>;
+  | 'createTestUser' | 'eraseTestUser' | 'mintToken' | 'ensureWebToken' | 'findToken' | 'revokeToken' | 'touchToken' | 'setTokenHarness' | 'markRequestAuthority'>;
 
 export function accountMethods(db: TransactionalQueryable, t: IdentityTables): AccountMethods {
   const userById = async (q: Queryable, id: string, lock = false) =>
@@ -153,6 +153,12 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
         if (existing) return {id: existing.id, minted: false};
         return {id: (await insertToken(t, tx, {name: 'web', userId, expiresInMs: null})).id, minted: true};
       });
+    },
+    async findToken({hash}) {
+      if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+      const row = (await db.query<{id: string; user_id: string | null; client_harness: string | null; audience: string | null}>(
+        `SELECT id, user_id, client_harness, audience FROM ${t.tokens} WHERE token_hash = $1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now())`, [hash])).rows[0];
+      return row ? {id: row.id, userId: row.user_id, clientHarness: row.client_harness, audience: row.audience} : null;
     },
     async revokeToken({id, userId}) {
       const row = (await db.query<{name: string | null}>(`UPDATE ${t.tokens} SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL${userId === undefined ? '' : ' AND user_id = $2'} RETURNING name`,

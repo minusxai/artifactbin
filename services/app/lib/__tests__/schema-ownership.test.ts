@@ -42,8 +42,8 @@ it('keeps editor annotation receipts beside app-owned atomic source edits',()=>{
 
 it('sharing revision belongs to app artifact state',()=>{expect(renderedSchema().schema).toMatch(/sharing_revision/);});
 
-it('guest workspace adoption belongs to app users',()=>{
- expect(declared()['app.users']).toBe('app');
+it('guest workspace adoption belongs to the identity module\'s users',()=>{
+ expect(declared()['auth.users']).toBe('auth');
  expect(renderedSchema().schema).toContain('merged_into_user_id TEXT');
 });
 
@@ -124,8 +124,8 @@ it('the hot-path indexes are declared, created at boot only when missing, and pa
  expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifact_shares_user ON app.artifact_shares (user_id)');
  expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifact_shares_email ON app.artifact_shares (email)');
  // The unique (group_id, email) index stays; the lookup by address alone is a second, plain one.
- expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email)');
- expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON app.group_invitations (email)');
+ expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON auth.group_invitations (group_id, email)');
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON auth.group_invitations (email)');
 });
 
 it('native identity provenance belongs to the app and preserves multiple verified aliases',()=>{
@@ -138,9 +138,9 @@ it('native identity provenance belongs to the app and preserves multiple verifie
 
 it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');expect(declared()['app.comment_reaction_events']).toBeUndefined();});
 
-it('group mail retries and fenced claims belong to app durable state',()=>{
- expect(declared()['app.group_mail_outbox']).toBe('app');
- const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS app.group_mail_outbox (')[1]?.split(');')[0];
+it('group mail retries and fenced claims belong to the identity module\'s durable state',()=>{
+ expect(declared()['auth.group_mail_outbox']).toBe('auth');
+ const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS auth.group_mail_outbox (')[1]?.split(');')[0];
  for(const column of ['claim_token TEXT','attempts INTEGER NOT NULL DEFAULT 0','next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()','quarantined_at TIMESTAMPTZ'])expect(declaration).toContain(column);
 });
 it('the head\'s content publisher and the scheduled run\'s fencing epoch belong to the app',()=>{

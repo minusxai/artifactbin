@@ -98,11 +98,11 @@ function registration(body: Record<string, unknown>): { clientName: string; redi
 
 const refreshToken = (): string => `mxr_${randomBytes(32).toString('base64url')}`;
 
-export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: string): OAuthStore {
+export function createOAuthStore(db: Queryable, schema = 'auth'): OAuthStore {
   const s = identifier(schema, 'schema');
   const clients = `${s}.clients`;
   const credentials = `${s}.credentials`;
-  const accessTokens = `${appSchema ? `${identifier(appSchema, 'app schema')}.` : ''}tokens`;
+  const accessTokens = `${s}.tokens`;
   const sweep = () => db.query(`DELETE FROM ${credentials} WHERE expires_at <= now() AND kind NOT IN ('refresh_token', 'refresh_family')`);
   return {
     async register(body) {

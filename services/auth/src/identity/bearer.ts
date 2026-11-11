@@ -1,11 +1,11 @@
 /**
- * THE BEARER READ: one statement per presented credential, no cache. It joins the app-owned `tokens` row
- * (SELECT only), the OAuth family fence over this service's `credentials`, and the account's identity in
- * Better Auth's `user`. Every request reads the database, so a revocation committed by any writer on any
+ * THE BEARER READ: one statement per presented credential, no cache. It joins the identity module's `tokens` row
+ * (base table, in the auth schema beside this service's `credentials`), the OAuth family fence over `credentials`,
+ * and the account's identity in Better Auth's `user`. Every request reads the database, so a revocation committed by any writer on any
  * connection refuses the very next request; a failed statement throws and the caller answers 503.
  *
  *   SELECT token, fence, identity
- *     FROM <app>.tokens t
+ *     FROM <auth>.tokens t
  *     LEFT JOIN LATERAL (the first live family membership of t, LIMIT 1) fence ON true
  *     LEFT JOIN <auth>."user" u ON u.id = t.user_id
  *    WHERE t.token_hash = $1 AND live(t) AND (t is not OAuth OR fence found)
@@ -20,10 +20,8 @@ import { TOKEN_RE, hashToken } from '@artifactbin/utils';
 
 export interface BearerReaderOptions {
   db: Queryable;
-  /** AUTH__SCHEMA: where `credentials` and Better Auth's `user` live. Interpolated — a plain identifier. */
+  /** AUTH__SCHEMA: where `tokens`, `credentials` and Better Auth's `user` live. Interpolated — a plain identifier. */
   authSchema?: string;
-  /** APP__SCHEMA: where the app-owned `tokens` lives; absent means the connection's default schema. */
-  appSchema?: string;
   /** The owning service's own bearer admission policy (the app's account kinds), applied after the read. */
   admitBearer?: (token: TokenRecord) => Promise<boolean>;
 }
@@ -33,30 +31,31 @@ interface BearerRow { id: string; user_id: string | null; audience: string | nul
 /**
  * THE BEARER READ'S LIVENESS, as SQL over a `tokens` row aliased `t`: the lateral `fence` join and the predicate
  * that reads it (row not revoked, not expired, an OAuth token only with a live family). One spelling, used by
- * `createBearerReader` below and by the app's shared `identity.tokens` view, so the two cannot disagree. `auth` and
+ * `createBearerReader` below and by the `tokens` read view's `live` (../identity-store/views), so the two cannot disagree. `auth` and
  * `tokens` are interpolated: the auth schema and the (possibly schema-qualified) tokens table.
  */
-export function bearerLiveSql(o: { auth: string; tokens: string }): { fence: string; live: string } {
+export function bearerLiveSql(o: { auth: string; tokens: string }): { fence: string; live: string; exists: string } {
   const { auth, tokens } = o;
-  return {
-    fence: `LEFT JOIN LATERAL (
-      SELECT 1 AS live FROM ${auth}.credentials member
+  const family = `FROM ${auth}.credentials member
       JOIN ${auth}.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
         AND NOT EXISTS (
           SELECT 1 FROM ${auth}.credentials sibling LEFT JOIN ${tokens} access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
-            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))
-      LIMIT 1
-    ) fence ON true`,
-    live: `t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
+            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))`;
+  const rowLive = `t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())`;
+  return {
+    fence: `LEFT JOIN LATERAL (SELECT 1 AS live ${family} LIMIT 1) fence ON true`,
+    live: `${rowLive}
       AND (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL)`,
+    // The same predicate with the fence as a subquery, for a reader whose FROM must stay the one table (a view).
+    exists: `(${rowLive} AND (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 ${family})))`,
   };
 }
 
 export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
-  const tokens = `${o.appSchema ? `${identifier(o.appSchema, 'app schema')}.` : ''}tokens`;
+  const tokens = `${auth}.tokens`;
   const { fence, live } = bearerLiveSql({ auth, tokens });
   const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
     FROM ${tokens} t

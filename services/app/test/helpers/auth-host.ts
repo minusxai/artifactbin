@@ -8,7 +8,7 @@ import {createAuthHost,createBearerReader,createHumanAuth,ensureAuthSchema,login
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from '@/lib/deployment';
-import { EVENTS_SCHEMA, setServices } from '@/lib/platform';
+import { EVENTS_SCHEMA, ensureLocalIdentity, setServices } from '@/lib/platform';
 import {createAppHost} from '@/server/host';
 
 export async function createAuthComposedHost(env:NodeJS.ProcessEnv,assets=process.cwd()){
@@ -27,7 +27,9 @@ export async function createAuthComposedHost(env:NodeJS.ProcessEnv,assets=proces
    const human=await createHumanAuth({secret,baseURL:origin,schema:authSchema,secure:origin.startsWith('https:'),events,...loginProvidersOf(env),
     ...(raw.kind==='pglite'?{pglite:raw.instance}:{pool:raw.pool as import('pg').Pool}),
     mail:mailerForRuntime({...mailSettingsOf(env),publicBaseUrl:origin,devOutboxPath:readEnv(env,'EMAIL__DEV_OUTBOX_PATH')})});
-   const reader=createBearerReader({db:queryable,authSchema,appSchema,admitBearer:token=>canAuthenticateUser(token.userId)});
+   // As server.ts: the identity read surface again once Better Auth's tables exist (its sessions view).
+   await ensureLocalIdentity(db);
+   const reader=createBearerReader({db:queryable,authSchema,admitBearer:token=>canAuthenticateUser(token.userId)});
    identity={upstream:async()=>{throw new Error('The composed host is not initialized.');},env,tokens:reader,sessions:sessionStoreOf(human),admitIdentity:admitDeploymentIdentity,cookieSecret:secret,
     secure:origin.startsWith('https:'),identityDb:queryable,appSchema,events};
   },

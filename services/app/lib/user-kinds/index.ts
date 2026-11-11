@@ -14,6 +14,7 @@
  */
 import type { Queryable, UserKind } from '@artifactbin/contracts';
 import { getDb } from '../platform';
+import { authenticatingUserSql, liveTestuserWithParentSql } from '@artifactbin/auth/identity-store/rules';
 
 /**
  * The kind of one user, or null when there is no row at all.
@@ -29,17 +30,9 @@ export async function userKindOf(userId: string | null | undefined, query?: Quer
   return row.rows[0]?.kind ?? null;
 }
 
-/** Credentials require an email account. Disposable test users are delegated
- * by such an account; legacy guest owners are only retained for adoption.
- * SQL over the `users` row aliased `alias`: a live test user whose parent is an email account. */
-export const liveTestuserWithParentSql = (alias: string): string => `(${alias}.kind = 'testuser' AND (${alias}.expires_at IS NULL OR ${alias}.expires_at > now()) AND EXISTS
-  (SELECT 1 FROM users parent WHERE parent.id = ${alias}.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))`;
+/** The account rules' one spelling is the identity module's (@artifactbin/auth identity-store/rules): a live test user
+ * of an email account, and who may hold a credential at all. The app reads them over its `users` read view. */
 const LIVE_TESTUSER_WITH_PARENT_SQL = liveTestuserWithParentSql('u');
-/**
- * SQL over the `users` row aliased `alias`: may this identity hold a credential at all. The ONE spelling
- * `canAuthenticateUser` runs and the shared `identity.users` view (lib/groups identity-views) is built from.
- */
-export const authenticatingUserSql = (alias: string): string => `((${alias}.kind='account' AND ${alias}.email IS NOT NULL) OR ${liveTestuserWithParentSql(alias)})`;
 export async function canAuthenticateUser(userId:string|null|undefined,query?:Queryable):Promise<boolean> {
  if(!userId)return false;const db=query??await getDb();
  return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ${authenticatingUserSql('u')}`,[userId])).rows.length>0;

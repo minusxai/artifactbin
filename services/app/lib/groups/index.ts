@@ -127,4 +127,3 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
 export {recordGroupMutation,recordGroupChanges,groupQuota,mailGroupChanges} from './mutations';
 import {recordGroupMutation} from './mutations';
 export {reachedGroupsSql,subtreeSql,subtreeMemberIds} from './hierarchy';
-export {ensureIdentityViews,identityViewStatements,syncIdentitySettings} from './identity-views';

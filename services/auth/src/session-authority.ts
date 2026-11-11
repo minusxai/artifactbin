@@ -14,14 +14,14 @@
  *    tables (`appSchema`). `{method, input}` in; `{result}` or `{refused: {code, status, retry_after?, detail?}}` out,
  *    both 200; anything else (no transactional database, a failure) is 503 and the caller's call throws.
  */
-import {API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
-import {createIdentityStore,ensureIdentityRows} from './identity-store';
+import {createIdentityStore,ensureIdentitySchema} from './identity-store';
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const text=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=256;
 /** A job event as MinusX publishes it: the only envelope another product may put on this installation's feed. */
@@ -50,14 +50,16 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  });
  /**
   * Is the bearer read's record a live credential of this deployment's account: an account's token, an OAuth access
-  * token for one of this deployment's API origins, and an identity the deployment still admits. The record, or null.
+  * token for one of this deployment's API origins, and an ACTIVE account, by the one rule every reader applies (the
+  * `users` read view's `active`, ./identity-store/views), read on this host's database. The record, or null.
   */
  const live=async(c:Context<AuthEnv>,token:TokenRecord|null):Promise<(TokenRecord&{userId:string})|null>=>{
   const userId=token?.userId;
-  if(!token||!userId)return null;
+  if(!token||!userId||!o.identityDb)return null;
   const origins=acceptedOriginsOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'),parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS')));
   if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`))return null;
-  return !o.admitIdentity||await o.admitIdentity({userId})?{...token,userId}:null;
+  const active=(await o.identityDb.query<{active:boolean}>(`SELECT active FROM ${readSchema}.users WHERE id=$1`,[userId])).rows[0]?.active===true;
+  return active?{...token,userId}:null;
  };
  app.all(IDENTITY_INTROSPECT_PATH,async c=>{
   const input=await admit(c);if(input instanceof Response)return input;
@@ -69,12 +71,14 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
  let identity:Promise<IdentityService>|null=null;
- /** The store over the auth host's own connection, its boot rows ensured once (a failure is retried on the next call). */
+ const authSchema=readEnv(o.env,'AUTH__SCHEMA')??'auth',readSchema=readEnv(o.env,'IDENTITY__SCHEMA')??IDENTITY_SCHEMA;
+ if(!/^[a-z_][a-z0-9_]*$/.test(readSchema))throw Error(`IDENTITY__SCHEMA ${JSON.stringify(readSchema)} is not a plain lowercase identifier`);
+ /** The store over the auth host's own connection, its schema ensured once (a failure is retried on the next call). */
  const store=():Promise<IdentityService>=>identity??=(async()=>{
-  const db=o.identityDb;if(!transactional(db))throw Error('identity_unavailable');
-  const appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
-  await ensureIdentityRows(db,appSchema);
-  return createIdentityStore({db,appSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
+  const db=o.identityDb,appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
+  if(!transactional(db)||!appSchema)throw Error('identity_unavailable');
+  await ensureIdentitySchema(db,{auth:authSchema,app:appSchema,read:readSchema});
+  return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
  })().catch(error=>{identity=null;throw error;});
  app.all(IDENTITY_CALL_PATH,async c=>{
   const input=await admit(c);if(input instanceof Response)return input;

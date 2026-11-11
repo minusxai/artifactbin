@@ -11,7 +11,7 @@ afterEach(() => { vi.useRealTimers(); });
 const account = (email = 'owner@example.test') => createUser({ email });
 const tokenRow = async (id: string) =>
   (await (await getDb()).query<{ token_hash: string; user_id: string | null; expires_at: string | null; deleted_at: string | null; last_used_at: string | null }>(
-    'SELECT token_hash, user_id, expires_at, deleted_at, last_used_at FROM tokens WHERE id = $1', [id])).rows[0]!;
+    'SELECT token_hash, user_id, expires_at, deleted_at, last_used_at FROM auth.tokens WHERE id = $1', [id])).rows[0]!;
 /** Mint a token whose lifetime already ran out: the clock is set back past its shortest TTL. Only Date is faked. */
 async function mintExpired(userId: string | null): Promise<{ id: string; token: string }> {
   vi.useFakeTimers({ toFake: ['Date'] });

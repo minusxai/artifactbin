@@ -1,8 +1,8 @@
 /**
- * WHAT MINUSX LEARNS ABOUT WHO SOMEONE IS (cross-repository contract §2), end to end on the composed host: the
- * shared `identity` views (contracts `IDENTITY_VIEWS`, lib/groups identity-views) read with plain SQL, as MinusX's
- * database role reads them, and the one HTTP door left, bearer introspection, through the auth host in front. A
- * person's agent gets a token carrying the `minusx` scope through the ordinary email sign-in grant.
+ * WHAT EVERY READER LEARNS ABOUT WHO SOMEONE IS (cross-repository contract §2), end to end on the composed host: the
+ * identity read views (contracts `IDENTITY_VIEWS`, @artifactbin/auth identity-store/views) read with plain SQL, as
+ * MinusX's database role and the app itself read them, and the one HTTP door left, bearer introspection, through the
+ * auth host in front. A person's agent gets a token carrying the `minusx` scope through the ordinary email sign-in grant.
  *
  * The view names and columns are the cross-repository contract: the literal below pins them, so changing one is a
  * reviewed edit here and in MinusX (its tests apply a byte-for-byte copy of IDENTITY.sql).
@@ -11,11 +11,12 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {afterEach,beforeEach,expect,it} from 'vitest';
-import {IDENTITY_INTROSPECT_PATH,IDENTITY_VIEWS,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {IDENTITY_INTROSPECT_PATH,IDENTITY_OWNED_TABLES,IDENTITY_VIEWS,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {identityViewColumns} from '@artifactbin/auth/identity-store/views';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
-import {AUTH_SECRET,getDb} from '@/lib/platform';
+import {AUTH_SECRET,ensureLocalIdentity,getDb,syncIdentitySettings} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';
-import {createGroup,deleteGroup,ensureIdentityViews,setGroupParent,syncIdentitySettings} from '@/lib/groups';
+import {createGroup,deleteGroup,setGroupParent} from '@/lib/groups';
 import {canUseDeploymentIdentity,createUser} from '@/lib/accounts';
 import {canAuthenticateUser} from '@/lib/user-kinds';
 import {admitGroupMember,useAppHarness} from './harness';
@@ -25,10 +26,9 @@ let directory='';
 beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin});directory=await mkdtemp(join(tmpdir(),'identity-'));});
 afterEach(async()=>{await rm(directory,{recursive:true,force:true});});
 
-/** The composed host, then the views exactly as a combined-mode boot creates them. */
+/** The composed host, whose boot (its database open, then Better Auth's tables) made the views. */
 async function composed(){
  const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
- await ensureIdentityViews(await getDb(),'auth');
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(new Request(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)}));
  const service=async(path:string,body:unknown,secret=SECRET)=>{const response=await post(path,body,{[SERVICE_AUTH_HEADER]:secret});return {status:response.status,body:await response.json()};};
  /** Email sign-in, then the bearer grant with `scope` (absent: the default). */
@@ -46,38 +46,39 @@ async function composed(){
 const sql=async<T=Record<string,unknown>>(text:string,params:unknown[]=[])=>(await (await getDb()).query<T>(text,params)).rows;
 const userIdOf=async(email:string)=>(await sql<{id:string}>('SELECT id FROM users WHERE email=$1',[email]))[0]!.id;
 const token=async(id:string)=>(await sql<{user_id:string;scopes:string[];live:boolean}>('SELECT user_id,scopes,live FROM identity.tokens WHERE id=$1',[id]))[0]??null;
-const chainOf=async(id:string)=>(await sql<{id:string}>(`WITH RECURSIVE c(id,parent_id,depth) AS (SELECT id,parent_id,0 FROM identity.groups WHERE id=$1
-  UNION ALL SELECT g.id,g.parent_id,c.depth+1 FROM c JOIN identity.groups g ON g.id=c.parent_id) SELECT id FROM c ORDER BY depth`,[id])).map(row=>row.id);
-const revision=async()=>Number((await sql<{revision:string}>('SELECT revision FROM identity.hierarchy'))[0]?.revision);
+const chainOf=async(id:string)=>(await sql<{id:string}>(`WITH RECURSIVE c(id,parent_id,depth) AS (SELECT id,parent_id,0 FROM identity.groups WHERE id=$1 AND deleted_at IS NULL
+  UNION ALL SELECT g.id,g.parent_id,c.depth+1 FROM c JOIN identity.groups g ON g.id=c.parent_id AND g.deleted_at IS NULL) SELECT id FROM c ORDER BY depth`,[id])).map(row=>row.id);
+const revision=async()=>Number((await sql<{revision:string}>("SELECT revision FROM identity.group_hierarchy WHERE id='installation'"))[0]?.revision);
 
 it('pins the contract: schema identity holds exactly these views, these columns in this order, and nothing else',async()=>{
  await composed();
- expect(IDENTITY_VIEWS).toEqual({
-  groups:['id','handle','name','parent_id'],memberships:['group_id','user_id'],hierarchy:['revision'],
-  users:['id','active'],sessions:['id','user_id','live'],tokens:['id','user_id','scopes','live'],
- });
+ // Generated from the identity module's declarations minus its secret columns, and equal to the contract literal.
+ expect(identityViewColumns()).toEqual(IDENTITY_VIEWS);
+ expect(Object.keys(IDENTITY_VIEWS).sort()).toEqual([...IDENTITY_OWNED_TABLES,'sessions'].sort());
+ // The app's own connection reads the views by the tables' names.
+ expect(await sql("SELECT n.nspname AS schema,c.relkind::text AS kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass('users')")).toEqual([{schema:'identity',kind:'v'}]);
  const relations=await sql<{name:string;kind:string}>("SELECT c.relname AS name,c.relkind::text AS kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='identity' ORDER BY c.relname");
  expect(relations).toEqual(Object.keys(IDENTITY_VIEWS).sort().map(name=>({name,kind:'v'})));
  const columns=await sql<{table_name:string;column_name:string}>("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='identity' ORDER BY table_name,ordinal_position");
  const actual:Record<string,string[]>={};for(const c of columns)(actual[c.table_name]??=[]).push(c.column_name);
  expect(actual).toEqual(IDENTITY_VIEWS);
  // A second boot replaces the views in place (grants survive): same relations, no error.
- await ensureIdentityViews(await getDb(),'auth');
+ await ensureLocalIdentity(await getDb());
  expect((await sql("SELECT 1 FROM pg_views WHERE schemaname='identity'")).length).toBe(Object.keys(IDENTITY_VIEWS).length);
 });
 
-it('reaches no secret: no login code, session token, token hash, credential hash or email through any view, and a role granted only the views reads no base table',async()=>{
+it('reaches no secret: no login code, session token, token hash or credential hash through any view, and a role granted only the views reads no base table',async()=>{
  const host=await composed();
  const email='mxmx_test_secret_owner@example.test';
  const scoped=await host.signIn(email,'minusx artifacts');
  const user=await userIdOf(email);
  const secrets=[
-  scoped.grant.access_token,scoped.grant.refresh_token,email,
+  scoped.grant.access_token,scoped.grant.refresh_token,
   ...(await sql<{token:string}>('SELECT token FROM auth.session')).map(r=>r.token),
-  ...(await sql<{token_hash:string}>('SELECT token_hash FROM tokens')).map(r=>r.token_hash),
+  ...(await sql<{token_hash:string}>('SELECT token_hash FROM auth.tokens')).map(r=>r.token_hash),
   ...(await sql<{credential_hash:string}>('SELECT credential_hash FROM auth.credentials')).map(r=>r.credential_hash),
  ].filter(Boolean);
- expect(secrets.length).toBeGreaterThanOrEqual(5);
+ expect(secrets.length).toBeGreaterThanOrEqual(4);
  const everything=(await Promise.all(Object.keys(IDENTITY_VIEWS).map(view=>sql<{row:string}>(`SELECT row_to_json(v)::text AS row FROM identity.${view} v`)))).flat().map(r=>r.row).join('\n');
  expect(everything).toContain(user);
  for(const secret of secrets)expect(everything.includes(secret),'a secret is readable through the identity views').toBe(false);
@@ -89,7 +90,10 @@ it('reaches no secret: no login code, session token, token hash, credential hash
   await db.query('GRANT SELECT ON ALL TABLES IN SCHEMA identity TO mxmx_test_identity_reader');
   const asReader=async(text:string)=>db.transaction(async tx=>{await tx.query('SET LOCAL ROLE mxmx_test_identity_reader');return (await tx.query(text)).rows;});
   expect(await asReader(`SELECT active FROM identity.users WHERE id='${user}'`)).toEqual([{active:true}]);
-  for(const table of ['users','tokens','groups','group_members','auth.session','auth.credentials','auth."user"'])
+  // Readers never write, even through an updatable view.
+  for(const statement of [`UPDATE identity.users SET name='x' WHERE id='${user}'`,"DELETE FROM identity.group_members","INSERT INTO identity.groups(id,handle,name,created_by) VALUES ('g','g','g','u')"])
+   await expect(asReader(statement),statement).rejects.toThrow(/permission denied/);
+  for(const table of [...IDENTITY_OWNED_TABLES.map(table=>`auth.${table}`),'auth.session','auth.credentials','auth."user"'])
    await expect(asReader(`SELECT 1 FROM ${table} LIMIT 1`),table).rejects.toThrow(/permission denied/);
  }finally{
   await db.query('REVOKE ALL ON ALL TABLES IN SCHEMA identity FROM mxmx_test_identity_reader');
@@ -135,7 +139,7 @@ it('sessions: a browser session is live by id for its user until it expires',asy
  const email='mxmx_test_session_owner@example.test';
  await host.signIn(email);
  const user=await userIdOf(email);
- const [session]=await sql<{id:string;user_id:string;live:boolean}>('SELECT id,user_id,live FROM identity.sessions');
+ const [session]=await sql<{id:string;user_id:string;live:boolean}>('SELECT id,"userId" AS user_id,live FROM identity.sessions');
  expect(session).toEqual({id:expect.any(String),user_id:user,live:true});
  await (await getDb()).query(`UPDATE auth.session SET "expiresAt"=now()-interval '1 second' WHERE id=$1`,[session!.id]);
  expect((await sql('SELECT live FROM identity.sessions WHERE id=$1',[session!.id]))).toEqual([{live:false}]);
@@ -147,7 +151,8 @@ it('groups and memberships: direct membership only, the chain to the root, a rev
  const finance=await createGroup(admin.id,{handle:'finance',name:'Finance'});
  const retail=await createGroup(admin.id,{handle:'retail',name:'Retail',parent_id:finance.id});
  await admitGroupMember(admin.id,retail.id,bob.id,'viewer');
- const member=async(user:string,group:string)=>(await sql('SELECT 1 FROM identity.memberships WHERE user_id=$1 AND group_id=$2',[user,group])).length===1;
+ // Thin views: the reader keeps live groups itself, as MinusX does.
+ const member=async(user:string,group:string)=>(await sql('SELECT 1 FROM identity.group_members m JOIN identity.groups g ON g.id=m.group_id AND g.deleted_at IS NULL WHERE m.user_id=$1 AND m.group_id=$2',[user,group])).length===1;
  expect(await member(bob.id,retail.id)).toBe(true);
  // Membership of a descendant is not membership of the ancestor.
  expect(await member(bob.id,finance.id)).toBe(false);
@@ -192,5 +197,5 @@ it('users.active is canAuthenticateUser && canUseDeploymentIdentity, for every k
  expect(await agree('company')).toEqual(['acct_member','tu_live']);
  // No settings row (a boot that never ran): no account is active.
  await db.query('DELETE FROM identity_settings');
- expect(await sql('SELECT id FROM identity.users')).toEqual([]);
+ expect(await sql('SELECT id FROM identity.users WHERE active')).toEqual([]);
 });

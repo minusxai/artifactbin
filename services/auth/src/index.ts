@@ -1,6 +1,6 @@
 export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,type SessionStore,type SessionInfo} from './parts';
 export {ensureAuthSchema} from './schema';
-export {bearerLiveSql,createBearerReader} from './identity/bearer';
+export {createBearerReader} from './identity/bearer';
 export { createHumanAuth, ensureHumanAuthSchema, type HumanAuth, type OutgoingMail } from './auth/human';
 export { resendMailer, mailerForRuntime } from './mail';
 export {authEnvNamesRead,readEnv} from './env';
@@ -15,4 +15,4 @@ export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
   ...(h.sessions.identity ? {identity: h.sessions.identity.bind(h.sessions)} : {}),
   handler: (request) => h.handler(request),
 });
-export {ensureIdentityRows,identityDbOf} from './identity-store';
+export {IdentityNotReady,ensureIdentitySchema,identityDbOf,identityMoveStatements} from './identity-store';

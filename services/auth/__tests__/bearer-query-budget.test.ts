@@ -32,7 +32,7 @@ const measure=async(fetch:(request:Request)=>Response|Promise<Response>,token:st
 const cliToken=async()=>mintTestToken({id:'tok_cli',userId:'usr_owner',query:testDb().query});
 const oauthToken=async()=>{
  const token=await mintTestToken({id:'tok_oauth',userId:'usr_owner',query:testDb().query});
- await testDb().query("UPDATE tokens SET audience=$1,scope='artifacts' WHERE id='tok_oauth'",[`${ORIGIN}/api`]);
+ await testDb().query("UPDATE auth.tokens SET audience=$1,scope='artifacts' WHERE id='tok_oauth'",[`${ORIGIN}/api`]);
  await createOAuthStore({query:testDb().query},'auth').issueRefresh({clientId:'client',userId:'usr_owner',resource:`${ORIGIN}/api`,scope:'artifacts',accessTokenId:'tok_oauth'});
  return token;
 };
@@ -52,7 +52,7 @@ it('a CLI bearer costs one statement, and a raw-SQL revocation refuses the next 
  const warm=await measure(host.fetch,token);
  expect(warm.actor).toEqual({...owner,tokenId:'tok_cli'});
  expect(warm.statements).toHaveLength(1);
- await testDb().query("UPDATE tokens SET deleted_at=now() WHERE id='tok_cli'");
+ await testDb().query("UPDATE auth.tokens SET deleted_at=now() WHERE id='tok_cli'");
  expect(await measure(host.fetch,token)).toMatchObject({status:401,statements:{length:1}});
 });
 

@@ -17,6 +17,7 @@ import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb, type Queryable } from '@/lib/platform/db';
+import { syncIdentitySettings } from '@/lib/platform';
 import { resetExportRenderer } from '@/lib/export';
 import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
@@ -191,6 +192,8 @@ export function useAppHarness(): AppHarness {
     // every other file's wipe stays a no-op rather than an error.
     const present = await db.query<{ present: boolean }>('SELECT to_regclass($1) IS NOT NULL AS present', [`${EVENTS_SCHEMA}.events`]);
     if (present.rows[0]?.present) await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
+    // Every boot writes the row the identity views' rules read (lib/platform identity-host); the wipe took it.
+    await syncIdentitySettings(db);
   };
 
   beforeAll(() => {

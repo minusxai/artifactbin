@@ -41,7 +41,9 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
  };
  const relayed:string[]=[];
  const host=(tokens:TokenReader={byToken:async presented=>records[presented]??null})=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret,APP__PUBLIC_BASE_URL:origin},cookieSecret:'test',tokens,
-  admitIdentity:async identity=>identity.userId!=='usr_refused',sessions:{resolve:async()=>null},
+  // The one active rule, read where every reader reads it (the identity `users` view), not a host-supplied callback.
+  identityDb:{query:async<T>(sql:string,params?:unknown[])=>{if(!/FROM identity\.users WHERE id=\$1/.test(sql))throw Error(`unexpected ${sql}`);return {rows:[{active:params?.[0]!=='usr_refused'}] as T[]};}},
+  sessions:{resolve:async()=>null},
   upstream:async request=>{relayed.push(new URL(request.url).pathname);return Response.json({error:'not_found'},{status:404});}});
  const call=(app:ReturnType<typeof host>,path:string,body:unknown,key=secret)=>app.request(origin+path,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:key,'content-type':'application/json'},body:JSON.stringify(body)});
  it('refuses introspection without the service secret, before reading anything',async()=>{
@@ -51,7 +53,7 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
   expect((await app.request(origin+IDENTITY_INTROSPECT_PATH)).status).toBe(405);
   expect(relayed).toEqual([]);
  });
- it('introspects through the bearer read: user, token id and scopes, or inactive',async()=>{
+ it('introspects through the bearer read and the users view\'s active: user, token id and scopes, or inactive',async()=>{
   const app=host();
   expect(await(await call(app,IDENTITY_INTROSPECT_PATH,{token:'mx_live'})).json()).toEqual({active:true,user_id:'usr_1',token_id:'tok_live',scopes:['artifacts','minusx']});
   expect(await(await call(app,IDENTITY_INTROSPECT_PATH,{token:'mx_plain'})).json()).toEqual({active:true,user_id:'usr_1',token_id:'tok_plain',scopes:[]});

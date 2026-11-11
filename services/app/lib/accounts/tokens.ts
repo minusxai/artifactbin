@@ -185,14 +185,11 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
   const hash = sha256(presented);
   return answeredOnce(`token:${hash}`, () => lookUpToken(hash));
 }
+/** The hash is a secret column only the identity module reads: it answers the live row, this decides admission. */
 async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
+  const row = await services().identity.findToken({ hash });
   const db = await getDb();
-  const r = await db.query<{ id: string; user_id: string | null; client_harness: Harness | null; audience:string|null }>(
-    `SELECT id, user_id, client_harness, audience FROM tokens WHERE token_hash = $1 AND ${LIVE_TOKEN_SQL}`,
-    [hash],
-  );
-  const row = r.rows[0];
-  return row && await canUseDeploymentIdentity(row.user_id,db) && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness, ...(row.audience?{audience:row.audience}:{}) } : null;
+  return row && await canUseDeploymentIdentity(row.userId,db) && await canAuthenticateUser(row.userId, db) ? { id: row.id, userId: row.userId, clientHarness: row.clientHarness as Harness | null, ...(row.audience?{audience:row.audience}:{}) } : null;
 }
 
 /** Remember a declared/observed agent harness for attribution on later stateless calls. */

@@ -30,7 +30,7 @@ describe('the rendered schema', () => {
   it('SCHEMA.sql is exactly what the renderer produces (regenerate with npm run render:schema)', () => {
     const schema = rendered().schema;
     expect(read('SCHEMA.sql')).toBe(schema);
-    const tokens = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS app.tokens'), schema.indexOf('CREATE TABLE IF NOT EXISTS app.artifacts'));
+    const tokens = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS auth.tokens'), schema.indexOf('CREATE TABLE IF NOT EXISTS auth.handle_reservations'));
     expect(tokens).toMatch(/expires_at TIMESTAMPTZ[\s\S]*last_used_at TIMESTAMPTZ/);
   });
   it('roles.sql creates a role per package and the schema each one OWNS, grants USAGE, and grants no table privilege', () => {
@@ -42,31 +42,37 @@ describe('the rendered schema', () => {
     expect(roles).toMatch(/GRANT USAGE ON SCHEMA app TO artifactbin_auth/);
     // The app READS the log it does not own — the events service is its only writer.
     expect(roles).toMatch(/GRANT USAGE ON SCHEMA events TO artifactbin_app/);
-    // Combined mode: the app owns the shared identity views and reads the auth rows behind them.
-    expect(roles).toMatch(/CREATE SCHEMA identity AUTHORIZATION artifactbin_app/);
-    expect(roles).toMatch(/GRANT USAGE ON SCHEMA auth TO artifactbin_app/);
+    // The identity module owns the read views; the app reaches identity only through them, never the auth schema.
+    expect(roles).toMatch(/CREATE SCHEMA identity AUTHORIZATION artifactbin_auth/);
+    expect(roles).toMatch(/GRANT USAGE ON SCHEMA identity TO artifactbin_app/);
+    expect(roles).not.toMatch(/GRANT USAGE ON SCHEMA auth TO artifactbin_app/);
     expect(roles).not.toMatch(/ON (ALL )?TABLES?/i);
     expect(roles).not.toMatch(/DEFAULT PRIVILEGES/i);
   });
-  it('grants.sql carries exactly the cross-schema reads and nothing else', () => {
-    const grants = read('grants.sql').split('\n').filter((l) => /^\s*GRANT/i.test(l));
+  it('grants.sql carries exactly the cross-schema reads and nothing else: the app reads identity only through its views', () => {
+    const grants = read('grants.sql').split('\n').filter((l) => /^\s*(GRANT|ALTER DEFAULT)/i.test(l));
     expect(grants).toEqual([
-      'GRANT SELECT ON app.tokens TO artifactbin_auth;',
+      'GRANT SELECT ON app.deployment_members, app.deployment_state, app.identity_settings TO artifactbin_auth;',
       'GRANT SELECT ON events.events TO artifactbin_app;',
-      'GRANT SELECT ON auth.session TO artifactbin_app;',
-      'GRANT SELECT ON auth.credentials TO artifactbin_app;',
+      'GRANT SELECT ON ALL TABLES IN SCHEMA identity TO artifactbin_app;',
+      'ALTER DEFAULT PRIVILEGES FOR ROLE artifactbin_auth IN SCHEMA identity GRANT SELECT ON TABLES TO artifactbin_app;',
     ]);
+    expect(read('grants.sql')).not.toMatch(/ON auth\./);
   });
-  it('IDENTITY.sql is exactly what the renderer produces: the views a combined-mode boot creates (MinusX copies it byte for byte)', () => {
+  it('IDENTITY.sql is exactly what the renderer produces: the views an identity boot creates (MinusX copies it byte for byte)', () => {
     expect(read('IDENTITY.sql')).toBe(rendered().identity);
     expect(rendered().identity).toMatch(/^CREATE OR REPLACE VIEW identity\.tokens AS/m);
-    // Views only: nothing that writes or drops.
+    // Views only: nothing that writes or drops, and the schema created only where it is missing (no database CREATE needed).
     expect(rendered().identity.replace(/^--.*$/gm, '')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|GRANT|ALTER)\b/);
+    expect(rendered().identity).not.toMatch(/CREATE SCHEMA IF NOT EXISTS/);
+    // No secret column in any view.
+    expect(rendered().identity).not.toMatch(/\bt\.token_hash\b|\bs\."?token"?\b,/);
   });
   it('every table has exactly one owning package, and the declared set is the literal below', () => {
     const owners = rendered().tables;
-    expect(Object.keys(owners).sort()).toEqual(['app.legacy_page_migrations','app.identity_settings','app.artifact_group_shares','app.group_quotas','app.group_audit','app.group_mail_outbox','app.native_identity_imports','app.html_backend_secrets','app.html_backend_versions','app.page_function_schedules','app.groups','app.group_hierarchy','app.group_members','app.group_invitations','app.group_links','app.account_preferences','app.handle_reservations','app.deployment_state','app.deployment_members','app.ownership_transfers','app.runner_runs','app.runner_events','app.event_outbox','events.deliveries','app.member_notifications', 'app.user_blocks', 'app.export_image_cache', 'app.export_images', 'app.mermaid_images', 'app.mermaid_harvests', 'app.annotations', 'app.mutation_receipts', 'app.artifact_creation_operations', 'app.artifact_edits','app.region_states','app.region_updates','app.region_snapshots','app.artifact_id_registry','app.id_reservation_batches', 'app.artifact_shares', 'app.artifact_source_ids', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.artifact_view_totals', 'app.codes', 'app.comment_images', 'app.comment_reactions', 'app.dataset_images', 'app.dataset_policy_audit', 'app.dataset_usage',
-      'app.document_trust', 'app.pages_sessions', 'app.prepared_pages', 'app.data_snapshots', 'app.relations', 'app.tokens', 'app.users', 'app.web_assets', 'auth.clients', 'auth.credentials', 'events.events', 'events.feed_head'].sort());
+    expect(Object.keys(owners).sort()).toEqual(['app.legacy_page_migrations','app.identity_settings','app.artifact_group_shares','app.group_quotas','app.group_audit','app.native_identity_imports','app.html_backend_secrets','app.html_backend_versions','app.page_function_schedules','app.group_links','app.account_preferences','app.deployment_state','app.deployment_members','app.ownership_transfers','app.runner_runs','app.runner_events','app.event_outbox','events.deliveries','app.member_notifications', 'app.user_blocks', 'app.export_image_cache', 'app.export_images', 'app.mermaid_images', 'app.mermaid_harvests', 'app.annotations', 'app.mutation_receipts', 'app.artifact_creation_operations', 'app.artifact_edits','app.region_states','app.region_updates','app.region_snapshots','app.artifact_id_registry','app.id_reservation_batches', 'app.artifact_shares', 'app.artifact_source_ids', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.artifact_view_totals', 'app.codes', 'app.comment_images', 'app.comment_reactions', 'app.dataset_images', 'app.dataset_policy_audit', 'app.dataset_usage',
+      'app.document_trust', 'app.pages_sessions', 'app.prepared_pages', 'app.data_snapshots', 'app.relations', 'app.web_assets', 'auth.clients', 'auth.credentials',
+      'auth.users', 'auth.tokens', 'auth.handle_reservations', 'auth.groups', 'auth.group_hierarchy', 'auth.group_members', 'auth.group_invitations', 'auth.group_mail_outbox', 'events.events', 'events.feed_head'].sort());
     expect(new Set(Object.values(owners))).toEqual(new Set(['app', 'auth', 'events']));
   });
 });

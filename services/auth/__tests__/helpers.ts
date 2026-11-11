@@ -19,7 +19,7 @@ async function ensureTestSchema(): Promise<void> {
 /** Wipe both sides' tables so each test starts empty. */
 export async function resetTestDb(): Promise<void> {
   await ensureTestSchema();
-  await resetTables(['tokens', 'auth.credentials', 'auth.clients']);
+  await resetTables(['auth.tokens', 'auth.credentials', 'auth.clients']);
 }
 
 export async function testAuthOptions(overrides: Partial<AuthOptions> = {}): Promise<AuthOptions> {

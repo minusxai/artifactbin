@@ -39,7 +39,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
         const token = `mx_${serial.padStart(40, 'x')}`;
         const id = `tok_oauth_${serial}`;
         const expiresAt = new Date(Date.now() + requested.expiresInHours * 3600_000).toISOString();
-        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null, expiresAt]);
+        await query('INSERT INTO auth.tokens (id, name, token_hash, user_id, audience, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null, expiresAt]);
         return new Response(JSON.stringify({ id, token, expiresAt, has_created_document: false }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
       // The anonymous mint the app serves to a non-session actor: an unowned,
@@ -48,7 +48,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
         const serial = String(++mintedCount);
         const token = `mx_${serial.padStart(40, 'x')}`;
         const id = `tok_oauth_${serial}`;
-        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), null, null, null]);
+        await query('INSERT INTO auth.tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), null, null, null]);
         return new Response(JSON.stringify({ id, token, expiresAt: new Date(Date.now() + 31_536_000_000).toISOString() }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
       return new Response(JSON.stringify({ credential: actor.credential }), { headers: { 'content-type': 'application/json' } });
@@ -152,7 +152,7 @@ describe('the oauth provider routes', () => {
     expect(first.access_token).toMatch(/^mx_/);
     expect(first.refresh_token).toMatch(/^mxr_/);
     expect(first.expires_in).toBe(24 * 60 * 60);
-    const minted = (await testDb().query<{expires_at: string}>('SELECT expires_at FROM tokens WHERE token_hash=$1',[hashToken(first.access_token)])).rows[0]!;
+    const minted = (await testDb().query<{expires_at: string}>('SELECT expires_at FROM auth.tokens WHERE token_hash=$1',[hashToken(first.access_token)])).rows[0]!;
     expect(new Date(minted.expires_at).getTime()-Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(first.scope).toBe('artifacts');
     const { query } = testDb();
@@ -210,10 +210,10 @@ describe('oauth code and redirect binding', () => {
   it('ends a refresh-token family when its current access token is revoked', async () => {
     const { query } = testDb();
     const accessToken = `mx_${'r'.repeat(40)}`;
-    await query('INSERT INTO tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', ['tok_revocable', 'oauth', hashToken(accessToken), 'usr_1']);
+    await query('INSERT INTO auth.tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', ['tok_revocable', 'oauth', hashToken(accessToken), 'usr_1']);
     const oauth = createOAuthStore({ query }, 'auth');
     const refreshToken = await oauth.issueRefresh({ clientId: 'afbin_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
-    await query('UPDATE tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
+    await query('UPDATE auth.tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
     expect(await oauth.rotateAndMint(refreshToken, 'afbin_client', [RESOURCE],async()=>{throw new Error('must not mint revoked grant');})).toBeNull();
   });
 });
@@ -277,7 +277,7 @@ it('direct HTTP token issuance refuses guest sessions and never offers browser a
 it('direct HTTP token issuance binds a verified email session to an API-scoped bearer',async()=>{
  const response=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
  expect(response.status).toBe(201);const body=await response.json();expect(body.token_type).toBe('Bearer');
- const token=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];expect(token).toMatchObject({user_id:'usr_1',audience:RESOURCE,scope:'artifacts'});
+ const token=(await testDb().query('SELECT user_id,audience,scope FROM auth.tokens WHERE id=$1',[body.id])).rows[0];expect(token).toMatchObject({user_id:'usr_1',audience:RESOURCE,scope:'artifacts'});
 });
 
 it('direct HTTP bearer mint rejects unverified email and cross-site sessions',async()=>{
@@ -303,11 +303,11 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  const body=await response.json();expect(body.access_token).toMatch(/^mx_/);
  expect(body.has_created_document).toBe(false);
  expect(body.refresh_token).toMatch(/^mxr_/);expect(body.client_id).toEqual(expect.any(String));expect(body.expires_in).toBe(86400);
- const row=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];
+ const row=(await testDb().query('SELECT user_id,audience,scope FROM auth.tokens WHERE id=$1',[body.id])).rows[0];
  expect(row.user_id).toBeTruthy();expect(row.audience).toBe(RESOURCE);expect(row.scope).toBe('artifacts');
  expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[row.user_id])).rows[0]?.email).toBe(email);
  // A later task has no login cookie and its access token has expired.
- await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[body.id]);
+ await testDb().query("UPDATE auth.tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[body.id]);
  expect((await direct.request('/api/artifacts',{headers:{authorization:`Bearer ${body.access_token}`}})).status).toBe(401);
  const refresh=(token:string,clientId=body.client_id,resource=RESOURCE)=>post('/oauth/token',{grant_type:'refresh_token',client_id:clientId,refresh_token:token,resource});
  expect((await refresh(body.refresh_token,body.client_id,BASE+'/other')).status).toBe(400);
@@ -317,7 +317,7 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  expect(authenticated.status).toBe(200);expect(await authenticated.json()).toMatchObject({credential:'bearer'});
  // Rotation persists another usable grant; revoking its bearer closes that grant too.
  const again=await refresh(next.refresh_token);expect(again.status).toBe(200);const latest=await again.json();
- await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(latest.access_token)]);
+ await testDb().query('UPDATE auth.tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(latest.access_token)]);
  expect((await refresh(latest.refresh_token)).status).toBe(400);
 
 });
@@ -366,7 +366,7 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
   const after=await switched();
   const viaAlias=await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
   expect(viaAlias.status).toBe(201);const grant=await viaAlias.json() as {id:string;client_id:string;refresh_token:string};
-  expect((await testDb().query('SELECT audience FROM tokens WHERE id=$1',[grant.id])).rows[0]).toMatchObject({audience:`${CANONICAL}/api`});
+  expect((await testDb().query('SELECT audience FROM auth.tokens WHERE id=$1',[grant.id])).rows[0]).toMatchObject({audience:`${CANONICAL}/api`});
   expect((await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
   expect(await(await refresh(after,grant,'https://foreign.example/api')).json()).toMatchObject({error:'invalid_target'});
   const md=await(await after.request('/.well-known/oauth-authorization-server')).json() as Record<string,unknown>;
@@ -417,7 +417,7 @@ describe('grant family revocation', () => {
   fail=false;const pending=rotate();await waiting;
   expect((await post('/oauth/revoke',{client_id:grant.client_id,token:grant.refresh_token})).status).toBe(200);
   release();const response=await pending;expect(response.status).toBe(400);expect(await response.text()).not.toContain('mx_');
-  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM auth.tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
  });
  it('rolls back a failed final binding without burning the presented refresh',async()=>{
   const grant=await issue(),options=await optionsOf();const {query}=testDb();let fail=true;
@@ -427,7 +427,7 @@ describe('grant family revocation', () => {
   }}}));
   const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token})});
   expect((await rotate()).status).toBe(503);
-  const candidates=(await query<{id:string}>('SELECT id FROM tokens ORDER BY created_at')).rows;
+  const candidates=(await query<{id:string}>('SELECT id FROM auth.tokens ORDER BY created_at')).rows;
   expect(await createOAuthStore({query}).accessLive(candidates.at(-1)!.id)).toBe(false);
   expect((await rotate()).status).toBe(200);
  });
@@ -466,9 +466,9 @@ describe('grant family revocation', () => {
    return response;
   }}));
   const pending=host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token})});
-  await ready;await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(first.access_token)]);release();
+  await ready;await testDb().query('UPDATE auth.tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(first.access_token)]);release();
   expect((await pending).status).toBe(400);
-  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM auth.tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
  });
  it('bounds malformed revocation bodies and returns the same answer for unknown proof',async()=>{
   expect((await post('/oauth/revoke',{client_id:'unknown',token:'unknown'})).status).toBe(200);

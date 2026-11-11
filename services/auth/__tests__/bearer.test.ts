@@ -8,7 +8,7 @@ const db:Queryable={query:(sql,params)=>testDb().query(sql,params)};
 const store=()=>createOAuthStore(db,'auth');
 const oauth=async(id:string)=>{
  const token=await mintTestToken({id,userId:'usr_1',query:testDb().query});
- await testDb().query("UPDATE tokens SET audience='http://app.test/api',scope='artifacts' WHERE id=$1",[id]);
+ await testDb().query("UPDATE auth.tokens SET audience='http://app.test/api',scope='artifacts' WHERE id=$1",[id]);
  return token;
 };
 const member=(accessTokenId:string)=>store().issueRefresh({clientId:'client',userId:'usr_1',resource:'http://app.test/api',scope:'artifacts',accessTokenId});
@@ -44,8 +44,8 @@ describe('createBearerReader',()=>{
   const reader=createBearerReader({db});
   const deleted=await mintTestToken({id:'tok_deleted',userId:'usr_1',query:testDb().query});
   const expired=await mintTestToken({id:'tok_expired',userId:'usr_1',query:testDb().query});
-  await testDb().query("UPDATE tokens SET deleted_at=now() WHERE id='tok_deleted'");
-  await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id='tok_expired'");
+  await testDb().query("UPDATE auth.tokens SET deleted_at=now() WHERE id='tok_deleted'");
+  await testDb().query("UPDATE auth.tokens SET expires_at=now()-interval '1 second' WHERE id='tok_expired'");
   expect(await reader.byToken(deleted)).toBeNull();
   expect(await reader.byToken(expired)).toBeNull();
   expect(await reader.byToken('mx_'+'u'.repeat(40))).toBeNull();
@@ -71,15 +71,15 @@ describe('createBearerReader',()=>{
  });
 
  it('bearerLiveSql, the fragment the shared identity.tokens view is built from, has the same liveness by id: deleted, expired and a revoked OAuth family refuse',async()=>{
-  const {fence,live}=bearerLiveSql({auth:'auth',tokens:'tokens'});
-  const byId=async(id:string)=>(await testDb().query<{live:boolean}>(`SELECT (${live}) AS live FROM tokens t ${fence} WHERE t.id=$1`,[id])).rows[0]?.live??null;
+  const {fence,live}=bearerLiveSql({auth:'auth',tokens:'auth.tokens'});
+  const byId=async(id:string)=>(await testDb().query<{live:boolean}>(`SELECT (${live}) AS live FROM auth.tokens t ${fence} WHERE t.id=$1`,[id])).rows[0]?.live??null;
   await mintTestToken({id:'tok_by_id',userId:'usr_1',query:testDb().query});
   expect(await byId('tok_by_id')).toBe(true);
   expect(await byId('tok_missing')).toBeNull();
   await mintTestToken({id:'tok_expired_id',userId:'usr_1',query:testDb().query});
-  await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id='tok_expired_id'");
+  await testDb().query("UPDATE auth.tokens SET expires_at=now()-interval '1 second' WHERE id='tok_expired_id'");
   expect(await byId('tok_expired_id')).toBe(false);
-  await testDb().query("UPDATE tokens SET deleted_at=now() WHERE id='tok_by_id'");
+  await testDb().query("UPDATE auth.tokens SET deleted_at=now() WHERE id='tok_by_id'");
   expect(await byId('tok_by_id')).toBe(false);
   await oauth('tok_fenced_id');
   expect(await byId('tok_fenced_id')).toBe(false);
@@ -98,13 +98,13 @@ describe('createBearerReader',()=>{
 
  it('qualifies tables by the configured schemas and admits only plain identifiers',async()=>{
   const statements:string[]=[];
-  await createBearerReader({db:{query:async(sql)=>{statements.push(sql);return {rows:[]};}},authSchema:'identity',appSchema:'app'}).byToken('mx_'+'q'.repeat(40));
-  // Only ever a SELECT: the proxy's role holds SELECT on the app's tokens and nothing else.
+  await createBearerReader({db:{query:async(sql)=>{statements.push(sql);return {rows:[]};}},authSchema:'identity'}).byToken('mx_'+'q'.repeat(40));
+  // One SELECT over the identity module's own base tables, in its own schema.
   expect(statements).toHaveLength(1);expect(statements[0]).toMatch(/^\s*SELECT /);
-  expect(statements[0]).toMatch(/FROM app\.tokens t/);
+  expect(statements[0]).toMatch(/FROM identity\.tokens t/);
   expect(statements[0]).toMatch(/identity\.credentials member/);
   expect(statements[0]).toMatch(/identity\."user" u/);
-  expect(()=>createBearerReader({db,appSchema:'app; drop table tokens'})).toThrow(/schema/);
+  expect(()=>createBearerReader({db,authSchema:'auth; drop table tokens'})).toThrow(/schema/);
   expect(()=>createBearerReader({db,authSchema:'Auth'})).toThrow(/schema/);
  });
 });

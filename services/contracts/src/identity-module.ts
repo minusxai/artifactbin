@@ -102,6 +102,11 @@ export interface IdentityService {
   mintToken(input: {name?: string | null; userId?: string | null; expiresInMs: number | null; audience?: string | null; scope?: string | null; requestAuthority?: boolean}): Promise<MintedIdentityToken>;
   /** The account's 'web' token, minted once: its id and whether this call minted it. */
   ensureWebToken(input: {userId: string}): Promise<{id: string; minted: boolean}>;
+  /**
+   * The live token whose sha256 is `hash` (never the plaintext): the one read of a secret column a reader needs, so it
+   * is the module's. Null when unknown, revoked or expired.
+   */
+  findToken(input: {hash: string}): Promise<{id: string; userId: string | null; clientHarness: string | null; audience: string | null} | null>;
   /** Soft revoke a live token (only the owner's, with `userId`); its name, or null when nothing live matched. */
   revokeToken(input: {id: string; userId?: string}): Promise<{name: string | null} | null>;
   /** Stamp last use, at most once a minute. */
@@ -137,7 +142,7 @@ export interface IdentityService {
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [
   'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
-  'mintToken', 'ensureWebToken', 'revokeToken', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
+  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
   'createGroup', 'updateGroup', 'setGroupParent', 'deleteGroup', 'setGroupMember', 'removeGroupMember', 'inviteGroupMember', 'removeGroupInvitation', 'acceptGroupInvitations', 'admitToGroup',
   'enqueueGroupMail', 'claimGroupMail', 'settleGroupMail',
 ];

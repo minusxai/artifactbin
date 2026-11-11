@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
   await ensureAuthSchema(queryable, authSchema);
   if (appOnly) await ensureHumanAuthSchema({ schema: authSchema, ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }) });
-  const reader = createBearerReader({ db: queryable, authSchema, appSchema: readEnv(env, 'APP__SCHEMA'), admitBearer: token => canAuthenticateUser(token.userId) });
+  const reader = createBearerReader({ db: queryable, authSchema, admitBearer: token => canAuthenticateUser(token.userId) });
   if (!appOnly) {
     validateDeploymentConfiguration();
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
@@ -205,10 +205,9 @@ async function main(): Promise<void> {
 
   }
 
-  // COMBINED MODE: the shared identity views MinusX reads (lib/groups identity-views), created once the auth
-  // tables they read exist. Standalone Artifactbin creates none.
-  const { minusxSettings } = await import('@/lib/platform');
-  if (minusxSettings()) await (await import('@/lib/groups')).ensureIdentityViews(db, authSchema);
+  // The identity read surface again, now that Better Auth's tables exist (its `sessions` view), when this process
+  // hosts identity (lib/platform identity-host; its database open made the rest).
+  await (await import('@/lib/platform')).ensureLocalIdentity(db);
 
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.

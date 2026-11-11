@@ -3,7 +3,7 @@ import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
-import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -346,6 +346,16 @@ export let USER_PAGES_HOST = parseUserPagesHost(env('APP', 'USER_PAGES_HOST'));
 export let BROWSER_SERVICE_URL = env('BROWSER', 'SERVICE_URL');
 /** Origin of the owning auth service for split-host human pages sessions. */
 export const AUTH_SERVICE_URL = env('AUTH', 'SERVICE_URL');
+/**
+ * AUTH__SCHEMA: the identity module's own schema, where its base tables live (users, tokens, groups and the rest:
+ * contracts `IDENTITY_OWNED_TABLES`). The app never reads them there; it names it only when it hosts identity itself.
+ */
+export const AUTH_SCHEMA = env('AUTH', 'SCHEMA') ?? 'auth';
+/**
+ * IDENTITY__SCHEMA: the identity read surface (the views named as the identity tables), which this process's
+ * search_path resolves after its own schema, and MinusX reads. One per deployment sharing a database.
+ */
+export const IDENTITY_READ_SCHEMA = env('IDENTITY', 'SCHEMA') ?? IDENTITY_SCHEMA;
 export let INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
 
 /**

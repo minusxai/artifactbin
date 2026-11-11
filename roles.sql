@@ -5,9 +5,10 @@
 --
 -- Ownership (AUTHORIZATION) carries every privilege inside a schema, so
 -- nothing further is granted here, for existing objects or future ones:
--- widening anything would let the auth read app.artifacts. The
--- cross-schema READS (the auth on the tokens table, the app on the event
--- log) live in grants.sql, applied after the boot that creates each table.
+-- widening anything would let the auth read app.artifacts. The identity
+-- module (the auth role) owns its base tables in auth AND the read views in
+-- identity; readers get only those views. The cross-schema READS live in
+-- grants.sql, applied after the boot that creates each object.
 
 CREATE ROLE artifactbin_app    LOGIN;
 CREATE ROLE artifactbin_auth  LOGIN;
@@ -17,12 +18,12 @@ CREATE SCHEMA app AUTHORIZATION artifactbin_app;
 CREATE SCHEMA auth AUTHORIZATION artifactbin_auth;
 -- The events service is the log's ONLY writer; every other process reads it.
 CREATE SCHEMA events AUTHORIZATION artifactbin_events;
--- Combined mode: the app's shared identity views (IDENTITY.sql), which MinusX reads.
-CREATE SCHEMA identity AUTHORIZATION artifactbin_app;
+-- The identity read surface (IDENTITY.sql): the identity module's views, read by the app and MinusX.
+CREATE SCHEMA identity AUTHORIZATION artifactbin_auth;
 
--- The auth must reach the app schema at all to read its tokens table.
+-- The auth must reach the app schema at all to read the admission rows its users view's `active` reads.
 GRANT USAGE ON SCHEMA app TO artifactbin_auth;
 -- …and the app must reach the events schema at all to read the log.
 GRANT USAGE ON SCHEMA events TO artifactbin_app;
--- …and the auth schema, for the session and credential rows its identity views read.
-GRANT USAGE ON SCHEMA auth TO artifactbin_app;
+-- …and the identity schema, for the views it reads identity through (search_path: app, identity). Nothing on auth.
+GRANT USAGE ON SCHEMA identity TO artifactbin_app;

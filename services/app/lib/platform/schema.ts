@@ -18,102 +18,7 @@ import { renderDroppedTables, renderSchema } from '@artifactbin/utils';
  */
 export const TITLE_SLUG_SQL = "(rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-'))";
 
-const USERS: Table = {
-  name: 'users',
-  columns: [
-    { name: 'id', type: 'TEXT', notNull: true }, // 'usr_' + base36
-    { name: 'email', type: 'TEXT', relaxNotNull: true },
-    /*
-     * THE KIND. One column answers what a user IS, and every permission
-     * decision reads it through `lib/capabilities` rather than re-deriving it:
-     *   'account'  — a signed-in person;
-     *   'guest'    — an anonymous browser that saved something, claimable at login;
-     *   'testuser' — a throwaway second person an account minted (parent_user_id),
-     *                erased with everything it owns.
-     * The default is 'account' so the additive ALTER is legal on a non-empty
-     * table.
-     */
-    { name: 'kind', type: 'TEXT', notNull: true, default: "'account'" },
-    /** The ACCOUNT that minted a test user; NULL for everyone else. */
-    { name: 'parent_user_id', type: 'TEXT' },
-    /** A test user's death date; NULL for an account or a guest, which do not expire. */
-    { name: 'expires_at', type: 'TIMESTAMPTZ' },
-    // Verified guest adoption preserves the identity pinned by existing CLI workspaces.
-    { name: 'merged_into_user_id', type: 'TEXT' },
-    { name: 'name', type: 'TEXT' },
-    // Public handle for pretty URLs (/@username/...). Lowercase [a-z0-9_],
-    // auto-assigned at login (localpart_xxxx), renameable. Nullable so the
-    // additive ALTER is legal on non-empty tables; backfilled lazily at login.
-    { name: 'username', type: 'TEXT' },
-    // The profile picture: an object-store key (`avatar/<sha256>`), one square
-    // WebP written by lib/avatars. NULL = no picture; the client draws a
-    // generated initial. Public by id, like the handle.
-    { name: 'image_key', type: 'TEXT' },
-    // TRUE from the moment the app first creates a row for a NEW person
-    // (lib/profiles) until they confirm the welcome page. Existing rows take the
-    // default and never see it; no backfill needed, which is why this is a flag
-    // set at insert rather than a timestamp that would have to be back-dated.
-    { name: 'auto_accept_mentions', type: 'BOOLEAN', notNull: true, default: 'true' },
-    { name: 'welcome_pending', type: 'BOOLEAN', notNull: true, default: 'false' },
-    // TRUE for an account whose row was CREATED for an address at the test domain while test-domain
-    // sign-in was on (lib/accounts/test-accounts). Set at insert only, like welcome_pending: existing
-    // rows take the default and are never marked, so a later cleanup can select exactly these.
-    { name: 'test_account', type: 'BOOLEAN', notNull: true, default: 'false' },
-    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-  ],
-  primaryKey: ['id'],
-  // Both unique constraints use the `indexes` form ON PURPOSE: entries in
-  // `uniques` only render inside CREATE TABLE, so they never reach a
-  // database that already exists — an index applies retroactively.
-  indexes: [
-    { name: 'idx_users_email', columns: ['email'], unique: true },
-    { name: 'idx_users_username', columns: ['username'], unique: true },
-    // "How many live test users does this account hold?" and "erase them all"
-    // are both this index; the cap is read on every mint.
-    { name: 'idx_users_parent', columns: ['parent_user_id'] },
-  ],
-  // `is_guest` (replaced by `kind`, which says more: a test user is not a guest) and
-  // `password_hash` (login is email + OTP; there are no passwords). Dead data, dropped on boot.
-  dropped: ['is_guest', 'password_hash'],
-};
 
-const TOKENS: Table = {
-  name: 'tokens',
-  columns: [
-    { name: 'id', type: 'TEXT', notNull: true }, // 'tok_' + base36 — non-secret handle
-    { name: 'name', type: 'TEXT' }, // human label ("vivek-laptop")
-    { name: 'token_hash', type: 'TEXT', notNull: true }, // sha256 hex of plaintext; the ONLY thing stored
-    { name: 'user_id', type: 'TEXT' }, // NULL = anonymous (claimable via /api/tokens/claim)
-    // The harness last declared on the agent header, for display attribution on
-    // later stateless calls. Self-reported telemetry only — never authorization.
-    { name: 'client_harness', type: 'TEXT' },
-    // The exact resource an OAuth-issued access token is restricted to.
-    // NULL keeps manually minted tokens general-purpose.
-    { name: 'audience', type: 'TEXT' },
-    { name: 'scope', type: 'TEXT' },
-    { name: 'request_authority', type: 'BOOLEAN', notNull: true, default: 'false' },
-    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-    // NULL = live. The verb stays REVOKE everywhere a person or a function
-    // reads it (revokeToken, tokenStatus 'revoked', the dashboard's copy); the
-    // COLUMN is `deleted_at` because every table that can lose a row spells it
-    // the same way, and one pattern with no exception is worth more than a
-    // column name that reads slightly better on this one table. Declared as a
-    // rename, so a database built from the old declaration copies the stamps
-    // across on its next boot rather than un-revoking every revoked token.
-    { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' },
-    // Nullable so the additive boot DDL is the migration: existing tokens are
-    // grandfathered as non-expiring, and new mints set their own policy.
-    { name: 'expires_at', type: 'TIMESTAMPTZ' },
-    // Nullable so the same additive migration preserves "never used".
-    { name: 'last_used_at', type: 'TIMESTAMPTZ' },
-  ],
-  primaryKey: ['id'],
-  indexes: [
-    { name: 'idx_tokens_hash', columns: ['token_hash'], unique: true },
-    // An account's live tokens (lib/accounts/tokens: the web token, the token list).
-    { name: 'idx_tokens_user', columns: ['user_id'], where: 'deleted_at IS NULL' },
-  ],
-};
 
 const ARTIFACTS: Table = {
   name: 'artifacts',
@@ -951,24 +856,6 @@ const DOCUMENT_TRUST: Table = {
  ],primaryKey:['user_id','artifact_id'],
 };
 
-/** Independent group owners, shared handles, preferences and company admission state. */
-const GROUPS:Table={name:'groups',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
- {name:'name',type:'TEXT',notNull:true},{name:'description',type:'TEXT',notNull:true,default:"''"},
- {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- {name:'deleted_at',type:'TIMESTAMPTZ'},
- // THE TREE (lib/groups hierarchy): one parent at most, in this installation (this database), never a cycle.
- // NULL is a root. Written only by the topology mutations, under the group_hierarchy guard row FOR UPDATE.
- {name:'parent_id',type:'TEXT'},
-],primaryKey:['id'],indexes:[{name:'idx_groups_handle',columns:['handle'],unique:true},{name:'idx_groups_parent',columns:['parent_id'],where:'parent_id IS NOT NULL'}]};
-/**
- * THE HIERARCHY GUARD and revision: one row, id 'installation', seeded at boot (BACKFILLS in db.ts). Every
- * authorization decision that enumerates the tree holds it FOR SHARE; every topology mutation (group create,
- * delete, reparent) bumps `revision` as its first statement, which holds it exclusively until commit.
- */
-const GROUP_HIERARCHY:Table={name:'group_hierarchy',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'revision',type:'BIGINT',notNull:true,default:'0'},
-],primaryKey:['id']};
 /**
  * THE CONFIGURATION THE SHARED IDENTITY VIEWS READ (lib/groups identity-views): one row, id 'installation', written
  * from this process's settings on every boot in combined mode, so the views stay static SQL and the rules they apply
@@ -979,14 +866,6 @@ const IDENTITY_SETTINGS:Table={name:'identity_settings',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'deployment_mode',type:'TEXT',notNull:true},
  {name:'api_audiences',type:'TEXT[]',notNull:true,default:"'{}'"},
 ],primaryKey:['id']};
-const GROUP_MAIL_OUTBOX:Table={name:'group_mail_outbox',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},{name:'recipient_id',type:'TEXT'},
- {name:'group_id',type:'TEXT',notNull:true},{name:'group_name',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
- {name:'action',type:'TEXT',notNull:true},{name:'sender_id',type:'TEXT',notNull:true},
- {name:'lease_until',type:'TIMESTAMPTZ'},{name:'claim_token',type:'TEXT'},
- {name:'attempts',type:'INTEGER',notNull:true,default:'0'},{name:'next_attempt_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- {name:'quarantined_at',type:'TIMESTAMPTZ'},{name:'sent_at',type:'TIMESTAMPTZ'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id'],indexes:[{name:'idx_group_mail_pending',columns:['created_at'],where:'sent_at IS NULL'}]};
 const GROUP_QUOTAS:Table={name:'group_quotas',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'action',type:'TEXT',notNull:true},{name:'window_start',type:'BIGINT',notNull:true},{name:'used',type:'INTEGER',notNull:true}],primaryKey:['user_id','action']};
 const GROUP_AUDIT:Table={name:'group_audit',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'actor_user_id',type:'TEXT',notNull:true},{name:'actor_token_id',type:'TEXT'},{name:'client_harness',type:'TEXT'},
@@ -997,28 +876,12 @@ const ARTIFACT_GROUP_SHARES:Table={name:'artifact_group_shares',columns:[
  {name:'role',type:'TEXT',notNull:true},
  {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['artifact_id','group_id'],checks:[{name:'artifact_group_share_role',expression:"role IN ('viewer','commenter','editor')"}],indexes:[{name:'idx_artifact_group_shares_group',columns:['group_id','artifact_id']}]};
-const GROUP_MEMBERS:Table={name:'group_members',columns:[
- {name:'group_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
- {name:'role',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['group_id','user_id'],indexes:[{name:'idx_group_members_user',columns:['user_id']}]};
-const GROUP_INVITATIONS:Table={name:'group_invitations',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},
- {name:'role',type:'TEXT',notNull:true},{name:'invited_by',type:'TEXT',notNull:true},
- {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id'],indexes:[
- {name:'idx_group_invitations_email',columns:['group_id','email'],unique:true},
- // acceptGroupInvitations asks by the verified address alone, which the unique (group_id, email) cannot lead.
- {name:'idx_group_invitations_by_email',columns:['email']},
-]};
 const GROUP_LINKS:Table={name:'group_links',columns:[
  {name:'group_id',type:'TEXT',notNull:true},{name:'linked_group_id',type:'TEXT',notNull:true},
 ],primaryKey:['group_id','linked_group_id']};
 const ACCOUNT_PREFERENCES:Table={name:'account_preferences',columns:[
  {name:'user_id',type:'TEXT',notNull:true},{name:'default_destination',type:'JSONB',notNull:true,default:"'{\"type\":\"inherit\"}'::jsonb"},
 ],primaryKey:['user_id']};
-const HANDLE_RESERVATIONS:Table={name:'handle_reservations',columns:[
- {name:'handle',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},{name:'subject_id',type:'TEXT',notNull:true},
-],primaryKey:['handle'],indexes:[{name:'idx_handle_reservations_subject',columns:['kind','subject_id'],unique:true}]};
 const DEPLOYMENT_STATE:Table={name:'deployment_state',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'owner_user_id',type:'TEXT'},
  {name:'default_group_id',type:'TEXT'},{name:'setup_complete',type:'BOOLEAN',notNull:true,default:'false'},
@@ -1082,7 +945,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUPS,GROUP_HIERARCHY,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,

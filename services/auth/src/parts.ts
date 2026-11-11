@@ -164,11 +164,10 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
     mount: (app) => {
       if (!o.identityDb) return;
       const schema = readEnv(o.env, 'AUTH__SCHEMA') ?? 'auth';
-      const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         sessions: o.sessions,
         admitIdentity:o.admitIdentity,
-        oauth: createOAuthStore(o.identityDb, schema, appSchema),
+        oauth: createOAuthStore(o.identityDb, schema),
         upstream: o.upstream,
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),

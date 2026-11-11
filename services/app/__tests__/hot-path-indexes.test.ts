@@ -1,7 +1,8 @@
 /**
  * THE FOUR HOT-PATH INDEXES, proven on the planner (lib/platform/schema): each query the app really issues is
  * EXPLAINed on a database big enough that a scan is the wrong answer, and must choose the index declared for it.
- * No enable_seqscan override: the planner picks these on its own once the tables are real-sized.
+ * No enable_seqscan override: the planner picks these on its own once the tables are real-sized. Identity's tables
+ * are planned through the read views the app queries (thin views inline into the plan).
  */
 import { expect, it } from 'vitest';
 import { useAppHarness } from './harness';
@@ -28,7 +29,8 @@ async function seed() {
   await db.query(`INSERT INTO groups (id, handle, name, created_by) SELECT 'group' || n, 'g' || n, 'G' || n, 'user1' FROM generate_series(1, 60) n`);
   await db.query(`INSERT INTO group_invitations (id, group_id, email, role, invited_by)
     SELECT 'gin_' || n, 'group' || (n % 60 + 1), 'invitee' || n || '@example.com', 'viewer', 'user1' FROM generate_series(1, 3000) n`);
-  for (const table of ['artifacts', 'artifact_shares', 'groups', 'group_invitations']) await db.query(`ANALYZE ${table}`);
+  // Identity's base tables sit behind the read views of the same names (the app's reads plan through them).
+  for (const table of ['artifacts', 'artifact_shares', 'auth.groups', 'auth.group_invitations']) await db.query(`ANALYZE ${table}`);
 }
 
 it('chooses each new index for the query that motivated it', async () => {
@@ -57,7 +59,7 @@ it('chooses each new index for the query that motivated it', async () => {
 it('chooses the launch indexes and the snapshot GIN index', async () => {
   const db = await getDb();
   await seed();
-  await db.query(`INSERT INTO tokens (id, token_hash, user_id, deleted_at)
+  await db.query(`INSERT INTO auth.tokens (id, token_hash, user_id, deleted_at)
     SELECT 'tok' || n, 'hash' || n, 'user' || (n % 2000), CASE WHEN n % 9 = 0 THEN now() END FROM generate_series(1, 12000) n`);
   await db.query(`INSERT INTO member_notifications (id, artifact_id, user_id, recipient_id, sender_id, kind, source)
     SELECT 'mn' || n, 'a' || (n % 3000), 'user' || (n % 400), 'user' || (n % 400), 'user1', 'reply', 'comment:t' || (n % 4000)
@@ -66,7 +68,7 @@ it('chooses the launch indexes and the snapshot GIN index', async () => {
     SELECT 'ev' || n, '{}'::jsonb, now() - (n || ' seconds')::interval FROM generate_series(1, 12000) n`);
   await db.query(`INSERT INTO data_snapshots (artifact_id, slot, plan_key, inputs_key, datasets)
     SELECT 'a' || n, 'head', 'p', 'i', ARRAY['ds' || (n % 3000)] FROM generate_series(1, 12000) n`);
-  for (const table of ['tokens', 'member_notifications', 'event_outbox', 'data_snapshots']) await db.query(`ANALYZE ${table}`);
+  for (const table of ['auth.tokens', 'member_notifications', 'event_outbox', 'data_snapshots']) await db.query(`ANALYZE ${table}`);
 
   // An account's live tokens (lib/accounts/tokens).
   expect(await plan('SELECT id FROM tokens WHERE user_id = $1 AND deleted_at IS NULL', ['user8'])).toContain('idx_tokens_user');
