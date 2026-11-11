@@ -1,9 +1,7 @@
 /** Packages requiring real paths rather than inclusion in the server bundle. */
 export const EXTERNALS = [
   'pg', '@electric-sql/pglite',
-  // Native author modules and Lambda compilation are app-host responsibilities.
   'esbuild',
-  'isolated-vm',
   'abort-controller', 'fast-text-encoding', 'core-js',
   'playwright', 'playwright-core',
   // The SQLite engine reads its own sqlite3.wasm beside its module.
