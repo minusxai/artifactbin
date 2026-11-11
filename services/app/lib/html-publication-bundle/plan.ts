@@ -24,6 +24,16 @@ function resolve(value:string,owner:string):string|null{
  let decoded:string;try{decoded=decodeURIComponent(value.split(/[?#]/)[0]!);}catch{throw Error('Invalid dependency URL');}
  const resolved=path.posix.normalize(path.posix.join(path.posix.dirname(owner),decoded));return normalized(resolved);
 }
+/**
+ * Root-relative paths a page may load where it is served (its own origin's static directories, its doors, other
+ * artifacts' bytes): anything else root-relative names nothing there, since a page's address differs by where it is read.
+ */
+const PLATFORM_PATH=/^\/(?:af|fonts|libraries|geojson|basemap|islands|a|fn|api\/users)\/|^\/favicon\.ico(?:[?#]|$)/;
+/** The project path a root-relative `/x/y.css` names (the bundle's root is the project's), or null when it names none. */
+function rootedPath(value:string):string|null{
+ let decoded:string;try{decoded=decodeURIComponent(value.split(/[?#]/)[0]!).slice(1);}catch{return null;}
+ try{return normalized(path.posix.normalize(decoded));}catch{return null;}
+}
 function links(source:string,css:boolean,js=false):Link[]{
  if(js){const imports=parseImports(source)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(source):[];return imports.flatMap(item=>{
   if(item.d===-2)return [];
@@ -138,6 +148,15 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  const ordered:BundleDependency[]=[],visiting=new Set<string>(),visited=new Map<string,'asset'|'dataset'>(),missing=new Set<string>();
  const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{
   if(link.runtimeModule)return [];
+  // A root-relative reference (`/assets/fonts/x.woff2`) to a file published with the page is that file; one to none is
+  // refused unless it is the platform's own (a link to none is navigation, and a bare save keeps everything as written).
+  if(/^\/(?!\/)/.test(link.value)){
+   const rooted=rootedPath(link.value);
+   if(rooted&&(files.has(rooted)||bundle.mappings?.[rooted]))return [{...link,path:rooted}];
+   if(!rooted||link.hyperlink||context.linksAsWritten||PLATFORM_PATH.test(link.value))return [];
+   let relative=path.posix.relative(path.posix.dirname(owner),rooted);if(!relative.startsWith('.'))relative='./'+relative;
+   throw Error(`${link.value.split(/[?#]/)[0]} (in ${owner}) names no file published with the page, so it loads nothing where the page is read: put the file in the project and write it relative to ${owner} (${relative}), or use a full https address`);
+  }
   let name:string|null;
   // A bare save keeps any link as written, including one that leaves the project (`../`).
   try{name=resolve(link.value,owner);}catch(error){if(link.hyperlink&&context.linksAsWritten)return [];throw error;}

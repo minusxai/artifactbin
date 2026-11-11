@@ -140,3 +140,26 @@ describe('files a page links (<a href>, <area href>)',()=>{
   expect(authoringHtml(saved,{server:'https://app.example',pageId:'PAGE12',entryPath:'index.html',receipts:[{path:'docs/rota.pdf',kind:'asset',id:'ROTA12',revision:'1'}]})).toBe('<a href="./docs/rota.pdf#page=2">Rota</a>');
  });
 });
+describe('a root-relative reference',()=>{
+ const font=file('assets/fonts/x.woff2','font','font/woff2');
+ it('to a file published with the page is carried and rewritten like a relative one, from HTML and CSS',()=>{
+  const html='<link rel="stylesheet" href="/css/site.css"><img src="/assets/logo.svg"><a href="/docs/guide.pdf">guide</a>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[file('css/site.css','@font-face{src:url(/assets/fonts/x.woff2)}','text/css'),font,file('assets/logo.svg','<svg/>','image/svg+xml'),file('docs/guide.pdf','%PDF','application/pdf')]});
+  expect(plan.dependencies.map(d=>d.path).sort()).toEqual(['assets/fonts/x.woff2','assets/logo.svg','css/site.css','docs/guide.pdf']);
+  const addresses=new Map(plan.dependencies.map((d,i)=>[d.path,`/a/ASSET${i}/raw?v=1`]));
+  expect(plan.rewrite('@font-face{src:url(/assets/fonts/x.woff2)}','css/site.css',addresses)).not.toContain('/assets/fonts/');
+  expect(plan.rewrite(html,'index.html',addresses)).not.toMatch(/"\/(?:css|assets)\//);
+ });
+ it('to no published file is refused, naming it and what to write instead',()=>{
+  expect(()=>planPublicationBundle('<link rel="stylesheet" href="./css/site.css">',{entryPath:'index.html',files:[file('css/site.css','@font-face{src:url(/assets/fonts/x.woff2)}','text/css')]}))
+   .toThrow(/\/assets\/fonts\/x\.woff2 \(in css\/site\.css\) names no file published with the page[\s\S]*\.\.\/assets\/fonts\/x\.woff2/);
+  expect(()=>planPublicationBundle('<img src="/logo.png">',{entryPath:'index.html',files:[]})).toThrow(/\/logo\.png \(in index\.html\)[\s\S]*\.\/logo\.png/);
+ });
+ it('to the platform\'s own paths, another host, a link or a bare save stays as written',()=>{
+  const html='<link rel="icon" href="/favicon.ico"><style>@font-face{src:url(/af/fonts/inter.woff2)}</style><img src="/a/IMG123/raw?v=1"><script src="//cdn.example.com/x.js"></script><a href="/a/OTHER1">next</a><a href="/@sam/notes">notes</a>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[]});
+  expect(plan.dependencies).toEqual([]);
+  expect(plan.rewrite(html,'index.html',new Map())).toBe(html);
+  expect(planPublicationBundle('<img src="/logo.png">',{entryPath:'index.html',files:[]},{linksAsWritten:true}).dependencies).toEqual([]);
+ });
+});

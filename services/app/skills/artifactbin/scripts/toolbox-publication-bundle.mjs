@@ -52,7 +52,8 @@ if(name===entry)for(const link of previewBackendLinks(source)){if(retainedBacken
      link.href))retainedPaths.add(path.posix.normalize(path.posix.join(path.posix.dirname(entry),
      link.href)));}
    const urls=publicationLocalReferences(source,contentType);
-for(const url of urls){if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=
+for(const url of urls){if(/^\/(?!\/)/.test(url)){await loadRooted(url);continue;}
+    if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=
      path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(
      /[?#]/)[0])));await load(dep);}
    // A script's literal fetch names a file beside the page, from whichever file holds it; one
@@ -65,6 +66,11 @@ if(dep==='..'||dep.startsWith('../')||dep===entry||!(await lstat(path.join(proje
     ()=>null))?.isFile())continue;await load(dep);}
   }
  }
+ // A root-relative reference names the project's own file when it has one; publish refuses one
+ // that names none (lib/html-publication-bundle plan).
+ async function loadRooted(url){let dep;try{dep=path.posix.normalize(decodeURIComponent(url.split(
+  /[?#]/)[0]).slice(1));}catch{return;}if(!dep||dep==='.'||dep.startsWith('..'))return;
+  if((await lstat(path.join(project,dep)).catch(()=>null))?.isFile())await load(dep);}
  entry=path.posix.normalize(entry);await load(entry);
  const html=Buffer.from(files.get(entry).base64,'base64').toString('utf8');files.delete(entry);
 return {server:origin,method:'POST',idempotencyKey:randomUUID(),body:{html,visibility:
