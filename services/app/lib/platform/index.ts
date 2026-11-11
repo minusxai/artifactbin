@@ -28,5 +28,6 @@ export { isTransactionConflict, retryOnConflict, TransactionConflict, type Confl
 export { SCHEMA_STATEMENTS, TABLES, TITLE_SLUG_SQL } from './schema';
 export { identityIsLocal, services, setServices } from './services';
 export { lockSubjects } from './advisory-locks';
+export { createSecretCipher, secretCipher, type SecretCipher } from './secret-cipher';
 export { ensureLocalIdentity, syncIdentitySettings } from './identity-host';
 export type { Services } from './services';
