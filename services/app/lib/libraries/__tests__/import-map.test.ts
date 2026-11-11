@@ -47,9 +47,14 @@ it('has the core add validated library entries to the import map, skipped for po
  expect(core).toMatch(/\b\w+\.libraries\?\?\{\}/);
  expect(core).toContain('@afbin\\/[a-z][a-z0-9-]*$');
  // Hosted component entries (/af/components/<name>.js) pass the same value check as the versioned libraries.
- expect(core).toContain('af\\/components\\/[a-z][a-z0-9-]*');
+ expect(core).toContain('components\\/[a-z][a-z0-9-]*');
  expect(core).toMatch(/if\(!\w+\)for\(let\[\w+,\w+\]of Object\.entries\(\w+\.libraries/);
  expect(core.indexOf('.libraries')).toBeLessThan(core.indexOf('"@afbin/apollo"'));
+ // The core's own value check admits every address the server names (libraries under /af/lib/, components).
+ const check=/&&\/(\^\\\/af\\\/[^\n]*?\$)\/\.test\(/.exec(core)?.[1];
+ expect(check).toBeDefined();
+ for(const url of Object.values(libraryImports({})))expect(new RegExp(check!).test(url),url).toBe(true);
+ expect(new RegExp(check!).test('/libraries/vega-6.3.1/index.js')).toBe(false);
 });
 it('packs a bare @afbin/vega import into the offline copy',async()=>{
  const html='<script type="module">import * as vega from "@afbin/vega";console.log(vega);</script>';
