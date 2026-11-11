@@ -15,11 +15,12 @@
  *  ROUTINE hand-written ids     with `newPage` (a new page): every static data-af-id dropped; the platform assigns them
  *  REFUSED script-syntax        an inline script or JSON block that does not parse, at its HTML-file line
  *          duplicate-data-af-id a repeated identity inside a <template> (copies would collide; nothing to renumber)
- *          missing-asset        a relative local reference with no file behind it (checked only when `exists` is given)
+ *          missing-asset        a relative local reference or link with no file behind it (checked only when `exists` is given)
  *  WARNED  duplicate-id         two elements with one HTML id
  *          comment-view         a state block's data-af-comment-fields/-exclude/-version the runtime would refuse (no view saved)
  *          state-version        a state block's data-af-state-version the runtime would ignore (saved state never resets)
  *          pwa-metadata         an install setting publish would silently ignore
+ *          unlinked-file        an inline script naming a project file other than in a literal fetch, which publish does not find
  *
  * IDs are never assigned here: the server's identity ledger owns them (lib/html-page canonicalizeHtmlPage); dropping
  * one only lets the server mint it.
@@ -33,10 +34,12 @@ import {repairCoreScript} from '../html-page/index.ts';
 import {normalizeDesignSelection} from '../html-page/design-system.ts';
 import {parseCommentViewFieldList} from '../../../contracts/src/comment-view-state.ts';
 import {STATE_VERSION_ATTRIBUTE,isStateVersion} from '../../../contracts/src/state-version.ts';
+import {scriptFetchPaths} from './script-fetches.ts';
+export {scriptFetchPaths} from './script-fetches.ts';
 initSync();
 
 type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link' | 'duplicate-data-af-id';
-type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata' | 'comment-view' | 'state-version';
+type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata' | 'comment-view' | 'state-version' | 'unlinked-file';
 interface AutofixLine { line: number; text: string }
 interface AutofixFix { rule: AutofixRule; reason: string; before: AutofixLine[]; after: AutofixLine[] }
 interface AutofixProblem { rule: AutofixProblemRule; line: number; column: number; snippet: string; message: string }
@@ -118,7 +121,7 @@ export function autofixHtml(input: string, options: AutofixOptions = {}): Autofi
   if (handWritten) routine.push(`dropped ${handWritten} hand-written data-af-id (the platform assigns them)`);
 
   for (const fix of pending) fixes.push({ rule: fix.rule, reason: fix.reason, before: fix.before, after: fix.inserted.filter(Boolean).map((text) => placed(html, text)) });
-  const found = findProblems(html, options), warned = new Set<AutofixProblemRule>(['duplicate-id', 'pwa-metadata', 'comment-view', 'state-version']);
+  const found = findProblems(html, options), warned = new Set<AutofixProblemRule>(['duplicate-id', 'pwa-metadata', 'comment-view', 'state-version', 'unlinked-file']);
   return { html, changed: html !== input, fixes, problems: found.filter((problem) => !warned.has(problem.rule)), warnings: found.filter((problem) => warned.has(problem.rule)), routine };
 }
 
@@ -201,8 +204,25 @@ function findProblems(html: string, options: AutofixOptions = {}): AutofixProble
   }
 
   if (options.exists) {
-    for (const ref of localReferences(document.elements, document.templateElements)) {
-      if (!options.exists(ref.path)) problems.push({ rule: 'missing-asset', line: lineOf(html, ref.element), column: ref.element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, ref.element)), message: `local file not found: ${ref.value}` });
+    const references = localReferences(document.elements, document.templateElements);
+    for (const ref of references) {
+      const link = ref.element.tagName === 'a' || ref.element.tagName === 'area';
+      if (!options.exists(ref.path)) problems.push({ rule: 'missing-asset', line: lineOf(html, ref.element), column: ref.element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, ref.element)), message: link ? `linked file not found: ${ref.value}; put it beside the page or link a full address` : `local file not found: ${ref.value}` });
+    }
+    // A script's own string naming a project file: publish uploads what the HTML links and what a script fetches by a
+    // literal path (./script-fetches), so a name held anywhere else (a constant, d3.json) publishes nothing. A guess
+    // from literals, so a warning.
+    const linked = new Set(references.map((ref) => ref.path));
+    for (const element of [...document.elements, ...document.templateElements]) {
+      if (element.tagName !== 'script' || attribute(element, 'src') !== null) continue;
+      const text = textContent(element);
+      for (const fetched of scriptFetchPaths(text, attribute(element, 'type') === 'module')) { const path = projectPath(fetched); if (path) linked.add(path); }
+      for (const [, , value] of text.matchAll(SCRIPT_PATH)) {
+        const path = projectPath(value!);
+        if (!path || linked.has(path) || !options.exists(path)) continue;
+        linked.add(path);
+        problems.push({ rule: 'unlinked-file', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `a script names ${value}, which publishes with the page only when a script fetches it by that literal path: fetch('${value}')` });
+      }
     }
   }
   return problems.sort((a, b) => a.line - b.line || a.column - b.column);
@@ -221,22 +241,32 @@ function pwaMetaProblem(field: string, value: string): string | undefined {
 }
 
 const REMOTE = /^(?:[a-z][a-z\d+.-]*:|\/|#|\$|\{)/i;
-/** Relative project references a published page loads: element sources and literal module imports. */
+/** A quoted relative file path in script text (`'./data.json'`, `"img/a.png"`): a name with an extension. */
+const SCRIPT_PATH = /(["'`])((?:\.{1,2}\/)?[\w-][\w\-./%]*\.[A-Za-z0-9]{1,10})\1/g;
+/** The project path a relative reference names: dot segments resolved, query and hash dropped; null when none. */
+function projectPath(value: string): string | null {
+  value = value.trim();
+  if (!value || REMOTE.test(value)) return null;
+  let decoded: string; try { decoded = decodeURIComponent(value.split(/[?#]/)[0]!); } catch { decoded = value; }
+  const parts: string[] = [];
+  for (const part of decoded.split('/')) { if (part === '' || part === '.') continue; if (part === '..') parts.pop(); else parts.push(part); }
+  return parts.length ? parts.join('/') : null;
+}
+/** Relative project references a published page loads or links: element sources, links and literal module imports. */
 export function localReferences(elements: readonly Element[], templateElements: readonly Element[] = []): Array<{ element: Element; value: string; path: string }> {
   const found: Array<{ element: Element; value: string; path: string }> = [];
   const add = (element: Element, value: string) => {
     value = value.trim();
-    if (!value || REMOTE.test(value)) return;
-    let decoded: string; try { decoded = decodeURIComponent(value.split(/[?#]/)[0]!); } catch { decoded = value; }
-    const parts: string[] = [];
-    for (const part of decoded.split('/')) { if (part === '' || part === '.') continue; if (part === '..') parts.pop(); else parts.push(part); }
-    if (parts.length) found.push({ element, value, path: parts.join('/') });
+    const path = projectPath(value);
+    if (path) found.push({ element, value, path });
   };
   for (const element of [...elements, ...templateElements]) {
     const tag = element.tagName;
     if (['img', 'script', 'source', 'video', 'audio', 'iframe', 'embed', 'track', 'input'].includes(tag)) { const src = attribute(element, 'src'); if (src !== null) add(element, src); }
     if (tag === 'video') { const poster = attribute(element, 'poster'); if (poster !== null) add(element, poster); }
     if (tag === 'object') { const data = attribute(element, 'data'); if (data !== null) add(element, data); }
+    // A link to a project file publishes that file with the page (lib/html-publication-bundle).
+    if (tag === 'a' || tag === 'area') { const href = attribute(element, 'href'); if (href !== null) add(element, href); }
     if (tag === 'link' || tag === 'image' || tag === 'use') {
       const rel = (attribute(element, 'rel') ?? '').split(/\s+/);
       const href = attribute(element, 'href') ?? attribute(element, 'xlink:href');

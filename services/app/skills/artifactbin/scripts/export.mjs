@@ -1,18 +1,26 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Export a portable HTML copy or a rendered image (not editable source).
 Usage: node scripts/export.mjs ID|URL --format html|png|jpg --output FILE [--slide N]
+  [--element SELECTOR]
 Flags: --format html|png|jpg (required); --output FILE (required, never overwrites); --slide N a
   slide number, image formats only (1200x630; the Nth laid-out data-af-slide element, 1-based,
   drawn alone, so a stacked deck's hidden slides export too; display:none ones are skipped; a
   missing slide returns 404 slide_not_found with the count; capture hides data-af-deck-chrome).
+  --element SELECTOR one chart, tile, table or section of the page, image formats only: the
+  first element the CSS selector matches (id, class, attribute; at most 200 characters), drawn
+  alone at 2x on the page's background once its data has drawn; with --slide N, within that
+  slide. No match, or a hidden or empty one: 404 element_not_found naming the selector; over
+  4096 CSS px a side it draws at 1x, over 8192 it is refused (422 element_too_large).
   Common: --server ORIGIN, --json, --help.
 Examples:
   node scripts/export.mjs ID --format html --output copy.html
   node scripts/export.mjs ID --format png --slide 2 --output slide-2.png
-Gotchas: the HTML copy carries credential-free provenance (origin, page ID, saved revision) and
-  opens offline; it carries the page's dataset rows that you may read, so its sql tables render
-  offline. It does not overwrite or publish anything, and merely opening or editing it changes
-  nothing on the server.
+  node scripts/export.mjs ID --format png --element '#orders-chart' --output orders.png
+Gotchas: one chart or section of a page exports with --element, so nothing else needs
+  publishing or redrawing to get its image. The HTML copy carries credential-free provenance
+  (origin, page ID, saved revision) and opens offline; it carries the page's dataset rows that
+  you may read, so its sql tables render offline. It does not overwrite or publish anything,
+  and merely opening or editing it changes nothing on the server.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
@@ -54,16 +62,19 @@ export function imageDimensions(bytes, format) {
   }
   throw new ToolError('invalid_image', 'Export did not return a supported image payload.', 1);
 }
-// html downloads the portable copy; png/jpg render the page (or one slide) on the server.
+// html: the portable copy; png/jpg: the page, one slide or one element, rendered on the server.
 export async function exportCommand({values, positionals}, options = {}) {
   requireFlags(values, ['format', 'output']);
   const format = enumValue(values.format, ['html', 'png', 'jpg'], 'format');
   if (values.slide && format === 'html')
     throw new ToolError('unsupported_slide', '--slide requires an image format.', 2);
+  if (values.element && format === 'html')
+    throw new ToolError('unsupported_element', '--element requires an image format.', 2);
   const {server, id} = resolveTarget(positional(positionals), selectedServer(values, options.env)),
     client = makeClient(server, options);
   const query = new URLSearchParams({format});
   if (values.slide) query.set('slide', String(integer(values.slide, 'slide')));
+  if (values.element) query.set('element', values.element);
   const response = await client.request(
     `/a/${id}/${format === 'html' ? 'download' : 'export'}?${query}`, {
     raw: true,

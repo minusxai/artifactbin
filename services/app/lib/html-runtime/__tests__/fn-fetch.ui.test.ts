@@ -193,3 +193,49 @@ it('review: proxy input failures reject asynchronously like native fetch',async(
  await expect(result).rejects.toBeInstanceOf(TypeError);
 });
 
+
+/**
+ * A file published with the page (`files`, the runtime config's table, lib/html-publication-bundle): a fetch of the path
+ * the author wrote goes to the native fetch at the file's address; a path the publication did not record is untouched.
+ */
+describe('a file published with the page is fetched by its path',()=>{
+ const ADDRESS='/a/PAGE12/assets?dependency=DATA12&revision=1&version=3';
+ const at=(address:string)=>new URL(address,document.baseURI).href;
+ beforeEach(()=>{uninstall();uninstall=installFunctionFetch(window,async()=>({callFunction:async()=>({status:200,headers:{},body:''})}),{'data.json':ADDRESS,'geo/states.geojson':'/a/PAGE12/assets?dependency=GEO123&revision=2&version=3','my%20file.json':'data:application/json;base64,e30='});});
+ it.each([
+  ['the relative path','./data.json'],
+  ['the bare name','data.json'],
+  ['a dot segment that lands on it','./geo/../data.json'],
+  ['a query and a hash, which the stored file does not vary by','./data.json?v=2#rows'],
+  ['an absolute URL on this origin',new URL('./data.json',document.baseURI).href],
+  ['a URL object built from the document',new URL('./data.json',document.baseURI)],
+ ])('%s goes to its address, with the same init',async(_label,input)=>{
+  const init={headers:{accept:'application/json'}};
+  await window.fetch(input as string,init);
+  expect(native).toHaveBeenCalledTimes(1);
+  expect(native.mock.calls[0]![0]).toBe(at(ADDRESS));expect(native.mock.calls[0]![1]).toBe(init);
+ });
+ it('a nested path and a name the URL parser encodes reach theirs; an offline copy\'s data: address is used as given',async()=>{
+  await window.fetch('./geo/states.geojson');expect(native.mock.calls[0]![0]).toBe(at('/a/PAGE12/assets?dependency=GEO123&revision=2&version=3'));
+  await window.fetch('./my file.json');expect(native.mock.calls[1]![0]).toBe('data:application/json;base64,e30=');
+ });
+ it('a Request keeps its method, headers and signal at the new address',async()=>{
+  const controller=new AbortController();
+  await window.fetch(new Request(new URL('./data.json',document.baseURI),{headers:{'x-page':'1'},signal:controller.signal}));
+  const sent=native.mock.calls[0]![0] as Request;
+  expect(sent).toBeInstanceOf(Request);expect(sent.url).toBe(at(ADDRESS));expect(sent.method).toBe('GET');expect(sent.headers.get('x-page')).toBe('1');
+  controller.abort();expect(sent.signal.aborted).toBe(true);
+ });
+ it.each([
+  ['a path the publication did not record','./other.json'],
+  ['a recorded name in another folder','./sub/data.json'],
+  ['a recorded name on another origin','https://cdn.example/data.json'],
+ ])('%s goes to the native fetch untouched',async(_label,input)=>{
+  const init={method:'GET'};
+  await window.fetch(input,init);
+  expect(native.mock.calls[0]![0]).toBe(input);expect(native.mock.calls[0]![1]).toBe(init);
+ });
+ it('a function call is still a call',async()=>{
+  const response=await window.fetch('/fn/items');expect(response.status).toBe(200);expect(native).not.toHaveBeenCalled();
+ });
+});

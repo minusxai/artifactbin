@@ -135,6 +135,12 @@ function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Vi
 }
 
 /**
+ * What a page records of its publication (lib/html-publication-bundle PublicationRecord): its files' receipts, and the
+ * entry's project path, against which a script's `fetch('./x')` names a file (publishedFileTable).
+ */
+const publicationRecord=(receipts:unknown[],entryPath:unknown)=>({htmlPublicationDependencies:receipts,...(typeof entryPath==='string'?{htmlPublicationEntryPath:entryPath}:{})});
+
+/**
  * The full-replace pipeline both PUT routes run: read the body, validate the
  * content and the metadata fields, write inside one transaction, and answer.
  *
@@ -168,7 +174,7 @@ export async function replaceArtifactWithBody(
   if(body.annotation_ops!==undefined)return json({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
-  let bundleReceipts:unknown[]=[];
+  let bundleReceipts:unknown[]=[],bundleEntryPath:string|undefined;
   const bundleSupplied=body.publicationBundle!==undefined;
   // The caller's own fields: a bundle save injects the head's visibility and shares below, which are no change.
   const sent=body;
@@ -194,7 +200,7 @@ export async function replaceArtifactWithBody(
     }
     const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),{id,resolvedBackendNames:((current.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>link.kind==='backend').map(link=>link.name),dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
     if(bundled instanceof Response)return bundled;
-    body=bundled.body;bundleReceipts=bundled.receipts;
+    body=bundled.body;bundleReceipts=bundled.receipts;bundleEntryPath=bundled.entryPath;
   }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
@@ -279,7 +285,7 @@ export async function replaceArtifactWithBody(
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
-    meta:{...parsed.meta,...(bundleSupplied?{htmlPublicationDependencies:bundleReceipts}:current.meta.htmlPublicationDependencies?{htmlPublicationDependencies:current.meta.htmlPublicationDependencies}:{})},
+    meta:{...parsed.meta,...(bundleSupplied?publicationRecord(bundleReceipts,bundleEntryPath):current.meta.htmlPublicationDependencies?publicationRecord(current.meta.htmlPublicationDependencies as unknown[],current.meta.htmlPublicationEntryPath):{})},
     ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
@@ -345,7 +351,7 @@ export async function createArtifactFromBody(body:Record<string,unknown>,actor:T
  if(options.dryRun&&body.publicationBundle!==undefined)return json({error:'bundle_preflight_requires_dependency_plan'},400);
  const bundled=await preparePublicationBundle(body,actor,base,request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
  if(bundled instanceof Response)return bundled;
- const response=await createArtifactFromBodyPrepared(bundled.body,actor,base,request,{...options,bundleReceipts:bundled.receipts});
+ const response=await createArtifactFromBodyPrepared(bundled.body,actor,base,request,{...options,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
  if(!bundled.receipts.length)return response;
  return json({...await response.json(),dependencyReceipts:bundled.receipts},response.status);
 }
@@ -355,7 +361,7 @@ async function createArtifactFromBodyPrepared(
   actor: TokenHoldingActor,
   base: string,
   request?: Request,
-  options: {dryRun?:boolean;bundleReceipts?:unknown[]} = {},
+  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string} = {},
 ): Promise<Response> {
   let destination;
   try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
@@ -422,7 +428,7 @@ async function createArtifactFromBodyPrepared(
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
-    meta:{...parsed.meta,...(options.bundleReceipts?.length?{htmlPublicationDependencies:options.bundleReceipts}:{})},
+    meta:{...parsed.meta,...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
     ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,

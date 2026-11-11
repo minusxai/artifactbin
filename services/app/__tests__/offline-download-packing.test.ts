@@ -88,3 +88,22 @@ it('carries the live-cell library in a download of a page that imports it, and o
   for (const copy of [doc, without]) expect(JSON.parse(copy.querySelector('script[type="application/json"][data-af="state-module"]')!.textContent!)).toContain('af:viewer:');
   expect(readPortableDocument(html).source).not.toContain('data-af="state-module"');
 });
+
+// A link to a file published with the page works from disk: the copy carries the file's bytes, which only a reader of
+// the page and the file receives, as a download under the file's name. Published again, the copy is its source.
+it('carries a linked file in the copy as a download its reader can open offline, and republishes as the source',async()=>{
+ const actor=await mintAccountToken('offline-linked-file');
+ const pdf='%PDF-1.4\n% rota\n%%EOF\n',html='<!doctype html><html><head><title>Rota</title></head><body><a id="rota" href="./rota.pdf">Rota</a><a id="away" href="https://example.test/x">Away</a></body></html>';
+ const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'offline_linked_file_01'},json:{html,visibility:'private',publicationBundle:{entryPath:'index.html',files:[{path:'rota.pdf',contentType:'application/pdf',base64:Buffer.from(pdf).toString('base64')}]}}}));
+ expect(response.status).toBe(201);const saved=await response.json() as {id:string};
+ const original=(await getArtifactById(saved.id))!.source!;expect(original).toMatch(/href="\/a\/[A-Za-z0-9]+\/assets\?dependency=/);
+ const downloaded=await download(request(`/a/${saved.id}/download`,{token:actor.token}),params(saved.id));expect(downloaded.status).toBe(200);
+ const copy=await downloaded.text(),doc=new JSDOM(copy).window.document,link=doc.querySelector('#rota')!;
+ expect(link.getAttribute('href')).toMatch(/^data:application\/pdf;base64,/);expect(link.getAttribute('download')).toBe('rota.pdf');
+ expect(Buffer.from(link.getAttribute('href')!.split(',')[1]!,'base64').toString()).toBe(pdf);
+ expect(doc.querySelector('#away')!.getAttribute('href')).toBe('https://example.test/x');
+ expect((await download(request(`/a/${saved.id}/download`),params(saved.id))).status).toBe(404);
+ const again=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:copy,visibility:'private'}}));
+ expect(again.status,await again.clone().text()).toBe(201);
+ expect((await getArtifactById((await again.json()).id))!.source).toBe(original);
+});

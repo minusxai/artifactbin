@@ -19,10 +19,10 @@ description: >-
 the user and run `node scripts/comment.mjs watch ID --next` as its printed Next line says (even
 when the reply is only the link); then do what comments ask.[% else %]After you publish,
 edit or comment on a page (answering a comment too), reply to the user and start the save response's
-`monitoring.instruction` (with the installed skill: `node scripts/comment.mjs watch ID --next`,
-as its printed Next line says), then do what comments ask.[% endif %] The reply is the link plus
-what the user asked for, in the form they asked for; a form they prescribe limits the reply's text,
-never the watch.
+`monitoring.instruction` (installed skill: `node scripts/comment.mjs watch ID --next`, as its
+Next line says), then do what comments ask.[% endif %] The reply never waits on a watch: every
+link the user asked for plus what they asked, in the form they asked for; a form they prescribe
+limits its text, never the watch.
 Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
@@ -33,10 +33,10 @@ Skill map (each file's top comment explains it):
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
 serve, new-app, new-page, minusx
-- `references/`: guides (read only those you need): runtime, datasets, permissions, functions,
+- `references/`: guides (read those you need): runtime, datasets, permissions, functions,
 dataviz, diagrams, maps, groups, governed-data
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
-  serves (only its header, the shared tokens, is worth reading)
+  serves (read only its header: the shared tokens)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
 Import `@afbin/state`, `@afbin/apollo` (`sql`) and every hosted library as `@afbin/<name>`
@@ -90,7 +90,9 @@ group's job runs): `node scripts/events.mjs watch --help`.
   the next step); `node scripts/new-app.mjs --kind list --title "NAME"` (a list people add
   themselves to and change only their own entry: sign-up sheet, RSVP, roster);
   `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items behind a
-  key, grouped with totals, with notes signed-in readers share);
+  key, grouped with totals, with notes signed-in readers share; sign-in and the notes' rules are
+  the platform's: each reader changes or removes only their own note, a signed-out one adds none,
+  and no server of your own is needed);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it links the CSV by its path and writes a DATA block over its
   columns, and `--artifact ID` rebuilds an existing page);
@@ -100,7 +102,10 @@ group's job runs): `node scripts/events.mjs watch --help`.
   write the findings from); `cp examples/report.html index.html` (a report without data). Data
   from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below); behind
   a key or from your own server code: a backend function ([functions](references/functions.md),
-  read it first); never copy its rows into a CSV. If no starter fits, write the page yourself.
+  read it first); never copy its rows into a CSV. The server then keeps the key, encrypted (the
+  owner enters it in the page's settings; only the API's host receives it), and the rows people
+  write, such as notes; never the API's rows: the function fetches them on the server whenever a
+  reader opens the page. If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
   name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
   its stylesheet and fonts). Keep viewer-local state in `state` from `@afbin/state`
@@ -169,7 +174,9 @@ group's job runs): `node scripts/events.mjs watch --help`.
   `fetch('/fn/NAME')` ([functions](references/functions.md)). `node scripts/sql.mjs schema ID`
   for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
-  scripts/export.mjs ID --format html --output copy.html` for a portable copy.
+  scripts/export.mjs ID --format html --output copy.html` for a portable copy; one chart or
+  section of a page saves as an image with `--format png --element SELECTOR`, so nothing else
+  needs publishing or redrawing.
   Live warehouse rows on a server whose `/api/server` names `minusx`: `node scripts/minusx.mjs
   connections --group finance`, declare the one you need `'minusx'` in a function's `secrets`,
   publish, then `node scripts/minusx.mjs bind PAGE12 --name FIN --group finance --connection
@@ -227,9 +234,16 @@ ownership changes alone need no comment watch. Visibility only controls who can 
 comments and dataset writes are separate permissions. A receipt's `user_page_url` is an anonymous
 read-only copy ([groups](references/groups.md#public-view-receipts)).
 
-- Pages are unlisted by default: anyone with the link can open them, so "my team can view" needs
-  nothing more. Use `--visibility public` or `--visibility private` only when the user says
-  "public" or "private"; a private page opens only for the people it is shared with.
+- Who can read. Unlisted (the default): anyone with the link, signed out too, sees all the page
+  shows, its functions' answers included (a `signed_in` role still admits any signed-in link
+  holder). `--visibility private`: only the owner and the people and groups it is shared with,
+  never anyone signed out. `--visibility public` also lists it on the owner's profile: only when
+  the user says "public". Unlisted fits a page passed on by its link ("my team can view", "send
+  me the link"). Publish private only on the user's word: they say "private", call the data
+  confidential, or name who may see it; your own view of how sensitive it is does not make it
+  private. Then share it with their group (below) or have the owner invite people in the page's
+  Share dialog, and check without `--guest-steps` (it runs signed out, which a private page
+  answers with not found). Say in the reply which visibility the page has and who can open it.
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
   When they change its rows (a team tracker), add `--datasets`: a page share alone never lets

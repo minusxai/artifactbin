@@ -480,14 +480,15 @@ type Entry = {id: string; name: string; grp: string; note: string; by: string | 
 type Me = {signedIn: boolean; id: string | null; role: string};
 const READER: Me = {signedIn: true, id: 'usr_me', role: 'signed_in'}, GUEST: Me = {signedIn: false, id: null, role: 'anonymous'};
 /** The tracker's statements on the SQL engine over the dataset `entries` (its group sizes and total counted there),
- *  and its functions: `me` (who reads) and `add` (limits). */
+ *  and its functions: `me` (who reads), `add` and `save` (limits). */
 const trackerAnswer = (entries: Entry[]): Answer => (text, params) => {
   if (/^\s*(?:insert|update|delete)/i.test(text)) return {affected: 1, returning: []};
   const rows = entries.map(({id, name, grp, note, by}) => ({_id: id, name, grp, note, created_by: by, description: null}));
   const columns = ['_id', 'name', 'grp', 'note', 'created_by', 'description'].map(name => ({name, type: 'string' as const}));
   return runSql(text, params, {entries: {columns, rows}});
 };
-const trackerFns = (me: Me): Fn => name => name === 'me' ? {body: me} : name === 'add' ? {body: {affected: 1, returning: [{_id: 'new'}]}} : NO_FUNCTIONS(name, {}, 'GET');
+const trackerFns = (me: Me): Fn => name => name === 'me' ? {body: me} : name === 'add' || name === 'save'
+  ? {body: {affected: 1, returning: [{_id: 'new'}]}} : NO_FUNCTIONS(name, {}, 'GET');
 
 it('shows the tracker\'s add form, and Edit and Remove only on entries the rules let this reader change', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'},
@@ -679,4 +680,45 @@ it('shows each group as N of its limit, and a full group refuses an entry before
   await new Promise(resolve => setTimeout(resolve, 5));
   expect(page.calls.filter(c => c.name === 'add')).toEqual([{name: 'add', method: 'POST', input: {name: 'One more', grp: 'Doing', note: ''}}]);
   expect(page.writes).toEqual([]);
+});
+
+it('moves an entry through tracker.ts save, and a full group refuses a move before any call, the entry left in place', async () => {
+  const entries = [...Array.from({length: 5}, (_, i) => ({id: 'e' + i, name: 'Task ' + i, grp: 'To do', note: '', by: 'usr_me'})),
+    {id: 'm1', name: 'Mover', grp: 'Doing', note: 'mine', by: 'usr_me'}];
+  const page = await load(await tracker('tasks'), trackerAnswer(entries), trackerFns(READER));
+  expect(page.error).toBeUndefined();
+  const doc = page.dom.window.document, wait = () => new Promise(resolve => setTimeout(resolve, 5));
+  const saves = () => page.calls.filter(c => c.name === 'save'), status = () => doc.querySelector('#status')?.textContent;
+  const submit = async (id: string, grp: string) => {
+    (doc.querySelector(`[data-af-id="entry-${id}-edit"]`) as HTMLButtonElement | null)?.click();
+    (doc.querySelector(`[data-af-id="entry-${id}-group-input"]`) as HTMLSelectElement).value = grp;
+    doc.querySelector(`[data-af-id="entry-${id}-form"]`)!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
+    await wait();
+  };
+  await submit('m1', 'To do');
+  expect(status()).toBe('To do is full.');
+  expect(saves()).toEqual([]);expect(page.writes).toEqual([]);
+  // The entry is still listed in its own group, its form open for another choice.
+  expect(doc.querySelector('[data-af-id="group-doing-list"] [data-af-id="entry-m1-form"]')).not.toBeNull();
+  // A group with room takes it, through tracker.ts's save (a POST), never a direct update.
+  await submit('m1', 'Done');
+  expect(saves()).toEqual([{name: 'save', method: 'POST', input: {id: 'm1', name: 'Mover', grp: 'Done', note: 'mine'}}]);
+  expect(page.writes).toEqual([]);expect(status()).toBe('Saved Mover.');
+  // An edit that keeps its entry in a full group is no move: it saves.
+  await submit('e0', 'To do');
+  expect(saves().at(-1)).toEqual({name: 'save', method: 'POST', input: {id: 'e0', name: 'Task 0', grp: 'To do', note: ''}});
+  expect(status()).toBe('Saved Task 0.');
+});
+
+it('without limits, saves an edit with one bound sql update', async () => {
+  const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'}];
+  const page = await load(await tracker('list'), trackerAnswer(entries), trackerFns(READER));
+  const doc = page.dom.window.document;
+  (doc.querySelector('[data-af-id="entry-a1-edit"]') as HTMLButtonElement).click();
+  (doc.querySelector('[data-af-id="entry-a1-group-input"]') as HTMLSelectElement).value = 'Second choice';
+  doc.querySelector('[data-af-id="entry-a1-form"]')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(page.writes).toEqual([{text: 'update entries set name = $p0, grp = $p1,\n  note = $p2 where _id = $p3',
+    params: {p0: 'Ada', p1: 'Second choice', p2: 'gloves', p3: 'a1'}}]);
+  expect(page.calls.filter(c => c.name === 'save')).toEqual([]);
 });

@@ -4,7 +4,7 @@
  * the version read with an Idempotency-Key, rewrites the file with the merged text, resumes an unknown outcome with the same key (never a second write), and explains its
  * refusals in its own terms.
  */
-import {mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {afterEach, beforeEach, expect, it} from 'vitest';
@@ -56,8 +56,14 @@ it('read saves typing first, then writes the Markdown under its marker; write se
   expect(await readFile(file, 'utf8')).not.toContain('private-fixture');
 
   await writeFile(file, stamp(marker, '# Plan\n\nShip Friday.\n'));
+  // A write owes the user a reply: the page's running comment watches hear of it, as after a publish.
+  const {watchLogPath} = await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
+  const log = watchLogPath(path.join(root, 'home'), server, 'PAGE12', 'comments', 'session');
+  await mkdir(path.dirname(log), {recursive: true});
+  await writeFile(log, JSON.stringify({kind: 'watch', schema: 2, server, artifact: 'PAGE12', stream: 'comments'}) + '\n');
   seen = [];
   const written = await run('write', [file]);
+  expect(JSON.parse((await readFile(log, 'utf8')).trim().split('\n').at(-1)!)).toMatchObject({kind: 'activity', artifact: 'PAGE12', owesReply: true});
   expect(written).toMatchObject({id: 'PAGE12', regionId: 'body', version: 5, next: expect.stringContaining('reply to the user and run the comment watch')});
   expect(seen).toHaveLength(1);
   expect(seen[0]).toMatchObject({method: 'PUT', path: '/api/artifacts/PAGE12/regions/body', body: {markdown: '# Plan\n\nShip Friday.\n', base_version: 4}, key: expect.stringMatching(/^[A-Za-z0-9_-]{16,128}$/)});

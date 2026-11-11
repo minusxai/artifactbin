@@ -16,6 +16,7 @@ import {executePageSql,planLinkedDatasetTables,type PageCommitGuard} from '@/lib
 import {transactionAccessFacts} from '@/lib/artifact-access';
 import {DatasetError} from '@/lib/datasets';
 import {runWithRequest,services} from '@/lib/platform';
+import {exportKeyReader} from '@/lib/export';
 import {json,readBody,readJson,PayloadTooLarge} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 /** The page's dataset links. */
@@ -131,13 +132,44 @@ export function pageCommitGuard(pageId:string,actor:AccessActor,admitted:Artifac
  * reader, read or write. The same reader, cross-site guard and page audience as the page GraphQL: a page the reader
  * cannot read is the uniform 404. Only the head revision writes (an archived one, or `readOnly`, reads); a read
  * whose dataset moved while it ran re-runs, a bounded number of times, and leaves only if the page still holds.
- * An opaque origin (a capture, document-serving/raw) has no SQL door.
+ * An opaque origin reads here only as an export capture's requester (opaqueSqlRead); otherwise it has no SQL door.
  */
 export async function pageSqlDoor(request:Request,pageId:string):Promise<Response>{
- const headers={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
- if(request.headers.get('origin')==='null')return json({error:'permission_denied',message:'This page request is not permitted'},403,headers);
- const actor=await requestOrSessionActor(request);
- if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
+ if(request.headers.get('origin')==='null')return opaqueSqlRead(request,pageId);
+ return answerSql(request,pageId);
+}
+const SQL_HEADERS={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
+/**
+ * AN EXPORT CAPTURE'S SQL READ: the exporter photographs the page as a top-level opaque-origin document with no app
+ * frame (document-serving/raw), so its `sql` comes here directly (html-runtime/domain-reads), carrying the capture's
+ * export key in the body, as its GraphQL reads do (lib/graphql-compat `opaqueOriginRead`). Every credential header is
+ * dropped: the read runs as the requester the key was minted for (lib/export read-key), or as nobody for an anonymous
+ * key, re-checked at read time like any reader's, and reads only. No key that verifies for this page: no SQL door.
+ * The `*` CORS exposes the answer to that capture page alone: the key is seconds-long, scoped to this page and never
+ * shown to a reader.
+ */
+async function opaqueSqlRead(request:Request,pageId:string):Promise<Response>{
+ const cors={'access-control-allow-origin':'*'};
+ let body:string;
+ try{body=await readBody(request,{as:'text'});}catch(error){if(error instanceof PayloadTooLarge)return error.response();throw error;}
+ let key:unknown;try{key=(JSON.parse(body) as {key?:unknown}|null)?.key;}catch{/* refused below */}
+ const reader=typeof key==='string'?exportKeyReader(pageId,key):null;
+ if(!reader)return json({error:'permission_denied',message:'This page request is not permitted'},403,{...SQL_HEADERS,...cors});
+ const headers=new Headers(request.headers);
+ for(const name of [...CREDENTIAL_HEADERS,'idempotency-key'])headers.delete(name);
+ const guest=new Request(request.url,{method:'POST',headers,body,signal:request.signal});
+ const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,reader));
+ const out=new Headers(answered.headers);
+ out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
+ return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
+}
+/** `reader`: an export capture's requester (opaqueSqlRead), read as given and read-only; otherwise the request's own. */
+async function answerSql(request:Request,pageId:string,reader?:AccessActor):Promise<Response>{
+ const headers=SQL_HEADERS;
+ const requested=reader?null:await requestOrSessionActor(request);
+ // An export reader carries no cookie, so no same-site guard applies; it never writes (readOnly below).
+ if(requested&&refusesCrossSite(request,requested))return json({error:'forbidden'},403);
+ const actor:AccessActor=reader??requested!;
  try{
   const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
   // Readership first: a page this reader cannot read answers exactly as a missing one (the uniform 404), whatever
@@ -148,8 +180,8 @@ export async function pageSqlDoor(request:Request,pageId:string):Promise<Respons
   const idempotencyKey=request.headers.get('idempotency-key')??undefined;
   if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400,headers);
   const page=body.revision===head.revision?head:await readHtmlPage(actor,pageId,body.revision);
-  const scope={pageId,...(idempotencyKey?{idempotencyKey}:{}),readOnly:body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
-  const verifyPage=pageVerifier(request,pageId,actor,undefined,admitted);
+  const scope={pageId,...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
+  const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   for(let attempt=1;;attempt++){
    try{
     const reply=await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);

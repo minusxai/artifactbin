@@ -33,7 +33,6 @@ const commands = {
     flags: {
       type: flag(),
       root: flag(),
-      manifest: flag(),
       title: flag(),
       template: flag(),
       'owner-column': flag(),
@@ -50,7 +49,7 @@ const commands = {
     }
   },
   read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag()}}},
-  export: {flags: {format: flag(), slide: flag()}},
+  export: {flags: {format: flag(), slide: flag(), element: flag()}},
   check: {
     flags: {
       viewport: flag('string', true),
@@ -127,6 +126,7 @@ const commands = {
         once: flag('boolean'),
         append: flag('boolean'),
         next: flag('boolean'),
+        replied: flag('boolean'),
         wait: flag()
       }
     }

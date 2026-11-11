@@ -49,6 +49,8 @@ describe('markupCsp', () => {
     expect(connect).toContain('https://app.example/a/doc1/query');
     expect(connect).toContain('https://app.example/a/doc1/events/frame');
     expect(connect).not.toContain('/a/doc1/viewer');
+    // Its own published files (lib/html-publication-bundle): a script reads one through the link that names it.
+    expect(connect.split(' ')).toContain('https://app.example/a/doc1/assets');
     expect(policy).toMatch(/; sandbox allow-scripts [^;]*$/);
   });
 
@@ -56,7 +58,7 @@ describe('markupCsp', () => {
     const policy = markupCsp('https://app.example', 'doc1', 'https://cdn.example');
     expect(directive(policy, 'img-src')).toContain('https://cdn.example');
     expect(directive(policy, 'style-src')).not.toContain('https://cdn.example');
-    expect(directive(policy, 'connect-src')).toContain('https://cdn.example https://app.example/a/doc1/assets');
+    expect(directive(policy, 'connect-src')).toContain('https://app.example/a/doc1/assets https://cdn.example');
     expect(() => markupCsp('https://app.example', 'doc1', 'https://cdn.example/x')).toThrow('Invalid asset origin');
   });
 });

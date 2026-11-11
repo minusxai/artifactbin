@@ -5,9 +5,9 @@ import {MARKDOWN_ROOT} from '@/lib/html-components/markdown-styles';
 
 const SCRIPT='<script type="module" data-af-id="s1">document.querySelector(".chart").append(document.createElement("canvas"));</script>';
 /** A served page: runtime JSON (revision, source IDs, script fingerprint) and the author's markup. */
-function served(revision:number,body:string,{fingerprint='fp-1',head='<style data-af-id="css">h1{color:red}</style>'}:{fingerprint?:string;head?:string}={}){
+function served(revision:number,body:string,{fingerprint='fp-1',head='<style data-af-id="css">h1{color:red}</style>',files}:{fingerprint?:string;head?:string;files?:Record<string,string>}={}){
  const ids=[...`<html data-af-id="h"><head data-af-id="hd">${head}</head><body data-af-id="b">${body}${SCRIPT}</body>`.matchAll(/data-af-id="([^"]+)"/g)].map(match=>match[1]);
- return `<!doctype html><html data-af-id="h"><head data-af-id="hd"><script type="application/json" data-af="runtime">${JSON.stringify({revision:String(revision),savedNodeIds:ids,scriptFingerprint:fingerprint})}</script>${head}</head><body data-af-id="b">${body}${SCRIPT}</body></html>`;
+ return `<!doctype html><html data-af-id="h"><head data-af-id="hd"><script type="application/json" data-af="runtime">${JSON.stringify({revision:String(revision),savedNodeIds:ids,scriptFingerprint:fingerprint,...(files?{files}:{})})}</script>${head}</head><body data-af-id="b">${body}${SCRIPT}</body></html>`;
 }
 const V1=`<h1 data-af-id="t" class="title">Plan</h1><p data-af-id="p1">First draft.</p><p data-af-id="p2">Second.</p><div data-af-id="c" class="chart"></div><label data-af-id="l">Name <input data-af-id="i" name="n"></label>`;
 /** Load `html` as the running document, as the frame would have: its source kept, a script-made chart drawn. */
@@ -65,6 +65,13 @@ describe('native HTML live morph',()=>{
   load(served(1,V1));
   expect(()=>morphHtmlVersion(document,served(1,V1),served(2,V1.replace('Plan','Plans'),{fingerprint:'fp-2'}),SCRIPTS)).toThrow(VersionRefused);
   expect(document.querySelector('h1')!.textContent).toBe('Plan');
+ });
+ it('refuses a version whose published files changed, which its scripts already read; the version pin alone is no change',()=>{
+  const files=(revision:number,version:number)=>({files:{'data.json':`/a/X/assets?dependency=d&revision=${revision}&version=${version}`}});
+  load(served(1,V1,files(1,1)));
+  expect(morphHtmlVersion(document,served(1,V1,files(1,1)),served(2,V1.replace('First draft.','Edited.'),files(1,2)),SCRIPTS).revision).toBe('2');
+  expect(()=>morphHtmlVersion(document,served(2,V1.replace('First draft.','Edited.'),files(1,2)),served(3,V1,files(2,3)),SCRIPTS)).toThrow(VersionRefused);
+  expect(()=>morphHtmlVersion(document,served(2,V1,files(1,2)),served(3,V1),SCRIPTS)).toThrow(VersionRefused);
  });
  it('refuses edits that are not inert: interactive elements, and elements the scripts name',()=>{
   load(served(1,V1));

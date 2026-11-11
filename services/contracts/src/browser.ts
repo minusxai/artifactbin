@@ -9,8 +9,8 @@ import type { BrowserSessions } from './browser-sessions';
  * context and pages across calls (services/browser/src/sessions.ts owns leases, receipts and serialisation).
  *
  * There is no PDF: the product exports png and jpg, element-scoped by a
- * selector, with full, card, positioned-card, preview, and slide capture
- * modes. `card` is a measure→resize→measure→clip dance inside one page load
+ * selector, with full, card, positioned-card, preview, slide and element
+ * capture modes. `card` is a measure→resize→measure→clip dance inside one page load
  * and is therefore a named mode, not a client recipe.
  */
 type RenderFormat = 'png' | 'jpg';
@@ -25,7 +25,24 @@ interface RenderCardCrop {
 /** Slide capture selects laid-out author-owned data-af-slide elements outside deck chrome, in document order, and draws
  * the chosen one alone (revealed, the others hidden), so a stacked deck's inactive slides export too.
  * Generated data-af-deck-chrome is excluded only during capture; authored content and live navigation remain unchanged. */
-type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
+/**
+ * Element capture: the first element under the surface (or under slide `slide`, revealed as a slide capture reveals
+ * it) that `element`, a CSS selector, matches in the page's own document, drawn alone at ELEMENT_CAPTURE.density with
+ * whatever the page paints behind it. The selector is untrusted: the service matches it with the document's
+ * `querySelector`, never as a Playwright selector, so nothing but the page's CSS reads it.
+ */
+interface RenderElementCapture { element: string; slide?: number }
+type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop } | RenderElementCapture;
+
+/**
+ * Element capture's bounds. A selector is at most `selectorChars` long. A match is drawn at `density` device pixels per
+ * CSS pixel while both sides are at most `maxCssPx / density`, at 1x up to `maxCssPx`, and refused past it.
+ */
+export const ELEMENT_CAPTURE = { selectorChars: 200, density: 2, maxCssPx: 8192 } as const;
+/** Why an element capture drew nothing: no match, a match with no size or not visible, not CSS, or too large. */
+export type NoElement =
+  | { ok: false; reason: 'no_element'; why: 'none' | 'hidden' | 'invalid' }
+  | { ok: false; reason: 'no_element'; why: 'too_large'; width: number; height: number };
 
 /** One page load, as every operation that loads a page asks for it: where, how big, and what may load. */
 export interface PageRequest {
@@ -82,16 +99,21 @@ export type SvgHarvestResult =
 /** Bounds a harvest answer: drawings per load, bytes per drawing, and bytes in all. */
 export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, loads: 3 } as const;
 
+/**
+ * `element: true` says an element capture was drawn as one: a service that predates element capture answers the whole
+ * surface without it, and the caller must not take that for the element (a mixed-version rollout).
+ */
 export type RenderResult =
-  | { ok: true; mime: 'image/png' | 'image/jpeg'; bytes: Uint8Array }
+  | { ok: true; mime: 'image/png' | 'image/jpeg'; bytes: Uint8Array; element?: true }
   | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }
-  | { ok: false; reason: 'no_slide'; slides: number };
+  | { ok: false; reason: 'no_slide'; slides: number }
+  | NoElement;
 
 /** A narrowly scoped signed PUT URL; never exposed to the rendered page. */
 export interface RenderUploadRequest { render:RenderRequest; upload:{url:string;contentType:'image/png'|'image/jpeg'} }
 export type RenderUploadResult =
  | {ok:false;reason:'upload_unavailable'}
- | {ok:true;mime:'image/png'|'image/jpeg';bytes:number;width:number;height:number}
+ | {ok:true;mime:'image/png'|'image/jpeg';bytes:number;width:number;height:number;element?:true}
  | Exclude<RenderResult,{ok:true}>;
 
 export interface BrowserService {
@@ -104,4 +126,6 @@ export interface BrowserService {
   close?(): Promise<void>;
 }
 
+/** Over HTTP, the image answer's header carrying RenderResult `element`. */
+export const ELEMENT_CAPTURE_HEADER = 'x-artifactbin-element-capture';
 export const BROWSER_ROUTES = { render: '/render', renderUpload:'/render-upload', harvest: '/harvest', sessions: '/sessions' } as const;

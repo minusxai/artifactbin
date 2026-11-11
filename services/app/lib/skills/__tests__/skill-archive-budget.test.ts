@@ -26,11 +26,16 @@ import {archiveFor} from '@/lib/skills';
 // comment its own name ("Claude Code Red") and keep two agents sharing one sign-in from hiding each other's comments.
 // 1.76 MiB: the SQL model (scripts/sql.mjs, schema and statements through the page SQL door, ~6 KB) replaces
 // graphql.mjs as the way agents read a page's tables; graphql.mjs stays for older pages, so the archive grows by it.
+// 1.77 MiB: main sat 16 bytes under 1.76; a page's linked files now publish with it (<a href>, and the refusals that say
+// what to write for an unlinked or unsupported file) beside the reply-before-watch guidance for several pages (~1 KB).
+// 1.78 MiB: main sat 217 bytes under 1.77 once the tracker's limit held for moves (its save function and checks);
+// exporting one chart or section of a page (export.mjs --element, its limits and refusals) needs about 1 KB more.
 // 1.78 MiB: main sat about 4 KB under 1.76. Governed data (scripts/minusx.mjs and references/governed-data.md, ~9.5 KB)
 // lets an agent on a combined installation discover a group's MinusX connections and bind a page to one; the events
 // watch (scripts/events.mjs and its loop toolbox-events.mjs, ~9 KB net of the comment watch it replaces) is one watch
 // over GET /api/events for every page and a group's job runs, and comment.mjs watch is now its comments alias.
-const SKILL_ARCHIVE_MAX_BYTES=1.78*1024*1024;
+// 1.79 MiB: main's 1.78 and this branch's 1.78 each held their own additions; merged they store 1,873,284 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.79*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

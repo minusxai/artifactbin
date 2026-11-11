@@ -85,6 +85,58 @@ it('accepts a multi-megabyte asset inside the unchanged file limit without recur
  expect(plan.dependencies[0]?.bytes.byteLength).toBe(3_900_000);
 });
 it('keeps rejecting invalid base64 characters, padding and noncanonical encodings',()=>{
- for(const base64 of ['???','A===','AAAA=','AA=A','AA','AA==\n','AB==','AAB='])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).toThrow();
- for(const base64 of ['', 'AA==','AAA=','AAAA'])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).not.toThrow();
+ for(const base64 of ['???','A===','AAAA=','AA=A','AA','AA==\n','AB==','AAB='])expect(()=>planPublicationBundle('<a href="asset.bin">a</a>',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).toThrow(/base64|byte limit/);
+ for(const base64 of ['', 'AA==','AAA=','AAAA'])expect(()=>planPublicationBundle('<a href="asset.bin">a</a>',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).not.toThrow();
+});
+describe('files a page links (<a href>, <area href>)',()=>{
+ const pdf=file('docs/rota.pdf','%PDF-1.4','application/pdf');
+ it('publishes a linked file with the page and points the link at its address',()=>{
+  const html='<a href="./docs/rota.pdf#page=2">Rota</a><map><area href="docs/rota.pdf" alt="Rota"></map>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[pdf]});
+  expect(plan.dependencies.map(d=>[d.path,d.kind])).toEqual([['docs/rota.pdf','asset']]);
+  const rewritten=plan.rewrite(html,'index.html',new Map([['docs/rota.pdf','/a/PAGE12/assets?dependency=ROTA12&revision=1']]));
+  expect(rewritten).toBe('<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1#page=2">Rota</a><map><area href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1" alt="Rota"></map>');
+ });
+ it('leaves navigation that names no project file as written',()=>{
+  const html='<a href="#top">a</a><a href="?tab=2">b</a><a href="">c</a><a href="mailto:x@example.com">d</a><a href="/a/OTHER1">e</a><a href="https://example.com/x.pdf">f</a><a href="//cdn.example/x.pdf">g</a><a>h</a>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[]});
+  expect(plan.dependencies).toEqual([]);expect(plan.rewrite(html,'index.html',new Map())).toBe(html);
+ });
+ it('refuses a project link to a missing file, and keeps it as written in a save that carries no project',()=>{
+  expect(()=>planPublicationBundle('<a href="./missing.pdf">x</a>',{entryPath:'index.html',files:[]})).toThrow('missing.pdf');
+  const bare=planPublicationBundle('<a href="./missing.pdf">x</a>',{entryPath:'index.html',files:[]},{linksAsWritten:true});
+  expect(bare.dependencies).toEqual([]);expect(bare.rewrite(bare.html,'index.html',new Map())).toBe('<a href="./missing.pdf">x</a>');
+  // Element sources stay strict in every save.
+  expect(()=>planPublicationBundle('<img src="./missing.svg">',{entryPath:'index.html',files:[]},{linksAsWritten:true})).toThrow('missing.svg');
+ });
+ it('refuses a file nothing in the page links or fetches, and says what to write',()=>{
+  expect(()=>planPublicationBundle('<h1>x</h1>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]})).toThrow(/data\.json[\s\S]*fetch\('\.\/data\.json'\)/);
+  const plan=planPublicationBundle('<link rel="preload" as="fetch" href="./data.json" crossorigin>',{entryPath:'index.html',files:[file('data.json','{}','application/json')]});
+  expect(plan.dependencies.map(d=>d.path)).toEqual(['data.json']);
+ });
+ it('publishes a file a script fetches by a literal path, resolved against the page, and leaves the script as written',()=>{
+  const html='<script>fetch("./a.json")</script><script type="module">await fetch(`b.json`, {cache:"no-store"});import "./js/app.js";</script><script type="application/json">{"x":"fetch(\'./c.json\')"}</script>';
+  const files=[file('a.json','{}','application/json'),file('b.json','{}','application/json'),file('c.json','{}','application/json'),file('js/app.js','export const geo=await fetch(\'./geo/states.geojson\');','text/javascript'),file('geo/states.geojson','{}','application/geo+json')];
+  // A JSON block is data, not a script: its text fetches nothing.
+  expect(()=>planPublicationBundle(html,{entryPath:'index.html',files})).toThrow(/Not linked from the page: c\.json/);
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:files.filter(f=>f.path!=='c.json')});
+  expect(plan.dependencies.map(d=>d.path).sort()).toEqual(['a.json','b.json','geo/states.geojson','js/app.js']);
+  // A module's fetch reads against the document, as the browser resolves it: geo/ beside the page, not js/geo/.
+  expect(plan.dependencies.find(d=>d.path==='js/app.js')!.dependencies).toEqual([]);
+  const addresses=new Map(plan.dependencies.map(d=>[d.path,'/a/P/assets?dependency='+d.path]));
+  expect(plan.rewrite(html,'index.html',addresses)).toBe(html.replace('./js/app.js','/a/P/assets?dependency=js/app.js'));
+  expect(plan.rewrite('export const geo=await fetch(\'./geo/states.geojson\');','js/app.js',addresses)).toBe('export const geo=await fetch(\'./geo/states.geojson\');');
+ });
+ it('ignores a literal fetch of a path the project does not hold, or one that is not a file of it',()=>{
+  const html='<script type="module">// await fetch("./old.json")\nawait fetch("/api/x");await fetch("https://example.com/y.json");await fetch("../outside.json");await fetch(`./${name}.json`);</script>';
+  expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
+  // A file published before and reused by mapping is reached the same way.
+  expect(()=>planPublicationBundle('<script>fetch("./kept.json")</script>',{entryPath:'index.html',files:[],mappings:{'kept.json':{kind:'asset',id:'KEPT12',revision:'1'}}})).not.toThrow();
+ });
+ it('pins a link to the page version and reads it back as the path the author wrote',async()=>{
+  const {pinPublicationAssetUrls,authoringHtml}=await import('../plan');
+  const saved='<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1#page=2">Rota</a>';
+  expect(pinPublicationAssetUrls(saved,'PAGE12',3)).toBe('<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1&amp;version=3#page=2">Rota</a>');
+  expect(authoringHtml(saved,{server:'https://app.example',pageId:'PAGE12',entryPath:'index.html',receipts:[{path:'docs/rota.pdf',kind:'asset',id:'ROTA12',revision:'1'}]})).toBe('<a href="./docs/rota.pdf#page=2">Rota</a>');
+ });
 });

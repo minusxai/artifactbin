@@ -3,18 +3,19 @@
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {publicationLocalReferences,previewBackendLinks} from './preview-html.mjs';
+import {publicationLocalReferences,publicationScriptFetches,previewBackendLinks} from
+  './preview-html.mjs';
 import {serverOrigin} from './toolbox-client.mjs';
 const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg',
   '.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.csv':'text/csv','.json':
   'application/json','.js':'text/javascript','.mjs':'text/javascript','.woff2':'font/woff2'};
-/** @typedef {{root:string,entry:string,server:string,entryHtml?:string,manifest?:string[],
+/** @typedef {{root:string,entry:string,server:string,entryHtml?:string,
   mappings?:import('../../../lib/html-publication-bundle/contracts').PublicationBundle['mappings'],
   retainedBackends?:{name:string,href:string}[]}} BundlePreparationOptions */
 /** entryHtml replaces only selected entry bytes after filesystem admission, before snapshot
  * limits/discovery.
  * @param {BundlePreparationOptions} options */
-export async function prepareBundle({root,entry,server,entryHtml,manifest=[],mappings={},
+export async function prepareBundle({root,entry,server,entryHtml,mappings={},
   retainedBackends=[]}){
 const origin=serverOrigin(server);
 if(entryHtml!==undefined&&typeof entryHtml!=='string')throw Error(
@@ -54,9 +55,17 @@ if(name===entry)for(const link of previewBackendLinks(source)){if(retainedBacken
 for(const url of urls){if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=
      path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(
      /[?#]/)[0])));await load(dep);}
+   // A script's literal fetch names a file beside the page, from whichever file holds it; one
+   // the project lacks (or that leaves it) is the script's own address, never a refusal.
+for(const url of publicationScriptFetches(source,contentType)){if(!url||
+    /^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;let dep;try{dep=path.posix.normalize(
+    path.posix.join(path.posix.dirname(entry),decodeURIComponent(url.split(/[?#]/)[0])));}catch{
+    continue;}
+if(dep==='..'||dep.startsWith('../')||dep===entry||!(await lstat(path.join(project,dep)).catch(
+    ()=>null))?.isFile())continue;await load(dep);}
   }
  }
- entry=path.posix.normalize(entry);await load(entry);for(const name of manifest)await load(name);
+ entry=path.posix.normalize(entry);await load(entry);
  const html=Buffer.from(files.get(entry).base64,'base64').toString('utf8');files.delete(entry);
 return {server:origin,method:'POST',idempotencyKey:randomUUID(),body:{html,visibility:
    'unlisted',publicationBundle:{entryPath:entry,files:[...files.values()],mappings}}};

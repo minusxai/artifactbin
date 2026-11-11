@@ -42,7 +42,11 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
         return image;
       });
     } catch (error) {
-      await db.query(`UPDATE export_image_cache SET claim_token=NULL,lease_until=NULL,
+      // A producer error with `backoff: false` is a definite answer (a missing slide or element), no fault: the claim is
+      // released without a retry window, so the page corrected under the same key renders at once.
+      if((error as {backoff?:unknown}|null)?.backoff===false)
+        await db.query('UPDATE export_image_cache SET claim_token=NULL,lease_until=NULL WHERE cache_key=$1 AND claim_token=$2',[request.cacheKey,token]);
+      else await db.query(`UPDATE export_image_cache SET claim_token=NULL,lease_until=NULL,
         retry_after=clock_timestamp()+$3::int*interval '1 millisecond' WHERE cache_key=$1 AND claim_token=$2`,[request.cacheKey,token,retryMs]);
       throw error;
     }

@@ -7,8 +7,9 @@ import {afterEach,describe,expect,it} from 'vitest';
 import type {RenderRequest} from '@artifactbin/contracts';
 import {CARD_HEIGHT,CARD_WIDTH} from '@artifactbin/contracts';
 import {useAppHarness} from '@/__tests__/harness';
-import {setServices} from '@/lib/platform';
-import {EXPORT_RENDER_GENERATION,exportCacheKey,exportImageResponse,exportKeyReader,mintExportKey,parseExportCapture,parseExportFormat,parseExportSlide,renderArtifactImage,resetExportRenderer,verifyExportKey} from '..';
+import {getDb,setServices} from '@/lib/platform';
+import {ELEMENT_CAPTURE} from '@artifactbin/contracts';
+import {EXPORT_RENDER_GENERATION,exportCacheKey,exportImageResponse,exportKeyReader,mintExportKey,parseExportCapture,parseExportElement,parseExportFormat,parseExportSlide,renderArtifactImage,resetExportRenderer,verifyExportKey} from '..';
 
 useAppHarness();
 const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64');
@@ -31,6 +32,11 @@ describe('query parsers',()=>{
   expect([parseExportSlide(null),parseExportSlide('1'),parseExportSlide('12')]).toEqual([0,1,12]);
   for(const value of ['','0','01','-1','1.5',' 2','2 ','１'])expect(parseExportSlide(value)).toBeNull();
  });
+ it('reads an element selector as one plain CSS spelling, bounded, and refuses anything that could carry more',()=>{
+  expect(parseExportElement(null)).toBe('');
+  for(const value of ['#orders-chart','.tile:nth-child(2) > svg','[data-chart="orders"]',"section[aria-label='Orders by channel'] figure",'main .grid > .tile:first-of-type','a'.repeat(ELEMENT_CAPTURE.selectorChars)])expect(parseExportElement(value)).toBe(value);
+  for(const value of ['',' #a','#a ','a'.repeat(ELEMENT_CAPTURE.selectorChars+1),'#a\\31','<script>','#a{color:red}','#a;b','@import','`x`','#a\n','#ü','xpath=//div','//div','#a/b'])expect(parseExportElement(value),JSON.stringify(value)).toBeNull();
+ });
 });
 
 describe('the cache key',()=>{
@@ -50,6 +56,16 @@ describe('the cache key',()=>{
   expect(exportCacheKey(artifact,'png','full',0,'region=Köln')).not.toBe(picked);
   expect(exportCacheKey(artifact,'png','full',0,'',2)).toBe(`abc123:full-g${EXPORT_RENDER_GENERATION}-v2:png`);
   expect(exportCacheKey(artifact,'png','full',0,'',null)).toBe(head);
+ });
+ it('splits on an element by its hash, never its text, and leaves every key without one unchanged',()=>{
+  const artifact={id:'abc123',version:4};
+  const chart=exportCacheKey(artifact,'png','full',0,'',null,null,'#orders-chart');
+  expect(chart).toMatch(new RegExp(`^abc123:full-g${EXPORT_RENDER_GENERATION}-el[0-9a-f]{12}:png$`));
+  expect(chart).not.toContain('orders');
+  expect(exportCacheKey(artifact,'png','full',0,'',null,null,'#orders-table')).not.toBe(chart);
+  expect(exportCacheKey(artifact,'png','full',2,'',null,null,'#orders-chart')).toMatch(new RegExp(`^abc123:slide-2-g${EXPORT_RENDER_GENERATION}-el[0-9a-f]{12}:png$`));
+  expect(exportCacheKey(artifact,'png','full',0,'',null,null,'')).toBe(exportCacheKey(artifact,'png','full'));
+  expect(exportCacheKey(artifact,'png','full',3,'',null,null,'')).toBe(`abc123:slide-3-g${EXPORT_RENDER_GENERATION}:png`);
  });
 });
 
@@ -90,6 +106,71 @@ describe('the export answer',()=>{
    expect((await response.json() as {error:string}).error).toBe(error);
   }
   expect(requests).toEqual([]);
+ });
+
+ it('refuses a bad element, or an element with the card or preview framing, before any render',async()=>{
+  const requests=browser(()=>({ok:true,mime:'image/png',bytes:PNG,element:true}));
+  for(const query of [{element:'<img onerror=x>'},{element:''},{element:'#a',mode:'card'},{element:'#a',mode:'preview'}]){
+   const response=await exportImageResponse(page(),query,BASE);
+   expect(response.status,JSON.stringify(query)).toBe(400);
+   expect((await response.json() as {error:string}).error).toBe('unknown_element');
+  }
+  expect(requests).toEqual([]);
+ });
+
+ it('photographs one element of the page, in it or in one slide, read the same way as the whole page',async()=>{
+  const requests=browser(()=>({ok:true,mime:'image/png',bytes:PNG,element:true}));
+  const artifact=page();
+  for(let i=0;i<2;i++)expect((await exportImageResponse(artifact,{element:'#orders-chart'},BASE)).status).toBe(200);
+  expect((await exportImageResponse(artifact,{element:'#orders-chart',slide:'2'},BASE)).status).toBe(200);
+  expect((await exportImageResponse(artifact,{},BASE)).status).toBe(200);
+  // One render each: the repeat is the stored image, and the whole page never answers for the element.
+  expect(requests).toHaveLength(3);
+  // The selector rides in the capture, never as the surface the browser waits on, and the page is the same keyed page.
+  expect(requests[0]).toMatchObject({selector:'body',capture:{element:'#orders-chart'},sameOriginOnly:true});
+  expect(requests[1]!.capture).toEqual({element:'#orders-chart',slide:2});
+  expect(requests[2]!.capture).toBe('full');
+  const url=new URL(requests[0]!.url);
+  expect([url.pathname,url.searchParams.get('chrome')]).toEqual([`/a/${artifact.id}/raw`,'0']);
+  expect(verifyExportKey(artifact.id,url.searchParams.get('key')!)).toBe(true);
+  expect(url.search).not.toContain('orders');
+ });
+
+ it('names the selector when nothing matches, a match has no size, or it is too large, and stores none of them',async()=>{
+  const cases:Array<[Verdict,number,Record<string,unknown>]>=[
+   [{ok:false,reason:'no_element',why:'none'},404,{error:'element_not_found',element:'#nope',found:'none'}],
+   [{ok:false,reason:'no_element',why:'hidden'},404,{error:'element_not_found',element:'#nope',found:'hidden'}],
+   [{ok:false,reason:'no_element',why:'invalid'},400,{error:'unknown_element',element:'#nope'}],
+   [{ok:false,reason:'no_element',why:'too_large',width:1200,height:9000},422,{error:'element_too_large',element:'#nope',width:1200,height:9000,max:ELEMENT_CAPTURE.maxCssPx}],
+  ];
+  for(const [verdict,status,body] of cases){
+   await resetExportRenderer();
+   const requests=browser(()=>verdict);
+   const artifact=page();
+   const response=await exportImageResponse(artifact,{element:'#nope'},BASE);
+   expect(response.status,JSON.stringify(verdict)).toBe(status);
+   const told=await response.json() as Record<string,unknown>;
+   expect(told).toMatchObject(body);
+   expect(String(told.hint)).toContain('#nope');
+   // A refusal is never retried as a failure, and never stands in for a later answer.
+   expect(requests).toHaveLength(1);
+   await resetExportRenderer();
+   browser(()=>({ok:true,mime:'image/png',bytes:PNG,element:true}));
+   expect((await exportImageResponse(artifact,{element:'#nope'},BASE)).status).toBe(200);
+  }
+ });
+
+ it('refuses an element image from a browser that predates element capture, instead of storing the whole page',async()=>{
+  const requests=browser(()=>({ok:true,mime:'image/png',bytes:PNG}));
+  const artifact=page();
+  const response=await exportImageResponse(artifact,{element:'#orders-chart'},BASE);
+  expect([response.status,(await response.json() as {error:string}).error]).toEqual([503,'render_unavailable']);
+  // Nothing was stored for the element: once the browser is current (past the unavailable verdict's retry window), it renders.
+  await resetExportRenderer();
+  await (await getDb()).query('UPDATE export_image_cache SET retry_after=NULL');
+  browser(()=>({ok:true,mime:'image/png',bytes:PNG,element:true}));
+  expect((await exportImageResponse(artifact,{element:'#orders-chart'},BASE)).status).toBe(200);
+  expect(requests.length).toBeGreaterThan(0);
  });
 
  it('photographs the page by a scoped short-lived key, then serves the stored image without rendering again',async()=>{

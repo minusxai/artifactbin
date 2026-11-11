@@ -62,10 +62,14 @@ function leftovers(keep: Set<string>, out: Files): string[] {
     for (const name of NAMES) if (!keep.has(name) && new RegExp(`@(?:feature|only) ${name}\\b`).test(text))
       problems.push(`${file}: ${name} code is left`);
   }
-  // tracker.ts is always there (me says who reads); only limits adds add, and only limits calls it.
+  // tracker.ts is always there (me says who reads); only limits adds add and save, and only limits calls them.
   if (!/rel="af-resolver" data-af-name="tracker"/.test(out['index.html']!) || !('tracker.ts' in out)) problems.push('tracker.ts is not linked');
   if (keep.has('limits') !== /\badd\(input/.test(out['tracker.ts'] ?? '')) problems.push('tracker.ts add and limits disagree');
   if (keep.has('limits') !== /call\('add'/.test(out['index.html']!)) problems.push('the page\'s add and limits disagree');
+  // With limits every edit is tracker.ts's save (a move needs room); without, the page updates entries itself.
+  if (keep.has('limits') !== /\bsave\(input/.test(out['tracker.ts'] ?? '')) problems.push('tracker.ts save and limits disagree');
+  if (keep.has('limits') !== /call\('save'/.test(out['index.html']!)) problems.push('the page\'s save and limits disagree');
+  if (keep.has('limits') === /update entries set/.test(out['index.html']!)) problems.push('the page updates entries past tracker.ts');
   return problems;
 }
 async function generateAll(from = EXAMPLES) {
@@ -137,7 +141,7 @@ it('writes one --limit into the page and the resolver, the preset\'s texts, and 
   expect(tasks['tracker.ts']).toMatch(/^const LIMIT=12;/m);
   const list = await trackerFiles(trackerFeatures({preset: 'list'}), {preset: 'list'});
   expect(Object.keys(list).sort()).toEqual(['cleanup.mjs', 'guest.mjs', 'index.html', 'steps.mjs', 'tracker.ts']);
-  expect(list['tracker.ts']!.slice(list['tracker.ts']!.indexOf('*/'))).not.toMatch(/LIMIT|add|roles/);
+  expect(list['tracker.ts']!.slice(list['tracker.ts']!.indexOf('*/'))).not.toMatch(/LIMIT|add|save|roles/);
   for (const [from, to] of Object.entries(PRESETS.list.texts)) {
     expect(list['index.html'], from).not.toContain(`'${from}'`);
     expect(list['index.html'], to).toContain(`'${to}'`);

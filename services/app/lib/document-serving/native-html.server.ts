@@ -4,6 +4,7 @@ import {type HtmlAssemblyInput, type HtmlRuntimeConfig, assembleHtmlPage, downlo
 import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, buildHtmlAssets} from '@/lib/html-runtime/server';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import {nativeHtmlStructuralWrapper} from './native-html-structural-wrapper';
+import {publishedFileTable,type PublicationRecord} from '@/lib/html-publication-bundle';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +22,7 @@ import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem
 import {libraryImports} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
-/** Inputs from one permission-checked immutable version. No credentials belong here. */
+/** Inputs from one permission-checked immutable version. No credential belongs here but `captureKey`, for that one response. */
 export interface NativeHtmlRender {
   row: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta'>;
   appOrigin?: string;
@@ -40,6 +41,15 @@ export interface NativeHtmlRender {
   unsavedIds?: ReadonlySet<string>;
   /** Offline only: the rows the downloading reader's `sql` reads (lib/dataset-access offlinePageSqlData), with the engine that answers them. */
   offlineData?: HtmlAssemblyInput['offlineData'];
+  /** Offline only: where the copy reads each file its page published (its bytes, or the platform's door); served pages derive it. */
+  files?: Readonly<Record<string, string>>;
+  /**
+   * The exporter's capture only (./raw.server): the verified key on its own address. The capture holds no session, so
+   * each request its page makes to its own asset door (a file it links, a module, a stylesheet and what that names, a
+   * file a script fetches through `files`) carries the key. Only in that response's bytes: never an offline copy, the
+   * stored source or a shared render.
+   */
+  captureKey?: string;
 }
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
 
@@ -55,23 +65,29 @@ function htmlCore(): Promise<string> {
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
   const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),...(input.live!==undefined?{live:input.live}:{}),backends:links.map(link=>link.name),...(links.some(link=>link.kind==='dataset')?{datasets:links.flatMap(link=>link.kind==='dataset'?[link.name]:[])}:{}),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.domainReads&&!input.offline?{domainReads:true as const}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
+  // A page script's fetch of a file its publication recorded reads it at the page's asset door, on every surface
+  // (html-runtime fn-fetch); the address is relative, so it resolves on whichever origin serves the page.
+  const captureKey=input.offline?null:input.captureKey??null;
+  const files=input.offline?input.files:publishedFileTable(input.row.meta as PublicationRecord,input.row.id,input.row.version,captureKey?receipt=>`/a/${input.row.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}&version=${input.row.version}&key=${encodeURIComponent(captureKey)}`:undefined);
+  if(files&&Object.keys(files).length)config.files=files;
   const source=input.row.source??'';
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
-  const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row);
+  const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row,captureKey);
   const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeHtmlStructuralWrapper(nativeCodeHtml(rendered)),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state,...(input.offlineData?.tables.length?{offlineData:input.offlineData,offlineSql:(await htmlAssets()).offlineSql}:{})}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
-export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean}={}):string {
+export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean;captureSql?:boolean}={}):string {
   if (!pages){
     // The opaque raw reader may load only this page's admission-checked linked
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
     // On a anonymous owner host, and in the exporter's capture, the page reads its data from its own page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
     // Its page functions too (html-runtime/fn-fetch): the page's own function path, a prefix source.
-    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}`:'';
+    // The exporter's capture alone also reads its `sql` from the page SQL door (lib/page-doors `opaqueSqlRead`).
+    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href} ${new URL(`/api/artifacts/${encodeURIComponent(id)}/fn/`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
     return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");

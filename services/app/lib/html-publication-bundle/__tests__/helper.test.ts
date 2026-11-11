@@ -54,6 +54,23 @@ it('snapshots inline, static and lazy module graphs with shared chunks once',asy
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+it('snapshots a file a script fetches by a literal path, from the page or a module it loads, and skips one the project lacks',async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
+ const root=await mkdtemp(join(tmpdir(),'bundle-fetches-'));
+ try{
+  await mkdir(join(root,'js'));
+  await writeFile(join(root,'index.html'),'<script type="module">const data=await (await fetch(\'./data.json\')).json();</script><script type="module" src="./js/dash.mjs"></script>');
+  // fetch() reads against the document, so a module in js/ that fetches ./states.geojson means the file beside the page.
+  await writeFile(join(root,'js/dash.mjs'),'// await fetch("./old.json")\nexport const geo=await (await fetch("./states.geojson")).json();');
+  await writeFile(join(root,'data.json'),'{"total":42}');await writeFile(join(root,'states.geojson'),'{"type":"FeatureCollection","features":[]}');
+  const bundle=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
+  expect(bundle.body.publicationBundle.files.map((file:{path:string})=>file.path).sort()).toEqual(['data.json','js/dash.mjs','states.geojson']);
+  const {planPublicationBundle}=await import('../plan');
+  expect(planPublicationBundle(bundle.body.html,bundle.body.publicationBundle).dependencies.map(dep=>dep.path).sort()).toEqual(['data.json','js/dash.mjs','states.geojson']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 it('preserves URL query identity in inline modules and styles while escaping HTML attributes',async()=>{
  const {planPublicationBundle,pinPublicationAssetUrls}=await import('../plan');
  const html='<script type="module">import "./x.js";</script><style>.a{background:url(./x.png)}</style><img src="./x.png">';
@@ -103,5 +120,17 @@ it('snapshots an admitted in-memory entry override before discovery without chan
   for(const entry of ['missing.html','../escape.html'])await expect(prepareBundle({root,entry,entryHtml:html,server:'https://example.test'})).rejects.toThrow();
   await symlink(join(root,'index.html'),join(root,'link.html'));await expect(prepareBundle({root,entry:'link.html',entryHtml:html,server:'https://example.test'})).rejects.toThrow(/Symlink/);
   await expect(prepareBundle({root,entry:'index.html',entryHtml:'x'.repeat(4_000_001),server:'https://example.test'})).rejects.toThrow(/limit/);expect(await readFile(join(root,'index.html'),'utf8')).toBe(original);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('snapshots the files a page links, and none for navigation within or beyond the page',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
+ const root=await mkdtemp(join(tmpdir(),'bundle-links-'));
+ try{
+  await writeFile(join(root,'index.html'),'<a href="./rota.pdf#page=2">Rota</a><map><area href="plan.png" alt="Plan"></map><a href="#top">Top</a><a href="?tab=2">Tab</a><a href="">Here</a><a href="mailto:x@example.com">Mail</a><a href="/a/OTHER1">Other</a>');
+  await writeFile(join(root,'rota.pdf'),'%PDF-1.4');await writeFile(join(root,'plan.png'),'png');
+  const bundle=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
+  expect(bundle.body.publicationBundle.files.map((entry:{path:string})=>entry.path)).toEqual(['rota.pdf','plan.png']);
  }finally{await rm(root,{recursive:true,force:true});}
 });

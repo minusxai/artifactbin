@@ -13,7 +13,7 @@ Tracker features: own-rows (signed-in people add entries and change or remove on
   --datasets changes every entry; a page share alone lets members change only theirs); collab
   (an entry's description is typed in together); table (a sortable table view); limits (needs
   own-rows: at most --limit entries per group, enforced on the server by tracker.ts in one
-  statement).
+  statement for an add or a move).
 Usage: node scripts/new-app.mjs --title NAME [--kind tracker|list|api] [--preset tasks|list]
   [--without FEATURE,…] [--limit N] [--url URL] [--dir DIR]
 Flags: --title NAME the app's name, for <title> (a bare title argument works too);

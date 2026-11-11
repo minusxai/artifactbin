@@ -47,6 +47,24 @@ it('bounds HTML size, resource count, per-resource and aggregate bytes before pa
  const cases=[{html:'x'.repeat(l.htmlBytes+1),resources:[]},{html:'',resources:Array.from({length:l.resources+1},()=>file('./x','text/plain',''))},{html:'',resources:[{url:'./x',contentType:'image/png',bytes:new Uint8Array(l.resourceBytes+1)}]},{html:'',resources:[{url:'./x',contentType:'image/png',bytes:new Uint8Array(l.totalBytes)},{url:'./y',contentType:'image/png',bytes:new Uint8Array(1)}]}];for(const input of cases)await expect(packOfflineDependencies({...input,baseUrl})).rejects.toThrow(/limit/);
 });
 
+// A link to a file published with the page: in an embedding copy its bytes ride along as a download named for the
+// file, whatever its type; otherwise it names the file's own address on the platform. Every other link stays as written.
+it('carries a link to an admitted file as its bytes or as its platform address, and leaves every other link',async()=>{
+ const admitted='/a/PAGE12/assets?dependency=ROTA01&revision=2';
+ const resources=[{...file(admitted,'text/csv','name,shift\nada,early\n'),name:'rota.csv'},file('./site.css','text/css','p{}')];
+ const others='<a id="mail" href="mailto:ada@example.test">Mail</a><a id="keyed" href="https://other.test/?key=1">Keyed</a><a id="page" href="/a/OTHER1">Page</a><a id="denied" href="/a/PAGE12/assets?dependency=ROTA01&amp;revision=3">Old</a><a id="hash" href="#top">Top</a><a id="code" href="./site.css">Styles</a>';
+ const html=`<p><a id="rota" target="_blank" href="${admitted.replace('&','&amp;')}&amp;version=4#row=2">Rota</a><a id="named" download="mine.csv" href="${admitted.replace('&','&amp;')}">Mine</a><map><area id="area" href="${admitted.replace('&','&amp;')}"></map>${others}</p>`;
+ const {JSDOM}=await import('jsdom'),links=(packed:string)=>{const doc=new JSDOM(packed).window.document;return Object.fromEntries([...doc.querySelectorAll('[id]')].map(node=>[node.id,{href:node.getAttribute('href'),download:node.getAttribute('download')}]));};
+ const embedded=await packOfflineDependencies({html,baseUrl,resources,links:{embed:true,origin:'https://app.example.test'}});
+ const carried=links(embedded.html),bytes=`data:text/csv;base64,${Buffer.from('name,shift\nada,early\n').toString('base64')}`;
+ expect(carried.rota).toEqual({href:bytes,download:'rota.csv'});expect(carried.named).toEqual({href:bytes,download:'mine.csv'});expect(carried.area).toEqual({href:bytes,download:'rota.csv'});
+ expect(embedded.embeddedUrls).toHaveLength(1);
+ const addressed=links((await packOfflineDependencies({html,baseUrl,resources,links:{embed:false,origin:'https://app.example.test'}})).html);
+ expect(addressed.rota).toEqual({href:'https://app.example.test'+admitted+'&version=4#row=2',download:null});expect(addressed.area.href).toBe('https://app.example.test'+admitted);
+ const written=links(html);
+ for(const copy of [carried,addressed,links((await packOfflineDependencies({html,baseUrl,resources})).html)])for(const id of ['mail','keyed','page','denied','hash','code'])expect(copy[id]).toEqual(written[id]);
+ expect(links((await packOfflineDependencies({html,baseUrl,resources})).html).rota).toEqual(written.rota);
+});
 it('admits presentation query aliases only for the same immutable page asset',async()=>{
  const admitted='/a/PAGE12/assets?dependency=CHUNK1&revision=2';
  const script=(url:string)=>'<script type="module" src="'+url+'"></script>';

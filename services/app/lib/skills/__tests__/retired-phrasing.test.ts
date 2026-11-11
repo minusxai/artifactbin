@@ -156,6 +156,17 @@ const RETIRED: Retired[] = [
     reason: 'Q1: a page computes with the sql tag (sql`…`), not the _sql GraphQL field'},
   {pattern: /\bGraphQL\b|\bApollo (?:state|client|value)/i, scopes: DOCS,
     reason: 'Q1: no GraphQL teaching for new pages (graphql.mjs --help covers older pages)'},
+  // The 2026-11-11 reply order (W): agents holding every link announced the watch instead of replying, and the watch
+  // never returned.
+  {pattern: /part of every task/i, scopes: [...AGENT_TEXT, 'monitoring'],
+    reason: 'W1: watching follows the reply (WATCH_MODE); "part of every task" let the reply wait for the watch'},
+  // The 2026-11-11 visibility facts (V): an agent left the product over link sharing when private was allowed only on the word "private".
+  {pattern: /team can view"? needs\s+nothing more|only when the user says\s+"public" or "private"|Everyone with the link reads the notes/,
+    scopes: AGENT_TEXT, reason: 'V1: who reads a page at each visibility is stated once, in SKILL.md Sharing; private also fits data the user calls confidential'},
+  {pattern: /confidential or\s+internal|Published private:/, scopes: AGENT_TEXT,
+    reason: 'V2: a page is private on the user\'s own word, never the agent\'s view of the data (one called a sales pipeline internal and published it where the team it was for could not open it)'},
+  {pattern: /reaches (?:a|another) file only through a link|fetch its href/, scopes: [...AGENT_TEXT, 'runtime'],
+    reason: 'A script fetches a file published with its page by the path it wrote (fetch(\'./data.json\'), html-runtime fn-fetch); no link-and-href recipe'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -188,6 +199,9 @@ describe('retired skill phrasing', () => {
       'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
       'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
       'E1: the comment feed': 'GET /api/artifacts/ID/annotations/changes?after=now', 'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
+      'W1:': 'Watching is part of every task, however short the reply.',
+      'V1:': 'so "my team can view" needs\n  nothing more.',
+      'V2:': 'calls the data confidential or\n  internal',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;
@@ -212,9 +226,9 @@ describe('retired skill phrasing', () => {
   });
   it('states the reply rule once, in SKILL.md Read first', () => {
     const skill = FILES.skill[0]!.text.replace(/\s+/g, ' ');
-    expect(skill).toContain('The reply is the link plus what the user asked for, in the form they asked for; ' +
-      "a form they prescribe limits the reply's text, never the watch. " +
+    expect(skill).toContain('The reply never waits on a watch: every link the user asked for plus what they asked, in the ' +
+      'form they asked for; a form they prescribe limits its text, never the watch. ' +
       'Describe testing, build and permissions only from what `check` reported.');
-    expect(skill.match(/The reply is/g)).toHaveLength(1);
+    expect(skill.match(/The reply (?:is|never)/g)).toHaveLength(1);
   });
 });

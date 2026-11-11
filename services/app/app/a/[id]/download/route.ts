@@ -1,7 +1,7 @@
 import {designSystemChoice} from '@/lib/html-systems';
 import {withOfflineSystemStyle} from '@/lib/html-systems/server';
-import {packOfflineDependencies} from '@/lib/offline-dependencies';
-import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
+import {packOfflineDependencies,type OfflineDependencyInput} from '@/lib/offline-dependencies';
+import {loadBundleAssetResources,publishedFileTable,type PublicationRecord} from '@/lib/html-publication-bundle';
 import {referencedLibraryResources} from '@/lib/libraries/server';
 /**
  * The offline file: one self-contained `.html` a reader can open without a
@@ -54,20 +54,38 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
       if(!(error instanceof OfflineHtmlMediaError))throw error;
       return error.reason==='too_large'?json({error:'too_large'},413):error.reason==='unsupported_type'?json({error:'unsupported_image'},415):json({error:'not_found'},404);
     }
-    let resources:Awaited<ReturnType<typeof loadBundleAssetResources>>;
+    let resources:Array<OfflineDependencyInput['resources'][number]>;
     try{resources=await loadBundleAssetResources(request,actor,id);}catch{return json({error:'not_found'},404);}
+    // A script's fetch of a file the page published reads it from disk too (html-runtime fn-fetch): the copy carries the
+    // bytes this reader was just admitted to, or, past the size limit, the file's address on the platform.
+    const published=new Map(resources.map(resource=>[resource.url,resource]));
+    const files=(embed:boolean)=>publishedFileTable(row.meta as PublicationRecord,id,row.version,receipt=>{
+      const resource=published.get(`/a/${id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`);if(!resource)return null;
+      return embed?`data:${resource.contentType.split(';')[0]!.trim()||'application/octet-stream'};base64,${Buffer.from(resource.bytes).toString('base64')}`:`${platformOrigin}/a/${id}/assets?dependency=${receipt.id}&revision=${receipt.revision}&version=${row.version}`;
+    });
     try{resources.push(...await referencedLibraryResources(packed,resources,request.url));}catch{return json({error:'offline_dependency_unavailable'},422);}
     // The platform stylesheet, active system only: its rules inline, its fonts embedded by the packer.
     try{const styled=withOfflineSystemStyle(packed,request.url,designSystemChoice(artifact.meta));packed=styled.html;resources.push(...styled.resources);}catch{return json({error:'offline_dependency_unavailable'},422);}
-    if(resources.length){try{packed=(await packOfflineDependencies({html:packed,baseUrl:new URL(request.url).href,resources})).html;}catch{return json({error:'offline_dependency_unavailable'},422);}}
+    // A link to a file the page published works from disk: the copy carries the file (bytes this reader was just
+    // admitted to above), or, past the size limit, names the file on the platform, whose door checks every reader.
+    const unpacked=packed,pack=async(embed:boolean)=>resources.length?(await packOfflineDependencies({html:unpacked,baseUrl:new URL(request.url).href,resources,links:{embed,origin:platformOrigin}})).html:unpacked;
+    try{packed=await pack(true);}catch{return json({error:'offline_dependency_unavailable'},422);}
     // What this reader's `sql` could read through the page, carried so the copy computes its own tables offline.
     const links=((row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
     const offlineData=await offlinePageSqlData(actor,links,id,OFFLINE_SQL_DATA_MAX_BYTES,request.signal).catch(()=>null);
-    const render=(data:typeof offlineData)=>nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true, designSystem:designSystemChoice(artifact.meta), ...(data?{offlineData:data}:{}) });
+    let embedded=true;
+    const render=(data:typeof offlineData)=>nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true, designSystem:designSystemChoice(artifact.meta), files:files(embedded), ...(data?{offlineData:data}:{}) });
+    const tooLarge=(value:string)=>Buffer.byteLength(value)>OFFLINE_FILE_MAX_BYTES;
     let { html } = await render(offlineData);
-    // A copy too large with its data is still the copy it was without it.
-    if (offlineData && Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) ({ html } = await render(null));
-    if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
+    // A copy too large with its linked files is the copy that links them, and one still too large with its data is
+    // that copy without the data.
+    if (tooLarge(html)) {
+      try{packed=await pack(false);}catch{return json({error:'offline_dependency_unavailable'},422);}
+      embedded=false;
+      ({ html } = await render(offlineData));
+      if (offlineData && tooLarge(html)) ({ html } = await render(null));
+    }
+    if (tooLarge(html)) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {
       'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',

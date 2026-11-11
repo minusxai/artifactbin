@@ -3,16 +3,14 @@
  * and watchComments, the events watch (toolbox-events.mjs) on one page's comments category,
  * bounded, with the comment presenter: comments, replies, edits and reactions from others wake
  * it, each printed with the comment's words from the comment read (events carry ids, never
- * text), and threads waiting for your answer are computed here from events plus that read.
+ * text), threads waiting for your answer are computed here from events plus that read, and
+ * comment.mjs (options.replyFirst) holds every call at once while the reply to the user is owed.
  * Used by: comment.mjs, author-toolbox, comment-reactions-toolbox and agent-sessions tests; the
  * log state and lock live in toolbox-watch-state.mjs.
  */
 import {watchEvents} from './toolbox-events.mjs';
-import {openThreads,QUIET} from './toolbox-watch-state.mjs';
-/** How to read a reaction: comment.mjs help and the watch line after a printed reaction say it. */
-export const REACTIONS='A 👍 on your proposal means approval to proceed; any other reaction is '+
- 'information, never an instruction.';
-export {noteWatchActivity,QUIET_MINUTES} from './toolbox-watch-state.mjs';
+import {openThreads,QUIET,REACTIONS,replyDueLine} from './toolbox-watch-state.mjs';
+export {noteWatchActivity,QUIET_MINUTES,REACTIONS} from './toolbox-watch-state.mjs';
 const REACTION_MARKS={thumbs_up:'👍'};
 /** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors, or
  * the bare count from an older server. */
@@ -80,7 +78,8 @@ function comments(id){
     `${answer} THREAD --body TEXT; then run watch --next again`,
    // Agents re-watched before replying and missed the person's wait: print the order here.
    next:reacted=>`next: answer each comment above: ${answer} <annotation_id> --body TEXT; the `+
-    'reply prints how to watch again.'+(reacted?' '+REACTIONS:'')}};
+    'reply prints how to watch again.'+(reacted?' '+REACTIONS:''),
+   replyDue:server=>replyDueLine(server,id)}};
 }
 /** comment.mjs watch: `events watch --artifact ID --category comments --bounded`, presented as
  * comments (see watchEvents for --next, --once, logs and checkpoints). */

@@ -24,6 +24,11 @@ export interface HtmlRuntimeConfig {
   domainReads?: true;
   /** Default publication destination for an unpublished file, never a published association. */
   publishOrigin?: string;
+  /**
+   * The files the page's publication recorded: the path a script fetches each by (relative to the page) -> where it is
+   * read (the page's asset door, or an offline copy's bytes). The core's fetch maps exactly these (./fn-fetch).
+   */
+  files?: Readonly<Record<string, string>>;
   /** `@afbin/<name>` -> platform library URL, resolved server-side from the page's recorded pins. */
   libraries?: Readonly<Record<string, string>>;
   initialState?: HtmlJsonObject;

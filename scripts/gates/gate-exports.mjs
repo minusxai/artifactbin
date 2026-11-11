@@ -16,6 +16,7 @@ import { nativeHtml } from './lib/native-surface.mjs';
  *      SCREEN of the deck, slide 2 differs from slide 1, and a full shot runs past the fold.
  *   2. ONE FORMAT SET: PNG and JPEG bytes, the 1600×840 og card, a repeat served byte for byte from the stored
  *      render, and the capture render (`raw?chrome=0`) carrying no navigation chrome.
+ *      `?element=SELECTOR` is the same look at one chart or section: that element alone, or a refusal naming it.
  *   3. THE EDITABLE SOCIAL PREVIEW: owner chrome → sharing → cropper → pointer and keyboard → saved card pixels →
  *      reset back to the top-left default. The native HTML head directive it writes is asserted on the source in
  *      services/app/lib/document/__tests__/social-preview.test.ts; here only the card's pixels are.
@@ -86,6 +87,11 @@ async function deckLeg(browser) {
     check(s1.height > 200, `a slide is a real screen, not a sliver (${s1.height}px)`);
     check(two.status === 200 && !one.body.equals(two.body), 'slide 2 is a different picture from slide 1');
   }
+  // ONE ELEMENT of the page, alone and at 2x: the second slide's heading, smaller than its slide; no match is named.
+  const [heading, nothing] = await Promise.all([shot(deck.id, `?element=${encodeURIComponent('[data-af-slide]:nth-of-type(2) h1')}`), shot(deck.id, '?element=%23nope')]);
+  const h = heading.status === 200 && Buffer.isBuffer(heading.body) ? pngSize(heading.body) : null;
+  check(!!h && h.width < 2400 && h.height < 400 && h.height > 20, `an element export is that element alone (${heading.status} ${JSON.stringify(h)})`);
+  check(nothing.status === 404 && nothing.body?.error === 'element_not_found' && nothing.body?.element === '#nope', `an element that is not there is refused by name (${nothing.status} ${JSON.stringify(nothing.body)})`);
   check(tall.status === 200 && Buffer.isBuffer(tall.body) && pngSize(tall.body).height > 1000,
     `a full export photographs past the fold (${tall.status === 200 && Buffer.isBuffer(tall.body) ? pngSize(tall.body).height + 'px' : tall.status})`);
 

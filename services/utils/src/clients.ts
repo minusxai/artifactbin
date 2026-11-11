@@ -14,7 +14,7 @@ import type {
   SqlService,
   SvgHarvestResult,
 } from '@artifactbin/contracts';
-import { BROWSER_ROUTES, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
+import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
 import { httpClient } from './http';
 
 const SQL_DEFAULT_TIMEOUT_MS = 5_000;
@@ -91,7 +91,7 @@ export function browserClient(url: string, opts: { deadlineMs?: number; serviceS
       try {
         const res = await fetch(`${url}${BROWSER_ROUTES.render}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(opts.serviceSecret ? { [SERVICE_AUTH_HEADER]: opts.serviceSecret } : {}) }, body: JSON.stringify(req), signal: AbortSignal.timeout(deadline) });
         const type = res.headers.get('content-type') ?? '';
-        if (res.ok && type.startsWith('image/')) return { ok: true, mime: type as 'image/png' | 'image/jpeg', bytes: new Uint8Array(await res.arrayBuffer()) };
+        if (res.ok && type.startsWith('image/')) return { ok: true, mime: type as 'image/png' | 'image/jpeg', bytes: new Uint8Array(await res.arrayBuffer()), ...(res.headers.get(ELEMENT_CAPTURE_HEADER) === '1' ? { element: true as const } : {}) };
         if (type.startsWith('application/json')) return (await res.json()) as RenderResult;
         return { ok: false, reason: 'unavailable', detail: `${res.status}` };
       } catch (e) {

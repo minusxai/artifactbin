@@ -102,7 +102,9 @@ export async function ownRowsApp(kind, {title, dir, at, server, options, url}) {
   ].filter(Boolean).join('; ') + '.';
   const key = !url ? '' : '. Check reports the items Not tested until the API_KEY secret is set: ' +
     "tell the user to paste the key into the page's settings, Resolvers tab, API_KEY, and press " +
-    "Test connection (it lists the API's field names); never read the key or write it anywhere.";
+    "Test connection (it lists the API's field names); never read the key or write it anywhere. " +
+    'If the user asked for it private: leave out --guest-steps guest.mjs (signed out, it gets ' +
+    'not found).';
   return {project: dir, title, kind, created, kept, datasets: {[spec.table]: {id: own.id, rows: 0,
     reused: own.reused}}, rules, note, next: `Next: in index.html edit only APP: ${spec.edit}; ` +
     `then ${await check(at('index.html'))}${key}`};

@@ -8,7 +8,7 @@
  * answer and the closing lines. Used by: events.mjs, toolbox-comments.mjs and their tests.
  */
 import {open} from 'node:fs/promises';
-import {withWatchLock,windowOf,awaitingOf,readWatchLog,QUIET_MINUTES} from
+import {withWatchLock,windowOf,awaitingOf,readWatchLog,replyState,QUIET_MINUTES} from
   './toolbox-watch-state.mjs';
 import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
 const SCHEMA=2;
@@ -48,7 +48,10 @@ async function checkpointInput(value,id){
  * {replaced}). values.bounded: an empty call QUIET_MINUTES after the window's last activity
  * stops the watching. With presenter.threads, a first call replays the history, prints each open
  * thread whose latest comment is someone else's, and a call while a printed thread has no answer
- * drains the feed without waiting and returns {unanswered}. */
+ * drains the feed without waiting and returns {unanswered}. With options.replyFirst and
+ * presenter.lines.replyDue (comment.mjs), a bounded call while the reply to the user is owed
+ * (replyState) waits for nothing either and, nobody else having written, prints that line and
+ * returns {replyDue}; only a --replied after the line lets the watch wait. */
 export async function watchEvents(client,scope,values,options={},presenter=eventsPresenter('')){
  if(values.next&&values.once)throw new ToolError('invalid_invocation',
   'Use --next or --once, not both.',2);
@@ -62,7 +65,7 @@ export async function watchEvents(client,scope,values,options={},presenter=event
  return {events:0,timedOut:false,stopped:false,replaced:true};
 }
 async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=100,
- quietMs=QUIET_MINUTES*60000,touch=async()=>{}}={},presenter){
+ quietMs=QUIET_MINUTES*60000,touch=async()=>{},replyFirst=false}={},presenter){
  const id={server:client.server,artifact:scope.artifact??null,stream:streamOf(scope)};
  const next=Boolean(values.next),threads=next?presenter.threads:null,seen=new Set();
  let cursor,records=[],handle;
@@ -99,8 +102,12 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
  if(fresh){window={opened:now(),active:now()};await write(mark({opened:window.opened}));}
  // Threads printed and not yet answered: such a call only drains the feed.
  const awaiting=threads&&handle&&!fresh?awaitingOf(records,threads):new Set();
- let gate=awaiting.size>0,unanswered=null,failures=0,events=0,timedOut=false,stopped=false,
-  reacted=false,replay=Boolean(threads)&&!cursor;
+ // The reply checkpoint: while the reply is owed every call returns at once (replyState).
+ const owed=replyFirst&&presenter.lines.replyDue&&window?replyState(records,fresh):null,
+  due=Boolean(owed)&&!(values.replied&&owed==='shown');
+ if(owed&&!due)await write({...mark({at:now()}),kind:'replied'});
+ let gate=awaiting.size>0||due,unanswered=null,failures=0,events=0,timedOut=false,stopped=false,
+  reacted=false,asked=false,replay=Boolean(threads)&&!cursor;
  const latest=new Map(),held=[];
  const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
  const route=(after,wait)=>'/api/events?'+new URLSearchParams({
@@ -172,6 +179,8 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
    }
    if(values.once&&!more)break;
    if(next&&events>0&&!more)break;
+   if(due&&!replay&&!more){asked=true;if(owed==='owed'||fresh)await write({...mark({at:now()}),
+    kind:'reply-due'});break;}
   }
   if(timedOut&&window&&now()-window.active>=quietMs){stopped=true;await write(mark({closed:
    now()}));}
@@ -184,5 +193,6 @@ async function watchFeed(client,scope,values,{signal,deliver,now=Date.now,limit=
  else if(stopped)await print(lines.stopped(quiet));else if(timedOut)await print(lines.quiet);
  else if(values.once)await print(lines.once);
  else if(next&&events>0)await print(lines.next(reacted));
- return {events,timedOut,stopped,...(unanswered?{unanswered}:{})};
+ else if(asked)await print(lines.replyDue(client.server));
+ return {events,timedOut,stopped,...(unanswered?{unanswered}:{}),...(asked?{replyDue:true}:{})};
 }
