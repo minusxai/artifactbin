@@ -2,7 +2,7 @@ import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
-import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
+import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadFor, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
@@ -42,7 +42,7 @@ import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
 import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/user-pages';
 import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
-import { customShellResponse, keptFromShell, loadCustomShell } from './custom-shell';
+import { customShellResponse, loadCustomShell, namesDocument, shellAnswers } from './custom-shell';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
@@ -439,8 +439,20 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   /** One of the app's own screens: the custom shell in its place when one is set (./custom-shell), else the app page. */
-  const screen = (c: { req: { raw: Request; url: string; method: string } }) =>
-    (customShell ? customShellResponse(customShell, c.req.method, pageCsp(c.req.raw), APP_SECURITY_HEADERS) : page(c));
+  const screen = async (c: { req: { raw: Request; url: string; method: string } }): Promise<Response> => {
+    if (!customShell) return page(c);
+    const url = new URL(c.req.url);
+    const head = customShell.headed && namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousHead(c.req.raw, url.pathname)) : '';
+    // The policy the app page at this address carries (a document address admits its trusted embedders), and its agent pointer.
+    return customShellResponse(customShell, c.req.method, framedPolicy(url, pageCsp(c.req.raw)),
+      { ...APP_SECURITY_HEADERS, Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` }, head);
+  };
+  /** The head a link-preview bot sees for a document address: only for a document an ANONYMOUS reader may read. */
+  const anonymousHead = async (request: Request, pathname: string): Promise<string> => {
+    const id = candidateDocument(pathname)?.id ?? (slugAddress(pathname) ? await slugAddressTarget(request, pathname, ANONYMOUS_ACTOR) : null);
+    const read = id ? await readPageRow(id) : null;
+    return read && await canReadArtifact(read.row, ANONYMOUS_ACTOR) ? documentHeadFor(read.row) : '';
+  };
 
   /**
    * Who may frame this app page: the app alone; `/local/connect` its local hosts; a document's address (`/a/<id>`, its
@@ -648,16 +660,19 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
     return (row && await artifactAppAsset(row, c.req.param('asset'))) ?? c.notFound();
   });
-  app.get('/a/:id/edit', documentAddress);
-  app.get('/a/:id', documentAddress);
+  // A custom shell answers a page's and a handle's screens itself (./custom-shell `shellAnswers`); the app, otherwise.
+  const documentScreen = (c: Parameters<typeof documentAddress>[0] & { req: { method: string } }) =>
+    (customShell && shellAnswers(new URL(c.req.url)) ? screen(c) : documentAddress(c));
+  app.get('/a/:id/edit', documentScreen);
+  app.get('/a/:id', documentScreen);
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.
-  app.get('/:user{@[a-z0-9_]+}/*', documentAddress);
-  app.get('/:user{@[a-z0-9_]+}', (c) => page(c));
+  app.get('/:user{@[a-z0-9_]+}/*', documentScreen);
+  app.get('/:user{@[a-z0-9_]+}', (c) => (customShell ? screen(c) : page(c)));
   // A root typo gets the SPA too — its 404 page, under the 404 STATUS. A development server also answers its dev pages.
   const appPages = spaPaths({ dev: opts.devHmrPort !== undefined });
   app.get('*', async (c) => {
     const pathname = new URL(c.req.url).pathname;
-    if (customShell && !keptFromShell(pathname)) return screen(c);
+    if (customShell && shellAnswers(new URL(c.req.url))) return screen(c);
     return appPages.test(pathname) ? page(c) : page(c, 404);
   });
   return app;

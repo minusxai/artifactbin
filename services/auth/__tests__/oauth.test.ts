@@ -599,6 +599,24 @@ describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here fo
   expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${body.access_token}`}})).json()).toMatchObject({credential:'none'});
   expect((await exchange(host,{authorization:`Bearer ${body.access_token}`})).status).toBe(401);
  });
+ it('the long grant is for clients outside any page: a request a page makes (any Sec-Fetch-*) is refused, and the page uses the exchange',async()=>{
+  const host=await withService();
+  const grant=(headers:Record<string,string>,body:unknown={})=>host.request(`${BASE}/api/authentication/token`,{method:'POST',headers:{...signedIn(),origin:BASE,'content-type':'application/json',...headers},body:JSON.stringify(body)});
+  for(const page of [{'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'},{'sec-fetch-site':'same-origin'},{'sec-fetch-mode':'navigate'},{'sec-fetch-dest':'document'}]){
+   for(const body of [{},{audience:'warehouse'}]){
+    const refused=await grant(page,body);
+    expect(refused.status,JSON.stringify(page)).toBe(403);
+    const answer=await refused.json() as Record<string,unknown>;
+    expect(answer).toMatchObject({error:'page_context_refused',hint:expect.stringContaining('/api/authentication/service-token')});
+    expect(answer).not.toHaveProperty('refresh_token');
+   }
+  }
+  // Outside a page (the skill's sign-in, curl), as before.
+  expect((await grant({})).status).toBe(201);
+  // The page's own way: the exchange answers the same browser request.
+  const exchanged=await exchange(host,{...signedIn(),origin:BASE,'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'});
+  expect(exchanged.status).toBe(200);expect(await exchanged.json()).not.toHaveProperty('refresh_token');
+ });
  it('refuses a cookie from another Origin or none, the anonymous, and an unknown or missing audience',async()=>{
   const host=await withService();
   expect((await exchange(host,{...signedIn(),origin:'https://evil.example'})).status).toBe(403);

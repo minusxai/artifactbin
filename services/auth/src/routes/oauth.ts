@@ -132,8 +132,16 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   /** The scope a grant for `resource` stores: `artifacts` for this API (the default), nothing for a service; null when the request names another. */
   const scopeFor = (requested: string, scope: string): string | null =>
     serviceFor(requested) ? (scope === '' ? '' : null) : ((scope || ARTIFACT_SCOPE) === ARTIFACT_SCOPE ? ARTIFACT_SCOPE : null);
-  // Direct integrations obtain a bearer from an email-verified session, without device/browser grants.
+  /*
+   * Direct integrations obtain a bearer from an email-verified session, without device/browser grants: a 24 h access
+   * token and a 30-day refresh token, for a client outside any page (the skill's sign-in, curl, a server). A page's
+   * script never receives one: a browser marks every request a page makes with `Sec-Fetch-*`, which page code cannot
+   * remove, so a request carrying any is refused, and a page asks SERVICE_TOKEN_PATH for a short-lived token instead.
+   * The app's own pages never call this.
+   */
   app.post('/api/authentication/token', async (c) => {
+    if(['sec-fetch-site','sec-fetch-mode','sec-fetch-dest'].some(name=>c.req.header(name)!==undefined))
+      return new Response(JSON.stringify({error:'page_context_refused',hint:`A page uses POST ${SERVICE_TOKEN_PATH} for a short-lived token.`}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
     const actor=c.get('actor') ?? ANONYMOUS;
     if(actor.credential!=='session'||!actor.userId||!actor.email||actor.emailVerified!==true)
       return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
