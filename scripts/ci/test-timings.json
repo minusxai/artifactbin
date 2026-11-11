@@ -166,7 +166,7 @@
    "services/app/__tests__/pdf-read-method.test.ts": 1096,
    "services/app/__tests__/pdf-serving.test.ts": 1691,
    "services/app/__tests__/pdf-tier.test.ts": 1825,
-   "services/app/__tests__/policy-graphql-toolbox.test.ts": 2057,
+   "services/app/__tests__/policy-toolbox.test.ts": 2057,
    "services/app/__tests__/pretty-urls-encoding.test.ts": 1278,
    "services/app/__tests__/pretty-urls.test.ts": 7620,
    "services/app/__tests__/private-export.test.ts": 1036,

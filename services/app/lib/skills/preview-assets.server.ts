@@ -1,4 +1,3 @@
-import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {readFile} from 'node:fs/promises';
 import {build,transform} from 'esbuild';
@@ -25,20 +24,8 @@ export async function buildPreviewParser(source:string):Promise<string>{
  cached={source:cacheKey,output};return output;
 }
 
-let datasets:Promise<string>|undefined;
-/** Same immutable-source lifetime as buildHtmlAssets; no account/platform server entry. It also carries the GraphQL
- * functions toolbox-platform.mjs re-exports, so the archive holds one copy of graphql. */
-export function buildPreviewDatasets():Promise<string>{
- const entry=fileURLToPath(new URL('../graphql-compat/dataset/local-preview.ts',import.meta.url));
- return datasets??=build({stdin:{contents:`export * from ${JSON.stringify(entry)};export {parse,getOperationAST,validate,buildSchema} from 'graphql';`,resolveDir:path.dirname(entry),loader:'ts'},bundle:true,write:false,minify:true,legalComments:'none',format:'esm',platform:'node',target:'node22',
-  // graphql's ESM build tree-shakes to what local datasets and validation use (~170 KB, against ~250 KB for its CommonJS main).
-  mainFields:['module','main']}).then(result=>{
-  const text=result.outputFiles?.[0]?.text;if(!text)throw Error('Preview dataset build was empty');return text;
- }).catch(error=>{datasets=undefined;throw error;});
-}
-
-/** Native toolbox shares platform credentials, publication planning and GraphQL parsing; installs need only Node.
- * Its HTML parsing (./preview-html.mjs) and GraphQL (./preview-datasets.mjs, which bundles graphql) stay sibling imports. */
+/** Native toolbox shares platform credentials and publication planning; installs need only Node.
+ * Its HTML parsing (./preview-html.mjs) stays a sibling import. */
 let toolbox:Promise<string>|undefined;
 export function buildToolboxPlatform():Promise<string>{
  // Production sources are immutable: one bundle per process. Development bundles its current sources each time.
@@ -47,7 +34,7 @@ export function buildToolboxPlatform():Promise<string>{
 }
 async function bundleToolboxPlatform():Promise<string>{
  const siblings={name:'archive-siblings',setup(builder:import('esbuild').PluginBuild){
-  builder.onResolve({filter:/^(?:\.\/preview-html\.mjs|graphql)$/},args=>({path:args.path==='graphql'?'./preview-datasets.mjs':args.path,external:true}));
+  builder.onResolve({filter:/^\.\/preview-html\.mjs$/},args=>({path:args.path,external:true}));
   builder.onResolve({filter:PARSER_SHARED},args=>args.importer.endsWith('toolbox-platform.mjs')?{path:'./preview-html.mjs',external:true}:undefined);
  }};
  const result=await build({entryPoints:[path.resolve('skills/artifactbin/scripts/toolbox-platform.mjs')],bundle:true,write:false,minify:true,legalComments:'none',format:'esm',platform:'node',target:'node22',plugins:[siblings]});

@@ -1,7 +1,7 @@
 /**
  * Internal: the private loopback preview server (startPreview); serve.mjs is its command.
- * Contract: lib/skills/preview-contract.d.ts. Routes live in preview-dataset-route.mjs and
- * preview-source-routes.mjs; file helpers in preview-server-files.mjs.
+ * Contract: lib/skills/preview-contract.d.ts. Routes live in preview-source-routes.mjs; file
+ * helpers in preview-server-files.mjs.
  * Used by: serve.mjs, html-preview/author-toolbox/font-delivery/shared-skill-delivery tests,
  *   scripts/fixtures/local-preview.mjs.
  */
@@ -10,12 +10,10 @@ import {realpath,stat,writeFile,rename} from 'node:fs/promises';
 import {resolve,relative,sep,extname,basename} from 'node:path';
 import {platformModules} from './preview-platform.mjs';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
-import {createPreviewSessions} from './preview-sessions.mjs';
 import {previewHtml,formatAutofixReport,pageDesignSystem} from './preview-html.mjs';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
 import {types,platformFonts,platformBoundaries,inside,previewAutofix} from
   './preview-server-files.mjs';
-import {DATASET_ROUTE,handleDatasetRoute} from './preview-dataset-route.mjs';
 import {handleSourceRoute} from './preview-source-routes.mjs';
 import configuredServer from './toolbox-config.mjs';
 
@@ -31,7 +29,7 @@ export const PRIVATE_CSP =
  * supplies the runtime, libraries, components, fonts and boundaries (./preview-platform); a source
  * checkout's own build outputs come first. */
 export async function startPreview({root,port=0,runtimeDir,platformOrigin,
-  libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
+  libraryAssets,revisionIntervalMs=1000,autofix={}}) {
 if(!Number.isInteger(port)||port<0||port>65535)throw Error(
    'Port must be an integer from 0 to 65535');
 const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error(
@@ -44,7 +42,6 @@ const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())th
  const platformCss=html=>{const name=pageDesignSystem(html);
    return name?platform.systemCss(name):Promise.resolve(null);};
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
- const sessions=createPreviewSessions(base,sessionOptions);
  // One report per distinct served content of each page, not one per request.
  const reported=new Map();
  const served=async(file,html)=>{
@@ -66,10 +63,6 @@ res.setHeader('Content-Security-Policy',PRIVATE_CSP);res.setHeader('Cache-Contro
   if(req.headers.host!==`127.0.0.1:${server.address().port}`)return end(403,'Forbidden');
 if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)return end(403,
     'Forbidden');
-  // Dataset routes accept POST; everything else below is read-only.
-  const datasetRoute=(req.url??'').split('?')[0].match(DATASET_ROUTE);
-  if(datasetRoute)return handleDatasetRoute({req,res,end,route:datasetRoute,sessions,
-    operationTimeoutMs});
 if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');return end(405,
     'Read-only preview');}
   try {
@@ -110,28 +103,16 @@ const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; char
    res.setHeader('Content-Type',type);
 if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,
      file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString(
-     'utf8'))).html;const revision=await revisions.current({fresh:true});const local=
-     await sessions.prepare(html,pathname,revision);const config={pageId:'local:'+pathname,revision,
-     backends:local?local.names:[],...(local?.datasets?.length?{datasets:local.datasets}:{}),
-     offline:true,libraries:await platform.importMap().catch(()=>({})),...(local?{localPreview:{
-     endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:{})};const body=previewHtml(
-     html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:
-local.names}:undefined),config,await platformCss(html).catch(()=>null));res.setHeader(
-       'Content-Length',Buffer.byteLength(body));
+     'utf8'))).html;const revision=await revisions.current({fresh:true});const config={pageId:
+     'local:'+pathname,revision,backends:[],offline:true,libraries:await platform.importMap().catch(
+     ()=>({}))};const body=previewHtml(html,changeNotice(revision),config,await platformCss(html)
+     .catch(()=>null));res.setHeader('Content-Length',Buffer.byteLength(body));
      return end(200,body);}
    const bytes=await readPreviewFile(selected,file);res.setHeader('Content-Length',bytes.length);
    if(req.method==='HEAD')return end(200);
    end(200,bytes);
   }catch(error){
    res.removeHeader('Content-Length');
-   // A served page vanished while its dataset session still holds edits: offer their export.
-   if(error.code==='ENOENT'){const recovery=
-    sessions.recover(decodeURIComponent((req.url??'/').split('?')[0]));if(recovery){res.setHeader(
-    'Content-Type','text/html; charset=utf-8');return end(409,previewHtml(
-    '<!doctype html><html><head><title>Local preview recovery</title></head><body><h1>Source file '+
-    'is unavailable</h1><p>Your local dataset edits are retained in this running helper. Export '+
-    'them before discarding this session.</p></body></html>',changeNotice('missing',{endpoint:
-    '/__af_preview/datasets/'+recovery.id,names:recovery.names})));}}
    if(error.status){res.setHeader('Content-Type','application/json');return end(error.status,
     JSON.stringify({error:error.message}));}
    if(error.code==='PREVIEW_LIMIT'){res.removeHeader('Content-Length');
@@ -143,8 +124,7 @@ local.names}:undefined),config,await platformCss(html).catch(()=>null));res.setH
    return end(404,'Not found');
   }
  });
-server.maxConnections=16;server.requestTimeout=10000;server.headersTimeout=10000;server.on('close',(
-   )=>sessions.close());
+server.maxConnections=16;server.requestTimeout=10000;server.headersTimeout=10000;
 await new Promise((done,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',done);
    });
 return {server,url:`http://127.0.0.1:${server.address().port}/`,close:()=>new Promise((done,

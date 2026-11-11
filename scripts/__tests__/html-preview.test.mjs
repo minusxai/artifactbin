@@ -75,58 +75,18 @@ test('revision limits bound file count and aggregate bytes',async()=>{
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
-async function localFixture(options={}){
- const root=await mkdtemp(join(tmpdir(),'preview-session-'));let dirty=false;
- await writeFile(join(root,'index.html'),'<link rel="af-dataset" data-af-name="local" href="./data.json">');await writeFile(join(root,'data.json'),'[{"amount":1}]');
- const factory=async()=>({schema:{},async execute(request){if(request.query==='edit')dirty=true;return {data:{ok:true}};},status:async()=>({dirty,namespaces:dirty?['local']:[]}),export:()=>({dirty})});
- const session=await startPreview({root,revisionIntervalMs:0,...options,sessionOptions:{createDatasets:factory,...options.sessionOptions}});
- const config=async(path='')=>JSON.parse((await (await fetch(session.url+path)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)[1]);
- const execute=(endpoint,query='query')=>fetch(new URL(endpoint,session.url),{method:'POST',headers:{origin:new URL(session.url).origin,'content-type':'application/json'},body:JSON.stringify({query})});
- return {root,session,config,execute,async close(){await session.close();await rm(root,{recursive:true,force:true});}};
-}
-
-test('dirty sessions survive source edits, idle expiry and full-cache admission until explicit discard',async()=>{
- let now=0;const f=await localFixture({sessionOptions:{now:()=>now,ttlMs:10,maxSessions:1}});
+test('a linked local data file is served as a file, never as a dataset session: the preview takes no writes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-no-session-'));let session;
  try {
-  const config=await f.config(),endpoint=config.localPreview.endpoint;await f.execute(endpoint,'edit');now=11;
-  await writeFile(join(f.root,'data.json'),'[{"amount":2}]');const retained=await f.config();assert.equal(retained.localPreview.endpoint,endpoint);
-  const status=await (await fetch(new URL(endpoint+'/status',f.session.url))).json();assert.equal(status.dirty,true);assert.equal(status.conflict,true);
-  await writeFile(join(f.root,'other.html'),'<link rel="af-dataset" data-af-name="local" href="./data.json">');
-  const full=await fetch(f.session.url+'other.html');assert.equal(full.status,429);assert.match((await full.json()).error,/unsaved/);
-  assert.equal((await fetch(new URL(endpoint+'/export/local',f.session.url))).status,200);
-  const {unlink}=await import('node:fs/promises');await unlink(join(f.root,'index.html'));const missing=await fetch(f.session.url);assert.equal(missing.status,409);assert.match(await missing.text(),/edits are retained/);
-  await writeFile(join(f.root,'index.html'),'<link rel="af-dataset" data-af-name="local" href="./data.json">');
-  assert.equal((await fetch(new URL(endpoint+'/discard',f.session.url),{method:'POST',headers:{origin:new URL(f.session.url).origin}})).status,200);
-  assert.notEqual((await f.config()).localPreview.endpoint,endpoint);
- }finally{await f.close();}
+  await writeFile(join(root,'index.html'),'<link rel="af-dataset" data-af-name="local" href="./data.json">');await writeFile(join(root,'data.json'),'[{"amount":1}]');
+  session=await startPreview({root,revisionIntervalMs:0});
+  const config=JSON.parse((await (await fetch(session.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)[1]);
+  assert.equal(config.offline,true);assert.deepEqual(config.backends,[]);assert.equal(config.localPreview,undefined);assert.equal(config.datasets,undefined);
+  assert.equal(await (await fetch(session.url+'data.json')).text(),'[{"amount":1}]');
+  const posted=await fetch(session.url+'__af_preview/datasets/abc',{method:'POST',headers:{origin:new URL(session.url).origin,'content-type':'application/json'},body:'{"query":"{x}"}'});
+  assert.equal(posted.status,405);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
-
-test('clean sessions expire and local operation/body limits are enforced',async()=>{
- let now=0;const f=await localFixture({sessionOptions:{now:()=>now,ttlMs:10}});
- try {
-  let endpoint=(await f.config()).localPreview.endpoint;now=11;assert.equal((await f.execute(endpoint)).status,410);
-  endpoint=(await f.config()).localPreview.endpoint;
-  const large=await fetch(new URL(endpoint,f.session.url),{method:'POST',headers:{origin:new URL(f.session.url).origin,'content-type':'application/json'},body:JSON.stringify({query:'x'.repeat(65536)})});assert.equal(large.status,413);
-  for(let i=1;i<512;i++)assert.equal((await f.execute(endpoint)).status,200);
-  assert.equal((await f.execute(endpoint)).status,429);
- }finally{await f.close();}
-});
-
-test('local operations bound concurrency and pass a real abort signal',async()=>{
- const releases=[];let calls=0;
- const createDatasets=async()=>({schema:{},status:async()=>({dirty:false,namespaces:[]}),export:()=>({}),execute:async(request,signal)=>{
-  calls++;return new Promise((done,reject)=>{signal.addEventListener('abort',()=>reject(signal.reason),{once:true});if(request.query!=='timeout')releases.push(()=>done({data:{ok:true}}));});
- }});
- const f=await localFixture({operationTimeoutMs:100,sessionOptions:{createDatasets}});
- try {
-  const endpoint=(await f.config()).localPreview.endpoint;
-  const operations=Array.from({length:4},()=>f.execute(endpoint));
-  while(calls<4)await new Promise(done=>setTimeout(done,1));
-  assert.equal((await f.execute(endpoint)).status,429);for(const release of releases)release();await Promise.all(operations);
-  const timeout=await f.execute(endpoint,'timeout');assert.equal(timeout.status,400);assert.match((await timeout.json()).error,/timed out/);
- }finally{await f.close();}
-});
-
 
 test('platform modules come only from closed /af/, /libraries/ and /af/components/ paths, fetched once from the selected server',async()=>{
  const {platformModules,LEGACY_CORE_PATH}=await import('../../services/app/skills/artifactbin/scripts/preview-platform.mjs');

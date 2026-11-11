@@ -1,13 +1,13 @@
 /**
- * Internal: what check.mjs makes of the page's failed calls after a hosted run (sql, functions and
- * an older page's GraphQL, captured in the browser by toolbox-check-calls.mjs). A guest's failure
- * carries no owner detail: it takes the detail the same call showed the owner in another viewport,
- * or its read (a SELECT, a GET function, a GraphQL query) is asked again as the owner; a write is
- * never re-run. A call the server refused only because a secret has no value yet (its exact
- * refusal, secret_unavailable or connection_unavailable, naming a declared secret the owner has
- * not set) is not a failure: when every failed call of a viewport is such a refusal, its
- * unfinished step and the page and console errors logged after the first refusal become a Not
- * tested item. Secret values never reach the check; tokens are never printed.
+ * Internal: what check.mjs makes of the page's failed calls after a hosted run (sql and functions,
+ * captured in the browser by toolbox-check-calls.mjs). A guest's failure carries no owner detail:
+ * it takes the detail the same call showed the owner in another viewport, or its read (a SELECT, a
+ * GET function) is asked again as the owner; a write is never re-run. A call the server refused
+ * only because a secret has no value yet (its exact refusal, secret_unavailable or
+ * connection_unavailable, naming a declared secret the owner has not set) is not a failure: when
+ * every failed call of a viewport is such a refusal, its unfinished step and the page and console
+ * errors logged after the first refusal become a Not tested item. Secret values never reach the
+ * check; tokens are never printed.
  * Used by: toolbox-check-command.mjs.
  */
 
@@ -77,19 +77,10 @@ export async function explainCalls(client, id, checks, guestRun = false) {
 async function asOwner(client, id, {kind, field}, replay) {
   const read = {safeToRepeat: true, timeoutMs: 8000};
   try {
-    if (kind === 'sql' || kind === 'fn') {
-      if (kind === 'sql') await client.request(`/api/artifacts/${id}/sql`,
-        {...read, method: 'POST', body: replay});
-      else await client.request(`/api/artifacts/${id}/${field}${replay.search ?? ''}`, read);
-      return {ownerPasses: true};
-    }
-    const body = await client.request(`/api/artifacts/${id}/graphql`,
+    if (kind === 'sql') await client.request(`/api/artifacts/${id}/sql`,
       {...read, method: 'POST', body: replay});
-    const errors = Array.isArray(body?.errors) ? body.errors : [];
-    if (!errors.length) return {ownerPasses: true};
-    const same = errors.find(error => error?.path?.join?.('.') === field) ?? errors[0];
-    const detail = same?.extensions?.detail;
-    return typeof detail === 'string' ? {ownerDetail: detail.slice(0, 200)} : {};
+    else await client.request(`/api/artifacts/${id}/${field}${replay.search ?? ''}`, read);
+    return {ownerPasses: true};
   } catch (error) {
     // sql and functions refuse with a status: the refusal's owner detail, or its message.
     const refusal = error?.details, said = refusal?.detail ?? refusal?.message;

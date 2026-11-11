@@ -3,7 +3,7 @@
  * origin-bound HTTP client (makeClient) and runTool, which parses flags, runs a command and prints
  * its JSON envelope. Journals live in toolbox-journal.mjs, the check digest in
  * toolbox-check-digest.mjs; both are re-exported here.
- * Used by: every command script (auth serve autofix publish read export check graphql comment),
+ * Used by: every command script (auth serve autofix publish read export check sql comment),
  *   toolbox-*.mjs, author-toolbox/author-check tests.
  */
 import {ToolError,serverOrigin,requestUrl,originRequest} from './toolbox-transport.mjs';

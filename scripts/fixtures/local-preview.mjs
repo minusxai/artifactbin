@@ -52,22 +52,6 @@ try {
  assert.equal(await page.locator('#count').textContent(),'1');
  await writeFile(join(root,'next.html'),html.replace('Add one','Increment'));await rename(join(root,'next.html'),join(root,'index.html'));
  await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.getByRole('button',{name:'Increment',exact:true}).waitFor();
- await writeFile(join(root,'sales.csv'),'amount\n2\n');
- const datasetHtml=`<!doctype html><html><head><link rel="af-dataset" data-af-name="sales" href="./sales.csv"><script src="/af/core.js" data-af="core"></script></head><body><button id="insert">Insert local row</button><output id="rows"></output><output id="receipt"></output><script type="module">
- import {client,gql} from '@afbin/apollo';
- async function render(){const result=await client.query({query:gql\`{sales{_id amount}}\`});if(result.errors)throw Error(JSON.stringify(result.errors));document.querySelector('#rows').textContent=String(result.data.sales.length);}
- document.querySelector('#insert').onclick=async()=>{const result=await client.mutate({mutation:gql\`mutation{insert_sales_one(object:{amount:9}){_id}}\`});if(result.errors)throw Error(JSON.stringify(result.errors));document.querySelector('#receipt').textContent=result.extensions?.outcomes?.insert_sales_one??'unknown';await render();};await render();
- </script></body></html>`;
- await writeFile(join(root,'dataset.html'),datasetHtml);await page.goto(new URL('dataset.html',session.url).href);await page.waitForFunction(()=>document.querySelector('#rows').textContent==='1');
- await page.getByRole('button',{name:'Insert local row'}).click();await page.waitForFunction(()=>document.querySelector('#receipt').textContent==='committed');
- await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2');await chromeStatus.filter({hasText:'Local dataset edits are unsaved'}).waitFor();
- await writeFile(join(root,'sales.csv'),'amount\n4\n');await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();
- await page.reload();await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2'); // Native reload retains dirty session.
- await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.getByRole('button',{name:'Reload and discard local edits'}).waitFor();
- assert.equal(await page.locator('#rows').textContent(),'2');
- const downloadPromise=page.waitForEvent('download');await page.getByRole('link',{name:'Export sales',exact:true}).click();const download=await downloadPromise;const exported=join(dir,'export.json');await download.saveAs(exported);
- assert.equal(JSON.parse(await readFile(exported,'utf8')).tables[0].rows.length,2);assert.equal(await readFile(join(root,'sales.csv'),'utf8'),'amount\n4\n');
- await page.getByRole('button',{name:'Reload and discard local edits'}).click();await page.waitForFunction(()=>document.querySelector('#rows').textContent==='1');
  // A separate normal authored page exercises complete graph Save, rather than
  // relying on the live DOM or a manually assembled portable runtime.
  await mkdir(join(root,'components'));await writeFile(join(root,'components/shared.js'),'let count=0;export const next=()=>++count;');
@@ -93,5 +77,5 @@ try {
  const failureSource='<!doctype html><script src="/af/core.js" data-af="core"></script><script type="module">import "./components/missing.js";</script>';
  await writeFile(join(root,'failure.html'),failureSource);await page.goto(new URL('failure.html',session.url).href);await page.waitForFunction(()=>document.documentElement.getAttribute('data-af-local-chrome-ready')==='true');let failureDownloads=0;const failedDownload=()=>failureDownloads++;page.on('download',failedDownload);await chrome.getByRole('button',{name:'Save HTML',exact:true}).click();await chromeStatus.filter({hasText:'Missing local dependency: /components/missing.js'}).waitFor();assert.equal(failureDownloads,0);page.off('download',failedDownload);assert.equal(await readFile(join(root,'failure.html'),'utf8'),failureSource);assert.equal(await readFile(join(root,'portable.html'),'utf8'),portableSource);
  assert.ok(requests.every(url=>!/^https?:/.test(url)||new URL(url).origin===new URL(session.url).origin),JSON.stringify(requests));assert.ok(requests.every(url=>!url.includes('/local/connect')));
- assert.deepEqual(errors,[]);console.log('PASS: private request origins, local Apollo/JSON/datasets, dirty export and explicit discard, native reload preservation, disk notices, lifecycle cleanup, CSP, actual archive Save, offline shared/lazy/cyclic graph, Vega/Vega-Lite, canonical repeated Save, private-state opt-in, visible missing-dependency errors');
+ assert.deepEqual(errors,[]);console.log('PASS: private request origins, local Apollo/JSON, disk notices, lifecycle cleanup, CSP, actual archive Save, offline shared/lazy/cyclic graph, Vega/Vega-Lite, canonical repeated Save, private-state opt-in, visible missing-dependency errors');
 }finally{await browser?.close();await session?.close();await rm(dir,{recursive:true,force:true});}
