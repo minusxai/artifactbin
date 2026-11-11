@@ -21,7 +21,7 @@ it('gives every browser a disjoint immutable cache that the main warmer also pop
  expect(chromium.with).toEqual(warm.find(step=>step.id==='browser-chromium').with);
  const selection=jobs.gates.steps.findIndex(step=>step.id==='gate-browsers');
  expect(selection).toBeLessThan(jobs.gates.steps.findIndex(step=>step.id==='browser-chromium'));
- const install=warm.find(step=>step.run?.includes('install --with-deps chromium firefox webkit'));
+ const install=warm.find(step=>step.run?.includes('npx playwright install chromium firefox webkit'));
  for(const browser of browsers)expect(install.if).toContain(`steps.browser-${browser}.outputs.cache-hit != 'true'`);
 });
 

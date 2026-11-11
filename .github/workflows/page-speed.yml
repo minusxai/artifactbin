@@ -86,10 +86,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - if: steps.playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - if: steps.playwright.outputs.cache-hit == 'true'
-        run: npx playwright install chromium
+      # No `--with-deps`: ubuntu-latest ships Chromium's system libraries, so a cache miss is a download, never an apt mirror.
+      - run: npx playwright install chromium
       - name: Build head
         run: npm run build
       - name: Measure head
@@ -182,9 +180,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true' && steps.playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true' && steps.playwright.outputs.cache-hit == 'true'
+      - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'
         run: npx playwright install chromium
       - name: Check out base build
         if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'

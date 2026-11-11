@@ -398,9 +398,10 @@ describe('CI job shape', () => {
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
-    expect(install.run).toContain('npx playwright install "${deps[@]}" "${selected_engines[@]}"');
-    // Only Firefox/WebKit ever run apt, and from cached .debs; a Chromium cache miss is a download.
-    expect(install.run).not.toMatch(/CACHE_HIT" != true[^\n]*\n\s*deps\+=/);
+    expect(install.run).toContain('npx playwright install "${selected_engines[@]}"');
+    // Only Firefox/WebKit ever install system packages, from cached .debs (scripts/ci/system-debs.mjs);
+    // a Chromium cache miss is a download.
+    expect(install.run).toMatch(/"\$BROWSERS" != chromium[^\n]*\n\s*node scripts\/ci\/system-debs\.mjs "\$HOME\/browser-debs"/);
     const debs = jobs.gates.steps.find((step) => step.with?.path === '~/browser-debs');
     expect(debs.if).toBe("steps.gate-browsers.outputs.browsers != 'chromium'");
     expect(jobs.gates.steps.indexOf(debs)).toBeLessThan(jobs.gates.steps.indexOf(install));
@@ -435,7 +436,7 @@ describe('CI job shape', () => {
     }
 
     const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
-    expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');
+    expect(sessions.run).toContain('node scripts/ci/system-debs.mjs "$HOME/session-debs" --provides /usr/bin/bwrap --');
   });
 
   it('reports every job duration and enforces timing on the complete required chain', () => {
