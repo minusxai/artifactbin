@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { TextSelection } from 'prosemirror-state';
 import { canonicalizeHtmlPage } from '../../html-page';
-import { compactRegion, createRegionState, editableRegions, regionHtml, normalizeRegionHtml, regionMarkdown, validateRegionUpdate } from '../../live-regions';
+import { compactRegion, createRegionState, editableRegions, openRegionDoc, regionHtml, normalizeRegionHtml, regionMarkdown, validateRegionUpdate } from '../../live-regions';
 import { mountRegionEditor } from '../native-region-editor';
 const kind='rich-native-v1' as const;
 const cleanup:Array<()=>void>=[];
@@ -20,7 +20,7 @@ it.each(['plain','marked'])('persists a %s native link, edits and removes it thr
   editor.flush();
   const saved=compactRegion({savedHtml:page.html,ledger:page.ledger,regionId:region.id,state:server});
   editor.remote([saved.update]);
-  const doc=new Y.Doc();Y.applyUpdate(doc,server);Y.applyUpdate(doc,saved.update);server=Y.encodeStateAsUpdate(doc);doc.destroy();
+  const doc=openRegionDoc(server,{kind});Y.applyUpdate(doc,saved.update);server=Y.encodeStateAsUpdate(doc);doc.destroy();
   page={...page,html:saved.html,ledger:saved.ledger};
   const inner=editableRegions(saved.html)[0]!.inner;
   expect(regionHtml(kind,server)).toBe(normalizeRegionHtml(kind,inner));
