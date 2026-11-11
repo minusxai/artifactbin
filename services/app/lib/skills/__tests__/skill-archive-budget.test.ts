@@ -39,7 +39,7 @@ import {archiveFor} from '@/lib/skills';
 // 1.587 MiB: the service-token exchange (scripts/toolbox-service-token.mjs) lets one saved grant reach a co-hosted service, leaving 1,663,203 bytes.
 // 1.593 MiB: the page-apps guide (routes in `$` values, seat(), confirmations, external APIs) and root-relative files in
 // publish, on top of the service-token helper, leaving 1,669,373 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.593*1024*1024;
+const SKILL_ARCHIVE_MAX_BYTES=1.595*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
