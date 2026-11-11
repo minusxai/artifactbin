@@ -58,7 +58,10 @@ export const NativeIdentityRepair=Extension.create({
    const next=new Map<string,number>();
    doc.descendants((node,pos)=>{if(!node.isText)for(const key of ['afId','codeAfId']){
     const id=node.attrs[key];if(typeof id!=='string'||!id||next.has(id))continue;
-    const point=previous.get(id);next.set(id,point===undefined?pos+1:tr?tr.mapping.map(point,1):point);
+    // Item anchors start inside their first paragraph so a start split follows
+    // the original text. Keep that point across transactions, just like paragraphs.
+    const start=pos+1+((node.type.name==='listItem'||node.type.name==='taskItem')&&node.firstChild?.isTextblock?1:0);
+    const point=previous.get(id);next.set(id,point===undefined?start:tr?tr.mapping.map(point,1):point);
    }});return next;
   };
   const plugin:Plugin<Map<string,number>>=new Plugin({

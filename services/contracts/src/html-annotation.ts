@@ -57,3 +57,31 @@ export function htmlTextFingerprint(text: string): string {
   for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
+
+const canonicalizeHtmlText = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+/** Resolve captured offsets only against exact source text, otherwise require a unique canonical quote.
+ * Callers must first resolve the persisted identity; never search other nodes.
+ */
+export function resolveHtmlTextRange(text: string, anchor: Pick<HtmlNodeAnchor, 'range' | 'quote'>): { status: 'exact' | 'missing' | 'ambiguous'; start: number; end: number } {
+  const quote = canonicalizeHtmlText(anchor.quote);
+  let start = -1, end = -1;
+  if (anchor.range && anchor.range.length === text.length && anchor.range.fingerprint === htmlTextFingerprint(text) && canonicalizeHtmlText(text.slice(anchor.range.start, anchor.range.end)) === quote) {
+    start = anchor.range.start; end = anchor.range.end;
+  } else if (anchor.quote) {
+    const canonical = canonicalizeHtmlText(text);
+    const index = canonical.indexOf(quote);
+    if (canonical.indexOf(quote, index + 1) >= 0) return { status: 'ambiguous', start, end };
+    if (index >= 0 && quote) {
+      // Walk UTF-16 code units, counting each whitespace run as one canonical space.
+      let position = 0;
+      for (const match of text.matchAll(/\S\s*/g)) {
+        if (position === index) start = match.index;
+        if (position === index + quote.length - 1) { end = match.index + 1; break; }
+        position += match[0].length > 1 ? 2 : 1;
+      }
+    }
+  }
+  if (start < 0 || end <= start || end > text.length) return { status: 'missing', start: -1, end: -1 };
+  return { status: 'exact', start, end };
+}
