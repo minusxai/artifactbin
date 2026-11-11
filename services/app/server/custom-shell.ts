@@ -3,8 +3,9 @@
  * app's own screens, so a deployment can put its own face on Artifactbin and route client-side (deep links and
  * reloads land on the same file). With the setting unset nothing here runs and every response is as before.
  *
- * WHAT THE FILE ANSWERS (server/app, `shellAnswers`): every GET or HEAD for a SCREEN, always 200 (the file decides
- * what to show and what is not found):
+ * WHAT THE FILE ANSWERS (server/app, `shellAnswers`): every GET or HEAD for an address the URL map calls a SCREEN
+ * (contracts url-space `isScreenPath`, also published at `/af/url-space.json`), always 200 (the file decides what to
+ * show and what is not found):
  *  - `/` and every app screen (home, account, groups, group settings, trash, new-file pages, `/docs-human`,
  *    `/getting-started`, `/local/publish`) and every address nothing else serves;
  *  - the page and handle screens: `/a/<id>`, `/a/<id>/edit`, `/@<handle>` and `/@<handle>/<slug…>`. The file shows a
@@ -13,17 +14,14 @@
  *    `GET /api/page/artifact/<id>` is the access decision (404 for a reader who may not read it) with the title and
  *    description, and `GET /api/page/frame/<id>` the frame's first URL with its one-time ticket.
  *
- * WHAT STAYS ARTIFACTBIN'S, unchanged:
- *  - the API (`/api/*`, including sign-in `/api/auth/*`, the token endpoints and every refusal JSON), OAuth and
- *    discovery (`/oauth/*`, `/.well-known/*`, the consent page), `/llms*`, `/skills/*`, `/af/*`, and every static or
- *    built asset tree (`/assets`, `/islands`, `/libraries`, `/fonts`, `/geojson`, the public directory);
- *  - the identity screens `/login` and `/welcome`, the agent handoff and create door `/start`, and `/local/connect`
- *    (the local-file broker). Sign-out is the API (`POST /api/auth/sign-out`);
- *  - everything that is data or files under a page: `/a/<id>/{raw,story,export,download,assets,resolve,fetch,query,
- *    mutate,events,events/frame,events/authorize,css,tables,datasets/…}`, any other address under `/a/<id>/`, and a
- *    page address carrying an export key (`?key=`: the exporter photographs the app's own page);
- *  - the installed-app identity `/a/<id>/app/` and everything under it: its page carries the app's manifest and icons,
- *    which a shell cannot name for it;
+ * WHAT STAYS ARTIFACTBIN'S, unchanged: everything the map does not call a screen —
+ *  - the API (`/api/*`, including sign-in `/api/auth/*`, the token endpoints and every refusal JSON), `/af/*`, the old
+ *    addresses (the map's `legacy`), and every fixed path: OAuth and discovery, `/llms*`, `/skills/*`, stored bytes,
+ *    and the screens the product draws itself, `/login`, `/welcome` (the first sign-in's handle step), `/start` (the
+ *    create door and agent handoff) and `/local/connect` (the local-file helper). Sign-out is the API;
+ *  - everything that is data or files under a page (its doors), and the installed-app entry `/a/<id>/app` and
+ *    `/a/<id>/app/` (`page-app`: its page carries the app's manifest and icons, which a shell cannot name for it);
+ *  - a page screen carrying an export key (`?key=`: the exporter photographs the app's own page);
  *  - every other host (pages origins, user pages hosts, the assets origin): their boundaries answer first.
  * The app's other screens are not reachable at all: there is no second prefix for them.
  *
@@ -40,24 +38,19 @@
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { classifyPath, isScreenPath } from '@artifactbin/contracts';
 
 const NONCE_PLACEHOLDER = '__CSP_NONCE__';
 const HEAD_PLACEHOLDER = '__HEAD_TAGS__';
-/** Screens the app keeps: sign-in, the first sign-in's handle step, the agent handoff, the local-file broker. */
-const KEPT: ReadonlySet<string> = new Set(['/login', '/welcome', '/start', '/local/connect']);
-/** A page's own screen and its editor; every other address under `/a/` is a door, a file or the installed app. */
-const PAGE_SCREEN = /^\/a\/[^/]+(?:\/edit)?\/?$/;
 
-/** Is this GET a screen the custom shell answers (the table above), rather than one the app keeps? */
+/** Is this GET a screen the custom shell answers (the map's screens), rather than an address the app keeps? */
 export function shellAnswers(url: URL): boolean {
   const path = url.pathname;
-  if (KEPT.has(path)) return false;
-  if (path === '/a' || path.startsWith('/a/')) return PAGE_SCREEN.test(path) && !url.searchParams.has('key');
-  return true;
+  return isScreenPath(path) && !(classifyPath(path) === 'page-screen' && url.searchParams.has('key'));
 }
 
-/** A screen that names one document (`__HEAD_TAGS__` is filled there): a page address or a pretty one. */
-export const namesDocument = (url: URL): boolean => PAGE_SCREEN.test(url.pathname) || /^\/@[^/]+\/./.test(url.pathname);
+/** A screen that names one document (`__HEAD_TAGS__` is filled there): a page screen or a pretty address. */
+export const namesDocument = (url: URL): boolean => classifyPath(url.pathname) === 'page-screen' || /^\/@[^/]+\/./.test(url.pathname);
 
 export interface CustomShell { html: string; nonced: boolean; headed: boolean }
 

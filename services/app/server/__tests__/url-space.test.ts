@@ -44,18 +44,18 @@ describe('the classifier and the allowlists that derive from it', () => {
       ['/api/artifacts', 'api'], ['/api/people/u1', 'api'], ['/af/core.js', 'public-file'], ['/af/app/index-1.js', 'public-file'],
       ['/libraries/vega-6.3.1/index.js', 'legacy'], ['/geojson/world.json', 'legacy'], ['/fonts/a.12345678.woff2', 'legacy'],
       ['/people/u1', 'legacy'], ['/email/d1', 'legacy'], ['/workspace/Abc123', 'legacy'],
-      ['/a/Abc123', 'page-screen'], ['/a/Abc123/edit', 'page-screen'], ['/a/Abc123/app/', 'page-screen'],
+      ['/a/Abc123', 'page-screen'], ['/a/Abc123/edit', 'page-screen'], ['/a/Abc123/app/', 'page-app'], ['/a/Abc123/app', 'page-app'],
       ['/a/Abc123/raw', 'page-door'], ['/a/Abc123/app/manifest.webmanifest', 'page-door'],
-      ['/@sam', 'handle'], ['/@sam/q3-review', 'handle'], ['/login', 'fixed'], ['/health', 'fixed'], ['/llms.txt', 'fixed'],
+      ['/@sam', 'handle'], ['/@sam/q3-review', 'handle'], ['/login', 'fixed'], ['/welcome', 'fixed'], ['/start', 'fixed'], ['/local/connect', 'fixed'], ['/health', 'fixed'], ['/llms.txt', 'fixed'],
       ['/skills/artifactbin.zip', 'fixed'], ['/assets/' + 'a'.repeat(64), 'fixed'], ['/favicon.ico', 'fixed'],
-      ['/', 'screen'], ['/assets', 'screen'], ['/trash', 'screen'], ['/no-such-page', 'screen'],
+      ['/', 'screen'], ['/assets', 'screen'], ['/trash', 'screen'], ['/local/publish', 'screen'], ['/no-such-page', 'screen'],
     ];
     for (const [pathname, kind] of cases) expect(classifyPath(pathname), pathname).toBe(kind);
     // The classifier's literal patterns say what the published strings say.
     for (const [pathname, kind] of cases) expect(new RegExp(URL_SPACE.handle).test(pathname), pathname).toBe(kind === 'handle');
     for (const [pathname, kind] of cases.filter(([p]) => p.startsWith('/a/'))) expect(new RegExp(`^${URL_SPACE.page.prefix}${URL_SPACE.page.id}`).test(pathname), pathname).toBe(kind.startsWith('page-'));
     for (const screen of ['/', '/trash', '/a/Abc123', '/@sam', '/@sam/q3-review']) expect(isScreenPath(screen), screen).toBe(true);
-    for (const other of ['/api/me', '/af/core.js', '/a/Abc123/raw', '/login', '/geojson/world.json']) expect(isScreenPath(other), other).toBe(false);
+    for (const other of ['/api/me', '/af/core.js', '/a/Abc123/raw', '/a/Abc123/app/', '/login', '/welcome', '/start', '/local/connect', '/geojson/world.json']) expect(isScreenPath(other), other).toBe(false);
   });
 
   it('lets a document origin load every public file, old file addresses and stored bytes, and nothing of the app', () => {

@@ -13,6 +13,8 @@ import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
 import {createUser,ensureUsername,mintToken} from '@/lib/accounts';
 import {overrideConfig} from '@/lib/platform/config';
 import {shellFile} from '@/lib/platform';
+import {URL_SPACE,isScreenPath,LEGACY_PUBLIC_PATHS} from '@artifactbin/contracts';
+import {SPA_PATHS} from '@/lib/http/app-pages';
 import {createAppServer} from '../app';
 import {useAppHarness} from '@/__tests__/harness';
 useAppHarness();
@@ -59,7 +61,7 @@ describe('with a custom shell',()=>{
  });
  it('leaves the sign-in screens, the agent handoff, the API, assets, every door and file under a page, the installed app and export captures to the app',async()=>{
   const app=server(plain);
-  for(const path of ['/login','/welcome','/start','/start?agent=1']){
+  for(const path of ['/login','/welcome','/start','/start?agent=1','/local/connect']){
    const response=await app.request(path,html);
    expect(response.status,path).toBe(200);expect(await isShell(response),path).toBe(false);expect(await response.text()).toContain('id="root"');
   }
@@ -74,6 +76,21 @@ describe('with a custom shell',()=>{
    const response=await app.request(path);
    expect(response.status,path).toBe(200);expect(await isShell(response),path).toBe(false);
   }
+ });
+ it('answers exactly what the URL map calls a screen, for every path family the map names and every static app page',async()=>{
+  // The map is the one answer (contracts url-space isScreenPath); this pins the server's routing to it, so a route
+  // that answers the app page (or the shell) by itself cannot drift from what a co-hosted router reads.
+  const app=server(plain),one=(s:string)=>s.replace(/:\w+/g,'x');
+  const statics=SPA_PATHS.source.slice(2,-2).split('|').map(alt=>alt.replace(/\\\//g,'/').replace(/\[\^\/\]\+/g,'x'));
+  const samples=[
+   ...URL_SPACE.fixed.map(f=>f.match==='exact'?f.path:`${f.path}x`),
+   ...[...URL_SPACE.page.screens,...URL_SPACE.page.app,...URL_SPACE.page.doors].map(s=>`/a/${ID}${s?`/${one(s)}`:''}`),
+   `${URL_SPACE.api.prefix}x`,`${URL_SPACE.api.internal}x`,...URL_SPACE.api.links.map(l=>`${l.prefix}x`),
+   ...URL_SPACE.publicFiles.classes.map(c=>`${c.prefix}x.js`),...LEGACY_PUBLIC_PATHS.map(l=>`${l.from}x`),
+   '/@nobody_here','/@nobody_here/a-doc',`/a/${ID}/edit/`,'/a','/no-such-page',...statics,
+  ];
+  expect(statics).toEqual(expect.arrayContaining(['/','/welcome','/start','/login','/groups/x/settings']));
+  for(const path of samples)expect(await isShell(await app.request(path,html)),path).toBe(isScreenPath(path));
  });
  it('substitutes one fresh script nonce per response for every __CSP_NONCE__, and nothing else',async()=>{
   const app=server(nonced);

@@ -10,11 +10,17 @@
  *   /af/                every public, credential-free file: runtime modules, components, fonts, libraries,
  *                       the app's own bundles, boundary files, images, the manifest and this map. One CORS rule
  *                       (`Access-Control-Allow-Origin: *`, nothing credentialed), a cache class per directory.
- *   /a/<id>/...         one page: its screens (`/a/<id>`, `/edit`, `/app/`) and its doors (everything else under it)
+ *   /a/<id>/...         one page: its screens (`/a/<id>`, `/edit`), its installed-app entry (`/app`, `/app/`) and its
+ *                       doors (everything else under it)
  *   /@handle[/...]      a person's or group's address and a document's pretty address
- *   FIXED               the few root addresses that are stable public links or another service's (below)
+ *   FIXED               the few root addresses that are stable public links or another service's, and the screens the
+ *                       product draws itself even when a custom shell stands in for the others (below)
  *   LEGACY              old prefixes still answering (legacy-public-paths.ts, never taught)
  *   everything else     a screen (the app shell; unknown ones are its 404 page)
+ *
+ * ONE ANSWER TO "IS THIS A SCREEN" (`isScreenPath`): `screen`, `page-screen` and `handle`. A custom shell
+ * (APP__SHELL_FILE, server/custom-shell) answers exactly those and a co-hosted router may claim exactly those;
+ * `fixed` and `page-app` addresses stay the product's (`server/__tests__/custom-shell.test.ts` pins the server to it).
  *
  * `server/__tests__/url-space.test.ts` fails when the route table holds a route this map does not classify,
  * when an `/af/` handler reads a credential, or when the published JSON drifts from these constants.
@@ -78,12 +84,18 @@ export const personLinkPath = (userId: string): string => `/api/people/${encodeU
 /** The click link a notification e-mail carries (the deployment's mail extension writes it). */
 export const emailLinkPath = (deliveryId: string): string => `/api/email/${encodeURIComponent(deliveryId)}`;
 
-/** A page's own addresses. Screens are drawn by the app; every other address under `/a/<id>/` is a door of that page. */
+/**
+ * A page's own addresses. Screens are drawn by the app or a shell standing in for it; the installed-app entry is the
+ * product's own page (it carries the app's manifest and icons, which a shell cannot name for it); every other address
+ * under `/a/<id>/` is a door of that page.
+ */
 const PAGE_SPACE = {
   prefix: '/a/',
   id: '[A-Za-z0-9]{6,12}',
   /** `''` is `/a/<id>` itself. */
-  screens: ['', 'edit', 'app', 'app/'],
+  screens: ['', 'edit'],
+  /** The installed-app entry: `app/` is the page, `app` redirects to it. */
+  app: ['app', 'app/'],
   /** The route table's sub-resources (`:x` is one segment); the drift test pins this list to app/a/[id]/. */
   doors: [
     'assets', 'css', 'datasets/:datasetId/files', 'datasets/:datasetId/files/:fileId', 'datasets/:datasetId/images',
@@ -108,6 +120,9 @@ interface FixedPath {
 /** As small as it can be: each is a link already out in the world, a convention, or another service's. */
 const FIXED_PATHS: readonly FixedPath[] = [
   { path: '/login', match: 'exact', what: 'the sign-in screen', why: 'sign-in links, OAuth and the proxy\'s login routes return to it by name', hosts: [] },
+  { path: '/welcome', match: 'exact', what: 'the first sign-in\'s handle step', why: 'the onboarding gate and sign-in send a new account to it by name, with its callbackUrl', hosts: [] },
+  { path: '/start', match: 'exact', what: 'the create door and the agent handoff (`?agent=1`)', why: 'agents and links hand people this exact address to make a page and open it', hosts: [] },
+  { path: '/local/connect', match: 'exact', what: 'the local-file helper screen', why: 'local files and loopback documents frame it by name, under their own frame-ancestors', hosts: [] },
   { path: '/health', match: 'exact', what: 'liveness probe', why: 'container healthchecks and orchestrators probe it; it must never move', hosts: [] },
   { path: '/llms.txt', match: 'exact', what: 'the agent guide index', why: 'the llms.txt convention', hosts: [] },
   { path: '/llms/', match: 'prefix', what: 'agent guides by topic', why: 'linked from llms.txt, every page\'s agent pointer and installed skills', hosts: [] },
@@ -121,12 +136,13 @@ const FIXED_PATHS: readonly FixedPath[] = [
   { path: '/favicon.ico', match: 'exact', what: 'the site icon', why: 'browsers request it at the root by convention', hosts: ['documents', 'owner'] },
   { path: '/og.png', match: 'exact', what: 'the generic unfurl card', why: 'social scrapers and chat apps cached it by URL in every link preview already shared', hosts: [] },
   { path: '/openapi.json', match: 'exact', what: 'retired: answers the API not-found shape', why: 'agents guess it; the answer names /llms.txt', hosts: [] },
+  { path: '/chat', match: 'exact', what: 'retired: always 404', why: 'a retired surface, kept unanswerable', hosts: [] },
   { path: '/chat/', match: 'prefix', what: 'retired: always 404', why: 'a retired surface, kept unanswerable', hosts: [] },
   { path: '/install.sh', match: 'exact', what: 'retired: always 404', why: 'the installer lives on the project site; never served here', hosts: [] },
   { path: '/login/cli', match: 'exact', what: 'retired: always 404', why: 'a retired sign-in flow, kept unanswerable', hosts: [] },
 ];
 
-export type PathKind = 'api' | 'public-file' | 'page-door' | 'page-screen' | 'handle' | 'fixed' | 'legacy' | 'screen';
+export type PathKind = 'api' | 'public-file' | 'page-door' | 'page-screen' | 'page-app' | 'handle' | 'fixed' | 'legacy' | 'screen';
 
 const fixedOf = (pathname: string): FixedPath | undefined =>
   FIXED_PATHS.find((f) => (f.match === 'exact' ? pathname === f.path : pathname.startsWith(f.path)));
@@ -141,16 +157,19 @@ export function classifyPath(pathname: string): PathKind {
   if (pathname.startsWith(PUBLIC_FILES_PREFIX)) return 'public-file';
   if (legacyPublicPath(pathname)) return 'legacy';
   const page = PAGE_RE.exec(pathname);
-  if (page) return PAGE_SPACE.screens.includes(page[2] ?? '') ? 'page-screen' : 'page-door';
+  if (page) {
+    const sub = page[2] ?? '';
+    return PAGE_SPACE.app.includes(sub) ? 'page-app' : PAGE_SPACE.screens.includes(sub) ? 'page-screen' : 'page-door';
+  }
   if (HANDLE_RE.test(pathname)) return 'handle';
   if (fixedOf(pathname)) return 'fixed';
   return 'screen';
 }
 
 /**
- * THE SCREENS RULE, for a custom shell: true when the app (or a shell standing in for it) draws this address —
- * a page's screens, a handle's address and everything that is not `/api/`, `/af/`, a page door, a fixed path or a
- * legacy address. A screen the app does not know is still a screen: its 404 page.
+ * THE SCREENS RULE, for a custom shell: true when the app or a shell standing in for it draws this address —
+ * a page's screens, a handle's address and everything that is not `/api/`, `/af/`, a page door or app entry, a fixed
+ * path or a legacy address. A screen the app does not know is still a screen: its 404 page.
  */
 export const isScreenPath = (pathname: string): boolean => {
   const kind = classifyPath(pathname);
