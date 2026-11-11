@@ -13,9 +13,16 @@
  * /api/page/frame/<id> with this origin's session), its `sql` and `fetch('/fn/NAME')` relayed exactly as on the app
  * page (path, revision and read-only pinning: frame-bridge/parent), reader mode and design system, selecting or
  * revealing a node, the address's hash, a top inset, following a new version, dataset wakeups, the frame's events
- * and link navigations, and the raw bridge (`bridge`) for the rest. What it does not get: uploads (refused, no upload
- * session), comments and their rail, presence, region and cell editing, and the live version stream: a host that
- * wants them calls `followVersion` / `notifyData` from its own stream or builds them on `bridge`.
+ * and link navigations, and the raw bridge (`bridge`) for the rest.
+ *
+ * WITH `comments: true`, the reader's discussion as the app's own document page has it: the frame is granted its
+ * selection actions (the toolbar and context menu: Comment, Select) as the reader's role allows, and the comments
+ * (pins on the page, the composer, the rail with its threads, replies, resolving, saved views, mentions, live updates)
+ * are drawn by the app's own discussion UI. It is a module of its own (solid/document/browser-host-comments, pinned
+ * beside this one, the address baked in at build) imported only then: a shell that never asks loads none of it. Its
+ * stream also follows new versions and dataset changes (`followVersion` / `notifyData`), and with `presence: true`
+ * publishes this reader's presence and reports the others. `openComments(panel?)` / `closeComments()` show the rail.
+ * Not included: uploads (refused, no upload session), region and cell editing.
  *
  * Public code: it carries no credential and adds none (requests are this origin's own, `same-origin`). A document
  * trusts exactly one parent origin, baked in when it is served; the module refuses to mount anywhere else, and the
@@ -27,6 +34,11 @@ import { FRAME_ALLOW, FRAME_SANDBOX } from './frame-markup';
 import { keepFrameSession } from './frame-session';
 import { answerFrameNavigation } from './frame-navigation';
 import { followHtmlVersion } from './follow-version';
+import type { HostComments, HostCommentsModule, HostMode } from './host-comments-contract';
+
+/** The host comments module's pinned address, defined by the build (lib/html-runtime/build.server); the flat one unbuilt. */
+declare const __AF_HOST_COMMENTS__: string | undefined;
+const HOST_COMMENTS_PATH = typeof __AF_HOST_COMMENTS__ === 'string' ? __AF_HOST_COMMENTS__ : '/af/host-comments.js';
 
 export interface MountDocumentOptions {
   /** The document's id (`/a/<id>`). */
@@ -35,7 +47,14 @@ export interface MountDocumentOptions {
   title?: string;
   /** Query carried into the frame's first URL (the document's `$` values, `mx-mode`), as the app page's own. */
   search?: string;
+  /** The reader's discussion: selection actions and comments (loads the host comments module). */
+  comments?: boolean;
+  /** With `comments`: publish this reader's presence and report the others (`af-document-presence`). */
+  presence?: boolean;
 }
+
+/** For tests: how the comments module is loaded (default: its pinned address, same-origin). */
+export interface MountDocumentHooks { loadComments?: () => Promise<HostCommentsModule> }
 
 type Mode = 'light' | 'dark';
 export interface MountedDocument {
@@ -58,6 +77,9 @@ export interface MountedDocument {
   followVersion(version: number, live?: number): Promise<'morphed' | 'rebuilt' | 'reloaded'>;
   /** Datasets the document reads changed: it re-runs its queries. */
   notifyData(datasets: string[]): void;
+  /** With `comments`: open the comments rail inside `panel` (an element the shell lays out), or over the page's right edge. */
+  openComments(panel?: HTMLElement | null): void;
+  closeComments(): void;
   destroy(): void;
 }
 
@@ -82,14 +104,20 @@ async function freshFrame(win: Window, id: string, search: string): Promise<Fres
 }
 
 /** Mount document `id` into `container`. Rejects with a HostShellError when it cannot. */
-export async function mountDocument(container: HTMLElement, options: MountDocumentOptions, win: Window = window): Promise<MountedDocument> {
+export async function mountDocument(container: HTMLElement, options: MountDocumentOptions, win: Window = window, hooks: MountDocumentHooks = {}): Promise<MountedDocument> {
   const search = options.search ?? '';
+  // Asked for, the comments module loads beside the frame's ticket, never after it.
+  const commentsModule = options.comments
+    ? (hooks.loadComments ?? (() => import(/* @vite-ignore */ new URL(HOST_COMMENTS_PATH, win.location.href).href) as Promise<HostCommentsModule>))()
+    : null;
+  commentsModule?.catch(() => {});
   const first = await freshFrame(win, options.id, search);
   if (first.appOrigin !== win.location.origin) throw new HostShellError('wrong_origin', `This document trusts only ${first.appOrigin} as its parent; a host page must be served there, not at ${win.location.origin}.`);
   const { origin, id } = { origin: first.origin, id: options.id };
   let revision = first.revision;
   const doc = container.ownerDocument;
   const emit = (name: string, detail: unknown, cancelable = false) => container.dispatchEvent(new (win as unknown as typeof globalThis).CustomEvent(name, { detail, cancelable }));
+  const nonceListeners = new Set<(nonce: string) => void>();
 
   const frame = doc.createElement('iframe');
   frame.setAttribute('sandbox', FRAME_SANDBOX);
@@ -104,7 +132,7 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
     editId: () => first.editId, source: () => null,
     // No upload session: the bridge refuses uploads before any request.
     htmlContext: () => ({ revision, readOnly: false }),
-    onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); },
+    onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); for (const listener of [...nonceListeners]) listener(nonce); },
     onScroll: (scroll) => emit('af-document-scroll', scroll),
     onClosed: (reason) => emit('af-document-closed', { reason }),
     onUrlValues: (search, push) => emit('af-document-url-values', { search, push }),
@@ -122,11 +150,36 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
     navigate: (path) => { if (emit('af-document-navigate', { path }, true)) win.location.assign(path); },
   });
   const reload = () => { void remint(id).then((src) => { if (src) frame.src = src; }); };
+  const followVersion = (version: number, live = 0) => followHtmlVersion({
+    version, live, frame: bridge, reload,
+    refresh: async (drawn, shown) => {
+      const next = Number(shown);
+      if (!Number.isInteger(next) || next < drawn) return false;
+      revision = String(next);
+      return true;
+    },
+  });
+  // The discussion, once its module arrives; what the shell asked of it before then is kept and handed over.
+  let mode: HostMode | null = null;
+  let comments: HostComments | null = null;
+  let wanted: { open: boolean; panel: HTMLElement | null } = { open: false, panel: null };
+  let destroyed = false;
+  void commentsModule?.then(({ mountHostComments, stylesheet }) => {
+    if (destroyed) return;
+    comments = mountHostComments({
+      win, id, stylesheet, emit, bridge, mode, presence: options.presence === true,
+      nonce: () => bridge.nonce, onNonce: (listener) => { nonceListeners.add(listener); return () => { nonceListeners.delete(listener); }; },
+      version: Number(first.revision) || 0, editId: first.editId,
+      followVersion: (version, live) => { void followVersion(version, live); },
+      notifyData: (datasets) => bridge.invalidate(datasets),
+    });
+    if (wanted.open) comments.open(wanted.panel);
+  }, () => emit('af-document-comments-unavailable', {}));
 
   return {
     frame, origin, bridge,
     get revision() { return revision; },
-    setMode: (mode) => bridge.send({ type: STORY_READER_MODE_MESSAGE, mode }),
+    setMode(next) { mode = next; bridge.send({ type: STORY_READER_MODE_MESSAGE, mode: next }); comments?.setMode(next); },
     setDesignSystem: (name, mode) => bridge.send({ type: 'mx:design-system', name, mode }),
     select: (path, selectOptions) => bridge.send({ type: 'mx:select', path, ...(selectOptions?.reveal ? { reveal: true } : {}) }),
     scrollToHash(hash) {
@@ -138,16 +191,10 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
       try { frame.contentWindow?.postMessage({ type: STORY_URL_VALUES_MESSAGE, search }, origin); } catch { /* the frame went away */ }
     },
     setInset: (px) => bridge.setTopInset(px),
-    followVersion: (version, live = 0) => followHtmlVersion({
-      version, live, frame: bridge, reload,
-      refresh: async (drawn, shown) => {
-        const next = Number(shown);
-        if (!Number.isInteger(next) || next < drawn) return false;
-        revision = String(next);
-        return true;
-      },
-    }),
+    followVersion,
     notifyData: (datasets) => bridge.invalidate(datasets),
-    destroy() { stopEvents(); stopNavigation(); stopSession(); bridge.dispose(); frame.remove(); },
+    openComments(panel) { wanted = { open: true, panel: panel ?? null }; comments?.open(panel ?? null); },
+    closeComments() { wanted = { open: false, panel: null }; comments?.close(); },
+    destroy() { destroyed = true; comments?.destroy(); nonceListeners.clear(); stopEvents(); stopNavigation(); stopSession(); bridge.dispose(); frame.remove(); },
   };
 }

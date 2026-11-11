@@ -3,4 +3,4 @@
 export { createRuntimeAssetRetention, createSourceRetention } from './asset-retention';
 export type { RuntimeAssetRetention, SourceRetention } from './asset-retention-contract';
 export { retainedPublicAssets, retainedRuntimeAssets } from './asset-retention.server';
-export { buildHtmlAssets } from './build.server';
+export { buildHtmlAssets, hostCommentsPath } from './build.server';

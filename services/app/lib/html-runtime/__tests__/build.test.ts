@@ -2,7 +2,7 @@ import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {gzipSync} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import { expect, it } from 'vitest';
-import { buildHtmlCore,buildHtmlAssets } from '../build.server';
+import { buildHtmlCore,buildHtmlAssets,hostCommentsPath } from '../build.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
 import { PLATFORM_STYLES_PATH } from '../../html-systems';
 /** `@afbin/offline-sql` gzipped: the SQLite engine and its wasm, carried only by an export with rows (594,406 B measured 2026-11-10). */
@@ -312,11 +312,27 @@ it('loads the native trial in a separate module without server HTML parsers',asy
 it('ships the document host module (/af/host.js) as its own small module: no app framework, no page runtime, no credential',async()=>{
  const assets=await buildHtmlAssets();
  const host=assets.host!;
- // The parent half of the bridge and its relays, gzipped as served (8,012 B measured 2026-11-11).
+ // The parent half of the bridge and its relays, gzipped as served (8,012 B measured 2026-11-11; 8,448 B with the
+ // comments option, whose module stays apart, below).
  expect(gzipSync(host).byteLength).toBeLessThanOrEqual(10*1024);
  expect(host).toMatch(/export\s*\{[^}]*mountDocument/);
  expect(host).not.toMatch(/solid-js|@afbin\//);
  // Loaded by another shell, never by a page: not in the core's import map, and no skew guard tied to a core.
  expect(assets.core).not.toContain('/af/host.js');
  expect(host).not.toContain('afbin:runtime-reload');
+});
+
+it('ships the host comments module apart, at the pinned address the host module names, as public UI code',async()=>{
+ const assets=await buildHtmlAssets();
+ const comments=assets.hostComments!;
+ expect(comments).toMatch(/export\s*\{[^}]*mountHostComments/);
+ expect(comments).toMatch(/export\s*\{[^}]*stylesheet/);
+ // The app's discussion (Solid, the comment editor, the app's sheet), loaded only when a shell asks for comments
+ // (243,000 B gzipped measured 2026-11-11, the comment editor most of it).
+ expect(gzipSync(comments).byteLength).toBeLessThanOrEqual(256*1024);
+ // The host module imports exactly this build's comments, never bundles them.
+ expect(assets.host).toContain(hostCommentsPath(comments));
+ expect(assets.host).not.toMatch(/data-trusted-ui|ProseMirror/);
+ expect(assets.core).not.toContain('host-comments');
+ expect(comments).not.toContain('afbin:runtime-reload');
 });

@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-vi.mock('../build-portable-chrome.server',()=>({buildPortableChrome:async()=>''}));
+vi.mock('../build-portable-chrome.server',()=>({buildPortableChrome:async()=>'',buildHostComments:async()=>''}));
 import {buildHtmlAssets} from '../build.server';
 afterEach(()=>{vi.unstubAllGlobals();});
 /** The built apollo with its bare runtime imports (`@afbin/reader`, and `@afbin/state`, which also imports the reader) bound to data URLs, as the page's import map binds them. */

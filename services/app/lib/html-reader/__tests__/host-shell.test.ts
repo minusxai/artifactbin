@@ -19,6 +19,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { identityForUser } from '@/lib/accounts';
 import { pagesOriginFor, pagesSite } from '@/lib/http';
 import { mountDocument, HostShellError, type MountedDocument } from '../host-shell';
+import type { HostComments, HostCommentsModule, HostCommentsOptions } from '../host-comments-contract';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '../contract';
 import { createAppServer } from '@/server/app';
 import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
@@ -150,6 +151,61 @@ describe('a host page on the app\'s own origin', () => {
     const who = await doc.fetchThrough(`/api/artifacts/${w.publicPage}/fn/whoami`, 'GET', null);
     expect(who.body.principal).toEqual({ tenant: w.publicPage, subject: null, role: 'anonymous' });
     mounted.destroy();
+  });
+});
+
+describe('a host page that asks for comments', () => {
+  /** A comments module that records what the host module hands it, arriving when `arrive` is called. */
+  function commentsModule() {
+    const calls: string[] = [];
+    let handed: HostCommentsOptions | null = null;
+    let arrive!: () => void;
+    const comments: HostComments = {
+      open: (panel) => { calls.push(`open:${panel ? panel.id : 'overlay'}`); }, close: () => { calls.push('close'); },
+      setMode: (mode) => { calls.push(`mode:${mode}`); }, destroy: () => { calls.push('destroy'); },
+    };
+    const loaded = new Promise<HostCommentsModule>((resolve) => { arrive = () => resolve({ stylesheet: '.sheet{}', mountHostComments: (options) => { handed = options; return comments; } }); });
+    return { calls, handed: () => handed, arrive, loadComments: () => loaded };
+  }
+
+  it('loads its comments module only when asked, and hands it the bridge, the served head and what the shell asked before it arrived', async () => {
+    const w = world();
+    const plain = hostPage(session(w.owner));
+    const unused = commentsModule();
+    let asked = 0;
+    const without = await mountDocument(plain.container, { id: w.privatePage }, plain.win, { loadComments: () => { asked++; return unused.loadComments(); } });
+    without.openComments(null);
+    expect(asked).toBe(0);
+    without.destroy();
+
+    const { win, container } = hostPage(session(w.owner));
+    const module = commentsModule();
+    const mounted = await mountDocument(container, { id: w.privatePage, comments: true, presence: true }, win, { loadComments: module.loadComments });
+    const panel = Object.assign(win.document.createElement('aside'), { id: 'panel' });
+    // Asked before the module arrives: kept and handed over.
+    mounted.setMode('dark');
+    mounted.openComments(panel);
+    const nonces: string[] = [];
+    module.arrive();
+    await expect.poll(() => module.handed()).not.toBeNull();
+    const handed = module.handed()!;
+    expect(handed).toMatchObject({ id: w.privatePage, stylesheet: '.sheet{}', version: 1, mode: 'dark', presence: true, bridge: mounted.bridge });
+    expect(handed.editId).toBeTruthy();
+    expect(module.calls).toEqual(['open:panel']);
+    handed.onNonce((nonce) => nonces.push(nonce));
+    // The frame's controller signs its events: the comments hear its nonce, as the app page's discussion does.
+    framedDocument(win, mounted);
+    expect(nonces).toEqual(['n'.repeat(16)]);
+    expect(handed.nonce()).toBe('n'.repeat(16));
+    // Its events go to the shell's container.
+    const heard: unknown[] = [];
+    container.addEventListener('af-document-comments', (event) => heard.push((event as CustomEvent).detail));
+    handed.emit('af-document-comments', { open: 2, unread: 0, panel: true });
+    expect(heard).toEqual([{ open: 2, unread: 0, panel: true }]);
+    mounted.setMode('light');
+    mounted.closeComments();
+    mounted.destroy();
+    expect(module.calls).toEqual(['open:panel', 'mode:light', 'close', 'destroy']);
   });
 });
 

@@ -1,4 +1,4 @@
-import {buildPortableChrome} from './build-portable-chrome.server';
+import {buildHostComments,buildPortableChrome} from './build-portable-chrome.server';
 import {build,type PluginBuild,type Plugin} from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -13,6 +13,8 @@ import {RUNTIME_BUILD_KEY,RUNTIME_MODULE_PATHS} from './contract';
  * refuses to run. Pages without a hosted core (offline copies embed their own modules) never set the id.
  */
 const skewGuard=(id:string)=>`{const c=globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})];if(c&&c!==${JSON.stringify(id)}){let r=!1;try{const n="afbin:runtime-reload";if(sessionStorage.getItem(n)!==${JSON.stringify(id)}){sessionStorage.setItem(n,${JSON.stringify(id)});r=!0}}catch{}if(r)location.reload();throw Error("Artifactbin runtime updated; reload the page")}}\n`;
+/** The host comments module's pinned address (lib/document-serving/hosted-blocks): its digest under /af/v1/host/. */
+export const hostCommentsPath=(source:string)=>`/af/v1/host/${createHash('sha256').update(source).digest('hex')}.js`;
 let assets:Promise<HtmlRuntimeAssets>|undefined;
 /** Build immutable code once. Page configuration is supplied only by assembly. */
 export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=compile().catch(error=>{assets=undefined;throw error;});}
@@ -53,7 +55,11 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const offlineSqlBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./offline-sql.ts',import.meta.url))],format:'esm',define:{__AF_SQLITE_WASM__:JSON.stringify(sqliteWasm.toString('base64'))}});
  // The document host module (lib/html-reader/host-shell, /af/host.js): loaded by another shell on the app's origin, never by
  // a page, so it has no import-map entry and no skew guard (no core runs beside it); the manifest pins it by digest.
- const hostBuild=await build({...options,entryPoints:[fileURLToPath(new URL('../html-reader/host-shell.ts',import.meta.url))],format:'esm'});
+ // Its discussion (the host comments module, ./build-portable-chrome) is a module of its own the host module imports only
+ // when a shell asks for comments; the host module names that build's pinned address (/af/v1/host/<sha256>.js, kept by
+ // the same retention), so a pinned host module always loads the comments it was built with.
+ const hostComments=await buildHostComments();
+ const hostBuild=await build({...options,entryPoints:[fileURLToPath(new URL('../html-reader/host-shell.ts',import.meta.url))],format:'esm',define:{__AF_HOST_COMMENTS__:JSON.stringify(hostCommentsPath(hostComments))}});
  const chrome=await buildPortableChrome();
  // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
  // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
@@ -111,5 +117,5 @@ if(config.offline&&window.parent===window){void import(reader).then(module=>modu
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostComments};
 }

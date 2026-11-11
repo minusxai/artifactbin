@@ -13,6 +13,7 @@ import { GET as pinnedComponent } from '@/app/af/v1/components/[digest]/[file]/r
 import { GET as pinnedStyles } from '@/app/af/v1/styles/[file]/route';
 import { GET as pinnedHost } from '@/app/af/v1/host/[file]/route';
 import { GET as flatHost } from '@/app/af/host.js/route';
+import { GET as flatHostComments } from '@/app/af/host-comments.js/route';
 import { GET as flatComponent } from '@/app/af/components/[file]/route';
 import { retainedPublicAssets } from '@/lib/html-runtime/server';
 import { HTML_SYSTEM_NAMES, THEME_TOKENS } from '@/lib/html-systems';
@@ -24,7 +25,7 @@ const APP = 'https://app.example.test';
 const sri = (body: string | Buffer) => `sha384-${createHash('sha384').update(body).digest('base64')}`;
 const sha256 = (body: string) => createHash('sha256').update(body).digest('hex');
 interface Manifest {
-  version: number; components: Record<string, string>; styles: string; host: string; fonts: string;
+  version: number; components: Record<string, string>; styles: string; host: string; hostComments: string; fonts: string;
   designSystems: Record<string, { label: string; defaultMode: string; styles: string }>;
   theme: { attributes: Record<string, string>; tokens: string[]; optionalTokens: string[] }; integrity: Record<string, string>;
 }
@@ -84,6 +85,15 @@ it('names every public component, the stylesheets and the host module at immutab
   expect(m.integrity[m.host]).toBe(sri(hostSource));
   const repeat = await pinned(m.host, { 'if-none-match': host.headers.get('etag')! });
   expect(repeat.status).toBe(304);
+  // Its comments module: pinned beside it in the same retention, and the address the host module itself imports.
+  const comments = await pinned(m.hostComments);
+  expect(comments.status).toBe(200);
+  expect(comments.headers.get('access-control-allow-origin')).toBe('*');
+  const commentsSource = await comments.text();
+  expect(commentsSource).toBe(await (await flatHostComments(new Request(`${APP}/af/host-comments.js`))).text());
+  expect(commentsSource).toContain('mountHostComments');
+  expect(m.integrity[m.hostComments]).toBe(sri(commentsSource));
+  expect(hostSource).toContain(m.hostComments);
 });
 
 it('keeps answering a bundle an earlier deploy built, and refuses what it never stored or that was tampered with', async () => {

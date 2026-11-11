@@ -9,7 +9,8 @@
  *   /af/v1/components/<digest>/<file>   one build's public components and the chunks they import, as one retained
  *                                       bundle (sha256 of its canonical JSON): relative chunk imports resolve inside it
  *   /af/v1/styles/<sha256>.css          the whole platform stylesheet, or one design system's
- *   /af/v1/host/<sha256>.js             the document host module (lib/html-reader/host-shell)
+ *   /af/v1/host/<sha256>.js             the document host module (lib/html-reader/host-shell), and the host comments
+ *                                       module it imports by this address when a shell asks for comments
  *   /af/fonts/<name>.woff2              already immutable: a font name never changes its bytes
  *
  * Kept by the runtime's retention (lib/html-runtime createSourceRetention, a namespace per kind): an address
@@ -20,7 +21,7 @@
 import { createHash } from 'node:crypto';
 import { publicComponentFiles } from '@/lib/libraries/server';
 import { hostedComponentEntries } from '@/lib/libraries';
-import { buildHtmlAssets, createSourceRetention, retainedPublicAssets, type SourceRetention } from '@/lib/html-runtime/server';
+import { buildHtmlAssets, hostCommentsPath, createSourceRetention, retainedPublicAssets, type SourceRetention } from '@/lib/html-runtime/server';
 import { HTML_SYSTEM_NAMES, HTML_SYSTEM_LABELS, PLATFORM_FONTS_PATH, THEME_ATTRIBUTES, THEME_TOKENS, OPTIONAL_THEME_TOKENS, htmlSystemsCss } from '@/lib/html-systems';
 import { HTML_SYSTEM_MODES } from '@/lib/validation/html-system-modes';
 import { matchingTag, publicRevalidatedResponse } from '@/lib/http';
@@ -53,7 +54,7 @@ async function blocks(): Promise<Blocks> {
   const [assets, files] = await Promise.all([buildHtmlAssets(), publicComponentFiles()]);
   // A development rebuild of the components changes their bytes: the key (their per-file digests, read once per file
   // by lib/libraries/components.server) follows them, so the manifest does too. The bundle is assembled only then.
-  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '']));
+  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '', assets.hostComments ?? '']));
   if (current?.key === key) return current.blocks;
   const pending = (async (): Promise<Blocks> => {
     const text = files ? bundleText(files) : null;
@@ -61,7 +62,7 @@ async function blocks(): Promise<Blocks> {
     const retention = {
       components: createSourceRetention(text ? [text] : [], stores.components, sha256),
       styles: createSourceRetention(Object.values(sheets), stores.styles, sha256),
-      host: createSourceRetention(assets.host ? [assets.host] : [], stores.host, sha256),
+      host: createSourceRetention([assets.host, assets.hostComments].filter((source): source is string => !!source), stores.host, sha256),
     };
     const bundle = text ? { digest: sha256(text), files: (JSON.parse(text) as { files: Record<string, string> }).files } : null;
     const hashes: Record<string, string> = {};
@@ -75,6 +76,8 @@ async function blocks(): Promise<Blocks> {
     }
     const host = assets.host ? `/af/v1/host/${sha256(assets.host)}.js` : null;
     if (host) hashes[host] = integrity(assets.host!);
+    const hostComments = assets.hostComments ? hostCommentsPath(assets.hostComments) : null;
+    if (hostComments) hashes[hostComments] = integrity(assets.hostComments!);
     const manifest = JSON.stringify({
       version: 1,
       components,
@@ -82,6 +85,7 @@ async function blocks(): Promise<Blocks> {
       designSystems: Object.fromEntries(HTML_SYSTEM_NAMES.map(name => [name, { label: HTML_SYSTEM_LABELS[name], defaultMode: HTML_SYSTEM_MODES[name], styles: styleUrl(sheets[name]!) }])),
       fonts: PLATFORM_FONTS_PATH,
       ...(host ? { host } : {}),
+      ...(hostComments ? { hostComments } : {}),
       theme: { attributes: THEME_ATTRIBUTES, tokens: THEME_TOKENS, optionalTokens: OPTIONAL_THEME_TOKENS },
       integrity: hashes,
     });
