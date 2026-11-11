@@ -101,9 +101,6 @@ const commands = {
       reopen: {thread: flag(), 'expected-revision': flag(), request: flag(), resume: flag()},
       react: {comment: flag(), kind: flag(), active: flag(), request: flag(), resume: flag()},
       watch: {
-        cursor: flag(),
-        once: flag('boolean'),
-        append: flag('boolean'),
         next: flag('boolean'),
         replied: flag('boolean'),
         wait: flag()
