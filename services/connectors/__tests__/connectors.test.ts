@@ -1,13 +1,13 @@
 /**
  * THE CONNECTORS, through their public entry: the statement rules (binding, the read-only gate, the page's name
  * mapping), configuration checks and secrecy, the network rule, and the Postgres connector end to end against a real
- * Postgres engine on a loopback socket (./pglite-wire): rows and types, bound values, the read-only session, limits,
+ * Postgres engine on a loopback socket (test-support pglite-wire): rows and types, bound values, the read-only session, limits,
  * and the viewer's values as the database sees them. TLS, statement timeouts, row policies and MySQL run against
  * real servers in services/app/lib/connections/__tests__/connectors-docker.test.ts (integration project).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connectionSummary, connectorError, connectorList, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
-import { startPgliteWire, type PgliteWire } from './pglite-wire';
+import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 
 const DEV = { allowPrivateNetwork: true }, PUBLIC = { allowPrivateNetwork: false };
 const failure = async (p: Promise<unknown>) => p.then(() => { throw Error('expected a refusal'); }, (e) => connectorError(e));

@@ -17,5 +17,8 @@
     "@artifactbin/utils": "*",
     "mysql2": "3.24.6",
     "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@artifactbin/test-support": "*"
   }
 }

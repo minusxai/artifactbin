@@ -1,6 +1,7 @@
 import {isUserPagesHost,handleFromUserPagesHost} from './services/app/lib/user-pages';
 import {userHostIngress,userHostStaticPath,USER_HOST_CREDENTIAL_HEADERS} from './services/app/server/user-host';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from './services/app/lib/deployment';
+import {closeDefaultConnection,validateDefaultConnection} from './services/app/lib/connections';
 import {trustedForwarded} from './services/app/lib/http';
 /**
  * OSS single-process host: shared authentication wraps the app. SQL, browser
@@ -180,6 +181,8 @@ async function main(): Promise<void> {
   await ensureAuthSchema(queryable, authSchema);
   if (appOnly) await ensureHumanAuthSchema({ schema: authSchema, ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }) });
   const reader = createBearerReader({ db: queryable, authSchema, admitBearer: token => canAuthenticateUser(token.userId) });
+  // DATASETS__DEFAULT_CONNECTION: a bad value stops the start here, naming the setting (never its value).
+  validateDefaultConnection();
   if (!appOnly) {
     validateDeploymentConfiguration();
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
@@ -303,6 +306,7 @@ async function main(): Promise<void> {
     () => services().events.close?.() ?? Promise.resolve(),
     () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())),
     async () => { await vite?.close(); },
+    closeDefaultConnection,
     () => db.close(),
   ] });
 

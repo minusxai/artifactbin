@@ -2,12 +2,13 @@
   "name": "@artifactbin/test-support",
   "version": "0.1.0",
   "private": true,
-  "description": "The fixtures every workspace's tests share: the real-socket HTTP server, and one PGLite with schema reset and a minted token row. Runner-agnostic on purpose: nothing here imports a test runner.",
+  "description": "The fixtures every workspace's tests share: the real-socket HTTP server, and one PGLite with schema reset and a minted token row, and a PGLite Postgres on a loopback socket speaking the wire protocol. Runner-agnostic on purpose: nothing here imports a test runner.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
     "./net": "./src/net.ts",
-    "./db": "./src/db.ts"
+    "./db": "./src/db.ts",
+    "./pglite-wire": "./src/pglite-wire.ts"
   },
   "files": [
     "src"

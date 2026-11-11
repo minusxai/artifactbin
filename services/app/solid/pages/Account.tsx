@@ -8,6 +8,7 @@ import { AvatarCircle } from '../ui/AvatarCircle';
 import { UsernameCard } from '../account/UsernameCard';
 import { NotificationSettings } from '../account/NotificationSettings';
 import { TokensPanel } from '../account/TokensPanel';
+import { DefaultConnectionPanel } from '../account/DefaultConnectionPanel';
 import { Button } from '../ui/Button';
 import { Panel } from '../ui/Panel';
 import { SectionHeading } from '../ui/PageHeader';
@@ -28,6 +29,7 @@ export function AccountPage(): JSX.Element {
         </section>
         <Show when={page.data()?.user_page_url}>{url => <p class="text-sm text-muted">Your public home: <a class="text-accent" href={url()}>{url()}</a></p>}</Show>
         <NotificationSettings />
+        <DefaultConnectionPanel />
         <section aria-labelledby="connections-heading"><SectionHeading id="connections-heading">API access</SectionHeading><p class="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Manage API access to your account. Revoking a token stops clients using it. To connect an authoring agent, follow the <a href="/llms/http-auth" class="text-accent">HTTP authentication guide</a>.</p><div class="mt-4"><TokensPanel /></div></section>
       </div>
     </main>

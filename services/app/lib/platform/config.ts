@@ -467,6 +467,28 @@ env('DATA_SERVICES', 'TRUSTED');
 export const dataServices = (): readonly DataService[] => parseDataServices(env('DATA_SERVICES', 'TRUSTED'));
 
 /**
+ * DATASETS__DEFAULT_CONNECTION: the install's default connection, one connector configuration JSON object
+ * (contracts `CONNECTORS`; `{"connector":"postgres","host":…,"password":…}`), secrets included. Every signed-in person
+ * may query it read-only from a page (`<link rel="af-dataset" href="default:">`) or an agent. Unset, the default: none.
+ * Checked at boot (lib/connections `validateDefaultConnection`): a bad value stops the start naming this setting and
+ * never echoing the value. Read at each use, so a test's `overrideConfig` environment applies.
+ */
+env('DATASETS', 'DEFAULT_CONNECTION');
+export const defaultConnectionSetting = (): string | null => env('DATASETS', 'DEFAULT_CONNECTION')?.trim() || null;
+/**
+ * DATASETS__ALLOW_PRIVATE_NETWORK: `1` lets connections reach loopback and private addresses and turn TLS off
+ * (`"tls":"disable"`), for development or a database on the install's own network. `0` (unset, the default): public
+ * addresses over verified TLS only. Link-local and cloud metadata addresses are refused either way. Any other value
+ * refuses the boot.
+ */
+env('DATASETS', 'ALLOW_PRIVATE_NETWORK');
+export function datasetsAllowPrivateNetwork(): boolean {
+  const value = env('DATASETS', 'ALLOW_PRIVATE_NETWORK')?.trim() || '0';
+  if (value !== '0' && value !== '1') throw new Error('DATASETS__ALLOW_PRIVATE_NETWORK must be 0 (the default) or 1.');
+  return value === '1';
+}
+
+/**
  * APP__SHELL_FILE: the path of one HTML file this process can read, served in place of the app's own screens
  * (server/custom-shell says which addresses, and what stays the app's). Unset, the default: the app's screens.
  */

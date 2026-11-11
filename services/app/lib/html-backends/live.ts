@@ -14,14 +14,15 @@ interface HtmlSharedAccess { mayReadDataset(id:string):Promise<boolean> }
  */
 export async function htmlSharedRevisions(db:Queryable,links:readonly HtmlPageLink[],access:HtmlSharedAccess):Promise<HtmlSharedRevision[]>{
  const resolvers=links.some(link=>link.kind==='backend');
- const datasets=links.filter(link=>link.kind==='dataset'&&link.mode==='live');
+ const datasets=links.filter((link):link is Extract<HtmlPageLink,{kind:'dataset'}>=>link.kind==='dataset'&&link.mode==='live');
  const allowed=new Set((await Promise.all(datasets.map(async link=>await access.mayReadDataset(link.datasetId)?link.datasetId:null))).filter((id):id is string=>id!==null));
  const wanted=resolvers?new Set(datasets.map(link=>link.datasetId)):allowed;
  const rows=wanted.size?(await db.query<{id:string;version:number;edit_id:string;live:boolean}>('SELECT id,version,edit_id,deleted_at IS NULL AS live FROM artifacts WHERE id=ANY($1::text[])',[[...wanted]])).rows:[];
  const linked=createHash('sha256').update(JSON.stringify([...new Set(datasets.map(link=>link.datasetId))].sort().map(id=>{const row=rows.find(row=>row.id===id);return [id,row?row.version:null,row?.edit_id??null,row?.live??false];}))).digest('base64url');
  return links.flatMap(link=>{
   if(link.kind==='backend')return [{name:link.name,revision:`resolver:${link.backendId}:${linked}`}];
-  if(link.mode!=='live')return [];
+  // The default connection has no revision to watch: it is never invalidated.
+  if(link.kind!=='dataset'||link.mode!=='live')return [];
   if(!allowed.has(link.datasetId))return [{name:link.name,revision:'unavailable'}];
   const row=rows.find(row=>row.id===link.datasetId);return [{name:link.name,revision:row?.live?`dataset:${link.datasetId}:${row.version}:${row.edit_id}:true`:'unavailable'}];
  });

@@ -39,7 +39,7 @@ export function connectorList(): (ConnectorSpec & { available: boolean })[] {
   return CONNECTORS.map((spec) => ({ ...spec, available: !!MODULES[spec.id] }));
 }
 
-export { connectionSummary, connectionSecrets, parseConnectionConfig } from './config';
+export { connectionSummary, parseConnectionConfig } from './config';
 export { ConnectorFailure, connectorError } from './errors';
 export { leadingWords, mapQualifiers, qualifierNames } from './statement';
 export { checkedNamespace } from './answer';

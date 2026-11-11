@@ -13,6 +13,7 @@ import {readHtmlPage} from '@/lib/html-publication';
 import {createBackendInvoker,createResolverSql,callPageFunction,FUNCTION_INPUT_BYTES,pageHeadDigest,resolverFieldRefusal,ResolverQueryError,type AdmissionCheck,type PageFunctionSource,type ResolverAdmit} from '@/lib/page-operations';
 import {renewScheduleClaim,scheduleClaimHolds} from '@/lib/function-schedules';
 import {executePageSql,planLinkedDatasetTables,type PageCommitGuard} from '@/lib/dataset-access';
+import {pageConnectionSql} from '@/lib/connections';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 import {DatasetError} from '@/lib/datasets';
 import {runWithRequest,services} from '@/lib/platform';
@@ -184,7 +185,8 @@ async function answerSql(request:Request,pageId:string,reader?:AccessActor):Prom
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   for(let attempt=1;;attempt++){
    try{
-    const reply=await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
+    // A statement naming a default-connection link runs wholly on the install's connection (lib/connections).
+    const reply=await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
     await verifyPage(page.revision);
     // The last guard: nothing past the SQL output budget leaves, however it was produced.

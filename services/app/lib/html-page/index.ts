@@ -1,6 +1,6 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
@@ -161,9 +161,11 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
  }
  return carried;
 }
+/** What may follow `default:`: empty, one identifier, or (BigQuery) `project.dataset`; quoted per dialect when used. */
+const DEFAULT_NAMESPACE=/^(?:[A-Za-z_][A-Za-z0-9_$-]{0,62}(?:\.[A-Za-z_][A-Za-z0-9_$-]{0,62})?)?$/;
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
- const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const names=new Set<string>();
+ const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const names=new Set<string>();
  for(const element of allElements(html).all){
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
@@ -176,15 +178,22 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
   if(names.has(name))throw new Error('Duplicate namespace');names.add(name);
   if(names.size>20)throw new Error('Too many namespaces');
   if(backend){backends.push(name);continue;}
+  // The install's default connection: `default:` and the namespace (schema, database, dataset) it reads, never pinned.
+  const fallback=/^default:(.*)$/s.exec(attribute(element,'href')??'');
+  if(fallback){
+   if(!DEFAULT_NAMESPACE.test(fallback[1]!))throw new Error('A default-connection href is default: and one schema name (letters, digits, _, $ or -)');
+   if(attribute(element,'data-af-mode')!==null||attribute(element,'data-af-revision')!==null)throw new Error('The default connection is always live: it has no mode or revision');
+   connections.push({kind:'default-connection',name,namespace:fallback[1]!});continue;
+  }
   const match=/^ref:([A-Za-z0-9]{6,128})$/.exec(attribute(element,'href')??'');
-  if(!match)throw new Error('Dataset href must name an artifact as ref:<id>');
+  if(!match)throw new Error('Dataset href must name an artifact as ref:<id>, or the default connection as default:');
   const mode=attribute(element,'data-af-mode')??'live';
   const revision=attribute(element,'data-af-revision');
   if(mode==='live'&&revision===null)datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'live'});
   else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'pinned',revision});
   else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
  }
- return {backends,datasets};
+ return {backends,datasets,connections};
 }
 export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
 /**

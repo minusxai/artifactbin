@@ -9,7 +9,8 @@ import { trackEvent } from '@/lib/analytics';
 import {compilePageBackend,composePageSchema,pageDocumentProblems} from '@/lib/page-operations';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import {pageDatasetCheckSources,pageDatasetRoots} from '@/lib/graphql-compat';
-import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlPageLink} from '@artifactbin/contracts';
+import {hasDefaultConnection} from '@/lib/connections';
 import {credentialNames,type PreparedHtmlBackend} from '@/lib/html-backends';
 import {pageFunctionPublishRefusal} from './function-rules';
 /**
@@ -37,14 +38,16 @@ async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:str
  });return json(saved.body,saved.status);
 }
 
-async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly HtmlDatasetLink[]|undefined|Response>{
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]|undefined|Response>{
  if(typeof body.html!=='string')return undefined;
  try{
-  const {backends,datasets}=htmlPageDeclarations(body.html);
+  const {backends,datasets,connections}=htmlPageDeclarations(body.html);
+  // `default:` reads the install's default connection: refused where the install has none.
+  if(connections.length&&!hasDefaultConnection())return json({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
   const collision=await graphqlRootCollision(actor,backends,datasets);
   if(collision)return json({error:'graphql_root_collision',details:[collision]},400);
-  return datasets;
+  return [...datasets,...connections];
  }catch(error){
   if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
   return json({error:'invalid_dataset_binding'},400);
@@ -99,9 +102,10 @@ const PAGE_GRAPHQL_HINT='A resolver\'s caps.query and the page\'s own queries ru
  * role-independent schema). A field the page lacks refuses the save before anything is written, naming the fix:
  * every such call would otherwise fail at run time with a detail only the owner sees. Nothing checkable is no refusal.
  */
-async function pageGraphqlRefusal(actor:AccessActor,html:unknown,datasets:readonly HtmlDatasetLink[]|undefined,backends:readonly PreparedHtmlBackend[]|undefined):Promise<Response|null>{
+async function pageGraphqlRefusal(actor:AccessActor,html:unknown,links:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]|undefined,backends:readonly PreparedHtmlBackend[]|undefined):Promise<Response|null>{
  if(typeof html!=='string'||!backends?.length)return null;
  let schema:Awaited<ReturnType<typeof pageDatasetCheckSources>>;
+ const datasets=links?.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
  try{schema=await pageDatasetCheckSources(actor,datasets??[]);}catch{return null;}
  const {resolverFiles,scripts}=htmlGraphqlSources(html),prepared=new Set(backends.map(backend=>backend.name));
  const problems=await pageDocumentProblems({

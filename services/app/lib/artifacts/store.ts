@@ -3,7 +3,7 @@ import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regio
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlBackendLink,HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
@@ -51,7 +51,8 @@ export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_u
 export interface ArtifactInput {
   /** Server-prepared only; never decoded from caller metadata. */
   htmlBackends?:readonly PreparedHtmlBackend[];
-  htmlDatasets?:readonly HtmlDatasetLink[];
+  /** The page's dataset links and default-connection links, in source order. */
+  htmlDatasets?:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[];
   destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
