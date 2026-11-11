@@ -102,7 +102,16 @@ async function stored(id: string, q?: Queryable, lock = false): Promise<StoredCo
   const db = q ?? await getDb();
   return (await db.query<StoredConnection>(`SELECT config, sealed, revision FROM dataset_connections WHERE dataset_id = $1${lock ? ' FOR UPDATE' : ''}`, [id])).rows[0] ?? null;
 }
-const secretsOf = (id: string, row: StoredConnection): Record<string, string> => (row.sealed ? JSON.parse(datasetConnectionCipher().open(row.sealed, [PURPOSE, id])) as Record<string, string> : {});
+/**
+ * The stored secrets, or null when they no longer open (the install's AUTH__SECRET changed): the connection then needs
+ * them entered again by an owner or editor, and nothing else about it changes.
+ */
+function sealedSecrets(id: string, row: StoredConnection): Record<string, string> | null {
+  if (!row.sealed) return {};
+  try { return JSON.parse(datasetConnectionCipher().open(row.sealed, [PURPOSE, id])) as Record<string, string>; } catch { return null; }
+}
+const secretsOf = (id: string, row: StoredConnection): Record<string, string> => sealedSecrets(id, row) ?? {};
+const UNSEALED = 'its stored secret no longer opens (this install\'s AUTH__SECRET changed): an owner or editor enters it again';
 
 /** One open connection per live dataset, reused while its stored revision holds. */
 const open = new Map<string, { revision: number; connection: OpenConnection; dialect: ConnectorDialect }>();
@@ -112,6 +121,7 @@ async function connectionOf(id: string): Promise<{ revision: number; connection:
   const cached = open.get(id);
   if (cached?.revision === row.revision) return cached;
   if (cached) { open.delete(id); void cached.connection.close(); }
+  if (!sealedSecrets(id, row)) throw new LiveDatasetRefusal(503, 'dataset_not_found', `the live dataset is unavailable: ${UNSEALED}`);
   let entry: { revision: number; connection: OpenConnection; dialect: ConnectorDialect };
   try {
     const config = parseConnectionConfig({ ...row.config, ...secretsOf(id, row) });
@@ -255,7 +265,9 @@ export async function updateLiveConnection(actor: AccessActor, id: string, input
       const next: Record<string, unknown> = { ...current.config, ...Object.fromEntries(Object.entries(sent).filter(([name]) => !secretNames.includes(name))) };
       for (const [name, v] of Object.entries(next)) if (v === null || v === '') delete next[name];
       const prior = parseConnectionConfig({ ...current.config, ...secretsOf(id, current) });
-      const keptSecrets = secretsOf(id, current);
+      const unsealed = sealedSecrets(id, current);
+      if (!unsealed && !sentSecrets.length) throw new LiveDatasetRefusal(400, 'secret_required', `send ${secretNames.join(' and ')} again: ${UNSEALED}`);
+      const keptSecrets = unsealed ?? {};
       const candidate = checkedConfig({ ...next, ...keptSecrets, ...Object.fromEntries(sentSecrets.map((name) => [name, sent[name]])) });
       const moved = spec.fields.filter((f) => !f.secret && JSON.stringify(candidate[f.name] ?? null) !== JSON.stringify(prior[f.name] ?? null)).map((f) => f.name);
       const kept = secretNames.filter((name) => keptSecrets[name] !== undefined && !sentSecrets.includes(name));

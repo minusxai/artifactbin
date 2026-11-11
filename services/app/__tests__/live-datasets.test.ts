@@ -96,6 +96,8 @@ it('creates a live dataset through the create door: a dataset with the connectio
   // Everywhere an answer or a stored row could carry it: nowhere.
   const answers = [created.text, mine.text, theirs.text, (await call(artifactGet as never, `/api/artifacts/${id}`, id, alice)).text, (await call(contentGet as never, `/api/artifacts/${id}/content`, id, alice)).text];
   for (const text of answers) expect(text).not.toContain(PASSWORD);
+  // The artifact read (what the dataset editor opens) carries the summary as its meta, and no rows.
+  expect((await call(artifactGet as never, `/api/artifacts/${id}`, id, alice)).body).toMatchObject({ format: 'dataset', meta: { connection: row.meta.connection }, rows: [] });
   expect(await everyStoredRow()).not.toContain(PASSWORD);
   // The page lists it with the datasets.
   expect((await (await getDb()).query("SELECT count(*)::int AS n FROM artifacts WHERE format='dataset' AND id=$1", [id])).rows[0]).toEqual({ n: 1 });
@@ -130,6 +132,16 @@ it('lets only its owner and editors change the connection, keeps an omitted secr
   expect((await patch(alice, { port: 1, password: PASSWORD })).status).toBe(200);
   const gone = await call(queryPost as never, `/api/artifacts/${id}/query`, id, alice, { method: 'POST', json: { sql: 'select 1 as one' } });
   expect(gone.status).toBe(503);
+  // A sealed secret that no longer opens (AUTH__SECRET changed; here: another dataset's ciphertext) is never used and
+  // never silently dropped: queries say why, and the next change must carry the secret.
+  const other = (await createLive(alice)).body.id;
+  await (await getDb()).query('UPDATE dataset_connections SET sealed = (SELECT sealed FROM dataset_connections WHERE dataset_id = $2) WHERE dataset_id = $1', [id, other]);
+  await closeLiveDatasetConnections(); // a restart under a new AUTH__SECRET opens nothing it had
+  const unsealed = await call(queryPost as never, `/api/artifacts/${id}/query`, id, alice, { method: 'POST', json: { sql: 'select 1 as one' } });
+  expect([unsealed.status, unsealed.body.message]).toEqual([503, "the live dataset is unavailable: its stored secret no longer opens (this install's AUTH__SECRET changed): an owner or editor enters it again"]);
+  expect((await patch(alice, { port: wire.port })).body.error).toBe('secret_required');
+  expect((await patch(alice, { port: wire.port, password: PASSWORD })).status).toBe(200);
+  expect((await call(queryPost as never, `/api/artifacts/${id}/query`, id, alice, { method: 'POST', json: { sql: 'select 1 as one' } })).status).toBe(200);
 });
 
 it('answers free SQL for owners and editors only, through the page and the agent door, on the dataset\'s connection', async () => {
