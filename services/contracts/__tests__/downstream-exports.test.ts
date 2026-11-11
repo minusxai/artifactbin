@@ -7,18 +7,18 @@
  */
 import { expect, expectTypeOf, it } from 'vitest';
 import {
-  ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS, FORWARDED_HOST, FORWARDED_PROTO,
-  HUMAN_SESSION_LIVE_PATH, RESOLVER_LIMITS, SERVICE_AUTH_HEADER, eventName, isQueryFailure,
+  ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS, EVENTS_PUBLISH_PATH, FORWARDED_HOST, FORWARDED_PROTO,
+  HUMAN_SESSION_LIVE_PATH, IDENTITY_INTROSPECT_PATH, RESOLVER_LIMITS, SERVICE_AUTH_HEADER, eventName, isQueryFailure,
   type Actor, type DatasetPolicy, type EventEnvelope, type EventPayload, type EventVerb, type EventsService,
   type MutationInput, type MutationOutcome, type ObjectKind, type Part, type Queryable, type RunSnapshot, type RunStart,
-  type RunnerService, type SqlService, type TokenReader, type Upstream,
+  type RunnerService, type SqlService, type TokenReader, type TokenRecord, type Upstream,
 } from '@artifactbin/contracts';
 
 it('exports the values the deployment imports', () => {
-  const values = { ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, RESOLVER_LIMITS, SERVICE_AUTH_HEADER, eventName, isQueryFailure };
+  const values = { ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS, EVENTS_PUBLISH_PATH, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, IDENTITY_INTROSPECT_PATH, RESOLVER_LIMITS, SERVICE_AUTH_HEADER, eventName, isQueryFailure };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
 });
 
 it('exports the types the deployment imports', () => {
-  expectTypeOf<[Actor, DatasetPolicy, EventEnvelope, EventPayload<'artifact', 'created'>, EventVerb<'artifact'>, EventsService, MutationInput, MutationOutcome, ObjectKind, Part, Queryable, RunSnapshot, RunStart, RunnerService, SqlService, TokenReader, Upstream]>().not.toBeNever();
+  expectTypeOf<[Actor, DatasetPolicy, EventEnvelope, EventPayload<'artifact', 'created'>, EventVerb<'artifact'>, EventsService, MutationInput, MutationOutcome, ObjectKind, Part, Queryable, RunSnapshot, RunStart, RunnerService, SqlService, TokenReader, TokenRecord, Upstream]>().not.toBeNever();
 });

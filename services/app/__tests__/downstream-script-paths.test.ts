@@ -47,6 +47,11 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/app/lib/html-systems/font-manifest.json', repo: SERVER, usedAt: ['scripts/native-runtime-cache.mjs:42 and the install action (cache key)'] },
   { path: 'vite.config.mts', repo: SERVER, usedAt: ['vite.config.mts:2 (extends the toolkit configuration)'] },
   { path: 'tsconfig.json', repo: SERVER, usedAt: ['tsconfig.json:2 (extends it)', 'scripts/build-source.mjs'] },
+  // The generated SQL the server's one-shot database jobs apply (the minusx-integration fork's SETUP.md, combined mode).
+  { path: 'SCHEMA.sql', repo: SERVER, usedAt: ['SETUP.md (fresh database: the tables, by owning schema)'] },
+  { path: 'roles.sql', repo: SERVER, usedAt: ['toolkit/roles.sql (fresh database: one login role per package and the schemas each owns)'] },
+  { path: 'grants.sql', repo: SERVER, usedAt: ['toolkit/grants.sql (cross-schema reads, applied after the boots that create each object)'] },
+  { path: 'IDENTITY.sql', repo: SERVER, usedAt: ['SETUP.md "Combined mode (MinusX)" (the identity read surface MinusX reads; MinusX copies it byte for byte)'] },
   { path: 'scripts/lib/dev-env.mjs', repo: EVALS, usedAt: ['lib/dev-server.ts:18 (imports declaredPort, loadDotEnv, resolvePort)'] },
   { path: 'scripts/lib/shard.mjs', repo: EVALS, usedAt: ['lib/task-set.ts:30 (imports parseShardSpec)'] },
   { path: 'scripts/lib/env.ts', repo: EVALS, usedAt: ['lib/env.ts:2 (re-exports it)'] },
@@ -73,7 +78,7 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(16);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(20);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(4);
   });
 
