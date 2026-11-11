@@ -1,9 +1,8 @@
-import {createPrivateKey} from 'node:crypto';
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
-import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, parseAliasOrigins, parseDataServices, parseServiceAudiences, parseTestDomainSignIn, type DataService, type ServiceAudience } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -353,7 +352,7 @@ export const AUTH_SERVICE_URL = env('AUTH', 'SERVICE_URL');
 export const AUTH_SCHEMA = env('AUTH', 'SCHEMA') ?? 'auth';
 /**
  * IDENTITY__SCHEMA: the identity read surface (the views named as the identity tables), which this process's
- * search_path resolves after its own schema, and MinusX reads. One per deployment sharing a database.
+ * search_path resolves after its own schema, and every other reader reads. One per deployment sharing a database.
  */
 export const IDENTITY_READ_SCHEMA = env('IDENTITY', 'SCHEMA') ?? IDENTITY_SCHEMA;
 export let INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
@@ -444,47 +443,31 @@ export function deploymentConfig():{mode:'public'|'company';ownerEmail:string|un
 }
 
 /**
- * COMBINED MODE: this installation also runs the MinusX data service (the cross-repository contract, §1). It is on
- * exactly when `MINUSX__BASE_URL` (the MinusX control API origin) is set, and then `INSTALLATION__ID` (this
- * installation's stable id, in every delegation it mints), `MINUSX__DELEGATION_PRIVATE_KEY` (an Ed25519 PKCS#8 PEM;
- * a `\n` escape stands for a newline, as one-line .env values write it) and `MINUSX__DELEGATION_KEY_ID` (its `kid`)
- * are required: an incomplete or malformed set refuses the boot (lib/deployment `validateDeploymentConfiguration`)
- * naming the setting, never echoing the key. Read at each use, so a test's `overrideConfig` environment applies.
- * Unset, nothing here changes standalone Artifactbin.
+ * IDENTITY__SERVICE_AUDIENCES (contracts `parseServiceAudiences`): the services that accept this installation's
+ * identity tokens. An identity-side setting the app also reads, for the identity store it may host, the views' row
+ * (./identity-host) and the token mint's audience check; empty by default. Read at each use, so a test's
+ * `overrideConfig` applies; a malformed value refuses the boot (lib/deployment `validateDeploymentConfiguration`).
  */
-env('MINUSX', 'BASE_URL'); env('INSTALLATION', 'ID'); env('MINUSX', 'DELEGATION_PRIVATE_KEY'); env('MINUSX', 'DELEGATION_KEY_ID');
-export interface MinusxSettings { baseUrl: string; installationId: string; delegationPrivateKey: string; delegationKeyId: string }
-let checkedKey: string | undefined;
-export function minusxSettings(): MinusxSettings | null {
-  const base = env('MINUSX', 'BASE_URL')?.trim();
-  if (!base) return null;
-  let url: URL;
-  try { url = new URL(base); } catch { throw new Error('MINUSX__BASE_URL must be an absolute http(s) URL, the MinusX control API origin.'); }
-  if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('MINUSX__BASE_URL must be an absolute http(s) URL without credentials, query or fragment.');
-  const installationId = env('INSTALLATION', 'ID')?.trim();
-  if (!installationId || !/^[A-Za-z0-9_.:-]{1,128}$/.test(installationId)) throw new Error('INSTALLATION__ID is required when MINUSX__BASE_URL is set: this installation\'s stable id (letters, digits, _ . : -).');
-  const keyId = env('MINUSX', 'DELEGATION_KEY_ID')?.trim();
-  if (!keyId || keyId.length > 256) throw new Error('MINUSX__DELEGATION_KEY_ID is required when MINUSX__BASE_URL is set: the kid MinusX knows the delegation key by.');
-  const pem = env('MINUSX', 'DELEGATION_PRIVATE_KEY')?.replace(/\\n/g, '\n').trim();
-  if (!pem) throw new Error('MINUSX__DELEGATION_PRIVATE_KEY is required when MINUSX__BASE_URL is set: an Ed25519 private key, PKCS#8 PEM.');
-  if (checkedKey !== pem) {
-    let type: string | undefined;
-    try { type = createPrivateKey({ key: pem, format: 'pem' }).asymmetricKeyType; } catch { type = undefined; }
-    if (type !== 'ed25519') throw new Error('MINUSX__DELEGATION_PRIVATE_KEY must be an Ed25519 private key in PKCS#8 PEM.');
-    checkedKey = pem;
-  }
-  return { baseUrl: url.href.replace(/\/+$/, ''), installationId, delegationPrivateKey: pem, delegationKeyId: keyId };
-}
+env('IDENTITY', 'SERVICE_AUDIENCES');
+export const serviceAudiences = (): readonly ServiceAudience[] => parseServiceAudiences(env('IDENTITY', 'SERVICE_AUDIENCES'));
 
 /**
- * WHO OWNS RECURRING WORK (contract §7): `artifactbin` (unset, the default) runs the page-function scheduler as
- * today; `minusx` does not start it and refuses a save that declares a new page schedule (`schedules_owned_by_minusx`),
- * leaving on-demand functions and every other background task as they are. Any other value refuses the boot.
+ * DATA_SERVICES__TRUSTED (contracts `parseDataServices`): the services a page function's `'viewer'` connection may be
+ * bound to, each with its session endpoint and the identity audience its viewer tokens are minted for. Empty by
+ * default: then a declaration of that kind is refused at publish (`data_service_not_configured`).
  */
-env('SCHEDULES', 'OWNER');
-export type SchedulesOwner = 'artifactbin' | 'minusx';
-export function schedulesOwner(): SchedulesOwner {
-  const owner = env('SCHEDULES', 'OWNER')?.trim() || 'artifactbin';
-  if (owner !== 'artifactbin' && owner !== 'minusx') throw new Error('SCHEDULES__OWNER must be artifactbin (the default) or minusx.');
-  return owner;
+env('DATA_SERVICES', 'TRUSTED');
+export const dataServices = (): readonly DataService[] => parseDataServices(env('DATA_SERVICES', 'TRUSTED'));
+
+/**
+ * SCHEDULES__PAGE_SCHEDULES: `on` (unset, the default) runs the page-function scheduler; `off` does not start it, and
+ * a publish, fork, restore or revert that would create or reactivate a page schedule is refused
+ * (`page_schedules_disabled`). On-demand functions and every other background task are unaffected. Any other value
+ * refuses the boot.
+ */
+env('SCHEDULES', 'PAGE_SCHEDULES');
+export function pageSchedulesEnabled(): boolean {
+  const value = env('SCHEDULES', 'PAGE_SCHEDULES')?.trim() || 'on';
+  if (value !== 'on' && value !== 'off') throw new Error('SCHEDULES__PAGE_SCHEDULES must be on (the default) or off.');
+  return value === 'on';
 }

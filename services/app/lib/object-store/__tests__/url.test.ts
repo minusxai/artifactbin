@@ -77,11 +77,11 @@ describe('the bucket', () => {
   });
 
   it('reads path segments after the bucket as a KEY PREFIX', () => {
-    // One bucket serves several environments: /minusx/artifacts-dev and
-    // /minusx/artifacts are the same bucket with different roots, so a dev
+    // One bucket serves several environments: /acme/artifacts-dev and
+    // /acme/artifacts are the same bucket with different roots, so a dev
     // machine cannot overwrite production objects by misconfiguration.
-    const c = parseS3Url('s3://k:s@host/minusx/artifacts-dev');
-    expect(c.bucket).toBe('minusx');
+    const c = parseS3Url('s3://k:s@host/acme/artifacts-dev');
+    expect(c.bucket).toBe('acme');
     expect(c.prefix).toBe('artifacts-dev');
   });
 

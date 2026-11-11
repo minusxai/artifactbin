@@ -1,5 +1,5 @@
 /** Guides served over HTTP at /llms/TOPIC (for agents that call the API directly). */
-const PUBLIC_TOPICS=new Set(['http-auth','runtime','html-operations','datasets','permissions','functions','dataviz','maps','diagrams','groups','live-docs','governed-data']);
+const PUBLIC_TOPICS=new Set(['http-auth','runtime','html-operations','datasets','permissions','functions','dataviz','maps','diagrams','groups','live-docs']);
 /** Served over HTTP only: the scripts' own descriptions cover them for agents using the downloaded skill. */
 const SERVED_ONLY=new Set(['http-auth','html-operations']);
 export function isPublicSkillTopic(topic:string):boolean{return PUBLIC_TOPICS.has(topic);}

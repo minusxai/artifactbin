@@ -1,20 +1,23 @@
 /**
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
- * is service-authenticated (SERVICE_AUTH_HEADER carrying INTERNAL__SERVICE_SECRET) and refused without it:
- *  - session-live: is a human session still live (the pages sessions' revalidation);
- *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`, cross-repository contract §2): a presented bearer
- *    is answered here from the one bearer read every API request is admitted by (token, OAuth family fence,
- *    identity). Every other identity fact MinusX reads from the shared `identity` views, not from here;
- *  - MinusX's job events (contracts `EVENTS_PUBLISH_PATH`, cross-repository contract §6): the durable publish onto
- *    this process's events service, accepting only `source: 'minusx'` job envelopes with a catalogued verb and the ids
- *    the feed authorizes on. 2xx only once stored; a storage failure is 503, so MinusX's outbox keeps the batch;
- *  - THE IDENTITY MODULE's calls (contracts `IDENTITY_CALL_PATH`, `IdentityService`): every write to users, tokens,
- *    handles, groups, memberships, invitations and the group mail outbox, run by the identity store
- *    (`./identity-store`) on `identityDb` (which must offer transactions: `identityDbOf(pool)`) against the app's
- *    tables (`appSchema`). `{method, input}` in; `{result}` or `{refused: {code, status, retry_after?, detail?}}` out,
- *    both 200; anything else (no transactional database, a failure) is 503 and the caller's call throws.
+ * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
+ *  - session-live (INTERNAL__SERVICE_SECRET): is a human session still live (the pages sessions' revalidation);
+ *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`): a presented token, answered with its user, id,
+ *    scopes, audience, expiry and, for a viewer token, the first-party actor and the page and function that asked. An
+ *    access token is read by the one bearer read every API request is admitted by (token, OAuth family fence,
+ *    identity) and must be bound to this deployment's API or to a configured service (IDENTITY__SERVICE_AUDIENCES); a
+ *    viewer token is verified by its signature (./identity/service-tokens). Either needs an ACTIVE account. Asked
+ *    with INTERNAL__SERVICE_SECRET the answer covers every token; asked with a configured service's own introspection
+ *    secret it covers only tokens bound to that service's origin, every other one answering `{active: false}`;
+ *  - THE IDENTITY MODULE's calls (contracts `IDENTITY_CALL_PATH`, `IdentityService`, INTERNAL__SERVICE_SECRET only):
+ *    every write to users, tokens, handles, groups, memberships, invitations and the group mail outbox, and the
+ *    viewer-token mint, run by the identity store (`./identity-store`) on `identityDb` (which must offer
+ *    transactions: `identityDbOf(pool)`) against the app's tables (`appSchema`). `{method, input}` in; `{result}` or
+ *    `{refused: {code, status, retry_after?, detail?}}` out, both 200; anything else (no transactional database, a
+ *    failure) is 503 and the caller's call throws.
  */
-import {API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {createHash,timingSafeEqual} from 'node:crypto';
+import {API_RESOURCE_PATH,FIRST_PARTY_ACTOR,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -22,23 +25,23 @@ import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
+import {isViewerToken,verifyViewerToken,viewerTokenKey} from './identity/service-tokens';
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
-const text=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=256;
-/** A job event as MinusX publishes it: the only envelope another product may put on this installation's feed. */
-const isJobEnvelope=(v:unknown):v is EventEnvelope=>{
- if(!v||typeof v!=='object'||Array.isArray(v))return false;
- const e=v as Record<string,unknown>,payload=e.payload as Record<string,unknown>|null;
- return text(e.id)&&text(e.at)&&!Number.isNaN(Date.parse(e.at))&&e.source==='minusx'&&e.object_kind==='job'&&text(e.object_id)
-  &&(EVENT_VERBS.job as readonly string[]).includes(e.verb as string)&&(e.subject_kind===null||e.subject_kind==='service')&&(e.subject_id===null||text(e.subject_id))
-  &&!!payload&&typeof payload==='object'&&!Array.isArray(payload)&&text(payload.schedule_id)&&text(payload.occurrence_id)&&text(payload.group_id);
+const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
+/** The configured service whose introspection secret `presented` is, compared in constant time; undefined when none. */
+const serviceOf=(audiences:readonly ServiceAudience[],presented:string|undefined):ServiceAudience|undefined=>{
+ if(!presented)return undefined;
+ const digest=Buffer.from(sha256(presented));
+ return audiences.find(service=>!!service.introspectionSecretSha256&&timingSafeEqual(Buffer.from(service.introspectionSecretSha256),digest));
 };
 export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sessionAuthority',mount:app=>{
  const secret=readEnv(o.env,'INTERNAL__SERVICE_SECRET');
- /** A refusal Response, or the parsed JSON object body. */
- const admit=async(c:Context<AuthEnv>,parse=true):Promise<Response|Record<string,unknown>>=>{
+ const audiences=parseServiceAudiences(readEnv(o.env,'IDENTITY__SERVICE_AUDIENCES'));
+ const viewerKey=o.cookieSecret?viewerTokenKey(o.cookieSecret):null;
+ /** A refusal Response, or the parsed JSON object body. `admitted` decides the credential (default: the installation's). */
+ const admit=async(c:Context<AuthEnv>,admitted:(presented:string|undefined)=>boolean=presented=>serviceSecretMatches(presented,secret)):Promise<Response|Record<string,unknown>>=>{
   if(c.req.method!=='POST')return answer({error:'method_not_allowed'},405);
-  if(!serviceSecretMatches(c.req.header(SERVICE_AUTH_HEADER),secret))return answer({error:'unauthorized'},401);
-  if(!parse)return {};
+  if(!admitted(c.req.header(SERVICE_AUTH_HEADER)))return answer({error:'unauthorized'},401);
   let body:unknown;
   try{body=JSON.parse(await readBody(c.req.raw,{limit:8192,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
   return body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:answer({error:'bad_request'},400);
@@ -50,24 +53,36 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  });
  /**
   * Is the bearer read's record a live credential of this deployment's account: an account's token, an OAuth access
-  * token for one of this deployment's API origins, and an ACTIVE account, by the one rule every reader applies (the
-  * `users` read view's `active`, ./identity-store/views), read on this host's database. The record, or null.
+  * token for one of this deployment's API origins or for a configured service's origin, and an ACTIVE account, by the
+  * one rule every reader applies (the `users` read view's `active`, ./identity-store/views), read on this host's
+  * database. The record, or null.
   */
+ const activeUser=async(userId:string)=>!!o.identityDb&&(await o.identityDb.query<{active:boolean}>(`SELECT active FROM ${readSchema}.users WHERE id=$1`,[userId])).rows[0]?.active===true;
  const live=async(c:Context<AuthEnv>,token:TokenRecord|null):Promise<(TokenRecord&{userId:string})|null>=>{
   const userId=token?.userId;
   if(!token||!userId||!o.identityDb)return null;
   const origins=acceptedOriginsOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'),parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS')));
-  if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`))return null;
-  const active=(await o.identityDb.query<{active:boolean}>(`SELECT active FROM ${readSchema}.users WHERE id=$1`,[userId])).rows[0]?.active===true;
-  return active?{...token,userId}:null;
+  if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`)&&!audiences.some(service=>service.origin===token.audience))return null;
+  return await activeUser(userId)?{...token,userId}:null;
  };
  app.all(IDENTITY_INTROSPECT_PATH,async c=>{
-  const input=await admit(c);if(input instanceof Response)return input;
+  // The installation itself (every token), or one configured service (only tokens bound to its own origin).
+  const asker:{only:ServiceAudience|null}={only:null};
+  const input=await admit(c,presented=>serviceSecretMatches(presented,secret)||!!(asker.only=serviceOf(audiences,presented)??null));if(input instanceof Response)return input;
+  const only=asker.only;
   if(typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
-  let token:(TokenRecord&{userId:string})|null;
-  try{token=await live(c,await o.tokens.byToken(input.token));}catch{return answer({error:'session_unavailable'},503);}
-  if(!token)return answer({active:false} satisfies IdentityIntrospectResponse);
-  return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[]} satisfies IdentityIntrospectResponse);
+  const inactive=answer({active:false} satisfies IdentityIntrospectResponse);
+  try{
+   if(isViewerToken(input.token)){
+    const claims=viewerKey?verifyViewerToken(viewerKey,audiences,input.token):null;
+    if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub))return inactive;
+    return answer({active:true,user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),
+     actor:{id:FIRST_PARTY_ACTOR,artifact_id:claims.act.artifact_id??null,function:claims.act.function??null}} satisfies IdentityIntrospectResponse);
+   }
+   const token=await live(c,await o.tokens.byToken(input.token));
+   if(!token||(only&&token.audience!==only.origin))return inactive;
+   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,actor:null} satisfies IdentityIntrospectResponse);
+  }catch{return answer({error:'session_unavailable'},503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
  let identity:Promise<IdentityService>|null=null;
@@ -78,7 +93,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   const db=o.identityDb,appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
   if(!transactional(db)||!appSchema)throw Error('identity_unavailable');
   await ensureIdentitySchema(db,{auth:authSchema,app:appSchema,read:readSchema});
-  return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
+  return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain,serviceTokens:{secret:o.cookieSecret,audiences}});
  })().catch(error=>{identity=null;throw error;});
  // The identity host's boot, started with the part: the app's boot waits for the views this creates, and this waits
  // (retrying while IdentityNotReady: the app's own tables come first) for the app's. Never awaited by a request.
@@ -105,14 +120,5 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(error instanceof IdentityError)return answer({refused:{code:error.code,status:error.status,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{}),...(error.detail!==undefined?{detail:error.detail}:{})}});
    return answer({error:'identity_unavailable'},503);
   }
- });
- app.all(EVENTS_PUBLISH_PATH,async c=>{
-  const refused=await admit(c,false);if(refused instanceof Response)return refused;
-  let batch:unknown;
-  try{batch=JSON.parse(await readBody(c.req.raw,{limit:1<<20,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
-  if(!Array.isArray(batch)||batch.length>EVENTS_PUBLISH_MAX_BATCH||!batch.every(isJobEnvelope))return answer({error:'bad_request'},400);
-  if(!o.events?.publish)return answer({error:'events_unavailable'},503);
-  try{await o.events.publish(batch);}catch{return answer({error:'events_unavailable'},503);}
-  return answer({accepted:batch.length});
  });
 }};}

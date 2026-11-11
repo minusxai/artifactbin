@@ -213,3 +213,67 @@ describe('no stale text, no dead code', () => {
     expect(lines.slice(Math.max(0, i - 4), i).join('\n')).toMatch(/openssl rand -base64 32|npm run setup/);
   });
 });
+
+/**
+ * NO OTHER PRODUCT BY NAME. This product integrates with other services only through generic mechanisms (identity
+ * tokens for a configured audience, viewer connections to a configured data service, the identity read views), so no
+ * source file, setting, route, generated SQL, skill file or document names the downstream data product those were
+ * first built for. The allowlist is three spellings that are not that product:
+ *   - the GitHub organisation that owns this repository and its deployment and eval repositories (`<name>ai`);
+ *   - the company's mail domain (`<name>.ai`: the security contact, test addresses);
+ *   - the shipped chart recipe namespace (`<name>/<recipe>@<version>` and its quoted prefix), stored inside
+ *     published pages, so renaming it is a data migration, not a text edit.
+ * Assembled from parts so this file does not spell what it forbids.
+ */
+const OTHER_PRODUCT = ['minus', 'x'].join('');
+const OTHER_PRODUCT_NAME = new RegExp(OTHER_PRODUCT, 'gi');
+const OTHER_PRODUCT_ALLOWED = [
+  new RegExp(`${OTHER_PRODUCT}ai\\b`, 'iy'),
+  new RegExp(`${OTHER_PRODUCT}\\.ai\\b`, 'iy'),
+  new RegExp(`${OTHER_PRODUCT}/[a-z0-9-]+@\\d+`, 'y'),
+  new RegExp(`${OTHER_PRODUCT}/'`, 'y'),
+];
+
+/** Pure so a synthetic violation can prove the scan bites. `files` is a list of `[path, text]`. */
+function otherProductNames(files) {
+  const found = [];
+  for (const [file, text] of files) {
+    if (OTHER_PRODUCT_NAME.test(file)) found.push(`${file}: in the path`);
+    OTHER_PRODUCT_NAME.lastIndex = 0;
+    for (const match of text.matchAll(OTHER_PRODUCT_NAME)) {
+      if (OTHER_PRODUCT_ALLOWED.some((allowed) => { allowed.lastIndex = match.index; return allowed.test(text); })) continue;
+      found.push(`${file}:${text.slice(0, match.index).split('\n').length}: ${match[0]}`);
+    }
+  }
+  return found;
+}
+
+describe('no other product by name', () => {
+  it('finds the name in a setting, a route, a kind, a path or prose, in any case', () => {
+    const name = OTHER_PRODUCT, title = name[0].toUpperCase() + name.slice(1, 5) + name[5].toUpperCase();
+    const files = [
+      ['services/app/lib/platform/config.ts', `env('${name.toUpperCase()}', 'BASE_URL');`],
+      ['services/app/server/routes.generated.ts', `'/api/my/${name}/connections'`],
+      ['services/contracts/src/kinds.ts', `export const KIND = '${name}';`],
+      [`services/app/skills/artifactbin/scripts/${name}.mjs`, ''],
+      ['README.md', `Pages read ${title} data.`],
+    ];
+    expect(otherProductNames(files)).toEqual([
+      'services/app/lib/platform/config.ts:1: ' + name.toUpperCase(),
+      'services/app/server/routes.generated.ts:1: ' + name,
+      'services/contracts/src/kinds.ts:1: ' + name,
+      `services/app/skills/artifactbin/scripts/${name}.mjs: in the path`,
+      'README.md:1: ' + title,
+    ]);
+  });
+
+  it('allows only the organisation, the mail domain and the chart recipe namespace', () => {
+    const name = OTHER_PRODUCT;
+    expect(otherProductNames([['a.md', `https://github.com/${name}ai/artifactbin\nsecurity@${name}.ai\n{recipe: '${name}/funnel@1'}\nstartsWith('${name}/')`]])).toEqual([]);
+    expect(otherProductNames([['a.md', `${name}/funnel`]])).toEqual(['a.md:1: ' + name]);
+  });
+
+  it('no tracked file names it', () => {
+    expect(otherProductNames(trackedText())).toEqual([]);
+  });
+});

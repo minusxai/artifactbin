@@ -22,11 +22,12 @@ file to change it, or leave the link to keep the published version.
 
 ## Contents
 
-[File](#the-file) · [Call](#calling-from-the-page) · [roles](#roles) · [caps.fetch](#capsfetch-and-secrets) · [caps.sql](#capssql-datasets-as-the-caller) · [caps.db](#capsdb-your-own-database) · [schedule](#schedules) · [Library](#library)
+[File](#the-file) · [Call](#calling-from-the-page) · [roles](#roles) · [caps.fetch](#capsfetch-and-secrets) · [caps.sql](#capssql-datasets-as-the-caller) · [caps.db](#capsdb-your-own-database) · [as the viewer](#capsdb-as-the-viewer) · [schedule](#schedules)
 
 ## The file
 
-Start from `resolvers/resolver-*.ts` (usage atop each) or `examples/tracker.ts`. The callable
+Start from `resolvers/` (`resolver-public-url.ts`, `resolver-http-json.ts`,
+`resolver-google-sheets.ts`, `resolver-bigquery.ts`, `resolver-supabase.ts`, `resolver-neon.ts`) or `examples/tracker.ts`. The callable
 functions are the keys of an object-literal `export default {…}` and the named exported
 functions, read from the source at publish (no spreads, computed keys or reassignment:
 `invalid_functions`). Each gets `(input, principal, caps)`: `principal` is `{tenant, subject,
@@ -132,6 +133,13 @@ user**. Per run: 4 connections, 16 MiB in, 4 MiB out.
 RDS, Cloud SQL and Supabase need `ca` (the provider's CA bundle, PEM) in the connection (Resolvers → Advanced).
 IP allowlists: allow the addresses `GET /api/outbound-ips` lists.
 
+## caps.db as the viewer
+
+`secrets = {SALES: 'viewer'}`: a trusted data service opens `caps.db('SALES')` as each viewer,
+not you. Bind it in Resolvers or `PUT /api/my/resolvers/BACKEND/VERSION/secrets`
+`{name, binding: {service, params}}` (from `GET /api/my/artifacts/ID/resolvers`). Refused
+viewers, guests and schedules get `data_access_denied: SALES`.
+
 ## Schedules
 
 `export const schedule = {refresh: 'every 1 hour'}` runs `refresh` on its own: `every N
@@ -141,14 +149,3 @@ publisher (whoever last published it), who must still be an owner or editor, as 
 would: `roles` still apply and `caps.sql` may write. The page reads what it saved with `sql`. A
 run never overlaps the last; failures back off and show in the owner's Resolvers settings. One
 publisher has at most 20 scheduled functions (`schedule_limit`).
-
-## Library
-
-| File | Source | Secret |
-|---|---|---|
-| `resolver-public-url.ts` | Public CSV/JSON URL | none |
-| `resolver-http-json.ts` | JSON API with a bearer key | `API_KEY` |
-| `resolver-google-sheets.ts` | Private Google Sheet | `GOOGLE_SA` (service account) |
-| `resolver-bigquery.ts` | BigQuery SQL | `GOOGLE_SA` |
-| `resolver-supabase.ts` | Supabase table (PostgREST) | `SUPABASE_KEY` |
-| `resolver-neon.ts` | Neon Postgres over HTTP SQL | `NEON_PASSWORD` |

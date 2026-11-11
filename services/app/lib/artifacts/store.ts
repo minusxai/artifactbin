@@ -405,7 +405,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
      * actor in the same statement. A live-region save is a text edit, not a publication: it keeps the publisher.
      */
     async publish(content: ArtifactInput, options: { publisher?: boolean } = {}): Promise<ArtifactRow> {
-      // What the head schedules before this write: a publication may keep those, never add one MinusX owns (./schedule-capacity).
+      // What the head schedules before this write: with page schedules off a publication may keep those, never add one (./schedule-capacity).
       const scheduled = options.publisher === true ? await schedulesBefore(tx, [id]) : new Set<string>();
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,

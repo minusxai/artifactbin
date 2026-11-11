@@ -1,5 +1,5 @@
 /**
- * MinusX Vega-Lite theme configs.
+ * The product's Vega-Lite theme configs.
  *
  * One token source generates the light and dark VL `config` objects: the chart constants
  * in lib/chart/chart-theme.ts (palette + JetBrains Mono), shared with the native-Vega

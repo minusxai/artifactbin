@@ -12,9 +12,9 @@
  * locks.ts): a tail after the transaction's artifacts, in `lockOrder`; a deadlock with a writer in another order
  * aborts one, which rolls back whole.
  *
- * WHO OWNS RECURRING WORK (contract §7): with `SCHEDULES__OWNER=minusx` the same transactions refuse to activate any
- * page schedule the page's live head did not already declare before the write (`schedules_owned_by_minusx`, 409), by
- * page, link and function name: exactly the publish path's rule (lib/publish governed.ts), so fork, trash restore and
+ * PAGE SCHEDULES OFF (`SCHEDULES__PAGE_SCHEDULES=off`): the same transactions refuse to activate any page schedule
+ * the page's live head did not already declare before the write (`page_schedules_disabled`, 409), by page, link and
+ * function name: exactly the publish path's rule (lib/publish function-rules.ts), so fork, trash restore and
  * revert cannot leave a page declaring a schedule a publish would have refused. They REFUSE rather than strip: a
  * schedule is read from the function file's source text, which nothing here rewrites. A trashed page's head declares
  * nothing (its schedules are inactive), so restoring a scheduled page there is refused; a version without the
@@ -22,17 +22,17 @@
  */
 import {FUNCTION_SCHEDULE_LIMIT,type Queryable} from '@artifactbin/contracts';
 import {DatasetError} from '@/lib/datasets';
-import {lockSubjects,schedulesOwner} from '@/lib/platform';
+import {lockSubjects,pageSchedulesEnabled} from '@/lib/platform';
 
 /** A write refused because it would activate page schedules: its code and the lines a caller shows (`details`). */
 export class ScheduleRefusal extends DatasetError {
- constructor(readonly code:'schedule_limit'|'schedules_owned_by_minusx',readonly details:string[],status:number){super(details.join('; '),status);}
+ constructor(readonly code:'schedule_limit'|'page_schedules_disabled',readonly details:string[],status:number){super(details.join('; '),status);}
 }
 export class ScheduleLimitError extends ScheduleRefusal {
  constructor(total:number){super('schedule_limit',[`This would give the publishing account ${total} scheduled functions across the pages it published; one account may have at most ${FUNCTION_SCHEDULE_LIMIT}. Remove a schedule here or from another page it published, then try again.`],400);}
 }
-class SchedulesOwnedByMinusxError extends ScheduleRefusal {
- constructor(added:readonly {link:string;function:string}[]){super('schedules_owned_by_minusx',added.map(entry=>`resolver "${entry.link}" schedules ${entry.function}: recurring work on this installation is scheduled in MinusX, not by a page, so this would start a page schedule; publish a version without the schedule export instead`),409);}
+class PageSchedulesDisabledError extends ScheduleRefusal {
+ constructor(added:readonly {link:string;function:string}[]){super('page_schedules_disabled',added.map(entry=>`resolver "${entry.link}" schedules ${entry.function}: page schedules are off on this server (SCHEDULES__PAGE_SCHEDULES), so this would start a page schedule; publish a version without the schedule export instead`),409);}
 }
 const HEADS=`FROM artifacts a
  CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(a.meta->'htmlLinks')='array' THEN a.meta->'htmlLinks' ELSE '[]'::jsonb END) AS e(el)
@@ -46,21 +46,21 @@ async function liveSchedules(tx:Queryable,ids:readonly string[]):Promise<Schedul
 }
 /**
  * The schedules the live heads of `ids` declare BEFORE a write that may replace those heads (a revert or a publish),
- * for `assertScheduleCapacity` to compare against; nothing to remember unless MinusX owns recurring work.
+ * for `assertScheduleCapacity` to compare against; nothing to remember while page schedules are on.
  */
 export async function schedulesBefore(tx:Queryable,ids:readonly string[]):Promise<ReadonlySet<string>>{
- return schedulesOwner()==='minusx'&&ids.length?new Set((await liveSchedules(tx,ids)).map(keyOf)):new Set();
+ return !pageSchedulesEnabled()&&ids.length?new Set((await liveSchedules(tx,ids)).map(keyOf)):new Set();
 }
 /**
- * After a write in `tx` that may have activated the schedules of `ids`: under `SCHEDULES__OWNER=minusx` refuse
- * (SchedulesOwnedByMinusxError) any schedule not in `before` (`schedulesBefore`; none for a creation, a fork or a
+ * After a write in `tx` that may have activated the schedules of `ids`: with page schedules off refuse
+ * (PageSchedulesDisabledError) any schedule not in `before` (`schedulesBefore`; none for a creation, a fork or a
  * restore), then refuse (ScheduleLimitError) any publisher over the limit.
  */
 export async function assertScheduleCapacity(tx:Queryable,ids:readonly string[],before:ReadonlySet<string>=new Set()):Promise<void>{
  if(!ids.length)return;
- if(schedulesOwner()==='minusx'){
+ if(!pageSchedulesEnabled()){
   const added=(await liveSchedules(tx,ids)).filter(entry=>!before.has(keyOf(entry)));
-  if(added.length)throw new SchedulesOwnedByMinusxError(added);
+  if(added.length)throw new PageSchedulesDisabledError(added);
  }
  const publishers=(await tx.query<{publisher:string}>(`SELECT DISTINCT a.content_publisher_user_id AS publisher ${HEADS} WHERE ${LIVE_SCHEDULED} AND a.id=ANY($1::text[]) AND a.content_publisher_user_id IS NOT NULL`,[ids])).rows.map(r=>r.publisher);
  await lockSubjects(tx,'schedule-capacity',publishers);

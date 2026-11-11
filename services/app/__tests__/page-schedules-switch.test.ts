@@ -1,6 +1,6 @@
 /**
- * `SCHEDULES__OWNER` (contract §7): `artifactbin`, the default, runs the page-function scheduler as before; `minusx`
- * never starts it and refuses a save that declares a NEW page schedule (`schedules_owned_by_minusx`): one the page's
+ * `SCHEDULES__PAGE_SCHEDULES`: `on`, the default, runs the page-function scheduler as before; `off` never starts it
+ * and refuses a save that declares a NEW page schedule (`page_schedules_disabled`): one the page's
  * current head does not already declare for that link and function. On-demand functions and the other background
  * tasks (the event outbox among them) are unaffected. Real handlers, the real runner, the composition's own
  * `startAppBackgroundTasks`, with only `setInterval` on a test clock.
@@ -28,7 +28,7 @@ const harness=useAppHarness();
 let runner:Awaited<ReturnType<typeof createRunner>>;
 beforeAll(async()=>{runner=await createRunner({db:await harness.db(),capabilities:(context,operation,args)=>localPageBackendCapability(context.request,operation,args,context.signal,resolverPorts)});setServices({runner});});
 afterAll(async()=>{await runner?.close();});
-const owner=(value:'artifactbin'|'minusx'|undefined)=>overrideConfig({},{SCHEDULES__OWNER:value});
+const owner=(value:'on'|'off'|undefined)=>overrideConfig({},{SCHEDULES__PAGE_SCHEDULES:value});
 
 const HTML='<html><head><link rel="af-resolver" data-af-name="api" href="./api.ts"></head><body>Scheduled</body></html>';
 const SCHEDULED=`export const schedule={refresh:'every 15 minutes'};export default {async refresh(){return 'refreshed';},async now(){return 'on demand';}};`;
@@ -49,14 +49,14 @@ const call=async(id:string,name:string,who:Person)=>{
  return {status:response.status,body:await response.json() as unknown};
 };
 
-describe('SCHEDULES__OWNER=minusx refuses new page schedules and nothing else',()=>{
+describe('SCHEDULES__PAGE_SCHEDULES=off refuses new page schedules and nothing else',()=>{
  afterAll(()=>owner(undefined));
  it('a create declaring a schedule is refused; one without publishes and its functions run on demand',async()=>{
-  owner('minusx');
+  owner('off');
   const alice=await person('alice');
   const refused=await publish(alice,SCHEDULED);
   expect(refused.status).toBe(409);
-  expect(refused.body.error).toBe('schedules_owned_by_minusx');
+  expect(refused.body.error).toBe('page_schedules_disabled');
   expect(refused.body.details?.[0]).toContain('refresh');
   const plain=await publish(alice,PLAIN);
   expect(plain.status,JSON.stringify(plain.body)).toBe(201);
@@ -64,22 +64,22 @@ describe('SCHEDULES__OWNER=minusx refuses new page schedules and nothing else',(
   expect(await call(plain.body.id,'refresh',alice)).toEqual({status:200,body:'refreshed'});
  },45_000);
  it('a schedule the head already declares may be republished; a schedule the head does not declare is new and refused',async()=>{
-  owner('artifactbin');
+  owner('on');
   const bob=await person('bob');
   const page=await publish(bob,SCHEDULED);
   expect(page.status,JSON.stringify(page.body)).toBe(201);
-  owner('minusx');
+  owner('off');
   expect((await republish(bob,page.body.id,SCHEDULED.replace("'refreshed'","'refreshed again'"))).status).toBe(200);
   const added=await republish(bob,page.body.id,`export const schedule={refresh:'every 15 minutes',now:'every 1 hour'};export default {async refresh(){return 1;},async now(){return 2;}};`);
   expect(added.status).toBe(409);
-  expect(added.body.error).toBe('schedules_owned_by_minusx');
+  expect(added.body.error).toBe('page_schedules_disabled');
   expect(added.body.details).toEqual([expect.stringContaining('schedules now')]);
   owner(undefined);
   expect((await republish(bob,page.body.id,`export const schedule={refresh:'every 15 minutes',now:'every 1 hour'};export default {async refresh(){return 1;},async now(){return 2;}};`)).status).toBe(200);
  },45_000);
 });
 
-describe('SCHEDULES__OWNER=minusx: fork, trash restore and revert refuse to activate a page schedule, as publish does',()=>{
+describe('SCHEDULES__PAGE_SCHEDULES=off: fork, trash restore and revert refuse to activate a page schedule, as publish does',()=>{
  afterAll(()=>owner(undefined));
  const post=async(handler:(request:Request,context:{params:Promise<{id:string}>})=>Promise<Response>,id:string,path:string,who:Person,json:Record<string,unknown>={})=>{
   // A revert is a conditional write: it names the head it saw.
@@ -88,9 +88,9 @@ describe('SCHEDULES__OWNER=minusx: fork, trash restore and revert refuse to acti
   const response=await handler(request(`/api/artifacts/${id}/${path}`,{method:'POST',token:who.token,json:body}),{params:Promise.resolve({id})});
   return {status:response.status,body:await response.json() as {error?:string;details?:string[];id?:string}};
  };
- /** A page published while Artifactbin owned schedules: version 1 schedules `refresh`, version 2 (the head) schedules nothing. */
+ /** A page published while page schedules were on: version 1 schedules `refresh`, version 2 (the head) schedules nothing. */
  async function scheduledThenPlain(name:string){
-  owner('artifactbin');
+  owner('on');
   const who=await person(name);
   const page=await publish(who,SCHEDULED);
   expect(page.status,JSON.stringify(page.body)).toBe(201);
@@ -100,28 +100,28 @@ describe('SCHEDULES__OWNER=minusx: fork, trash restore and revert refuse to acti
  const scheduledHeads=async()=>(await (await getDb()).query<{n:number}>(`SELECT count(*)::int AS n FROM artifacts a CROSS JOIN LATERAL jsonb_array_elements(a.meta->'htmlLinks') e
   JOIN html_backend_versions v ON v.backend_id=e->>'backendId' AND v.version=e->>'version' WHERE a.deleted_at IS NULL AND v.function_schedules IS NOT NULL`)).rows[0]!.n;
 
- it('refuses each of the three with schedules_owned_by_minusx and changes nothing',async()=>{
+ it('refuses each of the three with page_schedules_disabled and changes nothing',async()=>{
   const {who,id}=await scheduledThenPlain('doors');
   // A second page whose head still schedules `refresh` (a fork's source, then the trashed page).
   const scheduled=await publish(who,SCHEDULED);
   expect(scheduled.status).toBe(201);
-  owner('minusx');
+  owner('off');
   const active=await scheduledHeads();
   const before=(await getArtifactById(id))!.version;
   const reverted=await post(revertPost,id,'revert',who,{version:1});
   expect(reverted.status).toBe(409);
-  expect(reverted.body.error).toBe('schedules_owned_by_minusx');
+  expect(reverted.body.error).toBe('page_schedules_disabled');
   expect(reverted.body.details).toEqual([expect.stringContaining('refresh')]);
   expect((await getArtifactById(id))!.version).toBe(before);
   const forked=await post(forkPost,scheduled.body.id,'fork',who);
   expect(forked.status).toBe(409);
-  expect(forked.body.error).toBe('schedules_owned_by_minusx');
+  expect(forked.body.error).toBe('page_schedules_disabled');
   expect(await scheduledHeads()).toBe(active);
   expect(await trashArtifactFor(who.actor,scheduled.body.id)).not.toBeNull();
   const trashed=await scheduledHeads();
   const restored=await post(restorePost,scheduled.body.id,'restore',who);
   expect(restored.status).toBe(409);
-  expect(restored.body.error).toBe('schedules_owned_by_minusx');
+  expect(restored.body.error).toBe('page_schedules_disabled');
   expect((await (await getDb()).query('SELECT deleted_at FROM artifacts WHERE id=$1',[scheduled.body.id])).rows[0]?.deleted_at).not.toBeNull();
   expect(await scheduledHeads()).toBe(trashed);
   // A page without schedules forks, reverts and restores as before.
@@ -132,7 +132,7 @@ describe('SCHEDULES__OWNER=minusx: fork, trash restore and revert refuse to acti
   expect((await post(revertPost,id,'revert',who,{version:2})).status).toBe(200);
  },45_000);
 
- it('under the default owner the same three succeed',async()=>{
+ it('with page schedules on (the default) the same three succeed',async()=>{
   const {who,id}=await scheduledThenPlain('default_doors');
   const scheduled=await publish(who,SCHEDULED);
   owner(undefined);
@@ -143,7 +143,7 @@ describe('SCHEDULES__OWNER=minusx: fork, trash restore and revert refuse to acti
  },45_000);
 });
 
-describe('the background tasks under each owner',()=>{
+describe('the background tasks under each setting',()=>{
  afterAll(()=>{owner(undefined);vi.useRealTimers();});
  /** One composition start: a 15 s scheduler beat on the test clock, an outbox event, then the composition's stop. */
  async function startAndStop(){
@@ -161,11 +161,11 @@ describe('the background tasks under each owner',()=>{
   const outbox=(await db.query('SELECT id FROM event_outbox')).rows.length;
   return {schedules,published,outbox};
  }
- it('artifactbin (the default) runs the scheduler; minusx never starts it, while the outbox still drains',async()=>{
+ it('on (the default) runs the scheduler; off never starts it, while the outbox still drains',async()=>{
   owner(undefined);
   const carol=await person('carol');
   expect((await publish(carol,SCHEDULED)).status).toBe(201);
-  owner('minusx');
+  owner('off');
   const governed=await startAndStop();
   expect(governed.schedules).toEqual([]);
   expect(governed.published.map(envelope=>(envelope as unknown as {type:string}).type)).toEqual(['probe']);

@@ -1,4 +1,8 @@
-/** Durable filesystem credentials for CLI and direct HTTP clients; no environment reads. */
+/**
+ * Durable filesystem credentials for CLI and direct HTTP clients; no environment reads. One grant per server origin
+ * for its API (`credentials.env`), and beside it one per configured SERVICE the person signed in for
+ * (`audience-<id>.env`: a token whose audience is that service's origin, `resource`, refreshed against it).
+ */
 import {createHash} from 'node:crypto';
 import {lstat,readFile,readlink,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
@@ -6,12 +10,16 @@ import {normalizeOrigin,API_RESOURCE_PATH} from '@artifactbin/contracts';
 import {atomicWrite} from './atomic-file';
 import {privateDirectories,privateDirectory,verifyPrivatePaths,preparePrivateCredentialFile} from './private-directory';
 import {lockDirectory,withStateLock} from './state-lock';
-export interface Credentials {server:string;token:string;refreshToken?:string;clientId?:string;expiresAt?:number}
+export interface Credentials {server:string;token:string;refreshToken?:string;clientId?:string;expiresAt?:number;
+ /** A service grant: the service id and the resource (its origin) the grant is bound to; absent for the API grant. */
+ audience?:string;resource?:string}
+const AUDIENCE=/^[a-z][a-z0-9-]{0,62}$/;
 export function credentialOrigin(value:string):string{
  const origin=normalizeOrigin(value);if(!origin)throw new Error('Use an HTTPS server origin, or HTTP on a local development host (localhost, 127.0.0.1, [::1], *.localhost, *.lvh.me, *.test).');return origin;
 }
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
-export function credentialPaths(server:string,root:string){
+export function credentialPaths(server:string,root:string,audience?:string){
+ if(audience!==undefined&&!AUDIENCE.test(audience))throw new Error('A service id is lower-case letters, digits and hyphens.');
  const origin=credentialOrigin(server),url=new URL(origin);
  // URL normalizes IDN and default ports. Encode IPv6 colons/brackets and unsafe filesystem bytes.
  let hostname=encodeURIComponent(url.hostname).replace(/\.+$/,dots=>'%2E'.repeat(dots.length));
@@ -19,7 +27,8 @@ export function credentialPaths(server:string,root:string){
  const protocol=url.protocol.slice(0,-1),port=url.port||(protocol==='https'?'443':'80');
  const folder=protocol==='https'&&port==='443'?hostname:`${hostname}@${protocol}-${port}`;
  const directory=join(root,'hosts',folder),backingDirectory=join(root,'hosts',digest(origin).slice(0,16));
- return {origin,directory,path:join(directory,'credentials.env'),backingDirectory,backingPath:join(backingDirectory,'credentials.env')};
+ const file=audience?`audience-${audience}.env`:'credentials.env';
+ return {origin,directory,path:join(directory,file),backingDirectory,backingPath:join(backingDirectory,file)};
 }
 async function projection(server:string,root:string,create=false):Promise<ReturnType<typeof credentialPaths>>{
  const paths=credentialPaths(server,root);
@@ -43,18 +52,19 @@ async function projection(server:string,root:string,create=false):Promise<Return
  }
  return paths;
 }
-export async function readCredentials(server:string,root:string):Promise<Credentials|null>{
- const paths=credentialPaths(server,root);const saved:Record<string,string>={};
+export async function readCredentials(server:string,root:string,audience?:string):Promise<Credentials|null>{
+ const paths=credentialPaths(server,root,audience);const saved:Record<string,string>={};
  // Validate the controlled ancestors before following the normalized origin projection or reading secrets.
  await verifyPrivatePaths([root,join(root,'hosts'),paths.backingDirectory],paths.backingPath);
  await projection(server,root);
  try{if(!(await lstat(paths.backingPath)).isFile())throw new Error('Expected a private credential file.');for(const line of(await readFile(paths.backingPath,'utf8')).split(/\r?\n/)){
-  const match=line.match(/^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/);
+  const match=line.match(/^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT|ARTIFACTBIN_AUDIENCE|ARTIFACTBIN_RESOURCE)\s*=\s*(.*?)\s*$/);
   if(match?.[1]&&match[2]!==undefined)saved[match[1]]=match[2].replace(/^(['"])(.*)\1$/,'$2');
  }}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
- if(saved.ARTIFACTBIN_URL!==paths.origin||!saved.ARTIFACTBIN_TOKEN)return null;
+ if(saved.ARTIFACTBIN_URL!==paths.origin||!saved.ARTIFACTBIN_TOKEN||(saved.ARTIFACTBIN_AUDIENCE??undefined)!==audience)return null;
+ if(audience&&!saved.ARTIFACTBIN_RESOURCE)return null;
  const expiresAt=Number(saved.ARTIFACTBIN_EXPIRES_AT);
- return {server:paths.origin,token:saved.ARTIFACTBIN_TOKEN,...(saved.ARTIFACTBIN_REFRESH_TOKEN&&saved.ARTIFACTBIN_CLIENT_ID?{refreshToken:saved.ARTIFACTBIN_REFRESH_TOKEN,clientId:saved.ARTIFACTBIN_CLIENT_ID,...(Number.isSafeInteger(expiresAt)&&expiresAt>0?{expiresAt}:{})}:{})};
+ return {server:paths.origin,token:saved.ARTIFACTBIN_TOKEN,...(audience?{audience,resource:saved.ARTIFACTBIN_RESOURCE!}:{}),...(saved.ARTIFACTBIN_REFRESH_TOKEN&&saved.ARTIFACTBIN_CLIENT_ID?{refreshToken:saved.ARTIFACTBIN_REFRESH_TOKEN,clientId:saved.ARTIFACTBIN_CLIENT_ID,...(Number.isSafeInteger(expiresAt)&&expiresAt>0?{expiresAt}:{})}:{})};
 }
 /**
  * Every private directory a sign-in to `server` writes under `root`: the store, its locks, the credential hosts and
@@ -69,10 +79,19 @@ export async function saveCredentials(connection:Credentials,root:string):Promis
 }
 async function writeCredentials(connection:Credentials,root:string):Promise<void>{
  const paths=await projection(connection.server,root);
+ const file=credentialPaths(connection.server,root,connection.audience);
+ if(connection.audience&&(!connection.resource||!credentialOrigin(connection.resource)))throw new Error('A service grant needs the origin it is bound to');
  if(!/^[A-Za-z0-9_-]+$/.test(connection.token))throw new Error('Invalid token format');
  for(const value of[connection.refreshToken,connection.clientId])if(value!==undefined&&!/^[A-Za-z0-9_-]+$/.test(value))throw new Error('Invalid refresh credential format');
  if(connection.expiresAt!==undefined&&(!Number.isSafeInteger(connection.expiresAt)||connection.expiresAt<=0))throw new Error('Invalid credential expiry');
  await privateDirectory(paths.backingDirectory);
+ if(connection.audience){
+  await atomicWrite(file.backingPath,[`ARTIFACTBIN_URL=${paths.origin}`,`ARTIFACTBIN_AUDIENCE=${connection.audience}`,`ARTIFACTBIN_RESOURCE=${credentialOrigin(connection.resource!)}`,`ARTIFACTBIN_TOKEN=${connection.token}`,
+   ...(connection.refreshToken?[`ARTIFACTBIN_REFRESH_TOKEN=${connection.refreshToken}`]:[]),...(connection.clientId?[`ARTIFACTBIN_CLIENT_ID=${connection.clientId}`]:[]),
+   ...(connection.expiresAt!==undefined?[`ARTIFACTBIN_EXPIRES_AT=${connection.expiresAt}`]:[])].map(line=>line+'\n').join(''),{prepare:preparePrivateCredentialFile});
+  await projection(connection.server,root,true);
+  return;
+ }
  const profilePath=join(paths.backingDirectory,'profile.json');let profile:Record<string,unknown>={url:paths.origin};
  try{profile={...JSON.parse(await readFile(profilePath,'utf8')),url:paths.origin};}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
  if((profile.credentialAccount as {credential?:string}|undefined)?.credential!==digest(connection.token))delete profile.credentialAccount;
@@ -89,13 +108,13 @@ class CredentialRefreshUnavailableError extends Error {
 export async function refreshCredentials(connection:Credentials,root:string,options:{fetch?:typeof fetch;signal?:AbortSignal;timeoutMs?:number}={}):Promise<Credentials>{
  return withStateLock(root,'home',()=>withStateLock(root,'@credential-refresh',async()=>{
   options.signal?.throwIfAborted();
-  const saved=await readCredentials(connection.server,root);
+  const saved=await readCredentials(connection.server,root,connection.audience);
   if(!saved||!saved.refreshToken||!saved.clientId||saved.clientId!==connection.clientId)throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');
   if(saved.token!==connection.token||saved.refreshToken!==connection.refreshToken)return saved;
   connection=saved;
   if(!connection.refreshToken||!connection.clientId)throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');
   const origin=credentialOrigin(connection.server);
-  const response=await(options.fetch??fetch)(`${origin}/oauth/token`,{method:'POST',redirect:'error',signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs??15000)]):AbortSignal.timeout(options.timeoutMs??15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:connection.clientId,refresh_token:connection.refreshToken,resource:`${origin}${API_RESOURCE_PATH}`})}).catch(()=>{options.signal?.throwIfAborted();throw new CredentialRefreshUnavailableError('refresh_unavailable: the refresh server could not be reached. Retry later; the saved grant was retained.');});
+  const response=await(options.fetch??fetch)(`${origin}/oauth/token`,{method:'POST',redirect:'error',signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs??15000)]):AbortSignal.timeout(options.timeoutMs??15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:connection.clientId,refresh_token:connection.refreshToken,resource:connection.resource??`${origin}${API_RESOURCE_PATH}`})}).catch(()=>{options.signal?.throwIfAborted();throw new CredentialRefreshUnavailableError('refresh_unavailable: the refresh server could not be reached. Retry later; the saved grant was retained.');});
   const data=await response.json().catch(()=>null) as {access_token?:unknown;refresh_token?:unknown;expires_in?:number;error?:unknown}|null;
   if(!response.ok){
    if(response.status<500&&response.status!==429&&['invalid_grant','invalid_client','revoked_token'].includes(String(data?.error)))throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');

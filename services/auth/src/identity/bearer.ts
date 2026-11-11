@@ -26,7 +26,7 @@ export interface BearerReaderOptions {
   admitBearer?: (token: TokenRecord) => Promise<boolean>;
 }
 
-interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; email: string | null; email_verified: boolean | null }
+interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; expires_at: string | Date | null; email: string | null; email_verified: boolean | null }
 
 /**
  * THE BEARER READ'S LIVENESS, as SQL over a `tokens` row aliased `t`: the lateral `fence` join and the predicate
@@ -57,7 +57,7 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
   const tokens = `${auth}.tokens`;
   const { fence, live } = bearerLiveSql({ auth, tokens });
-  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, u.email, u."emailVerified" AS email_verified
+  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, t.expires_at, u.email, u."emailVerified" AS email_verified
     FROM ${tokens} t
     ${fence}
     LEFT JOIN ${auth}."user" u ON u.id=t.user_id
@@ -70,6 +70,7 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
         userId: row.user_id ?? null,
         ...(row.audience ? { audience: row.audience } : {}),
         ...(row.scope ? { scope: row.scope } : {}),
+        ...(row.expires_at ? { expiresAt: new Date(row.expires_at).toISOString() } : {}),
         ...(row.email !== null && row.email !== undefined ? { email: row.email, emailVerified: row.email_verified === true } : {}),
       };
       return !o.admitBearer || await o.admitBearer(token) ? token : null;

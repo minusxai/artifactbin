@@ -2,14 +2,14 @@ import {canUseDeploymentIdentity} from '../accounts';
 import {recordGroupChanges} from '../groups';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
-import { getDb, type Queryable, deploymentConfig, env, minusxSettings, schedulesOwner, services } from '../platform';
+import { getDb, type Queryable, dataServices, deploymentConfig, env, pageSchedulesEnabled, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
 const ID='company';
 export class DeploymentError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
-/** Run at boot (server.ts): a refused setting stops the start with its name. Combined mode is checked whole here. */
+/** Run at boot (server.ts): a refused setting stops the start with its name. */
 export function validateDeploymentConfiguration():void {
- minusxSettings();schedulesOwner();
+ serviceAudiences();dataServices();pageSchedulesEnabled();
  const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  if(config.mode==='company'&&!policy.matches(config.ownerEmail!))throw new Error('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
 }

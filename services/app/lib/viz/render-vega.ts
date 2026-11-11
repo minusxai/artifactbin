@@ -494,7 +494,7 @@ interface CompileVegaLiteOptions {
 }
 
 /**
- * Compile a (raw, saved) Vega-Lite spec into a full Vega spec with the MinusX theme.
+ * Compile a (raw, saved) Vega-Lite spec into a full Vega spec with the product theme.
  * A responsive-by-default autosize is applied at render time only — never persisted
  * into the saved spec (the container owns sizing,); explicit spec autosize wins.
  */

@@ -1,6 +1,6 @@
 /** OAuth 2.1 for `/api`, implemented over the auth domain's clients and credentials. */
 import { createHash, randomBytes } from 'node:crypto';
-import {API_RESOURCE_PATH,GRANTABLE_SCOPES,type Queryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 // Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
@@ -54,6 +54,32 @@ interface OAuthClient {
   clientId: string;
   clientName: string;
   redirectUris: string[];
+  /** Registered by the operator (IDENTITY__OAUTH_CLIENTS), so its name is shown at consent; a dynamic client's is not. */
+  configured?: boolean;
+}
+
+/** An operator-registered client (IDENTITY__OAUTH_CLIENTS): a fixed id, a name people see at consent, its redirects. */
+export interface ConfiguredOAuthClient { clientId: string; name: string; redirectUris: string[] }
+const WHAT_CLIENTS = 'IDENTITY__OAUTH_CLIENTS must be a JSON array of {"client_id": "<lower-case id>", "name": "<shown at consent>", "redirect_uris": ["https://…"]}';
+/**
+ * IDENTITY__OAUTH_CLIENTS, validated whole (a malformed entry throws naming the setting): public clients (PKCE, no
+ * secret) with fixed ids, e.g. another service's web application, which then needs no dynamic registration. An id is
+ * lower-case letters, digits and hyphens, so it can never be a dynamic one (`afbin_…`).
+ */
+export function parseOAuthClients(raw: string | undefined): readonly ConfiguredOAuthClient[] {
+  if (raw === undefined || raw.trim() === '') return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error(WHAT_CLIENTS); }
+  if (!Array.isArray(parsed)) throw new Error(WHAT_CLIENTS);
+  const out: ConfiguredOAuthClient[] = [];
+  for (const entry of parsed) {
+    const e = entry as Record<string, unknown> | null;
+    if (!e || typeof e !== 'object' || typeof e.client_id !== 'string' || !/^[a-z][a-z0-9-]{2,62}$/.test(e.client_id) || typeof e.name !== 'string' || !/^[^\u0000-\u001f<>]{1,80}$/.test(e.name.trim())
+      || !Array.isArray(e.redirect_uris) || !e.redirect_uris.length || e.redirect_uris.length > 10 || !e.redirect_uris.every((uri) => typeof uri === 'string' && uri.length <= 2048 && isAllowedRedirectUri(uri))
+      || out.some((other) => other.clientId === e.client_id)) throw new Error(WHAT_CLIENTS);
+    out.push({ clientId: e.client_id, name: e.name.trim(), redirectUris: [...new Set(e.redirect_uris as string[])] });
+  }
+  return out;
 }
 
 interface RefreshGrant {
@@ -98,7 +124,7 @@ function registration(body: Record<string, unknown>): { clientName: string; redi
 
 const refreshToken = (): string => `mxr_${randomBytes(32).toString('base64url')}`;
 
-export function createOAuthStore(db: Queryable, schema = 'auth'): OAuthStore {
+export function createOAuthStore(db: Queryable, schema = 'auth', configured: readonly ConfiguredOAuthClient[] = []): OAuthStore {
   const s = identifier(schema, 'schema');
   const clients = `${s}.clients`;
   const credentials = `${s}.credentials`;
@@ -119,6 +145,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth'): OAuthStore {
       return { client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), ...metadata };
     },
     async client(clientId) {
+      const fixed = configured.find((client) => client.clientId === clientId);
+      if (fixed) return { clientId: fixed.clientId, clientName: fixed.name, redirectUris: [...fixed.redirectUris], configured: true };
       const row = (await db.query<{ id: string; metadata: Record<string, unknown> | string }>(
         `SELECT id, metadata FROM ${clients} WHERE id = $1 AND deleted_at IS NULL`,
         [clientId],
@@ -252,14 +280,14 @@ export const authServerMetadata = (base: string): Record<string, unknown> => ({
   registration_endpoint: `${base}/oauth/register`,
   response_types_supported: ['code'],
   grant_types_supported: [AUTHORIZATION_CODE, REFRESH_TOKEN],
-  scopes_supported: [...GRANTABLE_SCOPES],
+  scopes_supported: [ARTIFACT_SCOPE],
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none'],
 });
 export const protectedResourceMetadata = (base: string): Record<string, unknown> => ({
   resource: `${base}${API_RESOURCE_PATH}`,
   authorization_servers: [base],
-  scopes_supported: [...GRANTABLE_SCOPES],
+  scopes_supported: [ARTIFACT_SCOPE],
   bearer_methods_supported: ['header'],
 });
 export const s256 = (verifier: string): string => createHash('sha256').update(verifier).digest('base64url');

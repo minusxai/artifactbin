@@ -18,7 +18,7 @@ No product rules live here. Server-only.
   fails on a stale file; `schema-ownership.test.ts` fails when two packages declare one table.
 - Identity's tables (contracts `IDENTITY_OWNED_TABLES`) are not the app's: the auth package declares them
   (`identity-store/schema.ts`, AUTH__SCHEMA) and is their only writer (`services().identity`); `IDENTITY.sql` is its read
-  views (`identity-store/views.ts`; MinusX copies it byte for byte). The app reads them through those views: every
+  views (`identity-store/views.ts`; another reader may copy it byte for byte). The app reads them through those views: every
   connection's search_path is `<app schema>, <IDENTITY__SCHEMA>` (`db.ts`), and `identity-host.ts` refuses a boot where
   `users` is not the view. Never call `services().identity` inside an open transaction (PGLite waits on itself).
 - Settings procedure: read it in `config.ts`, the only file that reads the process environment, through

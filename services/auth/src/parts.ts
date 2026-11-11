@@ -1,11 +1,11 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
-import {createOAuthStore} from './identity/oauth';
+import {createOAuthStore,parseOAuthClients} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
@@ -167,11 +167,12 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       mountOAuthRoutes(app, {
         sessions: o.sessions,
         admitIdentity:o.admitIdentity,
-        oauth: createOAuthStore(o.identityDb, schema),
+        oauth: createOAuthStore(o.identityDb, schema, parseOAuthClients(readEnv(o.env, 'IDENTITY__OAUTH_CLIENTS'))),
         upstream: o.upstream,
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
         aliasOrigins: aliasOriginsOf(o),
+        serviceAudiences: parseServiceAudiences(readEnv(o.env, 'IDENTITY__SERVICE_AUDIENCES')),
       });
     },
   };

@@ -13,7 +13,7 @@
  * (contracts `IDENTITY_OWNED_TABLES`; the app role holds SELECT only on them in a split-role database). A decision
  * reads them at decision time inside its own transaction and takes no lock on them, so it never waits for, or holds
  * up, an identity write: a membership granted or revoked, a subtree moved, a group deleted takes effect from the next
- * decision. The hierarchy revision (`group_hierarchy`) is a counter MinusX's stale-policy rule reads, not a lock.
+ * decision. The hierarchy revision (`group_hierarchy`) is a counter readers of the tree may watch, not a lock.
  *
  * The order, on the normal path:
  *

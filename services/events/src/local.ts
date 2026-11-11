@@ -7,7 +7,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { EventEnvelope, EventSink, EventSubscriber, EventsService, Queryable } from '@artifactbin/contracts';
-import { EVENT_VERBS } from '@artifactbin/contracts';
 import { ensureTable } from '@artifactbin/utils';
 import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLES, IDENTIFIER } from './schema';
 
@@ -43,18 +42,6 @@ export async function ensureEventsSchema(db: Queryable, schema: string = DEFAULT
     FROM todo, head WHERE e.id = todo.id`);
 }
 
-/**
- * The one kind another product publishes (MinusX's job runs, CONTRACT §6): refused here unless it is a catalogued
- * verb carrying the ids the feed authorizes on, so a malformed job event can never be stored unobservable.
- */
-function checkEnvelope(event: EventEnvelope): void {
-  if (event.object_kind !== 'job') return;
-  const payload = (event.payload ?? {}) as Record<string, unknown>;
-  const ids = ['schedule_id', 'occurrence_id', 'group_id'].every(key => typeof payload[key] === 'string' && payload[key] !== '');
-  if (!(EVENT_VERBS.job as readonly string[]).includes(event.verb) || !ids || typeof event.object_id !== 'string' || !event.object_id)
-    throw new Error('Invalid job event: a catalogued verb and string schedule_id, occurrence_id and group_id are required');
-}
-
 /** The row, as the wire orders it — one list, so the INSERT's columns and its parameters cannot drift. */
 const COLUMNS = ['id', 'at', 'source', 'subject_kind', 'subject_id', 'verb', 'object_kind', 'object_id', 'payload'] as const;
 /** A VALUES list types its parameters itself: the two columns that are not text say what they are. */
@@ -79,7 +66,6 @@ export function createEvents(opts: EventsWriterOptions): EventsWriter {
   const ready = () => ensured ??= ensureEventsSchema(opts.db, schema).catch(error => { ensured = null; throw error; });
   const publish = async (events: EventEnvelope[]) => {
     if (!events.length) return;
-    events.forEach(checkEnvelope);
     await ready();
     const width = COLUMNS.length;
     const rows = events.map((_, row) => `(${COLUMNS.map((c, col) => `$${row * width + col + 1}${CASTS[c] ?? ''}`).join(', ')}, ${row + 1})`);

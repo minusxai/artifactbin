@@ -1,6 +1,6 @@
 
 /**
- * MinusX BI chart theme constants — palettes, fonts, light/dark tokens.
+ * The chart theme constants — palettes, fonts, light/dark tokens.
  * Engine-free: consumed by the Vega theme (lib/viz/theme.ts) and the
  * story CSS builder (lib/html-systems/story-css.server.ts).
  */

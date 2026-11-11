@@ -12,9 +12,8 @@ export {
   MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_QUERY_ROWS, MAX_ROWS_LIMIT, OUTBOUND_IPS, PUBLIC_BASE_URL, QUERY_TIMEOUT_MS, RUNNER_SERVICE_URL,
   S3_URL, SQL_SERVICE_URL, TEST_DOMAIN, TRUSTED_PROXY_HOPS, WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_MAX_PER_HOUR, WEB_INGEST_TIMEOUT_MS,
   deploymentConfig, env, envNamesRead, functionScheduleMinimumMinutes, parseUserPagesHost, requirePagesHost,
-  resolveHmrPort, unknownEnvNames, minusxSettings, schedulesOwner,
+  resolveHmrPort, unknownEnvNames, serviceAudiences, dataServices, pageSchedulesEnabled,
 } from './config';
-export type { MinusxSettings, SchedulesOwner } from './config';
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb, schemaImageInputs, schemaImageKey } from './db';
 export type { Db, Queryable, SchemaImageInputs } from './db';
 export { actorSubject, emit, envelope } from './events';

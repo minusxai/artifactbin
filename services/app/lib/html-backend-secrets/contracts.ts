@@ -1,7 +1,7 @@
-import {isResolverDatabaseKind,MINUSX_CONNECTION_KIND,RESOLVER_DATABASE_KINDS,RESOLVER_DATABASE_LIMITS,type ResolverDatabaseKind} from '@artifactbin/contracts';
+import {isResolverDatabaseKind,VIEWER_CONNECTION_KIND,RESOLVER_DATABASE_KINDS,RESOLVER_DATABASE_LIMITS,type ResolverDatabaseKind} from '@artifactbin/contracts';
 import {hostNameSyntax} from '@artifactbin/utils/public-address';
 /** Declarations contain names only. Credential values are never versioned with source. */
-/** `secretHosts`: each declared name's host or kind; a group-owned page reads only its governed (`'minusx'`) names. */
+/** `secretHosts`: each declared name's host or kind; a group-owned page reads only its viewer (`'viewer'`) names. */
 export interface PinnedBackendSecretScope {ownerId:string;backendId:string;pageId:string;secretBindings?:readonly string[];secretHosts?:Readonly<Record<string,string>>}
 export interface BackendSecretScope {ownerId:string;backendId:string}
 export interface BackendSecretCipher {seal(value:string,scope:BackendSecretScope,name:string):string;open(ciphertext:string,scope:BackendSecretScope,name:string):string}
@@ -23,8 +23,8 @@ const SECRET_HOST=new RegExp(`^(?:\\*\\.)?(?:${HOST_LABEL}\\.)+[a-z][a-z0-9-]*[a
 /**
  * The resolver `secrets` export: each name bound to the one host that may receive it, or to a database kind of
  * RESOLVER_DATABASE_KINDS (`'postgres'`, `'mysql'`: a named connection for `caps.db`, which `caps.fetch` never fills),
- * or to MINUSX_CONNECTION_KIND (`'minusx'`: a `caps.db` connection through a governed MinusX connection, combined mode
- * only, refused at publish otherwise). A value that is neither is refused with its name and the supported kinds, which publish shows as is.
+ * or to VIEWER_CONNECTION_KIND (`'viewer'`: a `caps.db` connection a configured data service opens as each viewer,
+ * refused at publish when none is configured). A value that is neither is refused with its name and the supported kinds, which publish shows as is.
  * Returned sorted by name.
  */
 export function secretHostMap(value:unknown):Record<string,string>{
@@ -34,7 +34,7 @@ export function secretHostMap(value:unknown):Record<string,string>{
  if(entries.length>32)throw Error('invalid_secrets: at most 32 names');
  for(const [name,host] of entries){
   if(!SECRET_NAME.test(name))throw Error(`invalid_secrets: ${JSON.stringify(name.slice(0,64))} is not an upper-case name`);
-  if(typeof host==='string'&&host.length<=253&&(SECRET_HOST.test(host)||isResolverDatabaseKind(host)||host===MINUSX_CONNECTION_KIND))continue;
+  if(typeof host==='string'&&host.length<=253&&(SECRET_HOST.test(host)||isResolverDatabaseKind(host)||host===VIEWER_CONNECTION_KIND))continue;
   const shown=typeof host==='string'?JSON.stringify(host.slice(0,64)):typeof host;
   throw Error(`invalid_secrets: ${name}: ${shown} is neither a host name (exact or one leading *. label) nor a database type (${RESOLVER_DATABASE_KINDS.join(', ')})`);
  }

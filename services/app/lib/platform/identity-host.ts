@@ -1,7 +1,8 @@
 /**
  * WHERE THIS PROCESS STANDS WITH THE IDENTITY MODULE'S SCHEMA, at its database's open (./db):
- *  - it writes `identity_settings`, the app's row the read views' rules read (the deployment mode and the API
- *    audiences an OAuth token may be bound to), from its own settings, on every boot in every mode;
+ *  - it writes `identity_settings`, the app's row the read views' rules read (the deployment mode, the API audiences an
+ *    OAuth token may be bound to and the configured services' origins), from its own settings, on every boot in every
+ *    mode;
  *  - when identity runs in this process (no `AUTH__SERVICE_URL`: ./services) it is identity's host, so it ensures the
  *    identity schema itself (@artifactbin/auth `ensureIdentitySchema`: base tables in AUTH__SCHEMA, the read views in
  *    IDENTITY__SCHEMA);
@@ -13,14 +14,14 @@
  */
 import {API_RESOURCE_PATH,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
 import {ensureIdentitySchema} from '@artifactbin/auth/identity-store';
-import {ALIAS_ORIGINS,AUTH_SCHEMA,AUTH_SERVICE_URL,IDENTITY_READ_SCHEMA,PUBLIC_BASE_URL,deploymentConfig} from './config';
+import {ALIAS_ORIGINS,AUTH_SCHEMA,AUTH_SERVICE_URL,IDENTITY_READ_SCHEMA,PUBLIC_BASE_URL,deploymentConfig,serviceAudiences} from './config';
 
 /** This process's settings into the row the identity views read. */
 export async function syncIdentitySettings(db: Queryable): Promise<void> {
   const origins = [...new Set([new URL(PUBLIC_BASE_URL).origin, ...ALIAS_ORIGINS])];
-  await db.query(`INSERT INTO identity_settings(id,deployment_mode,api_audiences) VALUES('installation',$1,$2)
-    ON CONFLICT (id) DO UPDATE SET deployment_mode=excluded.deployment_mode,api_audiences=excluded.api_audiences`,
-    [deploymentConfig().mode, origins.map(origin => `${origin}${API_RESOURCE_PATH}`)]);
+  await db.query(`INSERT INTO identity_settings(id,deployment_mode,api_audiences,service_audiences) VALUES('installation',$1,$2,$3)
+    ON CONFLICT (id) DO UPDATE SET deployment_mode=excluded.deployment_mode,api_audiences=excluded.api_audiences,service_audiences=excluded.service_audiences`,
+    [deploymentConfig().mode, origins.map(origin => `${origin}${API_RESOURCE_PATH}`), serviceAudiences().map(service => service.origin)]);
 }
 
 /** The identity schema, when this process hosts identity (again once Better Auth's tables exist: the sessions view). */

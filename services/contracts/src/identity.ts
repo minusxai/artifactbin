@@ -10,6 +10,8 @@ export interface TokenRecord {
   audience?: string;
   /** Space-delimited OAuth scope; absent on ordinary/manual tokens. */
   scope?: string;
+  /** ISO expiry; absent when the token does not expire. */
+  expiresAt?: string;
   /** The account's identity, read in the same statement as the token; absent when it has no account row. */
   email?: string;
   emailVerified?: boolean;

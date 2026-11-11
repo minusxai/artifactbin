@@ -26,8 +26,8 @@ export interface S3Config {
   forcePathStyle: boolean;
   /**
    * Key prefix, from the path segments after the bucket. One shared bucket
-   * holds several environments, so `/minusx/artifacts-dev` and
-   * `/minusx/artifacts` are the same bucket with different roots — and a dev
+   * holds several environments, so `/acme/artifacts-dev` and
+   * `/acme/artifacts` are the same bucket with different roots — and a dev
    * machine can never write over production objects by misconfiguration.
    * Normalised without a trailing slash; '' when the URL names only a bucket.
    */

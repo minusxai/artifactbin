@@ -135,19 +135,26 @@ it('uses private origin-bound login challenges and saves grants without exposing
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:false});
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('login --minusx asks the grant for the minusx scope beside artifacts; plain login asks for none',async()=>{
+it('login --audience saves a second grant for that service beside the API grant; plain login asks for the API grant alone',async()=>{
  const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
- const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'author-auth-scope-')),codeFile=path.join(root,'code.txt'),server='https://example.test';
+ const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs'),{platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-auth-audience-')),codeFile=path.join(root,'code.txt'),server='https://example.test';
  const asked:unknown[]=[];
  try{
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});if(pathname==='/api/authentication/token')asked.push(JSON.parse(init.body));return Response.json({access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});
+   const body=JSON.parse(init.body);if(pathname==='/api/authentication/token')asked.push(body);
+   return Response.json(body.audience?{access_token:'service_access',refresh_token:'service_refresh',client_id:'service_client',expires_in:3600,resource:'https://warehouse.example'}:{access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
   await writeFile(codeFile,'123456');
-  for(const minusx of [true,false]){
+  for(const audience of ['warehouse',undefined]){
    const challenge=await authCommand({sub:'login',values:{email:'author@example.test'},positionals:[]},options);
-   await authCommand({sub:'login',values:{challenge:challenge.challenge,'code-file':codeFile,...(minusx?{minusx:true}:{})},positionals:[]},options);
+   const result=await authCommand({sub:'login',values:{challenge:challenge.challenge,'code-file':codeFile,...(audience?{audience}:{})},positionals:[]},options);
+   expect(JSON.stringify(result)).not.toMatch(/service_access|synthetic_access/);
   }
-  expect(asked).toEqual([{scope:'artifacts minusx'},{}]);
+  expect(asked).toEqual([{},{audience:'warehouse'},{}]);
+  const shared=await platform();
+  expect(await shared.readCredentials(server,root)).toMatchObject({token:'synthetic_access'});
+  expect(await shared.readCredentials(server,root,'warehouse')).toMatchObject({token:'service_access',audience:'warehouse',resource:'https://warehouse.example'});
+  await expect(authCommand({sub:'status',values:{audience:'Not An Id'},positionals:[]},options)).rejects.toMatchObject({code:'invalid_audience'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('status proves an unexpired saved grant with the server, so a grant revoked elsewhere reads as signed out',async()=>{

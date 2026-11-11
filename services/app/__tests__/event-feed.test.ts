@@ -1,16 +1,13 @@
 /**
  * THE PUBLIC EVENTS FEED over real routes and the real events writer (CONTRACT §6): order and resumption by position,
  * at-least-once redelivery, the comments category without text, access re-checked on every poll, 410 for an expired
- * cursor, per-session `you`, and MinusX job events published to the events service's durable route reaching the
- * members of their group and nobody else. Concurrent commits need real PostgreSQL connections:
+ * cursor, per-session `you`, and no category but the catalogued ones. Concurrent commits need real PostgreSQL connections:
  * services/events/__tests__/feed-position-postgres.test.ts.
  */
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
-import type { EventEnvelope, EventFeedEvent, EventFeedPage } from '@artifactbin/contracts';
-import { AGENT_SESSION_HEADER, EVENTS_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
-import { serveEvents } from '@artifactbin/events';
-import { createEvents } from '@artifactbin/events/local';
+import type { EventFeedEvent, EventFeedPage } from '@artifactbin/contracts';
+import { AGENT_SESSION_HEADER } from '@artifactbin/contracts';
 import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { nativeHtml } from './native-html-fixture';
@@ -211,31 +208,11 @@ it('holds a waiting request until an event arrives, and caps concurrent waits pe
   expect((await Promise.all(waits)).map(r => r.status)).toEqual([499, 499, 499, 499]);
 }, 30_000);
 
-it('delivers a MinusX job event published to the events service\'s durable route to members of its group only', async () => {
-  const owner = await mintAccountToken('job-owner'), outsider = await mintAccountToken('job-outsider');
-  const made = await createGroup(request('/api/groups', { method: 'POST', token: owner.token, json: { handle: `jobs_${randomUUID().slice(0, 8)}`, name: 'Jobs' } }));
-  const group = await made.json() as { id: string };
-  const startOwner = await page(owner, { after: 'now' }), startOutsider = await page(outsider, { after: 'now' });
-  const startJobs = await page(owner, { category: 'jobs', after: 'now' }), startComments = await page(owner, { category: 'comments', after: 'now' });
-  // The events service as MinusX reaches it: the HTTP shell's publish route, service-authenticated.
-  const db = await getDb();
-  const server = serveEvents(createEvents({ db: { query: async <T,>(sql: string, params: unknown[] = []) => db.query<T>(sql, params) }, schema: EVENTS_SCHEMA }), { serviceSecret: 'svc' });
-  const { url } = server.listen(0);
-  const run = (verb: string, groupId: string): EventEnvelope => ({ id: `job:occ_1:${verb}:${groupId}`, at: new Date().toISOString(), source: 'minusx',
-    subject_kind: 'service', subject_id: 'minusx', verb, object_kind: 'job', object_id: 'sch_1',
-    payload: { schedule_id: 'sch_1', occurrence_id: 'occ_1', group_id: groupId } });
-  try {
-    const post = (body: EventEnvelope[]) => fetch(url + EVENTS_ROUTES.publish, { method: 'POST',
-      headers: { 'content-type': 'application/json', [SERVICE_AUTH_HEADER]: 'svc' }, body: JSON.stringify(body) });
-    expect((await post([run('run_started', group.id), run('run_started', 'grp_elsewhere')])).status).toBe(200);
-    // A retried publish (same stable id per occurrence and type) is stored once.
-    expect((await post([run('run_started', group.id)])).status).toBe(200);
-  } finally { await server.close(); }
-  const seen = await page(owner, { after: startOwner.next });
-  expect(seen.events).toHaveLength(1);
-  expect(seen.events[0]).toMatchObject({ type: 'job.run_started', resource: { kind: 'job', id: 'sch_1' },
-    actor: { kind: 'service', id: 'minusx', you: false }, payload: { schedule_id: 'sch_1', occurrence_id: 'occ_1', group_id: group.id } });
-  expect(types((await page(owner, { category: 'jobs', after: startJobs.next })).events)).toEqual(['job.run_started']);
-  expect((await page(owner, { category: 'comments', after: startComments.next })).events).toEqual([]);
-  expect((await page(outsider, { after: startOutsider.next })).events).toEqual([]);
+it('serves no category but comments: an unknown category or a job type is refused, as any type outside the catalogue', async () => {
+  const owner = await mintAccountToken('feed-categories');
+  for (const [query, code] of [[{ category: 'jobs' }, 'invalid_category'], [{ types: 'job.run_started' }, 'invalid_types']] as const) {
+    const refused = await read(owner, query);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: { code } });
+  }
 });

@@ -24,7 +24,7 @@ artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
   deleted group grants nothing: every read keeps `deleted_at IS NULL`, whatever app rows still name the group.
 - Groups form one tree (lib/groups hierarchy). Shares and a group-owned row's member audience reach a group's
   subtree in both languages (`reachedGroupsSql`, `groupAudience`); ownership and editor powers stay on direct rows.
-  The hierarchy revision is a counter identity moves on every topology change (MinusX's stale-policy rule reads
+  The hierarchy revision is a counter identity moves on every topology change (readers of the tree may watch
   it), not a lock.
 - Facts read inside a write are read-only: never stamp or update a fact row while deciding (an upgraded share
   lock deadlocks two readers of one page). Unresolved invitations are stamped by ordinary reads only.

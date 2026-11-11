@@ -16,19 +16,19 @@
  * contracts check it (`databaseConnection`) and sent only when filled. Advanced opens by itself when a CA is the likely
  * fix: the host is an RDS or Supabase name, or Test connection answered `tls_untrusted_certificate`.
  *
- * A name declared `'minusx'` (MINUSX_CONNECTION_KIND, combined mode only) is a GOVERNED CONNECTION BINDING, not a
- * secret: the author picks one of their own groups (`GET /api/groups`, direct memberships) and a connection MinusX
- * lists for them in it (`GET /api/my/minusx/connections`), and saves `{connection_id, group_id}`. The current binding
- * comes with the resolver (`bindings`); every refusal (`not_group_member`, `connection_not_visible`,
- * `minusx_not_configured`, `minusx_unavailable`, `binding_forbidden`) is said in plain words. Those reads happen only
- * when such a name is declared, so a page without one (and every standalone server) asks for nothing new.
+ * A name declared `'viewer'` (VIEWER_CONNECTION_KIND) is a VIEWER CONNECTION BINDING, not a secret: the author picks
+ * one of the data services this server trusts (`data_services` on the resolvers read) and writes the parameters that
+ * service takes (a JSON object, read by the service only), and saves `{service, params}`. The server asks the service
+ * for a session as the author before storing it. The current binding comes with the resolver (`bindings`); every
+ * refusal (`data_service_not_configured`, `binding_forbidden`, `binding_rejected`, `data_service_unavailable`,
+ * `invalid_binding`) is said in plain words.
  *
  * A resolver that schedules functions (`export const schedule`, lib/function-schedules) lists each with its interval,
  * its last outcome and its next run; a failed run shows its code, the function's message and the owner-only detail,
  * as Test connection does.
  */
-import { createEffect, createResource, createSignal, For, Show, type JSX } from 'solid-js';
-import { isResolverDatabaseKind, MINUSX_CONNECTION_KIND, type GroupSummary, type ResolverDatabaseKind } from '@artifactbin/contracts';
+import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
+import { isResolverDatabaseKind, VIEWER_CONNECTION_KIND, type ResolverDatabaseKind, type ViewerBinding } from '@artifactbin/contracts';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { CopyBlock } from '../ui/CopyBlock';
@@ -39,9 +39,8 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
 interface FunctionSchedule { name: string; every: string; nextRunAt: string; running: boolean; failures: number; lastRunAt: string | null; lastStatus: 'ok' | 'failed' | null; lastError: string | null; lastMessage: string | null; lastDetail: string | null }
-interface MinusxBinding { connection_id: string; group_id: string; group_name: string | null }
-interface PageResolver { name: string; backendId: string; version: string; test: boolean; functions?: boolean; secrets: Record<string, string>; set: string[]; bindings?: Record<string, MinusxBinding>; schedules?: FunctionSchedule[] }
-interface PageResolvers { revision: string; resolvers: PageResolver[] }
+interface PageResolver { name: string; backendId: string; version: string; test: boolean; functions?: boolean; secrets: Record<string, string>; set: string[]; bindings?: Record<string, ViewerBinding>; schedules?: FunctionSchedule[] }
+interface PageResolvers { revision: string; resolvers: PageResolver[]; data_services?: string[] }
 type TestOutcome = { ok: true; text: string } | { ok: false; text: string };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -169,90 +168,69 @@ function ConnectionRow(props: { resolver: PageResolver; name: string; kind: Reso
 
 /** A binding refusal in plain words; an unknown code is shown as is. */
 const BINDING_WORDS: Record<string, string> = {
-  not_group_member: 'You are not a direct member of that group. Only its own members can pin a page to its data; membership of a parent group or a subgroup does not count.',
-  connection_not_visible: 'MinusX does not show that connection to this group. Choose one of the connections listed for it.',
-  minusx_not_configured: 'This server is not connected to MinusX, so governed connections cannot be bound.',
-  minusx_unavailable: 'MinusX did not answer. Try again in a moment.',
-  binding_forbidden: 'MinusX refused to show you that group’s connections.',
-  invalid_binding: 'Choose a group and one of its connections.',
+  data_service_not_configured: 'This server trusts no data service by that name, so this connection cannot be bound.',
+  binding_forbidden: 'The data service refused you a session with these parameters. You can only bind what you may read yourself.',
+  binding_rejected: 'The data service does not accept these parameters.',
+  data_service_unavailable: 'The data service did not answer. Try again in a moment.',
+  invalid_binding: 'Choose a data service and write its parameters as a JSON object.',
 };
 const bindingWords = (code: string) => BINDING_WORDS[code] ?? code;
-interface MinusxConnection { id: string; name: string; protocol: string }
-async function readJsonOrRefusal<T>(response: Response): Promise<T> {
-  const body = await response.json().catch(() => null) as (T & { error?: string }) | null;
-  if (!response.ok || !body) throw new Error(body?.error ?? (response.status >= 500 ? 'minusx_unavailable' : 'refused'));
-  return body;
-}
-/** The author's direct memberships: the only groups a page may be pinned to. */
-async function readGroups(): Promise<GroupSummary[]> {
-  return (await readJsonOrRefusal<{ groups: GroupSummary[] }>(await fetch('/api/groups'))).groups;
-}
-async function readConnections(group: string): Promise<MinusxConnection[]> {
-  return (await readJsonOrRefusal<{ connections: MinusxConnection[] }>(await fetch(`/api/my/minusx/connections?group_id=${encodeURIComponent(group)}`))).connections;
-}
+/** The params text as an object, or null when it is not a JSON object. */
+const paramsOf = (text: string): Record<string, unknown> | null => {
+  try { const value = JSON.parse(text.trim() || '{}') as unknown; return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; } catch { return null; }
+};
 
-function MinusxBindingRow(props: { resolver: PageResolver; name: string; set: boolean; binding: MinusxBinding | null; onNames: (names: string[]) => void }): JSX.Element {
-  const [current, setCurrent] = createSignal<MinusxBinding | null>(props.binding);
-  const [group, setGroup] = createSignal(props.binding?.group_id ?? '');
-  const [connection, setConnection] = createSignal(props.binding?.connection_id ?? '');
+function ViewerBindingRow(props: { resolver: PageResolver; name: string; set: boolean; binding: ViewerBinding | null; services: string[]; onNames: (names: string[]) => void }): JSX.Element {
+  const [current, setCurrent] = createSignal<ViewerBinding | null>(props.binding);
+  const [service, setService] = createSignal(props.binding?.service ?? (props.services.length === 1 ? props.services[0]! : ''));
+  const [params, setParams] = createSignal(props.binding ? JSON.stringify(props.binding.params) : '{}');
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
-  const [groups] = createResource(readGroups);
-  const [connections] = createResource(() => group() || false, readConnections);
-  const groupOptions = () => {
-    const mine = (groups.error ? [] : groups() ?? []).map((g) => ({ value: g.id, label: g.name }));
+  const serviceOptions = () => {
+    const options = props.services.map((id) => ({ value: id, label: id }));
     const bound = current();
-    // The binding another editor set may name a group this author is not in: still shown, so it is visible what it pins.
-    return bound && !mine.some((g) => g.value === bound.group_id) ? [{ value: bound.group_id, label: bound.group_name ?? bound.group_id }, ...mine] : mine;
+    return bound && !props.services.includes(bound.service) ? [{ value: bound.service, label: bound.service }, ...options] : options;
   };
-  const listed = () => (connections.error || connections.loading ? [] : connections() ?? []);
-  const connectionOptions = () => {
-    const options = listed().map((c) => ({ value: c.id, label: c.name }));
-    const chosen = connection();
-    return chosen && !options.some((o) => o.value === chosen) ? [{ value: chosen, label: chosen }, ...options] : options;
-  };
-  const groupName = (id: string) => groupOptions().find((g) => g.value === id)?.label ?? id;
-  // Names of every connection listed so far: the bound one keeps its name while another group's list is shown.
-  const [seen, setSeen] = createSignal<Record<string, string>>({});
-  createEffect(() => { const more = listed(); if (more.length) setSeen((known) => ({ ...known, ...Object.fromEntries(more.map((c) => [c.id, c.name])) })); });
-  const connectionName = (id: string) => seen()[id] ?? id;
-  const listError = () => connections.error ? bindingWords(connections.error instanceof Error ? connections.error.message : 'minusx_unavailable') : '';
-  const changed = () => !current() || current()!.group_id !== group() || current()!.connection_id !== connection();
-  const ready = () => !!group() && !!connection() && listed().some((c) => c.id === connection()) && changed();
+  const parsed = () => paramsOf(params());
+  const changed = () => !current() || current()!.service !== service() || JSON.stringify(current()!.params) !== JSON.stringify(parsed());
+  const ready = () => !!service() && !!parsed() && changed();
   const send = async (method: 'PUT' | 'DELETE') => {
     setBusy(true); setError('');
     try {
-      const body = method === 'PUT' ? { name: props.name, binding: { connection_id: connection(), group_id: group() } } : { name: props.name };
+      const binding = { service: service(), params: parsed() ?? {} };
+      const body = method === 'PUT' ? { name: props.name, binding } : { name: props.name };
       const response = await fetch(`/api/my/resolvers/${encodeURIComponent(props.resolver.backendId)}/${encodeURIComponent(props.resolver.version)}/secrets`, { method, headers: JSON_HEADERS, body: JSON.stringify(body) });
       const answer = await response.json().catch(() => null) as { names?: string[]; error?: string } | null;
       if (!response.ok || !answer?.names) throw new Error(answer?.error ?? 'backend_secret_failed');
-      setCurrent(method === 'PUT' ? { connection_id: connection(), group_id: group(), group_name: groupName(group()) } : null);
-      if (method === 'DELETE') { setGroup(''); setConnection(''); }
+      setCurrent(method === 'PUT' ? binding : null);
+      if (method === 'DELETE') setParams('{}');
       props.onNames(answer.names);
     } catch (cause) { setError(bindingWords(cause instanceof Error ? cause.message : 'backend_secret_failed')); }
     finally { setBusy(false); }
   };
   return <ListRow class="items-end">
-    <div role="group" aria-label={`MinusX connection ${props.name}`} class="grid w-full gap-2">
+    <div role="group" aria-label={`Viewer connection ${props.name}`} class="grid w-full gap-2">
       <div class="flex flex-wrap items-center gap-3">
         <span class="font-mono text-sm text-fg">{props.name}</span>
-        <span class="font-sans text-xs text-muted">Governed MinusX connection</span>
+        <span class="font-sans text-xs text-muted">Connects as each viewer</span>
         <Badge tone={props.set && current() ? 'accent' : 'dim'}>{props.set && current() ? 'Bound' : 'Not bound'}</Badge>
       </div>
-      <Show when={props.set && current()}>{(bound) => <p class="m-0 font-sans text-sm text-fg">Pinned to {connectionName(bound().connection_id)} in {bound().group_name ?? bound().group_id}.</p>}</Show>
-      <form class="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (ready()) void send('PUT'); }}>
-        <Field label={`Group for ${props.name}`} class="min-w-48 flex-1">
-          <Select value={group()} options={groupOptions()} placeholder={groups.loading ? 'Loading your groups…' : 'Choose one of your groups'} disabled={busy() || groups.loading} onChange={(next) => { setGroup(next); setConnection(''); setError(''); }} />
+      <Show when={props.set && current()}>{(bound) => <p class="m-0 font-sans text-sm text-fg">Bound to {bound().service} with <span class="font-mono">{JSON.stringify(bound().params)}</span>.</p>}</Show>
+      <form class="grid gap-2" onSubmit={(event) => { event.preventDefault(); if (ready()) void send('PUT'); }}>
+        <Field label={`Data service for ${props.name}`} class="min-w-48">
+          <Select value={service()} options={serviceOptions()} placeholder={props.services.length ? 'Choose a data service' : 'No data service is configured'} disabled={busy() || !serviceOptions().length} onChange={(next) => { setService(next); setError(''); }} />
         </Field>
-        <Field label={`Connection for ${props.name}`} class="min-w-48 flex-1">
-          <Select value={connection()} options={connectionOptions()} placeholder={connections.loading ? 'Loading connections…' : 'Choose a connection'} disabled={busy() || !group() || connections.loading || !!connections.error} onChange={(next) => { setConnection(next); setError(''); }} />
+        <Field label={`Parameters for ${props.name}`} hint="A JSON object; only the data service reads it.">
+          <Textarea size="sm" spellcheck={false} autocomplete="off" rows={3} value={params()} disabled={busy()} onInput={(event) => { setParams(event.currentTarget.value); setError(''); }} />
         </Field>
-        <Button type="submit" size="md" disabled={busy() || !ready()}>Save binding</Button>
-        <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove binding</Button></Show>
+        <div class="flex gap-2">
+          <Button type="submit" size="md" disabled={busy() || !ready()}>Save binding</Button>
+          <Show when={props.set}><Button type="button" variant="danger" disabled={busy()} onClick={() => void send('DELETE')}>Remove binding</Button></Show>
+        </div>
       </form>
-      <Show when={group() && !connections.loading && !connections.error && !listed().length}><StatusMessage kind="empty">MinusX shows {groupName(group())} no connections.</StatusMessage></Show>
-      <Show when={error() || listError()}><StatusMessage kind="error">{error() || listError()}</StatusMessage></Show>
-      <p class="m-0 font-sans text-xs text-muted">Each viewer reads with their own MinusX access in this group. Someone outside it sees the page with a data-access error, never your rows. Only the group and connection are stored, no password.</p>
+      <Show when={!parsed()}><StatusMessage kind="error">The parameters must be a JSON object.</StatusMessage></Show>
+      <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
+      <p class="m-0 font-sans text-xs text-muted">Each viewer reads with their own access at that service. Someone without it sees the page with a data-access error, never your rows. Only the service and its parameters are stored, no password.</p>
     </div>
   </ListRow>;
 }
@@ -281,7 +259,7 @@ function ScheduleRow(props: { schedule: FunctionSchedule }): JSX.Element {
   </ListRow>;
 }
 
-function ResolverSection(props: { id: string; revision: string; resolver: PageResolver; outboundIps: string[] }): JSX.Element {
+function ResolverSection(props: { id: string; revision: string; resolver: PageResolver; outboundIps: string[]; dataServices: string[] }): JSX.Element {
   const [set, setSet] = createSignal(props.resolver.set);
   const [testing, setTesting] = createSignal(false);
   const [outcome, setOutcome] = createSignal<TestOutcome | null>(null);
@@ -309,7 +287,7 @@ function ResolverSection(props: { id: string; revision: string; resolver: PageRe
       <ul class="m-0 list-none p-0"><For each={names()}>{(name) => {
         const onNames = (next: string[]) => { setSet(next); setOutcome(null); };
         const kind = props.resolver.secrets[name];
-        if (kind === MINUSX_CONNECTION_KIND) return <MinusxBindingRow resolver={props.resolver} name={name} set={set().includes(name)} binding={props.resolver.bindings?.[name] ?? null} onNames={onNames} />;
+        if (kind === VIEWER_CONNECTION_KIND) return <ViewerBindingRow resolver={props.resolver} name={name} set={set().includes(name)} binding={props.resolver.bindings?.[name] ?? null} services={props.dataServices} onNames={onNames} />;
         return isResolverDatabaseKind(kind)
           ? <ConnectionRow resolver={props.resolver} name={name} kind={kind} set={set().includes(name)} outboundIps={props.outboundIps} untrusted={untrusted()} onNames={onNames} />
           : <SecretRow resolver={props.resolver} name={name} host={props.resolver.secrets[name] ?? ''} set={set().includes(name)} onNames={onNames} />;
@@ -332,7 +310,7 @@ export default function ResolversPanel(props: { id: string }): JSX.Element {
     <Show when={!page.loading} fallback={<StatusMessage kind="loading">Loading resolvers…</StatusMessage>}>
       <Show when={!page.error && page()} keyed fallback={<StatusMessage kind="error">Resolvers are unavailable. Refresh and try again.</StatusMessage>}>{(current) =>
         <Show when={current.resolvers.length} fallback={<StatusMessage kind="empty">This page has no resolvers.</StatusMessage>}>
-          <For each={current.resolvers}>{(resolver) => <ResolverSection id={props.id} revision={current.revision} resolver={resolver} outboundIps={outboundIps()} />}</For>
+          <For each={current.resolvers}>{(resolver) => <ResolverSection id={props.id} revision={current.revision} resolver={resolver} outboundIps={outboundIps()} dataServices={current.data_services ?? []} />}</For>
         </Show>}
       </Show>
     </Show>

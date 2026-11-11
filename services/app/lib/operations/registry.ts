@@ -170,7 +170,7 @@ const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "
 
 /** The shared write refusals, stated once and spread into each writer's table. */
 const SCHEDULE_LIMIT: OperationError = { status: 400, code: 'schedule_limit', fix: 'the page would give its publishing account more than 20 active scheduled functions: remove a schedule from it or another page that account published first' };
-const SCHEDULES_OWNED: OperationError = { status: 409, code: 'schedules_owned_by_minusx', fix: 'MinusX schedules recurring work on this installation: use a version or a page without the schedule export' };
+const SCHEDULES_DISABLED: OperationError = { status: 409, code: 'page_schedules_disabled', fix: 'Page schedules are off on this server: use a version or a page without the schedule export' };
 const CONTENT_ERRORS: OperationError[] = [
   {status:400,code:'native_html_required',fix:'Use the html field with a complete HTML document.'},
   {status:400,code:'invalid_html',fix:'Fix the named HTML identities or declaration problem and resubmit the complete source.'},
@@ -186,7 +186,7 @@ const CONTENT_ERRORS: OperationError[] = [
   { status: 400, code: 'private_requires_account', fix: 'private needs a logged-in owner — claim the token or use unlisted' },
   INVALID_PARENT,
   SCHEDULE_LIMIT,
-  SCHEDULES_OWNED,
+  SCHEDULES_DISABLED,
 ];
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
@@ -434,7 +434,7 @@ const revertArtifactOp: Operation = {
     { status: 400, code: 'version_required', fix: 'version must be a positive integer from list_versions' },
     POLICY_LOCKED,
     SCHEDULE_LIMIT,
-    SCHEDULES_OWNED,
+    SCHEDULES_DISABLED,
   ],
   async run(ctx, input) {
     if (typeof input.version !== 'number' || !Number.isInteger(input.version) || input.version < 1) {
@@ -500,7 +500,7 @@ const restoreArtifactOp: Operation = {
     // tell a stranger whether the id exists.
     NOT_FOUND,
     SCHEDULE_LIMIT,
-    SCHEDULES_OWNED,
+    SCHEDULES_DISABLED,
   ],
   async run(ctx, input) {
     let restored: Awaited<ReturnType<typeof restoreArtifactFor>>;

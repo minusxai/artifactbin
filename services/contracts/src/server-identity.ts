@@ -24,10 +24,6 @@ export interface ServerIdentityDocument {
   origin: string;
   /** Other origins the same deployment answers at. Never contains `origin`. */
   aliases: string[];
-  /** Combined mode only (MinusX configured): this installation's stable id. */
-  installation_id?: string;
-  /** Combined mode only: where this installation's MinusX control API is. A client sends no credential there it was not given for it. */
-  minusx?: { base_url: string };
 }
 
 /**

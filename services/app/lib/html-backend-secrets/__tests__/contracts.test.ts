@@ -18,9 +18,9 @@ describe('backend credential boundaries',()=>{
   expect(()=>secretHostMap({DB:'mssql'})).toThrow('invalid_secrets: DB: "mssql" is neither a host name (exact or one leading *. label) nor a database type (postgres, mysql)');
   expect(()=>secretHostMap({DB:5432})).toThrow('invalid_secrets: DB: number is neither');
  });
- it('binds a name to a governed MinusX connection with the one word minusx (publish refuses it outside combined mode)',()=>{
-  expect(secretHostMap({FIN:'minusx',WAREHOUSE:'postgres'})).toEqual({FIN:'minusx',WAREHOUSE:'postgres'});
-  for(const host of ['MinusX','minusx:','*.minusx'])expect(()=>secretHostMap({FIN:host}),host).toThrow('invalid_secrets');
+ it('binds a name to a viewer connection with the one word viewer (publish refuses it without a configured data service)',()=>{
+  expect(secretHostMap({FIN:'viewer',WAREHOUSE:'postgres'})).toEqual({FIN:'viewer',WAREHOUSE:'postgres'});
+  for(const host of ['Viewer','viewer:','*.viewer'])expect(()=>secretHostMap({FIN:host}),host).toThrow('invalid_secrets');
  });
  it('validates and normalizes a stored database connection, its kind one of the list',()=>{
   const ok={kind:'postgres',host:'DB.Example.com',port:5432,database:'shop',user:'reader',password:'p@ss word'};

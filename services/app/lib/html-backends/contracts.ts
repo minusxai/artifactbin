@@ -8,8 +8,8 @@ export interface HtmlBackendVersionRecord extends PreparedHtmlBackend {backendId
 
 /**
  * Credential-bearing source changes require the current personal owner's approval. `declaresSecrets` and
- * `historicalSecrets` count credentials only (./authority `credentialNames`): a governed MinusX binding is not one, so
- * a group-owned page may carry it.
+ * `historicalSecrets` count credentials only (./authority `credentialNames`): a viewer binding is not one, so a
+ * group-owned page may carry it.
  */
 export interface BackendChangeAuthority {personalOwner:boolean;declaresSecrets:boolean;historicalSecrets:boolean}
 export interface BackendIdentityTransition {previousOwnerId:string;nextOwnerId:string}

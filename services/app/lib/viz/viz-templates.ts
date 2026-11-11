@@ -1299,7 +1299,7 @@ const pointMap: VizTemplate = {
     const scheme = typeof p.colorScale === 'string' && CHOROPLETH_SCHEMES[p.colorScale] ? CHOROPLETH_SCHEMES[p.colorScale] : null;
     // Solid marker color (all points/flows one color) — used when NO data-driven `color`
     // column is bound. A bound `color` wins (it drives the category/ramp scale). Accepts
-    // any CSS color (hex or name). Default MinusX teal.
+    // any CSS color (hex or name). Default teal.
     const markColorVal = typeof p.markColor === 'string' && p.markColor ? p.markColor : '#16a085';
     // Projection controls. The map is a recenterable MERCATOR driven by
     // `scale` + `center` signals — the canonical vega zoomable-map pattern. (Vega's
