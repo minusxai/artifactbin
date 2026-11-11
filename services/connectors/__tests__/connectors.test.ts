@@ -6,7 +6,7 @@
  * real servers in services/app/lib/connections/__tests__/connectors-docker.test.ts (integration project).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
+import { colonParameters, connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 
 const DEV = { allowPrivateNetwork: true }, PUBLIC = { allowPrivateNetwork: false };
@@ -192,5 +192,13 @@ describe('postgres, end to end', () => {
     const e = await failure(pg.query({ text: "select * from \"hunter2-secret\"", params: {}, viewer: null }));
     expect(e.code).toBe('database_error');
     expect(e.message).not.toContain('hunter2-secret');
+  });
+});
+
+describe('colonParameters', () => {
+  it('reads :name as a bound parameter from the tokens, never a cast, a literal, a quoted name or a comment', () => {
+    expect(colonParameters('postgres', "select :a, x::text, :b::int, ':c', \"d:e\", $f from t -- :g\n where y = :a")).toEqual({ text: "select $a, x::text, $b::int, ':c', \"d:e\", $f from t -- :g\n where y = $a", names: ['a', 'b', 'f'] });
+    expect(colonParameters('mysql', 'select `x:y`, :viewer_email # :no')).toEqual({ text: 'select `x:y`, $viewer_email # :no', names: ['viewer_email'] });
+    expect(() => colonParameters('postgres', "select ':open")).toThrow();
   });
 });

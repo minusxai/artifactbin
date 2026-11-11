@@ -9,6 +9,8 @@ import { getDb, TransactionConflict } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
+import { updateLiveConnection } from '@/lib/live-datasets';
+import { overrideConfig } from '@/lib/platform/config';
 import { createGroup, deleteGroup } from '@/lib/groups';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
@@ -142,6 +144,8 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
   const f = await fixture(), db = await getDb(), transaction = db.transaction.bind(db);
   const group = await createGroup(f.owner.userId!, { handle: 'lock_order_group', name: 'Lock order' });
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
+  overrideConfig({}, { DATASETS__ALLOW_PRIVATE_NETWORK: '1' });
+  const live = (await publish(f.owner, { connection: { connector: 'postgres', host: '127.0.0.1', database: 'd', user: 'u', password: 'p', tls: 'disable' }, title: 'Live' })).body.id;
   const formats = new Map((await db.query<{ id: string; format: string }>('SELECT id, format FROM artifacts')).rows.map((r) => [r.id, r.format]));
   const isArtifactLock = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM artifacts\b/.test(s) && !/JOIN/.test(s);
   const isFact = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM (artifact_shares|artifact_group_shares)\b/.test(s)
@@ -169,6 +173,7 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
     path = 'sql door'; await sql(f.page, f.other, "insert into staff (name) values ('o1')");
     path = 'sql door, cross-link read'; await sql(f.page, f.other, 'insert into staff (name) select note from notes');
     path = 'graphql'; await gql(f.page, f.other, 'mutation { insert_staff_one(object: {name: "o2"}) { name } }');
+    path = 'live connection edit'; expect((await updateLiveConnection(f.owner.actor, live, { password: 'q' })).status).toBe(200);
     path = 'sharing'; await updateSharingFor(f.owner.actor, f.page, { shares: [] });
     path = 'group share'; await setArtifactGroupShare(f.owner.actor, f.page, group.id, 'viewer');
     path = 'group-owned publish'; await createArtifact(null, f.owner.userId, { format: 'html', source: '<p>group page</p>', meta: {}, title: 'Group page', destination: { type: 'group', id: group.id } });
@@ -177,7 +182,7 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
   expect(bad, JSON.stringify(bad)).toEqual([]);
   // Each path locked something it is pinned for; the guarded ones locked their page before the dataset.
   // (A test user's erasure, the third competing writer, is pinned in lib/operations' own test: testusers-erase.test.ts.)
-  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'sharing', 'group share'])
+  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'live connection edit', 'sharing', 'group share'])
     expect(traces.some((t) => t.path === p && (t.artifacts.length || t.facts)), p).toBe(true);
   for (const p of ['sql door', 'graphql']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
   expect(traces.find((t) => t.path === 'sql door, cross-link read' && t.artifacts.length)?.artifacts.slice(0, 3)).toEqual([f.page, ...[f.staff, f.notes].sort(lockOrder)]);
