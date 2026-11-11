@@ -67,6 +67,15 @@ it('exports actual image bytes exclusively and reports dimensions',async()=>{
   expect(await exportCommand({values:{format:'png',slide:'2',output},positionals:['PAGE12']},options)).toMatchObject({width:390,height:844,outputOwned:true});
   expect(await readFile(output)).toEqual(png);expect(calls[0].url).toContain('/a/PAGE12/export?format=png&slide=2');
   await expect(exportCommand({values:{format:'png',output},positionals:['PAGE12']},options)).rejects.toThrow();
+  // One chart or section of the page, by CSS selector, alone or within a slide; never with the HTML copy.
+  const chart=path.join(root,'chart.png');
+  expect(await exportCommand({values:{format:'png',element:'#orders-chart',output:chart},positionals:['PAGE12']},options)).toMatchObject({width:390,height:844,outputOwned:true});
+  expect(new URL(calls.at(-1).url).searchParams.get('element')).toBe('#orders-chart');
+  await exportCommand({values:{format:'png',element:'.kpi',slide:'3',output:path.join(root,'kpi.png')},positionals:['PAGE12']},options);
+  expect([...new URL(calls.at(-1).url).searchParams]).toEqual([['format','png'],['slide','3'],['element','.kpi']]);
+  await expect(exportCommand({values:{format:'html',element:'#orders-chart',output:path.join(root,'copy.html')},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'unsupported_element',exit:2});
+  const {parseCommand}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
+  expect(parseCommand('export',['PAGE12','--format','png','--element','#orders-chart','--output','x.png']).values.element).toBe('#orders-chart');
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('validates selected GraphQL against SDL and never replays an unknown mutation',async()=>{

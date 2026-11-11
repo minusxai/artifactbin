@@ -569,10 +569,11 @@ const exportArtifactOp: Operation = {
   name: 'export_artifact',
   title: 'Export an artifact as an image',
   http: { method: 'GET', path: '/api/artifacts/{id}/export' },
-  description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the HTML back with get_artifact). Set refresh:true to capture the current published page rather than reuse its stored image. For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
+  description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the HTML back with get_artifact). Set refresh:true to capture the current published page rather than reuse its stored image. For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. For one chart, tile or section, name it by CSS selector (element): it is drawn alone at 2x, within slide N when both are given. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
   input: {
     id: z.string(),
     slide: z.number().int().positive().optional().describe('one deck slide, 1-based; omit for the whole document'),
+    element: z.string().optional().describe('CSS selector of one element (a chart, tile or section) to capture alone; omit for the whole document'),
     format: z.enum(['png', 'jpg']).optional(),
     mode: z.enum(['full','card','preview']).optional().describe('Capture mode; defaults to full.'),
     crop: z.string().optional().describe('Card crop selection.'),
@@ -585,6 +586,9 @@ const exportArtifactOp: Operation = {
   errors: [
     NOT_FOUND,
     { status: 404, code: 'slide_not_found', fix: 'past the last slide — the response carries the real count' },
+    { status: 404, code: 'element_not_found', fix: 'nothing visible matches the selector — check it against the page source; inside a slide, add slide' },
+    { status: 400, code: 'unknown_element', fix: 'not a selector the export accepts — use an id, class or attribute selector' },
+    { status: 422, code: 'element_too_large', fix: 'the element is larger than an element capture draws — choose a smaller part or export the whole page' },
     { status: 503, code: 'render_unavailable', fix: 'this deployment has no headless browser — the HTML link still works' },
   ],
   async run(ctx, input) {
@@ -605,7 +609,7 @@ const exportArtifactOp: Operation = {
       ...(input.refresh === true ? { refresh: '1' } : typeof input.refresh === 'string' ? { refresh: input.refresh } : {}),
       // Only an editor's refresh re-renders (lib/export): the publishing token is its document's owner.
       ...(input.refresh !== undefined ? { editor: holdsCreatingToken(artifact, ctx.actor) || canEdit(await effectiveRole(artifact, ctx.actor)) } : {}),
-      ...Object.fromEntries(['mode','crop','image','search'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
+      ...Object.fromEntries(['mode','crop','image','search','element'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
     }, ctx.base);
     const mime = res.headers.get('Content-Type') ?? '';
     if (!res.ok || !mime.startsWith('image/')) return fromResponse(res);

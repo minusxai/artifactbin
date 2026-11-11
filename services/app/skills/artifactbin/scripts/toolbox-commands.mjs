@@ -48,7 +48,7 @@ const commands = {
     }
   },
   read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag()}}},
-  export: {flags: {format: flag(), slide: flag()}},
+  export: {flags: {format: flag(), slide: flag(), element: flag()}},
   check: {
     flags: {
       viewport: flag('string', true),

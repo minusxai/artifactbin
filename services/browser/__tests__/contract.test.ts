@@ -29,7 +29,18 @@ const SLIDE_CHROME_PAGE=`<html><body style="margin:0"><main style="width:600px">
 /* A stacked deck: every slide sits in the same box, hidden until the deck's script marks it active. */
 const STACKED_COLORS=Array.from({length:8},(_,i)=>[30*i+10,200-20*i,90+10*i]);
 const STACKED_DECK_PAGE=`<html><head><style>.slide{position:absolute;inset:0;visibility:hidden;opacity:0;transition:opacity .26s ease,visibility .26s}.slide.is-active{visibility:visible;opacity:1}</style></head><body style="margin:0"><main style="position:relative;width:600px;height:630px">
-${STACKED_COLORS.map(([r,g,b],i)=>`<section data-af-slide class="slide${i<7?'':' is-active'}" style="background:rgb(${r},${g},${b})">Slide ${i+1}</section>`).join('')}</main></body></html>`;
+${STACKED_COLORS.map(([r,g,b],i)=>`<section data-af-slide class="slide${i<7?'':' is-active'}" style="background:rgb(${r},${g},${b})">Slide ${i+1}<i class="mark" style="display:block;width:40px;height:40px;background:rgb(${r},${g},${b})"></i></section>`).join('')}</main></body></html>`;
+/*
+ * A dashboard: a red tile, a chart drawn only once its SQL read answers (a green bar over the left half of a box with
+ * no background of its own, so the page's blue shows behind the rest), and elements a selector may find but must not
+ * photograph: hidden, invisible, sizeless, taller than the capture allows, and one tall enough for 1x only.
+ */
+const ELEMENT_PAGE = `<html><body style="margin:0;background:rgb(51,51,204)"><main style="width:1200px">
+<div id="other" style="width:300px;height:100px;background:#c33"></div>
+<div id="chart" data-mx-chart-state="pending" style="width:200px;height:100px"></div>
+<div id="hidden" style="display:none;width:50px;height:50px"></div><div id="ghost" style="visibility:hidden;width:50px;height:50px"></div><div id="empty"></div>
+<div id="long" style="width:50px;height:5000px;background:#3c3"></div><div id="tall" style="width:50px;height:9000px;background:#3c3"></div>
+</main><script>fetch('/api/artifacts/x/sql',{method:'POST',body:'{}'}).then(r=>r.json()).then(()=>setTimeout(()=>{const c=document.getElementById('chart');c.innerHTML='<div style="width:100px;height:100px;background:rgb(51,204,51)"></div>';c.dataset.mxChartState='ready'},100))</script></body></html>`;
 /* A deck whose script threw before drawing a slide: only the fixed deck chrome is left, so the body has no height. */
 const EMPTY_DECK_PAGE = `<html><body style="margin:0"><main id="deck"></main><nav data-af-deck-chrome style="position:fixed;bottom:0;left:0;width:200px;height:40px">01 / 06</nav><script type="module">throw Error('The dataset returned no usable rows.')</script></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
@@ -63,7 +74,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { const late = DATA_DOORS[q.url ?? '']; if (late !== undefined) { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'application/json' }); s.end('{"columns":[],"rows":[]}'); } }, late); t.unref?.(); s.on('close', () => clearTimeout(t)); return; } if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/data'?DATA_PAGE:q.url==='/hung-data'?HUNG_DATA_PAGE:q.url==='/stream'?STREAM_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { const late = DATA_DOORS[q.url ?? '']; if (late !== undefined) { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'application/json' }); s.end('{"columns":[],"rows":[]}'); } }, late); t.unref?.(); s.on('close', () => clearTimeout(t)); return; } if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/element'?ELEMENT_PAGE:q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/data'?DATA_PAGE:q.url==='/hung-data'?HUNG_DATA_PAGE:q.url==='/stream'?STREAM_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -187,6 +198,46 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
       expect([...data.subarray(at, at + 3)], `slide ${n}`).toEqual(STACKED_COLORS[n - 1]);
     }
     expect(await svc.render({ ...base(), url: pages.base + '/stacked', capture: { slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 8 });
+  });
+  /*
+   * ONE ELEMENT, ALONE: the chart a reader asked for, drawn from its data, at twice the CSS pixels, with the page's own
+   * background behind it, and nothing of the tiles around it. The selector is the page's CSS only: what Playwright
+   * would read as another engine (xpath=, text=) is not a selector here, it is refused.
+   */
+  it('shoots one element alone at 2x, after its data reads, with the page background behind it', async () => {
+    const r = await svc.render({ ...base(), url: `${pages.base}/element`, selector: 'body', capture: { element: '#chart' } });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(r.element).toBe(true);
+    const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+    expect([info.width, info.height]).toEqual([400, 200]);
+    const px = (x: number, y: number) => [...data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 3)];
+    expect(px(100, 100)).toEqual([51, 204, 51]);
+    expect(px(300, 100)).toEqual([51, 51, 204]);
+    // At 2x device pixels: the page's own high-density rule is the one drawn.
+    const dense = await svc.render({ ...base(), capture: { element: '.density' } });
+    if (!dense.ok) throw new Error(JSON.stringify(dense));
+    const d = await sharp(Buffer.from(dense.bytes)).raw().toBuffer({ resolveWithObject: true });
+    expect([d.info.width, d.info.height]).toEqual([40, 40]);
+    expect([...d.data.subarray((20 * 40 + 20) * d.info.channels, (20 * 40 + 20) * d.info.channels + 3)]).toEqual([51, 204, 51]);
+  });
+  it('answers no_element, naming why, for a selector that matches nothing, nothing visible, or is not CSS', async () => {
+    const at = (element: string) => svc.render({ ...base(), url: `${pages.base}/element`, selector: 'body', capture: { element } });
+    expect(await at('#nope')).toEqual({ ok: false, reason: 'no_element', why: 'none' });
+    for (const element of ['#hidden', '#ghost', '#empty']) expect(await at(element), element).toEqual({ ok: false, reason: 'no_element', why: 'hidden' });
+    for (const element of ['#a[', 'xpath=//main', 'text=one', 'main >> #chart']) expect(await at(element), element).toEqual({ ok: false, reason: 'no_element', why: 'invalid' });
+    expect(await at('#tall')).toEqual({ ok: false, reason: 'no_element', why: 'too_large', width: 50, height: 9000 });
+    const long = await at('#long');
+    if (!long.ok) throw new Error(JSON.stringify(long));
+    expect(pngSize(long.bytes)).toEqual({ width: 50, height: 5000 });
+  });
+  it('shoots an element of one slide, revealed, and finds an inactive slide\'s element hidden without it', async () => {
+    const r = await svc.render({ ...base(), url: pages.base + '/stacked', viewport: { width: 600, height: 630 }, capture: { element: '.mark', slide: 5 } });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+    expect([info.width, info.height]).toEqual([80, 80]);
+    expect([...data.subarray((40 * 80 + 40) * info.channels, (40 * 80 + 40) * info.channels + 3)]).toEqual(STACKED_COLORS[4]);
+    expect(await svc.render({ ...base(), url: pages.base + '/stacked', capture: { element: '.mark' } })).toEqual({ ok: false, reason: 'no_element', why: 'hidden' });
+    expect(await svc.render({ ...base(), url: pages.base + '/stacked', capture: { element: '.mark', slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 8 });
   });
   it('answers no_slide with the count', async () => {
     expect(await svc.render({ ...base(), capture: { slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 3 });

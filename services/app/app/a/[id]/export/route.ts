@@ -74,6 +74,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
     format: q.get('format'),
     mode: q.get('mode'),
     slide: q.get('slide'),
+    element: q.get('element'),
     crop: q.get('crop'),
     image: q.get('image'),
     search: new URL(request.url).search,

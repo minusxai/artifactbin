@@ -28,7 +28,9 @@ import {archiveFor} from '@/lib/skills';
 // graphql.mjs as the way agents read a page's tables; graphql.mjs stays for older pages, so the archive grows by it.
 // 1.77 MiB: main sat 16 bytes under 1.76; a page's linked files now publish with it (<a href>, and the refusals that say
 // what to write for an unlinked or unsupported file) beside the reply-before-watch guidance for several pages (~1 KB).
-const SKILL_ARCHIVE_MAX_BYTES=1.77*1024*1024;
+// 1.78 MiB: main sat 217 bytes under 1.77 once the tracker's limit held for moves (its save function and checks);
+// exporting one chart or section of a page (export.mjs --element, its limits and refusals) needs about 1 KB more.
+const SKILL_ARCHIVE_MAX_BYTES=1.78*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
