@@ -22,6 +22,9 @@ import { GET as streamRoute } from '@/app/api/artifacts/[id]/regions/stream/rout
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 import { nativeHtml } from './native-html-fixture';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { GET as myReadRoute } from '@/app/api/my/artifacts/[id]/route';
+import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
 import { sseStream } from './sse';
 
@@ -328,6 +331,36 @@ describe('the stream', () => {
 });
 
 describe('saving as page versions', () => {
+  it.each([false, true])('native links survive read materialization, comment flush and reopened sessions (marked=%s)', async marked => {
+    const a = await join(owner), other = await join(owner, plain);
+    const paragraphId = (a.doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).getAttribute('afId');
+    a.text.format(0, 5, { link: { href: 'https://example.com/qa', target: '_blank', rel: 'noopener noreferrer nofollow', class: null, title: null, afId: null }, ...(marked ? { bold: {}, italic: {} } : {}) });
+    other.text.insert(0, 'Atomic peer ');
+    expect((await a.push()).status).toBe(200);expect((await other.push()).status).toBe(200);
+    const req = request(`/api/my/artifacts/${pageId}`, sessionOpts(owner));
+    const read = await call(req, () => myReadRoute(req, { params: Promise.resolve({ id: pageId }) }));
+    expect(read.status).toBe(200);
+    expect(await read.text()).toContain('https://example.com/qa');
+    const rawReq = request(`/a/${pageId}/raw`, sessionOpts(owner));
+    const raw = await call(rawReq, () => rawRoute(rawReq, { params: Promise.resolve({ id: pageId }) }));
+    expect(raw.status).toBe(200);expect(await raw.text()).toContain('https://example.com/qa');
+    const flushed = await flush(owner);
+    expect(flushed.status, await flushed.clone().text()).toBe(200);
+    const row = (await getArtifactById(pageId))!;
+    expect(row.source).toContain('https://example.com/qa');expect(row.source).toContain('Atomic peer Title');
+    expect(row.source).toContain(`data-af-id="${paragraphId}"`);
+    const reopened = await join(owner);
+    expect(reopened.html()).toContain('https://example.com/qa');
+    expect(reopened.html()).toContain('target="_blank"');expect(reopened.html()).toContain('rel="noopener noreferrer nofollow"');
+    if(marked){expect(reopened.html()).toContain('<strong');expect(reopened.html()).toContain('<em');}
+    const comment = request(`/api/my/artifacts/${pageId}/annotations`, { method: 'POST', ...sessionOpts(owner), json: { anchor: { kind: 'html-node', v: 1, nodeId: paragraphId, revision: String(row.version), quote: 'Hello' }, edit_id: row.edit_id, body: 'mxmx_test link persists' } });
+    const posted = await call(comment, () => commentRoute(comment, { params: Promise.resolve({ id: pageId }) }));
+    expect(posted.status, await posted.clone().text()).toBe(201);
+    const versions = await rows('region_snapshots');
+    expect(new Set(versions.map(snapshot => snapshot.version))).toEqual(new Set([1, 2]));
+    a.doc.destroy();other.doc.destroy();reopened.doc.destroy();
+  });
+
   it('flush saves every region\'s unsaved edits as one version whose source holds the merged text in canonical form; nothing unsaved changes nothing', async () => {
     const a = await join(owner), b = await join(editor), t = await join(owner, plain);
     const { frames } = await stream(editor, `${rich}:${b.reply.seq + 0}`);

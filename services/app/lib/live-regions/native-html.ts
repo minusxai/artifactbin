@@ -1,4 +1,8 @@
-/** Strict nested HTML codec for the opt-in native format; never accepts executable attributes. */
+/**
+ * Strict native HTML codec; never accepts executable attributes. Link target/rel are semantic mark attributes:
+ * keep them across serialization so compaction's identity-only write-back does not change the live document.
+ * Absent target/rel stay absent; browser-created links retain Tiptap's safe new-window defaults.
+ */
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { JSONContent } from '@tiptap/core';
 import type { Mark, Node as PMNode } from 'prosemirror-model';
@@ -23,7 +27,7 @@ export function readNativeHtml(html:string):PMNode {
     if(attrs.class && !(node.tagName==='code' && /^language-[\w+-]+$/.test(attrs.class))) refuse('class');
     if(node.tagName==='code' && code) return walk(node.childNodes,[],true);
     const mark=marks[node.tagName];
-    if(mark) { if(mark==='link' && safeHref(attrs.href??'')!==attrs.href) refuse('unsafe link');return walk(node.childNodes,[...inherited,{type:mark,attrs:{afId:attrs['data-af-id']??null,...(mark==='link'?{href:attrs.href,title:attrs.title??null,target:null,rel:'noopener noreferrer nofollow',class:null}:{})}}],code); }
+    if(mark) { if(mark==='link' && safeHref(attrs.href??'')!==attrs.href) refuse('unsafe link');return walk(node.childNodes,[...inherited,{type:mark,attrs:{afId:attrs['data-af-id']??null,...(mark==='link'?{href:attrs.href,title:attrs.title??null,target:attrs.target||null,rel:attrs.rel==='noopener noreferrer'?'noopener noreferrer nofollow':attrs.rel||null,class:null}:{})}}],code); }
     let type=/^h[1-6]$/.test(node.tagName)?'heading':tags[node.tagName];
     if(node.tagName==='ul' && attrs['data-type']==='taskList')type='taskList';
     if(node.tagName==='li' && attrs['data-type']==='taskItem')type='taskItem';
@@ -61,7 +65,7 @@ export function writeNativeHtml(doc:PMNode):string {
       while(active.length>common)inner+=`</${tagOf(active.pop()!)}>`;
       for(const mark of child.marks.slice(common)){
         const tag=tagOf(mark);
-        inner+=`<${tag}${identity(mark.attrs.afId)}${tag==='a'?` href="${escape(mark.attrs.href)}"${mark.attrs.title?` title="${escape(mark.attrs.title)}"`:''}`:''}>`;
+        inner+=`<${tag}${identity(mark.attrs.afId)}${tag==='a'?` href="${escape(mark.attrs.href)}"${mark.attrs.target?` target="${escape(mark.attrs.target)}"`:''}${mark.attrs.rel?` rel="${escape(mark.attrs.rel)}"`:''}${mark.attrs.title!=null?` title="${escape(mark.attrs.title)}"`:''}`:''}>`;
         active.push(mark);
       }
       inner+=render(child);
