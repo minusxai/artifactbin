@@ -5,7 +5,7 @@
  *
  * The state block (or the runtime config's initialState) is the defaults; this viewer's saved overrides merge over
  * them (./viewer-overrides); `data-af-state-version` clears those once when it changes; an `#af-state=` address
- * replaces them. The comment view (./comment-view) snapshots and restores the same port.
+ * replaces them, at load or when the fragment changes later. The comment view (./comment-view) snapshots and restores the same port.
  * Offline and exported copies run this too: their runtime block's page id (`local:<path>` when none) keys their own
  * origin's storage, so a downloaded file keeps its viewer's state like the hosted page, separately from it.
  */
@@ -36,6 +36,11 @@ export interface PageStateOptions {
   storage: { getItem(key: string): string | null; setItem(key: string, value: string): void };
   /** `storage` events from this viewer's other tabs. */
   onStorage(listener: (key: string | null) => void): () => void;
+  /**
+   * The address's fragment changed after load (`hashchange`): an `#af-state=` there seeds the document as one at load
+   * does (the app page forwards its own address's fragment to its frame once the page runs).
+   */
+  onHash?(listener: (hash: string) => void): () => void;
   /** Navigator Locks: serializes compare-and-swap across this viewer's tabs. */
   lock?: (name: string, work: () => Promise<StoreReceipt>) => Promise<StoreReceipt>;
 }
@@ -61,5 +66,11 @@ export function createPageState(options: PageStateOptions): PageState {
   } catch {
     installHtmlCommentView(options.owner, { capture() { throw new Error('Invalid comment view declaration'); }, async restore() { throw new Error('Invalid comment view declaration'); } });
   }
-  return { port, state: createStateStore(port, { initial: options.initial, name: key }), dispose: () => port.dispose() };
+  const state = createStateStore(port, { initial: options.initial, name: key });
+  // A later seed replaces this viewer's overrides as one at load does: the defaults with the link's fields over them.
+  const stopHash = options.onHash?.((hash) => {
+    const later = readStateFragment(hash);
+    if (later.state) void state.setState({ ...options.initial, ...later.state }, true);
+  });
+  return { port, state, dispose: () => { stopHash?.(); port.dispose(); } };
 }

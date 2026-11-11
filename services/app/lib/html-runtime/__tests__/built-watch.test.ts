@@ -51,3 +51,22 @@ it('a published page that calls onBackendChange still subscribes through the bui
  listeners.at(-1)!(['orders']);
  expect(changed).toEqual([['orders']]);
 });
+
+it('the emitted @afbin/state exports seat() and route beside state: a page reads where it runs and keeps its screen in `$` values',async()=>{
+ const assets=await buildHtmlAssets();
+ const pushed:string[]=[];let href='https://abc.pages.test/?$screen=home';
+ const location={get href(){return href;},get search(){return new URL(href).search;},get pathname(){return new URL(href).pathname;},get hash(){return new URL(href).hash;}};
+ const win:Record<string,unknown>={origin:'https://abc.pages.test',location,history:{state:null,pushState(_s:unknown,_t:string,next:string){href=new URL(next,href).href;pushed.push(href);},replaceState(_s:unknown,_t:string,next:string){href=new URL(next,href).href;}},addEventListener(){},removeEventListener(){}};
+ for(const [name,value] of Object.entries(win))vi.stubGlobal(name,value);vi.stubGlobal('parent',globalThis);
+ vi.stubGlobal('document',{querySelector:()=>null});
+ vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
+ vi.stubGlobal('__seatReader',{config:{pageId:'seat-page',revision:'1',backends:[],appOrigin:'https://app.test'},remote:{online:()=>false}});
+ const reader=dataUrl('const r=globalThis.__seatReader;export const {config,remote}=r;');
+ const state=await import(/* @vite-ignore */ dataUrl(assets.state!.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(reader))));
+ expect(state.state.getState()).toEqual({});
+ expect(state.seat()).toEqual({kind:'address',pageId:'seat-page',sql:false,writes:false,functions:false});
+ expect(state.route.get()).toEqual({screen:'home'});
+ state.route.set({screen:'detail',id:'4'},{push:true});
+ expect(pushed).toEqual(['https://abc.pages.test/?$screen=detail&$id=4']);
+ expect(state.route.href({screen:'list'})).toBe('https://abc.pages.test/?$screen=list');
+});

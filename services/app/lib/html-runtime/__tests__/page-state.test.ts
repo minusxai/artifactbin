@@ -137,6 +137,26 @@ it('an #af-state link seeds the store and replaces this viewer\'s saved document
   expect(saved(viewer.items)).toEqual({ count: 3, tab: 'detail' });
 });
 
+it('an #af-state that arrives after load (the app forwards its address\'s fragment) seeds the store once, telling subscribers', async () => {
+  const viewer = browser();
+  let hashChanged: ((hash: string) => void) | undefined;
+  const page = createPageState(viewer.tab({ initial: { count: 0, tab: 'home' }, onHash: (listener) => { hashChanged = listener; return () => { hashChanged = undefined; }; } }));
+  await page.state.setState({ count: 9 });
+  const seen = vi.fn();
+  page.state.subscribe(seen);
+  hashChanged!('#top');
+  expect(seen).not.toHaveBeenCalled();
+  hashChanged!('#af-state=' + encodeState({ tab: 'detail' }));
+  expect(page.state.getState()).toEqual({ count: 0, tab: 'detail' });
+  expect(seen).toHaveBeenCalledTimes(1);
+  await settle();
+  expect(saved(viewer.items)).toEqual({ tab: 'detail' });
+  hashChanged!('#af-state=***');
+  expect(page.state.getState()).toEqual({ count: 0, tab: 'detail' });
+  page.dispose();
+  expect(hashChanged).toBeUndefined();
+});
+
 it('comment views capture and restore the same document the store holds', async () => {
   const owner = {};
   const { state, port } = createPageState(browser().tab({ owner, stateBlock: { getAttribute: () => null }, initial: { screen: 'home', count: 0 } }));

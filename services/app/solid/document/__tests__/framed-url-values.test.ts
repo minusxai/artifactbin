@@ -5,7 +5,7 @@
  * than pushed — so a copied link or a reload carries the selection. Only its own frame's window and origin count.
  */
 import { createRoot } from 'solid-js';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STORY_URL_VALUES_MESSAGE } from '@/lib/html-reader/contract';
 import { createFramedStory, followFramedValues } from '../create-framed-story';
 
@@ -22,8 +22,8 @@ function framedPage() {
     createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, editId: () => 'e1', source: () => null });
     cleanups.push(dispose);
   });
-  const fromFrame = (search: unknown, origin = PAGES, source: Window | null = frame.contentWindow) =>
-    window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_URL_VALUES_MESSAGE, search }, origin, source }));
+  const fromFrame = (search: unknown, origin = PAGES, source: Window | null = frame.contentWindow, push = false) =>
+    window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_URL_VALUES_MESSAGE, search, ...(push ? { push: true } : {}) }, origin, source }));
   return { frame, fromFrame };
 }
 
@@ -54,6 +54,25 @@ describe('the app page\'s address follows its framed document\'s selection', () 
     expect(window.location.href).toBe(new URL('/a/doc1?$region=west', start).href);
     fromFrame('?intent=fork&$region=east');
     expect(window.location.search).toBe('?$region=east');
+  });
+
+  it('pushes a history entry when the page asks, and answers Back and Forward with the values its address holds then', async () => {
+    window.history.replaceState({ router: 1 }, '', '/a/doc1?version=3&$screen=home#top');
+    const length = window.history.length;
+    const { frame, fromFrame } = framedPage();
+    const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+    fromFrame('?$screen=detail&$id=7', PAGES, frame.contentWindow, true);
+    expect(window.location.search).toBe('?version=3&$screen=detail&$id=7');
+    expect(window.location.hash).toBe('#top');
+    expect(window.history.length, 'pushed').toBe(length + 1);
+    expect(window.history.state).toEqual({ router: 1 });
+    // The page's own push is not echoed back to it.
+    expect(posted).not.toHaveBeenCalled();
+    const popped = new Promise((resolve) => window.addEventListener('popstate', resolve, { once: true }));
+    window.history.back();
+    await popped;
+    expect(window.location.search).toBe('?version=3&$screen=home');
+    expect(posted).toHaveBeenLastCalledWith({ type: STORY_URL_VALUES_MESSAGE, search: '?$screen=home' }, PAGES);
   });
 
   it('rewrites nothing when the address already says it', () => {

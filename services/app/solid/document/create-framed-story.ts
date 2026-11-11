@@ -2,7 +2,7 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import type { IslandStoryController } from '@/lib/html-reader/contract';
+import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
@@ -22,17 +22,20 @@ import { keepFrameSession } from '@/lib/html-reader/frame-session';
 export { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR };
 
 /**
- * The framed document's link moved (lib/islands/url-sync → STORY_URL_VALUES_MESSAGE): this page's address takes
- * exactly its `$` params — the path, the hash and every other param kept, replaced rather than pushed — so the
- * address bar, a copied link and a reload carry the reader's selection (the server forwards the page's `$` params
- * into the frame's first URL, lib/document-serving/artifact-page).
+ * The framed document's link moved (its `route.set`, lib/html-runtime/page-route → STORY_URL_VALUES_MESSAGE): this
+ * page's address takes exactly its `$` params — the path, the hash and every other param kept, replaced, or pushed when
+ * the page asked — so the address bar, a copied link, a reload and Back carry the reader's screen (the server forwards
+ * the page's `$` params into the frame's first URL, lib/document-serving/artifact-page).
  */
-export function followFramedValues(win: Window, values: string): void {
+export function followFramedValues(win: Window, values: string, push = false): void {
   const { pathname, search, hash } = win.location;
   const next = withUrlValuesOf(search, values);
   if (next === search) return;
-  win.history.replaceState(win.history.state, '', `${pathname}${next}${hash}`);
+  win.history[push ? 'pushState' : 'replaceState'](win.history.state, '', `${pathname}${next}${hash}`);
 }
+
+/** The `$` params alone of an address's search (`''` for none): what the frame is told after Back or Forward. */
+const dollarValuesOf = (search: string): string => withUrlValuesOf('', search);
 
 /**
  * The framed document's node tree (the page's NODES door, `?part=nodes`): a request of its own because the page draws nothing
@@ -127,7 +130,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
       editId: options.editId, source: options.source, htmlContext: options.htmlContext,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
-      onUrlValues: (values) => followFramedValues(window, values),
+      onUrlValues: (values, push) => followFramedValues(window, values, push),
     });
     setCurrent(bridge);
     if (inset) bridge.setTopInset(inset);
@@ -135,6 +138,10 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
 
   };
+  // The reader's Back or Forward over entries the page pushed: the frame's route follows what this address holds now.
+  const onHistory = () => { try { frame.contentWindow?.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: dollarValuesOf(window.location.search) }, origin); } catch { /* the frame went away */ } };
+  window.addEventListener('popstate', onHistory);
+  onCleanup(() => window.removeEventListener('popstate', onHistory));
   // A frame whose session ran out (or that a redirect took off its origin) gets a fresh ticket (keepFrameSession).
   onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id, remint: (id) => freshFrameSrc(id) }));
   start();

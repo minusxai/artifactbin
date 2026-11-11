@@ -29,6 +29,8 @@ export interface HtmlRuntimeConfig {
    * read (the page's asset door, or an offline copy's bytes). The core's fetch maps exactly these (./fn-fetch).
    */
   files?: Readonly<Record<string, string>>;
+  /** The https origins the page declares in `csp-connect`: its core sends a GET to one through the page's fetch door (./fn-fetch). */
+  connect?: readonly string[];
   /** `@afbin/<name>` -> platform library URL, resolved server-side from the page's recorded pins. */
   libraries?: Readonly<Record<string, string>>;
   initialState?: HtmlJsonObject;

@@ -239,3 +239,27 @@ describe('a file published with the page is fetched by its path',()=>{
   const response=await window.fetch('/fn/items');expect(response.status).toBe(200);expect(native).not.toHaveBeenCalled();
  });
 });
+
+describe('a host the page declares in csp-connect is reached through its own fetch door',()=>{
+ const door=(url:string)=>new URL(`/a/PAGE12/fetch?url=${encodeURIComponent(url)}`,document.baseURI).href;
+ beforeEach(()=>{uninstall();uninstall=installFunctionFetch(window,async()=>({callFunction:async()=>({status:200,headers:{},body:''})}),undefined,{pageId:'PAGE12',origins:['https://api.example.com','https://*.tiles.example.org']});});
+ it.each([
+  ['a declared origin','https://api.example.com/v1/rates?base=eur'],
+  ['a URL object','https://api.example.com/v1/rates'],
+  ['a host under a declared wildcard','https://a.tiles.example.org/3/4/5.png'],
+ ])('a GET to %s goes to the door, keeping its signal',async(_label,input)=>{
+  const controller=new AbortController();
+  await window.fetch(_label==='a URL object'?new URL(input):input,{signal:controller.signal});
+  expect(native).toHaveBeenCalledTimes(1);
+  expect(native.mock.calls[0]![0]).toBe(door(input));
+  expect((native.mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal);
+ });
+ it.each([
+  ['an undeclared host','https://evil.example.net/x',undefined],
+  ['the wildcard\'s own apex','https://tiles.example.org/x',undefined],
+  ['a POST to a declared host','https://api.example.com/v1/rates',{method:'POST',body:'{}'}],
+ ])('%s goes to the native fetch untouched',async(_label,input,init)=>{
+  await window.fetch(input,init);
+  expect(native.mock.calls[0]![0]).toBe(input);expect(native.mock.calls[0]![1]).toBe(init);
+ });
+});

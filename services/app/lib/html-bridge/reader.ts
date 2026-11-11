@@ -22,6 +22,8 @@ export function applyHtmlReaderAppearance(document: Document, command: unknown):
   setMode(document, data.mode);
   return true;
 }
+/** The longest `#af-state=` hash taken: the base64url of the 256 KiB state limit (apollo-contracts AF_STATE_URL_LIMIT), with room for anchors. */
+const AF_STATE_HASH_MAX = 350_000;
 /** Reader preferences and hash navigation grant no storage or network authority. */
 export function installHtmlReaderCommands(win: Window, appOrigin: string): () => void {
   const receive = (event: MessageEvent) => {
@@ -29,7 +31,8 @@ export function installHtmlReaderCommands(win: Window, appOrigin: string): () =>
     const data = event.data as { type?: unknown; mode?: unknown; hash?: unknown } | null;
     if (!data || typeof data !== 'object') return;
     applyHtmlReaderAppearance(win.document, data);
-    if (data.type === 'mx:frame-hash' && typeof data.hash === 'string' && /^#\S{1,512}$/.test(data.hash)) {
+    // An anchor is short; an `#af-state=` link (the app forwards its own address's) is bounded by the state limit.
+    if (data.type === 'mx:frame-hash' && typeof data.hash === 'string' && (/^#\S{1,512}$/.test(data.hash) || data.hash.length <= AF_STATE_HASH_MAX && /^#(?:\S*&)?af-state=[\w-]+(?:&\S*)?$/.test(data.hash))) {
       if (win.location.hash !== data.hash) win.location.hash = data.hash;
       else try { win.document.getElementById(decodeURIComponent(data.hash.slice(1)))?.scrollIntoView?.(); } catch { /* malformed escape */ }
     }

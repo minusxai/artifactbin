@@ -84,6 +84,19 @@ it('removes the message listener on cleanup and keeps the frame hash contract', 
   expect(mock.root.hasAttribute('data-af-dark')).toBe(false);
 });
 
+it('takes an #af-state hash up to the state limit, while an anchor stays within 512 characters', () => {
+  const mock = createReaderWindow();
+  const stop = installHtmlReaderCommands(mock.win, 'https://platform.example');
+  const state = '#af-state=' + 'A'.repeat(4000);
+  mock.deliver({ type: 'mx:frame-hash', hash: state });
+  expect(mock.win.location.hash).toBe(state);
+  mock.deliver({ type: 'mx:frame-hash', hash: '#' + 'b'.repeat(600) });
+  expect(mock.win.location.hash).toBe(state);
+  mock.deliver({ type: 'mx:frame-hash', hash: '#af-state=' + 'A'.repeat(400 * 1024) });
+  expect(mock.win.location.hash).toBe(state);
+  stop();
+});
+
 it('switches the design system live on the owner command, keeping the given mode, and ignores malformed names', () => {
   const mock = createReaderWindow();
   const stop = installHtmlReaderCommands(mock.win, 'https://platform.example');

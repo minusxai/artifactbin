@@ -30,8 +30,11 @@ interface FrameBridgeParentOptions {
   onScroll?: (scroll: { x: number; y: number }) => void;
   /** The bridge closed itself (the frame navigated away, or reported it cannot run the editor). */
   onClosed?: (reason: string) => void;
-  /** The document's link moved: `search` is what the page's address's `$` params should now say (`''` at rest). */
-  onUrlValues?: (search: string) => void;
+  /**
+   * The document's link moved: `search` is what the page's address's `$` params should now say (`''` at rest); `push`
+   * when the page asked for a new history entry (its `route.set(…, {push: true})`, lib/html-runtime/page-route).
+   */
+  onUrlValues?: (search: string, push: boolean) => void;
   /** The reader first pressed, touched, typed or selected in a document attached without its tree (contract `pressed`). */
   onPressed?: () => void;
 }
@@ -322,7 +325,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const onMessage = (event: MessageEvent) => {
     if (closed || event.source !== frame.contentWindow || event.origin !== frameOrigin) return;
     const values = urlValuesOf(event.data);
-    if (values !== null) { options.onUrlValues?.(values); return; }
+    if (values !== null) { options.onUrlValues?.(values, (event.data as { push?: unknown }).push === true); return; }
     if (!isFrameBridgeEnvelope(event.data)) return;
     const data = event.data as { key?: unknown; payload: FrameBridgeFramePayload };
     const payload = data.payload;
@@ -347,7 +350,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         for (const queued of backlog.splice(0)) envelope(queued);
         if (inset) envelope({ kind: 'inset', top: inset });
         const values = urlValuesOf({ type: STORY_URL_VALUES_MESSAGE, search: payload.urlValues });
-        if (values !== null) options.onUrlValues?.(values);
+        if (values !== null) options.onUrlValues?.(values, false);
         options.onReady?.(nonce);
         return;
       case 'event':

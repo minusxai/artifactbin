@@ -21,8 +21,8 @@
  * trusts exactly one parent origin, baked in when it is served; the module refuses to mount anywhere else, and the
  * document's door (lib/html-runtime/frame-door) drops every message from another origin regardless.
  */
-import { createFrameBridgeParent, type FrameBridgeParent } from './frame-bridge/parent';
-import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from './contract';
+import { createFrameBridgeParent, urlValuesOf, type FrameBridgeParent } from './frame-bridge/parent';
+import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_URL_VALUES_MESSAGE } from './contract';
 import { FRAME_ALLOW, FRAME_SANDBOX } from './frame-markup';
 import { keepFrameSession } from './frame-session';
 import { answerFrameNavigation } from './frame-navigation';
@@ -50,6 +50,8 @@ export interface MountedDocument {
   /** Select the node `[data-af-id=path]` (null clears); `reveal` scrolls it into view. Answered by `af-document-selection`. */
   select(path: string | null, options?: { reveal?: boolean }): void;
   scrollToHash(hash: string): void;
+  /** The `$` values this host's address holds after its own Back or Forward: the page's route follows them. */
+  setUrlValues(search: string): void;
   /** How far the host's bars reach over the frame's top edge: the document reserves it. */
   setInset(px: number): void;
   /** A newer published version: drawn in place or rebuilt by the frame; otherwise the frame is loaded afresh. */
@@ -105,7 +107,7 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
     onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); },
     onScroll: (scroll) => emit('af-document-scroll', scroll),
     onClosed: (reason) => emit('af-document-closed', { reason }),
-    onUrlValues: (search) => emit('af-document-url-values', { search }),
+    onUrlValues: (search, push) => emit('af-document-url-values', { search, push }),
   });
   const stopEvents = bridge.subscribe((event) => {
     emit('af-document-event', event);
@@ -130,6 +132,10 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
     scrollToHash(hash) {
       if (!/^#\S{1,512}$/.test(hash)) return;
       try { frame.contentWindow?.postMessage({ type: STORY_FRAME_HASH_MESSAGE, hash }, origin); } catch { /* the frame went away */ }
+    },
+    setUrlValues(search) {
+      if (urlValuesOf({ type: STORY_URL_VALUES_MESSAGE, search }) === null) return;
+      try { frame.contentWindow?.postMessage({ type: STORY_URL_VALUES_MESSAGE, search }, origin); } catch { /* the frame went away */ }
     },
     setInset: (px) => bridge.setTopInset(px),
     followVersion: (version, live = 0) => followHtmlVersion({

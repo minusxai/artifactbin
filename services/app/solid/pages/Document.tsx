@@ -187,6 +187,18 @@ export function DocumentPage(): JSX.Element {
     const hash = window.location.hash;
     if (hash && hash !== '#edit') postToFrame({ type: STORY_FRAME_HASH_MESSAGE, hash });
   };
+  /**
+   * An `#af-state=` link opens the framed page with that state once: the frame's address takes the fragment
+   * (lib/html-bridge/reader) and its `@afbin/state` seeds from it. Once the frame's controller runs it has it, and this
+   * address drops it, so the frame's next load (a reload, a rebuilt version) keeps the reader's own state.
+   */
+  const settleStateFragment = () => {
+    const { pathname, search, hash } = window.location;
+    if (!/^#(?:.*&)?af-state=/.test(hash)) return;
+    forwardHash();
+    const rest = hash.slice(1).split('&').filter((part) => !part.startsWith('af-state=')).join('&');
+    window.history.replaceState(window.history.state, '', `${pathname}${search}${rest ? `#${rest}` : ''}`);
+  };
   /** The viewport: the served frame's own host, where the server drew it (see the adoption below). */
   const [host, setHost] = createSignal<HTMLElement>();
 
@@ -304,6 +316,7 @@ export function DocumentPage(): JSX.Element {
       // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
       // anew). It is told the mode then, and whenever that changes (the reader's pick).
       createEffect(on(() => story?.nonce() ?? null, setNonce));
+      createEffect(on(nonce, (signed) => { if (signed) settleStateFragment(); }));
       createEffect(on([nonce, toldMode], ([signed, mode]) => {
         if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
       }));
