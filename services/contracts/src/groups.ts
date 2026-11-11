@@ -7,6 +7,19 @@ export interface AccountPreferences {default_destination:DefaultDestination;}
 /** `parent_id`: the group's parent in the installation's single-parent tree, null for a root (lib/groups hierarchy). */
 export interface GroupSummary {id:string;handle:string;name:string;description:string;role:GroupRole|null;parent_id?:string|null;}
 export interface GroupMember {user_id:string;username:string|null;name:string|null;role:GroupRole;}
+/**
+ * One page a group's member can open through the group (`GET /api/groups/{id}/artifacts`): an html page the group, or
+ * one of its ancestors, owns or is shared with (a share reaches a group's subtree). A page readable only through its
+ * link is never listed. Ids, titles, display names and counts only.
+ */
+export interface GroupArtifact {
+  id:string;title:string;updated_at:string;
+  owner:{kind:'user'|'group';name:string};
+  /** The groups on the asked group's chain the page is shared with; never a group outside that chain. */
+  shared_with:{id:string;name:string}[];
+  /** Open comment threads. */
+  comments:number;
+}
 export interface GroupInvitation {id:string;email:string;role:GroupRole;created_at:string;invited_by:string;changed?:boolean;}
 /** A group beside the one being read (its parent, a subgroup): `role` is the reader's own DIRECT membership of it, null for none. */
 export interface GroupRelative {id:string;handle:string;name:string;role:GroupRole|null;}

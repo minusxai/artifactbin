@@ -2,7 +2,7 @@ import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
-import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, parseAliasOrigins, parseDataServices, parseServiceAudiences, parseTestDomainSignIn, type DataService, type ServiceAudience } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, isLocalDevelopmentHost, parseAliasOrigins, parseDataServices, parseServiceAudiences, parseTestDomainSignIn, type DataService, type ServiceAudience } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -458,6 +458,26 @@ export const serviceAudiences = (): readonly ServiceAudience[] => parseServiceAu
  */
 env('DATA_SERVICES', 'TRUSTED');
 export const dataServices = (): readonly DataService[] => parseDataServices(env('DATA_SERVICES', 'TRUSTED'));
+
+/**
+ * TRUSTED EMBEDDERS: `EMBED__TRUSTED_ORIGINS`, comma-separated origins (https, or http on a local development host)
+ * that may frame a document's address, the `/a/<id>` app page and the document it frames on its own origin, and
+ * nothing else of the app. `?embed=1` on that address is the EMBEDDED view, which only these origins may frame (no
+ * one when the list is empty). Empty by default: app pages and documents are framed by the app alone. A malformed
+ * entry refuses the boot. Read at each use, so a test's `overrideConfig` environment applies.
+ */
+env('EMBED', 'TRUSTED_ORIGINS');
+export function embedTrustedOrigins(): string[] {
+  const text = env('EMBED', 'TRUSTED_ORIGINS')?.trim();
+  if (!text) return [];
+  return text.split(',').map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    let url: URL | undefined;
+    try { url = new URL(entry); } catch { url = undefined; }
+    const ok = url && url.origin === entry.replace(/\/+$/, '') && (url.protocol === 'https:' || (url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname)));
+    if (!ok) throw new Error('EMBED__TRUSTED_ORIGINS must be comma-separated origins: https, or http on a local development host.');
+    return url!.origin;
+  });
+}
 
 /**
  * SCHEDULES__PAGE_SCHEDULES: `on` (unset, the default) runs the page-function scheduler; `off` does not start it, and

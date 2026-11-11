@@ -13,6 +13,10 @@ what an artifact is served as, and the local-file doors in `lib/local-connection
   its bootstrap carries no page source or author script. A document runs only at `<hex id>.<pages host>`, and
   `/a/<id>/raw` answers under the document sandbox CSP (`raw.server.ts`). The app CSP's `frame-src` admits only
   itself and the pages hosts.
+- Trusted embedders: `EMBED__TRUSTED_ORIGINS` (empty by default) may frame a document's address and nothing else
+  of the app: the `/a/<id>` app page's `frame-ancestors` and its document's gain exactly those origins. Its embedded
+  view (`?embed=1`, no app bar, onboarding deferred: `solid/lib/embedded.ts`) may be framed by them ONLY, by no one
+  when the list is empty. The reader inside is whoever the app session in that frame names, as on the app itself.
 - A pages origin is same-site with the app, so on another host it reaches only its own document's doors and the
   static directories; everything else stays 403 `forbidden_origin` (`pages-host.ts`). The pages session comes
   from a one-use ticket and a host-only cookie, never the app-session cookie; sign-out ends it server-side.
