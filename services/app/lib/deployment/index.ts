@@ -1,5 +1,6 @@
 import {canUseDeploymentIdentity} from '../accounts';
 import {recordGroupChanges} from '../groups';
+import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
 import { getDb, type Queryable, dataServices, deploymentConfig, embedTrustedOrigins, env, pageSchedulesEnabled, serviceAudiences, services } from '../platform';
@@ -11,6 +12,8 @@ export class DeploymentError extends Error {constructor(public code:string,publi
 /** Run at boot (server.ts): a refused setting stops the start with its name. */
 export function validateDeploymentConfiguration():void {
  serviceAudiences();dataServices();pageSchedulesEnabled();embedTrustedOrigins();
+ // DATASETS__DEFAULT_CONNECTION (lib/connections): here too, so a downstream composition refuses a bad value at boot.
+ validateDefaultConnection();
  const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  if(config.mode==='company'&&!policy.matches(config.ownerEmail!))throw new Error('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
  groupTrustApprovalsEnabled();
