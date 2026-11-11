@@ -60,7 +60,7 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsSource,nativeRegions:nativeRegionsBuild.outputFiles![0]!.text,nativeMarkdown:nativeMarkdownBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text,offlineSql:offlineSqlBuild.outputFiles![0]!.text};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
- const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath,hostPath}=RUNTIME_MODULE_PATHS;
+ const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door.ts',import.meta.url)))};
 import {installFunctionFetch} from ${JSON.stringify(fileURLToPath(new URL('./fn-fetch.ts',import.meta.url)))};
@@ -108,5 +108,5 @@ if(config.offline&&window.parent===window){void import(reader).then(module=>modu
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostPath};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text};
 }

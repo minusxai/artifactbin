@@ -2,8 +2,7 @@
  * THE DOCUMENT HOST MODULE (lib/html-reader/host-shell, /af/host.js) through the real app server: a plain HTML host
  * page on the app's own origin mounts a document, and the page's `fetch('/fn/NAME')` and `sql` reach the real doors as
  * the signed-in reader, pinned to the served revision exactly as the app page's bridge pins them. A signed-out or
- * unauthorised reader gets the app page's refusals; a host page on another origin is refused by the module, and its
- * messages by the document's own door (the parent origin the served document carries).
+ * unauthorised reader gets the app page's refusals; a host page on another origin is refused by the module.
  *
  * The browser is a JSDOM window at the host page's address whose `fetch` is the app server with the reader's session
  * (what a same-origin `credentials: 'same-origin'` request carries); the framed document's side of the bridge is
@@ -19,11 +18,10 @@ import { localPageBackendCapability } from '@/lib/page-operations';
 import { createArtifactFromBody } from '@/lib/publish';
 import { identityForUser } from '@/lib/accounts';
 import { pagesOriginFor, pagesSite } from '@/lib/http';
-import { mountDocument, HostShellError, type MountedDocument } from '@/lib/html-reader/host-shell';
-import { openFrameDoor } from '@/lib/html-runtime/frame-door';
-import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
-import { createAppServer } from '../server/app';
-import { mintAccountToken, useAppHarness } from './harness';
+import { mountDocument, HostShellError, type MountedDocument } from '../host-shell';
+import { STORY_FRAME_BRIDGE_MESSAGE } from '../contract';
+import { createAppServer } from '@/server/app';
+import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { guideExamples } from '@/test/helpers/skill-docs';
 
 /** This deployment's pages site, as the frame endpoint reads it: the app's public origin frames its documents. */
@@ -58,8 +56,8 @@ const world = harness.shared(async () => {
   return { owner, stranger, privatePage: await publish('private'), publicPage: await publish('public') };
 });
 
-const session = (who: { userId: string; email: string | null } | null): Actor | null =>
-  who ? { credential: 'session', sessionId: `host-${who.userId}`, userId: who.userId, email: who.email ?? '', emailVerified: true } : null;
+const session = (who: { userId: string | null; email: string | null } | null): Actor | null =>
+  who?.userId ? { credential: 'session', sessionId: `host-${who.userId}`, userId: who.userId, email: who.email ?? '', emailVerified: true } : null;
 
 /** A host page at `origin` whose same-origin requests are the app server's, carrying `reader`'s session. */
 function hostPage(reader: Actor | null, origin = APP) {
@@ -73,7 +71,7 @@ function hostPage(reader: Actor | null, origin = APP) {
 }
 
 /** The framed document's side: its door's hello and ready, then the page's own `fetch` calls, answered through the bridge. */
-function framedDocument(win: Window, mounted: MountedDocument) {
+function framedDocument(win: Window & typeof globalThis, mounted: MountedDocument) {
   const posted: Array<{ message: { key: string; payload: Record<string, unknown> }; target: string }> = [];
   const frameWindow = mounted.frame.contentWindow!;
   frameWindow.postMessage = ((message: never, target: string) => { posted.push({ message, target }); }) as Window['postMessage'];
@@ -178,7 +176,7 @@ describe('the host-page guide\'s example', () => {
     fromFrame({ type: STORY_FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } });
     const key = posted.find((message) => message.payload.kind === 'attach')!.key;
     fromFrame({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'ready', nonce: 'r'.repeat(16) } });
-    const commands = posted.filter((message) => message.payload.kind === 'send').map((message) => (message.payload as { command: { type: string } }).command.type);
+    const commands = posted.filter((message) => message.payload.kind === 'send').map((message) => (message.payload as unknown as { command: { type: string } }).command.type);
     expect(commands).toEqual(['mx:reader-mode', 'mx:select']);
     fromFrame({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'event', event: { type: 'mx:selection', nonce: 'r'.repeat(16), selection: { path: 'title' } } } });
     expect(selections).toEqual([{ path: 'title' }]);
@@ -186,7 +184,7 @@ describe('the host-page guide\'s example', () => {
 });
 
 describe('a host page on another origin', () => {
-  it('is refused by the module, and its messages by the document\'s own door', async () => {
+  it('is refused by the module (the document\'s door refuses it too: lib/html-runtime/__tests__/frame-door-host.test.ts)', async () => {
     const w = world();
     const { win, container } = hostPage(session(w.owner), 'https://shell.other.test');
     const refused = await mountDocument(container, { id: w.privatePage }, win).catch((error: unknown) => error);
@@ -194,34 +192,5 @@ describe('a host page on another origin', () => {
     expect((refused as HostShellError).code).toBe('wrong_origin');
     expect((refused as Error).message).toContain(APP);
     expect(container.querySelector('iframe')).toBeNull();
-
-    // The parent origin the served document trusts is the app's, baked in when it is served.
-    const fresh = await (await app.request(attachActor(new Request(`${APP}/api/page/frame/${w.privatePage}`), session(w.owner)!))).json() as { src: string; appOrigin: string };
-    expect(fresh.appOrigin).toBe(APP);
-    const served = await (await app.request(fresh.src, { headers: { accept: 'text/html' } })).text();
-    const config = JSON.parse(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/.exec(served)![1]!) as { appOrigin: string };
-    expect(config.appOrigin).toBe(APP);
-    // The door that document opens starts a session only for its parent on that origin.
-    const listeners: Array<(event: unknown) => void> = [];
-    const parent = { postMessage() {} };
-    class FakeEvent { stopImmediatePropagation() {} }
-    // The door reads MessageEvent's own getters (captured before an author script can replace them), as a browser has them.
-    class FakeMessageEvent extends FakeEvent {
-      readonly isTrusted = true;
-      constructor(private readonly init: { data: unknown; origin: string; source: unknown }) { super(); }
-      get data() { return this.init.data; }
-      get origin() { return this.init.origin; }
-      get source() { return this.init.source; }
-    }
-    const frameWin = { parent, MessageEvent: FakeMessageEvent, Event: FakeEvent, addEventListener: (_type: string, listener: (event: unknown) => void) => listeners.push(listener), removeEventListener() {} };
-    let started = 0;
-    const close = openFrameDoor(frameWin as unknown as Window, config.appOrigin, async () => { started++; return { startFrameBridge: () => ({ receive() {}, dispose() {} }) }; });
-    const attach = { type: STORY_FRAME_BRIDGE_MESSAGE, key: 'k'.repeat(24), payload: { kind: 'attach', id: w.privatePage, editId: '', source: null } };
-    for (const listener of listeners) listener(new FakeMessageEvent({ data: attach, origin: 'https://shell.other.test', source: parent }));
-    await Promise.resolve();
-    expect(started).toBe(0);
-    for (const listener of listeners) listener(new FakeMessageEvent({ data: attach, origin: APP, source: parent }));
-    await expect.poll(() => started).toBe(1);
-    close();
   });
 });
