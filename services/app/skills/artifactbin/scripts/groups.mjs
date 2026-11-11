@@ -44,7 +44,7 @@ Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/acces
 import {runTool,makeClient,selectedServer,resolveTarget,positional,requireFlags,enumValue,
  ToolError,toolFailure,toolExit} from './toolbox-client.mjs';
 import {confirmation,groupReference,resolveGroup,resolveMember,resolveInvitation,
- invitationEmail,segment,withDatasets} from './toolbox-groups.mjs';
+ invitationEmail,segment,withDatasets,editorGrant,EDITOR_GRANT} from './toolbox-groups.mjs';
 
 /** The step after a listing of members or invitations (show). */
 const PROPOSE='Next: members show handles, not email addresses. A change to these members or '+
@@ -53,7 +53,13 @@ const PROPOSE='Next: members show handles, not email addresses. A change to thes
  'tell apart; an address missing here does not mean they are not a member) and each invitation '+
  'by its email, with the action for each (remove, change role, cancel the invitation); make it '+
  'only after they agree.';
-export async function groupsCommand({sub,values,positionals},options={}){
+/** An editor grant's result says what it gave (EDITOR_GRANT). */
+export async function groupsCommand(parsed,options={}){
+ const result=await command(parsed,options);
+ return editorGrant(parsed.sub,parsed.values.role)&&result&&typeof result==='object'?
+  {...result,note:EDITOR_GRANT}:result;
+}
+async function command({sub,values,positionals},options){
  // These checks precede even identity lookup HTTP, so refusal cannot accidentally mutate.
  confirmation(sub,values);
  const pageVerb=['share','unshare','move'].includes(sub);

@@ -1,4 +1,4 @@
-import type {PresenceFrame,PresencePublication} from '@/lib/html-presence';
+import type {PresenceIdentity,PresenceFrame,PresencePublication} from '@/lib/html-presence';
 import type { CommentReactionInput, AnnotationCommentWire, DocumentGraph, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/html-reader/contract';
@@ -162,7 +162,7 @@ export interface ArtifactBackend {
    * reports every dataset that changed after the page's rows were computed.
    */
   /** Ephemeral platform-owned reader session; null when refused or unavailable. */
-  publishPresence(input: PresencePublication): Promise<string | null>;
+  publishPresence(input: PresencePublication): Promise<PresenceIdentity | string | null>;
   live(handlers: LiveHandlers, options?: { since?: string }): () => void;
   /** The complete document a ping announced (GET /a/<id>/events/frame). Null when refused. */
   liveFrame(): Promise<ArtifactLiveEvent | null>;

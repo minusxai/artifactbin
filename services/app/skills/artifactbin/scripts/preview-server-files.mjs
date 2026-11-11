@@ -1,6 +1,6 @@
 /**
- * Internal: file helpers for the private preview server: content types, platform font lookup,
- * root containment and the per-request autofix of served pages.
+ * Internal: file helpers for the private preview server: content types, platform font and
+ * boundary lookup, root containment and the per-request autofix of served pages.
  * Used by: preview-server.mjs, preview-source-routes.mjs.
  */
 import {readFile,readdir} from 'node:fs/promises';
@@ -50,6 +50,31 @@ if(bytes.length>4_000_000||bytes.subarray(0,4).toString('latin1')!=='wOF2')throw
    return bytes;
   })().catch(error=>{fetched.delete(name);throw error;}));
   return fetched.get(name);
+ };
+}
+/**
+ * The platform's boundary files, /geojson/<name>.json, which a page fetches from its own origin: a
+ * source checkout reads the app's public/geojson; otherwise each is fetched once from the selected
+ * server and served from this origin, so the private CSP keeps connect-src 'self'.
+ */
+const BOUNDARY=/^\/geojson\/([a-z0-9-]+)\.json$/;
+export function platformBoundaries(origin){
+ const fetched=new Map();
+ return async pathname=>{
+  const match=BOUNDARY.exec(pathname);if(!match)return null;
+  const local=await readFile(fileURLToPath(new URL(`../../../public${pathname}`,import.meta.url)))
+   .catch(error=>{if(error.code==='ENOENT'||error.code==='ENOTDIR')return null;throw error;});
+  if(local||!origin)return local;
+  if(!fetched.has(pathname))fetched.set(pathname,(async()=>{
+const response=await fetch(new URL(pathname,origin),{redirect:'error',signal:AbortSignal.timeout(
+     15000)});
+   if(!response.ok)return null;
+   const bytes=Buffer.from(await response.arrayBuffer());
+if(bytes.length>8_000_000||!/^application\/json\b/i.test(response.headers.get('content-type')??
+     ''))throw Error('Unexpected platform boundary response');
+   return bytes;
+  })().catch(error=>{fetched.delete(pathname);throw error;}));
+  return fetched.get(pathname);
  };
 }
 export const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(

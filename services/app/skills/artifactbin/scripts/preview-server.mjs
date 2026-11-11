@@ -13,7 +13,8 @@ import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
 import {previewHtml,formatAutofixReport,pageDesignSystem} from './preview-html.mjs';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
-import {types,platformFonts,inside,previewAutofix} from './preview-server-files.mjs';
+import {types,platformFonts,platformBoundaries,inside,previewAutofix} from
+  './preview-server-files.mjs';
 import {DATASET_ROUTE,handleDatasetRoute} from './preview-dataset-route.mjs';
 import {handleSourceRoute} from './preview-source-routes.mjs';
 import configuredServer from './toolbox-config.mjs';
@@ -27,7 +28,7 @@ export const PRIVATE_CSP =
   "'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-downloads";
 /** Start a private loopback server; contract: lib/skills/preview-contract.d.ts.
  * `platformOrigin` (default: the archive's selected server)
- * supplies the runtime, libraries, components and fonts (./preview-platform); a source
+ * supplies the runtime, libraries, components, fonts and boundaries (./preview-platform); a source
  * checkout's own build outputs come first. */
 export async function startPreview({root,port=0,runtimeDir,platformOrigin,
   libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
@@ -38,7 +39,7 @@ const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())th
  const origin=platformOrigin??configuredServer??null;
  const platform=platformModules({origin,libraryAssets});
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
- const platformFont=platformFonts(origin);
+ const platformFont=platformFonts(origin),platformBoundary=platformBoundaries(origin);
  // Only the page's own design system stylesheet, fetched on demand.
  const platformCss=html=>{const name=pageDesignSystem(html);
    return name?platform.systemCss(name):Promise.resolve(null);};
@@ -86,6 +87,8 @@ if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','applicatio
      200,JSON.stringify({revision:await revisions.current()}));}
 const font=await platformFont(pathname);if(font){res.setHeader('Content-Type','font/woff2');
      res.setHeader('Content-Length',font.length);return end(200,font);}
+   const boundary=await platformBoundary(pathname);if(boundary){res.setHeader('Content-Type',
+     'application/json');res.setHeader('Content-Length',boundary.length);return end(200,boundary);}
    // --runtime-dir replaces the server's runtime (/af/*), but not its hosted components.
    const module=!(runtime&&pathname.startsWith('/af/')&&!pathname.startsWith('/af/components/'))?
      await platform.module(pathname):null;

@@ -17,7 +17,7 @@ it('announces a departure for an invisible reader, drops a report from a version
  const result=await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'7',visible:false},ports(sent));
  expect(decodePresenceMessage(sent[0]!,'7')).toEqual({id:(result as {id:string}).id,gone:true});
  // A page still drawing the version before is answered (it reports again on the new one) and nothing is broadcast.
- expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'6',visible:true},ports(sent))).toEqual({id:(result as {id:string}).id});
+ expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'6',visible:true},ports(sent))).toEqual(result);
  expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session,revision:'8'},ports(sent))).toBeNull();
  expect(await publishPresence({userId:'u1',tokenId:null},{version:7},{session:'short',revision:'7'},ports(sent))).toBeNull();
  expect(await publishPresence({userId:'u1',tokenId:null},{version:7},null,ports(sent))).toBeNull();
@@ -36,4 +36,11 @@ it('uses stable server account color across tabs while keeping tab ids and guest
  expect(entries[0].colorId).toBe(entries[1].colorId);expect(entries[0].id).not.toBe(entries[1].id);
  expect(entries[0].colorId).not.toBe(entries[2].colorId);expect(entries[3].colorId).not.toBe(entries[4].colorId);
  expect(decodePresenceMessage(sent[0]!,'7')).toHaveProperty('colorId',entries[0].colorId);
+});
+it('returns the same trusted account identity when hidden and never accepts a supplied identity',async()=>{
+ const sent:string[]=[];
+ const visible=await publishPresence({userId:'synthetic-reader'},{version:7},{session,revision:'7',colorId:'forged'},ports(sent));
+ const hidden=await publishPresence({userId:'synthetic-reader'},{version:7},{session:session.replace(/1$/,'2'),revision:'7',visible:false,colorId:'forged'},ports(sent));
+ expect(visible?.colorId).toMatch(/^[a-f0-9]{64}$/);expect(hidden?.colorId).toBe(visible?.colorId);expect(hidden?.id).not.toBe(visible?.id);
+ expect(JSON.stringify(hidden)).not.toContain('synthetic-reader');
 });

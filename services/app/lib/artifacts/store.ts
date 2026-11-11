@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {convertLegacyPage,editableRegions} from '../live-regions';
+import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regions';
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
@@ -445,6 +445,16 @@ async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 're
   if (mode === 'replace') await restore();
 }
 
+/** A migration receipt is a permanent format boundary, including for immutable old archives. */
+async function migratedContent(tx: Queryable, id: string, input: ArtifactInput): Promise<ArtifactInput | Response> {
+  if (input.format !== 'html' || !(await tx.query('SELECT 1 FROM legacy_page_migrations WHERE artifact_id=$1', [id])).rows.length) return input;
+  try { return {...input, source: convertLegacyPage(input.source ?? '').html}; }
+  catch (error) {
+    if (error instanceof LiveRegionRefusal) return json({error: error.code, details: error.details}, 409);
+    throw error;
+  }
+}
+
 type ArtifactWrite = NonNullable<Awaited<ReturnType<typeof lockArtifactWrite>>>;
 
 /** What saving a page's live regions came to: the head that holds their text, each region's sequence in it, and whether it is new. */
@@ -590,6 +600,9 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     const moved = condition(current, {expectedVersion: initial.version, expectedState: artifactState(initial)}); if (moved) return {notArchived:true,refusal:moved};
+    const normalized = await migratedContent(tx, id, target);
+    if (normalized instanceof Response) return {notArchived:true, refusal:normalized};
+    target = {...target, ...normalized};
     // A revert replaces the whole page under its live regions: their unsaved typing is saved as its own version
     // first (the revert archives it), then the regions close and their editors reopen from the reverted text.
     const hadRegions = current.format === 'html';
@@ -714,6 +727,9 @@ async function replaceArtifactInTx(
   const fromLive = opts.expectedLive !== undefined && current.format === 'html' && input.format === 'html';
   if (fromLive && (await liveRevisionOf(tx, id)).live !== opts.expectedLive) return conflictOf(current, 'content');
   if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
+  const normalized = await migratedContent(tx, id, input);
+  if (normalized instanceof Response) return normalized;
+  input = normalized;
   // A page leaving HTML takes its live regions with it: their unsaved typing is saved as its own version first.
   const leavingHtml = current.format === 'html' && input.format !== 'html';
   if (leavingHtml && (await saveRegionsLocked(tx, actor, write)).published) {
@@ -1006,7 +1022,12 @@ export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):P
   const actor=identityForUser(null);
   let write=await lockArtifactWrite(tx,actor,id,true);
   if(!write)return 'missing';
-  if((await tx.query('SELECT 1 FROM legacy_page_migrations WHERE artifact_id=$1',[id])).rows.length)return 'already_migrated';
+  if((await tx.query('SELECT 1 FROM legacy_page_migrations WHERE artifact_id=$1',[id])).rows.length){
+   const legacy=write.current.format==='html'&&editableRegions(write.current.source??'').some(region=>region.kind==='rich'||region.kind==='text');
+   const live=(await tx.query("SELECT 1 FROM region_states WHERE artifact_id=$1 AND kind IN ('rich','text') AND region_id NOT LIKE 'cell:%' LIMIT 1",[id])).rows.length;
+   if(legacy||live)throw new LiveRegionRefusal('unsupported_content',['migrated page contains legacy state']);
+   return 'already_migrated';
+  }
   if(write.current.format!=='html')return 'ineligible';
   const kinds=editableRegions(write.current.source??'').map(region=>region.kind);
   if(!kinds.includes('rich')&&!kinds.includes('text'))return 'ineligible';

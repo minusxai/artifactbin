@@ -12,7 +12,7 @@
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
-import {createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
+import {presenceAccountIdentity, createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
 import { getDb, ID_RE } from '@/lib/platform';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/analytics';
@@ -274,7 +274,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
     // A new source revision replaces only its presence room, never the document stream.
     replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;
     latestPresence=null;presenceRevision=String(row.version);
-    const room=await createPresenceRoom({revision:String(row.version),
+    const room=await createPresenceRoom({revision:String(row.version),readerIdentity:presenceAccountIdentity(actor.userId),
       authorize:async()=>{const current=await getArtifactAccessById(id);return !!current&&await canReadArtifact(current,actor);},
       subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
       subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),

@@ -25,7 +25,10 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
     },
     async publishPresence(input: PresencePublication) {
       const response=await fetch(`/api/artifacts/${encodeURIComponent(id)}/presence`,{method:'POST',credentials,headers:JSON_HEADERS,body:JSON.stringify(input),keepalive:!input.visible});
-      if(!response.ok)return null;const body=await response.json() as {id?:unknown};return typeof body.id==='string'?body.id:null;
+      if(!response.ok)return null;const body=await response.json() as {id?:unknown;colorId?:unknown};
+      if(typeof body.id!=='string')return null;
+      // An old server returns only id. Keep it usable without pretending it supplied account authority.
+      return typeof body.colorId==='string'&&/^[a-f0-9]{64}$/.test(body.colorId)?{id:body.id,colorId:body.colorId}:body.id;
     },
     live(handlers, options) {
       // Reconnecting, with a heartbeat watchdog and a catch-up on wake (lib/live-stream).

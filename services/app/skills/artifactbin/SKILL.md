@@ -152,9 +152,9 @@ group's job runs): `node scripts/events.mjs watch --help`.
   Always check before replying, even while a function's secret is unset. Publish autofixes the page
   and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` for a file you aren't
   publishing). Never rerun an unchanged check that failed a step or the page:
-  change the steps or the page first. Only when the user asks for a private draft: `node
-  scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node scripts/serve.mjs --help`;
-  `sql` and functions run only in the published page).
+  change the steps or the page first. Only when the user asks for a private draft or wants nothing
+  uploaded: `node scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node
+  scripts/serve.mjs --help`; `sql` and functions run only in the published page).
 - **Answer comments.** A comment from someone the page is shared with is a new request, even when
   an earlier request limited what to change: make the change without asking first, publish, then
   `node scripts/comment.mjs reply ID --thread T --body
@@ -237,13 +237,15 @@ read-only copy ([groups](references/groups.md#public-view-receipts)).
 - Who can read. Unlisted (the default): anyone with the link, signed out too, sees all the page
   shows, its functions' answers included (a `signed_in` role still admits any signed-in link
   holder). `--visibility private`: only the owner and the people and groups it is shared with,
-  never anyone signed out. `--visibility public` also lists it on the owner's profile: only when
-  the user says "public". Unlisted fits a page passed on by its link ("my team can view", "send
-  me the link"). Publish private only on the user's word: they say "private", call the data
-  confidential, or name who may see it; your own view of how sensitive it is does not make it
-  private. Then share it with their group (below) or have the owner invite people in the page's
-  Share dialog, and check without `--guest-steps` (it runs signed out, which a private page
-  answers with not found). Say in the reply which visibility the page has and who can open it.
+  never anyone signed out. `--visibility public` also lists it on the owner's profile.
+  Publishing is how a page is shared: unlisted fits a page passed on by its link ("my team can
+  view", "send me the link"). Use `--visibility public` or `--visibility private` only when the
+  user says "public" or "private" or names who may see it; share a private page with their group
+  (below) or have the owner invite people in its Share dialog, and check it without
+  `--guest-steps` (signed out, a private page answers not found). A user who does not want it
+  uploaded gets the local draft above, nothing published: tell them what only a published page
+  has (a link to share, sign-in, comments, `sql` and functions). Say in the reply which
+  visibility the page has and who can open it.
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
   When they change its rows (a team tracker), add `--datasets`: a page share alone never lets

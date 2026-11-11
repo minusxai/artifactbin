@@ -42,9 +42,9 @@ it('preserves trash timestamp',async()=>{
  expect((await db.query('SELECT deleted_at FROM artifacts WHERE id=$1',[row.id])).rows).toEqual(before);
 });
 
-it('folds state and pending log bytes and retains exact attributed backup bytes',async()=>{
+it.each(['true','false'])('folds checklist %s state and pending log bytes and retains exact attributed backup bytes',async checked=>{
  const user=await createUser({email:'mxmx_test_migration_dirty@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Hello</p></article>',meta:{},visibility:'private'});
+ const row=await createArtifact(null,user.id,{format:'html',source:`<article data-af-editable="rich"><p>Hello</p><ul><li role="checkbox" aria-checked="${checked}" aria-disabled="true"><p>Task</p></li></ul></article>`,meta:{},visibility:'private'});
  const db=await harness.db();
  const region=editableRegions(row.source!)[0]!;
  const initial=createRegionState('rich',region.inner);
@@ -59,6 +59,7 @@ it('folds state and pending log bytes and retains exact attributed backup bytes'
  expect(await migrateLegacyPage(row.id,{apply:true})).toBe('migrated');
  const current=(await db.query<{state:Uint8Array}>('SELECT state FROM region_states WHERE artifact_id=$1',[row.id])).rows[0]!;
  expect(regionHtml('rich-native-v1',current.state)).toContain('pending folded Hello');
+ expect(regionHtml('rich-native-v1',current.state)).toContain(`role="checkbox" aria-checked="${checked}" aria-disabled="true"`);
  const backup=(await db.query<{backup:{region_states:unknown[];region_updates:{update:string}[]}}>('SELECT backup FROM legacy_page_migrations WHERE artifact_id=$1',[row.id])).rows[0]!.backup;
  expect(backup.region_states).toEqual([old]);
  expect(backup.region_updates[0]!.update).toBe('\\x'+Buffer.from(update).toString('hex'));
@@ -82,4 +83,30 @@ it('rejects old sessions in warm and cold processes after conversion',async()=>{
    expect(result.status).toBe(422);
   }
  }finally{warm.dispose();cold.dispose();}
+});
+
+it.each(['true','false'])('migrates legacy checkbox %s through the real operator with exact backup and comments',async checked=>{
+ const user=await createUser({email:`mxmx_test_checkbox_${checked}@example.com`});
+ const source=`<article data-af-id="af-1" data-af-editable="rich"><p data-af-id="af-2">Tasks</p><ul data-af-id="af-3"><li data-af-id="af-4" role="checkbox" aria-checked="${checked}" aria-disabled="true"><p data-af-id="af-5">Example task</p></li></ul></article>`;
+ const row=await createArtifact(null,user.id,{format:'html',source,meta:{},visibility:'private'});
+ const db=await harness.db();
+ await db.query(`INSERT INTO annotations(id,artifact_id,body,author_kind,quote,anchor_version,html_anchor) VALUES($1,$2,'Keep','human','Example task',$3,$4::jsonb)`,[`ann_checkbox_${checked}`,row.id,row.version,JSON.stringify({nodeId:'af-5'})]);
+ const before=(await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows;
+ const comments=(await db.query('SELECT to_jsonb(a) AS value FROM annotations a WHERE artifact_id=$1',[row.id])).rows;
+ expect(await migrateLegacyPage(row.id)).toBe('eligible');
+ expect((await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows).toEqual(before);
+ expect(await migrateLegacyPage(row.id,{apply:true})).toBe('migrated');
+ const state=(await db.query<{state:Uint8Array}>('SELECT state FROM region_states WHERE artifact_id=$1',[row.id])).rows[0]!.state;
+ expect(regionHtml('rich-native-v1',state)).toBe(editableRegions(row.source!)[0]!.inner);
+ expect((await db.query<{backup:{head:unknown}}>('SELECT backup FROM legacy_page_migrations WHERE artifact_id=$1',[row.id])).rows[0]!.backup.head).toEqual(before[0]!.value);
+ expect((await db.query('SELECT to_jsonb(a) AS value FROM annotations a WHERE artifact_id=$1',[row.id])).rows).toEqual(comments);
+});
+it.each(['aria-checked="mixed"','aria-checked="true" aria-disabled="yes"','aria-checked="true" aria-label="unmodelled"','aria-checked="true" data-checked="true"'])('refuses invalid checkbox attributes atomically: %s',async attrs=>{
+ const user=await createUser({email:'mxmx_test_checkbox_invalid@example.com'});
+ const row=await createArtifact(null,user.id,{format:'html',source:`<article data-af-editable="rich"><ul><li role="checkbox" ${attrs}><p>Invalid</p></li></ul></article>`,meta:{},visibility:'private'});
+ const db=await harness.db();
+ const before=(await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows;
+ await expect(migrateLegacyPage(row.id,{apply:true})).rejects.toThrow();
+ expect((await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[row.id])).rows).toEqual(before);
+ expect((await db.query('SELECT * FROM legacy_page_migrations WHERE artifact_id=$1',[row.id])).rows).toHaveLength(0);
 });

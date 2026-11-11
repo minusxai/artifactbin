@@ -36,7 +36,9 @@ import {archiveFor} from '@/lib/skills';
 // over GET /api/events for every page and a group's job runs, and comment.mjs watch is now its comments alias.
 // 1.79 MiB: main's 1.78 and this branch's 1.78 each held their own additions; merged they store 1,873,284 bytes,
 // and the governed-data guide ships in the archive too (about 3.5 KB), which fits after trimming it.
-const SKILL_ARCHIVE_MAX_BYTES=1.79*1024*1024;
+// 1.80 MiB: main grew about 2.3 KB under its own 1.78 (served boundary files in the maps guide, the editor-grant
+// wording); merged with this branch the archive stores 1,879,186 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.80*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

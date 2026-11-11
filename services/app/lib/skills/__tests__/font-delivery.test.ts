@@ -57,6 +57,12 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
    // Only the /af/fonts/ name resolves: neither the stored hashed file name nor an unknown name does.
    expect((await fetch(new URL(face.url,preview.url))).status).toBe(404);
    expect((await fetch(new URL('/af/fonts/not-a-font.woff2',preview.url))).status).toBe(404);
+   // A page's boundary fetch (/geojson/NAME.json) reads the selected server's file from the preview's own origin.
+   const boundary=await fetch(new URL('/geojson/india-states.json',preview.url));expect(boundary.status).toBe(200);
+   expect(boundary.headers.get('content-type')).toContain('application/json');
+   expect(Buffer.from(await boundary.arrayBuffer())).toEqual(readFileSync(path.resolve('public/geojson/india-states.json')));
+   expect(origin.requests).toContain('/geojson/india-states.json');
+   expect((await fetch(new URL('/geojson/not-a-boundary.json',preview.url))).status).toBe(404);
   }finally{await preview.close();}
   const {prepareBundle}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
   const request=await prepareBundle({root:installed,entry:'index.html',server:'https://publish.example'});
