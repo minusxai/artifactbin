@@ -239,3 +239,12 @@ it('highlights opted-in code for readers without putting presentation spans in s
  expect(doc.querySelector('.mx-code-token-keyword')?.textContent).toBe('const');
  expect(row.source).not.toContain('mx-code-token');
 });
+it('tells a served page its declared connect hosts, which its core reaches through the fetch door; never a download',async()=>{
+ const row={id:'declares-hosts',version:1,source:'<!doctype html><html><head><title>Rates</title><meta name="csp-connect" content="https://api.example.com https://*.tiles.example.org"></head><body><p>Rates</p></body></html>',meta:{}};
+ const served=await nativeHtml.nativeHtmlDocument({row,appOrigin:'https://app.example.test'});
+ expect(served.config.connect).toEqual(['https://api.example.com','https://*.tiles.example.org']);
+ const exported=await nativeHtml.nativeHtmlDocument({row,appOrigin:'https://app.example.test',offline:true});
+ expect(exported.config.connect).toBeUndefined();
+ const plain=await nativeHtml.nativeHtmlDocument({row:{...row,source:'<!doctype html><html><head><title>Plain</title></head><body></body></html>'}});
+ expect(plain.config.connect).toBeUndefined();
+});

@@ -17,6 +17,7 @@ import type { HtmlPageLink } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
+import {declaredCspExtensions} from '@/lib/trust';
 import { ASSETS_ORIGIN, embedTrustedOrigins } from '@/lib/platform';
 import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem } from '@/lib/html-systems';
 import {libraryImports} from '@/lib/libraries';
@@ -71,6 +72,10 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   const files=input.offline?input.files:publishedFileTable(input.row.meta as PublicationRecord,input.row.id,input.row.version,captureKey?receipt=>`/a/${input.row.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}&version=${input.row.version}&key=${encodeURIComponent(captureKey)}`:undefined);
   if(files&&Object.keys(files).length)config.files=files;
   const source=input.row.source??'';
+  // The hosts the page declares it connects to: its core sends a GET to one through the page's own fetch door
+  // (html-runtime fn-fetch), which checks this reader's trust. A download and a publishing host have no door.
+  const connect=input.offline||input.domainReads?[]:declaredCspExtensions(source).connect;
+  if(connect.length)config.connect=connect;
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};

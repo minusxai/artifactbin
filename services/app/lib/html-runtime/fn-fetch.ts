@@ -18,6 +18,14 @@
  * those paths on the page's own origin goes to the browser's own fetch at that address, its query and hash dropped (the
  * stored file does not vary by them) and a Request's method, headers, body and signal kept; nothing else is touched.
  *
+ * A HOST THE PAGE DECLARES — `<meta name="csp-connect" content="https://api.example.com">` — is reached through the
+ * page's own fetch door (app/a/[id]/fetch) on the origin that serves it: a GET to a declared origin (or one under a
+ * declared `*.` wildcard) is sent to `/a/<id>/fetch?url=<that URL>` with its signal, because the document's policy
+ * never lets the reader's browser connect to a declared host itself (lib/page-styles/document-csp). The door decides:
+ * this reader trusts the host (they published it, or allowed it on the consent bar), GET only, no request headers or
+ * credentials forwarded, 5 MB, 10 s. Any other method goes to the browser's fetch untouched. Not in the `/raw` sandbox
+ * (an opaque origin), whose own policy admits the hosts the reader trusts directly.
+ *
  * Framework-free and value-free imports only: it is part of every page's core.
  */
 export interface FunctionRequest {name:string;method:'GET'|'POST';search:string;body:string|null;contentType:string|null}
@@ -28,8 +36,16 @@ const NAME=/^[_A-Za-z][_0-9A-Za-z]{0,63}$/;
 const PREFIX='/fn/';
 const NULL_BODY=new Set([101,204,205,304]);
 
+/** The page's declared connect origins (runtime config `connect`) and the id its fetch door is addressed by. */
+export interface DeclaredHosts {pageId:string;origins:readonly string[]}
+/** lib/document cspOriginMatches, restated so core carries no server value: exact, or a host under `https://*.`. */
+const declares=(declared:string,url:URL)=>{
+ if(declared===url.origin)return true;
+ const wild=/^https:\/\/\*\.([^/:]+)(:\d+)?$/.exec(declared);
+ return !!wild&&url.protocol==='https:'&&url.hostname.endsWith('.'+wild[1])&&(url.port?':'+url.port:'')===(wild[2]??'');
+};
 /** Replace `win.fetch`; returns the restore. `load` resolves the reader on the first call only; `files`: path -> address. */
-export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:FunctionCaller}>,files?:Readonly<Record<string,string>>):()=>void{
+export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:FunctionCaller}>,files?:Readonly<Record<string,string>>,hosts?:DeclaredHosts):()=>void{
  // Captured now, before the author's script can replace them.
  const scope=win as unknown as typeof globalThis;
  const native=win.fetch,apply=Reflect.apply,U=scope.URL,Req=scope.Request,Res=scope.Response,location=win.location,doc=win.document;
@@ -81,6 +97,13 @@ export function installFunctionFetch(win:Window,load:()=>Promise<{callFunction:F
   const file=url&&url.origin===new U(location.href).origin&&published.get(url.origin+url.pathname);
   // A Request rebuilt at the file's address (its body already read rejects, as fetch would).
   if(file){try{return apply(native,win,[input instanceof Req?new Req(file,input):file,...args.slice(1)]);}catch(error){return Promise.reject(error);}}
+  // A GET to a declared host goes through the page's fetch door, where the reader's trust is checked.
+  const init=args[1] as RequestInit|undefined;
+  if(url&&hosts&&win.origin!=='null'&&(url.protocol==='https:'||url.protocol==='http:')&&url.origin!==new U(location.href).origin&&hosts.origins.some(origin=>declares(origin,url!))
+   &&((init?.method??(input instanceof Req?input.method:'GET')).toUpperCase()==='GET')){
+   const signal=init?.signal??(input instanceof Req?input.signal:undefined);
+   return apply(native,win,[new U(`/a/${encodeURIComponent(hosts.pageId)}/fetch?url=${encodeURIComponent(url.href)}`,doc.baseURI).href,signal?{signal}:{}]);
+  }
   if(!url||url.origin!==new U(location.href).origin||!url.pathname.startsWith(PREFIX))return apply(native,win,[input,...args.slice(1)]);
   return call(url,input,args[1]);
  };
