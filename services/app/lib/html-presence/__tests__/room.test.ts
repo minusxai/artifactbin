@@ -1,4 +1,4 @@
-import {expect,it,vi} from 'vitest';
+import {expect,it} from 'vitest';
 import {createPresenceRoom} from '../room';
 import type {PresenceFrame} from '../contract';
 it('coalesces geometry without ACL reads, serializes checks and stops immediately on access revocation',async()=>{
@@ -67,17 +67,20 @@ it('re-authorizes at once on an ACL wakeup and otherwise only on the 60s safety 
  bySafety.state.tick();await settle();expect(bySafety.state.closed).toBe(1);
 });
 it('expires unique counts without activity and converges after reconnect heartbeats',async()=>{
- vi.useFakeTimers();vi.setSystemTime(1000);
+ let now=1000,sequence=0;
+ const timers=new Map<number,{at:number,work:()=>void,interval?:number}>();
+ const clock={now:()=>now,setTimeout:(work:()=>void,ms:number)=>{const id=++sequence;timers.set(id,{at:now+ms,work});return id;},clearTimeout:(id:unknown)=>{timers.delete(id as number);},setInterval:(work:()=>void,ms:number)=>{const id=++sequence;timers.set(id,{at:now+ms,work,interval:ms});return id;},clearInterval:(id:unknown)=>{timers.delete(id as number);}};
+ const advance=async(ms:number)=>{const end=now+ms;for(;;){const next=[...timers].filter(([,timer])=>timer.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;const [id,timer]=next;now=timer.at;timers.delete(id);if(timer.interval)timers.set(id,{...timer,at:now+timer.interval});timer.work();await Promise.resolve();}now=end;};
  let receive=(_payload:string)=>{};const sent:PresenceFrame[]=[];
- const ports={revision:'1',readerIdentity:'a'.repeat(64),authorize:async()=>true,subscribe:async(fn:(payload:string)=>void)=>{receive=fn;return async()=>{};},subscribeAcl:async()=>async()=>{},send:(frame:PresenceFrame)=>sent.push(frame),close:()=>{},clock:{now:Date.now,setTimeout:(fn:()=>void,ms:number)=>setTimeout(fn,ms),clearTimeout:(id:unknown)=>clearTimeout(id as ReturnType<typeof setTimeout>),setInterval:(fn:()=>void,ms:number)=>setInterval(fn,ms),clearInterval:(id:unknown)=>clearInterval(id as ReturnType<typeof setInterval>)}};
+ const ports={revision:'1',readerIdentity:'a'.repeat(64),authorize:async()=>true,subscribe:async(fn:(payload:string)=>void)=>{receive=fn;return async()=>{};},subscribeAcl:async()=>async()=>{},send:(frame:PresenceFrame)=>sent.push(frame),close:()=>{},clock};
  try{
  let room=await createPresenceRoom(ports);
- const publish=()=>{for(let i=0;i<35;i++)receive(JSON.stringify({id:i.toString(16).padStart(64,'0'),colorId:'b'.repeat(64),label:'Same label',revision:'1',seen:Date.now(),cursor:null,selection:null}));};
- publish();await vi.advanceTimersByTimeAsync(1000);expect(sent.at(-1)?.readers?.total).toBe(1);
- room.dispose();room=await createPresenceRoom(ports);publish();await vi.advanceTimersByTimeAsync(1000);expect(sent.at(-1)?.readers?.total).toBe(1);
- await vi.advanceTimersByTimeAsync(44000);expect(sent.at(-1)?.readers?.total).toBe(0);expect(sent.at(-1)?.viewers).toEqual([]);
- room.dispose();expect(vi.getTimerCount()).toBe(0);
- }finally{vi.useRealTimers();}
+ const publish=()=>{for(let i=0;i<35;i++)receive(JSON.stringify({id:i.toString(16).padStart(64,'0'),colorId:'b'.repeat(64),label:'Same label',revision:'1',seen:now,cursor:null,selection:null}));};
+ publish();await advance(1000);expect(sent.at(-1)?.readers?.total).toBe(1);
+ room.dispose();room=await createPresenceRoom(ports);publish();await advance(1000);expect(sent.at(-1)?.readers?.total).toBe(1);
+ await advance(44000);expect(sent.at(-1)?.readers?.total).toBe(0);expect(sent.at(-1)?.viewers).toEqual([]);
+ room.dispose();expect(timers.size).toBe(0);
+ }finally{timers.clear();}
 });
 it('closes explicitly on state overload instead of publishing a silently truncated count',async()=>{
  let receive=(_payload:string)=>{},closed=0;const sent:PresenceFrame[]=[];
