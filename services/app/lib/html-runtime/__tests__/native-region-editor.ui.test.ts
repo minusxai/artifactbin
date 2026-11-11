@@ -202,3 +202,59 @@ it('refuses an old page session before decoding or changing the saved DOM',()=>{
  expect(()=>mountRegionEditor({win:window,root,regionId:'synthetic-region',kind:'rich',clientId:100,state:createRegionState('rich','<p>Old</p>').state,post})).toThrow('Legacy page editor retired');
  expect(root.innerHTML).toBe('<p>Saved legacy text</p>');expect(root.hasAttribute('data-af-region-editor')).toBe(false);
 });
+
+it('reports collapsed stored formatting immediately and clears it before plain peer text',()=>{
+ const root=document.createElement('article');document.body.append(root);
+ const messages:Parameters<import('../region-editor-contract').RegionEditorOptions['post']>[0][]=[];
+ const initial=createRegionState('rich-native-v1','<p>Text</p>').state;
+ let state=initial;
+ const peerRoot=document.createElement('article');document.body.append(peerRoot);
+ const b=mountRegionEditor({win:window,root:peerRoot,regionId:'synthetic',kind:'rich-native-v1',clientId:802,state:initial,post(){}});
+ cleanup.push(()=>{b.destroy();peerRoot.remove();});
+ const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId:801,state:initial,post:m=>{messages.push(m);if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,801).doc);b.remote([m.update]);}}});
+ cleanup.push(()=>{e.destroy();root.remove();});
+ e.view.focus();
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.atEnd(e.view.state.doc)));
+ e.command('strong');
+ expect(messages.filter(m=>m.kind==='region-caret').at(-1)?.marks).toContain('strong');
+ e.replay([{text:' bold'}]);
+ e.command('strong');
+ expect(messages.filter(m=>m.kind==='region-caret').at(-1)?.marks).not.toContain('strong');
+ e.replay([{text:' plain'}]);
+ expect(e.view.dom.querySelector('strong')?.textContent).toBe(' bold');
+ e.flush();expect(b.view.dom.querySelector('strong')?.textContent).toBe(' bold');
+ expect(b.view.state.doc.textContent).toBe('Text bold plain');
+});
+it('native mounted editable child replays buffered Enter as a separate paragraph',()=>{
+ const e=single('<p data-af-id="original">Before</p>');
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.atEnd(e.view.state.doc)));
+ e.replay([{text:' fastX'},{key:'Backspace'},{text:'Y'},{key:'Enter'},{text:'next-line'}]);
+ expect(e.view.dom.getAttribute('contenteditable')).toBe('true');
+ expect([...e.view.dom.children].map(n=>n.textContent)).toEqual(['Before fastY','next-line']);
+ expect(e.view.dom.children[1]?.getAttribute('data-af-id')).toBe('original');
+ expect(e.view.dom.children[0]?.hasAttribute('data-af-id')).toBe(false);
+});
+
+it('native task node view toggles and undoes while preserving validated peer typing',()=>{
+ const initial=createRegionState('rich-native-v1','<ul data-type="taskList"><li data-af-id="task" data-type="taskItem" data-checked="false"><p data-af-id="task-text">Task work</p></li></ul>').state;
+ let state=initial;
+ let a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{
+  const root=document.createElement('article');document.body.append(root);
+  const e=mountRegionEditor({win:window,root,regionId:'synthetic-task',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});
+  cleanup.push(()=>{e.destroy();root.remove();});return e;
+ };
+ a=make(901,()=>b);b=make(902,()=>a);
+ const checkbox=()=>a.view.dom.querySelector('li[data-checked] input[type="checkbox"]') as HTMLInputElement;
+ expect(checkbox()).not.toBeNull();checkbox().click();a.flush();
+ expect(b.view.dom.querySelector('input')?.checked).toBe(true);
+ let end=0;b.view.state.doc.descendants((node,pos)=>{if(node.isText)end=pos+node.nodeSize;});
+ b.view.dispatch(b.view.state.tr.insertText(' remote',end));b.flush();
+ a.command('undo');a.flush();
+ expect(checkbox().checked).toBe(false);expect(b.view.dom.querySelector('input')?.checked).toBe(false);
+ expect(b.view.state.doc.textContent).toBe('Task work remote');
+ a.command('redo');a.flush();expect(b.view.dom.querySelector('input')?.checked).toBe(true);
+ expect(b.view.dom.querySelector('li')?.getAttribute('data-af-id')).toBe('task');
+ expect(regionHtml('rich-native-v1',state)).toContain('data-checked="true"');
+ expect(regionHtml('rich-native-v1',state)).toContain('Task work remote');
+});

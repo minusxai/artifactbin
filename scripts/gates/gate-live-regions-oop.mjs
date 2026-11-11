@@ -5,7 +5,7 @@
  * frame in the app page's process, so its IME leg never crosses that boundary. This gate boots a server whose pages host
  * is `localhost` (documents at `<hex id>.localhost`, another site than the app at `app.lvh.me`; Chromium and Node resolve
  * it to loopback themselves), launches Chromium with site isolation as desktop Chrome has it (`--site-per-process`; the
- * headless shell leaves it off), and, with an owner (A) and an editor share (B) on one `data-af-editable="rich"` region:
+ * headless shell leaves it off), and, with an owner (A) and an editor share (B) on one `data-af-editable="rich-native-v1"` region:
  *
  *   1. the frame really is out of process: a CDP session attaches to the frame itself (Playwright refuses for a frame in
  *      its page's process), and its target is an `iframe` at the document's origin, which the browser lists as a target
@@ -33,7 +33,8 @@ const section = createSection(check);
 const started = performance.now();
 const stamp = Date.now().toString(36);
 const REGION = '[data-af-id="notes"]';
-const SOURCE = '<!doctype html><html><head><title>Live regions out of process</title></head><body style="padding:40px;font:18px/1.5 sans-serif;max-width:860px"><h1 data-af-id="title">Out of process</h1><article data-af-editable="rich" data-af-id="notes"><p data-af-id="p1">Owner line.</p><p data-af-id="p2">Editor line.</p></article></body></html>';
+const EDITOR = `${REGION} > [contenteditable="true"]`;
+const SOURCE = '<!doctype html><html><head><title>Live regions out of process</title></head><body style="padding:40px;font:18px/1.5 sans-serif;max-width:860px"><h1 data-af-id="title">Out of process</h1><article data-af-editable="rich-native-v1" data-af-id="notes"><p data-af-id="p1">Owner line.</p><p data-af-id="p2">Editor line.</p></article></body></html>';
 
 async function until(read, want, budgetMs = 10_000) {
   const end = Date.now() + budgetMs;
@@ -44,7 +45,10 @@ async function until(read, want, budgetMs = 10_000) {
 const textOf = (frame) => frame.locator(REGION).evaluate((node) => node.textContent ?? '');
 const both = (frames, ...parts) => Promise.all(frames.map((frame) => until(() => textOf(frame), (text) => parts.every((part) => text?.includes(part)), 15_000)));
 async function caretAtEnd(frame, page, selector) {
-  await frame.locator(selector).click();
+  // Splits retain the old identity on the right; find the original text after Enter.
+  const block = selector === '[data-af-id="p1"]' ? frame.locator(`${REGION} p`).filter({ hasText: 'Owner line.' }).first()
+    : selector === '[data-af-id="p2"]' ? frame.locator(`${REGION} p`).filter({ hasText: 'Editor line.' }).first() : frame.locator(selector);
+  await block.click();
   await page.keyboard.press('End');
 }
 /** The target a CDP session is attached to. */
@@ -110,8 +114,8 @@ try {
     check(await until(() => b.locator(REGION).getAttribute('tabindex'), (value) => value === '0') === '0', 'the editor\'s frame is told the region is editable');
     await caretAtEnd(a, A, '[data-af-id="p1"]');
     await caretAtEnd(b, B, '[data-af-id="p2"]');
-    check(await until(() => a.locator(REGION).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the owner\'s press mounts the editor');
-    check(await until(() => b.locator(REGION).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the editor\'s press mounts the editor');
+    check(await until(() => a.locator(EDITOR).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the owner\'s press mounts the editor');
+    check(await until(() => b.locator(EDITOR).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the editor\'s press mounts the editor');
     await Promise.all([A.keyboard.type(' alpha', { delay: 25 }), B.keyboard.type(' bravo', { delay: 25 })]);
     const [atA, atB] = await both([a, b], 'Owner line. alpha', 'Editor line. bravo');
     check(atA?.includes('Owner line. alpha') && atA?.includes('Editor line. bravo') && atB === atA, `both converge (${JSON.stringify(atB)})`);

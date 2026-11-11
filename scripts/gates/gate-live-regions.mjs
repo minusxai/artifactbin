@@ -1,5 +1,5 @@
 /**
- * Gate: LIVE REGIONS — two people edit one page's `data-af-editable="rich"` region at once, in real browsers, against
+ * Gate: LIVE REGIONS — two people edit one page's `data-af-editable="rich-native-v1"` region at once, in real browsers, against
  * the real server (lib/region-sessions), the parent's region client (artifact-backend/region-http, region-editing) and
  * the frame's editor (@afbin/regions). Three signed-in accounts: the owner (A), an editor share (B), a viewer share (C).
  *
@@ -32,6 +32,7 @@ import { performance } from 'node:perf_hooks';
 import { connectAgent } from './lib/account-connection.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { documentFrame } from './lib/page-facts.mjs';
+import { nativeRegionFacts, NATIVE_TASK_CHECKBOX } from './lib/native-region-facts.mjs';
 import { createChecker, createSection } from './lib/assert.mjs';
 import { sleep } from './lib/sleep.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
@@ -43,8 +44,9 @@ const section = createSection(check);
 const started = performance.now();
 const stamp = Date.now().toString(36);
 const REGION = '[data-af-id="notes"]';
+const EDITOR = `${REGION} > [contenteditable="true"]`;
 const page = (body) => `<!doctype html><html><head><title>Live regions</title></head><body style="padding:40px;font:18px/1.5 sans-serif;max-width:860px">${body}</body></html>`;
-const SOURCE = page('<h1 data-af-id="title">Live regions</h1><article data-af-editable="rich" data-af-id="notes"><p data-af-id="p1">Owner line.</p><p data-af-id="p2">Editor line.</p></article><p data-af-id="tail">Outside the region.</p>');
+const SOURCE = page('<h1 data-af-id="title">Live regions</h1><article data-af-editable="rich-native-v1" data-af-id="notes"><p data-af-id="p1">Owner line.</p><p data-af-id="p2">Editor line.</p></article><p data-af-id="tail">Outside the region.</p>');
 
 async function until(read, want, budgetMs = 10_000) {
   const end = Date.now() + budgetMs;
@@ -56,24 +58,27 @@ const textOf = (frame) => frame.locator(REGION).evaluate((node) => node.textCont
 const both = (frames, ...parts) => Promise.all(frames.map((frame) => until(() => textOf(frame), (text) => parts.every((part) => text?.includes(part)), 15_000)));
 /** The caret at the end of a block of the region (a press, then End). */
 async function caretAtEnd(frame, page, selector) {
-  await frame.locator(selector).click();
+  // Splits retain the old identity on the right; find the original text after Enter.
+  const block = selector === '[data-af-id="p1"]' ? frame.locator(`${REGION} p`).filter({ hasText: 'Owner line.' }).first()
+    : selector === '[data-af-id="p2"]' ? frame.locator(`${REGION} p`).filter({ hasText: 'Editor line.' }).first() : frame.locator(selector);
+  await block.click();
   await page.keyboard.press('End');
 }
 /** Every element inside the region as the editor draws it, as `tag[attr,…]` (the editor's own classes left out). */
-const regionShape = (frame) => frame.locator(REGION).evaluate((root) => [...root.querySelectorAll('*')].map((element) => {
+const regionShape = (frame) => frame.locator(REGION).evaluate((root) => [...(root.querySelector('[contenteditable="true"]') ?? root).querySelectorAll('*')].map((element) => {
   const attrs = [...element.attributes].map((attr) => attr.name).filter((name) => !(name === 'class' && /^ProseMirror-/.test(element.getAttribute('class') ?? '')));
   return `${element.tagName.toLowerCase()}${attrs.length ? `[${attrs.join(',')}]` : ''}`;
 }));
 /**
  * Region HTML holds only the region schema's elements, and of attributes only ids and links; the editor draws a list
- * item or a quoted block as a flat block with its structure in data attributes (live-regions schema editingAttrs).
+ * item and quoted block retain native nesting; task lists/items carry their serialized type and checked state.
  */
 const REGION_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'br', 'hr']);
-const SAVED_ATTRS = new Set(['data-af-id', 'href']);
+const SAVED_ATTRS = new Set(['data-af-id', 'href', 'data-type', 'data-checked']);
 const EDITING_ATTRS = new Set([...SAVED_ATTRS, 'data-list', 'data-depth', 'data-quote']);
 const foreign = (shape, allowed = EDITING_ATTRS) => shape.filter((entry) => {
   const [, tag, attrs = ''] = /^([^[]+)(?:\[(.*)\])?$/.exec(entry);
-  return !REGION_TAGS.has(tag) || attrs.split(',').filter(Boolean).some((name) => !allowed.has(name));
+  return !REGION_TAGS.has(tag) || attrs.split(',').filter(Boolean).some((name) => !allowed.has(name) || name === 'data-type' && !['ul', 'li'].includes(tag) || name === 'data-checked' && tag !== 'li');
 });
 /** The words of the region that sit inside a mark element (`strong`, `em`). */
 const marked = (frame, tag) => frame.locator(REGION).evaluate((root, tag) => [...root.querySelectorAll(tag)].map((element) => element.textContent), tag);
@@ -132,8 +137,8 @@ try {
     check(await until(() => b.locator(REGION).getAttribute('tabindex'), (value) => value === '0') === '0', 'the editor\'s frame is told the region is editable');
     await caretAtEnd(a, A, '[data-af-id="p1"]');
     await caretAtEnd(b, B, '[data-af-id="p2"]');
-    check(await until(() => a.locator(REGION).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the owner\'s press mounts the editor on the region');
-    check(await until(() => b.locator(REGION).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the editor\'s press mounts the editor on the region');
+    check(await until(() => a.locator(EDITOR).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the owner\'s press mounts the editor on the region');
+    check(await until(() => b.locator(EDITOR).getAttribute('contenteditable'), (value) => value === 'true') === 'true', 'the editor\'s press mounts the editor on the region');
     await Promise.all([A.keyboard.type(' alpha from the owner', { delay: 25 }), B.keyboard.type(' bravo from the editor', { delay: 25 })]);
     const [atA, atB] = await both([a, b], 'Owner line. alpha from the owner', 'Editor line. bravo from the editor');
     check(atA?.includes('alpha from the owner') && atA?.includes('bravo from the editor'), `the owner sees both people's typing (${JSON.stringify(atA)})`);
@@ -150,7 +155,7 @@ try {
     // No wait for the editor: the keys go at once (the press lands at the end of the line, the right of its box).
     const box = await b.locator('[data-af-id="p2"]').boundingBox();
     await b.locator('[data-af-id="p2"]').click({ position: { x: box.width - 4, y: box.height / 2 } });
-    const mountedAtFirstKey = await b.locator(REGION).getAttribute('contenteditable');
+    const mountedAtFirstKey = await b.locator(EDITOR).count() ? 'true' : null;
     await B.keyboard.type(' fastX');
     await B.keyboard.press('Backspace');
     await B.keyboard.type('Y');
@@ -159,7 +164,7 @@ try {
     check.note(`the editor was ${mountedAtFirstKey === 'true' ? 'already' : 'not yet'} mounted at the first key`);
     const [atB, atA] = await both([b, a], 'fastYnext-line');
     check(atB?.includes('bravo from the editor fastYnext-line') && !atB.includes('fastX'), `every key arrived, in order, Backspace and Enter included (${JSON.stringify(atB?.slice(-48))})`);
-    check(await b.locator(REGION).evaluate((root) => [...root.children].some((child) => child.textContent === 'next-line')), 'Enter made a new block');
+    check(await b.locator(REGION).evaluate((root) => [...root.querySelector('[contenteditable="true"]').children].some((child) => child.textContent === 'next-line')), 'Enter made a new block');
     check(atA === atB, 'the owner converges on the same text');
     check(await b.locator('textarea[data-af="region-keys"]').count() === 0, 'nothing of the key buffer is left in the page');
   });
@@ -223,10 +228,10 @@ try {
     // A viewer is never told a region is editable, so its press asks for nothing: no key buffer is put in, no request
     // goes (the last leg checks the viewer's region traffic) and its keys reach no editor. All of it happens at the
     // press and the keys themselves, and nothing the editors typed is still on its way, so it is read at once.
-    await c.locator('[data-af-id="p1"]').click();
+    await c.locator(REGION).click({ position: { x: 4, y: 4 } });
     await C.keyboard.type('viewer keys');
     check(await c.locator('textarea[data-af="region-keys"]').count() === 0, 'a viewer\'s press holds no keys for an editor');
-    check(await c.locator(REGION).getAttribute('contenteditable') === null && await c.locator(REGION).getAttribute('tabindex') === null, 'a viewer\'s press mounts no editor');
+    check(await c.locator(`${REGION} [contenteditable="true"]`).count() === 0 && await c.locator(REGION).getAttribute('tabindex') === null, 'a viewer\'s press mounts no editor');
     const after = await textOf(c);
     check(after === text && !after.includes('viewer keys'), `a viewer's keys change nothing (${JSON.stringify(after.slice(-48))})`);
   });
@@ -349,7 +354,8 @@ try {
     await both([a], 'typing-after-read');
     const written = await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-agent-write-${stamp}` }, body: JSON.stringify({ markdown: `${read.markdown}\n\nAgent line from **Markdown**.`, base_version: read.version }) });
     check(written.version === read.version + 1, `the agent's write is saved as one new version (v${read.version} → v${written.version})`);
-    check(written.html.includes('Agent line from <strong>Markdown</strong>.') && written.html.split('typing-before-agent').length === 2 && written.html.includes('typing-after-read'), 'the version the agent saved holds its line and all of B\'s typing, none of it twice');
+    const facts = nativeRegionFacts(written.html);
+    check(facts.text.includes('Agent line from Markdown.') && facts.strong.includes('Markdown') && facts.text.split('typing-before-agent').length === 2 && facts.text.includes('typing-after-read'), 'the version the agent saved holds its line and all of B\'s typing, none of it twice');
     const [atA, atB] = await both([a, b], 'Agent line from Markdown.', 'typing-before-agent');
     check(atA === atB && atB?.includes('Agent line from Markdown.') && atB?.includes('typing-before-agent'), 'both open editors show the agent\'s line and keep B\'s typing');
     check((await marked(b, 'strong')).includes('Markdown'), 'the agent\'s Markdown bold arrives as bold');
@@ -360,30 +366,30 @@ try {
   await section('task checkbox typing, peer toggle, undo and saved readonly semantics', async () => {
     const read = await api('/regions/_doc?format=markdown');
     await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-task-${stamp}` }, body: JSON.stringify({ markdown: `${read.markdown}\n\n- [ ] Task work`, base_version: read.version }) });
-    const task = (frame) => frame.locator(`${REGION} input[aria-label="Task completed"]`);
+    const task = (frame) => frame.locator(`${EDITOR} ${NATIVE_TASK_CHECKBOX}`);
     await task(a).waitFor(); await task(b).waitFor();
-    const blockId = await task(a).evaluate((node) => node.parentElement.getAttribute('data-af-id'));
+    const blockId = await task(a).evaluate((node) => node.closest('li').getAttribute('data-af-id'));
     await task(a).check();
     check(await until(() => task(b).isChecked(), Boolean) === true, 'a real checkbox click reaches the other editor');
-    await caretAtEnd(b, B, `[data-af-id="${blockId}"]`);
+    await caretAtEnd(b, B, `[data-af-id="${blockId}"] p`);
     await B.keyboard.type(' remote');
     await both([a, b], 'Task work remote');
     // Undo belongs to A even while B types; focus A without changing its history.
-    await caretAtEnd(a, A, `[data-af-id="${blockId}"]`);
+    await caretAtEnd(a, A, `[data-af-id="${blockId}"] p`);
     await A.keyboard.press('ControlOrMeta+z');
     check(await until(() => task(a).isChecked(), (value) => value === false) === false, 'undo after peer typing restores the checkbox');
     check(await until(() => task(b).isChecked(), (value) => value === false) === false, 'checkbox undo converges at the peer');
     check((await textOf(a)).includes('Task work remote'), 'undo keeps the peer text');
     await A.keyboard.press('ControlOrMeta+Shift+z');
     check(await until(() => task(b).isChecked(), Boolean) === true, 'redo reaches the peer');
-    check(await task(a).evaluate((node) => node.parentElement.getAttribute('data-af-id')) === blockId, 'toggle and undo preserve the task block id');
+    check(await task(a).evaluate((node) => node.closest('li').getAttribute('data-af-id')) === blockId, 'toggle and undo preserve the task block id');
     const saved = await api('/regions/_doc?format=markdown');
     check(saved.markdown.includes('[x] Task work remote'), 'saved Markdown retains the checked task and peer text');
     await C.reload({ waitUntil: 'load' });
     c = await documentFrame(C);
-    const readonly = c.locator(`${REGION} li[role="checkbox"]`);
+    const readonly = c.locator(`${REGION} li[data-type="taskItem"]`);
     await readonly.waitFor();
-    check(await readonly.getAttribute('aria-checked') === 'true' && await readonly.getAttribute('aria-disabled') === 'true', 'the viewer gets checked, disabled saved semantics');
+    check(await readonly.getAttribute('data-checked') === 'true' && await c.locator(`${REGION} [contenteditable="true"]`).count() === 0, 'the viewer gets checked native task semantics with no editing surface');
     check(await c.locator(`${REGION} input`).count() === 0, 'the viewer has no interactive checkbox');
     // Remove this fixture so the existing canonical-shape checks keep their original coverage.
     await api('/regions/_doc', { method: 'PUT', headers: { 'Idempotency-Key': `gate-task-clean-${stamp}` }, body: JSON.stringify({ markdown: saved.markdown.replace(/\n*[-*+] \[x\] Task work remote\s*$/, ''), base_version: saved.version }) });
@@ -441,7 +447,7 @@ try {
     check(foreign(savedShape(saved), SAVED_ATTRS).length === 0, `the saved region is region HTML only (${foreign(savedShape(saved), SAVED_ATTRS).join(' ') || 'clean'})`);
     check(['Word item', 'Docs item', 'online-A', 'offline-B', 'ime:仮名', 'Owner PUT line.', 'Agent line from'].every((part) => saved.includes(part)), 'every leg\'s text is in the saved version');
     check(traffic.get(C).length === 0, `the viewer made no region request (${traffic.get(C).map((entry) => entry.url).join(' ') || 'none'})`);
-    check(await c.locator(REGION).getAttribute('contenteditable') === null, 'the viewer never had an editor');
+    check(await c.locator(`${REGION} [contenteditable="true"]`).count() === 0, 'the viewer never had an editor');
   });
 } finally {
   check.note(`gate time ${((performance.now() - started) / 1000).toFixed(1)} s`);
