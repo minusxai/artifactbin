@@ -8,8 +8,8 @@ import type { Capability } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
-import {publicCatalogOf} from '@/lib/datasets';
-import {datasetReadAccess} from '@/lib/dataset-permissions';
+import {liveConnectionOf,publicCatalogOf} from '@/lib/datasets';
+import {datasetReadAccess,datasetRole} from '@/lib/dataset-permissions';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 
 /**
@@ -31,6 +31,8 @@ export async function canReadArtifact(
     if(!dataset)return false;
     // A dataset is read by its dataset role and select rules (lib/dataset-permissions): admission only; a door
     // serving rows asks `datasetReadAccess` itself for the role view.
+    // A LIVE dataset's sharing alone admits its page (connector, host, database); its rules decide who runs declared queries.
+    if(dataset.format==='dataset'&&liveConnectionOf(dataset.meta))return (await datasetRole(dataset,reader))!==null;
     if(dataset.format==='dataset')return (await datasetReadAccess(dataset,reader)).allowed;
   }
   // One decision, asked one way: reading is simply the bottom of the lattice.
@@ -59,7 +61,7 @@ interface ReadableArtifact<T extends ArtifactHeader> { row:T; role:ArtifactRole 
 async function readableRow<T extends ArtifactHeader>(actor:AccessActor,row:T|null):Promise<ReadableArtifact<T>|null>{
  if(!row)return null;
  const role=await effectiveRole(row,actor);
- if(row.format==='dataset')return (await datasetReadAccess(row,actor)).allowed?{row,role:role==='none'?'viewer':role}:null;
+ if(row.format==='dataset')return (liveConnectionOf(row.meta)?(await datasetRole(row,actor))!==null:(await datasetReadAccess(row,actor)).allowed)?{row,role:role==='none'?'viewer':role}:null;
  return canRead(role)?{row,role}:null;
 }
 /** Read access never implies access to the editable governance or connection definition. */

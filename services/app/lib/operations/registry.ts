@@ -128,6 +128,7 @@ const CONTENT_FIELDS = {
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
+  connection: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('A LIVE dataset: one connector configuration, {"connector":"postgres", host, port, database, user, password, tls, ca} (GET /api/connections lists the connectors and their fields). Its secret fields are stored encrypted and never returned; the rows stay in the database. Create only: change it with PATCH /api/artifacts/ID/connection.'),
   columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date', 'timestamp']), choices:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(100).optional() })).optional().describe('dataset: declared column types (win over inference)'),
   viz: z.record(z.string(), z.unknown()).optional().describe('viz tier: a recipe {description, engine, bindings, params?, template} with {{slot}} tokens'),
   image: z.string().optional().describe('image tier: a base64 data: URL (png|jpeg|webp|gif|svg+xml)'),

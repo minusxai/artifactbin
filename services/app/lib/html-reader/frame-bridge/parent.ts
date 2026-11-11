@@ -173,15 +173,16 @@ function relayedSql(url: URL, request: { headers: unknown; body: unknown }, html
   let input: unknown;
   try { input = JSON.parse(request.body); } catch { return null; }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  const { sql, params = {} } = input as { sql?: unknown; params?: unknown };
-  if (typeof sql !== 'string' || !params || typeof params !== 'object' || Array.isArray(params)) return null;
+  // `{sql}` a statement, or `{query}` a declared query's name (never both): the server decides what either may do.
+  const { sql, query, params = {} } = input as { sql?: unknown; query?: unknown; params?: unknown };
+  if ((typeof sql === 'string') === (typeof query === 'string') || !params || typeof params !== 'object' || Array.isArray(params)) return null;
   const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries((request.headers && typeof request.headers === 'object' ? request.headers : {}) as Record<string, unknown>)) {
     if (typeof value !== 'string') continue;
     if (SENT_HEADERS.includes(name.toLowerCase())) headers[name] = value;
     else if (name.toLowerCase() === 'idempotency-key' && IDEMPOTENCY_KEY.test(value)) headers['Idempotency-Key'] = value;
   }
-  return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ sql, params, revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
+  return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ ...(typeof query === 'string' ? { query } : { sql }), params, revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
 }
 
 export function createFrameBridgeParent(options: FrameBridgeParentOptions): FrameBridgeParent {

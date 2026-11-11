@@ -11,8 +11,22 @@ export type HtmlDatasetLink = { kind: 'dataset'; name: string; datasetId: string
  * dataset (contracts `ConnectorSpec.namespace`).
  */
 export interface HtmlDefaultConnectionLink { kind: 'default-connection'; name: string; namespace: string }
-export type HtmlPageLink = HtmlDatasetLink | HtmlDefaultConnectionLink;
+/**
+ * A LIVE DATASET (a dataset whose content is a database connection), linked like any dataset,
+ * `<link rel="af-dataset" data-af-name="NAME" href="ref:ID">`: publish records it as this kind, always live (a
+ * connection has no row revisions to pin).
+ */
+export interface HtmlLiveDatasetLink { kind: 'live-dataset'; name: string; datasetId: string }
+export type HtmlPageLink = HtmlDatasetLink | HtmlDefaultConnectionLink | HtmlLiveDatasetLink;
+/**
+ * A DECLARED QUERY: `<script type="application/sql" data-af-query="NAME" data-af-dataset="LINK">SQL</script>` in the
+ * published source, recorded by publish per page version (meta `htmlQueries`) after checking the publisher may edit
+ * the live dataset `link` names. Readers run it by `name` (`sql.query(name, params)`), never by its text.
+ */
+export interface HtmlDeclaredQuery { name: string; link: string; sql: string }
 export interface HtmlPageVersion {
   pageId: string; version: number; revision: string; html: string;
   nextNodeId: number; links: readonly HtmlPageLink[];
+  /** The version's declared queries (meta `htmlQueries`). */
+  queries: readonly HtmlDeclaredQuery[];
 }

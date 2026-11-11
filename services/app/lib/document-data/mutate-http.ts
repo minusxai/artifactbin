@@ -1,3 +1,4 @@
+import { LIVE_DATASET_REFUSAL, liveConnectionOf } from '@/lib/datasets';
 /**
  * THE DATASET WRITE DOOR over HTTP: the owner's direct statement against a dataset they may write, and
  * a document's declared mutation run by name (the bearer twin of the page door). Both answer the same
@@ -49,6 +50,7 @@ export async function respondToMutate(
   // does not edit is the uniform 404.
   const dataset = found&&await canWriteDataset(found,actor)===null?found:await getArtifactFor(actor,id);
   if (!dataset) return json({ error: 'not_found' }, 404);
+  if (dataset.format === 'dataset' && liveConnectionOf(dataset.meta)) return json({ error: 'live_dataset', message: LIVE_DATASET_REFUSAL }, 400);
 
   const refusal = await canWriteDataset(dataset, actor);
   if (refusal === 'not_a_dataset') {

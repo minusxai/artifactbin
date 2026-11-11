@@ -8,8 +8,10 @@ import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import {pageDatasetRoots} from '@/lib/graphql-compat';
-import type {HtmlDatasetLink,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlLiveDatasetLink} from '@artifactbin/contracts';
 import {hasDefaultConnection} from '@/lib/connections';
+import {LiveDatasetRefusal,livePageDeclarations,prepareLiveDataset,withoutSecrets} from '@/lib/live-datasets';
+import {liveConnectionOf} from '@/lib/datasets';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
  * auth modes and the operations registry run over one pipeline. Story owns the
@@ -35,17 +37,26 @@ async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:str
  });return json(saved.body,saved.status);
 }
 
-async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[]|undefined|Response>{
+/** A page's data links (stored, live and default-connection) and its declared queries, as publish records them. */
+type HtmlDataLinks=readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveDatasetLink)[];
+/**
+ * `actor` authorizes the stored links (the page's owner on a replace); `publisher`, the person saving, must own or
+ * edit each live dataset the page declares queries on (lib/live-datasets).
+ */
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor,publisher:AccessActor):Promise<{links:HtmlDataLinks;queries:HtmlDeclaredQuery[]}|undefined|Response>{
  if(typeof body.html!=='string')return undefined;
  try{
-  const {datasets,connections}=htmlPageDeclarations(body.html);
+  const {datasets:declared,connections,queries:written}=htmlPageDeclarations(body.html);
   // `default:` reads the install's default connection: refused where the install has none.
   if(connections.length&&!hasDefaultConnection())return json({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
+  const {links,queries}=await livePageDeclarations(publisher,declared,written);
+  const datasets=links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
   const collision=await graphqlRootCollision(actor,datasets);
   if(collision)return json({error:'graphql_root_collision',details:[collision]},400);
-  return [...datasets,...connections];
+  return {links:[...links,...connections],queries};
  }catch(error){
+  if(error instanceof LiveDatasetRefusal)return json(error.body,error.status);
   if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
   return json({error:'invalid_dataset_binding'},400);
  }
@@ -81,7 +92,7 @@ function parseGraphqlName(body:Record<string,unknown>,parsed:{format:string;meta
  const refuse=(detail:string)=>json({error:'invalid_graphql_name',details:[detail]},400);
  const problem=graphqlRootNameProblem(body.name);if(problem)return refuse(problem);
  const catalog=catalogOf(parsed);
- if(parsed.format!=='dataset')return refuse('name sets the GraphQL root of a new stored dataset (CSV or JSON rows)');
+ if(parsed.format!=='dataset'||liveConnectionOf(parsed.meta))return refuse('name sets the GraphQL root of a new stored dataset (CSV or JSON rows)');
  if((catalog?.tables.length??1)>1)return refuse('a multi-table dataset\'s GraphQL roots are its table names');
  if(forkedFrom)return refuse('a copy takes its GraphQL root from its title: drop name or forked_from');
  return body.name as string;
@@ -184,6 +195,9 @@ export async function replaceArtifactWithBody(
    * above gives: that parse FETCHES, and a refused write must not import the
    * caller's images on the way to being refused.
    */
+  if (liveConnectionOf(current.meta) && (CONTENT_FIELDS.some((f) => body[f] !== undefined) || body.connection !== undefined)) {
+    return json({ error: 'live_dataset_connection', message: 'A live dataset\'s content is its connection: change it with PATCH /api/artifacts/ID/connection (owner and editors); its rows stay in its database.' }, 400);
+  }
   if (current.format === 'folder') {
     if (CONTENT_FIELDS.some((f) => body[f] !== undefined)) {
       return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Only title, visibility and folder are editable, in the folder YAML you push'] }, 400);
@@ -237,13 +251,14 @@ export async function replaceArtifactWithBody(
 
   const changed = observedChange(current, expected);
   if (changed) return json(versionConflict(current, changed), 409);
-  const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
+  const htmlData=await prepareHtmlDatasets(body,owner,actor);if(htmlData instanceof Response)return htmlData;
+  const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
-    meta:{...parsed.meta,...(bundleSupplied?publicationRecord(bundleReceipts,bundleEntryPath):current.meta.htmlPublicationDependencies?publicationRecord(current.meta.htmlPublicationDependencies as unknown[],current.meta.htmlPublicationEntryPath):{})},
+    meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(bundleSupplied?publicationRecord(bundleReceipts,bundleEntryPath):current.meta.htmlPublicationDependencies?publicationRecord(current.meta.htmlPublicationDependencies as unknown[],current.meta.htmlPublicationEntryPath):{})},
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
     ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : parsed.format==='html'?{description:parsed.derivedDescription??null}:{}),
@@ -338,8 +353,14 @@ async function createArtifactFromBodyPrepared(
   }
   let receiptOwner:UserPagesOwner|null = null;
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup,receiptOwner);
+  // A live dataset (`connection`): its secret fields never reach the creation ledger's fingerprint.
+  let live:ReturnType<typeof prepareLiveDataset>|undefined;
+  if(body.connection!==undefined&&body.connection!==null){
+   if(CONTENT_FIELDS.some(field=>body[field]!==undefined&&body[field]!==null))return json({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
+   try{live=prepareLiveDataset(body.connection);}catch(error){if(error instanceof LiveDatasetRefusal)return json(error.body,error.status);throw error;}
+  }
   let operation;
-  try {operation = await creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}),request?.headers.get('X-Artifactbin-Account'));}
+  try {operation = await creationOperation(actor,base,request?.headers.get('Idempotency-Key'),live?{...body,connection:withoutSecrets(body.connection)}:body,row=>({status:201,body:responseBody(row)}),request?.headers.get('X-Artifactbin-Account'));}
   catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
   if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
@@ -358,7 +379,7 @@ async function createArtifactFromBodyPrepared(
   // A group publishes as the group: the creating token, no account, the group as owner (never the actor's grant).
   const publicationActor:AccessActor=destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
   const sentMarkup=body.markup;
-  const prepared = await prepareContentInput(body, {
+  const prepared: PreparedContent | Response = live ? {content:live.content,objects:[]} : await prepareContentInput(body, {
     creating: true,
     prepareDataset: (input,objects) => prepareCatalog(input,undefined,objects),
     loadRef: refLoaderForActor(publicationActor),
@@ -372,7 +393,8 @@ async function createArtifactFromBodyPrepared(
   if (access instanceof Response) return access;
   const graphqlName=parseGraphqlName(body,parsed,forkedFrom);if(graphqlName instanceof Response)return graphqlName;
 
-  const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
+  const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Response)return htmlData;
+  const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
@@ -380,7 +402,7 @@ async function createArtifactFromBodyPrepared(
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
-    meta:{...parsed.meta,...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
+    meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
     ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
     description: body.description===null || typeof body.description === 'string' ? body.description : parsed.derivedDescription??null,
@@ -388,7 +410,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

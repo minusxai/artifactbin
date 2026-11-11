@@ -1,3 +1,4 @@
+import { LIVE_DATASET_REFUSAL, liveConnectionOf } from '@/lib/datasets';
 /** Authorize and resolve an image, then redirect to a scoped persistent asset.
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/analytics';
@@ -31,6 +32,8 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   // hold, an unfurler with neither. Direct token ownership counts — an
   // unclaimed token's doc has no viewer.userId to match.
   const actor = await requestOrSessionActor(request);
+  // A live dataset has no rows here to photograph (lib/live-datasets).
+  if (artifact.format === 'dataset' && liveConnectionOf(artifact.meta)) return json({ error: 'live_dataset', message: LIVE_DATASET_REFUSAL }, 400);
   // A dataset's image renders every row (a keyed render): only for a role that sees it whole (lib/dataset-permissions).
   const authorized = holdsCreatingToken(artifact, actor) || (artifact.format === 'dataset' ? datasetExportable(await datasetReadAccess(artifact, actor)) : await canReadArtifact(artifact, actor));
   if (!authorized) return json({ error: 'not_found' }, 404);

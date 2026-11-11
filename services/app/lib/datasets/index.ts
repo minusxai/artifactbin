@@ -1,4 +1,6 @@
 /** The datasets module's interface: what code outside lib/datasets imports (rule 4, scripts/ci/module-graph.mjs). */
+export { LIVE_DATASET_REFUSAL, liveConnectionOf } from './catalog-metadata';
+export { LIVE_QUERY_TABLE, liveQueryRoles, liveRulesProblems } from './policy/live-rules';
 export { catalogOf, importedRows, importedTables, prepareCatalog, publicCatalogOf } from './catalog';
 export { publishDataset, publishImage, publishPdf, publishVizRecipe, storeImageContent, storePdfContent } from './data-tiers';
 export { loadDatasetRows, storeDatasetRows, storedRowCount } from './dataset-store';

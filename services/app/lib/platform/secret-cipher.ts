@@ -12,9 +12,12 @@ export interface SecretCipher {
   seal(value: string, context: readonly string[]): string;
   open(sealed: string, context: readonly string[]): string;
 }
-/** A cipher under `secret`; the key derivation label keeps it apart from every other use of that secret. */
-export function createSecretCipher(secret: string): SecretCipher {
-  const key = () => createHash('sha256').update('artifactbin/backend-secret/v1\0' + secret).digest();
+/**
+ * A cipher under `secret`; the key derivation `label` keeps it apart from every other use of that secret (each kind of
+ * stored secret has its own: a live dataset's connection is `artifactbin/dataset-connection/v1`).
+ */
+export function createSecretCipher(secret: string, label = 'artifactbin/backend-secret/v1'): SecretCipher {
+  const key = () => createHash('sha256').update(label + '\0' + secret).digest();
   const aad = (context: readonly string[]) => Buffer.from(JSON.stringify(context));
   return {
     seal(value, context) {
@@ -30,6 +33,9 @@ export function createSecretCipher(secret: string): SecretCipher {
     },
   };
 }
+/** This host's cipher for live dataset connections (lib/live-datasets), under its own label. */
+let connectionCipher: SecretCipher | undefined;
+export const datasetConnectionCipher = (): SecretCipher => (connectionCipher ??= createSecretCipher(AUTH_SECRET, 'artifactbin/dataset-connection/v1'));
 /** This host's cipher (AUTH__SECRET), created on first use. */
 let hostCipher: SecretCipher | undefined;
 export const secretCipher = (): SecretCipher => (hostCipher ??= createSecretCipher(AUTH_SECRET));

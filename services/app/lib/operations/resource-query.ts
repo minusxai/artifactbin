@@ -2,7 +2,8 @@ import { requestOrSessionActor } from '@/lib/authentication';
 import {createHash} from 'node:crypto';
 import { artifactState, readableArtifact } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
-import {catalogOf, executeCatalog, DatasetError} from '../datasets';
+import {catalogOf, executeCatalog, DatasetError, liveConnectionOf} from '../datasets';
+import {liveDatasetSql} from '@/lib/live-datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '../dataset-permissions';
 import {json, parseQueryRequest} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
@@ -17,6 +18,14 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
  await checkActor?.();
  const readable=await readableArtifact(actor,id);if(!readable)return json({error:'not_found'},404);
  const {row}=readable;const state=artifactState(row);
+ // A LIVE dataset (lib/live-datasets): its owner's or an editor's statement on its connection, every row it answers at once.
+ if(row.format==='dataset'&&liveConnectionOf(row.meta)){
+  if(typeof body.sql!=='string')return json({error:'invalid_query',hint:'A live dataset is read with SQL in its database\'s dialect (sql); its tables: GET /api/artifacts/ID/connection/schema.'},400);
+  if(body.cursor!==undefined)return json({error:'invalid_cursor',hint:'A live dataset answers every row at once (up to its row limit): page with LIMIT and OFFSET in the SQL.'},400);
+  const reply=await liveDatasetSql(actor,id,{sql:body.sql,params:parsed.values??{}},signal);
+  if(reply.status!==200)return json(reply.body,reply.status);
+  return json({results:[{id,name:'result',execution:'remote',columns:reply.body.columns,rows:reply.body.rows,next_cursor:null,...(reply.body.truncated?{truncated:true}:{})}]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+ }
  // A dataset is queried over the caller's role view (lib/dataset-permissions): the rows and columns their select rule shows.
  const decision=row.format==='dataset'?await datasetReadAccess(row,actor):null;
  if(decision&&!decision.allowed)return json({error:'not_found'},404);

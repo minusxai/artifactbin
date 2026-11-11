@@ -31,10 +31,10 @@ export function createDomainReadTransport(page:{pageId:string;revision:string},l
  */
 export function createDomainSql(page:{pageId:string;revision:string},location:Pick<Location,'href'>,send:typeof fetch){
  const key=new URL(location.href).searchParams.get('key');
- return async(request:{sql:string;params:Record<string,string|number|boolean|null>}):Promise<unknown>=>{
+ return async(request:{sql?:string;query?:string;params:Record<string,string|number|boolean|null>}):Promise<unknown>=>{
   if(!key)throw new RemoteUnreachable('sql runs in a page the app frames');
   let response:Response;
-  try{response=await send(new URL(`/api/artifacts/${encodeURIComponent(page.pageId)}/sql`,location.href),{method:'POST',credentials:'omit',redirect:'error',cache:'no-store',headers:{'content-type':'text/plain;charset=UTF-8'},body:JSON.stringify({sql:request.sql,params:request.params,revision:page.revision,readOnly:true,key})});}
+  try{response=await send(new URL(`/api/artifacts/${encodeURIComponent(page.pageId)}/sql`,location.href),{method:'POST',credentials:'omit',redirect:'error',cache:'no-store',headers:{'content-type':'text/plain;charset=UTF-8'},body:JSON.stringify({...(request.query!==undefined?{query:request.query}:{sql:request.sql}),params:request.params,revision:page.revision,readOnly:true,key})});}
   catch{throw new RemoteUnreachable('This page could not reach its data');}
   return response.json().catch(()=>({error:'unexpected',message:`Data request failed (${response.status})`}));
  };

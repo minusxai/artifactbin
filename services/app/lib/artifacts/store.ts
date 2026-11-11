@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regions';
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
-import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlLiveDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
@@ -20,7 +20,7 @@ import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import {normalizeNewHtmlPage} from './new-page';
 import { seedOwnerJoin } from '@/lib/social';
 import { claimArtifactId } from './identities';
-import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
+import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, liveConnectionOf, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
@@ -46,10 +46,20 @@ const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annota
 export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'content_publisher_user_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
+/** A new live dataset's connection (lib/live-datasets): its fields without secrets, and the secrets sealed to the new ID. */
+export interface LiveConnectionInsert { config: Record<string, unknown>; seal: (datasetId: string) => string | null }
+/**
+ * A live dataset's connection changed (lib/live-datasets, inside its locked transaction): the row shows the new summary
+ * (`meta.connection`); the version (row revisions, which a connection has none of) does not move.
+ */
+export async function setLiveDatasetSummary(tx: Queryable, id: string, summary: Record<string, unknown>): Promise<void> {
+  await tx.query(`UPDATE artifacts SET meta = jsonb_set(meta, '{connection}', $2::jsonb), updated_at = now() WHERE id = $1 AND format = 'dataset' AND meta ? 'connection'`, [id, JSON.stringify(summary)]);
+}
+
 export interface ArtifactInput {
   /** Server-prepared only; never decoded from caller metadata. */
   /** The page's dataset links and default-connection links, in source order. */
-  htmlDatasets?:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink)[];
+  htmlDatasets?:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveDatasetLink)[];
   destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
@@ -156,7 +166,7 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; graphqlName?: string; tx?: Queryable } = {},
+  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; graphqlName?: string; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
@@ -244,10 +254,12 @@ async function insertArtifact(
   // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
   // A GraphQL name (validated by the create door) is stored in that template's configuration, whatever the access.
   const named = atCreation.graphqlName !== undefined;
-  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset';
+  // A live dataset is born with no rules (lib/live-datasets): only its owner and editors may query it until one is set.
+  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset' && !liveConnectionOf(input.meta);
   if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
   const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
   if(input.format==='html'&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
+  if (!!atCreation.liveConnection !== !!liveConnectionOf(input.meta) || (atCreation.liveConnection && input.format !== 'dataset')) throw new Error('A live dataset is created with its connection, and only it');
   const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -303,6 +315,8 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[],created.rows[0].sharing_revision??0));
   await bindCurrentUserScopes(tx,created.rows[0]);
+  // A live dataset's connection is born with it, in this transaction: its secret fields sealed to this dataset's ID.
+  if (atCreation.liveConnection) await tx.query('INSERT INTO dataset_connections (dataset_id, config, sealed) VALUES ($1, $2::jsonb, $3)', [id, JSON.stringify(atCreation.liveConnection.config), atCreation.liveConnection.seal(id)]);
   if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];

@@ -1,6 +1,6 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
-import type {HtmlDatasetLink,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
+import {SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlDeclaredQuery,type HtmlDefaultConnectionLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
@@ -161,12 +161,27 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
  }
  return carried;
 }
+/** A declared query's name and the link it names; how many a page may declare. */
+const DECLARED_NAME=/^[_A-Za-z][_0-9A-Za-z]{0,63}$/,DECLARED_QUERIES_MAX=50;
 /** What may follow `default:`: empty, or the database the session opens, as written (`warehouse/finance`); never SQL text. */
 const DEFAULT_NAMESPACE=/^(?:[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127})?$/;
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
- const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const names=new Set<string>();
+ const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const queries:HtmlDeclaredQuery[]=[];const names=new Set<string>();
  for(const element of allElements(html).all){
+  // A declared query (a live dataset's, checked at publish): its name, the link it runs on, and its SQL text.
+  if(element.tagName==='script'&&(attribute(element,'type')??'').trim().toLowerCase()==='application/sql'&&attribute(element,'data-af-query')!==null){
+   const name=attribute(element,'data-af-query')!,link=attribute(element,'data-af-dataset');
+   if(!DECLARED_NAME.test(name))throw new Error('A declared query is named data-af-query="NAME" (letters, digits and _)');
+   if(!link||!DECLARED_NAME.test(link))throw new Error(`Declared query ${name} names the dataset link it runs on, data-af-dataset="NAME"`);
+   if(queries.some(query=>query.name===name))throw new Error(`Two declared queries are named ${name}`);
+   if(attribute(element,'src')!==null)throw new Error(`Declared query ${name} is written inline, never loaded from src`);
+   const sql=element.childNodes.map(node=>'value' in node?String(node.value):'').join('').trim();
+   if(!sql||new TextEncoder().encode(sql).length>SQL_READ_LIMITS.sqlBytes)throw new Error(`Declared query ${name} is one SQL statement of at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
+   queries.push({name,link,sql});
+   if(queries.length>DECLARED_QUERIES_MAX)throw new Error(`A page declares at most ${DECLARED_QUERIES_MAX} queries`);
+   continue;
+  }
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
   // A dataset link names one dataset, once.
@@ -190,7 +205,7 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
   else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'pinned',revision});
   else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
  }
- return {datasets,connections};
+ return {datasets,connections,queries};
 }
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{

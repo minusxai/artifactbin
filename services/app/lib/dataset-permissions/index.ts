@@ -12,4 +12,4 @@ export {
 export { storedPolicy, type StoredPolicy } from './stored-policy';
 export { filterAdmits } from './view';
 export { assertWriteCommit, canInsert, canUpdateCell, cellCheckAdmits, datasetWriteAccess, tableMutationPolicy, type DatasetWriteOptions } from './write';
-export { pageRole } from './role';
+export { datasetRole, pageRole } from './role';

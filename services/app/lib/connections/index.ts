@@ -62,7 +62,8 @@ export async function testDefaultConnection(actor: AccessActor & { userId: strin
 /** Closes the connection's sessions (process shutdown, tests). */
 export async function closeDefaultConnection(): Promise<void> { const c = current; current = null; await c?.connection.close(); }
 
-/** The person a query runs for: the account, its email and its groups' IDs, read now. */
+/** The person a query runs for: the account, its email and its groups' IDs, read now; nobody (null) without an account. */
+export async function connectorViewer(actor: AccessActor): Promise<ConnectorViewer | null> { return actor.userId ? viewerOf(actor) : null; }
 async function viewerOf(actor: AccessActor): Promise<ConnectorViewer> {
   const user = await getUserById(actor.userId!);
   const groups = (await listGroups(actor.userId!)).map((g) => g.id);
@@ -117,8 +118,8 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   try { named = qualifierNames(dialect, raw.sql); words = leadingWords(dialect, raw.sql); } catch { return null; }
   const used = defaults.filter((l) => named.has(l.name.toLowerCase()));
   if (!used.length) return null;
-  const stored = links.find((l) => (l.kind === 'dataset') && words.has(l.name.toLowerCase()));
-  if (stored) return reply(400, 'validation_failed', `a statement reads one source: ${used[0]!.name} is the install's default connection and ${stored.name} a stored dataset; query them separately`);
+  const stored = links.find((l) => (l.kind === 'dataset' || l.kind === 'live-dataset') && words.has(l.name.toLowerCase()));
+  if (stored) return reply(400, 'validation_failed', `a statement reads one source: ${used[0]!.name} is the install's default connection and ${stored.name} ${stored.kind === 'dataset' ? 'a stored dataset' : 'a live dataset'}; query them separately`);
   if (!actor.userId) return reply(403, 'permission_denied', `sign in to read ${used[0]!.name}: the default connection answers signed-in people only`);
   const call = checkedCall(raw);
   if ('status' in call) return call;

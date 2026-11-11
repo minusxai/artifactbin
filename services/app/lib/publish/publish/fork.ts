@@ -4,7 +4,8 @@ import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/data
 import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';
-import { DatasetError } from '@/lib/datasets';
+import { DatasetError, liveConnectionOf } from '@/lib/datasets';
+import { assertDeclaredQueriesCopyable, LiveDatasetRefusal } from '@/lib/live-datasets';
 import { datasetReadAccess } from '@/lib/dataset-permissions';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { trackEvent } from '@/lib/analytics';
@@ -86,6 +87,8 @@ export async function forkArtifact(
    */
   const unforkable = forkRefusal(source);
   if (unforkable) return unforkable;
+  // A page's declared queries on a live dataset are copied only by someone who may declare them (lib/live-datasets).
+  if (source.format === 'html') { try { await assertDeclaredQueriesCopyable(creator, source); } catch (error) { if (error instanceof LiveDatasetRefusal) return json(error.body, error.status); throw error; } }
   /*
    * A DATASET COPIES WHAT THE FORKER MAY READ: their role view (lib/dataset-permissions). Owner and editor (and the
    * creating token) copy it whole with its policy; any other reader that sees it whole gets the read-only template
@@ -125,6 +128,9 @@ export async function forkArtifact(
 export function forkRefusal(source: ArtifactRow): Response | null {
   if (source.format === 'folder') {
     return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
+  }
+  if (liveConnectionOf(source.meta)) {
+    return json({ error: 'not_forkable', hint: 'a live dataset cannot be copied (its connection holds a secret): create a new live dataset with the connection you want' }, 400);
   }
   return null;
 }

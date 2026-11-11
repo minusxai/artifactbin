@@ -631,6 +631,25 @@ ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_token_id TEX
 
 ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.dataset_connections (
+  dataset_id TEXT NOT NULL,
+  config JSONB NOT NULL,
+  sealed TEXT,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (dataset_id)
+);
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS dataset_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS config JSONB NOT NULL;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS sealed TEXT;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.dataset_usage (
   bucket TEXT NOT NULL,
   calls INTEGER NOT NULL DEFAULT 0,

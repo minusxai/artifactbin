@@ -19,7 +19,7 @@ import {
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, transactionAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
-import { catalogOf, DatasetError, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
+import { catalogOf, DatasetError, LIVE_QUERY_TABLE, liveConnectionOf, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
 import { datasetRole, type DatasetRoleRow } from './role';
 import { storedPolicy } from './stored-policy';
 import { sessionRead, shows, unrestricted, viewRows, type DatasetSession } from './view';
@@ -61,6 +61,8 @@ const same = (a: DatasetTableName, b: DatasetTableName) => a.schema === b.schema
 
 /** The dataset's catalog tables (a flat dataset's one `public.rows`) and their declared source columns. */
 function tablesOf(row: Pick<ArtifactRow, 'meta'>): Array<DatasetTableName & { columns: string[] }> {
+  // A live dataset's one rule table: a select entry on it lets that role run the declared queries of pages.
+  if (liveConnectionOf(row.meta)) return [{ ...LIVE_QUERY_TABLE, columns: [] }];
   const flat = ((row.meta as { columns?: Array<{ name: string }> } | null)?.columns ?? []).map((c) => c.name);
   return catalogOf(row)?.tables.map(({ schema, name, columns }) => ({ schema, name, columns: columns.map((c) => c.name) })) ?? [{ schema: 'public', name: 'rows', columns: flat }];
 }
@@ -84,7 +86,7 @@ export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor,
     ...(options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
   if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
-  const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row).map(({ schema, name }) => ({ schema, name })) });
+  const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row).map(({ schema, name }) => ({ schema, name })), live: !!liveConnectionOf(row.meta) });
   if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) return { allowed: false, role };
   const tables = tablesOf(row).map((table): TableSelect => {
     const entry = read.policy.tables.find((t) => same(t.table, table))?.select_permissions?.find((e) => e.role === (role as DatasetRuleRole));

@@ -9,6 +9,7 @@ import { canReadArtifact, getArtifactHeaderById, accessMoved, readableArtifactHe
 import {readHtmlPage} from '@/lib/html-publication';
 import {executePageSql,type PageCommitGuard} from '@/lib/dataset-access';
 import {pageConnectionSql} from '@/lib/connections';
+import {pageLiveDatasetSql} from '@/lib/live-datasets';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 import {DatasetError} from '@/lib/datasets';
 import {runWithRequest} from '@/lib/platform';
@@ -117,8 +118,9 @@ async function answerSql(request:Request,pageId:string,reader?:AccessActor):Prom
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   for(let attempt=1;;attempt++){
    try{
-    // A statement naming a default-connection link runs wholly on the install's connection (lib/connections).
-    const reply=await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
+    // A declared query, or a statement naming a live dataset link, runs on that dataset's connection (lib/live-datasets);
+    // one naming a default-connection link wholly on the install's connection (lib/connections).
+    const reply=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
     await verifyPage(page.revision);
     // The last guard: nothing past the SQL output budget leaves, however it was produced.

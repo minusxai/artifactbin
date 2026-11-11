@@ -26,7 +26,7 @@ import {cspExtensionsFor} from '@/lib/trust';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, parseByteRange, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/lib/datasets';
+import { LIVE_DATASET_REFUSAL, liveConnectionOf, loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/lib/datasets';
 import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-permissions';
 import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { Readable } from 'node:stream';
@@ -220,6 +220,9 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':
     {
+      // A live dataset's raw view is its connection's summary (never a secret): its rows stay in its database.
+      const live=liveConnectionOf(artifact.meta);
+      if(live)return new Response(JSON.stringify({connection:live,message:LIVE_DATASET_REFUSAL}),{headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
       const catalog=catalogOf(artifact);
       const legacyFlat=catalog?.kind==='stored'&&catalog.tables.length===1&&catalog.tables[0].schema==='public'&&catalog.tables[0].name==='rows'&&typeof (artifact.meta as Record<string,unknown>).objectKey==='string';
       // The reader's role view (lib/dataset-permissions); the creating token and a verified export key read whole.

@@ -2,13 +2,15 @@ import type {DatasetPermissions,DatasetPermissionsIssue,DatasetPermissionsShape}
 import {datasetPermissionsTemplate,validateDatasetPermissions} from '@artifactbin/utils/dataset-permissions';
 import type {DatasetHost} from '@/lib/datasets/types';
 import {catalogOf} from '@/lib/datasets/catalog';
+import {liveConnectionOf} from '@/lib/datasets/catalog-metadata';
+import {LIVE_QUERY_TABLE,liveRulesProblems} from './live-rules';
 import {storedConfiguration} from '@/lib/datasets/graphql-names';
 
 /** The refusal a retired version 1/2 body (any object that is not version 3) gets from every policy-setting door. */
 export const LEGACY_POLICY_REFUSED = 'Version 1 and 2 dataset policies can no longer be set: send a version 3 policy, {"version":3,"tables":[{"table":{"schema":"public","name":"rows"},"select_permissions":[{"role":"viewer","permission":{"columns":"*","filter":{}}}]}]}, with Hasura permission entries for the roles viewer, signed_in and anonymous (owner and editors always have full access). GET the policy for the dataset\'s tables and current rules.';
 
 type PolicyRow = Pick<DatasetHost,'format'|'meta'|'dataset_policy'>;
-const tablesOf = (row:PolicyRow) => catalogOf(row)?.tables ?? [{schema:'public',name:'rows',columns:(row.meta.columns ?? []) as Array<{ name: string }>}];
+const tablesOf = (row:PolicyRow) => liveConnectionOf(row.meta) ? [{...LIVE_QUERY_TABLE,columns:[] as Array<{ name: string }>}] : catalogOf(row)?.tables ?? [{schema:'public',name:'rows',columns:(row.meta.columns ?? []) as Array<{ name: string }>}];
 const shapeOf = (row:PolicyRow):DatasetPermissionsShape => ({tables:tablesOf(row).map(t=>({table:{schema:t.schema,name:t.name},columns:t.columns.map(c=>c.name)}))});
 const isV3 = (value:unknown) => !!value && typeof value==='object' && (value as {version?:unknown}).version===3;
 
@@ -50,6 +52,8 @@ function requireStoredDataset(row:PolicyRow) {
 function validateV3(row:PolicyRow,value:unknown):DatasetPermissions {
  const result=validateDatasetPermissions(value,shapeOf(row));
  if(!result.ok)throw new Error(result.errors.map(e=>`${e.path}: ${e.message}`).join('; '));
+ const live=liveConnectionOf(row.meta)?liveRulesProblems(result.policy):[];
+ if(live.length)throw new Error(live.map(e=>`${e.path}: ${e.message}`).join('; '));
  return result.policy;
 }
 

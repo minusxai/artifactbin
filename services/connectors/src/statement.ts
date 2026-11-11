@@ -106,6 +106,26 @@ export function bindStatement(dialect: ConnectorDialect, text: string, params: R
   return { text: out, values, names: order };
 }
 
+/**
+ * `:name` parameters (a live dataset's SQL, as people write it in most SQL tools) as `$name`, read from the tokens: a
+ * `:` directly followed by a name, and neither directly after nor before another `:` (Postgres `x::text` is a cast),
+ * outside literals, quoted identifiers and comments. Everything else is kept byte for byte, so `bindStatement` then
+ * binds both spellings. Answers the text and the names it used.
+ */
+export function colonParameters(dialect: ConnectorDialect, text: string): { text: string; names: string[] } {
+  const tokens = tokenize(dialect, text), names: string[] = [];
+  let out = '';
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!, next = tokens[i + 1];
+    if (t.kind === 'punct' && t.text === ':' && tokens[i - 1]?.text !== ':' && next?.kind === 'word' && PARAM_NAME.exec(next.text)?.[0] === next.text) {
+      out += `$${next.text}`; if (!names.includes(next.text)) names.push(next.text); i++; continue;
+    }
+    if (t.kind === 'param') { const name = t.text.slice(1); if (!names.includes(name)) names.push(name); }
+    out += t.text;
+  }
+  return { text: out, names };
+}
+
 const READS: Record<ConnectorDialect, ReadonlySet<string>> = {
   postgres: new Set(['select', 'with', 'values', 'table', 'show', 'explain']),
   mysql: new Set(['select', 'with', 'values', 'table', 'show', 'explain', 'describe', 'desc']),
