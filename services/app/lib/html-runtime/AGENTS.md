@@ -28,6 +28,8 @@ build that serve them. Access decisions belong to the doors behind the trusted p
 - A new `@afbin/*` module: its build in `build.server.ts`, its path in `RUNTIME_MODULE_PATHS` (`contract.ts`),
   its import-map entry in the core, a size test; runtime modules reach it by dynamic `import()`, as
   `browser-client.ts` loads `browser-state.ts`, so a page with an older core reaches the skew guard and reloads.
+- `/af/host.js` (`lib/html-reader/host-shell`, the parent half of the bridge for a shell on the app's origin) is
+  built here but is no `@afbin/*` module: no import-map entry, no skew guard, its own size test.
 - The index is imported by browser, archive and fast-lane code: node-only code (esbuild, Babel, Tailwind,
   `node:*`) enters through `server.ts`, which browser-bundled code may not import.
 

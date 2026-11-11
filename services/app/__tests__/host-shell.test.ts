@@ -24,6 +24,7 @@ import { openFrameDoor } from '@/lib/html-runtime/frame-door';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 import { createAppServer } from '../server/app';
 import { mintAccountToken, useAppHarness } from './harness';
+import { guideExamples } from '@/test/helpers/skill-docs';
 
 /** This deployment's pages site, as the frame endpoint reads it: the app's public origin frames its documents. */
 const site = pagesSite();
@@ -148,6 +149,39 @@ describe('a host page on the app\'s own origin', () => {
     const who = await doc.fetchThrough(`/api/artifacts/${w.publicPage}/fn/whoami`, 'GET', null);
     expect(who.body.principal).toEqual({ tenant: w.publicPage, subject: null, role: 'anonymous' });
     mounted.destroy();
+  });
+});
+
+describe('the host-page guide\'s example', () => {
+  it('mounts a document as written, on a host page at the app\'s origin', async () => {
+    const w = world();
+    const [example] = guideExamples('host-pages', 'A document in a shell on the app\'s origin', 'js', APP);
+    expect(example).toMatch(/^import \{ mountDocument \} from '\/af\/host\.js';\n/);
+    // The module the example imports is the one this test exercises, at the address it names.
+    const served = await app.request(`${APP}/af/host.js`);
+    expect(served.status).toBe(200);
+    expect(await served.text()).toContain('mountDocument');
+    const { win } = hostPage(session(w.owner));
+    win.document.body.insertAdjacentHTML('beforeend', '<section id="doc"></section>');
+    const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...values: unknown[]) => Promise<void>;
+    const body = example!.replace(/^import .*\n/, '');
+    const selections: unknown[] = [];
+    const logged = { log: (value: unknown) => selections.push(value) };
+    const run = new AsyncFunction('mountDocument', 'document', 'documentId', 'console', body);
+    await run((container: HTMLElement, options: { id: string }) => mountDocument(container, options, win), win.document, w.privatePage, logged);
+    const frame = win.document.querySelector('#doc > iframe') as HTMLIFrameElement;
+    expect(new URL(frame.src).origin).toBe(pagesOriginFor(w.privatePage, site));
+    // Its selection listener hears the frame's answer to its `select`.
+    const posted: Array<{ key: string; payload: { kind: string } }> = [];
+    frame.contentWindow!.postMessage = ((message: never) => { posted.push(message); }) as Window['postMessage'];
+    const fromFrame = (data: unknown) => win.dispatchEvent(new win.MessageEvent('message', { data, origin: pagesOriginFor(w.privatePage, site), source: frame.contentWindow }));
+    fromFrame({ type: STORY_FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } });
+    const key = posted.find((message) => message.payload.kind === 'attach')!.key;
+    fromFrame({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'ready', nonce: 'r'.repeat(16) } });
+    const commands = posted.filter((message) => message.payload.kind === 'send').map((message) => (message.payload as { command: { type: string } }).command.type);
+    expect(commands).toEqual(['mx:reader-mode', 'mx:select']);
+    fromFrame({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'event', event: { type: 'mx:selection', nonce: 'r'.repeat(16), selection: { path: 'title' } } } });
+    expect(selections).toEqual([{ path: 'title' }]);
   });
 });
 

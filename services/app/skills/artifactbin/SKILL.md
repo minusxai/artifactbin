@@ -214,6 +214,9 @@ DOM and the page's design-system tokens and carry no credentials. Decks use `exa
 | Data/media | `af-data-table`, `af-file-upload`; typing in a dataset cell together: `@afbin/collab`
   ([datasets](references/datasets.md#type-together-afbincollab)) |
 
+The same components and design systems in another web shell, outside any page:
+[host pages](references/host-pages.md).
+
 For charts, maps and diagrams, use the direct library APIs rather than a custom element:
 
 | Need | Guide |
