@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { librariesFresh, recordLibraries, recordServerReader, repoRelative, serverReaderFresh, stampInputs, withComponentGraph } from './server-reader-cache.mjs';
+import { librariesFresh, recordLibraries, recordServerReader, repoRelative, serverReaderFresh, stampInputs, stampLibraryInputs, withComponentGraph } from './server-reader-cache.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'lib/build-assets');
@@ -28,7 +28,7 @@ const libraryOutputs = Object.entries(registry).map(([name, spec]) => repoRelati
 // The hosted libraries rebuild only when what they are built from changed (server-reader-cache.mjs `librariesFresh`).
 if (cache && librariesFresh()) console.log('build-server-reader: hosted libraries unchanged, skipping their rebuild (cache hit)');
 else {
-  const librariesStamp = stampInputs(libraryFiles.map(repoRelative));
+  const librariesStamp = stampLibraryInputs(libraryFiles.map(repoRelative));
   await import('./build-libraries.mjs');
   recordLibraries(librariesStamp, libraryOutputs);
 }

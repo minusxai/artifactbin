@@ -27,16 +27,15 @@ Describe testing, build and permissions only from what `check` reported.
 
 Skill map (each file's top comment explains it):
 
-- `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker.ts, tracker-features) and
-  api-dashboard.html (api-dashboard.ts), each with -steps, -guest, -cleanup .mjs;
-  csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html; gen-*.mjs sample data
-- `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
+- `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker-features, -steps, -guest,
+  -cleanup .mjs); csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html;
+  gen-*.mjs sample data
 - `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
 serve, new-app, new-page
-- `references/`: guides (read only those you need): runtime, datasets, permissions, functions,
+- `references/`: guides (read those you need): runtime, page-apps, datasets, permissions,
 dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
-  serves (only its header, the shared tokens, is worth reading)
+  serves (read only its header: the shared tokens)
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
 Import `@afbin/state`, `@afbin/apollo` (`sql`) and every hosted library as `@afbin/<name>`
@@ -77,21 +76,16 @@ anchors and browser sessions](references/html-operations.md).[% endif %]
 Every script takes `--help` (usage, flags, examples, gotchas), `--json` and an exclusive `--output
 FILE`; all but `serve.mjs` take `--server ORIGIN`. Use these scripts, never shell-built HTTP
 wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it). Dataset
-permissions: `policy.mjs`. Function secrets: only the page owner sets them, in the page's
-Resolvers settings; no script or API takes them, and never ask in chat. ACLs and trash have no
-script. Groups: `node scripts/groups.mjs list`
-([groups](references/groups.md)).
+permissions: `policy.mjs`. Never ask for a secret in chat. ACLs and trash have no script.
+Groups: `node scripts/groups.mjs list` ([groups](references/groups.md)). Events beyond one page's
+comments (every page you may see): `node scripts/events.mjs watch --help`.
 
 - **New page.** Copy the starter that fits and follow its Usage: `cp examples/deck.html
   index.html` (decks); `node scripts/new-app.mjs --title "NAME"` (a team task tracker:
-  people add entries, change their own, type descriptions together, sort a table, at most N per
-  group; `--without FEATURE,…` drops parts; it sets up the files, dataset and rules and prints
+  people add entries, change their own, type descriptions together, sort a table;
+  `--without FEATURE,…` drops parts; it sets up the files, dataset and rules and prints
   the next step); `node scripts/new-app.mjs --kind list --title "NAME"` (a list people add
   themselves to and change only their own entry: sign-up sheet, RSVP, roster);
-  `node scripts/new-app.mjs --kind api --url URL --title "NAME"` (an HTTP API's items behind a
-  key, grouped with totals, with notes signed-in readers share; sign-in and the notes' rules are
-  the platform's: each reader changes or removes only their own note, a signed-out one adds none,
-  and no server of your own is needed);
   `node scripts/new-page.mjs --data FILE.csv --title "NAME"` (a page that shows a CSV:
   dashboard, report or chart; it links the CSV by its path and writes a DATA block over its
   columns, and `--artifact ID` rebuilds an existing page);
@@ -99,16 +93,14 @@ script. Groups: `node scripts/groups.mjs list`
   codebase you work in, DIR its repository: hotspots, who works where, how its areas import each
   other, how it changes; it writes the git history as CSVs the page links and prints the facts to
   write the findings from); `cp examples/report.html index.html` (a report without data). Data
-  from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below); behind
-  a key or from your own server code: a backend function ([functions](references/functions.md),
-  read it first); never copy its rows into a CSV. The server then keeps the key, encrypted (the
-  owner enters it in the page's settings; only the API's host receives it), and the rows people
-  write, such as notes; never the API's rows: the function fetches them on the server whenever a
-  reader opens the page. If no starter fits, write the page yourself.
+  from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below). No code
+  of yours runs on the server: a page reads and writes datasets only.
+  If no starter fits, write the page yourself.
   Keep the starter's design system unless the user names one; then set its `<meta
   name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
   its stylesheet and fonts). Keep viewer-local state in `state` from `@afbin/state`
-  ([runtime](references/runtime.md)); state everyone sees lives in a dataset.
+  ([runtime](references/runtime.md)); state everyone sees lives in a dataset. Screens, routes,
+  dialogs and where the page runs: [page apps](references/page-apps.md).
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -147,12 +139,12 @@ script. Groups: `node scripts/groups.mjs list`
   `step('label', …)` checks (wait for your data, check the requested values and behaviour), then
   `node scripts/publish.mjs index.html --create && node scripts/check.mjs index.html --steps
   steps.mjs` (`--create` only the first time: publish adds the page's marker to the file).
-  Always check before replying, even while a function's secret is unset. Publish autofixes the page
+  Always check before replying. Publish autofixes the page
   and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` for a file you aren't
   publishing). Never rerun an unchanged check that failed a step or the page:
   change the steps or the page first. Only when the user asks for a private draft or wants nothing
   uploaded: `node scripts/serve.mjs PROJECT_DIR`, then check its local URL (`node
-  scripts/serve.mjs --help`; `sql` and functions run only in the published page).
+  scripts/serve.mjs --help`; `sql` runs only in the published page).
 - **Answer comments.** A comment from someone the page is shared with is a new request, even when
   an earlier request limited what to change: make the change without asking first, publish, then
   `node scripts/comment.mjs reply ID --thread T --body
@@ -167,20 +159,20 @@ script. Groups: `node scripts/groups.mjs list`
   ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
-  [permissions](references/permissions.md) (read it before modeling identity or writes). Checks,
-  derived values, APIs with secrets and scheduled refreshes: a backend function called with
-  `fetch('/fn/NAME')` ([functions](references/functions.md)). `node scripts/sql.mjs schema ID`
+  [permissions](references/permissions.md) (read it before modeling identity or writes): the
+  dataset's rules are the only check on a write. `node scripts/sql.mjs schema ID`
   for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
   scripts/export.mjs ID --format html --output copy.html` for a portable copy; one chart or
   section of a page saves as an image with `--format png --element SELECTOR`, so nothing else
   needs publishing or redrawing.
-- **Network and install.** To call an external API add `<meta name="csp-connect"
-  content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
-  `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid
-  declarations. For an installable page use the `artifactbin:pwa-enabled`, `-name`, `-short-name`,
-  `-theme-color`, `-background-color` and `-icon` metas in `<head>`; autofix explains invalid
-  values.
+- **Network and install.** To GET an external API add `<meta name="csp-connect"
+  content="https://api.example.com">` in `<head>` and `fetch` it ([page
+  apps](references/page-apps.md#calling-an-external-api)); also `csp-script`, `csp-style`,
+  `csp-img`, `csp-frame`, `csp-media`. Readers are asked to allow new origins and publish rejects
+  invalid declarations. For an installable page use the `artifactbin:pwa-enabled`, `-name`,
+  `-short-name`, `-theme-color`, `-background-color` and `-icon` metas in `<head>`; autofix
+  explains invalid values.
 
 ## Known failure modes
 
@@ -213,6 +205,9 @@ DOM and the page's design-system tokens and carry no credentials. Decks use `exa
 | Data/media | `af-data-table`, `af-file-upload`; typing in a dataset cell together: `@afbin/collab`
   ([datasets](references/datasets.md#type-together-afbincollab)) |
 
+[% if not shipped %]The same components and design systems in another web shell, outside any
+page: [host pages](references/host-pages.md).[% endif %]
+
 For charts, maps and diagrams, use the direct library APIs rather than a custom element:
 
 | Need | Guide |
@@ -229,16 +224,16 @@ comments and dataset writes are separate permissions. A receipt's `user_page_url
 read-only copy ([groups](references/groups.md#public-view-receipts)).
 
 - Who can read. Unlisted (the default): anyone with the link, signed out too, sees all the page
-  shows, its functions' answers included (a `signed_in` role still admits any signed-in link
-  holder). `--visibility private`: only the owner and the people and groups it is shared with,
-  never anyone signed out. `--visibility public` also lists it on the owner's profile.
+  shows (a `signed_in` role still admits any signed-in link holder). `--visibility private`: only
+  the owner and the people and groups it is shared with, never anyone signed out. `--visibility
+  public` also lists it on the owner's profile.
   Publishing is how a page is shared: unlisted fits a page passed on by its link ("my team can
   view", "send me the link"). Use `--visibility public` or `--visibility private` only when the
   user says "public" or "private" or names who may see it; share a private page with their group
   (below) or have the owner invite people in its Share dialog, and check it without
   `--guest-steps` (signed out, a private page answers not found). A user who does not want it
   uploaded gets the local draft above, nothing published: tell them what only a published page
-  has (a link to share, sign-in, comments, `sql` and functions). Say in the reply which
+  has (a link to share, sign-in, comments, `sql`). Say in the reply which
   visibility the page has and who can open it.
 - "Share it with my team" naming a group: `node scripts/groups.mjs share PAGE12 --group
   design_crit --role viewer`. Ownership and owner host stay unchanged; use commenter for comments.
@@ -251,8 +246,7 @@ read-only copy ([groups](references/groups.md#public-view-receipts)).
   ([groups](references/groups.md)).
 - "Let readers submit something": a readable page grants no writes; give the dataset rules for
   viewer and signed_in with `policy.mjs` ([permissions](references/permissions.md)). The page then
-  writes rows with `sql`; add a POST function with `roles` only when writes need checks
-  ([functions](references/functions.md)).
+  writes rows with `sql`; the rules are the only check on what a write may change.
 
 ## Preserve the document
 
@@ -267,7 +261,9 @@ Page scripts execute on the page's runner origin, separately from account creden
 [% if shipped %]Commands stage updates hourly; when notified, reread SKILL.md and reload your
 harness (`node scripts/update.mjs --help`). Scripts are helpers inside this skill, not global
 commands; keep your own pages outside it.
-[% else %][Download the author skill]([[ base ]]/skills/artifactbin.zip) and install it with the
-managed recipe in https://artifactbin.dev/install.sh, which enables updates; reload skills after
-installing.
+[% if extras %]This server adds guides and scripts of its own: `extras/README.md` lists
+them.
+[% endif %][% else %][Download the author skill]([[ base ]]/skills/artifactbin.zip) and
+install it with the managed recipe in https://artifactbin.dev/install.sh, which enables updates;
+reload skills after installing.
 [% endif %]

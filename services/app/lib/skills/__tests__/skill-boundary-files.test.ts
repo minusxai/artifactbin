@@ -1,5 +1,5 @@
 /**
- * The boundary files the skill's maps reference names (`/geojson/<file>.json`) exist under public/geojson, as GeoJSON
+ * The boundary files the skill's maps reference names (`/af/geojson/<file>.json`) exist under public/geojson, as GeoJSON
  * FeatureCollections whose every feature carries what the reference says it carries, so the reference cannot drift
  * from the files the platform serves.
  */
@@ -18,7 +18,7 @@ const CLAIMS:Record<string,{properties:Record<string,RegExp>;id?:RegExp;count?:n
 it('names exactly the boundary files it describes, and the loading line',()=>{
  const named=new Set([...reference.matchAll(/`([a-z0-9-]+\.json)`/g)].map(match=>match[1]));
  expect([...named].sort()).toEqual(Object.keys(CLAIMS).sort());
- expect(reference).toContain('fetch("/geojson/india-states.json")');
+ expect(reference).toContain('fetch("/af/geojson/india-states.json")');
  for(const [file,claim] of Object.entries(CLAIMS)){
   // Each file's own description: from "`file`:" to the next file's, or the paragraph's end.
   const sentence=reference.split(/(?=`[a-z0-9-]+\.json`:)|\n/).find(part=>part.startsWith('`'+file+'`:'))!;

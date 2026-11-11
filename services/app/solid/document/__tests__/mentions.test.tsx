@@ -17,7 +17,7 @@ it('offers only people, preserves stable identity and never requests agent sessi
  const select=vi.fn();
  render(()=><CommentMentionPicker backend={createHttpBackend('doc1')} artifactId="doc1" query="as" onSelect={select}/>);
  fireEvent.click(await screen.findByLabelText('Mention @asha'));
- expect(select).toHaveBeenCalledWith('[@asha](/people/usr_asha)');
+ expect(select).toHaveBeenCalledWith('[@asha](/api/people/usr_asha)');
  expect(fetch.mock.calls.map(call=>String(call[0]))).toEqual(['/api/my/artifacts/doc1/members?query=as']);
  expect(screen.queryByRole('link',{name:/agent/i})).toBeNull();
  expect(screen.queryByText('Mention an agent')).toBeNull();
@@ -29,7 +29,7 @@ it('navigates person choices with wrapping and selects without submitting the co
  await screen.findByLabelText('Mention @asha');
  fireEvent.keyDown(field,{key:'ArrowUp'});fireEvent.keyDown(field,{key:'Enter'});
  expect(field.textContent).toBe('@lee');expect(submit).not.toHaveBeenCalled();
- fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});expect(submit).toHaveBeenCalledWith('[@lee](/people/usr_lee)');
+ fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});expect(submit).toHaveBeenCalledWith('[@lee](/api/people/usr_lee)');
  replaceComment(field,'@');await screen.findByLabelText('Mention @asha');escape.mockClear();
  fireEvent.keyDown(field,{key:'Escape'});expect(screen.queryByLabelText('Mention people')).toBeNull();expect(escape).not.toHaveBeenCalled();
 });

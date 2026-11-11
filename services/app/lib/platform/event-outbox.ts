@@ -33,16 +33,32 @@ export async function enqueueEvent(tx:Queryable,event:EventEnvelope):Promise<voi
 export async function enqueueEvents(tx:Queryable,events:readonly EventEnvelope[]):Promise<void>{
  if(events.length)await tx.query("INSERT INTO event_outbox(id,envelope) SELECT e->>'id',e FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS t(e,n) ORDER BY n ON CONFLICT DO NOTHING",[JSON.stringify(events)]);
 }
-export function startEventPublisher(db:Db):()=>Promise<void>{
- let pending:Promise<void>|null=null;
- const flush=async()=>{
-  const publish=services().events.publish;if(!publish)return;
+/** The one flush in flight in this process: the timer and every reader that wants recorded facts published share it. */
+let flushing:Promise<void>|null=null;
+async function flushBatches(db:Db):Promise<void>{
+ const publish=services().events.publish;if(!publish)return;
+ // Bounded: a backlog drains over several ticks rather than holding one caller.
+ for(let batch=0;batch<20;batch++){
   const rows=(await db.query<{id:string;envelope:EventEnvelope}>('SELECT id,envelope FROM event_outbox ORDER BY created_at,id LIMIT 50')).rows;
   if(!rows.length)return;
   await publish(rows.map(r=>r.envelope));
   await db.query('DELETE FROM event_outbox WHERE id=ANY($1::text[])',[rows.map(r=>r.id)]);
- };
- const tick=()=>pending??=flush().catch(()=>{/* Rows remain for retry, including after restart. */}).finally(()=>{pending=null;});
+  if(rows.length<50)return;
+ }
+}
+/**
+ * Publish what the outbox holds now, after commit and never inside a transaction. Waits out a flush already running
+ * (it may have read the outbox before the caller's commit) and then runs one more, so a reader that calls this after
+ * its own write sees that write in the events service: the public feed (lib/event-feed) calls it before each read.
+ * Never rejects: rows that fail to publish stay for the next flush, including after a restart.
+ */
+export async function publishEventOutbox(db:Db):Promise<void>{
+ await flushing;
+ flushing??=flushBatches(db).catch(()=>{/* Rows remain for retry. */}).finally(()=>{flushing=null;});
+ await flushing;
+}
+export function startEventPublisher(db:Db):()=>Promise<void>{
+ const tick=()=>flushing??=flushBatches(db).catch(()=>{/* Rows remain for retry, including after restart. */}).finally(()=>{flushing=null;});
  const timer=setInterval(()=>void tick(),1000);timer.unref();void tick();
- return async()=>{clearInterval(timer);await pending;await tick();};
+ return async()=>{clearInterval(timer);await flushing;await tick();};
 }

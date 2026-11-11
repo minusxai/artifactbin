@@ -11,6 +11,9 @@ export interface LibrarySpec {
 }
 const libraries: Record<string, LibrarySpec> = registry;
 
+/** Where hosted libraries are served (public/libraries on disk; the old `/libraries/` answers through the legacy table). */
+export const LIBRARIES_PATH = '/af/lib/';
+
 /** Pages import hosted libraries as `@afbin/<name>`; the whole `@afbin/` prefix is platform-reserved. */
 export const LIBRARY_SPECIFIER_PREFIX = '@afbin/';
 
@@ -21,7 +24,7 @@ export const LIBRARY_SPECIFIER_PREFIX = '@afbin/';
  */
 export function resolveLibraryUrl(name: string, pinnedVersion?: string, origin = ''): string {
   void pinnedVersion;
-  return `${origin}/libraries/${name}-${libraries[name]!.version}/index.js`;
+  return `${origin}${LIBRARIES_PATH}${name}-${libraries[name]!.version}/index.js`;
 }
 
 /** A versioned, platform-owned module URL; callers cannot supply package names or CDN URLs. */
@@ -44,6 +47,8 @@ const components: readonly string[] = hostedComponents.components;
 /** Served at /af/components/: the components, and the legacy `af-deck-gl`/`af-mermaid` wrappers, which have no
  * `@afbin/` name (the deck.gl library owns `@afbin/deck-gl`; new maps and diagrams use the libraries) and load by URL. */
 export const isHostedComponent = (name: string): boolean => components.includes(name) || hostedComponents.legacy.includes(name);
+/** The public components (`hosted.json` `components`): what a page imports as `@afbin/<name>` and a host page loads. */
+export const hostedComponentEntries = (): readonly string[] => components;
 export const componentUrl = (name: string, origin = ''): string => `${origin}${COMPONENTS_PATH}${name}.js`;
 /** Every hosted component's import-map entry. */
 export function componentImports(origin = ''): Record<string, string> {
@@ -58,7 +63,7 @@ export function libraryImports(pins: unknown, skip: ReadonlySet<string> = new Se
   ...Object.entries(componentImports())].filter(([specifier]) => !skip.has(specifier!)));
 }
 
-/** `@afbin/vega` -> `/libraries/vega-6.3.1/index.js`, `@afbin/tabs` -> `/af/components/tabs.js`; undefined for any other specifier. */
+/** `@afbin/vega` -> `/af/lib/vega-6.3.1/index.js`, `@afbin/tabs` -> `/af/components/tabs.js`; undefined for any other specifier. */
 export function libraryPathForSpecifier(specifier: string): string | undefined {
   if (!specifier.startsWith(LIBRARY_SPECIFIER_PREFIX)) return undefined;
   const name = specifier.slice(LIBRARY_SPECIFIER_PREFIX.length);

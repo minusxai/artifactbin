@@ -1,6 +1,7 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+// Types only: the skill's scripts run this module's parsers under plain Node, where the contracts index cannot load.
+import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
@@ -161,46 +162,52 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
  }
  return carried;
 }
+/** A declared query's name and the link it names; how many a page may declare. */
+const DECLARED_NAME=/^[_A-Za-z][_0-9A-Za-z]{0,63}$/,DECLARED_QUERIES_MAX=50;
+/** What may follow `default:`: empty, or the database the session opens, as written (`warehouse/finance`); never SQL text. */
+const DEFAULT_NAMESPACE=/^(?:[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127})?$/;
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
- const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const names=new Set<string>();
+ const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const queries:HtmlDeclaredQuery[]=[];const names=new Set<string>();
  for(const element of allElements(html).all){
+  // A declared query (a live dataset's, checked at publish): its name, the link it runs on, and its SQL text.
+  if(element.tagName==='script'&&(attribute(element,'type')??'').trim().toLowerCase()==='application/sql'&&attribute(element,'data-af-query')!==null){
+   const name=attribute(element,'data-af-query')!,link=attribute(element,'data-af-dataset');
+   if(!DECLARED_NAME.test(name))throw new Error('A declared query is named data-af-query="NAME" (letters, digits and _)');
+   if(!link||!DECLARED_NAME.test(link))throw new Error(`Declared query ${name} names the dataset link it runs on, data-af-dataset="NAME"`);
+   if(queries.some(query=>query.name===name))throw new Error(`Two declared queries are named ${name}`);
+   if(attribute(element,'src')!==null)throw new Error(`Declared query ${name} is written inline, never loaded from src`);
+   const sql=element.childNodes.map(node=>'value' in node?String(node.value):'').join('').trim();
+   // Its size is judged at publish with the SQL limits (lib/live-datasets), where the contracts load.
+   if(!sql)throw new Error(`Declared query ${name} is one SQL statement`);
+   queries.push({name,link,sql});
+   if(queries.length>DECLARED_QUERIES_MAX)throw new Error(`A page declares at most ${DECLARED_QUERIES_MAX} queries`);
+   continue;
+  }
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
-  // One link names one kind, once.
-  const backend=rel.includes('af-resolver'),dataset=rel.includes('af-dataset');
-  if(!backend&&!dataset)continue;
-  if(backend&&dataset)throw new Error('A link declares one namespace kind');
+  // A dataset link names one dataset, once.
+  if(!rel.includes('af-dataset'))continue;
   const name=attribute(element,'data-af-name');
   if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__'))throw new Error('Invalid namespace');
   if(names.has(name))throw new Error('Duplicate namespace');names.add(name);
   if(names.size>20)throw new Error('Too many namespaces');
-  if(backend){backends.push(name);continue;}
+  // The install's default connection: `default:` and the namespace (schema, database, dataset) it reads, never pinned.
+  const fallback=/^default:(.*)$/s.exec(attribute(element,'href')??'');
+  if(fallback){
+   if(!DEFAULT_NAMESPACE.test(fallback[1]!))throw new Error('A default-connection href is default: and a database name (letters, digits and _ $ . : / -)');
+   if(attribute(element,'data-af-mode')!==null||attribute(element,'data-af-revision')!==null)throw new Error('The default connection is always live: it has no mode or revision');
+   connections.push({kind:'default-connection',name,namespace:fallback[1]!});continue;
+  }
   const match=/^ref:([A-Za-z0-9]{6,128})$/.exec(attribute(element,'href')??'');
-  if(!match)throw new Error('Dataset href must name an artifact as ref:<id>');
+  if(!match)throw new Error('Dataset href must name an artifact as ref:<id>, or the default connection as default:');
   const mode=attribute(element,'data-af-mode')??'live';
   const revision=attribute(element,'data-af-revision');
   if(mode==='live'&&revision===null)datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'live'});
   else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'pinned',revision});
   else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
  }
- return {backends,datasets};
-}
-export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
-/**
- * What publish checks the page's GraphQL documents in (lib/page-operations `pageDocumentProblems`): each resolver
- * link's file name by its data-af-name, and every inline script's code (a script with src has none here).
- */
-export function htmlGraphqlSources(html:string):{resolverFiles:Record<string,string>;scripts:string[]}{
- const resolverFiles:Record<string,string>={},scripts:string[]=[];
- for(const element of allElements(html).all){
-  if(element.tagName==='link'&&(attribute(element,'rel')??'').split(/\s+/).includes('af-resolver')){
-   const name=attribute(element,'data-af-name'),file=(attribute(element,'href')??'').split(/[?#]/,1)[0]!.split('/').at(-1);
-   if(name&&file)resolverFiles[name]=file;
-  }
-  if(element.tagName==='script'&&attribute(element,'src')===null)scripts.push(element.childNodes.map(node=>'value' in node?String(node.value):'').join(''));
- }
- return {resolverFiles,scripts};
+ return {datasets,connections,queries};
 }
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{
@@ -233,7 +240,7 @@ export function htmlPwaSettings(html:string):HtmlPwaSettings {
 }
 
 const assetAttributes=(element:import('./html-source').Element):string[]=>element.tagName==='img'||element.tagName==='source'?['src']:element.tagName==='video'?['poster']:element.tagName==='a'?['href']:[];
-/** Only byte-bearing HTML attributes are asset references; backend links and script text are excluded. */
+/** Only byte-bearing HTML attributes are asset references; links and script text are excluded. */
 export function htmlAssetLinks(html:string):HtmlAssetLinks {
  const refs=new Set<string>(),imageUrls=new Set<string>();
  for(const element of parseSource(html).elements)for(const name of assetAttributes(element)){
@@ -252,4 +259,4 @@ export function rewriteHtmlAssetUrls(html:string,replacements:ReadonlyMap<string
  }
  return applyEdits(html,edits);
 }
-export { isRuntimeCoreSrc, LEGACY_CORE_PATH } from './core-script.ts';
+export { isRuntimeCoreSrc } from './core-script.ts';

@@ -3,13 +3,15 @@
  * PGLite (one serialized connection) can never interleave. The guarded side is the production code: the artifact
  * locks (`lockAuthorization`), then the decision's facts (`transactionAccessFacts`, each locking what it reads).
  *
- *  - Correctness: a revocation of a fact the decision read waits for its commit; one committed first is what the
- *    decision reads.
+ *  - Correctness: a revocation of an APP fact the decision read (a share) waits for its commit; one committed first
+ *    is what the decision reads.
+ *  - Identity is not locked: a membership, a subgroup's edge or a group's deletion changes while a decision is in
+ *    flight without waiting for it (and the decision never waits for them); the NEXT decision reads the change.
  *  - The normal path: the global order (page first, artifacts by `lockOrder`, memberOf documents in the page tier,
  *    read-only facts) never deadlocks against sharing edits, publishing or a second reader of the same page.
- *  - The safety net: writers that cannot follow it (group-owned publish, group deletion, test-user erasure) can
- *    deadlock with a guarded write; with both sides' whole transactions under lib/platform `retryOnConflict`, both
- *    complete, and the guarded decision is the one the state it finally read gives.
+ *  - The safety net: writers that cannot follow it can deadlock with a guarded write; with both sides' whole
+ *    transactions under lib/platform `retryOnConflict`, both complete, and the guarded decision is the one the state
+ *    it finally read gives.
  *
  * Only the tables and columns these statements touch are created. Runs in the `integration` project; skipped
  * without the image.
@@ -42,7 +44,8 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
   const code = (e: { code?: string }) => e.code ?? String(e);
   /** This disposable server's own rows, reset per case (not the app harness database). */
   const seed = async () => {
-    await clients[0]!.query(`TRUNCATE artifact_group_shares, artifact_shares, group_members, groups, users, artifacts;
+    await clients[0]!.query(`TRUNCATE artifact_group_shares, artifact_shares, group_members, groups, users, artifacts, group_hierarchy;
+      INSERT INTO group_hierarchy VALUES ('installation', 0);
       INSERT INTO artifacts VALUES ('page'), ('data'), ('data2'), ('Bdata'), ('adata'); INSERT INTO users VALUES ('u1', 'u1@example.com', 'account');
       INSERT INTO groups VALUES ('g1', NULL); INSERT INTO group_members VALUES ('g1', 'u1', 'viewer');
       INSERT INTO artifact_shares VALUES ('page', 'u1', 'u1@example.com', 'viewer'); INSERT INTO artifact_group_shares VALUES ('data', 'g1', 'editor');`);
@@ -61,7 +64,8 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     await clients[0]!.query(`
       CREATE TABLE artifacts (id text PRIMARY KEY);
       CREATE TABLE users (id text PRIMARY KEY, email text, kind text);
-      CREATE TABLE groups (id text PRIMARY KEY, deleted_at timestamptz);
+      CREATE TABLE groups (id text PRIMARY KEY, deleted_at timestamptz, parent_id text);
+      CREATE TABLE group_hierarchy (id text PRIMARY KEY, revision bigint NOT NULL DEFAULT 0);
       CREATE TABLE group_members (group_id text REFERENCES groups(id), user_id text REFERENCES users(id), role text, PRIMARY KEY (group_id, user_id));
       CREATE TABLE artifact_shares (artifact_id text REFERENCES artifacts(id), user_id text, email text, role text, PRIMARY KEY (artifact_id, email));
       CREATE TABLE artifact_group_shares (artifact_id text REFERENCES artifacts(id), group_id text REFERENCES groups(id), role text, PRIMARY KEY (artifact_id, group_id));`);
@@ -71,46 +75,13 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     if (container) spawnSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
   });
 
-  it('a membership insert cannot revoke the policy used by an in-flight commit', async () => {
-    await seed();
-    await clients[0]!.query("DELETE FROM group_members; UPDATE artifact_group_shares SET role='viewer'");
-    const writer = await connect(), grantor = await connect();
-    const row = {
-      id: 'data', user_id: 'another-owner', token_id: null, group_id: null,
-      format: 'dataset', visibility: 'unlisted', link_role: 'viewer', access: 'readwrite',
-      meta: { columns: [{ name: 'name', type: 'string' }], objectKey: 'unused' },
-      dataset_policy: { version: 3, tables: [{ table: { schema: 'public', name: 'rows' },
-        insert_permissions: [{ role: 'signed_in', permission: { columns: '*', check: {} } }],
-      }] },
-    } as unknown as ArtifactRow;
-    await writer.query('BEGIN');
-    try {
-      await lockAuthorization(tx(writer), { write: 'data' });
-      const before = await datasetWriteAccess(row, ACTOR, { tx: tx(writer) });
-      expect(before).toMatchObject({ allowed: true, role: 'signed_in' });
-      // Invitation acceptance holds the group before inserting, just as lib/groups does.
-      const grant = transaction(grantor, async () => {
-        await grantor.query("SELECT id FROM groups WHERE id='g1' FOR UPDATE");
-        await grantor.query("INSERT INTO group_members VALUES ('g1', 'u1', 'viewer')");
-      });
-      const slipped = await settles(grant, 150);
-      const after = slipped ? await datasetWriteAccess(row, ACTOR, { tx: tx(writer) }) : before;
-      await writer.query('COMMIT');
-      await grant;
-      expect({ slipped, allowed: after.allowed, role: after.role }).toEqual({
-        slipped: false, allowed: true, role: 'signed_in',
-      });
-    } finally { await writer.query('ROLLBACK'); }
-  });
-
   /**
-   * THE ABSENCE AUDIT. Dataset rules match exactly one role, so an INSERT can narrow it: each absent fact the decision
-   * reads, inserted the way its production writer inserts it while a write is in flight, must not commit before that
-   * write does. Each writer locks a parent row first; the decision holds that row (artifact) or takes it (group).
+   * THE ABSENCE AUDIT. Dataset rules match exactly one role, so an INSERT can narrow it: each absent APP fact the
+   * decision reads, inserted the way its production writer inserts it while a write is in flight, must not commit
+   * before that write does. Each writer locks the artifact first, which the decision holds. (A new membership is the
+   * identity module's and is not held back: it applies from the next decision, `identity is not locked` below.)
    */
   it.each([
-    // lib/groups acceptGroupInvitations / lib/deployment: the group FOR UPDATE, then the membership.
-    ['an owning-group membership', { group_id: 'g3' }, "INSERT INTO groups VALUES ('g3', NULL)", ["SELECT id FROM groups WHERE id='g3' FOR UPDATE", "INSERT INTO group_members VALUES ('g3', 'u1', 'viewer')"]],
     // lib/artifacts writeShares / membership invites: the artifact FOR UPDATE, then the named share.
     ['a named share', {}, '', ["SELECT id FROM artifacts WHERE id='data' FOR UPDATE", "INSERT INTO artifact_shares VALUES ('data', NULL, 'u1@example.com', 'viewer')"]],
     // lib/artifacts setArtifactGroupShare: the artifact FOR UPDATE NOWAIT, then the group share (a group the actor is in).
@@ -144,32 +115,46 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     } finally { await writer.query('ROLLBACK'); }
   });
 
-  it('a revocation of a fact the decision read waits for its commit', async () => {
+  it('a revocation of an app fact the decision read (its group share) waits for its commit', async () => {
     await seed();
     const writer = await connect(), revoker = await connect();
     await writer.query('BEGIN');
     await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
     expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
-    const revoke = revoker.query("DELETE FROM group_members WHERE group_id='g1' AND user_id='u1'");
+    const revoke = revoker.query("DELETE FROM artifact_group_shares WHERE artifact_id='data' AND group_id='g1'");
     expect(await settles(revoke, 300)).toBe(false);
     await writer.query('COMMIT');
     await revoke;
-    expect((await revoker.query("SELECT 1 FROM group_members WHERE user_id='u1'")).rowCount).toBe(0);
+    expect((await revoker.query("SELECT 1 FROM artifact_group_shares WHERE artifact_id='data'")).rowCount).toBe(0);
   });
 
-  it('a revocation committed first is what the decision reads', async () => {
+  it('identity is not locked: a membership removal during a decision neither waits nor is waited on; the next decision refuses', async () => {
     await seed();
     const writer = await connect(), revoker = await connect();
-    await revoker.query('BEGIN');
+    await writer.query('BEGIN');
+    try {
+      await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
+      expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
+      // The identity module's write: its group row, then the membership (services/auth identity-store groups).
+      const revoke = transaction(revoker, async () => { await revoker.query("SELECT id FROM groups WHERE id='g1' FOR UPDATE"); await revoker.query("DELETE FROM group_members WHERE group_id='g1' AND user_id='u1'"); });
+      expect(await settles(revoke, 300)).toBe(true);
+      await revoke;
+      await writer.query('COMMIT');
+    } finally { await writer.query('ROLLBACK'); }
+    const next = await connect();
+    expect(await transaction(next, async () => { await lockAuthorization(tx(next), { write: 'data' }); return transactionAccessFacts(ACTOR, tx(next)).groupShareRole('data'); })).toBe('none');
+  });
+
+  it('a membership revocation committed first is what the decision reads', async () => {
+    await seed();
+    const writer = await connect(), revoker = await connect();
     await revoker.query("DELETE FROM group_members WHERE group_id='g1' AND user_id='u1'");
     await writer.query('BEGIN');
-    await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
-    const role = transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data');
-    // The membership row is being deleted: the decision waits on it, then reads the committed state.
-    expect(await settles(role, 300)).toBe(false);
-    await revoker.query('COMMIT');
-    expect(await role).toBe('none');
-    await writer.query('COMMIT');
+    try {
+      await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
+      expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('none');
+      await writer.query('COMMIT');
+    } finally { await writer.query('ROLLBACK'); }
   });
 
   it('the global order never deadlocks against a sharing edit; the old inverted order does', async () => {
@@ -202,11 +187,10 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
   // Review 4's competing writers: each locks against the global order. The guarded write pauses (first attempt only)
   // right before its decision reads its facts; the competitor takes its first lock and goes for its second.
   it.each([
-    // A true cycle: the group FOR UPDATE against the decision's group lock, the dataset against the commit's: one retries.
-    ['group-owned publication', "SELECT id FROM groups WHERE id='g1' FOR UPDATE", "SELECT id FROM artifacts WHERE id='data' FOR UPDATE", true],
-    // Lock-on-read: the decision has not locked the share yet, so these revoke first and the decision reads that.
-    ['group deletion', "SELECT id FROM groups WHERE id='g1' FOR UPDATE", "DELETE FROM artifact_group_shares WHERE group_id='g1'", false],
-    ['test-user erasure', "SELECT id FROM users WHERE id='u1' FOR UPDATE", "DELETE FROM artifact_group_shares WHERE artifact_id='data'", false],
+    // A true cycle: the share row FOR UPDATE against the decision's share lock, the dataset against the commit's: one retries.
+    ['an inverted sharing writer', "SELECT 1 FROM artifact_group_shares WHERE artifact_id='data' FOR UPDATE", "SELECT id FROM artifacts WHERE id='data' FOR UPDATE", true],
+    // Lock-on-read: the decision has not locked the share yet, so this revokes first and the decision reads that.
+    ['test-user erasure', "SELECT id FROM artifacts WHERE id='adata' FOR UPDATE", "DELETE FROM artifact_group_shares WHERE artifact_id='data'", false],
   ] as const)('review4: %s and a guarded write both complete under retryOnConflict', async (_name, first, second, cycle) => {
     await seed();
     const writer = await connect(), other = await connect();
@@ -284,5 +268,91 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     const codes = await Promise.all([guarded, published]);
     for (const [c, result] of [[writer, codes[0]], [publisher, codes[1]]] as const) if (result !== 'ok') await c.query('ROLLBACK');
     expect(codes).toEqual(['ok', 'ok']);
+  });
+  /**
+   * THE TREE. Finance ('fin') ⊃ Retail ('ret'); u1 is a Retail member only; 'data' is shared with Finance. The
+   * guarded write reaches it through the ancestor's share (lib/groups hierarchy). Each identity competitor runs the
+   * identity module's protocol (a membership write locks its group; a topology write moves the revision first); none
+   * waits for the decision, and the next decision reads it. The app competitor (the share's deletion) waits.
+   */
+  const subtree = async (role = 'editor', member = true) => {
+    await seed();
+    await clients[0]!.query(`DELETE FROM artifact_group_shares; DELETE FROM group_members;
+      INSERT INTO groups VALUES ('fin', NULL, NULL), ('ret', NULL, 'fin');
+      INSERT INTO artifact_group_shares VALUES ('data', 'fin', '${role}');${member ? " INSERT INTO group_members VALUES ('ret', 'u1', 'viewer');" : ''}`);
+  };
+  const BUMP = "INSERT INTO group_hierarchy AS h (id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=h.revision+1";
+  const identityCompetitors = {
+    'a descendant membership removal': async (c: pg.Client) => { await c.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await c.query("DELETE FROM group_members WHERE group_id='ret' AND user_id='u1'"); },
+    'a reparent of the subgroup out of the ancestor': async (c: pg.Client) => { await c.query(BUMP); await c.query("SELECT id FROM groups WHERE id IN ('fin','ret') ORDER BY id COLLATE \"C\" FOR UPDATE"); await c.query("UPDATE groups SET parent_id=NULL WHERE id='ret'"); },
+    'a deletion of the subgroup': async (c: pg.Client) => { await c.query(BUMP); await c.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await c.query("DELETE FROM group_members WHERE group_id='ret'"); await c.query("UPDATE groups SET deleted_at=now() WHERE id='ret'"); },
+  } as const;
+  const shareDeletion = async (c: pg.Client) => { await c.query("SELECT id FROM artifacts WHERE id='data' FOR UPDATE"); await c.query("DELETE FROM artifact_group_shares WHERE artifact_id='data' AND group_id='fin'"); };
+  const nextRole = async () => {
+    const next = await connect();
+    return transaction(next, async () => { await lockAuthorization(tx(next), { write: 'data' }); return transactionAccessFacts(ACTOR, tx(next)).groupShareRole('data'); });
+  };
+
+  it.each(Object.keys(identityCompetitors) as Array<keyof typeof identityCompetitors>)('subtree: %s during a decision through the ancestor share commits at once; the next decision refuses', async (name) => {
+    await subtree();
+    const writer = await connect(), other = await connect();
+    await writer.query('BEGIN');
+    try {
+      await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
+      expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
+      const competing = transaction(other, () => identityCompetitors[name](other)).then(() => 'ok', code);
+      expect(await settles(competing, 300)).toBe(true);
+      expect(await competing).toBe('ok');
+      await writer.query('COMMIT');
+    } finally { await writer.query('ROLLBACK'); }
+    expect(await nextRole()).toBe('none');
+  });
+
+  it.each(Object.keys(identityCompetitors) as Array<keyof typeof identityCompetitors>)('subtree: %s committed first is what the decision reads', async (name) => {
+    await subtree();
+    const other = await connect();
+    await transaction(other, () => identityCompetitors[name](other));
+    expect(await nextRole()).toBe('none');
+  });
+
+  it('subtree: a deletion of the ancestor share (an app fact) waits for an in-flight decision, and the next decision refuses', async () => {
+    await subtree();
+    const writer = await connect(), other = await connect();
+    await writer.query('BEGIN');
+    try {
+      await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
+      expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
+      const competing = transaction(other, () => shareDeletion(other)).then(() => 'ok', code);
+      expect(await settles(competing, 300)).toBe(false);
+      await writer.query('COMMIT');
+      expect(await competing).toBe('ok');
+    } finally { await writer.query('ROLLBACK'); }
+    expect(await nextRole()).toBe('none');
+  });
+
+  it('subtree: a NEW descendant membership applies from the next decision (direct-only membership, subtree reach)', async () => {
+    // A viewer share to Finance: joining Retail turns `signed_in` into `viewer`, which this dataset rule refuses. The
+    // join is identity's and does not wait for the in-flight write; the next decision reads it and refuses.
+    await subtree('viewer', false);
+    const writer = await connect(), grantor = await connect();
+    const row = {
+      id: 'data', user_id: 'another-owner', token_id: null, group_id: null,
+      format: 'dataset', visibility: 'unlisted', link_role: 'viewer', access: 'readwrite',
+      meta: { columns: [{ name: 'name', type: 'string' }], objectKey: 'unused' },
+      dataset_policy: { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'signed_in', permission: { columns: '*', check: {} } }] }] },
+    } as unknown as ArtifactRow;
+    await writer.query('BEGIN');
+    try {
+      await lockAuthorization(tx(writer), { write: 'data' });
+      expect(await datasetWriteAccess(row, ACTOR, { tx: tx(writer) })).toMatchObject({ allowed: true, role: 'signed_in' });
+      const grant = transaction(grantor, async () => { await grantor.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await grantor.query("INSERT INTO group_members VALUES ('ret', 'u1', 'viewer')"); }).then(() => 'ok', code);
+      expect(await settles(grant, 300)).toBe(true);
+      expect(await grant).toBe('ok');
+      await writer.query('COMMIT');
+    } finally { await writer.query('ROLLBACK'); }
+    const next = await connect();
+    expect(await transaction(next, async () => { await lockAuthorization(tx(next), { write: 'data' }); return datasetWriteAccess(row, ACTOR, { tx: tx(next) }); })).toMatchObject({ allowed: false, role: 'viewer' });
+    // Direct-only: the Retail member is no member of Finance itself.
+    expect(await transaction(next, () => transactionAccessFacts(ACTOR, tx(next)).groupRole('fin'))).toBeNull();
   });
 });

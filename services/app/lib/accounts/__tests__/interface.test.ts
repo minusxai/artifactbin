@@ -6,7 +6,7 @@
 import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, mintAccountToken, useAppHarness } from '@/__tests__/harness';
-import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, lockMembershipUsers, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, reserveHandle, resolveTestUser, revokeToken, setAutoAcceptMentions, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
 import { forgetRequestCredentials, markRequestAuthority } from '@/lib/accounts/tokens';
 import { getDb, runWithRequest, services, setServices } from '@/lib/platform';
 
@@ -30,22 +30,14 @@ describe('actors', () => {
     expect(forwardedFor(headers({ 'x-forwarded-for': '10.0.0.1' }), 5)).toBe('10.0.0.1');
     expect(forwardedFor(headers({ 'x-forwarded-for': ' , ', 'x-real-ip': ' 10.0.0.9 ' }), 1)).toBe('10.0.0.9');
     expect(forwardedFor(headers({}), 1)).toBe('');
+    // No trusted hop: every forwarded address is the caller's text, so none identifies them.
+    expect(forwardedFor(headers({ 'x-forwarded-for': 'spoof', 'x-real-ip': 'spoof' }), 0)).toBe('');
   });
 });
 
 describe('handles', () => {
-  it('reserves a handle for one subject, keeps it idempotent, frees a renamed one, and refuses another subject', async () => {
-    const db = await getDb();
+  it('names the reserved words of the one handle namespace (reservations are the identity module\'s)', () => {
     expect(RESERVED_HANDLES.has('admin') && RESERVED_HANDLES.has('login')).toBe(true);
-    await reserveHandle(db, 'alice', 'user', 'u1');
-    await reserveHandle(db, 'alice', 'user', 'u1');
-    await expect(reserveHandle(db, 'alice', 'group', 'g1')).rejects.toMatchObject({ code: '23505', message: 'Handle is taken' });
-    await expect(reserveHandle(db, 'alice', 'user', 'u2')).rejects.toMatchObject({ code: '23505' });
-    await reserveHandle(db, 'alicia', 'user', 'u1');
-    await reserveHandle(db, 'alice', 'group', 'g1');
-    expect((await db.query('SELECT handle, kind, subject_id FROM handle_reservations ORDER BY handle')).rows).toEqual([
-      { handle: 'alice', kind: 'group', subject_id: 'g1' }, { handle: 'alicia', kind: 'user', subject_id: 'u1' },
-    ]);
   });
 });
 
@@ -77,9 +69,9 @@ describe('profiles', () => {
     expect(await replaceUserImageKey(user.id, 'img/2')).toBe('img/1');
     expect(await replaceUserImageKey(user.id, null)).toBe('img/2');
     expect(await userRow(user.id)).toMatchObject({ image_key: null });
-    await setAutoAcceptMentions(await getDb(), user.id, true);
+    await services().identity.setAutoAcceptMentions({ userId: user.id, autoAccept: true });
     expect(await userRow(user.id)).toMatchObject({ auto_accept_mentions: true });
-    await setAutoAcceptMentions(await getDb(), user.id, false);
+    await services().identity.setAutoAcceptMentions({ userId: user.id, autoAccept: false });
     expect(await userRow(user.id)).toMatchObject({ auto_accept_mentions: false });
   });
 });
@@ -110,9 +102,9 @@ describe('hosted request authority', () => {
     const scoped = await mintAccountToken('hosted:agent-1'), plain = await mintAccountToken('cli'), revoked = await mintAccountToken('hosted:old');
     await revokeToken(revoked.id);
     expect(await hostedCredentialDescriptor(scoped.userId!, scoped.id)).toMatchObject({ name: 'hosted:agent-1', scoped: false });
-    await expect(markRequestAuthority('', await getDb())).rejects.toThrow('request_authority_prefix_invalid');
-    await expect(markRequestAuthority('x'.repeat(257), await getDb())).rejects.toThrow('request_authority_prefix_invalid');
-    await markRequestAuthority('hosted:', await getDb());
+    await expect(markRequestAuthority('')).rejects.toThrow('request_authority_prefix_invalid');
+    await expect(markRequestAuthority('x'.repeat(257))).rejects.toThrow('request_authority_prefix_invalid');
+    await markRequestAuthority('hosted:');
     expect(await hostedCredentialDescriptor(scoped.userId!, scoped.id)).toMatchObject({ scoped: true });
     expect(await hostedCredentialDescriptor(plain.userId!, plain.id)).toMatchObject({ scoped: false });
     expect(await hostedCredentialDescriptor(revoked.userId!, revoked.id)).toBeNull();
@@ -131,7 +123,6 @@ describe('historical guest aliases', () => {
     expect(await matchesWorkspaceAccount(held.userId, account.id)).toBe(true);
     expect(await matchesWorkspaceAccount(account.id, account.id)).toBe(true);
     expect(await matchesWorkspaceAccount(other.userId, account.id)).toBe(false);
-    await db.transaction(tx => lockMembershipUsers(tx, [account.id, account.id, other.userId, 'usr_missing']));
   });
 });
 

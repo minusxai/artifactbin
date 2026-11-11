@@ -52,28 +52,15 @@ it('keeps the live dataset cell library (@afbin/collab) a core-provided import',
  const html='<script type="module">import {collab} from "@afbin/collab"; console.log(collab);</script>';
  expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
 });
-it('resolves local backend TypeScript into the native atomic backend source contract',()=>{
- const source='export const typeDefs="type Query { count:Int! }"; export default {count:()=>1};';
- const plan=planPublicationBundle('<link rel="af-resolver" data-af-name="jobs" href="./api.ts">',{entryPath:'index.html',files:[file('api.ts',source,'text/typescript')]});
- expect(plan.resolverSources).toEqual({jobs:source});expect(plan.backends).toEqual([{name:'jobs',path:'api.ts',bytes:Buffer.byteLength(source)}]);expect(plan.dependencies).toEqual([]);expect(plan.html).not.toContain('api.ts');expect(plan.html).toContain('data-af-name="jobs"');
-});
-
-it('resolves af-resolver files, refuses one name twice, and treats the removed af-backend rel as no resolver',()=>{
- const source='export const typeDefs="type Query { n:Int }"; export default {n:()=>1};';
+it('runs no file as code: a TypeScript file a link names is an ordinary uploaded asset, and a missing one is refused',()=>{
+ const source='export default {n:()=>1};';
  const bundle={entryPath:'index.html',files:[file('budget.ts',source,'text/typescript')]};
- const plan=planPublicationBundle('<link rel="af-resolver" data-af-name="budget" href="./budget.ts">',bundle);
- expect(plan.resolverSources).toEqual({budget:source});expect(plan.backends).toEqual([{name:'budget',path:'budget.ts',bytes:Buffer.byteLength(source)}]);expect(plan.html).not.toContain('budget.ts');
- expect(()=>planPublicationBundle('<link rel="af-resolver" data-af-name="budget" href="./budget.ts"><link rel="af-resolver" data-af-name="budget" href="./budget.ts">',bundle)).toThrow('duplicate');
- // An af-backend link is no resolver: its file is an ordinary uploaded asset.
- const removed=planPublicationBundle('<link rel="af-backend" data-af-name="budget" href="./budget.ts">',bundle);
- expect(removed.resolverSources).toEqual({});expect(removed.backends).toEqual([]);expect(removed.dependencies.map(dep=>dep.path)).toEqual(['budget.ts']);
-});
-
-it('accepts atomically supplied backend namespaces but still rejects missing local files',()=>{
- const html='<link rel="af-resolver" data-af-name="db" href="./garden.ts">';
- expect(planPublicationBundle(html,{entryPath:'index.html',files:[]},{resolvedBackendNames:['db']}).dependencies).toEqual([]);
- expect(()=>planPublicationBundle(html,{entryPath:'index.html',files:[]})).toThrow('garden.ts');
- expect(()=>planPublicationBundle(html+'<img src="./missing.svg">',{entryPath:'index.html',files:[]},{resolvedBackendNames:['db']})).toThrow('missing.svg');
+ for(const rel of ['af-resolver','af-backend']){
+  const plan=planPublicationBundle(`<link rel="${rel}" data-af-name="budget" href="./budget.ts">`,bundle);
+  expect(Object.keys(plan)).not.toContain('resolverSources');
+  expect(plan.dependencies.map(dep=>dep.path)).toEqual(['budget.ts']);
+ }
+ expect(()=>planPublicationBundle('<link rel="af-resolver" data-af-name="db" href="./garden.ts">',{entryPath:'index.html',files:[]})).toThrow('garden.ts');
 });
 it('preserves literal native bindings without admitting arbitrary dynamic asset paths',()=>{
  for(const value of ['$pick','{$pick}'])expect(planPublicationBundle(`<DataTable data="$current"/><img src="${value}">`,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
@@ -138,5 +125,28 @@ describe('files a page links (<a href>, <area href>)',()=>{
   const saved='<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1#page=2">Rota</a>';
   expect(pinPublicationAssetUrls(saved,'PAGE12',3)).toBe('<a href="/a/PAGE12/assets?dependency=ROTA12&amp;revision=1&amp;version=3#page=2">Rota</a>');
   expect(authoringHtml(saved,{server:'https://app.example',pageId:'PAGE12',entryPath:'index.html',receipts:[{path:'docs/rota.pdf',kind:'asset',id:'ROTA12',revision:'1'}]})).toBe('<a href="./docs/rota.pdf#page=2">Rota</a>');
+ });
+});
+describe('a root-relative reference',()=>{
+ const font=file('assets/fonts/x.woff2','font','font/woff2');
+ it('to a file published with the page is carried and rewritten like a relative one, from HTML and CSS',()=>{
+  const html='<link rel="stylesheet" href="/css/site.css"><img src="/assets/logo.svg"><a href="/docs/guide.pdf">guide</a>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[file('css/site.css','@font-face{src:url(/assets/fonts/x.woff2)}','text/css'),font,file('assets/logo.svg','<svg/>','image/svg+xml'),file('docs/guide.pdf','%PDF','application/pdf')]});
+  expect(plan.dependencies.map(d=>d.path).sort()).toEqual(['assets/fonts/x.woff2','assets/logo.svg','css/site.css','docs/guide.pdf']);
+  const addresses=new Map(plan.dependencies.map((d,i)=>[d.path,`/a/ASSET${i}/raw?v=1`]));
+  expect(plan.rewrite('@font-face{src:url(/assets/fonts/x.woff2)}','css/site.css',addresses)).not.toContain('/assets/fonts/');
+  expect(plan.rewrite(html,'index.html',addresses)).not.toMatch(/"\/(?:css|assets)\//);
+ });
+ it('to no published file is refused, naming it and what to write instead',()=>{
+  expect(()=>planPublicationBundle('<link rel="stylesheet" href="./css/site.css">',{entryPath:'index.html',files:[file('css/site.css','@font-face{src:url(/assets/fonts/x.woff2)}','text/css')]}))
+   .toThrow(/\/assets\/fonts\/x\.woff2 \(in css\/site\.css\) names no file published with the page[\s\S]*\.\.\/assets\/fonts\/x\.woff2/);
+  expect(()=>planPublicationBundle('<img src="/logo.png">',{entryPath:'index.html',files:[]})).toThrow(/\/logo\.png \(in index\.html\)[\s\S]*\.\/logo\.png/);
+ });
+ it('to the platform\'s own paths, another host, a link or a bare save stays as written',()=>{
+  const html='<link rel="icon" href="/favicon.ico"><style>@font-face{src:url(/af/fonts/inter.woff2)}</style><img src="/a/IMG123/raw?v=1"><script src="//cdn.example.com/x.js"></script><a href="/a/OTHER1">next</a><a href="/@sam/notes">notes</a>';
+  const plan=planPublicationBundle(html,{entryPath:'index.html',files:[]});
+  expect(plan.dependencies).toEqual([]);
+  expect(plan.rewrite(html,'index.html',new Map())).toBe(html);
+  expect(planPublicationBundle('<img src="/logo.png">',{entryPath:'index.html',files:[]},{linksAsWritten:true}).dependencies).toEqual([]);
  });
 });

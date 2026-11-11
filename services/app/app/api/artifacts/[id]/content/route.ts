@@ -2,7 +2,7 @@ import { getVersionFor, readableArtifact, refusingUnservable, servableDocument }
 /** Authenticated immutable content reads never use public serving/import paths. */
 import { withTokenAuth } from '@/lib/authentication';
 import { canEdit } from '@artifactbin/contracts';
-import {serveStoredFile, catalogOf, publicCatalogOf, serializeDatasetDefinition, type DatasetCatalog} from '@/lib/datasets';
+import {LIVE_DATASET_REFUSAL, liveConnectionOf, serveStoredFile, catalogOf, publicCatalogOf, serializeDatasetDefinition, type DatasetCatalog} from '@/lib/datasets';
 import {objectStore} from '@/lib/object-store';
 import {datasetReadAccess,datasetRowsFor,viewCatalog} from '@/lib/dataset-permissions';
 import {json} from '@/lib/http';
@@ -22,6 +22,7 @@ export const GET=withTokenAuth((request,{ actor,params })=>refusingUnservable(as
  const row=raw===null||Number(raw)===head.version?servableDocument(head):await getVersionFor(actor,head.id,Number(raw));
  if(!row)return json({error:'not_found'},404);
  if(['image','pdf','file'].includes(row.format))return serveStoredFile(request,{id:head.id,meta:row.meta});
+ if(row.format==='dataset'&&liveConnectionOf(row.meta))return json({error:'live_dataset',message:LIVE_DATASET_REFUSAL},400);
  if(row.format==='dataset'){
   // The reader's role view (lib/dataset-permissions): a role that sees every row gets the stored bytes.
   const decision=await datasetReadAccess(head,actor);

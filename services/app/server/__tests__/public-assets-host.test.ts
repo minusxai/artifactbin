@@ -90,9 +90,9 @@ it('internal export transport reaches the real public-byte middleware, not the a
 
 it('production composition bypasses identity only for manifest-listed files and still denies private documents', async () => {
  const dir = mkdtempSync(path.join(os.tmpdir(), 'app-build-admission-'));
- mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'assets'));
- writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'assets/app-test.js' } }));
- writeFileSync(path.join(dir, 'assets/app-test.js'), 'public build');
+ mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'af/app'), { recursive: true });
+ writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'af/app/app-test.js' } }));
+ writeFileSync(path.join(dir, 'af/app/app-test.js'), 'public build');
  writeFileSync(path.join(dir, 'index.html'), '<html><head></head><body><div id="root"></div></body></html>');
  writeFileSync(path.join(dir, 'solid-app.html'), '<html><head></head><body><div id="root"></div><script src="/solid-entry.tsx"></script></body></html>');
  const token = await mintToken('build-admission-private');
@@ -103,7 +103,7 @@ it('production composition bypasses identity only for manifest-listed files and 
   for (const upstream of [inProcess(app), overHttp(server.base, secret)]) {
    const session = vi.fn(async () => null);
    const proxy = createAuthHost(await testAuthOptions({ upstream, sessions: { resolve: session } }));
-   const res = await proxy.request('https://example.test/assets/app-test.js', { headers: { cookie: 'secret', 'x-forwarded-host': 'assets.example.test', 'x-mx-actor': 'forged' } });
+   const res = await proxy.request('https://example.test/af/app/app-test.js', { headers: { cookie: 'secret', 'x-forwarded-host': 'assets.example.test', 'x-mx-actor': 'forged' } });
    expect(res.status).toBe(200); expect(await res.text()).toBe('public build'); expect(session).not.toHaveBeenCalled();
    const denied = await proxy.request('https://example.test/a/' + row.id);
    expect(denied.status).toBe(404); expect(await denied.text()).not.toContain('private content');

@@ -45,109 +45,155 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [ types, lint, tests, guards, guards-2 ]
+        part: [ types, lint, tests, guards, guards-2, guards-3 ]
         # The guard and contract tests were one 35-59s Vitest step, ~100s of worker CPU on the runner's 4 vCPUs (the
-        # contracts boot a database and real resolver runners per file). Two jobs split them by measured time
-        # (vitest.guard.config.ts's timed sequencer), each file once.
+        # contracts boot a database per file). Three jobs split them by measured time
+        # (vitest.guard.config.ts's timed sequencer over the guard runners' own times), each file once: on two, the
+        # guard jobs were the slowest of the run in half of pr fast's runs (42-57s; Vitest 19-27s around a 15s file).
         include:
           - part: guards
-            shard: 1/2
+            shard: 1/3
           - part: guards-2
-            shard: 2/2
-          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 22 runners, its ui and
-          # islands projects on 6, the same files ci.yml's api and ui jobs run after the merge, each group packed
+            shard: 2/3
+          - part: guards-3
+            shard: 3/3
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 32 runners, its ui and
+          # islands projects on 7, the same files ci.yml's api and ui jobs run after the merge, each group packed
           # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
           # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
           # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
           # runner provisions a browser. Add a runner when a group's load nears the clock; never move a file out.
+          # EVERY RUNNER DOWNLOADS THE 166 MB INSTALL AT ONCE, and that is what caps the count: at 42 test runners it took
+          # a median 5s (p90 6-7, max 7-11); at 52 (40 api runners, run 43042914246) a median 6s, p90 11, max 20, with 18
+          # runners past 8s, and the slowest jobs were those downloads, not their tests. So 32, not 40.
           - part: api-1
             projects: --project=api --project=api-isolated
-            suite: 1/22
+            suite: 1/32
           - part: api-2
             projects: --project=api --project=api-isolated
-            suite: 2/22
+            suite: 2/32
           - part: api-3
             projects: --project=api --project=api-isolated
-            suite: 3/22
+            suite: 3/32
           - part: api-4
             projects: --project=api --project=api-isolated
-            suite: 4/22
+            suite: 4/32
           - part: api-5
             projects: --project=api --project=api-isolated
-            suite: 5/22
+            suite: 5/32
           - part: api-6
             projects: --project=api --project=api-isolated
-            suite: 6/22
+            suite: 6/32
           - part: api-7
             projects: --project=api --project=api-isolated
-            suite: 7/22
+            suite: 7/32
           - part: api-8
             projects: --project=api --project=api-isolated
-            suite: 8/22
+            suite: 8/32
           - part: api-9
             projects: --project=api --project=api-isolated
-            suite: 9/22
+            suite: 9/32
           - part: api-10
             projects: --project=api --project=api-isolated
-            suite: 10/22
+            suite: 10/32
           - part: api-11
             projects: --project=api --project=api-isolated
-            suite: 11/22
+            suite: 11/32
           - part: api-12
             projects: --project=api --project=api-isolated
-            suite: 12/22
+            suite: 12/32
           - part: api-13
             projects: --project=api --project=api-isolated
-            suite: 13/22
+            suite: 13/32
           - part: api-14
             projects: --project=api --project=api-isolated
-            suite: 14/22
+            suite: 14/32
           - part: api-15
             projects: --project=api --project=api-isolated
-            suite: 15/22
+            suite: 15/32
           - part: api-16
             projects: --project=api --project=api-isolated
-            suite: 16/22
+            suite: 16/32
           - part: api-17
             projects: --project=api --project=api-isolated
-            suite: 17/22
+            suite: 17/32
           - part: api-18
             projects: --project=api --project=api-isolated
-            suite: 18/22
+            suite: 18/32
           - part: api-19
             projects: --project=api --project=api-isolated
-            suite: 19/22
+            suite: 19/32
           - part: api-20
             projects: --project=api --project=api-isolated
-            suite: 20/22
+            suite: 20/32
           - part: api-21
             projects: --project=api --project=api-isolated
-            suite: 21/22
+            suite: 21/32
           - part: api-22
             projects: --project=api --project=api-isolated
-            suite: 22/22
+            suite: 22/32
+          - part: api-23
+            projects: --project=api --project=api-isolated
+            suite: 23/32
+          - part: api-24
+            projects: --project=api --project=api-isolated
+            suite: 24/32
+          - part: api-25
+            projects: --project=api --project=api-isolated
+            suite: 25/32
+          - part: api-26
+            projects: --project=api --project=api-isolated
+            suite: 26/32
+          - part: api-27
+            projects: --project=api --project=api-isolated
+            suite: 27/32
+          - part: api-28
+            projects: --project=api --project=api-isolated
+            suite: 28/32
+          - part: api-29
+            projects: --project=api --project=api-isolated
+            suite: 29/32
+          - part: api-30
+            projects: --project=api --project=api-isolated
+            suite: 30/32
+          - part: api-31
+            projects: --project=api --project=api-isolated
+            suite: 31/32
+          - part: api-32
+            projects: --project=api --project=api-isolated
+            suite: 32/32
           - part: ui-1
             projects: --project=ui --project=islands
-            suite: 1/6
+            suite: 1/7
           - part: ui-2
             projects: --project=ui --project=islands
-            suite: 2/6
+            suite: 2/7
           - part: ui-3
             projects: --project=ui --project=islands
-            suite: 3/6
+            suite: 3/7
           - part: ui-4
             projects: --project=ui --project=islands
-            suite: 4/6
+            suite: 4/7
           - part: ui-5
             projects: --project=ui --project=islands
-            suite: 5/6
+            suite: 5/7
           - part: ui-6
             projects: --project=ui --project=islands
-            suite: 6/6
+            suite: 6/7
+          - part: ui-7
+            projects: --project=ui --project=islands
+            suite: 7/7
           # THE NODE BATCH (vitest.node-batch.config.ts, scripts/lib/node-batch.mjs): the full suite's `node` files
           # recorded under 200ms that no other list here runs, plus the post-merge failures it guards, one shared module
           # graph per worker; ci.yml's node job still runs every one of them. 236 files: ~4.3s per runner locally on two
           # runners (3 workers each), so three runners, predicted ~10s each on CI (an estimate: none has run there yet).
+          # THE PULL REQUEST'S OWN INSTALL: a lock this branch changed misses main's install on every push, and every runner
+          # reconciles main's tree to it (~2.7s: the miss probe and `npm install`, run 43039126177). This runner, only on
+          # that miss, runs a clean `npm ci` (never a reconciled tree: nothing stale is saved) and saves it under this
+          # lock's key, in this pull request's cache scope; from the next push every runner restores an exact hit.
+          # A clean install is ~14-24s; it runs beside the test runners, on the first push of each new lock only.
+          - part: install
+            install: true
           - part: node-1
             batch: 1/3
           - part: node-2
@@ -156,7 +202,7 @@ jobs:
             batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      # Node 22, the install cache's (its key says node22; isolated-vm in it is compiled for that major's ABI). The runner's
+      # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
       # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
       # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
       - id: runner-node
@@ -167,9 +213,91 @@ jobs:
         with:
           node-version: 22
       # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
-      # `warm-caches` and every ci.yml miss save it; this lane only restores.
+      # `warm-caches` and every ci.yml miss save it; in this lane only the `install` runner saves, a clean `npm ci` of a
+      # lock main has not installed yet (its matrix entry says why).
       - run: node scripts/ci/ci.mjs lock-fingerprint
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      - if: matrix.install
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: own-install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          lookup-only: true
+      - if: matrix.install
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: own-slim
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          lookup-only: true
+      - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      # The slim install of a lock whose whole install exists but whose slim one does not (this pull request's first
+      # run after the slim entry was introduced): the whole one, restored, is what it is cut from.
+      - if: matrix.install && steps.own-install.outputs.cache-hit == 'true' && steps.own-slim.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - if: matrix.install && steps.own-slim.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      # THE SLIM INSTALL, for the runners that only run Vitest: the whole install minus what no test here can load
+      # (scripts/__tests__/slim-install.test.mjs names each and refuses an import of one): the native TypeScript compiler
+      # (the `types` runner's), the @fontsource packages (copy-assets reads them at install; the fonts they make are kept),
+      # lucide-static's icon font. About 29 MB of the 166 MB compressed entry. Exact key only: on a miss the whole install
+      # is restored as before, so a lock main has not slimmed yet (this entry's first merge included) costs nothing.
+      - if: matrix.suite || matrix.shard || matrix.batch
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: slim
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            !node_modules/@typescript/typescript-*
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/lucide-static/font
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
           path: |
@@ -184,7 +312,7 @@ jobs:
       # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
       # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
       # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
-      - if: steps.install.outputs.cache-hit != 'true'
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: near-install
         with:
@@ -195,7 +323,7 @@ jobs:
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
           restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
-      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != ''
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
         name: Reconcile the nearest install to this lock
         run: |
           npm install --no-audit --no-fund
@@ -205,7 +333,7 @@ jobs:
             git checkout -- package-lock.json package.json 'services/*/package.json'
             npm ci --no-audit --no-fund
           fi
-      - if: steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
         run: npm ci --no-audit --no-fund
       # The root type check is incremental: start from the newest native build info any run of this repository
       # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.

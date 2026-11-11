@@ -140,12 +140,14 @@ export function logClientIdentity(context: string, input: {
  * Unlike the User-Agent above this is used for a rate-limit BUCKET as well as
  * telemetry, so which end is read is a security property, not a preference —
  * see lib/auth.ts `clientIp`. `x-real-ip` is the single-value spelling some
- * proxies send instead; empty string means the caller is unidentifiable.
+ * proxies send instead; empty string means the caller is unidentifiable, as it
+ * always is with no trusted hop (`hops` 0: every such header is the caller's).
  */
 export function forwardedFor(
   headers: { get(name: string): string | null },
   hops: number,
 ): string {
+  if (hops < 1) return '';
   const forwarded = headers.get('x-forwarded-for');
   if (forwarded) {
     const chain = forwarded.split(',').map((hop) => hop.trim()).filter(Boolean);

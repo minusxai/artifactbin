@@ -11,7 +11,7 @@ const examples = {
  er: 'erDiagram\n READER ||--o{ PAGE : owns\n READER {\n string name\n }\n PAGE {\n string title\n }'
 };
 it('ships pinned independent Pele APIs and renders readable diagrams with safe links and recoverable errors',async()=>{
- expect(libraryUrls()).toMatchObject({pele:'/libraries/pele-1.12.0/index.js','pele-flowchart':'/libraries/pele-flowchart-1.12.0/index.js'});
+ expect(libraryUrls()).toMatchObject({pele:'/af/lib/pele-1.12.0/index.js','pele-flowchart':'/af/lib/pele-flowchart-1.12.0/index.js'});
  for(const name of ['pele','pele-flowchart','pele-sequence','pele-er']){
   const spec=(registry as Record<string,{entry:string}>)[name];expect(spec).toBeDefined();
   const result=await build({entryPoints:[path.resolve('lib/libraries',spec!.entry)],bundle:true,minify:true,write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',logLevel:'silent'});

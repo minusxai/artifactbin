@@ -33,7 +33,7 @@ The local test wrapper runs affected tests within its file budget; a deferred lo
 
 ## Modules and documentation
 
-`services/app` owns the reader and artifact APIs. `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. The author skill lives at [services/app/skills/artifactbin](services/app/skills/artifactbin/SKILL.md). The HTTP skill is the public authoring path; standard OAuth, verified email login and account API-token access remain supported.
+`services/app` owns the reader and artifact APIs. `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/contracts` and `services/utils` provide shared capabilities. The author skill lives at [services/app/skills/artifactbin](services/app/skills/artifactbin/SKILL.md). The HTTP skill is the public authoring path; standard OAuth, verified email login and account API-token access remain supported.
 
 The guides people and agents read are served by the author skill (`/llms.txt`, `/llms/<topic>`); the operations behind them are described in `services/app/lib/operations/registry.ts`. How a module works is in its own header comment, and the rules for changing it are in the `AGENTS.md` card [AGENTS.md](AGENTS.md) names for that directory. [SETUP.md](SETUP.md) covers running a server.
 

@@ -19,18 +19,16 @@ function admitted(expression, event, base, ref = 'refs/heads/main') {
 }
 
 describe('main validation', () => {
-  // #1007: full ci.yml and runner-design run after merge (and by manual dispatch); PRs run only pr-fast.
+  // #1007: full ci.yml runs after merge (and by manual dispatch); PRs run only pr-fast.
   it('runs the full ci.yml on every push to main, never automatically on pull requests', () => {
     const ci = workflow('ci.yml');
     expect(ci.on.push.branches).toEqual(['main']);
     expect(ci.on).not.toHaveProperty('pull_request');
     for (const job of [ci.jobs.plan, ci.jobs.test]) expect(admitted(job.if, 'push', '')).toBe(true);
-    expect(workflow('runner-design.yml').on).not.toHaveProperty('pull_request');
   });
   it('runs every deployment gate and the server pin on each push to main', () => {
     const ci = workflow('ci.yml');
     expect(ci.on.push.branches).toContain('main');
-    expect(workflow('runner-design.yml').on.push.branches).toEqual(['main']);
     expect(workflow('v3-codeql.yml').on.push.branches).toEqual(['main']);
     expect(workflow('v3-codeql.yml').on.push['paths-ignore']).toBeUndefined();
     expect(workflow('page-speed.yml').on.push.branches).toContain('main');
@@ -51,29 +49,6 @@ describe('main validation', () => {
   it('runs the fast lane on main pushes only', () => {
     const step = workflow('ci.yml').jobs.checks.steps.find(candidate => candidate.run === 'node scripts/ci/fast-check.mjs');
     expect(step.if).toBe("github.ref == 'refs/heads/main'");
-  });
-  it('runs every retained worker proof without retired product suites on every ref', () => {
-    const steps = workflow('runner-design.yml').jobs['linux-worker'].steps;
-    const selected = ref => new Set(steps.filter(step => !step.if || admitted(step.if, 'push', '', ref)).flatMap(step => step.run?.match(/services\/[\w/.-]+\.test\.ts/g) ?? []));
-    const main = selected('refs/heads/main');
-    expect([...main].sort()).toEqual([
-      'services/app/__tests__/runner-page-boundary.test.ts',
-      'services/app/server/__tests__/retired-execution.test.ts',
-      'services/runner/__tests__/runner-service.test.ts',
-      'services/runner/__tests__/runner-container-lifecycle.test.ts',
-      'services/app/__tests__/page-graphql.test.ts',
-      'services/app/lib/page-operations/__tests__/backend.test.ts',
-      'services/app/lib/page-operations/__tests__/runtime.test.ts',
-      // caps.db with the Docker worker: tunnel cleanup and redaction, and a real TLS PostgreSQL and MySQL end to end.
-      'services/app/lib/page-operations/__tests__/database-runner.test.ts',
-      'services/app/lib/page-operations/__tests__/database-postgres.test.ts',
-      'services/app/lib/page-operations/__tests__/database-mysql.test.ts',
-    ].sort());
-    // A pull request into main (refs/pull/N/merge) and main itself run the same retained set.
-    expect([...selected('refs/pull/904/merge')].sort()).toEqual([...main].sort());
-    for (const file of ['services/app/__tests__/runner-design.test.ts','services/app/__tests__/runner-api.test.ts','services/app/__tests__/lambda-artifact.test.ts','services/app/__tests__/lambda-operations.test.ts'])
-      expect(main.has(file)).toBe(false);
-    for (const script of ['scripts/runner-os-boundary.mjs','services/runner/prove-postgres.ts']) expect(steps.some(step => step.run?.includes(script))).toBe(true);
   });
   // #1007: every main push runs the full suite (the bounded PR lane mints no tested receipts).
   it('runs the full suite on every main push', () => {

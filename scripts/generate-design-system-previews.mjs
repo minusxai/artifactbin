@@ -18,7 +18,7 @@ import { varsMap } from '../design-systems/lib/runtime.mjs';
 import { pickerSpecimen } from '../design-systems/lib/picker.mjs';
 
 const ORIGIN = 'http://design-system-previews.local';
-const OUT = path.join(REPO, 'services/app/public/design-systems');
+const OUT = path.join(REPO, 'services/app/public/img/design-systems');
 const CACHE = path.join(REPO, 'tmp/design-system-preview-fonts');
 const escapeHtml = text => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 

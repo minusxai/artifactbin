@@ -43,12 +43,12 @@ import { completeMutationReceipt, durableMutation, getArtifactById, getArtifactH
 import { datasetWriteAccess, filterAdmits } from '@/lib/dataset-permissions';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
 import {
-  authorityShape, columnsOf, datasetBindingCatalog, fenced, ID_COLUMN, linkedRoot, load, loadLinked, notFound, readAuthorityIn, refusal,
+  authorityShape, datasetBindingCatalog, fenced, ID_COLUMN, linkedRoot, load, loadLinked, notFound, readAuthorityIn, refusal,
   resolveDatasetBinding, rowIdsForObject, rowsNow, runPageSql, shownRows, tableIdentity,
   type DatasetSnapshot, type DatasetStatement, type Loaded, type LoadedTable, type PageCommitGuard, type PageScope, type PageSqlAnswer,
   type PageSqlCall, type ReadAuthority, type WrittenOutcome,
 } from '@/lib/dataset-access';
-import { CAN_FIELD, hasuraSdl, type HasuraTableModel } from './hasura-schema';
+import { CAN_FIELD, hasuraSdl } from './hasura-schema';
 import { askedCan, rowCan, tableCan, withCan } from './can';
 import { hasuraGeneratedNames, hasuraNames, storedConfiguration } from './hasura-names';
 import { compileRows, HasuraReadError, type HasuraReadArgs } from './hasura-read';
@@ -163,27 +163,27 @@ async function run(actor: AccessActor, loaded: readonly Loaded[], document: Docu
 
 
 interface LinkedDatasetGraphqlOptions {
-  /** The resolver operation the call runs inside: mutations only inside a mutation resolver. */
+  /** The operation the caller asked for: mutations only when it is `mutation`. */
   operation: 'query' | 'mutation' | undefined;
   /** Serialized `data` bytes the answer may carry. */
   resultBytes: number;
-  /** The page whose resolver calls (`X-Hasura-Page-Id`). */
+  /** The page the call reads through (`X-Hasura-Page-Id`). */
   pageId?: string;
   /** A mutation commits only while the page holds (lib/page-doors `pageCommitGuard`). */
   commitGuard?: PageCommitGuard;
 }
 
 /**
- * THE PAGE'S DATASETS FOR A RESOLVER'S `caps.query`, run as the caller (never owner rights): reads always; writes
- * only inside a mutation resolver, through the one generated mutation path under each dataset's rules for the
- * caller's role through the page.
+ * A PAGE'S LINKED DATASETS AS ONE GENERATED API, run as the caller (never owner rights): reads always; writes only
+ * when the call is a mutation, through the one generated mutation path under each dataset's rules for the caller's
+ * role through the page.
  */
 export async function executeLinkedDatasetGraphql(actor: AccessActor, links: readonly HtmlDatasetLink[], request: DatasetGraphqlRequest, options: LinkedDatasetGraphqlOptions, signal: AbortSignal): Promise<DatasetGraphqlReply> {
   const parsed = parsedOperation(request);
   if ('errors' in parsed) return parsed;
   const kind = parsed.operation.operation;
-  if (kind === 'subscription') return { errors: [error('caps.query has no subscription root', 'validation_failed')] };
-  if (kind === 'mutation' && options.operation !== 'mutation') return { errors: [error('a dataset mutation runs only inside a mutation resolver', 'permission_denied')] };
+  if (kind === 'subscription') return { errors: [error('there is no subscription root', 'validation_failed')] };
+  if (kind === 'mutation' && options.operation !== 'mutation') return { errors: [error('a dataset mutation runs only as a mutation call', 'permission_denied')] };
   let loaded: Loaded[];
   try { loaded = await loadLinked(actor, links, { ...(options.pageId ? { pageId: options.pageId } : {}), fenced: kind === 'query' }, signal); } catch (e) {
     if (e instanceof GraphQLError) return { errors: [error(e.message, 'validation_failed')] };
@@ -213,43 +213,6 @@ export async function pageDatasetRoots(actor: AccessActor, link: HtmlDatasetLink
   return roots.flatMap(({ root }) => hasuraGeneratedNames(linkedRoot(link.name, roots.length, root)));
 }
 
-/** One link's publish-check schema (lib/page-operations `PageDocumentDataset`). */
-export interface PageDatasetCheckSource {
-  name: string;
-  fileId: string;
-  version: string;
-  typeDefs: string;
-  /** The dataset's own API names (its direct GraphQL) → this link's page names. */
-  renames: Record<string, string>;
-}
-
-/**
- * THE PAGE'S DATASETS AS PUBLISH CHECKS SEE THEM: every link under its page name with every root, column and write
- * a role could be given (role-independent, from the declared tables, as `pageDatasetRoots`), so a document
- * valid for any reader is never refused; `sdl` is all of them as one API, what a resolver's caps.query validates
- * against. Null when no dataset is linked.
- */
-export async function pageDatasetCheckSources(actor: AccessActor, links: readonly HtmlDatasetLink[]): Promise<{ sdl: string; sources: PageDatasetCheckSource[] } | null> {
-  if (!links.length) return null;
-  const all: HasuraTableModel[] = [], sources: PageDatasetCheckSource[] = [];
-  for (const link of links) {
-    const row = await resolveDatasetBinding(actor, link);
-    const declared = datasetBindingCatalog(row);
-    const names = hasuraNames(declared.tables, { title: row.title, configuration: storedConfiguration(row.dataset_policy) });
-    const models = declared.tables.map((table, i): HasuraTableModel => {
-      const columns = columnsOf(table, names[i]!);
-      return { root: linkedRoot(link.name, declared.tables.length, names[i]!.root), table: { schema: table.schema, name: table.name }, columns, write: { insert: columns, update: columns, delete: true } };
-    });
-    const renames: Record<string, string> = {};
-    names.forEach(({ root }, i) => {
-      const page = hasuraGeneratedNames(models[i]!.root);
-      if (root !== models[i]!.root) hasuraGeneratedNames(root).forEach((own, j) => { renames[own] = page[j]!; });
-    });
-    all.push(...models);
-    sources.push({ name: link.name, fileId: link.datasetId, version: link.mode === 'pinned' ? link.revision : 'live', typeDefs: hasuraSdl(models), renames });
-  }
-  return { sdl: hasuraSdl(all), sources };
-}
 
 /** One hasura link's composition source: its role's SDL, mounted flat at the top of the page schema. */
 interface PageDatasetSource {

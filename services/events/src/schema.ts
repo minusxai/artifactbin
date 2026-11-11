@@ -39,6 +39,16 @@ const EVENTS_TABLE: Table = {
     { name: 'object_id', type: 'TEXT', notNull: true },
     /** The rest — ids and names only: {fork_id}, {annotation_id}, {client}. Never content, never a secret. */
     { name: 'payload', type: 'JSONB', notNull: true, default: "'{}'" },
+    /**
+     * THE FEED POSITION: assigned by this service when it durably accepts the row (never the emitter's `at`), from
+     * the one-row `feed_head` counter inside the same statement, so appends serialize on that row through commit and
+     * a reader that sees position p has already seen every position below it. Strictly increasing per installation,
+     * not dense (a duplicate id in a batch spends one). NULL only on rows stored before positions existed, until the
+     * next boot's ensure numbers them.
+     */
+    { name: 'position', type: 'BIGINT' },
+    /** When this service accepted the row (clock time at append): the public feed's retention is measured on it. */
+    { name: 'accepted_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['id'],
   indexes: [
@@ -48,7 +58,29 @@ const EVENTS_TABLE: Table = {
     { name: 'idx_events_subject_at', columns: ['subject_id', 'at'] },
     /** the forwarding rules and the catalogue tests */
     { name: 'idx_events_kind_verb_at', columns: ['object_kind', 'verb', 'at'] },
+    /** the public feed: the installation-wide resume point, and its expiry check */
+    { name: 'idx_events_position', columns: ['position'], unique: true },
+    /** the public feed for one resource (`artifact_id=`) */
+    { name: 'idx_events_object_position', columns: ['object_id', 'position'] },
+    /** the public feed for some event types (`category=`, `types=`) */
+    { name: 'idx_events_kind_verb_position', columns: ['object_kind', 'verb', 'position'] },
+    /** the public feed's retention: where the retained feed starts */
+    { name: 'idx_events_accepted_position', columns: ['accepted_at', 'position'] },
   ],
+};
+
+/**
+ * The feed's append counter: ONE row, `position` the highest position handed out. Every append does
+ * `UPDATE … SET position = position + n RETURNING` first, so concurrent appends queue on the row lock and each sees
+ * the previous one's committed value (READ COMMITTED re-reads a row it waited for). Never read by the app.
+ */
+const FEED_HEAD_TABLE: Table = {
+  name: 'feed_head',
+  columns: [
+    { name: 'id', type: 'INTEGER', notNull: true },
+    { name: 'position', type: 'BIGINT', notNull: true, default: '0' },
+  ],
+  primaryKey: ['id'],
 };
 
 const DELIVERIES_TABLE: Table = {
@@ -60,4 +92,4 @@ const DELIVERIES_TABLE: Table = {
   ], primaryKey:['event_id','subscriber'],
   indexes:[{name:'idx_delivery_pending',columns:['subscriber','available_at'],where:'delivered_at IS NULL'}],
 };
-export const EVENTS_TABLES: Table[] = [EVENTS_TABLE, DELIVERIES_TABLE];
+export const EVENTS_TABLES: Table[] = [EVENTS_TABLE, DELIVERIES_TABLE, FEED_HEAD_TABLE];

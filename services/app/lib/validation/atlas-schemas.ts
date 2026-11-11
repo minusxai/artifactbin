@@ -100,7 +100,7 @@ type ConditionalFormatRule = Static<typeof ConditionalFormatRule>;
 // ============================================================================
 // Viz V2 envelope
 //
-// Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
+// Only the chart envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
 // deliberately opaque here (open records) — the grammar is not re-validated.
 // Do NOT reproduce the grammars in TypeBox.
 // ============================================================================

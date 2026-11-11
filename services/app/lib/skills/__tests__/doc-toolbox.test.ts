@@ -58,9 +58,9 @@ it('read saves typing first, then writes the Markdown under its marker; write se
   await writeFile(file, stamp(marker, '# Plan\n\nShip Friday.\n'));
   // A write owes the user a reply: the page's running comment watches hear of it, as after a publish.
   const {watchLogPath} = await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
-  const log = watchLogPath(path.join(root, 'home'), server, 'PAGE12', 'session');
+  const log = watchLogPath(path.join(root, 'home'), server, 'PAGE12', 'comments', 'session');
   await mkdir(path.dirname(log), {recursive: true});
-  await writeFile(log, JSON.stringify({kind: 'watch', schema: 1, server, artifact: 'PAGE12', stream: 'comments'}) + '\n');
+  await writeFile(log, JSON.stringify({kind: 'watch', schema: 2, server, artifact: 'PAGE12', stream: 'comments'}) + '\n');
   seen = [];
   const written = await run('write', [file]);
   expect(JSON.parse((await readFile(log, 'utf8')).trim().split('\n').at(-1)!)).toMatchObject({kind: 'activity', artifact: 'PAGE12', owesReply: true});

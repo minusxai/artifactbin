@@ -142,7 +142,7 @@ describe('profile sync at the bearer door', () => {
     const db = await harness.db();
     const real = db.query.bind(db);
     const spy = vi.spyOn(db, 'query').mockImplementation(((text: string, params?: unknown[]) =>
-      /INSERT INTO users/.test(text)
+      /INSERT INTO (auth\.)?users/.test(text)
         ? Promise.reject(new Error('connection terminated unexpectedly'))
         : real(text, params)) as typeof db.query);
     try {

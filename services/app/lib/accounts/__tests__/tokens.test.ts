@@ -11,12 +11,12 @@ afterEach(() => { vi.useRealTimers(); });
 const account = (email = 'owner@example.test') => createUser({ email });
 const tokenRow = async (id: string) =>
   (await (await getDb()).query<{ token_hash: string; user_id: string | null; expires_at: string | null; deleted_at: string | null; last_used_at: string | null }>(
-    'SELECT token_hash, user_id, expires_at, deleted_at, last_used_at FROM tokens WHERE id = $1', [id])).rows[0]!;
+    'SELECT token_hash, user_id, expires_at, deleted_at, last_used_at FROM auth.tokens WHERE id = $1', [id])).rows[0]!;
 /** Mint a token whose lifetime already ran out: the clock is set back past its shortest TTL. Only Date is faked. */
 async function mintExpired(userId: string | null): Promise<{ id: string; token: string }> {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(Date.now() - MIN_TOKEN_TTL_MS - 60_000);
-  try { return await mintToken('stale', userId, undefined, { expiresInMs: MIN_TOKEN_TTL_MS }); } finally { vi.useRealTimers(); }
+  try { return await mintToken('stale', userId, { expiresInMs: MIN_TOKEN_TTL_MS }); } finally { vi.useRealTimers(); }
 }
 
 describe('lifetimes', () => {
@@ -60,11 +60,11 @@ describe('mint', () => {
 
   it('accepts exactly the [MIN, MAX] range or null, and refuses anything else without writing a row', async () => {
     const user = await account();
-    await expect(mintToken('min', user.id, undefined, { expiresInMs: MIN_TOKEN_TTL_MS })).resolves.toMatchObject({ name: 'min' });
-    await expect(mintToken('max', user.id, undefined, { expiresInMs: MAX_TOKEN_TTL_MS })).resolves.toMatchObject({ name: 'max' });
-    await expect(mintToken('forever', user.id, undefined, { expiresInMs: null })).resolves.toMatchObject({ expiresAt: null });
+    await expect(mintToken('min', user.id, { expiresInMs: MIN_TOKEN_TTL_MS })).resolves.toMatchObject({ name: 'min' });
+    await expect(mintToken('max', user.id, { expiresInMs: MAX_TOKEN_TTL_MS })).resolves.toMatchObject({ name: 'max' });
+    await expect(mintToken('forever', user.id, { expiresInMs: null })).resolves.toMatchObject({ expiresAt: null });
     for (const expiresInMs of [MIN_TOKEN_TTL_MS - 1, MAX_TOKEN_TTL_MS + 1, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      await expect(mintToken('bad', user.id, undefined, { expiresInMs }), String(expiresInMs)).rejects.toThrow(RangeError);
+      await expect(mintToken('bad', user.id, { expiresInMs }), String(expiresInMs)).rejects.toThrow(RangeError);
     }
     const names = (await (await getDb()).query<{ name: string }>('SELECT name FROM tokens ORDER BY name')).rows.map((r) => r.name);
     expect(names).toEqual(['forever', 'max', 'min']);
@@ -99,7 +99,7 @@ describe('resolve', () => {
     expect(await resolveToken(stale.token)).toBeNull();
     expect(await resolveTokenById(stale.id)).toBeNull();
     expect(tokenStatus(await tokenRow(stale.id))).toBe('expired');
-    const web = await mintToken('web', user.id, undefined, { expiresInMs: null });
+    const web = await mintToken('web', user.id, { expiresInMs: null });
     expect(await resolveToken(web.token)).toMatchObject({ id: web.id });
   });
 
@@ -132,7 +132,7 @@ describe('LIVE_TOKEN_SQL', () => {
   it('admits exactly the unrevoked, unexpired rows, and stays unambiguous joined with artifacts', async () => {
     const user = await account();
     const live = await mintToken('live', user.id);
-    const forever = await mintToken('forever', user.id, undefined, { expiresInMs: null });
+    const forever = await mintToken('forever', user.id, { expiresInMs: null });
     const revoked = await mintToken('revoked', user.id);
     await revokeToken(revoked.id);
     const stale = await mintExpired(user.id);

@@ -27,6 +27,8 @@ import { mintAccountToken } from '@/__tests__/harness';
 import { resetAllowances } from '@/lib/allowances';
 import { getDb, resetDb } from '@/lib/platform';
 import { SCHEMA_STATEMENTS } from '@/lib/platform';
+import { ensureIdentitySchema } from '@artifactbin/auth/identity-store';
+import type { Queryable, TransactionalQueryable } from '@artifactbin/contracts';
 import { request } from '@/__tests__/harness';
 
 // harness-exempt: reset builds fresh PGlite databases to test schema replay and upgrade behavior
@@ -54,23 +56,46 @@ afterAll(async () => {
 });
 
 describe('the additive DDL is replay-safe', () => {
-  it('preserves a pre-lifecycle token with the new lifecycle columns NULL', async () => {
+  it('moves identity tables left in the app schema into the identity module\'s, rows and indexes kept, new columns NULL, reads through the views', async () => {
     const legacy = new PGlite();
     try {
+      // A database from before the identity module owned its tables: tokens, users and a group in the app's schema.
       await legacy.exec(`
         CREATE TABLE tokens (
           id TEXT PRIMARY KEY,
           token_hash TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        CREATE UNIQUE INDEX idx_tokens_hash ON tokens (token_hash);
         INSERT INTO tokens (id, token_hash) VALUES ('tok_legacy', 'legacy-hash');
+        CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, kind TEXT NOT NULL DEFAULT 'account');
+        INSERT INTO users (id, email) VALUES ('usr_legacy', 'legacy@example.com');
+        CREATE TABLE groups (id TEXT PRIMARY KEY, handle TEXT NOT NULL, name TEXT NOT NULL, created_by TEXT NOT NULL);
+        INSERT INTO groups (id, handle, name, created_by) VALUES ('grp_legacy', 'legacy', 'Legacy', 'usr_legacy');
       `);
       for (const stmt of SCHEMA_STATEMENTS) await legacy.exec(stmt);
+      const db = { query: legacy.query.bind(legacy), transaction: <T,>(fn: (tx: Queryable) => Promise<T>) => legacy.transaction((tx) => fn(tx as unknown as Queryable)) } as unknown as TransactionalQueryable;
+      const schemas = { auth: 'auth', app: 'public', read: 'identity' };
+      await ensureIdentitySchema(db, schemas);
+      // Replayed, as on every boot: a no-op.
+      await ensureIdentitySchema(db, schemas);
+      await legacy.exec("SET search_path TO public, identity");
+      const where = await legacy.query<{ schema: string; name: string; kind: string }>(
+        "SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS kind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname IN ('tokens','users','groups') AND n.nspname IN ('public','auth','identity') ORDER BY 1, 2");
+      expect(where.rows).toEqual([
+        { schema: 'auth', name: 'groups', kind: 'r' }, { schema: 'auth', name: 'tokens', kind: 'r' }, { schema: 'auth', name: 'users', kind: 'r' },
+        { schema: 'identity', name: 'groups', kind: 'v' }, { schema: 'identity', name: 'tokens', kind: 'v' }, { schema: 'identity', name: 'users', kind: 'v' },
+      ]);
       const rows = await legacy.query<{ id: string; expires_at: Date | null; last_used_at: Date | null; audience: string | null; scope: string | null }>(
         'SELECT id, expires_at, last_used_at, audience, scope FROM tokens WHERE id = $1',
         ['tok_legacy'],
       );
       expect(rows.rows).toEqual([{ id: 'tok_legacy', expires_at: null, last_used_at: null, audience: null, scope: null }]);
+      expect((await legacy.query('SELECT id, email FROM users')).rows).toEqual([{ id: 'usr_legacy', email: 'legacy@example.com' }]);
+      expect((await legacy.query('SELECT id, deleted_at, parent_id FROM groups')).rows).toEqual([{ id: 'grp_legacy', deleted_at: null, parent_id: null }]);
+      // The index moved with its table; the hash is the base table's alone.
+      expect((await legacy.query("SELECT schemaname FROM pg_indexes WHERE indexname = 'idx_tokens_hash'")).rows).toEqual([{ schemaname: 'auth' }]);
+      await expect(legacy.query('SELECT token_hash FROM tokens')).rejects.toThrow(/token_hash/);
     } finally {
       await legacy.close();
     }
@@ -84,7 +109,7 @@ describe('the additive DDL is replay-safe', () => {
     // The second pass is the one that matters: it runs on every restart.
     for (const stmt of SCHEMA_STATEMENTS) await fresh.exec(stmt);
 
-    for (const table of ['artifacts', 'artifact_versions', 'artifact_edits', 'annotations', 'tokens', 'users']) {
+    for (const table of ['artifacts', 'artifact_versions', 'artifact_edits', 'annotations']) {
       const present = await fresh.query<{ n: number }>(
         'SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1',
         [table],
@@ -113,10 +138,6 @@ describe('the additive DDL is replay-safe', () => {
       'deleted_at', 'author_remote',
       // When the author last rewrote the body; appended on upgrade like the rest.
       'edited_at',
-      // The latest edit's position in the comment feed (lib/annotations/changes), and the credential that made it.
-      'change_seq', 'change_token_id',
-      // The agent session behind the row and its latest edit: per-session `you` in the feed.
-      'author_session', 'change_session',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is
@@ -132,11 +153,8 @@ describe('the additive DDL is replay-safe', () => {
     // new columns go on the END, so an existing database grows them by ALTER
     // rather than needing its rows rewritten.
     expect(artifactColumns.rows.slice(-2).map((row) => row.column_name)).toEqual(['forked_from', 'deleted_at']);
-    const tokenColumns = await fresh.query<{ column_name: string }>(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema = current_schema() AND table_name = 'tokens'`,
-    );
-    expect(tokenColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining(['client_harness', 'audience', 'scope']));
+    // Identity's tables are not the app's to declare.
+    expect((await fresh.query("SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('tokens','users','groups')")).rows).toEqual([]);
     await fresh.close();
   });
 

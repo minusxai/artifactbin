@@ -1,6 +1,6 @@
 /**
- * Which network addresses the host may connect to on a page's behalf: web ingestion and `caps.fetch`
- * (services/app lib/web-ingest) and the resolver database tunnel (services/runner). PURE: no sockets, no
+ * Which network addresses the host may connect to on a page's behalf: web ingestion (services/app
+ * lib/web-ingest). PURE: no sockets, no
  * DNS, so every range is unit-testable. Callers resolve a name once, judge every answer here and connect to
  * the exact address judged.
  *

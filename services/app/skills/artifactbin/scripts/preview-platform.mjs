@@ -1,6 +1,6 @@
 /**
  * Internal: the platform code a local preview runs, from the selected server: the core runtime and
- * its lazy modules (/af/*.js), the hosted libraries (/libraries/<name>-<version>/index.js), the
+ * its lazy modules (/af/*.js), the hosted libraries (/af/lib/<name>-<version>/index.js), the
  * hosted components (/af/components/*.js) and the import map naming them (/af/import-map.json)
  * and one design system's platform stylesheet (/af/styles.css?system=NAME). Each file is fetched
  * once and served from the preview's own origin, so the private CSP keeps script-src 'self'. A
@@ -15,7 +15,7 @@ import {fileURLToPath} from 'node:url';
 // Save HTML never embeds them (an offline page never opens a session).
 const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|collab|state)\.js$/;
 const NATIVE_RUNTIME=/^\/af\/native-(?:regions|markdown)\.js$/;
-const LIBRARY=/^\/libraries\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/;
+const LIBRARY=/^\/af\/lib\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/;
 const COMPONENT=/^\/af\/components\/[a-z][a-z0-9-]*\.js$/;
 const MAX_BYTES=8_000_000;
 /** The runtime modules Save HTML embeds (lib/html-runtime save-local), by HtmlRuntimeAssets key. */
@@ -34,7 +34,8 @@ export const isPlatformModulePath=pathname=>pathname===LEGACY_CORE_PATH||RUNTIME
 
 /** A source checkout's own build outputs (absent in the installed archive). */
 async function checkoutModule(pathname){
-const file=LIBRARY.test(pathname)?new URL('../../../public'+pathname,import.meta.url):
+const file=LIBRARY.test(pathname)?new URL('../../../public/libraries/'+pathname.slice(8),
+   import.meta.url):
    COMPONENT.test(pathname)?new URL('../../../lib/build-assets/components/'+pathname.slice(
    '/af/components/'.length),import.meta.url):null;
  if(!file)return null;
@@ -43,7 +44,7 @@ return readFile(fileURLToPath(file)).catch(error=>{if(error.code==='ENOENT'||
 }
 
 /** @param {{origin?:string|null, libraryAssets?:Record<string,string>}} options
- * `libraryAssets`: explicit `/libraries/…` sources (tests). */
+ * `libraryAssets`: explicit `/af/lib/…` sources (tests). */
 export function platformModules({origin=null,libraryAssets}={}){
 if(origin!==null&&!/^https?:$/.test(new URL(origin).protocol))throw Error(
    'Platform origin must be http(s)');
@@ -80,7 +81,7 @@ if(bytes.length>MAX_BYTES||!check(response.headers.get('content-type')??''))thro
   * given (tests). */
  async function importMap(){
 if(explicit.size){const map={};for(const url of explicit.keys())map['@afbin/'+LIBRARY.exec(url)[
-    0].slice(11).replace(/-\d+\.\d+\.\d+\/index\.js$/,'')]=url;return map;}
+    0].slice(8).replace(/-\d+\.\d+\.\d+\/index\.js$/,'')]=url;return map;}
   imports??=remote('/af/import-map.json',type=>/^application\/json\b/i.test(type)).then(bytes=>{
    // Admit only @afbin/ names that point at a closed library or component path.
    const map=bytes?JSON.parse(bytes.toString('utf8')).imports:{};const admitted={};

@@ -22,6 +22,7 @@ import { agentContract } from '@/lib/agent-copy';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import { hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sourcedTokenName } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
+import { serviceAudiences } from '@/lib/platform';
 
 export async function POST(request: Request) {
   // Only an ACCOUNT session binds the mint: the agent cookie names a token
@@ -40,20 +41,28 @@ export async function POST(request: Request) {
   let audience: string | undefined;
   let scope: string | undefined;
   if (body.audience !== undefined || body.scope !== undefined) {
-    if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== ARTIFACT_SCOPE) return json({ error: 'invalid_audience' }, 400);
-    try {
-      const target = new URL(body.audience);
-      // Plain http only on loopback: an address literal or a loopback name (contracts `isLoopbackName`:
-      // localhost, lvh.me and every name under either), development's app host.
-      const loopback = target.protocol === 'http:' && (isLoopbackName(target.hostname) || ['127.0.0.1', '::1', '[::1]'].includes(target.hostname));
-      if ((target.protocol !== 'https:' && !loopback) || target.pathname !== API_RESOURCE_PATH || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
-      audience = target.href;
-      scope = body.scope;
-    } catch {
-      return json({ error: 'invalid_audience' }, 400);
+    if (actor.credential !== 'session' || typeof body.audience !== 'string' || typeof body.scope !== 'string') return json({ error: 'invalid_audience' }, 400);
+    // A configured service's origin (IDENTITY__SERVICE_AUDIENCES): the person's own token there, with no scope here.
+    if (serviceAudiences().some((service) => service.origin === body.audience)) {
+      if (body.scope !== '') return json({ error: 'invalid_audience' }, 400);
+      audience = body.audience;
+      scope = '';
+    } else {
+      if (body.scope !== ARTIFACT_SCOPE) return json({ error: 'invalid_audience' }, 400);
+      try {
+        const target = new URL(body.audience);
+        // Plain http only on loopback: an address literal or a loopback name (contracts `isLoopbackName`:
+        // localhost, lvh.me and every name under either), development's app host.
+        const loopback = target.protocol === 'http:' && (isLoopbackName(target.hostname) || ['127.0.0.1', '::1', '[::1]'].includes(target.hostname));
+        if ((target.protocol !== 'https:' && !loopback) || target.pathname !== API_RESOURCE_PATH || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
+        audience = target.href;
+        scope = body.scope;
+      } catch {
+        return json({ error: 'invalid_audience' }, 400);
+      }
     }
   }
-  const minted = await mintToken(sourcedTokenName('api'), userId, undefined, { expiresInMs, audience, scope });
+  const minted = await mintToken(sourcedTokenName('api'), userId, { expiresInMs, audience, scope });
   return json(
     {
       has_created_document: await hasCreatedDocument(userId!),

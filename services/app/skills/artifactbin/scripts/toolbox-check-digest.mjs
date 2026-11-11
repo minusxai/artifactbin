@@ -38,9 +38,7 @@ export function checkDigest(envelope,file){
      `; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
   if(check.unreachable?.length)errors.push(`not loaded here (this browser has no internet; `+
    `readers' browsers load it): ${check.unreachable.join(', ')}`);
-  const blocked=check.needsSecret,task=check.error?'task error: '+clip(check.error,1000):
-   blocked&&'step' in blocked?`steps stopped ${blocked.step==null?'outside a step':'at '+
-    JSON.stringify(blocked.step)}: needs secret ${blocked.secrets.join(', ')}`:
+  const task=check.error?'task error: '+clip(check.error,1000):
    check.inspectionError?'inspection error: '+clip(check.inspectionError,200):
    check.task==null?(check.steps?.passed?'steps passed':'no task'):'task '+clip(check.task,2000);
   const overflow=check.overflow?check.overflow.fits?'fits':
@@ -82,10 +80,8 @@ export function checkDigest(envelope,file){
  for(const {name} of envelope.unreadDatasets??[])lines.push(`  page links dataset ${clip(name,60)
   } but never reads it on load or in your steps: compute its numbers from its rows in page `+
   'script (references/datasets.md#read)');
- // Each failed call with what the server told the owner; an unset secret is Not tested.
+ // Each failed call with what the server told the owner.
  for(const failure of (envelope.callFailures??[]).slice(0,5))lines.push('  '+failed(failure));
- if(!(clean&&envelope.reply))for(const item of envelope.needsSecrets??[])lines.push(
-  '  Not tested: '+untested(item));
  // What the step labels proved, per viewport: the Tested: line of the reply facts.
  const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
  const tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
@@ -111,27 +107,21 @@ export function checkDigest(envelope,file){
  return lines.join('\n')+'\n';
 }
 /** One failed call: the owner detail, or for a guest the code and what the owner gets. */
-const failed=({field,kind,message,code,detail,guest,ownerDetail,ownerPasses,notReplayed})=>`${
- kind==='fn'?'function '+field.slice(3):field} failed${detail?`: ${detail} (owner `+
+const failed=({field,message,code,detail,guest,ownerDetail,ownerPasses,notReplayed})=>`${
+ field} failed${detail?`: ${detail} (owner `+
  'detail)':guest?` for the guest (${code??message}); ${ownerDetail?'as owner the detail is: '+
  ownerDetail:ownerPasses?'as owner it succeeds':notReplayed?'not a read, so it was '+
  'not run again as owner':'no owner detail'}`:`: ${message}${code?` (${code})`:''}`}`;
-/** A refused call's name as the reply says it: function NAME or sql. */
-const called=field=>field.startsWith('fn/')?'function '+field.slice(3):field;
-/** What an unset secret kept the check from testing, and who sets it. */
-const untested=({step,fields,secrets})=>`${step===undefined?fields.map(called).join(', '):step===
- null?'the steps':JSON.stringify(step)} (needs secret ${secrets.join(', ')}, which the owner `+
- "sets in the page's Resolvers settings)";
 /** A clean pass whose steps proved no labelled behaviour still proves each viewport loads. */
 const loads=checks=>(checks??[]).filter(c=>c?.viewport).map(c=>`${c.viewer?c.viewer+' ':''}${
  c.viewport.width}x${c.viewport.height}: the page loads without errors`).join(' | ');
 /** The facts a reply states, from the run and the page: the link, Built with, Tested, Not tested,
  * who can do what (the server's permission read-back, verbatim) and the slide images; then the
  * Next line. */
-function replyFacts({reply,slideLinks,checks,needsSecrets},tested){
+function replyFacts({reply,slideLinks,checks},tested){
  const guest=(checks??[]).some(check=>check?.viewer==='guest'),many=reply.permissions.length>1;
  const outside=[...new Set((checks??[]).flatMap(check=>check?.unreachable??[]))];
- const untried=[...(needsSecrets??[]).map(untested),...(outside.length?[`content from ${outside
+ const untried=[...(outside.length?[`content from ${outside
   .join(', ')} (the check browser has no internet)`]:[]),'visual appearance',...(guest?
   ['sharing between two signed-in users (the guest is signed out)']:[])];
  return ['For your reply:','Link: '+reply.link,

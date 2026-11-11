@@ -98,10 +98,11 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  // ci.yml's full suite may let main's push skip its tests.
  const runs=job.steps.map(step=>step.run??'').join('\n');
  for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint','vitest.mjs run --config vitest.guard.config.ts'])expect(runs).toContain(command);
- expect(job.strategy.matrix.part).toEqual(['types','lint','tests','guards','guards-2']);
- // The guard config runs as two time-packed shards, every guard part one of them, so each file runs exactly once.
+ expect(job.strategy.matrix.part).toEqual(['types','lint','tests','guards','guards-2','guards-3']);
+ // The guard config runs as three time-packed shards, every guard part one of them, so each file runs exactly once.
  const shards=job.strategy.matrix.include.filter(entry=>entry.shard).map(entry=>[entry.part,entry.shard]);
- expect(shards).toEqual([['guards','1/2'],['guards-2','2/2']]);
+ expect(shards).toEqual([['guards','1/3'],['guards-2','2/3'],['guards-3','3/3']]);
+ expect(JOBS['pr-guards'].count).toBe(shards.length);
  expect(job.steps.find(step=>step.run?.includes('vitest.guard.config.ts'))).toMatchObject({if:'matrix.shard',run:expect.stringMatching(/ --shard=\$\{\{ matrix\.shard \}\}$/)});
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain('sequence: { sequencer: TimedSequencer }');
  expect(runs).not.toContain('docker run');
@@ -138,7 +139,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
  expect(restore).toBeGreaterThan(-1);expect(restore).toBeLessThan(steps.indexOf(run));
  expect(steps[restore].uses).toMatch(/^actions\/cache\/restore@/);
- const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save'));
+ const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
  expect(save).toHaveLength(1);
  expect(save[0].if).toBe("matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
@@ -177,7 +178,7 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const exact=steps.find(step=>step.id==='install'),near=steps.find(step=>step.id==='near-install');
  expect(near.uses).toMatch(/^actions\/cache\/restore@/);
- expect(near.if).toBe("steps.install.outputs.cache-hit != 'true'");
+ expect(near.if).toBe("${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' }}");
  expect(near.with.path).toBe(exact.with.path);
  expect(near.with.key).toBe(exact.with.key);
  expect(near.with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
@@ -186,11 +187,18 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(reconcile.if).toContain("steps.near-install.outputs.cache-matched-key != ''");
  expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
- expect(cold).toHaveLength(1);
- expect(cold[0].if).toBe("steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == ''");
- // Restore only: no stale install is ever saved from a pull request. The one save is the suite runners' test builds.
- expect(steps.filter(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@')).map(step=>step.with.key))
-  .toEqual(['test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}']);
+ expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
+ // No stale install is ever saved from a pull request: the one install save is the `install` runner's clean `npm ci`,
+ // only when this lock's exact key is missing, and every other runner skips it. The other save is the test builds.
+ // (The slim install's own save, from the same runner, is scripts/__tests__/slim-install.test.mjs's.)
+ const saves=steps.filter(step=>(step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))&&!step.with.key.startsWith('install-slim-'));
+ expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}']);
+ const own=steps.find(step=>step.id==='own-install');
+ expect(own).toMatchObject({if:'matrix.install',with:{path:exact.with.path,key:exact.with.key,'lookup-only':true}});
+ expect(saves[0]).toMatchObject({if:"matrix.install && steps.own-install.outputs.cache-hit != 'true'",with:{path:exact.with.path,key:exact.with.key}});
+ expect(steps.indexOf(cold[0])).toBe(steps.findIndex(step=>step.id==='own-slim')+1);expect(steps.indexOf(saves[0])).toBe(steps.indexOf(cold[0])+1);
+ expect(exact.if).toBe("${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}");
+ expect(workflow('pr-fast.yml').jobs.fast.strategy.matrix.include.filter(entry=>entry.install)).toEqual([{part:'install',install:true}]);
 });
 it('fails the pull request lane past 60 seconds with the plain budget message',()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-pr-elapsed-'));
@@ -252,7 +260,7 @@ it('enrolls existing node-project guard tests that the full suite also runs, onc
 it('enrolls node-project contract tests that the full suite also runs, once each, outside the other lists',()=>{
  const read=path=>JSON.parse(readFileSync(new URL(`../../${path}`,import.meta.url),'utf8'));
  const contracts=read('scripts/ci/contract-tests.json'),guards=read('scripts/ci/guard-tests.json'),fast=read('scripts/ci/fast-tests.json');
- expect(contracts).toContain('services/app/lib/html-backends/__tests__/native-acceptance.test.ts');
+ expect(contracts).toContain('services/app/lib/page-operations/__tests__/native-acceptance.test.ts');
  expect(contracts).toEqual([...new Set(contracts)].sort());
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain("byIsolation('pr-contracts', 'contract-tests.json'");
  for(const file of contracts){

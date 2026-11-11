@@ -5,7 +5,7 @@ import type { ArtifactRow } from '@/lib/artifact-access';
 
 const dependencies=(row:ArtifactRow):string[]=>[
  ...((row.meta.refs as Array<{id:string}>|undefined)??[]).map(ref=>ref.id),
- ...((Array.isArray(row.meta.htmlLinks)?row.meta.htmlLinks:[]) as Array<{kind?:string;datasetId?:string}>).flatMap(link=>link.kind==='dataset'&&typeof link.datasetId==='string'?[link.datasetId]:[]),
+ ...((Array.isArray(row.meta.htmlLinks)?row.meta.htmlLinks:[]) as Array<{kind?:string;datasetId?:string}>).flatMap(link=>(link.kind==='dataset'||link.kind==='live-dataset')&&typeof link.datasetId==='string'?[link.datasetId]:[]),
  ...(typeof row.meta.userScopeDocument==='string'?[row.meta.userScopeDocument]:[]),
  ...[...JSON.stringify({source:row.source,document:row.document,meta:row.meta,dataset_policy:row.dataset_policy}).matchAll(/ref:([A-Za-z0-9]{6,12})/g)].map(match=>match[1]!),
 ];
@@ -26,7 +26,7 @@ export async function assertTransferDependencies(tx:Queryable,closure:ArtifactRo
  const inbound=await tx.query<{id:string}>(`SELECT id
   FROM artifacts WHERE NOT (id=ANY($1::text[])) AND format IN ('html','dataset','viz') AND (
    EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(meta->'refs')='array' THEN meta->'refs' ELSE '[]'::jsonb END) ref WHERE ref->>'id'=ANY($1::text[]))
-   OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(meta->'htmlLinks')='array' THEN meta->'htmlLinks' ELSE '[]'::jsonb END) link WHERE link->>'kind'='dataset' AND link->>'datasetId'=ANY($1::text[]))
+   OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(meta->'htmlLinks')='array' THEN meta->'htmlLinks' ELSE '[]'::jsonb END) link WHERE link->>'kind' IN ('dataset','live-dataset') AND link->>'datasetId'=ANY($1::text[]))
    OR meta->>'userScopeDocument'=ANY($1::text[])
    OR CASE WHEN strpos(source,$3)>0 THEN source ~ $2 ELSE false END
    OR CASE WHEN strpos(meta::text,$3)>0 THEN meta::text ~ $2 ELSE false END

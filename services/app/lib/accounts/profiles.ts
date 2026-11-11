@@ -16,8 +16,8 @@
  * this row. There is no boot-time sync: one identity, one row, ids agreeing by
  * construction.
  */
-import { getDb } from '../platform';
-import { ensureUsername, getUserById } from './users';
+import { IdentityError } from '@artifactbin/contracts';
+import { getDb, services } from '../platform';
 import { isTestDomainAddress } from './test-accounts';
 
 /**
@@ -50,8 +50,7 @@ export async function welcomePending(who: string | { kind: string; welcome_pendi
 
 /** They pressed Confirm. Idempotent: pressing it twice is pressing it once. */
 export async function confirmWelcome(userId: string): Promise<void> {
-  const db = await getDb();
-  await db.query('UPDATE users SET welcome_pending = false WHERE id = $1', [userId]);
+  await services().identity.confirmWelcome({ userId });
 }
 
 const LRU_MAX = 5000;
@@ -64,41 +63,27 @@ export const profileWrites = (): number => writes;
 export async function syncProfile(claims: { userId: string; email?: string }): Promise<void> {
   const email = claims.email?.trim().toLowerCase() ?? '';
   if (!email) return; // a session without an email claim has nothing to record
-  const hash = email;
-  if (seen.get(claims.userId) === hash) return;
-  const db = await getDb();
+  if (seen.get(claims.userId) === email) return;
   try {
-    await db.query(
-      // A NEW person starts with the welcome page pending; an existing row keeps
-      // whatever it had (the conflict branch never touches the flag). The same
-      // holds for test_account: only a row created here for a test-domain
-      // address is marked (lib/accounts/test-accounts), never an existing one.
-      `INSERT INTO users (id, email, welcome_pending, test_account) VALUES ($1, $2, true, $3)
-       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email WHERE users.email IS DISTINCT FROM EXCLUDED.email`,
-      [claims.userId, email, isTestDomainAddress(email)],
-    );
+    // The identity module creates a NEW person's row with the welcome page pending (and, for an address at the test
+    // domain, marked a test account: lib/accounts/test-accounts), follows an address change, and assigns a handle.
+    await services().identity.syncProfile({ userId: claims.userId, email, testAccount: isTestDomainAddress(email) });
   } catch (error) {
     /*
      * The address is already someone's, under a different id — which means a
-     * SECOND identity for one address, which the app's lazy upsert cannot
-     * absorb (it would fork one person into two rows). Left raw, it surfaces
-     * as `duplicate key value violates unique constraint "idx_users_email"`
-     * on every authenticated request: the same outage, saying nothing about
-     * what is wrong or what to do.
+     * SECOND identity for one address, which the lazy upsert cannot absorb (it
+     * would fork one person into two rows). Left raw, it surfaces as a unique
+     * violation on every authenticated request: the same outage, saying nothing
+     * about what is wrong or what to do.
      */
-    const held = (await db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])).rows[0];
-    if (held && held.id !== claims.userId) {
+    if (error instanceof IdentityError && error.code === 'duplicate_email') {
       throw new DuplicateProfileEmail(
-        `${email} already belongs to another id (${held.id}) — one address is one person; resolve which identity owns it before this one signs in again`,
+        `${email} already belongs to another id (${error.detail ?? 'unknown'}) — one address is one person; resolve which identity owns it before this one signs in again`,
       );
     }
     throw error;
   }
   writes++;
-  // Every column `ensureUsername` decides by — `kind` included: a row read
-  // without it reads as not-an-account and never gets its handle.
-  const row = (await getUserById(claims.userId)) ?? null;
-  if (row && !row.username) await ensureUsername(row);
-  seen.set(claims.userId, hash);
+  seen.set(claims.userId, email);
   if (seen.size > LRU_MAX) seen.delete(seen.keys().next().value!);
 }

@@ -18,7 +18,7 @@ it('serves the human tour with current templates, live design systems and a link
   expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Human docs' })).toHaveAttribute('aria-current', 'page');
   for (const system of STORY_SYSTEMS) {
     expect(main).toHaveTextContent(system.label);
-    expect(main.querySelector(`[data-design-specimen="${system.name}"] img`)).toHaveAttribute('src', `/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
+    expect(main.querySelector(`[data-design-specimen="${system.name}"] img`)).toHaveAttribute('src', `/af/img/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
   }
   expect(main.querySelector('img[src^="/story-themes/"]')).toBeNull();
   expect(main.querySelector('link[href*="design-system"]')).toBeNull();

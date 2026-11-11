@@ -13,6 +13,14 @@
  *
  * `watch` runs the statement now and again whenever the page's names-only invalidation names a link the statement
  * text mentions (or names none: a change of who reads), one request in flight and one dirty bit, never a queue.
+ *
+ * A DECLARED QUERY (a live dataset's, `<script type="application/sql" data-af-query="NAME" data-af-dataset="LINK">`):
+ *
+ *   const rows = await sql.query('revenue', { year: 2026 });
+ *   const stop = sql.watch(sql.query('revenue', { year }), rows => …);
+ *
+ * sends only the name and the values of its `:name` parameters; the server runs the SQL the open version of the page
+ * declares, filling `:viewer_id`, `:viewer_email` and `:viewer_groups` itself.
  */
 import type { HtmlJsonObject as AfJsonObject } from '@artifactbin/contracts';
 
@@ -24,7 +32,8 @@ type Reply = { columns: SqlColumn[]; rows: AfJsonObject[] } | SqlWrite | { error
 
 /** The transport: the frame relay in a hosted page (lib/html-runtime/browser-reader). */
 export interface SqlPort {
-  run(request: { sql: string; params: Record<string, string | number | boolean | null>; idempotencyKey: string }): Promise<Reply>;
+  /** `sql`: a statement; `query`: a declared query's name instead (never both). */
+  run(request: { sql?: string; query?: string; params: Record<string, string | number | boolean | null>; idempotencyKey: string }): Promise<Reply>;
   /** Names-only invalidations (dataset link names; none: everything); returns its cleanup. */
   subscribe(listener: (names?: readonly string[]) => void): () => void;
 }
@@ -35,14 +44,18 @@ export class SqlError extends Error {
 
 interface SqlStatement extends PromiseLike<SqlRows | SqlWrite> {
   readonly text: string;
+  /** A declared query's name (`sql.query`); its text is then the server's. */
+  readonly query?: string;
   readonly params: Readonly<Record<string, string | number | boolean | null>>;
 }
 export interface SqlTag {
   (strings: TemplateStringsArray, ...values: SqlValue[]): SqlStatement;
   watch(statement: SqlStatement, next: (rows: SqlRows) => void, error?: (error: SqlError) => void): () => void;
+  /** The page's declared query `name`, with values for its `:name` parameters. */
+  query(name: string, params?: Record<string, SqlValue>): SqlStatement;
 }
 
-function bound(value: unknown, i: number): string | number | boolean | null {
+function bound(value: unknown, i: number | string): string | number | boolean | null {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
@@ -53,7 +66,7 @@ const key = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(3
 
 export function createSql(port: SqlPort): SqlTag {
   const run = async (statement: SqlStatement): Promise<SqlRows | SqlWrite> => {
-    const reply = await port.run({ sql: statement.text, params: { ...statement.params }, idempotencyKey: key() });
+    const reply = await port.run({ ...(statement.query !== undefined ? { query: statement.query } : { sql: statement.text }), params: { ...statement.params }, idempotencyKey: key() });
     if (!reply || typeof reply !== 'object') throw new SqlError('unexpected', 'Invalid SQL reply');
     if ('error' in reply) throw new SqlError(String(reply.error), reply.message ?? String(reply.error));
     // `columns` rides on the array, out of iteration and JSON, and stays an ordinary property: a chart library handed
@@ -71,6 +84,13 @@ export function createSql(port: SqlPort): SqlTag {
     };
     return statement;
   }) as SqlTag;
+  tag.query = (name, values = {}) => {
+    if (typeof name !== 'string' || !name) throw new TypeError('sql.query takes a declared query\'s name');
+    const params: Record<string, string | number | boolean | null> = {};
+    for (const [k, v] of Object.entries(values)) params[k] = bound(v, k as never);
+    const statement: SqlStatement = { text: '', query: name, params, then: (resolve, reject) => run(statement).then(resolve, reject) };
+    return statement;
+  };
   tag.watch = (statement, next, error) => {
     let active = true, running = false, dirty = true;
     const lower = statement.text.toLowerCase();

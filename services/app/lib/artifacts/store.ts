@@ -2,17 +2,15 @@ import {createHash} from 'node:crypto';
 import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regions';
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
-import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlLiveDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
-import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
+import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
-import { assertScheduleCapacity } from './schedule-capacity';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import {
@@ -22,7 +20,7 @@ import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import {normalizeNewHtmlPage} from './new-page';
 import { seedOwnerJoin } from '@/lib/social';
 import { claimArtifactId } from './identities';
-import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
+import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, liveConnectionOf, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
@@ -48,10 +46,20 @@ const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annota
 export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'content_publisher_user_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
+/** A new live dataset's connection (lib/live-datasets): its fields without secrets, and the secrets sealed to the new ID. */
+export interface LiveConnectionInsert { config: Record<string, unknown>; seal: (datasetId: string) => string | null }
+/**
+ * A live dataset's connection changed (lib/live-datasets, inside its locked transaction): the row shows the new summary
+ * (`meta.connection`); the version (row revisions, which a connection has none of) does not move.
+ */
+export async function setLiveDatasetSummary(tx: Queryable, id: string, summary: Record<string, unknown>): Promise<void> {
+  await tx.query(`UPDATE artifacts SET meta = jsonb_set(meta, '{connection}', $2::jsonb), updated_at = now() WHERE id = $1 AND format = 'dataset' AND meta ? 'connection'`, [id, JSON.stringify(summary)]);
+}
+
 export interface ArtifactInput {
   /** Server-prepared only; never decoded from caller metadata. */
-  htmlBackends?:readonly PreparedHtmlBackend[];
-  htmlDatasets?:readonly HtmlDatasetLink[];
+  /** The page's dataset links and default-connection links, in source order. */
+  htmlDatasets?:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveDatasetLink)[];
   destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
@@ -158,7 +166,7 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; graphqlName?: string; tx?: Queryable } = {},
+  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; graphqlName?: string; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
@@ -246,24 +254,20 @@ async function insertArtifact(
   // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
   // A GraphQL name (validated by the create door) is stored in that template's configuration, whatever the access.
   const named = atCreation.graphqlName !== undefined;
-  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset';
+  // A live dataset is born with no rules (lib/live-datasets): only its owner and editors may query it until one is set.
+  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset' && !liveConnectionOf(input.meta);
   if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
   const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
-  if(input.format==='html'&&input.htmlBackends){
-    const names=htmlBackendNames(input.source??'');
-    if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
-    const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
-    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
-  }
-  if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
+  if(input.format==='html'&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
+  if (!!atCreation.liveConnection !== !!liveConnectionOf(input.meta) || (atCreation.liveConnection && input.format !== 'dataset')) throw new Error('A live dataset is created with its connection, and only it');
   const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, content_publisher_user_id, dataset_policy, policy_revision, document)
-     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $3, $16::jsonb, $17::int, $18::jsonb) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
+     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $16::jsonb, $17::int, $18::jsonb) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, document_state)
      SELECT id, edit_id, 0, '', COALESCE($7::text, ''), 0, 0, $3, $2, jsonb_build_object('epoch',COALESCE(document->>'epoch',document#>>'{prose,epoch}'),'version',version) FROM created
@@ -311,8 +315,8 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[],created.rows[0].sharing_revision??0));
   await bindCurrentUserScopes(tx,created.rows[0]);
-  // A created (or forked) page's schedules are active at once: its publisher's capacity is checked in this transaction.
-  if(input.format==='html')await assertScheduleCapacity(tx,[id]);
+  // A live dataset's connection is born with it, in this transaction: its secret fields sealed to this dataset's ID.
+  if (atCreation.liveConnection) await tx.query('INSERT INTO dataset_connections (dataset_id, config, sealed) VALUES ($1, $2::jsonb, $3)', [id, JSON.stringify(atCreation.liveConnection.config), atCreation.liveConnection.seal(id)]);
   if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
@@ -399,11 +403,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
     async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
       await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
     },
-    /**
-     * `publisher`: this write publishes content (a replace or a revert), so the head's content publisher becomes the
-     * actor in the same statement. A live-region save is a text edit, not a publication: it keeps the publisher.
-     */
-    async publish(content: ArtifactInput, options: { publisher?: boolean } = {}): Promise<ArtifactRow> {
+    async publish(content: ArtifactInput): Promise<ArtifactRow> {
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -411,17 +411,14 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
              meta=$5, title=$6, description=$7, visibility=COALESCE($9,visibility),
              ancestor_ids=COALESCE($10::text[],ancestor_ids), access=COALESCE($11,access), link_role=COALESCE($14,link_role),
              sharing_revision=sharing_revision+CASE WHEN (COALESCE($9,visibility),COALESCE($11,access),COALESCE($14,link_role)) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END,
-             ${headBumpSql('$8', '$12', '$13')},
-             content_publisher_user_id=CASE WHEN $16::boolean THEN $12 ELSE content_publisher_user_id END
+             ${headBumpSql('$8', '$12', '$13')}
          WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
         [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, content.source, content.meta)),
           content.title !== undefined ? content.title : current.title,
           content.description !== undefined ? content.description : current.description,
           newEditId(), content.visibility ?? null, content.ancestor_ids ?? null, content.access ?? null,
-          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document, options.publisher === true],
+          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document],
       )).rows[0];
-      // A publication or revert makes the actor the publisher of the head's schedules: its capacity, in this transaction.
-      if (options.publisher === true && updated && updated.format === 'html') await assertScheduleCapacity(tx, [id]);
       if (content.ancestor_ids && current.format === 'folder') {
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);
@@ -614,7 +611,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     try { await write.validateContent(target); }
     catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
-    const updated = await write.publish(target, { publisher: true });
+    const updated = await write.publish(target);
     await logWholeDocumentWrite(tx, current, updated);
     await reconcileSourceIds(tx, updated, 'restore');
     if (hadRegions) await closeLiveRegions(tx, id);
@@ -754,17 +751,7 @@ async function replaceArtifactInTx(
     if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(current));
     return current;
   }
-  if(input.format==='html'){
-    const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
-    const names=htmlBackendNames(input.source??'');
-    if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
-    if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
-    const backendOwner=current.user_id??current.token_id;
-    if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
-    const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
-    const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
-    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
-  }
+  if(input.format==='html')input={...input,meta:{...input.meta,htmlLinks:[...(input.htmlDatasets??[])]}};
   input=retainUserScope(input,current);
   /*
    * The policy is re-validated against the REPLACEMENT's catalog, inside this
@@ -783,7 +770,7 @@ async function replaceArtifactInTx(
   const source = input.source;
   const updated = await write.publish({
     ...input, source, meta: input.meta,
-  }, { publisher: true });
+  });
   if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
   else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
   await bindCurrentUserScopes(tx,updated);
@@ -798,7 +785,7 @@ async function replaceArtifactInTx(
 
 /**
  * True when an HTML replace asks for nothing the head does not already hold: the canonical source is
- * byte-identical and no title, description, placement, access, share, backend, dataset, policy or
+ * byte-identical and no title, description, placement, access, share, dataset, policy or
  * annotation change rides along. The identity ledger and carry notes are derived from the source, so
  * they are not compared; every other metadata key must match.
  */
@@ -807,7 +794,7 @@ function isUnchangedHtmlRepublish(current: ArtifactRow, input: ArtifactInput, op
   if (input.title !== undefined && input.title !== current.title) return false;
   if (input.description !== undefined && input.description !== current.description) return false;
   if (input.visibility !== undefined || input.access !== undefined || input.ancestor_ids !== undefined || input.link_role !== undefined) return false;
-  if (input.htmlBackends?.length || input.htmlDatasets?.length || input.destination) return false;
+  if (input.htmlDatasets?.length || input.destination) return false;
   if (opts.shares !== undefined || opts.expectedPolicyRevision !== undefined) return false;
   return Object.entries(input.meta).every(([key, value]) => value === undefined || key === 'htmlIdentity' || key === 'htmlIdentityCarry' || isDeepStrictEqual(value, current.meta[key]));
 }

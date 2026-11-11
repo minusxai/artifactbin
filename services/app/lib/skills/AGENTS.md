@@ -17,6 +17,9 @@ only the skill: no loose files at its root (`loadSkillSources` throws).
 - Installed skills update from `/skills/artifactbin.zip`, and the updater refuses members outside the folders
   it knows (`toolbox-update-archive.mjs`; the packager's list is `package.ts` and `assets.ts`): ship a new
   folder only once installs run an updater that accepts it.
+- A deployment's own files (`SKILLS__EXTRA_DIR`, `extras.ts`) join the archive under `extras/` only, never
+  replacing a product file, with caps of their own; the skill modules and names an extra may import are
+  `EXTRA_ENTRY_POINTS` (pinned by `__tests__/extras.test.ts`): rename one only with that list.
 - Verify on the task's own dev server only, then `npm run eval` shows an agent using the change.
 - Evals: `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo; its README is the guide. Copy it
   from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.
@@ -37,6 +40,6 @@ only the skill: no loose files at its root (`loadSkillSources` throws).
     metrics. Changed harness semantics need a matched new baseline.
 
 ## Checks
-- `npm test -- --files services/app/lib/skills/__tests__/skill-tree.test.ts services/app/lib/skills/__tests__/retired-phrasing.test.ts services/app/lib/skills/__tests__/skill-code-shape.test.ts services/app/lib/skills/__tests__/skill-description.test.ts services/app/lib/skills/__tests__/skill-public-budget.test.ts services/app/lib/skills/__tests__/skill-archive-budget.test.ts`
+- `npm test -- --files services/app/lib/skills/__tests__/skill-tree.test.ts services/app/lib/skills/__tests__/retired-phrasing.test.ts services/app/lib/skills/__tests__/skill-code-shape.test.ts services/app/lib/skills/__tests__/skill-description.test.ts services/app/lib/skills/__tests__/skill-public-budget.test.ts services/app/lib/skills/__tests__/skill-archive-budget.test.ts services/app/lib/skills/__tests__/extras.test.ts`
 - Starters or toolbox scripts changed: add their `__tests__` file (`starters.test.ts`, `author-toolbox.test.ts`).
 - `APP__PORT=<n> npm run eval -- --tasks <name>` against this worktree's dev server.

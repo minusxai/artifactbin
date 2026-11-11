@@ -134,3 +134,21 @@ it('snapshots the files a page links, and none for navigation within or beyond t
   expect(bundle.body.publicationBundle.files.map((entry:{path:string})=>entry.path)).toEqual(['rota.pdf','plan.png']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+it('snapshots a root-relative reference\'s project file, which the plan then carries; a missing one is refused by the plan',async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
+ const root=await mkdtemp(join(tmpdir(),'bundle-rooted-'));
+ try{
+  await mkdir(join(root,'css'));await mkdir(join(root,'assets/fonts'),{recursive:true});
+  await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="/css/site.css"><a href="/a/OTHER1">next</a><style>@font-face{src:url(/af/fonts/inter.woff2)}</style>');
+  await writeFile(join(root,'css/site.css'),'@font-face{font-family:X;src:url(/assets/fonts/x.woff2)}');await writeFile(join(root,'assets/fonts/x.woff2'),'font');
+  const bundle=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
+  expect(bundle.body.publicationBundle.files.map((file:{path:string})=>file.path).sort()).toEqual(['assets/fonts/x.woff2','css/site.css']);
+  const {planPublicationBundle}=await import('../plan');
+  expect(planPublicationBundle(bundle.body.html,bundle.body.publicationBundle).dependencies.map(dep=>dep.path).sort()).toEqual(['assets/fonts/x.woff2','css/site.css']);
+  await rm(join(root,'assets/fonts/x.woff2'));
+  const missing=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
+  expect(()=>planPublicationBundle(missing.body.html,missing.body.publicationBundle)).toThrow(/\/assets\/fonts\/x\.woff2 \(in css\/site\.css\) names no file/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

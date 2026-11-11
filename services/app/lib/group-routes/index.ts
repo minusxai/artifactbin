@@ -25,3 +25,4 @@ export function groupOperation(name:string,readOnly=false){return groupRoute(asy
  if(!['GET','HEAD'].includes(request.method)){const body=await readJson(request,{allowEmpty:true});if(!body)return json({error:'invalid_json'},400);Object.assign(input,body);}
  return runOperation(name,request,actor,{...input,...params});
 },readOnly);}
+

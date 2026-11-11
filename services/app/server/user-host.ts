@@ -1,8 +1,7 @@
 /** Anonymous default hosts: typed owners, eligible HTML, native read doors only. */
 import type { Context, MiddlewareHandler } from 'hono';
 import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
-import { isBuildAssetPath } from '@artifactbin/utils';
+import { ACTOR_HEADER, ownerHostServes } from '@artifactbin/contracts';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
 import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
@@ -15,7 +14,6 @@ import { getUserById } from '@/lib/accounts';
 import { pageOperationKind } from '@/lib/page-operations';
 import { DOMAIN_READ_ONLY_MESSAGE } from '@artifactbin/contracts/domain-footer';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
-import { GET as functionRoute } from '@/app/api/artifacts/[id]/fn/[name]/route';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { GET as eventsGet } from '@/app/a/[id]/events/route';
 import { GET as eventsFrameGet } from '@/app/a/[id]/events/frame/route';
@@ -28,16 +26,15 @@ import { GET as avatarGet } from '@/app/api/users/[id]/avatar/route';
 type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
 
 /**
- * Static trees the served document and its runtime load from; passed on to the app's own static handlers.
- * Only the native runtime and public static resources are admitted.
+ * The public files a served document and its runtime load from, passed on to the app's own static handlers: the
+ * reader's part of each `/af/` directory and the fixed files the URL map marks `owner` (contracts `ownerHostServes`:
+ * the reader runtime, styles, components, fonts, libraries, boundaries, the app's built css and fonts, the icon; never
+ * the editing chrome or an app script).
  */
-const STATIC = /^\/(?:fonts|libraries|geojson)\/|^\/favicon\.ico$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/(?:apollo|reader)\.js$|^\/af\/styles\.css$|^\/af\/fonts\/[a-z0-9-]+\.woff2$/;
-/** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
-const buildStyle = (path: string): boolean => isBuildAssetPath(path) && /\.(?:css|woff2)$/.test(path);
 /** The dev shell stylesheet is public CSS, never Vite's executable source graph. */
 export function userHostStaticPath(path:string):boolean {
  if (/%|\\/.test(path)) return false;
- return STATIC.test(path)||buildStyle(path)||(IS_DEV&&path==='/shell.css');
+ return ownerHostServes(path)||(IS_DEV&&path==='/shell.css');
 }
 /** Credentials never reach a handler on an anonymous owner host: the reader is a guest, by construction. */
 export const USER_HOST_CREDENTIAL_HEADERS = ['cookie', 'authorization', 'proxy-authorization', ACTOR_HEADER];
@@ -218,7 +215,7 @@ function withReadCors(response: Response): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
-/** A served page's dataset and backend reads (see the header): POST, a `query` operation, as a guest. */
+/** A served page's dataset reads (see the header): POST, a `query` operation, as a guest. */
 async function pageReads(request: Request, id: string, owner: UserPagesOwner): Promise<Response> {
   if (request.method !== 'POST') return notFound();
   const row = ID_RE.test(id) ? await getArtifactById(id) : null;
@@ -233,23 +230,6 @@ async function pageReads(request: Request, id: string, owner: UserPagesOwner): P
   return withReadCors(await call(graphqlPost, await asGuest(request, body), id));
 }
 const PAGE_READS_ROUTE = /^\/api\/artifacts\/([^/]+)\/graphql$/;
-
-/**
- * A served page's function calls (html-runtime/fn-fetch → domain-reads, lib/page-doors `pageFunction`): GET or POST,
- * the owner's served page only, as a guest. The request reaches the app as an opaque origin's (`Origin: null`, every
- * credential dropped) whatever it claimed, so the app's own door reads it as nobody and runs reads only, as here.
- */
-async function pageFunctionReads(request: Request, id: string, name: string, owner: UserPagesOwner): Promise<Response> {
-  if (request.method !== 'GET' && request.method !== 'POST') return notFound();
-  const row = ID_RE.test(id) ? await getArtifactById(id) : null;
-  if (!row || !servesDocument(owner, row)) return notFound();
-  const guest = await asGuest(request);
-  const headers = new Headers(guest.headers);
-  headers.set('origin', 'null');
-  const opaque = new Request(guest.url, { method: guest.method, headers, ...(guest.method === 'POST' ? { body: await guest.arrayBuffer() } : {}) });
-  return withReadCors(await runWithRequest(opaque, async () => functionRoute(opaque, { params: Promise.resolve({ id, name }) })));
-}
-const PAGE_FUNCTION_ROUTE = /^\/api\/artifacts\/([^/]+)\/fn\/([^/]+)$/;
 
 const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(events|events\/frame|resolve|assets)$/;
 
@@ -295,11 +275,6 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
     const reads = PAGE_READS_ROUTE.exec(path);
     if (reads && owner) {
       try { return privacy(await pageReads(request, reads[1]!, owner)); }
-      catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
-    }
-    const fn = PAGE_FUNCTION_ROUTE.exec(path);
-    if (fn && owner) {
-      try { return privacy(await pageFunctionReads(request, fn[1]!, fn[2]!, owner)); }
       catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
     }
     const document = DOCUMENT_ROUTE.exec(path);

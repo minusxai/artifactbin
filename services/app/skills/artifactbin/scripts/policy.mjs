@@ -22,7 +22,8 @@ Gotchas: only owners and editors read or set permissions. Rule roles are viewer 
   reads). configuration is server-owned: leave it out or unchanged. Run --dry-run first and
   read readBack: it says in plain words what each role can do. A revision conflict means
   someone else changed the permissions or the dataset: get again, reapply, set. Session
-  values: X-Hasura-User-Id, X-Hasura-Page-Id, X-Hasura-Role.
+  values: X-Hasura-User-Id, X-Hasura-Page-Id, X-Hasura-Role. A live dataset's one table is
+  public.queries: a select rule (columns "*", filter {}) lets that role run declared queries.
 Exit: 0 ok; 1 failed; 2 invalid (policy errors are listed by JSON path); 3 auth/access;
   4 revision conflict; 5 unknown save outcome (get shows the revision; a repeated set at the old
   revision cannot apply twice). Results never contain credentials.`;
@@ -84,8 +85,8 @@ export async function policyCommand({sub, values, positionals}, options = {}) {
     if (sub === 'get') return await client.request(route);
     if (sub === 'explain') {
       const read = await client.request(route);
-      return {revision: read.revision, source: read.source, readBack: lines(read.readBack),
-        warnings: read.warnings, report: read.report};
+      return {revision: read.revision, source: read.source, ...read.live ? {live: read.live} : {},
+        readBack: lines(read.readBack), warnings: read.warnings, report: read.report};
     }
     if (sub === 'template') {
       const owner = values['owner-column'];

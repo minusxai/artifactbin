@@ -1,7 +1,7 @@
 /**
  * Decision D19: every hand-written code file the skill ships explains itself at the top and stays
  * short enough to read whole. The set is whatever loadSkillAssets ships (scripts, components,
- * examples, resolvers, design systems), so a new file joins by existing. Exemptions are rules, not names:
+ * examples, design systems), so a new file joins by existing. Exemptions are rules, not names:
  * compiled components (`components/*.js`, if any ship) are esbuild output; CSV examples are data (no header);
  * a stylesheet whose leading comment says "Generated from" is generated (header kept, length exempt).
  */
@@ -38,7 +38,7 @@ function kindOf(name: string, source: string, commands: readonly string[]): Code
   if (name.endsWith('.css') && /Generated from/.test(leadingComment(source) ?? '')) return 'generated';
   const script = /^scripts\/([a-z0-9-]+)\.mjs$/.exec(name);
   if (script) return commands.includes(script[1]!) ? 'command' : 'internal';
-  if (name.startsWith('examples/') || name.startsWith('resolvers/')) return 'example';
+  if (name.startsWith('examples/')) return 'example';
   if (/^<af-/.test(leadingComment(source) ?? '')) return 'component';
   return 'internal';
 }
@@ -95,7 +95,6 @@ describe('the rules', () => {
     expect(kindOf('components/x.ts', '/**\n * <af-x>: a thing.\n */', commands)).toBe('component');
     expect(kindOf('components/x-model.ts', '/** Internal: x. Used by: x.ts */', commands)).toBe('internal');
     expect(kindOf('examples/a.html', '<!doctype html>\n<!--\nExample: a.\n-->', commands)).toBe('example');
-    expect(kindOf('resolvers/resolver-a.ts', '/**\n * Example resolver: a.\n */', commands)).toBe('example');
   });
   it('find a missing header, a missing label and an over-long file', () => {
     expect(headerProblems('internal', 'export const x = 1;')).toEqual(['no leading comment block']);

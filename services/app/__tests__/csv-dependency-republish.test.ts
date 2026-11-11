@@ -26,7 +26,7 @@ async function published(){
  const saved=await response.json() as {id:string;dependencyReceipts:Array<{path:string;kind:'dataset';id:string;revision:string;state?:string;sha256:string}>};
  expect(response.status,JSON.stringify(saved)).toBe(201);
  const receipt=saved.dependencyReceipts.find(r=>r.path==='items.csv')!;
- // A write after publish, as a scheduled function's caps.sql makes: it moves the dataset's head.
+ // A write after publish, as a reader's sql makes: it moves the dataset's head.
  const wrote=await sqlPost(request(`/api/artifacts/${saved.id}/sql`,{method:'POST',token:owner.token,json:{sql:"insert into items (title, source) values ('from schedule', 'schedule')",revision:'1'}}),params(saved.id));
  expect(wrote.status,await wrote.clone().text()).toBe(200);
  expect((await getArtifactById(receipt.id))!.version).toBeGreaterThan(Number(receipt.revision));

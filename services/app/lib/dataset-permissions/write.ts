@@ -15,7 +15,7 @@
 import type { DatasetBoolExp, DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTableName, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, lockAuthorization, transactionAccessFacts, writerFor, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
-import { catalogOf, DatasetError } from '@/lib/datasets';
+import { catalogOf, DatasetError, liveConnectionOf } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { datasetRole } from './role';
 import { storedPolicy } from './stored-policy';
@@ -97,7 +97,8 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   // Under the commit's lock only that transaction's own facts decide, never a request's memo.
   const facts = options.tx ? transactionAccessFacts(actor, options.tx) : options.facts ?? liveAccessFacts(actor, db);
   const role = await datasetRole(row, actor, { facts, throughPage: options.throughPage || !!options.pageId });
-  if (row.format !== 'dataset' || row.access !== 'readwrite') return { allowed: false, role, revision, reason: 'dataset_read_only' };
+  // A live dataset's rows are its database's, read-only here: no door writes them.
+  if (row.format !== 'dataset' || row.access !== 'readwrite' || liveConnectionOf(row.meta)) return { allowed: false, role, revision, reason: 'dataset_read_only' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role) return { allowed: false, role, revision, reason: 'no_rule' };
   // Read only for a rule role, so an owner or editor can always replace a stored policy that does not read.

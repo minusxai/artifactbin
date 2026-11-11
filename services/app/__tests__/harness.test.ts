@@ -39,7 +39,8 @@ describe('the wipe is derived from the schema, not hand-listed', () => {
     expect(tables.length).toBeGreaterThan(5);
     for (const table of tables) {
       const n = await db.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM ${table}`);
-      expect(n.rows[0]?.n, table).toBe('0');
+      // Every boot writes the identity settings row the identity views read; the wipe restores exactly that one.
+      expect(n.rows[0]?.n, table).toBe(table === 'identity_settings' ? '1' : '0');
     }
   });
 });

@@ -6,6 +6,7 @@ import WorkspaceShell from '../components/WorkspaceShell';
 import StepHeader from "../datasets/StepHeader";
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DatasetImport } from '../datasets/DatasetImport';
+import { LiveDatasetForm, type ListedConnector } from '../datasets/LiveDatasetForm';
 import { DatasetPolicies } from "../datasets/DatasetPolicies";
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
@@ -52,10 +53,13 @@ const namesToColumns = (names: string[] = []): DatasetColumn[] => names.map(name
 /** Visual authoring and source share one definition boundary. */
 export function DatasetEditorPage({
   artifactId,
-  onSaved
+  onSaved,
+  initialSource
 }: {
   artifactId?: string;
   onSaved?: () => Promise<unknown>;
+  /** The new-dataset screen's choice (datasets/NewDataset): which stored input opens first. */
+  initialSource?: "csv" | "json";
 } = {}) {
   const params = useParams<{
     id: string;
@@ -69,7 +73,9 @@ export function DatasetEditorPage({
     current: null as string | null
   };
   const [title, setTitle] = createSignal("");
-  const [storedInput, setStoredInput] = createSignal<"csv" | "sheet" | "json">(id ? "json" : "csv");
+  const [storedInput, setStoredInput] = createSignal<"csv" | "sheet" | "json">(id ? "json" : initialSource ?? "csv");
+  // A live dataset's editor is its connection's form (datasets/LiveDatasetForm): it has no catalog to edit.
+  const [liveConnector, setLiveConnector] = createSignal<ListedConnector | null>(null);
   const [models, setModels] = createSignal<ModelDraft[]>([]);
   const [stored, setStored] = createSignal<StoredDraft[]>([]);
   const [defaultSchema, setDefaultSchema] = createSignal("");
@@ -112,11 +118,18 @@ export function DatasetEditorPage({
       state: string;
       meta: {
         catalog?: DatasetCatalog;
+        connection?: { connector: string };
       };
       source?: string;
     }>(`/api/my/artifacts/${encodeURIComponent(id)}`).then(data => {
       if (!alive) return;
       const catalog = data.meta.catalog;
+      const connection = data.meta.connection;
+      if (connection) return apiRequest<{ connectors: ListedConnector[] }>('/api/connections').then(list => {
+        const found = list.connectors.find(c => c.id === connection.connector);
+        if (!found) throw new Error("This live dataset's connector is not available here.");
+        if (alive) setLiveConnector(found);
+      });
       if (!catalog) throw new Error("This artifact does not have a dataset catalog.");
       setTitle(data.title ?? "");
       setVersion(data.version);
@@ -563,5 +576,5 @@ export function DatasetEditorPage({
           </>}
       </AssetWorkspace>;
   // Direct dataset edit URLs need the same layout and styles as /datasets/new.
-  return id ? <WorkspaceShell>{content}</WorkspaceShell> : content;
+  return id ? <WorkspaceShell><Show when={liveConnector()} fallback={content}>{connector => <div class="px-4 py-8"><LiveDatasetForm connector={connector()} datasetId={id} /></div>}</Show></WorkspaceShell> : content;
 }

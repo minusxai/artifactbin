@@ -68,7 +68,7 @@ async function main() {
   const db = await getDb();
   async function person(name: string) {
     const email = `mxmx_test_${name}_${randomUUID()}@example.test`, userId = (await createUser({ email })).id;
-    const token = await mintToken(name, userId, db);
+    const token = await mintToken(name, userId);
     return { token: token.token, actor: identityForUser(userId, token.id, email), userId, email };
   }
   const owner = await person('bench_owner'), viewer = await person('bench_viewer');

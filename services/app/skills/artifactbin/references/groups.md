@@ -74,6 +74,11 @@ default. Last-editor removal, demotion and leave are refused. Update changes nam
 not handle. Group handles have 3–32 lowercase letters/digits with internal underscores; no
 hyphens or edge underscores. Examples use `design_crit`.
 
+Group addresses: a page asks each reader before it calls an address outside the default policy. An
+editor's `allow GROUP ORIGIN... [--kind connect|img|media] --yes`, after consent, stops that question
+for every member of the group and its subgroups on any page; `addresses GROUP` lists, `disallow`
+removes. Scripts, styles, frames and wildcards are always asked page by page.
+
 ## HTTP contract
 
 Use the normal origin-bound authenticated HTTP API only when the script cannot do the job.
@@ -85,7 +90,9 @@ Bodies below are JSON; absent bodies are omitted. Server access checks remain au
 | List | `GET /api/groups` | `{groups:[...]}` |
 | Detail | `GET /api/groups/GROUP` | `{group,members,linked_groups,...}` |
 | Pages | `GET /api/artifacts?group_id=GROUP_ID` | Owned or shared, caller-visible; retain actual owner; follow `next_cursor` |
-| Create | `POST /api/groups` | `{handle,name,description?}` |
+| Through group | `GET /api/groups/ID/artifacts` | Members: pages the group or a parent owns or shares; `{artifacts:[...]}` |
+| Create | `POST /api/groups` | `{handle,name,description?,parent_id?}` |
+| Reparent | `PUT /api/groups/ID/parent` | `{parent_id,from_parent_id}` |
 | Update | `PATCH /api/groups/ID` | `{name?,description?}`; nonempty patch |
 | Invitations | `GET /api/groups/ID/invitations` | Editor-only `{invitations:[...]}` |
 | Invite | `POST /api/groups/ID/invitations` | `{email,role:"viewer"|"editor"}`; changed status |
@@ -102,7 +109,7 @@ Bodies below are JSON; absent bodies are omitted. Server access checks remain au
 
 Keep status and error codes: 401 authentication; 403 forbidden/account required; 404 missing or
 inaccessible group/member/invitation; 409 last_editor, group_not_empty, default_group_locked,
-handle_mismatch or transfer conflict; 429 rate_limited with retry_after. Do not turn a refusal
+handle_mismatch, hierarchy conflicts or transfer conflict; 429 rate_limited with retry_after. Do not turn a refusal
 into a success. Script envelopes use ok/code and preserve per-address results. Exit 2 is usage or
 confirmation, 3 access, 4 conflict, 5 unknown write outcome, 1 other failure, 0 success.
 

@@ -1,8 +1,8 @@
 /**
  * scripts/new-app.mjs: the tracker starter set up in one call, against a fake server: writes the template trimmed to
  * the chosen features (a preset minus --without), publishes the empty entries dataset with the template its features
- * start from, applies the rules they add and fills the page; --limit writes one number into the page and resolver;
- * unknown features, missing requirements and a limit without limits are refused before anything is written; a rerun
+ * start from, applies the rules they add and fills the page; unknown features and missing requirements are refused
+ * before anything is written; a rerun
  * reuses the dataset the kept index.html links (its ref:) and changes nothing; no file is written beside another.
  */
 import {it,expect} from 'vitest';
@@ -55,13 +55,13 @@ async function project(){
 }
 const CHECK='node scripts/publish.mjs index.html --create && node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs';
 
-it('sets up the team task tracker in one call: every feature, its dataset, rules, resolver and the filled page',async()=>{
+it('sets up the team task tracker in one call: every feature, its dataset, rules and the filled page',async()=>{
  const p=await project();
  try{
   const result=await p.run({dir:'app',title:'[Launch tasks]'});
-  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
-  expect(result).toMatchObject({kind:'tracker',preset:'tasks',features:['own-rows','team','collab','table','limits'],
-   created:['index.html','tracker.ts','steps.mjs','guest.mjs','cleanup.mjs','entries.csv'],kept:[],
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
+  expect(result).toMatchObject({kind:'tracker',preset:'tasks',features:['own-rows','team','collab','table'],
+   created:['index.html','steps.mjs','guest.mjs','cleanup.mjs','entries.csv'],kept:[],
    datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
   // One create (the header, named entries), the own-rows template, then the team and collab rules on top.
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy','GET /api/artifacts/DATA0001/policy','PUT /api/artifacts/DATA0001/policy']);
@@ -74,33 +74,30 @@ it('sets up the team task tracker in one call: every feature, its dataset, rules
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
   expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<title>Launch tasks</title>');
   expect(html).not.toMatch(/ref:DATASET_ID|\[Tracker name\]|@(?:feature|only|end) !/);
-  expect(html).toContain('<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">');
-  expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own; a group the page is shared with by groups.mjs share --datasets changes and removes every entry; descriptions are typed in together, live; each group holds at most 5 entries');
+  expect(html).not.toMatch(/af-resolver|\/fn\/|tracker\.ts/);
+  expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own; a group the page is shared with by groups.mjs share --datasets changes and removes every entry; descriptions are typed in together, live');
   expect(result.next).toBe(`Next: in index.html edit only APP: its [bracketed] text and groups (the stages entries move through); then ${CHECK}; for a team to edit every entry: node scripts/groups.mjs share PAGE --group GROUP --datasets`);
  }finally{await p.done();}
 });
 
-it('sets up the list preset (--kind list): own-rows only, tracker.ts with me alone, no rule beyond the template',async()=>{
+it('sets up the list preset (--kind list): own-rows only, no rule beyond the template',async()=>{
  const p=await project();
  try{
   const result=await p.run({dir:'app',kind:'list',title:'Riverside cleanup'});
-  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
-  const functions=await readFile(path.join(p.dir,'tracker.ts'),'utf8');
-  expect(functions.slice(functions.indexOf('*/'))).not.toMatch(/LIMIT|async add|async save|roles/);
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
   expect(result).toMatchObject({kind:'list',preset:'list',features:['own-rows'],datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
   expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',name:'entries',dataset:'name,grp,note,created_by\n',columns:[{name:'name'},{name:'grp'},{name:'note'},{name:'created_by'}]});
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
   expect(html).toContain("kicker: '[Event · dates]'");expect(html).toContain("groups: ['[First choice]', '[Second choice]', '[Third choice]']");
-  expect(html).toContain('<link rel="af-resolver" data-af-name="tracker" href="./tracker.ts">');
-  expect(html).not.toMatch(/call\('(?:add|save)'|@afbin\/collab|@afbin\/data-table|@(?:feature|only) (?:team|collab|table|limits)\b/);
+  expect(html).not.toMatch(/af-resolver|@afbin\/collab|@afbin\/data-table|@(?:feature|only) (?:team|collab|table)\b/);
   expect(html).toMatch(/<p id="signin" hidden>/);
-  expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).not.toMatch(/full group|description|table view/);
+  expect(await readFile(path.join(p.dir,'steps.mjs'),'utf8')).not.toMatch(/description|table view/);
   expect(result.rules).toBe('entries: everyone reads; signed-in people add entries and change or remove only their own');
   expect(result.next).toContain('groups (the options people pick from)');
   // A rerun reuses the dataset and writes nothing.
   p.calls.length=0;
-  expect((await p.run({dir:'app',kind:'list',title:'Riverside cleanup'})).kept).toHaveLength(6);
+  expect((await p.run({dir:'app',kind:'list',title:'Riverside cleanup'})).kept).toHaveLength(5);
   expect(p.calls).toEqual([]);
  }finally{await p.done();}
 });
@@ -108,9 +105,9 @@ it('sets up the list preset (--kind list): own-rows only, tracker.ts with me alo
 it('drops features with --without, keeping the read-only template when own-rows goes',async()=>{
  const p=await project();
  try{
-  const result=await p.run({dir:'app',title:'Reading list',without:'own-rows,team,limits,collab'});
+  const result=await p.run({dir:'app',title:'Reading list',without:'own-rows,team,collab'});
   expect(result).toMatchObject({features:['table']});
-  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
   // No template flag (new datasets start read-only) and no rule to add.
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts']);
   expect(p.calls[0]!.body.template).toBeUndefined();
@@ -121,23 +118,17 @@ it('drops features with --without, keeping the read-only template when own-rows 
  }finally{await p.done();}
 });
 
-it('writes one --limit into the page and tracker.ts, and refuses bad features and limits before writing anything',async()=>{
+it('refuses bad features, presets and kinds before writing anything',async()=>{
  const p=await project();
  try{
-  await expect(p.run({dir:'app',title:'X',without:'kanban'})).rejects.toMatchObject({code:'unknown_feature',exit:2,recovery:expect.stringContaining('own-rows, team, collab, table, limits')});
+  await expect(p.run({dir:'app',title:'X',without:'kanban'})).rejects.toMatchObject({code:'unknown_feature',exit:2,recovery:expect.stringContaining('own-rows, team, collab, table')});
   await expect(p.run({dir:'app',title:'X',without:'own-rows'})).rejects.toMatchObject({code:'feature_requires',exit:2,recovery:'Drop team too (--without own-rows,team), or keep own-rows.'});
   await expect(p.run({dir:'app',title:'X',preset:'kanban'})).rejects.toMatchObject({code:'invalid_preset',exit:2});
   await expect(p.run({dir:'app',title:'X',kind:'poll'})).rejects.toMatchObject({code:'invalid_kind',exit:2});
   await expect(p.run({dir:'app',title:'X',kind:'list',preset:'tasks'})).rejects.toMatchObject({code:'preset_conflict',exit:2});
-  await expect(p.run({dir:'app',title:'X',kind:'list',limit:'4'})).rejects.toMatchObject({code:'limit_without_limits',exit:2});
-  await expect(p.run({dir:'app',title:'X',limit:'0'})).rejects.toMatchObject({code:'invalid_limit',exit:2});
+  await expect(p.run({dir:'app',title:'X',kind:'api'})).rejects.toMatchObject({code:'invalid_kind',exit:2});
   await expect(p.run({dir:'app'})).rejects.toMatchObject({code:'missing_title',exit:2,recovery:'Run node scripts/new-app.mjs --title NAME'});
   expect(p.calls).toEqual([]);expect(await p.files()).toEqual([]);
-  const result=await p.run({dir:'app',title:'Workshop seats',without:'team,collab,table',limit:'12'});
-  expect(result).toMatchObject({features:['own-rows','limits'],limit:12});
-  expect(await readFile(path.join(p.dir,'index.html'),'utf8')).toMatch(/^ {2}limit: 12,/m);
-  expect(await readFile(path.join(p.dir,'tracker.ts'),'utf8')).toMatch(/^const LIMIT=12;/m);
-  expect(result.rules).toContain('each group holds at most 12 entries');
  }finally{await p.done();}
 });
 
@@ -162,52 +153,6 @@ it('keeps a file that already exists and says so, and reuses the dataset and rul
   const published=await p.run({dir:'app',title:'Launch tasks'});
   expect(published.datasets).toMatchObject({entries:{id:'DATA0001',reused:true}});
   expect(published.next).toContain('then node scripts/publish.mjs index.html && node scripts/check.mjs');
-  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs','tracker.ts']);
- }finally{await p.done();}
-});
-
-it('sets up the API starter: the resolver aimed at --url, an empty notes dataset with own-rows rules and the filled page',async()=>{
- const p=await project();
- try{
-  // A key file beside the project is never read: nothing the starter writes carries its value.
-  await writeFile(path.join(p.dir,'pipeline-key.txt'),'sk-live-never-copied\n');
-  const result=await p.run({dir:'app',kind:'api',title:'Open deals',url:'https://crm.example.com/v1/deals?status=open'});
-  expect(await p.files()).toEqual(['api.ts','cleanup.mjs','guest.mjs','index.html','notes.csv','pipeline-key.txt','steps.mjs']);
-  expect(result.created).toEqual(['index.html','api.ts','steps.mjs','guest.mjs','cleanup.mjs','notes.csv']);
-  expect(result.datasets).toEqual({notes:{id:'DATA0001',rows:0,reused:false}});
-  expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
-  expect(p.calls[0]!.body).toMatchObject({title:'Open deals notes',name:'notes',dataset:'item,note,created_by\n'});
-  // The resolver reads that address, and the key goes only to its host, as a secret the owner sets.
-  const resolver=await readFile(path.join(p.dir,'api.ts'),'utf8');
-  expect(resolver).toContain("const HOST = 'crm.example.com';");expect(resolver).toContain("const PATH = '/v1/deals?status=open';");
-  expect(resolver).toContain('export const secrets = { API_KEY: HOST };');expect(resolver).not.toContain('api.example.com');
-  const html=await readFile(path.join(p.dir,'index.html'),'utf8');
-  expect(html).toContain('href="ref:DATA0001"');expect(html).toContain('<link rel="af-resolver" data-af-name="api" href="./api.ts">');
-  expect(html).toContain('<title>Open deals</title>');expect(html).not.toMatch(/ref:DATASET_ID|\[Dashboard name\]/);
-  for(const name of await readdir(p.dir))if(name!=='pipeline-key.txt')expect(await readFile(path.join(p.dir,name),'utf8'),name).not.toContain('sk-live');
-  expect(JSON.stringify(result)).not.toContain('sk-live');
-  expect(result.rules).toBe('notes: everyone reads; signed-in people add notes and change or remove only their own');
-  // The next step: edit APP, publish and check, and send the owner to Resolvers for the key.
-  expect(result.next).toMatch(/^Next: in index\.html edit only APP: fields \(the API's field names\)/);
-  expect(result.next).toContain(CHECK);
-  expect(result.next).toMatch(/API_KEY[^.]*Resolvers/);expect(result.next).toContain('Not tested');
-  // A private page answers the signed-out guest pass not found, so its check runs without it.
-  expect(result.next).toContain('If the user asked for it private: leave out --guest-steps guest.mjs');
-  // A rerun keeps every file and the dataset, and writes nothing.
-  p.calls.length=0;
-  const again=await p.run({dir:'app',kind:'api',title:'Open deals',url:'https://crm.example.com/v1/deals?status=open'});
-  expect(again.kept).toEqual(['index.html','api.ts','steps.mjs','guest.mjs','cleanup.mjs','notes.csv']);
-  expect(again.datasets).toEqual({notes:{id:'DATA0001',rows:0,reused:true}});expect(p.calls).toEqual([]);
- }finally{await p.done();}
-});
-
-it('refuses an API starter without an HTTPS address on port 443, before writing anything',async()=>{
- const p=await project();
- try{
-  await expect(p.run({dir:'app',kind:'api',title:'Deals'})).rejects.toMatchObject({code:'missing_url',exit:2,recovery:expect.stringContaining('--kind api --url https://')});
-  for(const url of ['http://crm.example.com/v1/deals','https://crm.example.com:8443/v1/deals','https://user:pw@crm.example.com/v1','https://127.0.0.1/v1','https://localhost/v1','not a url'])
-   await expect(p.run({dir:'app',kind:'api',title:'Deals',url}),url).rejects.toMatchObject({code:'invalid_url',exit:2,recovery:expect.stringContaining('HTTPS on port 443')});
-  await expect(p.run({dir:'app',title:'Budget',url:'https://crm.example.com/v1'})).rejects.toMatchObject({code:'url_not_for_kind',exit:2});
-  expect(p.calls).toEqual([]);expect(await readdir(p.dir)).toEqual([]);
+  expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
  }finally{await p.done();}
 });

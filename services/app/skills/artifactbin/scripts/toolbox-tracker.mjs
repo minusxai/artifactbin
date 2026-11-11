@@ -16,9 +16,8 @@ const CLOSE = /^\s*(?:<!--|\/\*|\/\/)\s*@end\s+(!?[\w-]+)/;
 const ONLY = /\s*(?:<!--|\/\*|\/\/)\s*@only\s+(!?[\w-]+)\s*(?:\*\/|-->)?\s*$/;
 const EXAMPLES = new URL('../examples/', import.meta.url);
 /** Template file → its name in the project. */
-const TRACKER_FILES = [['tracker.html', 'index.html'], ['tracker.ts', 'tracker.ts'],
-  ['tracker-steps.mjs', 'steps.mjs'], ['tracker-guest.mjs', 'guest.mjs'],
-  ['tracker-cleanup.mjs', 'cleanup.mjs']];
+const TRACKER_FILES = [['tracker.html', 'index.html'], ['tracker-steps.mjs', 'steps.mjs'],
+  ['tracker-guest.mjs', 'guest.mjs'], ['tracker-cleanup.mjs', 'cleanup.mjs']];
 
 /** The feature names a source marks; throws on an unbalanced or unknown marker. */
 export function markers(source, file = 'source') {
@@ -75,10 +74,10 @@ export function trackerFeatures({preset = 'tasks', without = []} = {}) {
       `Drop ${name} too (--without ${[...without, name].join(',')}), or keep ${need}.`);
   return keep;
 }
-/** The project's files for KEEP: name → text, trimmed, with the preset's texts and the limit.
- * @param {Set<string>} keep @param {{preset?: string, limit?: number}} [options]
+/** The project's files for KEEP: name → text, trimmed, with the preset's texts.
+ * @param {Set<string>} keep @param {{preset?: string}} [options]
  * @param {URL} [from] @returns {Promise<Record<string, string>>} */
-export async function trackerFiles(keep, {preset = 'tasks', limit} = {}, from = EXAMPLES) {
+export async function trackerFiles(keep, {preset = 'tasks'} = {}, from = EXAMPLES) {
   /** @type {Record<string, string>} */
   const files = {};
   for (const [source, name] of TRACKER_FILES) {
@@ -87,8 +86,6 @@ export async function trackerFiles(keep, {preset = 'tasks', limit} = {}, from = 
     let text = trim(await readFile(new URL(source, from), 'utf8'), keep, source);
     if (name === 'index.html') for (const [from, to] of Object.entries(PRESETS[preset].texts))
       text = text.replaceAll(`'${from}'`, `'${to}'`);
-    if (limit !== undefined) text = text.replace(/^(\s*limit: )\d+,/m, `$1${limit},`)
-      .replace(/^const LIMIT=\d+;/m, `const LIMIT=${limit};`);
     files[name] = text;
   }
   return files;

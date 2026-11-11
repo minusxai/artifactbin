@@ -20,7 +20,7 @@ const REDIRECT = 'http://127.0.0.1:9987/callback';
 const verifier = 'v'.repeat(43);
 let pg: PGlite;
 let app: ReturnType<typeof assemble<any>>;
-let session: { userId: string; email: string; emailVerified?:boolean } | null = null;
+let session: { userId: string; email: string; emailVerified?:boolean; sessionId?: string } | null = null;
 let mintedCount = 0;
 const identities = new Map<string, { userId: string; email: string; emailVerified: boolean }>();
 
@@ -30,7 +30,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
     env: { APP__PUBLIC_BASE_URL: BASE },
     sessions: {
       identity: async userId => identities.get(userId) ?? null,
-      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true } : null,
+      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true, ...(session.sessionId ? { sessionId: session.sessionId } : {}) } : null,
     },
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
@@ -39,7 +39,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
         const token = `mx_${serial.padStart(40, 'x')}`;
         const id = `tok_oauth_${serial}`;
         const expiresAt = new Date(Date.now() + requested.expiresInHours * 3600_000).toISOString();
-        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null, expiresAt]);
+        await query('INSERT INTO auth.tokens (id, name, token_hash, user_id, audience, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null, expiresAt]);
         return new Response(JSON.stringify({ id, token, expiresAt, has_created_document: false }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
       // The anonymous mint the app serves to a non-session actor: an unowned,
@@ -48,7 +48,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
         const serial = String(++mintedCount);
         const token = `mx_${serial.padStart(40, 'x')}`;
         const id = `tok_oauth_${serial}`;
-        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), null, null, null]);
+        await query('INSERT INTO auth.tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), null, null, null]);
         return new Response(JSON.stringify({ id, token, expiresAt: new Date(Date.now() + 31_536_000_000).toISOString() }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
       return new Response(JSON.stringify({ credential: actor.credential }), { headers: { 'content-type': 'application/json' } });
@@ -152,7 +152,7 @@ describe('the oauth provider routes', () => {
     expect(first.access_token).toMatch(/^mx_/);
     expect(first.refresh_token).toMatch(/^mxr_/);
     expect(first.expires_in).toBe(24 * 60 * 60);
-    const minted = (await testDb().query<{expires_at: string}>('SELECT expires_at FROM tokens WHERE token_hash=$1',[hashToken(first.access_token)])).rows[0]!;
+    const minted = (await testDb().query<{expires_at: string}>('SELECT expires_at FROM auth.tokens WHERE token_hash=$1',[hashToken(first.access_token)])).rows[0]!;
     expect(new Date(minted.expires_at).getTime()-Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(first.scope).toBe('artifacts');
     const { query } = testDb();
@@ -210,10 +210,10 @@ describe('oauth code and redirect binding', () => {
   it('ends a refresh-token family when its current access token is revoked', async () => {
     const { query } = testDb();
     const accessToken = `mx_${'r'.repeat(40)}`;
-    await query('INSERT INTO tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', ['tok_revocable', 'oauth', hashToken(accessToken), 'usr_1']);
+    await query('INSERT INTO auth.tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', ['tok_revocable', 'oauth', hashToken(accessToken), 'usr_1']);
     const oauth = createOAuthStore({ query }, 'auth');
     const refreshToken = await oauth.issueRefresh({ clientId: 'afbin_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
-    await query('UPDATE tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
+    await query('UPDATE auth.tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
     expect(await oauth.rotateAndMint(refreshToken, 'afbin_client', [RESOURCE],async()=>{throw new Error('must not mint revoked grant');})).toBeNull();
   });
 });
@@ -277,7 +277,7 @@ it('direct HTTP token issuance refuses guest sessions and never offers browser a
 it('direct HTTP token issuance binds a verified email session to an API-scoped bearer',async()=>{
  const response=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
  expect(response.status).toBe(201);const body=await response.json();expect(body.token_type).toBe('Bearer');
- const token=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];expect(token).toMatchObject({user_id:'usr_1',audience:RESOURCE,scope:'artifacts'});
+ const token=(await testDb().query('SELECT user_id,audience,scope FROM auth.tokens WHERE id=$1',[body.id])).rows[0];expect(token).toMatchObject({user_id:'usr_1',audience:RESOURCE,scope:'artifacts'});
 });
 
 it('direct HTTP bearer mint rejects unverified email and cross-site sessions',async()=>{
@@ -303,11 +303,11 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  const body=await response.json();expect(body.access_token).toMatch(/^mx_/);
  expect(body.has_created_document).toBe(false);
  expect(body.refresh_token).toMatch(/^mxr_/);expect(body.client_id).toEqual(expect.any(String));expect(body.expires_in).toBe(86400);
- const row=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];
+ const row=(await testDb().query('SELECT user_id,audience,scope FROM auth.tokens WHERE id=$1',[body.id])).rows[0];
  expect(row.user_id).toBeTruthy();expect(row.audience).toBe(RESOURCE);expect(row.scope).toBe('artifacts');
  expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[row.user_id])).rows[0]?.email).toBe(email);
  // A later task has no login cookie and its access token has expired.
- await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[body.id]);
+ await testDb().query("UPDATE auth.tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[body.id]);
  expect((await direct.request('/api/artifacts',{headers:{authorization:`Bearer ${body.access_token}`}})).status).toBe(401);
  const refresh=(token:string,clientId=body.client_id,resource=RESOURCE)=>post('/oauth/token',{grant_type:'refresh_token',client_id:clientId,refresh_token:token,resource});
  expect((await refresh(body.refresh_token,body.client_id,BASE+'/other')).status).toBe(400);
@@ -317,7 +317,7 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  expect(authenticated.status).toBe(200);expect(await authenticated.json()).toMatchObject({credential:'bearer'});
  // Rotation persists another usable grant; revoking its bearer closes that grant too.
  const again=await refresh(next.refresh_token);expect(again.status).toBe(200);const latest=await again.json();
- await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(latest.access_token)]);
+ await testDb().query('UPDATE auth.tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(latest.access_token)]);
  expect((await refresh(latest.refresh_token)).status).toBe(400);
 
 });
@@ -366,7 +366,7 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
   const after=await switched();
   const viaAlias=await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
   expect(viaAlias.status).toBe(201);const grant=await viaAlias.json() as {id:string;client_id:string;refresh_token:string};
-  expect((await testDb().query('SELECT audience FROM tokens WHERE id=$1',[grant.id])).rows[0]).toMatchObject({audience:`${CANONICAL}/api`});
+  expect((await testDb().query('SELECT audience FROM auth.tokens WHERE id=$1',[grant.id])).rows[0]).toMatchObject({audience:`${CANONICAL}/api`});
   expect((await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
   expect(await(await refresh(after,grant,'https://foreign.example/api')).json()).toMatchObject({error:'invalid_target'});
   const md=await(await after.request('/.well-known/oauth-authorization-server')).json() as Record<string,unknown>;
@@ -417,7 +417,7 @@ describe('grant family revocation', () => {
   fail=false;const pending=rotate();await waiting;
   expect((await post('/oauth/revoke',{client_id:grant.client_id,token:grant.refresh_token})).status).toBe(200);
   release();const response=await pending;expect(response.status).toBe(400);expect(await response.text()).not.toContain('mx_');
-  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM auth.tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
  });
  it('rolls back a failed final binding without burning the presented refresh',async()=>{
   const grant=await issue(),options=await optionsOf();const {query}=testDb();let fail=true;
@@ -427,7 +427,7 @@ describe('grant family revocation', () => {
   }}}));
   const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token})});
   expect((await rotate()).status).toBe(503);
-  const candidates=(await query<{id:string}>('SELECT id FROM tokens ORDER BY created_at')).rows;
+  const candidates=(await query<{id:string}>('SELECT id FROM auth.tokens ORDER BY created_at')).rows;
   expect(await createOAuthStore({query}).accessLive(candidates.at(-1)!.id)).toBe(false);
   expect((await rotate()).status).toBe(200);
  });
@@ -466,9 +466,9 @@ describe('grant family revocation', () => {
    return response;
   }}));
   const pending=host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token})});
-  await ready;await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(first.access_token)]);release();
+  await ready;await testDb().query('UPDATE auth.tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(first.access_token)]);release();
   expect((await pending).status).toBe(400);
-  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM auth.tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
  });
  it('bounds malformed revocation bodies and returns the same answer for unknown proof',async()=>{
   expect((await post('/oauth/revoke',{client_id:'unknown',token:'unknown'})).status).toBe(200);
@@ -488,5 +488,289 @@ describe('grant family revocation', () => {
   expect((await post('/oauth/token',{grant_type:'refresh_token',client_id:first.client_id,refresh_token:next.refresh_token})).status).toBe(400);
   expect(await(await app.request('/api/artifacts',{headers:{authorization:`Bearer ${other.access_token}`}})).json()).toMatchObject({credential:'bearer'});
   expect((await revoke(first.client_id)).status).toBe(200);
+ });
+});
+
+describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the person\'s own token there, never one here', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const withService=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:SERVICE}])}}));};
+ const tokenRow=async(id:string)=>(await testDb().query('SELECT user_id,audience,scope FROM auth.tokens WHERE id=$1',[id])).rows[0];
+ const refresh=(host:ReturnType<typeof assemble<any>>,grant:{client_id:string;refresh_token:string},resource:string)=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token,resource})});
+
+ it('direct issuance by service id binds the token to that service\'s origin with no scope, and this API refuses it',async()=>{
+  const host=await withService();
+  const response=await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})});
+  expect(response.status).toBe(201);
+  const grant=await response.json() as {id:string;access_token:string;refresh_token:string;client_id:string;resource:string;scope:string};
+  expect(grant).toMatchObject({resource:SERVICE,scope:''});
+  expect(await tokenRow(grant.id)).toMatchObject({user_id:'usr_1',audience:SERVICE,scope:''});
+  // At this API it is no credential: the request is anonymous.
+  expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${grant.access_token}`}})).json()).toMatchObject({credential:'none'});
+  // It refreshes against its own resource only, and stays bound to it.
+  expect(await(await refresh(host,grant,RESOURCE)).json()).toMatchObject({error:'invalid_grant'});
+  const next=await refresh(host,grant,SERVICE);
+  expect(next.status,await next.clone().text()).toBe(200);
+  const rotated=await next.json() as {access_token:string};
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken(rotated.access_token)).toMatchObject({userId:'usr_1',audience:SERVICE});
+ });
+
+ it('an unknown service id, or the service on a host that does not name it, is refused',async()=>{
+  const host=await withService();
+  const unknown=await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'payroll'})});
+  expect(unknown.status).toBe(400);
+  expect(await unknown.json()).toMatchObject({error:'invalid_audience'});
+  const plain=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})});
+  expect(plain.status).toBe(400);
+ });
+
+ it('authorization code + PKCE with resource=<service origin>: consent names the service, and the code mints a token for it alone',async()=>{
+  const host=await withService();
+  const reg=await host.request('/oauth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client_name:'Warehouse web',redirect_uris:[REGISTERED_REDIRECT],token_endpoint_auth_method:'none'})});
+  const clientId=((await reg.json()) as {client_id:string}).client_id;
+  const authorize=(scope:string)=>`/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st&resource=${encodeURIComponent(SERVICE)}${scope}`;
+  const consent=await(await host.request(authorize(''),{headers:asUser()})).text();
+  expect(consent).toContain('act as you at <strong>warehouse</strong>');
+  expect(consent).toContain('Approve');
+  expect(await(await host.request(authorize('&scope=artifacts'),{headers:asUser()})).text()).toContain('Unsupported scope.');
+  const form=new URLSearchParams({client_id:clientId,redirect_uri:REDIRECT,code_challenge:s256(verifier),resource:SERVICE,scope:'',state:'st',grant:'user',action:'approve'});
+  const approved=await host.request('/oauth/authorize/approve',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form});
+  expect(approved.status).toBe(303);
+  const code=new URL(approved.headers.get('location')!).searchParams.get('code')!;
+  // Spent for this API instead of the service: refused.
+  const wrong=await host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:clientId,code,code_verifier:verifier,redirect_uri:REDIRECT,resource:RESOURCE})});
+  expect(await wrong.json()).toMatchObject({error:'invalid_grant'});
+  const form2=new URLSearchParams({client_id:clientId,redirect_uri:REDIRECT,code_challenge:s256(verifier),resource:SERVICE,scope:'',state:'st',grant:'user',action:'approve'});
+  const code2=new URL((await host.request('/oauth/authorize/approve',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form2})).headers.get('location')!).searchParams.get('code')!;
+  const token=await host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:clientId,code:code2,code_verifier:verifier,redirect_uri:REDIRECT,resource:SERVICE})});
+  expect(token.status,await token.clone().text()).toBe(200);
+  const body=await token.json() as {access_token:string;scope:string};
+  expect(body.scope).toBe('');
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken(body.access_token)).toMatchObject({userId:'usr_1',audience:SERVICE});
+  expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${body.access_token}`}})).json()).toMatchObject({credential:'none'});
+ });
+
+ it('the skill client keeps a service grant beside the API grant and refreshes it against the service\'s resource',async()=>{
+  const host=await withService();const root=await mkdtemp(join(tmpdir(),'afbin-audience-'));
+  try{
+   const issue=async(body:unknown)=>await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify(body)})).json() as {access_token:string;refresh_token:string;client_id:string;resource:string};
+   const api=await issue({}),service=await issue({audience:'warehouse'});
+   await saveCredentials({server:BASE,token:api.access_token,refreshToken:api.refresh_token,clientId:api.client_id,expiresAt:Date.now()+60_000},root);
+   await saveCredentials({server:BASE,audience:'warehouse',resource:service.resource,token:service.access_token,refreshToken:service.refresh_token,clientId:service.client_id,expiresAt:Date.now()-1000},root);
+   expect((await readCredentials(BASE,root))!.token).toBe(api.access_token);
+   const saved=(await readCredentials(BASE,root,'warehouse'))!;
+   expect(saved).toMatchObject({token:service.access_token,audience:'warehouse',resource:SERVICE});
+   const bodies:unknown[]=[];
+   const refreshed=await refreshCredentials(saved,root,{fetch:(async(url:string|URL|Request,init?:RequestInit)=>{bodies.push(JSON.parse(String(init?.body)));return host.request(String(url),init);}) as typeof fetch});
+   expect(bodies).toEqual([expect.objectContaining({resource:SERVICE})]);
+   expect(await createBearerReader({db:{query:testDb().query}}).byToken(refreshed.token)).toMatchObject({audience:SERVICE});
+   expect((await readCredentials(BASE,root,'warehouse'))!.token).toBe(refreshed.token);
+   expect((await readCredentials(BASE,root))!.token).toBe(api.access_token);
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
+});
+
+describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here for a short-lived token for one configured service', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const withService=async(audiences:unknown=[{id:'warehouse',origin:SERVICE}])=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__SERVICE_AUDIENCES:JSON.stringify(audiences)}}));};
+ const exchange=(host:ReturnType<typeof assemble<any>>,headers:Record<string,string>,body:unknown={audience:'warehouse'})=>host.request(`${BASE}/api/authentication/service-token`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
+ const signedIn=()=>{session={userId:'usr_1',email:'u@example.com',sessionId:'ses_1'};identities.set('usr_1',{userId:'usr_1',email:'u@example.com',emailVerified:true});return {cookie:'sess=1'};};
+ const claimsOf=(token:string)=>JSON.parse(Buffer.from(token.slice(4).split('.')[0]!,'base64url').toString());
+ const bearer=async(id:string)=>{const token=`mx_${id.padEnd(40,'z')}`;
+  await testDb().query('INSERT INTO auth.tokens (id,name,token_hash,user_id,audience,scope) VALUES ($1,$2,$3,$4,$5,$6)',[id,'agent',hashToken(token),'usr_1',null,null]);
+  identities.set('usr_1',{userId:'usr_1',email:'u@example.com',emailVerified:true});return token;};
+ const NO_REFRESH=['refresh_token','client_id','id'];
+
+ it('a signed-in page, same Origin only: five minutes for that service, bound to the session, no refresh token, no row written, never a credential here',async()=>{
+  const host=await withService();
+  const rows=async()=>Number((await testDb().query<{n:string}>('SELECT count(*) AS n FROM auth.tokens')).rows[0]!.n);
+  const before=await rows();
+  const response=await exchange(host,{...signedIn(),origin:BASE});
+  expect(response.status,await response.clone().text()).toBe(200);
+  expect(response.headers.get('cache-control')).toContain('no-store');
+  const body=await response.json() as Record<string,unknown>&{access_token:string;expires_in:number;expires_at:string};
+  expect(body).toMatchObject({token_type:'Bearer',audience:'warehouse',resource:SERVICE});
+  for(const field of NO_REFRESH)expect(body,field).not.toHaveProperty(field);
+  expect(body.expires_in).toBeGreaterThan(290);expect(body.expires_in).toBeLessThanOrEqual(300);
+  expect(Date.parse(body.expires_at)-Date.now()).toBeLessThanOrEqual(300_000);
+  expect(claimsOf(body.access_token)).toMatchObject({sub:'usr_1',aud:SERVICE,svc:'warehouse',par:{kind:'session',id:'ses_1'}});
+  expect(await rows()).toBe(before);
+  // At this API it is nobody, and it cannot be exchanged again.
+  session=null;
+  expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${body.access_token}`}})).json()).toMatchObject({credential:'none'});
+  expect((await exchange(host,{authorization:`Bearer ${body.access_token}`})).status).toBe(401);
+ });
+ it('the long grant is for clients outside any page: a request a page makes (Sec-Fetch-Site or Sec-Fetch-Dest) is refused, and the page uses the exchange',async()=>{
+  const host=await withService();
+  const grant=(headers:Record<string,string>,body:unknown={})=>host.request(`${BASE}/api/authentication/token`,{method:'POST',headers:{...signedIn(),origin:BASE,'content-type':'application/json',...headers},body:JSON.stringify(body)});
+  const pages:Record<string,string>[]=[{'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'},{'sec-fetch-site':'same-origin'},{'sec-fetch-dest':'document'}];
+  // Node's fetch, which the skill's sign-in uses, sends Sec-Fetch-Mode alone: that is a client outside any page.
+  expect((await grant({'sec-fetch-mode':'cors'})).status).toBe(201);
+  for(const page of pages){
+   for(const body of [{},{audience:'warehouse'}]){
+    const refused=await grant(page,body);
+    expect(refused.status,JSON.stringify(page)).toBe(403);
+    const answer=await refused.json() as Record<string,unknown>;
+    expect(answer).toMatchObject({error:'page_context_refused',hint:expect.stringContaining('/api/authentication/service-token')});
+    expect(answer).not.toHaveProperty('refresh_token');
+   }
+  }
+  // Outside a page (the skill's sign-in, curl), as before.
+  expect((await grant({})).status).toBe(201);
+  // The page's own way: the exchange answers the same browser request.
+  const exchanged=await exchange(host,{...signedIn(),origin:BASE,'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'});
+  expect(exchanged.status).toBe(200);expect(await exchanged.json()).not.toHaveProperty('refresh_token');
+ });
+ it('refuses a cookie from another Origin or none, the anonymous, and an unknown or missing audience',async()=>{
+  const host=await withService();
+  expect((await exchange(host,{...signedIn(),origin:'https://evil.example'})).status).toBe(403);
+  expect((await exchange(host,signedIn())).status).toBe(403);
+  session=null;
+  expect(await(await exchange(host,{origin:BASE})).json()).toMatchObject({error:'authentication_required'});
+  for(const body of [{audience:'payroll'},{},{audience:SERVICE}]){
+   const response=await exchange(host,{...signedIn(),origin:BASE},body);
+   expect(response.status,JSON.stringify(body)).toBe(400);expect(await response.json()).toMatchObject({error:'invalid_audience'});
+  }
+  // A host that names no such service exchanges nothing.
+  expect((await exchange(await withService([]),{...signedIn(),origin:BASE})).status).toBe(400);
+ });
+ it('an ordinary API bearer, no Origin needed: the same short-lived token, bound to that bearer',async()=>{
+  const host=await withService(),personal=await bearer('tok_personal');
+  const response=await exchange(host,{authorization:`Bearer ${personal}`});
+  expect(response.status,await response.clone().text()).toBe(200);
+  const body=await response.json() as {access_token:string};
+  for(const field of NO_REFRESH)expect(body,field).not.toHaveProperty(field);
+  expect(claimsOf(body.access_token)).toMatchObject({sub:'usr_1',aud:SERVICE,par:{kind:'token',id:'tok_personal'}});
+  // The OAuth grant sign-in gives for this API is an ordinary bearer too.
+  const api=await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'})).json() as {id:string;access_token:string};
+  session=null;
+  const viaGrant=await exchange(host,{authorization:`Bearer ${api.access_token}`});
+  expect(viaGrant.status,await viaGrant.clone().text()).toBe(200);
+  expect(claimsOf((await viaGrant.json() as {access_token:string}).access_token)).toMatchObject({par:{kind:'token',id:api.id}});
+ });
+ it('a token for the service itself, an unknown bearer, or an unverified account is refused: only this host\'s own credentials exchange',async()=>{
+  const host=await withService();
+  const direct=await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})})).json() as {access_token:string};
+  session=null;
+  expect((await exchange(host,{authorization:`Bearer ${direct.access_token}`})).status).toBe(401);
+  expect((await exchange(host,{authorization:`Bearer mx_${'q'.repeat(40)}`})).status).toBe(401);
+  const personal=await bearer('tok_unverified');identities.set('usr_1',{userId:'usr_1',email:'u@example.com',emailVerified:false});
+  expect(await(await exchange(host,{authorization:`Bearer ${personal}`})).json()).toMatchObject({error:'deployment_admission_required'});
+ });
+});
+
+describe('an operator-registered client (IDENTITY__OAUTH_CLIENTS): a fixed id, named at consent, no dynamic registration', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const CLIENTS=[{client_id:'warehouse-web',name:'Warehouse',redirect_uris:[REGISTERED_REDIRECT]}];
+ const withClient=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:JSON.stringify(CLIENTS),IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:SERVICE}])}}));};
+ const authorize=(resource:string,scope='',redirect=REDIRECT)=>`/oauth/authorize?response_type=code&client_id=warehouse-web&redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st&resource=${encodeURIComponent(resource)}${scope}`;
+
+ it('signs a browser in for the service and for this API with the same fixed client, naming it at consent', async () => {
+  const host=await withClient();
+  expect(await(await host.request(authorize(SERVICE),{headers:asUser()})).text()).toContain('<strong>Warehouse</strong> wants to act as you at <strong>warehouse</strong>');
+  expect(await(await host.request(authorize(RESOURCE,'&scope=artifacts'),{headers:asUser()})).text()).toContain('<strong>Warehouse</strong> wants to use this site as');
+  const code=async(resource:string,scope:string)=>{
+   const form=new URLSearchParams({client_id:'warehouse-web',redirect_uri:REDIRECT,code_challenge:s256(verifier),resource,scope,state:'st',grant:'user',action:'approve'});
+   const approved=await host.request('/oauth/authorize/approve',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form});
+   expect(approved.status).toBe(303);
+   return new URL(approved.headers.get('location')!).searchParams.get('code')!;
+  };
+  const exchange=async(resource:string,scope:string)=>{
+   const r=await host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:'warehouse-web',code:await code(resource,scope),code_verifier:verifier,redirect_uri:REDIRECT,resource})});
+   expect(r.status,await r.clone().text()).toBe(200);
+   return (await r.json() as {access_token:string}).access_token;
+  };
+  const reader=createBearerReader({db:{query:testDb().query}});
+  expect(await reader.byToken(await exchange(SERVICE,''))).toMatchObject({userId:'usr_1',audience:SERVICE});
+  const api=await exchange(RESOURCE,'artifacts');
+  expect(await reader.byToken(api)).toMatchObject({userId:'usr_1',audience:RESOURCE,scope:'artifacts'});
+  expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${api}`}})).json()).toMatchObject({credential:'bearer'});
+ });
+
+ it('keeps its redirects exact, is unknown where it is not configured, and a malformed setting refuses the host', async () => {
+  const host=await withClient();
+  expect(await(await host.request(authorize(SERVICE,'','https://evil.example/callback'),{headers:asUser()})).text()).toContain('Redirect URI not registered.');
+  expect(await(await app.request(authorize(RESOURCE,'&scope=artifacts'),{headers:asUser()})).text()).toContain('Unknown client.');
+  const options=await optionsOf();
+  for(const bad of ['{}',JSON.stringify([{client_id:'afbin_x',name:'X',redirect_uris:[REGISTERED_REDIRECT]}]),JSON.stringify([{client_id:'web',name:'X',redirect_uris:['http://evil.example/cb']}]),JSON.stringify([{client_id:'web',name:'<b>',redirect_uris:[REGISTERED_REDIRECT]}])])
+   expect(()=>assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:bad}})),bad).toThrow(/IDENTITY__OAUTH_CLIENTS/);
+ });
+});
+
+describe('a first-party client (IDENTITY__OAUTH_CLIENTS first_party): part of the sign-in, no consent page, ended with the browser session', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const WEB='http://warehouse.lvh.me:7444/auth/callback';
+ const CLIENTS=[{client_id:'warehouse-web',name:'Warehouse',redirect_uris:[WEB],first_party:true},{client_id:'reports-web',name:'Reports',redirect_uris:[WEB]}];
+ const withClients=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:JSON.stringify(CLIENTS),IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:SERVICE}])}}));};
+ const authorize=(client:string,resource:string,scope='')=>`/oauth/authorize?response_type=code&client_id=${client}&redirect_uri=${encodeURIComponent(WEB)}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st-1&resource=${encodeURIComponent(resource)}${scope}`;
+ /** A real Better Auth browser session row: the grant's liveness reads it. */
+ const browserSession=async(userId:string,sessionId:string)=>{
+  const {query}=testDb();
+  await query(`INSERT INTO auth."user" (id,name,email,"emailVerified","createdAt","updatedAt") VALUES ($1,$1,$2,true,now(),now()) ON CONFLICT (id) DO NOTHING`,[userId,`${userId}@example.com`]);
+  await query(`INSERT INTO auth.session (id,"expiresAt",token,"createdAt","updatedAt","userId") VALUES ($1,now()+interval '1 day',$2,now(),now(),$3)`,[sessionId,`tok-${sessionId}`,userId]);
+  session={userId,email:`${userId}@example.com`,sessionId};identities.set(userId,{userId,email:`${userId}@example.com`,emailVerified:true});
+  return {cookie:'sess=1',end:()=>query('DELETE FROM auth.session WHERE id=$1',[sessionId])};
+ };
+ const exchange=async(host:ReturnType<typeof assemble<any>>,client:string,location:string,resource:string)=>{
+  const code=new URL(location).searchParams.get('code')!;
+  const r=await host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:client,code,code_verifier:verifier,redirect_uri:WEB,resource})});
+  expect(r.status,await r.clone().text()).toBe(200);
+  return await r.json() as {access_token:string;refresh_token:string};
+ };
+ const refresh=(host:ReturnType<typeof assemble<any>>,client:string,token:string,resource:string)=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:client,refresh_token:token,resource})});
+
+ it('a signed-out browser goes straight to the login page and back; a signed-in one gets its code with no consent page', async () => {
+  const host=await withClients();
+  const out=await host.request(authorize('warehouse-web',SERVICE));
+  expect(out.status).toBe(303);
+  const login=new URL(out.headers.get('location')!,BASE);
+  expect(login.pathname).toBe('/login');
+  expect(login.searchParams.get('callbackUrl')).toBe(authorize('warehouse-web',SERVICE));
+  const browser=await browserSession('usr_fp1','sess_fp1');
+  const signedIn=await host.request(authorize('warehouse-web',SERVICE),{headers:{cookie:browser.cookie}});
+  expect(signedIn.status).toBe(303);
+  const back=new URL(signedIn.headers.get('location')!);
+  expect(`${back.origin}${back.pathname}`).toBe(WEB);
+  expect(back.searchParams.get('state')).toBe('st-1');
+  expect(signedIn.headers.get('cache-control')).toContain('no-store');
+  const grant=await exchange(host,'warehouse-web',back.href,SERVICE);
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken(grant.access_token)).toMatchObject({userId:'usr_fp1',audience:SERVICE});
+  // The same browser, Artifactbin's own API as the person: also no consent page.
+  const api=await host.request(authorize('warehouse-web',RESOURCE,'&scope=artifacts'),{headers:{cookie:browser.cookie}});
+  expect(api.status).toBe(303);
+  expect(await createBearerReader({db:{query:testDb().query}}).byToken((await exchange(host,'warehouse-web',api.headers.get('location')!,RESOURCE)).access_token)).toMatchObject({userId:'usr_fp1',audience:RESOURCE,scope:'artifacts'});
+  // A client that is not first-party still asks every time.
+  expect(await(await host.request(authorize('reports-web',SERVICE),{headers:{cookie:browser.cookie}})).text()).toContain('<strong>Reports</strong> wants to act as you');
+  await browser.end();
+ });
+
+ it('its grants end when the approving browser session ends, refresh included; a consented client\'s grant does not', async () => {
+  const host=await withClients();
+  const browser=await browserSession('usr_fp2','sess_fp2');
+  const first=await exchange(host,'warehouse-web',(await host.request(authorize('warehouse-web',SERVICE),{headers:{cookie:browser.cookie}})).headers.get('location')!,SERVICE);
+  const form=new URLSearchParams({client_id:'reports-web',redirect_uri:WEB,code_challenge:s256(verifier),resource:SERVICE,scope:'',state:'st',grant:'user',action:'approve'});
+  const consented=await exchange(host,'reports-web',(await host.request('/oauth/authorize/approve',{method:'POST',headers:{cookie:browser.cookie,origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form})).headers.get('location')!,SERVICE);
+  const reader=createBearerReader({db:{query:testDb().query}});
+  const rotated=await refresh(host,'warehouse-web',first.refresh_token,SERVICE);
+  expect(rotated.status,await rotated.clone().text()).toBe(200);
+  const live=await rotated.json() as {access_token:string;refresh_token:string};
+  expect(await reader.byToken(live.access_token)).toMatchObject({userId:'usr_fp2'});
+  await browser.end();
+  expect(await reader.byToken(live.access_token),'signed out: the first-party grant is no credential').toBeNull();
+  expect(await(await refresh(host,'warehouse-web',live.refresh_token,SERVICE)).json()).toMatchObject({error:'invalid_grant'});
+  expect(await reader.byToken(consented.access_token),'a consented grant is independent of the browser').toMatchObject({userId:'usr_fp2'});
+ });
+
+ it('refuses to issue an unbound first-party grant, and only operator-registered clients may redirect over local-development http', async () => {
+  const host=await withClients();
+  asUser('usr_fp3','fp3@example.com');
+  const noSession=await host.request(authorize('warehouse-web',SERVICE),{headers:{cookie:'sess=1'}});
+  expect(noSession.status).toBe(400);
+  const form=new URLSearchParams({client_id:'warehouse-web',redirect_uri:WEB,code_challenge:s256(verifier),resource:SERVICE,scope:'',state:'st',grant:'user',action:'approve'});
+  expect((await host.request('/oauth/authorize/approve',{method:'POST',headers:{cookie:'sess=1',origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form})).status).toBe(401);
+  const dynamic=await host.request('/oauth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client_name:'X',redirect_uris:[WEB]})});
+  expect(dynamic.status).toBe(400);
+  const options=await optionsOf();
+  for(const bad of [JSON.stringify([{client_id:'web-x',name:'X',redirect_uris:['http://evil.example/cb'],first_party:true}]),JSON.stringify([{client_id:'web-x',name:'X',redirect_uris:[WEB],first_party:'yes'}])])
+   expect(()=>assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:bad}})),bad).toThrow(/IDENTITY__OAUTH_CLIENTS/);
  });
 });

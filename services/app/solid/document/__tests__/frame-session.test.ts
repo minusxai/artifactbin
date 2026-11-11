@@ -8,7 +8,7 @@
  * first URL (a new ticket), and the document's door says hello again; it never loops.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { keepFrameSession } from '@/solid/document/create-framed-story';
+import { keepFrameSession } from '@/lib/html-reader/frame-session';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 
 const PAGES = 'https://6869.pages.test';

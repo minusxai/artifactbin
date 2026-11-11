@@ -15,13 +15,13 @@ const dirs: string[] = [];
 function fixture() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'public-build-'));
   dirs.push(dir);
-  mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'assets'));
+  mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'af/app'), { recursive: true });
   writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({
-    main: { file: 'assets/app-abc.js', css: ['assets/app-abc.css'], assets: ['assets/font-abc.woff2'] },
-    missing: { file: 'assets/missing-abc.js' },
-    forbidden: { file: 'assets/private.html' },
+    main: { file: 'af/app/app-abc.js', css: ['af/app/app-abc.css'], assets: ['af/app/font-abc.woff2'] },
+    missing: { file: 'af/app/missing-abc.js' },
+    forbidden: { file: 'af/app/private.html' },
   }));
-  for (const [name, body] of [['app-abc.js', 'public code'], ['app-abc.css', 'body{}'], ['font-abc.woff2', 'font'], ['unknown.js', 'not listed'], ['private.html', 'private']]) writeFileSync(path.join(dir, 'assets', name), body);
+  for (const [name, body] of [['app-abc.js', 'public code'], ['app-abc.css', 'body{}'], ['font-abc.woff2', 'font'], ['unknown.js', 'not listed'], ['private.html', 'private']]) writeFileSync(path.join(dir, 'af/app', name), body);
   const app = new Hono(); mountBuildAssets(app, dir);
   return { app, dir };
 }
@@ -30,11 +30,11 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 it('serves only manifest-listed build bytes, with HEAD and immutable caching', async () => {
   const { app } = fixture();
   for (const file of ['app-abc.js', 'app-abc.css', 'font-abc.woff2']) {
-    const res = await app.request(prefix + '/assets/' + file);
+    const res = await app.request(prefix + '/af/app/' + file);
     expect(res.status).toBe(200);
     expect(res.headers.get('x-artifactbin-build-asset')).toBe('1');
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
-    const head = await app.request(prefix + '/assets/' + file, { method: 'HEAD' });
+    const head = await app.request(prefix + '/af/app/' + file, { method: 'HEAD' });
     expect(head.status).toBe(200); expect(await head.text()).toBe('');
     expect(head.headers.get('content-type')).toBe(res.headers.get('content-type'));
   }
@@ -42,13 +42,13 @@ it('serves only manifest-listed build bytes, with HEAD and immutable caching', a
 it('fails closed for unknown/missing files, queries, non-read methods and unsafe paths', async () => {
   const { app, dir } = fixture();
   for (const file of ['unknown.js', 'missing-abc.js', 'private.html', '%61pp-abc.js', '../index.html', 'nested/app-abc.js', 'app-abc.js?private=1']) {
-    const res = await app.request(prefix + '/assets/' + file);
+    const res = await app.request(prefix + '/af/app/' + file);
     expect(res.status).toBe(404); expect(res.headers.get('x-artifactbin-build-asset')).toBeNull();
   }
-  expect((await app.request(prefix + '/assets/app-abc.js', { method: 'POST' })).status).toBe(404);
+  expect((await app.request(prefix + '/af/app/app-abc.js', { method: 'POST' })).status).toBe(404);
   rmSync(path.join(dir, '.vite/manifest.json'));
   const noManifest = new Hono(); mountBuildAssets(noManifest, dir);
-  expect((await noManifest.request(prefix + '/assets/app-abc.js')).status).toBe(404);
+  expect((await noManifest.request(prefix + '/af/app/app-abc.js')).status).toBe(404);
 });
 it('returns real public build bytes without any identity lookup and keeps protected requests on their usual path', async () => {
   const { app } = fixture();
@@ -57,15 +57,15 @@ it('returns real public build bytes without any identity lookup and keeps protec
   const options = await testAuthOptions({ sessions: { resolve: session }, upstream: inProcess(app) });
   const tokenRead = vi.spyOn(options.tokens, 'byToken');
   const proxy = createAuthHost(options);
-  const res = await proxy.request('/assets/app-abc.js', { headers: { cookie: 'session=secret', authorization: 'Bearer secret', 'x-mx-actor': 'forged' } });
+  const res = await proxy.request('/af/app/app-abc.js', { headers: { cookie: 'session=secret', authorization: 'Bearer secret', 'x-mx-actor': 'forged' } });
   expect(res.status).toBe(200); expect(await res.text()).toBe('public code');
   expect(session).not.toHaveBeenCalled(); expect(tokenRead).not.toHaveBeenCalled();
   expect(res.headers.get('x-artifactbin-build-asset')).toBeNull();
-  for (const url of ['/a/abc123', '/datasets/abc123', '/assets/unknown.js', '/assets/app-abc.js?private=1']) {
+  for (const url of ['/a/abc123', '/datasets/abc123', '/af/app/unknown.js', '/af/app/app-abc.js?private=1']) {
     expect((await proxy.request(url)).status).toBe(403);
   }
   expect(session).toHaveBeenCalledTimes(4);
-  expect((await proxy.request(prefix + '/assets/app-abc.js')).status).toBe(404);
+  expect((await proxy.request(prefix + '/af/app/app-abc.js')).status).toBe(404);
 });
 
 it('preserves the same public-byte boundary over the signed HTTP upstream', async () => {
@@ -83,7 +83,7 @@ it('preserves the same public-byte boundary over the signed HTTP upstream', asyn
     const session = vi.fn(async () => { throw Error('identity unavailable'); });
     const proxy = createAuthHost(await testAuthOptions({ sessions: { resolve: session }, upstream: overHttp(server.base, secret) }));
     for (const method of ['GET', 'HEAD']) {
-      const res = await proxy.request('/assets/app-abc.js', { method, headers: { cookie: 'secret', authorization: 'Bearer secret', 'x-mx-actor': 'forged' } });
+      const res = await proxy.request('/af/app/app-abc.js', { method, headers: { cookie: 'secret', authorization: 'Bearer secret', 'x-mx-actor': 'forged' } });
       expect(res.status).toBe(200); expect(await res.text()).toBe(method === 'HEAD' ? '' : 'public code');
       expect(res.headers.get('cache-control')).toContain('immutable');
     }

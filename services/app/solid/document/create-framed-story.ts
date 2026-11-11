@@ -2,7 +2,7 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import { STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
+import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
@@ -16,114 +16,26 @@ export type CellEditingLoader = () => Promise<{ startCellEditing: typeof startCe
 const loadCellEditing: CellEditingLoader = () => import('./cell-editing');
 
 // The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
-import { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
+import { framedDocumentFor, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
+import { freshFrameSrc } from '@/lib/html-reader/frame-src';
+import { keepFrameSession } from '@/lib/html-reader/frame-session';
 export { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR };
 
-/** Grace after a reloaded document's load event for its first message (its door normally says `hello` before it). */
-const FRAME_HELLO_MS = 3_000;
-/** At most this many fresh tickets per window: a document that stays unreachable is left as it is. */
-const FRAME_REMINTS = 2;
-const FRAME_REMINT_WINDOW_MS = 5 * 60_000;
-
-interface FrameSessionOptions {
-  win: Window;
-  frame: HTMLIFrameElement;
-  /** The document's own origin: the only one its messages count from. */
-  origin: string;
-  id: string;
-  /** A fresh first URL (a new ticket); null when the app refuses one. */
-  remint?: (id: string) => Promise<string | null>;
-  /** Whether this page can read the frame's document — it is on the app's own origin, off the document's. */
-  readable?: (frame: HTMLIFrameElement) => boolean;
-}
-
-const sameOriginAsPage = (frame: HTMLIFrameElement): boolean => {
-  try { return Boolean(frame.contentWindow?.location.href); } catch { return false; }
-};
-
 /**
- * KEEP THE FRAME ON ITS DOCUMENT. The frame's session on the document's origin (server/pages-host) lasts 8 h; a tab
- * left open longer that reloads its frame — a new version it cannot morph to, a reload keeping its place — gets the
- * document origin's bare "Not found", or, behind a proxy, a redirect onto the app's own origin, where every message
- * this page posts to the document's origin goes nowhere. Every framed document's door says `hello` as it opens
- * (lib/islands/frame-door), before its load event; so a frame that reloads and stays silent, or whose document this
- * page can read (it is on the app's origin), is pointed at a fresh first URL — a new ticket, minted by the app
- * session (`freshFrameSrc`) — and the bridge re-attaches on the new document's hello (frame-bridge/parent). Only a
- * document that has spoken before is second-guessed, and only FRAME_REMINTS times per window: it never loops.
- * Returns the stop.
+ * The framed document's link moved (its `route.set`, lib/html-runtime/page-route → STORY_URL_VALUES_MESSAGE): this
+ * page's address takes exactly its `$` params — the path, the hash and every other param kept, replaced, or pushed when
+ * the page asked — so the address bar, a copied link, a reload and Back carry the reader's screen (the server forwards
+ * the page's `$` params into the frame's first URL, lib/document-serving/artifact-page).
  */
-export function keepFrameSession(options: FrameSessionOptions): () => void {
-  const { win, frame, origin, id } = options;
-  const remint = options.remint ?? ((documentId: string) => freshFrameSrc(documentId));
-  const readable = options.readable ?? sameOriginAsPage;
-  let spoke = false;
-  let lastHello = -Infinity;
-  let lastMessage = -Infinity;
-  /** The frame's last load event: a hello after it belongs to the document that loaded next. */
-  let previousLoad = -Infinity;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let reminting = false;
-  let stopped = false;
-  const remints: number[] = [];
-
-  const recover = async () => {
-    const now = Date.now();
-    while (remints.length && now - remints[0]! > FRAME_REMINT_WINDOW_MS) remints.shift();
-    if (reminting || stopped || remints.length >= FRAME_REMINTS) return;
-    remints.push(now);
-    reminting = true;
-    try {
-      const src = await remint(id);
-      if (src && !stopped) frame.src = src;
-    } finally { reminting = false; }
-  };
-  const onMessage = (event: MessageEvent) => {
-    if (event.source !== frame.contentWindow || event.origin !== origin) return;
-    spoke = true;
-    lastMessage = Date.now();
-    const data = event.data as { type?: unknown; payload?: { kind?: unknown } } | null;
-    // `ready` answers an attach to this document's door, so it proves the door opened just as `hello` does — and it
-    // still arrives when this watchdog started (lazily) after the door's hello, which would otherwise make the served
-    // document's own first load look like a silent reload and re-navigate the frame, re-sending every query.
-    const kind = data && typeof data === 'object' && data.type === STORY_FRAME_BRIDGE_MESSAGE ? data.payload?.kind : undefined;
-    if (kind === 'hello' || kind === 'ready') lastHello = lastMessage;
-  };
-  const onLoad = () => {
-    clearTimeout(timer);
-    if (readable(frame)) { void recover(); return; }
-    const loadedAt = Date.now();
-    const before = previousLoad;
-    previousLoad = loadedAt;
-    if (!spoke) return;
-    // The new document's door says hello as it opens — before its load event, which waits for every image — or, at
-    // the latest, it speaks within the grace period after it.
-    timer = setTimeout(() => {
-      if (lastHello > before || lastMessage > loadedAt) return;
-      void recover();
-    }, FRAME_HELLO_MS);
-  };
-  win.addEventListener('message', onMessage);
-  frame.addEventListener('load', onLoad);
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    win.removeEventListener('message', onMessage);
-    frame.removeEventListener('load', onLoad);
-  };
-}
-
-/**
- * The framed document's link moved (lib/islands/url-sync → STORY_URL_VALUES_MESSAGE): this page's address takes
- * exactly its `$` params — the path, the hash and every other param kept, replaced rather than pushed — so the
- * address bar, a copied link and a reload carry the reader's selection (the server forwards the page's `$` params
- * into the frame's first URL, lib/document-serving/artifact-page).
- */
-export function followFramedValues(win: Window, values: string): void {
+export function followFramedValues(win: Window, values: string, push = false): void {
   const { pathname, search, hash } = win.location;
   const next = withUrlValuesOf(search, values);
   if (next === search) return;
-  win.history.replaceState(win.history.state, '', `${pathname}${next}${hash}`);
+  win.history[push ? 'pushState' : 'replaceState'](win.history.state, '', `${pathname}${next}${hash}`);
 }
+
+/** The `$` params alone of an address's search (`''` for none): what the frame is told after Back or Forward. */
+const dollarValuesOf = (search: string): string => withUrlValuesOf('', search);
 
 /**
  * The framed document's node tree (the page's NODES door, `?part=nodes`): a request of its own because the page draws nothing
@@ -218,7 +130,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
       editId: options.editId, source: options.source, htmlContext: options.htmlContext,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
-      onUrlValues: (values) => followFramedValues(window, values),
+      onUrlValues: (values, push) => followFramedValues(window, values, push),
     });
     setCurrent(bridge);
     if (inset) bridge.setTopInset(inset);
@@ -226,8 +138,12 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
 
   };
+  // The reader's Back or Forward over entries the page pushed: the frame's route follows what this address holds now.
+  const onHistory = () => { try { frame.contentWindow?.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: dollarValuesOf(window.location.search) }, origin); } catch { /* the frame went away */ } };
+  window.addEventListener('popstate', onHistory);
+  onCleanup(() => window.removeEventListener('popstate', onHistory));
   // A frame whose session ran out (or that a redirect took off its origin) gets a fresh ticket (keepFrameSession).
-  onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id }));
+  onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id, remint: (id) => freshFrameSrc(id) }));
   start();
   let editing: RegionEditing | null = null;
   const [toolbar, setToolbar] = createSignal<RegionToolbarState | null>(null, { equals: false });

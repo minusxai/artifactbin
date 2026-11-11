@@ -88,8 +88,6 @@ export default {
       ],
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },
-      // Makes the disposable TLS certificates of the real-Postgres resolver test (page-operations database-postgres).
-      ignoreBinaries: ['openssl'],
     },
     // THE PACKAGES: an export of a package entry (its package.json `exports`, or a server) that nothing imports is
     // reported too (`includeEntryExports`). What the private deployment imports is pinned, by name, in each
@@ -100,15 +98,11 @@ export default {
     'services/test-support': { includeEntryExports: true },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
     'services/auth': { ignoreBinaries: ['openssl'], includeEntryExports: true },
-    'services/runner': {
-      entry: ['src/server.ts', 'prove-postgres.ts'],
-      // Bundled into each user program by specifier (src/compiler.ts).
-      ignoreDependencies: ['abort-controller', 'fast-text-encoding', 'core-js'],
-      includeEntryExports: true,
-    },
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
     'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'], includeEntryExports: true },
     'services/events': { entry: ['src/server.ts'], includeEntryExports: true },
+    // Its Docker proof makes single-day TLS certificates for a real Postgres.
+    'services/connectors': { ignoreBinaries: ['openssl'], includeEntryExports: true },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'], includeEntryExports: true },
   },
   ignoreIssues: {

@@ -1,8 +1,8 @@
 import {getDeploymentState} from '@/lib/deployment';
-import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
+import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
-import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
+import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadFor, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
@@ -13,14 +13,14 @@ import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePret
  *    explicit raw/export responses retain their document sandbox policy;
  *  - the app's pages: one SPA (web/, built by Vite) served for the app's
  *    paths under the app CSP;
- *  - the static tree under public/, with its cache rules set here
- *    (content-addressed → immutable; /geojson a day).
+ *  - every public file under /af/, and the old addresses that still
+ *    answer for some of them (server/public-files).
  *
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
 import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/agent-copy';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
@@ -37,11 +37,13 @@ import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { appBuildId, mountBuildAssets } from './build-assets';
-import { compressDynamic, dynamicEncoding, negotiateEncoding, precompressedStatic } from './content-encoding';
+import { compressDynamic, dynamicEncoding, negotiateEncoding } from './content-encoding';
+import { mountPublicFiles, publicFilePath } from './public-files';
 import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
 import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/user-pages';
 import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
+import { customShellResponse, loadCustomShell, namesDocument, shellAnswers } from './custom-shell';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
@@ -226,9 +228,6 @@ const APP_SECURITY_HEADERS = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
-const IMMUTABLE = 'public, max-age=31536000, immutable';
-/** A VERSION-addressed file (`/libraries/<name>-<version>/`): a rebuild of the same version may change its bytes, so a day, revalidated in the background for a week, never immutable. */
-const VERSIONED = 'public, max-age=86400, stale-while-revalidate=604800';
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -244,6 +243,8 @@ export interface AppServerOptions {
   publicDir?: string;
   /** Every document on its own origin (APP__PAGES_HOST): this deployment's pages site unless a test passes its own. */
   pagesSite?: PagesSite;
+  /** APP__SHELL_FILE unless a test passes its own: the custom shell (./custom-shell) served for the app's screens. */
+  shellFile?: string | null;
 }
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
@@ -321,7 +322,8 @@ const buildHeader = (build: string) => async (c: Context, next: () => Promise<vo
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Every composition (server.ts, src/main.ts, server/host) serves through here: facts project into inboxes.
   setEventProjection(projectNotifications);
-  const app = new Hono();
+  // An old public address is routed as the one that owns it now (server/public-files, the legacy table).
+  const app = new Hono({ getPath: publicFilePath });
   app.use('*', serverTiming);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   // The build this server serves: the built tree's (production); development's Vite-served shell is none.
@@ -334,8 +336,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
-  // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -348,6 +348,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   /** The policy every app page carries: strict, framing only the pages origins. */
   const appPageCsp = appPagePolicy(pagesSite);
   const pageCsp = (request: Request): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, baseUrl(request), opts.devHmrPort) : appPageCsp);
+  // Read at boot: a file that cannot be read stops the boot here, naming the setting.
+  const configuredShell = opts.shellFile === undefined ? shellFile() : opts.shellFile;
+  const customShell = configuredShell ? loadCustomShell(configuredShell) : null;
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
   const index = async (url: string): Promise<string> => {
@@ -425,13 +428,42 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': new URL(c.req.url).pathname==='/local/connect' ? pageCsp(c.req.raw).replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*") : pageCsp(c.req.raw),
+      'content-security-policy': framedPolicy(new URL(c.req.url), pageCsp(c.req.raw)),
       ...readerHeaders(found?.reader),
       // A document's address carries the agent pointer as a header too, for a fetch that reads no body.
       ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),
     } }));
   };
 
+  /** One of the app's own screens: the custom shell in its place when one is set (./custom-shell), else the app page. */
+  const screen = async (c: { req: { raw: Request; url: string; method: string } }): Promise<Response> => {
+    if (!customShell) return page(c);
+    const url = new URL(c.req.url);
+    const head = customShell.headed && namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousHead(c.req.raw, url.pathname)) : '';
+    // The policy the app page at this address carries (a document address admits its trusted embedders), and its agent pointer.
+    return customShellResponse(customShell, c.req.method, framedPolicy(url, pageCsp(c.req.raw)),
+      { ...APP_SECURITY_HEADERS, Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` }, head);
+  };
+  /** The head a link-preview bot sees for a document address: only for a document an ANONYMOUS reader may read. */
+  const anonymousHead = async (request: Request, pathname: string): Promise<string> => {
+    const id = candidateDocument(pathname)?.id ?? (slugAddress(pathname) ? await slugAddressTarget(request, pathname, ANONYMOUS_ACTOR) : null);
+    const read = id ? await readPageRow(id) : null;
+    return read && await canReadArtifact(read.row, ANONYMOUS_ACTOR) ? documentHeadFor(read.row) : '';
+  };
+
+  /**
+   * Who may frame this app page: the app alone; `/local/connect` its local hosts; a document's address (`/a/<id>`, its
+   * `/app/` form) also the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS, empty by default); and that
+   * address's EMBEDDED view (`?embed=1`, the page without the app's bar, solid/lib/embedded) the trusted embedders
+   * ONLY, no one when there are none, so the bar can be hidden only inside a frame they draw. Nothing else.
+   */
+  const framedPolicy = (url: URL, csp: string): string => {
+    if (url.pathname === '/local/connect') return csp.replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*");
+    if (!/^\/a\/[^/]+(?:\/app)?\/?$/.test(url.pathname)) return csp;
+    const embedders = embedTrustedOrigins();
+    if (url.searchParams.get('embed') === '1') return csp.replace("frame-ancestors 'self'", `frame-ancestors ${embedders.length ? embedders.join(' ') : "'none'"}`);
+    return embedders.length ? csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`) : csp;
+  };
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');
 
@@ -528,28 +560,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return id && id !== found?.id ? admit(id, true) : byId;
   };
 
-  // Static: content-addressed trees are immutable, version-addressed libraries a day; everything else is served plainly.
-  app.use('/libraries/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', VERSIONED); c.header('access-control-allow-origin', '*'); });
-  // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
-  // Every file is content-addressed; both requests need CORS and immutable caching.
-  app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
-  app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
-  app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
-  app.use('/assets/*', async (c, next) => {
-    await next();
-    // Signed exports own their grant-bounded private policy, including refusals.
-    if (!c.req.path.startsWith('/assets/export/')) c.header('cache-control', IMMUTABLE);
-  });
-  // In development Vite owns /assets and dist/web does not exist yet. Avoid
-  // registering a static root that can only warn; production builds it first.
-  if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
+  // Every public file (server/public-files): /af/, its old addresses, the two root files.
+  mountPublicFiles(app, { webDir, publicDir });
   app.all('/chat/*', async c => c.notFound());
   app.all('/install.sh', async c => c.notFound());
   app.all('/login/cli', async c => c.notFound());
-  // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
-  app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {
+    if (customShell) return screen(c);
     const signedIn = await runWithRequest(c.req.raw, async () => {
       const actor = await sessionActor(c.req.raw);
       return actor.credential === 'session' && !!actor.userId;
@@ -568,7 +586,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const url = new URL(c.req.url);
       return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw)), 302);
     }
-    return page(c);
+    // Signed out: a custom shell's own sign-in screen when one is set (./custom-shell), else the app page.
+    return customShell ? screen(c) : page(c);
   });
   // The tour for people.
   app.get('/docs', (c) => {
@@ -576,11 +595,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('Cache-Control', 'no-store');
     return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
   });
-  app.on(['GET','HEAD'],'/local/publish',(c)=>page(c));
-  app.get('/docs-human', (c) => page(c));
+  app.on(['GET','HEAD'],'/local/publish',(c)=>screen(c));
+  app.get('/docs-human', (c) => screen(c));
   // The broker is platform-owned chrome, framed by file:// or loopback documents.
   app.get('/local/connect', (c) => page(c));
-  app.get('/getting-started', (c) => page(c));
+  app.get('/getting-started', (c) => screen(c));
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());
   // The app's API and document handlers.
@@ -624,13 +643,20 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
     return (row && await artifactAppAsset(row, c.req.param('asset'))) ?? c.notFound();
   });
-  app.get('/a/:id/edit', documentAddress);
-  app.get('/a/:id', documentAddress);
+  // A custom shell answers a page's and a handle's screens itself (./custom-shell `shellAnswers`); the app, otherwise.
+  const documentScreen = (c: Parameters<typeof documentAddress>[0] & { req: { method: string } }) =>
+    (customShell && shellAnswers(new URL(c.req.url)) ? screen(c) : documentAddress(c));
+  app.get('/a/:id/edit', documentScreen);
+  app.get('/a/:id', documentScreen);
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.
-  app.get('/:user{@[a-z0-9_]+}/*', documentAddress);
-  app.get('/:user{@[a-z0-9_]+}', (c) => page(c));
+  app.get('/:user{@[a-z0-9_]+}/*', documentScreen);
+  app.get('/:user{@[a-z0-9_]+}', (c) => (customShell ? screen(c) : page(c)));
   // A root typo gets the SPA too — its 404 page, under the 404 STATUS. A development server also answers its dev pages.
   const appPages = spaPaths({ dev: opts.devHmrPort !== undefined });
-  app.get('*', async (c) => (appPages.test(new URL(c.req.url).pathname) ? page(c) : page(c, 404)));
+  app.get('*', async (c) => {
+    const pathname = new URL(c.req.url).pathname;
+    if (customShell && shellAnswers(new URL(c.req.url))) return screen(c);
+    return appPages.test(pathname) ? page(c) : page(c, 404);
+  });
   return app;
 }

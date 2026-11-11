@@ -9,7 +9,7 @@ import {
   parseRel, personMentions, refinementRange,
   type AnnotationRange,
 } from '..';
-import { personMention } from '../person-mentions';
+import { personMention, personMentionId } from '../person-mentions';
 
 const textRange = (text: string, start: number) => ({ v: 1, parts: [{ rel: '', start, end: start + text.length, text }] });
 
@@ -82,9 +82,9 @@ describe('range kinds', () => {
 });
 
 describe('person mentions', () => {
-  it('writes the one mention spelling and reads it back', () => {
+  it('writes the one mention spelling, and reads it back beside the stored old form', () => {
     const text = `Hi ${personMention({ user_id: 'u_123', username: 'ada' })} and [@bob](/people/U-9)`;
-    expect(text).toContain('[@ada](/people/u_123)');
+    expect(text).toContain('[@ada](/api/people/u_123)');
     expect([...personMentions(text)].map((m) => [m[1], m[2]])).toEqual([['@ada', 'u_123'], ['@bob', 'U-9']]);
   });
 
@@ -93,7 +93,11 @@ describe('person mentions', () => {
     expect([...personMentions('')]).toEqual([]);
   });
 
-  it('recognises exactly a /people/<id> href', () => {
+  it('recognises exactly an /api/people/<id> href, or the stored /people/<id> form', () => {
+    expect(isPersonMentionHref('/api/people/u_1-A')).toBe(true);
+    expect(personMentionId('/api/people/u_1-A')).toBe('u_1-A');
+    expect(personMentionId('/people/u_1-A')).toBe('u_1-A');
+    expect(isPersonMentionHref('/api/api/people/a')).toBe(false);
     expect(isPersonMentionHref('/people/u_1-A')).toBe(true);
     expect(isPersonMentionHref(`/people/${'x'.repeat(128)}`)).toBe(true);
     for (const href of [`/people/${'x'.repeat(129)}`, '/people/', '/people/a/b', 'https://x/people/a', '/people/a?x=1', '/people/é']) {

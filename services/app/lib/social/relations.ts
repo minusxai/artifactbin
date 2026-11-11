@@ -3,7 +3,7 @@
  * consume that fact through notification-events, not through a second write path.
  */
 import { RELATION_EVENTS, RELATION_VERBS, type ImmediateRelationVerb, type RelationVerb } from '@artifactbin/contracts';
-import { getDb, recordEvent, type Queryable } from '@/lib/platform';
+import { getDb, lockSubjects, recordEvent, type Queryable } from '@/lib/platform';
 
 
 /** What the subject of every relation is today: an account. */
@@ -61,7 +61,7 @@ export async function link(userId: string, verb: ImmediateRelationVerb, objectId
    * already in the log.
    */
   const changed = await db.transaction(async tx=>{
-    await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
+    await lockSubjects(tx,'relations',[userId]);
     const result=await tx.query(
     `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id,initiated_by,accepted_at)
      VALUES ('${RELATION_SUBJECT_KIND}', $1, '${verb}', '${entry.object}', $2,$1,now())
@@ -82,7 +82,7 @@ export async function unlink(userId: string, verb: ImmediateRelationVerb, object
   if((verb as RelationVerb)==='join')throw Error('Join requires the membership lifecycle');
   const db = await getDb();
   const changed = await db.transaction(async tx=>{
-    await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
+    await lockSubjects(tx,'relations',[userId]);
     const result=await tx.query(
     `UPDATE relations SET deleted_at = now(),status='left',revision=revision+1 WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL AND status='accepted' RETURNING 1`,
     [userId, objectId],

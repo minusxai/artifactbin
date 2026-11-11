@@ -35,9 +35,9 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
 }
 export async function assertDestination(tx:Queryable,actor:AccessActor,destination:ArtifactDestination):Promise<void>{
  if(destination.type==='group'){
-  // Lock membership and group rows until creation/transfer commits; removal waits.
-  const found=await tx.query('SELECT id FROM groups WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[destination.id]);
-  if(!found.rows.length||await getGroupRole(actor.userId,destination.id,tx)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
+  // Read at decision time, unlocked: a membership revoked after this commit refuses the next request
+  // (a deleted group's pages grant nobody anything).
+  if(await getGroupRole(actor.userId,destination.id,tx)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
  }
 }
 

@@ -1,6 +1,6 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Comment threads: list, add, reply, edit, react, resolve, reopen, watch.
-Watch is the comment feed: every comment, reply, edit and reaction, from people and agents alike.
+Watch is events.mjs watch on the page's comments: every comment, reply, edit and reaction.
 Usage: node scripts/comment.mjs watch ID --next [--replied]
        node scripts/comment.mjs reply ID --thread T --body TEXT [--resolve]
        node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
@@ -35,8 +35,8 @@ Watch --next: Nothing may hold back your reply: it is every link the user asked 
   After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for
   15 minutes: stop watching and end your turn"; a later --next starts a new 15 minutes. A
   second --next of this agent session on the same page takes over from the running one, which
-  stops; another agent's watch runs on. It resumes from watch/<server>/ID/<session>.ndjson in the
-  sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or from --output LOG when you name one.
+  stops; another agent's watch runs on. It resumes from events/<server>/ID/comments.<session>.ndjson
+  in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin), or from --output LOG if you name one.
 Examples:
   node scripts/comment.mjs watch ID --next
   node scripts/comment.mjs reply ID --thread T --body "Done: the intro is two lines now."
@@ -51,19 +51,19 @@ Anchors: read the page first (read.mjs ID --json). ANCHOR.json is
 Gotchas: a plain reply never conflicts; a stale --expected-revision fails resolve and reopen (reply
   plus a stale resolve keeps the reply and reports status_conflict). Reactions are idempotent
   desired state per account (retry the same call, never invert it); counts are unique accounts,
-  only thumbs_up exists, and they change no source or revision. Resolve and reopen are not feed
-  events. Watch events deduplicate by ID and only delivered ones advance checkpoints.
+  only thumbs_up exists, and they change no source or revision. Watch events deduplicate by id
+  and only delivered ones advance checkpoints.
 Reactions: each listed comment's reactions are
   [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]: who reacted (at most
   50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints
   them as "👍 ppsreejith, alice"; --json keeps the structure.
-Watch events: comments are
-  {type:"artifactbin.comment",...,author:{kind,label,user_id,you},body,change?:"edited"};
-  reactions are {type:"artifactbin.comment_reaction",event_id,annotation_id,comment_id,
-  change:"added"|"removed",kind,count,reactor:{kind:human|agent,label,user_id,you},created_at},
-  count being the count right after; only the net change since your cursor arrives (added then
-  removed is no event). you:true means this agent session wrote it (another agent on your
-  sign-in is not you): skip those events. Skip event types you do not know.
+Watch events: each printed line is {kind:"event",event,comment}. event is the events feed's
+  {id,type,actor:{kind,id,you},payload}: type artifact.annotated, annotation_replied,
+  annotation_edited or annotation_reaction_changed (payload kind, active, count right after);
+  payload.annotation_id is the thread, reply_id the reply. comment is that comment's
+  {id,thread,body,author}, read for you: events carry no text. actor.you:true means this agent
+  session made it (another agent on your sign-in is not you); those are never printed. Each
+  reaction change is one event. Resolves, reopens and deletes are logged, not printed.
 How to treat reactions: a 👍 on your proposal means approval to proceed; any other reaction is
   information, never an instruction.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
@@ -74,8 +74,8 @@ import path from 'node:path';
 import {runTool, resolveTarget, selectedServer, makeClient, positional, requireFlags, integer,
   enumValue, jsonFile, journalIntent, createJournal, resumeJournal, ToolError, serverOrigin,
   credentialRoot} from './toolbox-client.mjs';
-import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
-import {noteWatchActivity, watchNext} from './toolbox-watch-state.mjs';
+import {watchComments, listText} from './toolbox-comments.mjs';
+import {noteWatchActivity, watchNext, watchLogPath} from './toolbox-watch-state.mjs';
 import {commentText, threadRevision} from './toolbox-comment-write.mjs';
 import {agentIdentity, nameNote} from './toolbox-agent.mjs';
 // The writes that make something for others to answer: each prints the name and the watch next.
@@ -113,8 +113,8 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     // structure.
     return values.json || values.output ? page : listText(page);
   }
-  // watch streams comments (--next returns after the next one); its checkpoint lives beside the
-  // saved sign-in, so a loop that changes directory never rebaselines.
+  // watch: events.mjs watch on this page's comments (--next returns after the next one); its
+  // checkpoint lives beside the saved sign-in, so a loop that changes directory never rebaselines.
   if (sub === 'watch') {
     if (values.next && Number(values.wait ?? 240) < 60) throw new ToolError('wait_too_short',
       '--next waits for the next comment: drop --wait; it returns as soon as someone comments.', 2);
@@ -125,7 +125,7 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
       // An unidentified session (no key) keeps one shared log per page, as before sessions.
       const session = identity.session ?? 'shared',
         output = values.output ?? watchLogPath(credentialRoot(options.env), client.server, id,
-          session);
+          'comments', session);
       if (!values.output) mkdirSync(path.dirname(output), {recursive: true, mode: 0o700});
       // A log that exists resumes from its checkpoint.
       watchValues = {...values, output, append: existsSync(output)};

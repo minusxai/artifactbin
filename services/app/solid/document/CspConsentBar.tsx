@@ -6,12 +6,16 @@
  * for this document (an account's standing answer), or Never (a stored deny, after which the bar is a
  * one-line note). Granting reloads the document frame,
  * or the page when the document is not framed. The answers are lib/trust/document-trust's, through
- * /api/trust.
+ * /api/trust. A reader who edits a group may also answer Always for that group (a picker when several), which
+ * approves only the connect, image and media addresses for every member on any page
+ * (/api/groups/<id>/allowed-addresses, lib/trust/group-trust); the bar says what still needs a per-page answer.
  */
 import { createSignal, Show, type JSX } from 'solid-js';
-import type { CspRequest } from '@/lib/document';
+import type { CspApprovalGroup, CspRequest } from '@/lib/document';
 import { Button } from '../ui/Button';
-import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './frame-src';
+import { Menu } from '../ui/Menu';
+import { DOCUMENT_FRAME_SELECTOR } from './frame-src';
+import { freshFrameSrc } from '@/lib/html-reader/frame-src';
 
 /**
  * Draw the document again under the reader's new answer. A framed document (its own origin) loads a FRESH first URL:
@@ -44,6 +48,10 @@ export function cspAskSentence(extensions: CspRequest['extensions']): string {
 const allHosts = (extensions: CspRequest['extensions']): string[] =>
   [...new Set([...extensions.script, ...extensions.connect, ...extensions.style, ...extensions.img, ...extensions.media, ...extensions.frame].map(host))];
 
+/** What a group approval leaves for a per-page answer: everything asked that is not in the group-eligible part. */
+const perPageHosts = (asking: CspRequest['asking'], eligible: CspRequest['asking']): string[] =>
+  allHosts({ ...asking, connect: asking.connect.filter((o) => !eligible.connect.includes(o)), img: asking.img.filter((o) => !eligible.img.includes(o)), media: asking.media.filter((o) => !eligible.media.includes(o)) });
+
 export function CspConsentBar(props: {
   id: string;
   request: CspRequest;
@@ -70,6 +78,29 @@ export function CspConsentBar(props: {
     } catch { setError('Could not save your choice — try again.'); }
     finally { setBusy(false); }
   };
+  /** Always for a group: approve the eligible part for the group, then read where this reader stands now. */
+  const approveFor = async (group: CspApprovalGroup) => {
+    const eligible = request().group?.eligible;
+    if (busy() || !eligible) return;
+    setBusy(true); setError(null);
+    try {
+      const response = await fetch(`/api/groups/${encodeURIComponent(group.id)}/allowed-addresses`, {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connect: eligible.connect, img: eligible.img, media: eligible.media }),
+      });
+      if (!response.ok) {
+        const reply = await response.json().catch(() => ({})) as { error?: string; detail?: string };
+        setError(reply.detail ?? `Could not approve for ${group.name} (${reply.error ?? response.status}).`);
+        return;
+      }
+      const now = await fetch(`/api/trust?artifactId=${encodeURIComponent(props.id)}`, { credentials: 'same-origin' });
+      const reply = await now.json().catch(() => ({})) as { cspRequest?: CspRequest };
+      if (reply.cspRequest) setRequest(reply.cspRequest);
+      // The served policy changed either way: the approved addresses now apply.
+      if (props.reload) props.reload(); else void reloadDocumentFrame(props.id);
+    } catch { setError('Could not save your choice — try again.'); }
+    finally { setBusy(false); }
+  };
   return <Show when={request().status === 'blocked'}>
     {/* In the slot above the frame (Document's `[data-mx-frame-slot]`): it takes its own row, the frame shrinks. */}
     <section role="region" aria-label="Document network access" class="border-b border-edge bg-surface px-3 py-2 text-sm text-fg">
@@ -85,8 +116,22 @@ export function CspConsentBar(props: {
           <Show when={props.accountSession}>
             <Button type="button" variant="secondary" size="sm" aria-label="Always for this document" disabled={busy()} onClick={() => void send('POST', { grant: 'document' })}>Always for this document</Button>
           </Show>
+          <Show when={request().group}>{(choice) => (
+            <Show when={choice().groups.length > 1} fallback={
+              <Button type="button" variant="secondary" size="sm" aria-label={`Always for ${choice().groups[0]!.name}`} disabled={busy()} onClick={() => void approveFor(choice().groups[0]!)}>Always for {choice().groups[0]!.name}</Button>
+            }>
+              <Menu label="Approve for a group" align="start" items={choice().groups.map((group) => ({ label: `Always for ${group.name}`, text: `Always for ${group.name}`, disabled: busy(), onSelect: () => void approveFor(group) }))}
+                trigger={(attrs) => <Button {...attrs} type="button" variant="secondary" size="sm" aria-label="Always for a group" disabled={busy()}>Always for a group…</Button>} />
+            </Show>
+          )}</Show>
           <Button type="button" variant="secondary" size="sm" aria-label="Never" disabled={busy()} onClick={() => void send('POST', { grant: 'never' })}>Never</Button>
         </div>
+        <Show when={request().group}>{(choice) => (
+          <p class="mt-1 text-xs text-muted">
+            A group approval covers data, image and media addresses only: every member of the group may then reach {listed(allHosts(choice().eligible))} on any page.
+            <Show when={perPageHosts(request().asking, choice().eligible).length}>{' '}Scripts, styles, frames and wildcard addresses still need an answer for this page: {listed(perPageHosts(request().asking, choice().eligible))}.</Show>
+          </p>
+        )}</Show>
       </Show>
       <Show when={error()}><p role="alert" class="mt-1 text-xs text-muted">{error()}</p></Show>
     </section>

@@ -1,74 +1,39 @@
 /** DEPRECATED: GraphQL compatibility for pages published before SQL. Do not use in new code; do not extend. */
 /**
- * THE PAGE GRAPHQL DOOR (`/api/artifacts/<page>/graphql`): the page schema composed from its backend files' typeDefs
- * and its dataset links' generated APIs, read and executed as the request's reader, and a resolver's `caps.query`.
+ * THE PAGE GRAPHQL DOOR (`/api/artifacts/<page>/graphql`): the page schema composed from its dataset links'
+ * generated APIs, read and executed as the request's reader.
  * Admission, verification and the commit guard are the plain doors' own (lib/page-doors).
  */
-import {getHtmlBackendVersion} from '@/lib/html-backends';
-import {REVALIDATE_ACTOR_HEADER,type HtmlDatasetLink,type HtmlJsonObject,type HtmlPageLink,type HtmlPageVersion,type PageNamespaceSource,type PageOperationRequest} from '@artifactbin/contracts';
+import {REVALIDATE_ACTOR_HEADER,type HtmlJsonObject,type HtmlPageVersion,type PageNamespaceSource,type PageOperationRequest} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactHeaderById, editablePage } from '@/lib/artifacts';
+import { getArtifactHeaderById, editablePage } from '@/lib/artifacts';
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
-import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind,type ResolverDatasets} from '@/lib/page-operations';
-import {admittedCommitGuard,CREDENTIAL_HEADERS,datasetLinks,headDatasetLinks,IDEMPOTENCY_KEY,pageCommitGuard,pageVerifier,RACED_READ_ATTEMPTS,resolverPorts} from '@/lib/page-doors';
-import {executeLinkedDatasetGraphql,loadPageDatasets,type PageCommitGuard,type PageDatasets} from './dataset/hasura';
-import {DatasetError,people} from '@/lib/datasets';
-import {getDb,runWithRequest,services} from '@/lib/platform';
+import {createPageOperations,pageOperationKind} from '@/lib/page-operations';
+import {CREDENTIAL_HEADERS,datasetLinks,IDEMPOTENCY_KEY,pageCommitGuard,pageVerifier,RACED_READ_ATTEMPTS} from '@/lib/page-doors';
+import {loadPageDatasets,type PageCommitGuard,type PageDatasets} from './dataset/hasura';
+import {people} from '@/lib/datasets';
+import {getDb,runWithRequest} from '@/lib/platform';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 import {DOMAIN_READ_ONLY_MESSAGE} from '@artifactbin/contracts/domain-footer';
 import {exportKeyReader} from '@/lib/export';
-async function backendSources(page:HtmlPageVersion):Promise<PageNamespaceSource[]>{
- return Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
-  const backend=await getHtmlBackendVersion(link.backendId,link.version);
-  if(!backend||backend.pageId!==page.pageId)throw Error('backend_link_mismatch');
-  return {name:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs};
- }));
-}
 interface OperationScope{retainReadFence?:(verify:()=>Promise<void>)=>void;idempotencyKey?:string;signal?:AbortSignal;commitGuard?:PageCommitGuard}
 function operations(actor:AccessActor,page:HtmlPageVersion,scope:OperationScope){
  const {retainReadFence}=scope;
- const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
  const linked=datasetLinks(page);
  // The dataset links load once per request, for this reader's role through this page: the composed SDL and the execution share it.
  let loaded:Promise<PageDatasets>|undefined;
  const datasets=()=>loaded??=loadPageDatasets(actor,linked,{pageId:page.pageId,...(retainReadFence?{retainReadFence}:{}),...(scope.idempotencyKey?{idempotencyKey:scope.idempotencyKey}:{}),...(scope.commitGuard?{commitGuard:scope.commitGuard}:{})},scope.signal??new AbortController().signal);
- const sources=async(_actor:AccessActor,current:HtmlPageVersion):Promise<readonly PageNamespaceSource[]>=>[
-  ...await backendSources(current),
-  ...(linked.length?(await datasets()).sources.map(source=>({...source,kind:'dataset-hasura' as const})):[]),
- ];
+ const sources=async():Promise<readonly PageNamespaceSource[]>=>linked.length?(await datasets()).sources.map(source=>({...source,kind:'dataset-hasura' as const})):[];
  // The page this request already read for this reader and revision is not read again (its source is the costly part).
  const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
  // The built-in viewer's name is the reader's own person card (never another person's, never an email).
  const viewerName=async(subject:string)=>(await people(await getDb(),[subject]))[subject]?.name??null;
  return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,datasets:async()=>linked.length?datasets():undefined,viewerName,
   // The live-region editor's own check (lib/region-sessions opens a region only on an `editablePage`).
-  canEdit:async(reader,id)=>!!await editablePage(await getDb(),reader,id),
-  invoke:async call=>{
-  const link=page.links.find(link=>link.name===call.namespace);
-  // Dataset roots never reach invoke: page operations run them through `datasets`.
-  if(link?.kind!=='backend')throw Error('namespace_not_linked');
-  return backend(call);
- }});
+  canEdit:async(reader,id)=>!!await editablePage(await getDb(),reader,id)});
 }
-/**
- * A resolver's caps.query and caps.sql, composed here so page operations stay below datasets and artifacts: the
- * datasets the page head links, run as the caller the run was admitted for, as one Hasura-style API (query) or as
- * read-only SQL tables on the SQL service's read door (sql).
- */
-export const resolverDatasets:ResolverDatasets={
- query:createResolverQuery({links:headDatasetLinks,execute:executeLinkedDatasetGraphql,
-  // A resolver's write goes through the page head it read the links from: the same guard as every page write. A page
-  // function call's write (SECURITY FIX: fixes, not features, AGENTS.md) commits under its admission instead, decided
-  // inside the commit exactly as a caps.sql write's is (lib/page-doors `admittedCommitGuard`).
-  page:async(pageId,actor,admission)=>{
-   const row=await getArtifactById(pageId);
-   const links=!row||row.format!=='html'?[]:((row.meta as {htmlLinks?:HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
-   return {links,commitGuard:admission?admittedCommitGuard(admission,actor):row?pageCommitGuard(pageId,actor,row):async()=>{throw new DatasetError('The page is unavailable; nothing was written.',404);}};
-  }}),
- ...resolverPorts,
-};
 /** Original request identity and ACLs guard both SDL and executions. */
 export async function pageGraphql(request:Request,pageId:string):Promise<Response>{
  if(request.method==='POST'&&request.headers.get('origin')==='null')return opaqueOriginRead(request,pageId);

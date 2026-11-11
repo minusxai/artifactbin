@@ -1,16 +1,23 @@
-import { currentHeaders, PUBLIC_BASE_URL } from '../platform';
+import { currentHeaders, PUBLIC_BASE_URL, TRUSTED_PROXY_HOPS } from '../platform';
 import { BodyTooLargeError, readBody as readCapped } from '@artifactbin/utils/body';
 
-/** Absolute origin as the client sees it — honors reverse-proxy forwarding headers, falling back to the request's own url. */
+/**
+ * A forwarding header (`x-forwarded-host`, `x-forwarded-proto`) as our outermost trusted proxy wrote it, or null.
+ * Like `X-Forwarded-For` (lib/accounts `forwardedFor`), a hop that appends leaves the caller's text to the LEFT, so
+ * the value sits `hops` from the END (clamped at the front); with no trusted hop (HTTP__TRUSTED_PROXY_HOPS=0) the
+ * header is the caller's and is never read. Every place that derives the addressed host or origin reads it here.
+ */
+export function trustedForwarded(headers: { get(name: string): string | null }, name: 'x-forwarded-host' | 'x-forwarded-proto', hops = TRUSTED_PROXY_HOPS): string | null {
+  if (hops < 1) return null;
+  const chain = (headers.get(name) ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+  return chain.length ? chain[Math.max(0, chain.length - hops)]! : null;
+}
+
+/** Absolute origin as the client sees it — the trusted proxy's forwarding headers, else the request's own Host and url. */
 export function baseUrl(request: Request): string {
   const url = new URL(request.url);
-  const proto = (request.headers.get('x-forwarded-proto') || url.protocol.replace(':', ''))
-    .split(',')[0]
-    .trim();
-  const host = (request.headers.get('x-forwarded-host') || request.headers.get('host') || url.host)
-    .split(',')[0]
-    .trim();
-  return `${proto}://${host}`;
+  const proto = trustedForwarded(request.headers, 'x-forwarded-proto') ?? url.protocol.replace(':', '');
+  return `${proto}://${addressedHost(request)}`;
 }
 
 /** Public origin from request-context forwarding headers, for callers without a Request.
@@ -19,8 +26,8 @@ export function baseUrl(request: Request): string {
 export async function publicOrigin(): Promise<string> {
   const h = await currentHeaders();
   if (h) {
-    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim();
-    const host = (h.get('x-forwarded-host') || h.get('host') || '').split(',')[0].trim();
+    const proto = trustedForwarded(h, 'x-forwarded-proto') ?? 'https';
+    const host = trustedForwarded(h, 'x-forwarded-host') ?? h.get('host')?.trim() ?? '';
     if (host) return `${proto}://${host}`;
   }
   // Off-request (a direct handler call in a test, a build): what the deployment declares.
@@ -163,11 +170,11 @@ export function isCrossSiteRequest(request: Request): boolean {
  * an Origin against the latter makes every request look foreign — and a
  * browser that sends no `Sec-Fetch-Site` (older Safari) would then get 403 on
  * every cookie-authenticated mutation. Reading the forwarded host is what
- * keeps those working. `x-forwarded-host` wins where the proxy also rewrites
- * `Host`.
+ * keeps those working. The trusted proxy's `x-forwarded-host` wins where it also
+ * rewrites `Host`; with no trusted hop the header is ignored (`trustedForwarded`).
  */
-function addressedHost(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-host')?.split(',')[0].trim();
+export function addressedHost(request: Request): string {
+  const forwarded = trustedForwarded(request.headers, 'x-forwarded-host');
   if (forwarded) return forwarded;
   const host = request.headers.get('host')?.trim();
   if (host) return host;

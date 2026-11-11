@@ -8,12 +8,13 @@
  * Gotchas: af-change reports user intent; set checked from your state to keep it controlled.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
+import { NamedHost, hostName, movingName } from './host-name';
 export interface AfSwitchChangeDetail {
   value: boolean;
 }
 
 /** A light-DOM switch that reports user intent through `af-change`. */
-export class AfSwitch extends HTMLElement {
+export class AfSwitch extends NamedHost {
 static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked', 'disabled',
     'read-only', 'readonly'];
 
@@ -55,7 +56,7 @@ static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked'
   }
 
   attributeChangedCallback(): void {
-    this.update();
+    if (!movingName(this)) this.update();
   }
 
   private currentChecked(): boolean {
@@ -114,7 +115,7 @@ static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked'
     const label = this.getAttribute('label') ?? '';
     this.labelNode.textContent = label;
     this.caption.hidden = !label;
-    const accessibleName = this.getAttribute('aria-label') || label;
+    const accessibleName = hostName(this) || label;
     if (accessibleName) this.button.setAttribute('aria-label', accessibleName);
     else this.button.removeAttribute('aria-label');
     const checked = this.currentChecked();

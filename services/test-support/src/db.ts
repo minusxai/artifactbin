@@ -5,7 +5,7 @@
  * PGLite owns one serialized connection per process, so a second instance is a second engine and a
  * second few hundred milliseconds of start-up. Callers share this one and reset the tables they touch.
  * Schema creation stays with whoever owns the schema — pass an `ensure` callback; this module knows
- * only the app-owned `tokens` table, because the token reader every service composes SELECTs from it.
+ * only the identity module's `auth.tokens` table, because the token reader every service composes SELECTs from it.
  */
 import { createHash } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
@@ -29,9 +29,10 @@ export const testDb = (): TestDb => {
   return { pg: () => shared!, query };
 };
 
-/** The app-owned tokens table, as the reader SELECTs it (the app declares it; readers only read). */
+/** The identity module's tokens base table (auth schema), as the bearer reader SELECTs it. */
 const TOKENS_DDL: readonly string[] = [
-  `CREATE TABLE IF NOT EXISTS tokens (
+  `CREATE SCHEMA IF NOT EXISTS auth`,
+  `CREATE TABLE IF NOT EXISTS auth.tokens (
      id TEXT PRIMARY KEY,
      name TEXT,
      token_hash TEXT NOT NULL,
@@ -44,7 +45,7 @@ const TOKENS_DDL: readonly string[] = [
      expires_at TIMESTAMPTZ,
      last_used_at TIMESTAMPTZ
    )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON tokens (token_hash)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON auth.tokens (token_hash)`,
 ];
 
 /** Idempotent: create the tokens table this package owns. */
@@ -63,6 +64,6 @@ export async function resetTables(tables: readonly string[]): Promise<void> {
 export async function mintTestToken(o: { id: string; userId: string | null; query: TestQuery }): Promise<string> {
   const token = `mx_${o.id.padEnd(40, 'x')}`;
   const hash = createHash('sha256').update(token).digest('hex');
-  await o.query('INSERT INTO tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', [o.id, 'test', hash, o.userId]);
+  await o.query('INSERT INTO auth.tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', [o.id, 'test', hash, o.userId]);
   return token;
 }

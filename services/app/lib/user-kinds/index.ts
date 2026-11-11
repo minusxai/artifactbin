@@ -14,6 +14,7 @@
  */
 import type { Queryable, UserKind } from '@artifactbin/contracts';
 import { getDb } from '../platform';
+import { authenticatingUserSql, liveTestuserWithParentSql } from '@artifactbin/auth/identity-store/rules';
 
 /**
  * The kind of one user, or null when there is no row at all.
@@ -29,13 +30,12 @@ export async function userKindOf(userId: string | null | undefined, query?: Quer
   return row.rows[0]?.kind ?? null;
 }
 
-/** Credentials require an email account. Disposable test users are delegated
- * by such an account; legacy guest owners are only retained for adoption. */
-const LIVE_TESTUSER_WITH_PARENT_SQL = `(u.kind = 'testuser' AND (u.expires_at IS NULL OR u.expires_at > now()) AND EXISTS
-  (SELECT 1 FROM users parent WHERE parent.id = u.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))`;
+/** The account rules' one spelling is the identity module's (@artifactbin/auth identity-store/rules): a live test user
+ * of an email account, and who may hold a credential at all. The app reads them over its `users` read view. */
+const LIVE_TESTUSER_WITH_PARENT_SQL = liveTestuserWithParentSql('u');
 export async function canAuthenticateUser(userId:string|null|undefined,query?:Queryable):Promise<boolean> {
  if(!userId)return false;const db=query??await getDb();
- return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ((u.kind='account' AND u.email IS NOT NULL) OR ${LIVE_TESTUSER_WITH_PARENT_SQL})`,[userId])).rows.length>0;
+ return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ${authenticatingUserSql('u')}`,[userId])).rows.length>0;
 }
 /** Live delegated identities use the same kind/expiry/parent predicate as credential authentication. */
 export async function authenticatingTestParent(userId:string,query?:Queryable):Promise<string|null> {

@@ -11,7 +11,7 @@ it.each([false,true])('assembles identity and an optional host document policy (
  const origin='http://127.0.0.1:7451';let token='';
  const host=await createAppHost({documentEditorPolicy:grant?account=>account.userId==='usr_local':undefined,initialize:async db=>{
   await db.query("INSERT INTO users (id,email,name,username) VALUES ($1,$2,$3,$4)",['usr_local','local@self.invalid','Local owner','local']);
-  token=(await mintToken('self','usr_local',db,{expiresInMs:null})).token;
+  token=(await mintToken('self','usr_local', {expiresInMs:null})).token;
  },identity:upstream=>({fetch:async request=>{
   // A bearer-only identity in front of the app: the host hands every request to it with the app as its upstream.
   const offered=/^Bearer (.+)$/.exec(request.headers.get('authorization')??'')?.[1];

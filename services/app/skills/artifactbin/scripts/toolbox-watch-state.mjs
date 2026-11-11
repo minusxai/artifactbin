@@ -1,30 +1,36 @@
 /**
- * Internal: the state a watch --next keeps beside its log: where the log lives (one per page and
- * agent session, so two agents sharing a sign-in never share a log or take over each other's
- * watch), the watching window (opened, activity, closed records), the threads printed and not yet
- * answered, the one-watch-at-a-time lock (<log>.lock holding the watch's pid, a token and when it
- * started; a later watch of the same session takes it over), the reply checkpoint and the Next
- * lines that send the agent back to the watch.
- * Used by: toolbox-comments.mjs (watch --next), toolbox-publish.mjs and doc.mjs (saves), and the
- * comment-reactions-toolbox and doc-toolbox tests.
+ * Internal: the state a watch --next keeps beside its log: where the log lives (one per scope,
+ * stream and agent session, so two agents sharing a sign-in never share a log or take over each
+ * other's watch), the watching window of a bounded watch (opened, activity, closed records), the
+ * threads printed and not yet answered, the one-watch-at-a-time lock (<log>.lock holding the
+ * watch's pid, a token and when it started; a later watch of the same session takes it over), the
+ * reply checkpoint and the Next lines that send the agent back to the watch.
+ * Used by: toolbox-events.mjs (the watch loop), toolbox-comments.mjs, events.mjs, comment.mjs,
+ * toolbox-publish.mjs and doc.mjs (saves), and the comment-reactions-toolbox, events-toolbox and
+ * doc-toolbox tests.
  */
 import {readFile,writeFile,unlink,stat,utimes,appendFile,truncate,link,rename,readdir} from
   'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {hash} from './toolbox-client.mjs';
-export const STREAM='comments';
-const stream=STREAM;
-/** The default --next log of one agent session (toolbox-agent sessionId): beside the saved
- * sign-in, never in the working directory. */
-export const watchLogPath=(root,server,id,session)=>path.join(root,'watch',hash(server).slice(0,
-  16),id,`${session}.ndjson`);
+/** A bounded --next watch ends itself after this long without an event from anyone (comments,
+ * replies, reactions, the agent's own publishes): one constant, named in comment.mjs help. */
+export const QUIET_MINUTES=15;
+/** The directory of one scope's --next logs (an artifact ID, or _all): beside the saved sign-in,
+ * never in the working directory. The events feed's logs live under events/, apart from the
+ * retired comment feed's watch/ logs, whose cursors it cannot read. */
+const scopeDir=(root,server,artifact)=>path.join(root,'events',hash(server).slice(0,16),
+  artifact??'_all');
+/** The default --next log of one agent session (toolbox-agent sessionId) on one stream. */
+export const watchLogPath=(root,server,artifact,stream,session)=>path.join(scopeDir(root,server,
+  artifact),`${stream.replace(/[^A-Za-z0-9_-]/g,'_')}.${session}.ndjson`);
 /** Records a write that prints the watch Next line (a publish, doc write or comment write, by
- * anyone) in every existing --next log of the page: each watch's quiet stop counts from it, and it
- * arms the reply checkpoint. */
+ * anyone) in every existing --next log of the page: each bounded watch's quiet stop counts from
+ * it, and it arms the reply checkpoint of a comment watch. */
 export async function noteWatchActivity(root,server,id,now=Date.now){
- const dir=path.dirname(watchLogPath(root,server,id,'-')),record=JSON.stringify({kind:'activity',
-  server,artifact:id,stream,at:now(),owesReply:true})+'\n';
+ const dir=scopeDir(root,server,id),record=JSON.stringify({kind:'activity',server,artifact:id,
+  at:now(),owesReply:true})+'\n';
  for(const file of await readdir(dir).catch(()=>[]))if(file.endsWith('.ndjson'))await appendFile(
   path.join(dir,file),record);
 }
@@ -34,14 +40,18 @@ export function windowOf(records){
   opened:record.opened,active:record.opened};else if(record.kind==='activity'&&open)open.active=
   Math.max(open.active,record.at);}return open;
 }
-/** Threads whose printed comment the agent has not replied to since this window opened (an
- * `answered` record names threads found deleted or resolved). */
-export function awaitingOf(records){
- const awaiting=new Set();for(const record of records){if(record.kind==='window'&&record.opened)
-  awaiting.clear();else if(record.kind==='printed')record.threads.forEach(t=>awaiting.add(t));
+/** Threads whose printed comment the agent has not answered since this window opened: an own
+ * comment on the thread, its resolution or deletion (threads.closes), or an `answered` record
+ * (threads found closed by a listing) answers it. */
+export function awaitingOf(records,threads){
+ const awaiting=new Set();if(!threads)return awaiting;
+ for(const record of records){if(record.kind==='window'&&record.opened)awaiting.clear();
+  else if(record.kind==='printed')record.threads.forEach(t=>awaiting.add(t));
   else if(record.kind==='answered')record.threads.forEach(t=>awaiting.delete(t));
-  else if(record.kind==='event'&&record.event?.author?.you===true)awaiting.delete(
-  record.event.annotation_id);}return awaiting;
+  else if(record.kind==='event'){const event=record.event,closed=threads.closes(event);
+   if(closed)awaiting.delete(closed);if(event?.actor?.you===true&&threads.of(event))
+    awaiting.delete(threads.of(event));}}
+ return awaiting;
 }
 /** A --next log's records. A torn last line (a watch killed mid-write) is dropped from the file
  * so appends continue cleanly; damage anywhere else returns null. */

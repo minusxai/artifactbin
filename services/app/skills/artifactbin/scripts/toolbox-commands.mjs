@@ -23,8 +23,9 @@ function flag(type = 'string', multiple = false) {
 // `listed:false` keeps a command out of the table; `starter` names the starter that routes it.
 const commands = {
   auth: {sub: {
-    login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {},
-    logout: {local: flag('boolean')}
+    login: {email: flag(), challenge: flag(), 'code-file': flag(), audience: flag()},
+    status: {audience: flag()},
+    logout: {local: flag('boolean'), audience: flag()}
   }},
   serve: {flags: {port: flag(), autofix: flag('boolean')}},
   autofix: {listed: false, flags: {'dry-run': flag('boolean'), root: flag()}},
@@ -35,6 +36,7 @@ const commands = {
       title: flag(),
       template: flag(),
       'owner-column': flag(),
+      'secret-file': flag(),
       name: flag(),
       visibility: flag(),
       group: flag(),
@@ -67,14 +69,18 @@ const commands = {
   },
   groups: {sub: {
     list: {}, show: {pages: flag('boolean'), cursor: flag()},
-    create: {name: flag(), description: flag()}, update: {name: flag(), description: flag()},
+    create: {name: flag(), description: flag(), parent: flag()},
+    update: {name: flag(), description: flag()},
+    reparent: {parent: flag(), root: flag('boolean'), yes: flag('boolean')},
     invite: {role: flag(), yes: flag('boolean')}, uninvite: {yes: flag('boolean')},
     role: {role: flag(), yes: flag('boolean')}, remove: {yes: flag('boolean')},
     leave: {yes: flag('boolean')}, share: {group: flag(), role: flag(), datasets: flag('boolean'),
       yes: flag('boolean')},
     unshare: {group: flag(), datasets: flag('boolean'), yes: flag('boolean')},
     move: {group: flag(), personal: flag('boolean'), yes: flag('boolean')},
-    link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')}
+    link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')},
+    addresses: {}, allow: {kind: flag(), yes: flag('boolean')},
+    disallow: {kind: flag(), yes: flag('boolean')}
   }},
   comment: {
     sub: {
@@ -107,6 +113,11 @@ const commands = {
       }
     }
   },
+  // The one events watch; comment.mjs watch is its comment alias.
+  events: {sub: {watch: {
+    artifact: flag(), category: flag(), types: flag(), next: flag('boolean'), wait: flag(),
+    bounded: flag('boolean')
+  }}},
   policy: {sub: {
     get: {}, explain: {}, template: {'owner-column': flag()},
     set: {file: flag(), 'dry-run': flag('boolean'), 'expected-revision': flag()}
@@ -114,8 +125,7 @@ const commands = {
   doc: {sub: {read: {region: flag(), html: flag('boolean')}, write: {}}},
   'new-app': {
     starter: 'examples/tracker.html',
-    flags: {kind: flag(), title: flag(), preset: flag(), without: flag(), limit: flag(),
-      url: flag(), dir: flag()}
+    flags: {kind: flag(), title: flag(), preset: flag(), without: flag(), dir: flag()}
   },
   'new-page': {
     starter: 'examples/csv-dashboard.html',

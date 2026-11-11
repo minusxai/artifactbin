@@ -11,10 +11,12 @@ export { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentH
 export type { DocumentFrame } from './document-frame';
 export type { ReaderForkedFrom } from './fork-credit.server';
 export { serveRawDocument } from './raw.server';
+export { documentHeadFor } from './native-html-presentation.server';
 export type { DomainPost } from './raw.server';
 export { cachedShell } from './shell-cache.server';
 export { artifactAppPath } from './artifact-pwa';
 export { artifactAppAsset, artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
 export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { componentModuleResponse } from './components.server';
+export { hostedBlocksManifestResponse, pinnedComponentResponse, pinnedHostResponse, pinnedStylesResponse } from './hosted-blocks.server';
 export { nativeHtmlApolloResponse, nativeHtmlCoreResponse, nativeHtmlDocument, nativeHtmlModuleResponse, nativeHtmlReaderResponse, nativeHtmlSystemsResponse, nativeHtmlTitle } from './native-html.server';

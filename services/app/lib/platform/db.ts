@@ -11,7 +11,11 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATABASE_URL } from './config';
+import { AUTH_SCHEMA, DATABASE_URL, IDENTITY_READ_SCHEMA } from './config';
+import { IDENTITY_TABLES } from '@artifactbin/auth/identity-store/schema';
+import { identityViewStatements } from '@artifactbin/auth/identity-store/views';
+import { openIdentity } from './identity-host';
+import { renderSchema } from '@artifactbin/utils';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
 import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
@@ -356,7 +360,7 @@ export function schemaImageInputs(): SchemaImageInputs {
   for (;;) {
     try {
       const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as { name?: string; version?: string };
-      if (pkg.name === '@electric-sql/pglite') return { statements: SCHEMA_STATEMENTS, backfills: BACKFILLS, engine: `${pkg.name}@${pkg.version}` };
+      if (pkg.name === '@electric-sql/pglite') return { statements: [...SCHEMA_STATEMENTS, ...renderSchema(IDENTITY_TABLES, { schema: AUTH_SCHEMA }), ...identityViewStatements({ auth: AUTH_SCHEMA, app: 'public', read: IDENTITY_READ_SCHEMA })], backfills: BACKFILLS, engine: `${pkg.name}@${pkg.version}` };
     } catch { /* no package.json at this level */ }
     const up = path.dirname(dir);
     if (up === dir) throw new Error('schemaImageInputs: no @electric-sql/pglite package.json above its entry');
@@ -404,7 +408,12 @@ async function createDb(): Promise<Db> {
     } finally {
       await boot.end();
     }
-    return new PostgresDb(withPoolErrors(new pg.Pool({ connectionString: target.url, ...SERVING_POOL })));
+    const pool = withPoolErrors(new pg.Pool({ connectionString: target.url, ...SERVING_POOL }));
+    // Every serving connection resolves the identity read views after the app's schema (queued before its first use).
+    pool.on('connect', (client) => { client.query(READ_PATH_SQL, [IDENTITY_READ_SCHEMA]).catch(() => {}); });
+    const db = new PostgresDb(pool);
+    try { await openIdentity(db); } catch (error) { await db.close().catch(() => {}); throw error; }
+    return db;
   }
 
   const { PGlite } = await import('@electric-sql/pglite');
@@ -424,12 +433,14 @@ async function createDb(): Promise<Db> {
   const raw = target.dataDir ? new PGlite(target.dataDir, { parsers })
     : new PGlite(snapshot ? { parsers, loadDataDir: snapshot } : { parsers });
   const db = new PgliteDb(raw as unknown as ConstructorParameters<typeof PgliteDb>[0]);
+  await db.query(READ_PATH_SQL, [IDENTITY_READ_SCHEMA]);
   if (snapshot) {
     await raw.waitReady;
     return db;
   }
   await db.initializeSchema();
   await applyBackfills(db);
+  await openIdentity(db);
   if (image) image.save(await raw.dumpDataDir('none'), key);
   return db;
 }
@@ -448,6 +459,12 @@ const BACKFILLS: readonly string[] = [
 async function applyBackfills(db: Queryable): Promise<void> {
   for (const statement of BACKFILLS) await db.query(statement);
 }
+
+/**
+ * The connection's search_path, then the identity read schema: `users`, `groups` … resolve to the identity read views
+ * (./identity-host), the app's own tables to its own schema, which stays first (unqualified DDL lands there).
+ */
+const READ_PATH_SQL = "SELECT set_config('search_path', current_setting('search_path') || ', ' || $1, false)";
 
 /**
  * Cache the in-flight adapter promise on the process global so concurrent calls
@@ -471,6 +488,19 @@ export function getDb(): Promise<Db> {
     global.__artifact_bin_db__ = promise;
   }
   return global.__artifact_bin_db__;
+}
+
+/**
+ * Test hook, the app test harness's alone (services/app/__tests__/harness.ts reuses one in-memory PGLite per worker):
+ * returns the open database to the session a fresh open gives it. DISCARD ALL drops session settings, temporary
+ * tables, prepared statements, advisory locks and LISTENs; then the identity read path is set again, as at open.
+ * Refuses anything but PGLite, and throws inside an open transaction block.
+ */
+export async function recycleDbSession(): Promise<void> {
+  const db = await getDb();
+  if (db.raw().kind !== 'pglite') throw new Error('recycleDbSession: the harness reuses in-memory PGLite only');
+  await db.query('DISCARD ALL');
+  await db.query(READ_PATH_SQL, [IDENTITY_READ_SCHEMA]);
 }
 
 /** Test hook — closes and forgets the cached instance. */

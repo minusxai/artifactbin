@@ -3,7 +3,7 @@
  * reads, the backend declarations, and the html-source leaf's offset-preserving edits.
  */
 import {describe,expect,it} from 'vitest';
-import {htmlBackendNames,htmlPageMetadata,isRuntimeCoreSrc,repairCoreScript} from '../index';
+import {htmlPageMetadata,isRuntimeCoreSrc,repairCoreScript} from '../index';
 import {LEGACY_CORE_PATH,RUNTIME_CORE_PATH} from '../core-script';
 import {applyEdits,atHeadStart,insertAttribute,parseSource,removeElement} from '../html-source';
 
@@ -52,16 +52,6 @@ describe('head metadata',()=>{
  });
 });
 
-describe('backend declarations',()=>{
- it('lists backend link names in source order and ignores datasets and other links',()=>{
-  expect(htmlBackendNames('<link rel="stylesheet" href="a.css"><link rel="af-resolver" data-af-name="orders"><link rel="af-dataset" data-af-name="sales" href="ref:abc123"><link rel="preload af-resolver" data-af-name="_two">')).toEqual(['orders','_two']);
-  expect(htmlBackendNames('')).toEqual([]);
- });
- it('refuses invalid, reserved and duplicate names',()=>{
-  for(const name of ['','1x','__private','na-me','名前'])expect(()=>htmlBackendNames(`<link rel="af-resolver" data-af-name="${name}">`)).toThrow('Invalid namespace');
-  expect(()=>htmlBackendNames('<link rel="af-resolver" data-af-name="db"><link rel="af-resolver" data-af-name="db">')).toThrow('Duplicate');
- });
-});
 
 describe('html-source edits',()=>{
  it('parses template content separately and finds the written html, head and body',()=>{

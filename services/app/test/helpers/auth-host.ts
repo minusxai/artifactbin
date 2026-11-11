@@ -1,14 +1,15 @@
 /**
  * The app host behind the real login service, composed the way server.ts composes it: email OTP
- * through a dev outbox, the auth boundary's bearer reader and the app's own authorization. Tests
+ * through a dev outbox (or the test-domain code, TEST_DOMAIN / TEST_DOMAIN_OTP), the auth boundary's
+ * bearer reader and the app's own authorization. Tests
  * that drive a login end to end call `fetch` on it and `close` when done.
  */
 import {join} from 'node:path';
-import {createAuthHost,createBearerReader,createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,mailSettingsOf,readEnv,sessionStoreOf} from '@artifactbin/auth';
+import {createAuthHost,createBearerReader,createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,mailSettingsOf,readEnv,sessionStoreOf,testDomainSignInOf} from '@artifactbin/auth';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from '@/lib/deployment';
-import { EVENTS_SCHEMA, setServices } from '@/lib/platform';
+import { EVENTS_SCHEMA, ensureLocalIdentity, setServices } from '@/lib/platform';
 import {createAppHost} from '@/server/host';
 
 export async function createAuthComposedHost(env:NodeJS.ProcessEnv,assets=process.cwd()){
@@ -23,11 +24,13 @@ export async function createAuthComposedHost(env:NodeJS.ProcessEnv,assets=proces
    const authSchema=readEnv(env,'AUTH__SCHEMA')??'auth',appSchema=readEnv(env,'APP__SCHEMA');
    await ensureAuthSchema(queryable,authSchema);
    validateDeploymentConfiguration();
-   const raw=db.raw();
-   const human=await createHumanAuth({secret,baseURL:origin,schema:authSchema,secure:origin.startsWith('https:'),events,...loginProvidersOf(env),
+   const raw=db.raw(),testDomain=testDomainSignInOf(env);
+   const human=await createHumanAuth({secret,baseURL:origin,schema:authSchema,secure:origin.startsWith('https:'),events,...loginProvidersOf(env),...(testDomain?{testDomain}:{}),
     ...(raw.kind==='pglite'?{pglite:raw.instance}:{pool:raw.pool as import('pg').Pool}),
     mail:mailerForRuntime({...mailSettingsOf(env),publicBaseUrl:origin,devOutboxPath:readEnv(env,'EMAIL__DEV_OUTBOX_PATH')})});
-   const reader=createBearerReader({db:queryable,authSchema,appSchema,admitBearer:token=>canAuthenticateUser(token.userId)});
+   // As server.ts: the identity read surface again once Better Auth's tables exist (its sessions view).
+   await ensureLocalIdentity(db);
+   const reader=createBearerReader({db:queryable,authSchema,admitBearer:token=>canAuthenticateUser(token.userId)});
    identity={upstream:async()=>{throw new Error('The composed host is not initialized.');},env,tokens:reader,sessions:sessionStoreOf(human),admitIdentity:admitDeploymentIdentity,cookieSecret:secret,
     secure:origin.startsWith('https:'),identityDb:queryable,appSchema,events};
   },

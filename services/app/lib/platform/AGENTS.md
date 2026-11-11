@@ -14,8 +14,13 @@ No product rules live here. Server-only.
   A rename is `renamedFrom` (copies, then drops). A row migration is an idempotent statement in `applyBackfills`.
 - `dropped` (columns) and `DROPPED_TABLES` delete data on every boot, with no undo: only for data nothing reads.
 - Schema procedure: edit the table in `schema.ts` (a new table also joins `TABLES`), then `npm run render:schema`,
-  which rewrites `SCHEMA.sql`, `roles.sql` and `grants.sql` at the repo root. `schema-sql-fresh.test.ts` fails on a
-  stale file; `schema-ownership.test.ts` fails when two packages declare one table.
+  which rewrites `SCHEMA.sql`, `roles.sql`, `grants.sql` and `IDENTITY.sql` at the repo root. `schema-sql-fresh.test.ts`
+  fails on a stale file; `schema-ownership.test.ts` fails when two packages declare one table.
+- Identity's tables (contracts `IDENTITY_OWNED_TABLES`) are not the app's: the auth package declares them
+  (`identity-store/schema.ts`, AUTH__SCHEMA) and is their only writer (`services().identity`); `IDENTITY.sql` is its read
+  views (`identity-store/views.ts`; another reader may copy it byte for byte). The app reads them through those views: every
+  connection's search_path is `<app schema>, <IDENTITY__SCHEMA>` (`db.ts`), and `identity-host.ts` refuses a boot where
+  `users` is not the view. Never call `services().identity` inside an open transaction (PGLite waits on itself).
 - Settings procedure: read it in `config.ts`, the only file that reads the process environment, through
   `env(module, name)` (one `MODULE__NAME` spelling, no fallback), and export it through the index. Add it to
   `.env.example`, then run `npm run generate:env-snapshot`, which rewrites `ENV_EXAMPLE_BASE64` in
@@ -24,7 +29,8 @@ No product rules live here. Server-only.
   `serialize` queue. Never add one that bypasses it, and never serialize `PostgresDb`, whose pool is
   concurrency-safe. Both implement one `Db` interface; keep their behaviour the same.
 - Events leave through the outbox: `recordEvent` and `enqueueEvent` write in the caller's transaction, and
-  `startEventPublisher` sends after commit. Never call the events service inside a transaction.
+  `startEventPublisher` sends after commit (`publishEventOutbox` flushes on demand, for the public events feed).
+  Never call the events service inside a transaction. A type `/api/events` serves is recorded this way, never `emit`.
 - `retryOnConflict` re-runs the whole transaction: wrap only work whose effects stay inside it or are idempotent.
 
 ## Checks

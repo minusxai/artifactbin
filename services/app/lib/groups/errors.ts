@@ -1,3 +1,2 @@
-export class GroupError extends Error {
- constructor(public code:string,public status=400,public retryAfter?:number){super(code);}
-}
+/** A group refusal: the identity module's own refusal type (contracts `IdentityError`), raised on either side of the contract. */
+export {IdentityError as GroupError} from '@artifactbin/contracts';

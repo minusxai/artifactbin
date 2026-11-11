@@ -28,16 +28,10 @@ describe('one installable native HTML author skill',()=>{
   expect(packed).toContain('src="data:image/png;base64,AQID"');
   expect(packed).toContain('alt="Garden beds after the harvest"');
  });
- it('publishes the documented function file as the platform reads it, and the page calls it with fetch',async()=>{
-  const {functionFileSurface}=await import('@/lib/page-operations');
-  const guide=publicGuideText('functions',BASE)!;
-  // The retired topic names are no longer served.
-  for(const topic of ['backends','resolvers'])expect(publicGuideText(topic,BASE)).toBeNull();
-  const file=guide.match(/```ts\n(export const secrets[\s\S]+?)```/)?.[1];
-  expect(file).toBeTruthy();
-  expect(await functionFileSurface(file!)).toEqual({functions:{deals:'anonymous',test:'owner',addNote:'signed_in'},schedule:null});
-  expect(guide).toContain("fetch('/fn/addNote',{method:'POST'");expect(guide).not.toMatch(/typeDefs|@auth|gql/);
+ it('serves no guide for page functions: no author code runs on the server',()=>{
+  for(const topic of ['functions','backends','resolvers'])expect(publicGuideText(topic,BASE)).toBeNull();
  });
+
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
   const root=llmsText(BASE);
   for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','scripts/read.mjs','scripts/publish.mjs','data-af-id'])expect(root).toContain(value);
@@ -70,7 +64,7 @@ describe('one installable native HTML author skill',()=>{
   const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
   const members:string[]=[];let offset=0;
   while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
-  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|resolvers\/[a-z0-9-]+\.ts|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
+  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
   // Pages import components as @afbin/<component> and the preview fetches the runtime and libraries from the server (D20).
   expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
@@ -91,8 +85,9 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','tracker.html','deck.html','csv-dashboard.mjs','gen-deliveries.mjs','gen-transactions.mjs','tracker.ts','deck-steps.mjs','tracker-features.mjs','tracker-steps.mjs','tracker-guest.mjs','tracker-cleanup.mjs','api-dashboard.html','api-dashboard.ts','api-dashboard-steps.mjs','api-dashboard-guest.mjs','api-dashboard-cleanup.mjs','codebase-report.html','codebase-report-steps.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
-  for(const resolver of ['public-url','http-json','google-sheets','bigquery','supabase','neon']){expect(Object.hasOwn(files,`resolvers/resolver-${resolver}.ts`),resolver).toBe(true);expect(Object.hasOwn(files,`examples/resolver-${resolver}.ts`),resolver).toBe(false);}
+  for(const sample of ['report.html','csv-dashboard.html','tracker.html','deck.html','csv-dashboard.mjs','gen-deliveries.mjs','gen-transactions.mjs','deck-steps.mjs','tracker-features.mjs','tracker-steps.mjs','tracker-guest.mjs','tracker-cleanup.mjs','codebase-report.html','codebase-report-steps.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const gone of ['examples/tracker.ts','examples/api-dashboard.html','references/functions.md'])expect(Object.hasOwn(files,gone),gone).toBe(false);
+  expect(Object.keys(files).some(name=>name.startsWith('resolvers/'))).toBe(false);
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
@@ -126,7 +121,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(plan.dependencies.find(dep=>dep.path==='examples/deliveries.csv')).toMatchObject({kind:'dataset'});expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='tracker'){expect(saved.body.html).toContain('data-af-name="tracker"');expect(plan.resolverSources.tracker).toContain("roles={add:'signed_in',save:'signed_in'}");expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='tracker'){expect(saved.body.html).not.toContain('af-resolver');expect(Object.keys(plan)).not.toContain('resolverSources');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });
@@ -136,7 +131,7 @@ describe('the shipped skill folder',()=>{
  it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
-  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/functions.md','references/groups.md','references/live-docs.md','references/maps.md','references/permissions.md','references/runtime.md']);
+  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/groups.md','references/live-docs.md','references/maps.md','references/page-apps.md','references/permissions.md','references/runtime.md']);
   // The design systems ship as self-documenting stylesheets, not guides.
   expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.

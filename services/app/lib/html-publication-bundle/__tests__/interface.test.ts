@@ -8,12 +8,11 @@ const file=(path:string,text:string,contentType='text/plain')=>({path,contentTyp
 const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
 
 describe('inspectPublicationBundle',()=>{
- it('reports the entry, backends, dependency sizes, reused paths and the limits without writing anything',()=>{
-  const html='<link rel="af-resolver" data-af-name="api" href="./api.graphql"><link rel="stylesheet" href="./main.css"><img src="./logo.svg"><img src="./kept.png">';
-  const inspected=inspectPublicationBundle(html,{entryPath:'index.html',files:[file('api.graphql','type Query{ok:Boolean}'),file('main.css','body{background:url(./logo.svg)}','text/css'),file('logo.svg','<svg>☕</svg>','image/svg+xml')],mappings:{'kept.png':{kind:'asset',id:'KEPT12',revision:'1'}}});
+ it('reports the entry, dependency sizes, reused paths and the limits without writing anything',()=>{
+  const html='<link rel="stylesheet" href="./main.css"><img src="./logo.svg"><img src="./kept.png">';
+  const inspected=inspectPublicationBundle(html,{entryPath:'index.html',files:[file('main.css','body{background:url(./logo.svg)}','text/css'),file('logo.svg','<svg>☕</svg>','image/svg+xml')],mappings:{'kept.png':{kind:'asset',id:'KEPT12',revision:'1'}}});
   expect(inspected).toEqual({
    entryPath:'index.html',
-   backends:[{name:'api',path:'api.graphql',bytes:Buffer.byteLength('type Query{ok:Boolean}')}],
    dependencies:[
     {path:'logo.svg',kind:'asset',contentType:'image/svg+xml',bytes:Buffer.byteLength('<svg>☕</svg>'),dependencies:[]},
     {path:'main.css',kind:'asset',contentType:'text/css',bytes:Buffer.byteLength('body{background:url(./logo.svg)}'),dependencies:['logo.svg']},
@@ -23,7 +22,7 @@ describe('inspectPublicationBundle',()=>{
   });
  });
  it('inspects an empty bundle and refuses what publication would refuse',()=>{
-  expect(inspectPublicationBundle('<p>no files</p>',{entryPath:'index.html',files:[]})).toMatchObject({dependencies:[],backends:[],reusedPaths:[]});
+  expect(inspectPublicationBundle('<p>no files</p>',{entryPath:'index.html',files:[]})).toMatchObject({dependencies:[],reusedPaths:[]});
   expect(()=>inspectPublicationBundle('<img src="./gone.png">',{entryPath:'index.html',files:[]})).toThrow('Unresolved local dependencies: gone.png');
   expect(()=>inspectPublicationBundle('',{entryPath:'index.html',files:Array.from({length:100},(_,i)=>file(`f${i}.txt`,'x'))})).toThrow('Invalid publication bundle');
   expect(()=>inspectPublicationBundle('',{entryPath:'index.html',files:[],mappings:{'./a.png':{kind:'asset',id:'A12345',revision:'1'}}})).toThrow('Noncanonical mapping path');

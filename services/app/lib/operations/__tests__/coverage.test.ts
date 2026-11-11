@@ -44,9 +44,7 @@ const EXCEPTIONS = new Set([
   '/api/artifacts/{id}/datasets/{datasetId}/files', // raw-byte CLI attachment upload; headers carry edit/idempotency identity, not a JSON operation
   '/api/artifacts/{id}/datasets/{datasetId}/files/{fileId}', // scoped binary attachment download; receipt metadata comes from the upload
   '/api/artifacts/{id}/comment-images/{imageId}', // binary attachment download; metadata is inlined on annotation reads
-  '/api/artifacts/{id}/annotations/changes', // abortable long-poll transport with checkpoint replay; documented by the monitoring guide, not a document operation
   '/api/artifacts/{id}/annotations', // the list view — the primary read is get_artifact, which inlines the open set
-  '/api/artifacts/{id}/fn/{name}', // a page reader's backend-function call relayed from the page frame (or unframed owner host); page-scoped transport, the page's own API
   '/api/artifacts/{id}/sql', // a page reader's sql`…` relayed from the page frame; page-scoped transport under the reader's dataset rules
 ]);
 

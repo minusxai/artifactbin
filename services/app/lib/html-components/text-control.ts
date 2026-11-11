@@ -2,6 +2,7 @@
  * Internal: shared light-DOM behaviour of the native text controls.
  * Used by: input.ts, textarea.ts.
  */
+import { hostName } from './host-name';
 /** Author-facing contract shared by the native text and textarea controls. */
 export interface TextControlContract {
   value: string | number | null | undefined;
@@ -64,11 +65,13 @@ do { native.id = `af-${kind}-${++nextTextControlId}`; } while (doc.getElementByI
   };
   const sync = () => {
     const visibleLabel = host.getAttribute('label');
-    const ariaLabel = host.getAttribute('aria-label');
+    const ariaLabel = hostName(host);
     const labelText = visibleLabel ?? ariaLabel ?? '';
     label.textContent = labelText;
     label.hidden = !labelText;
     label.classList.toggle('af-visually-hidden', !visibleLabel && !!ariaLabel);
+    if (visibleLabel && ariaLabel) native!.setAttribute('aria-label', ariaLabel);
+    else native!.removeAttribute('aria-label');
 for (const attr of ['name','placeholder','required','min','max','step','autofocus','disabled',
       'readonly','minlength','maxlength'] as const) {
       const mapped = attr === 'autofocus' ? 'autofocus' : attr === 'readonly' ? 'readonly' : attr;

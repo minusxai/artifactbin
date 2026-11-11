@@ -286,5 +286,5 @@ describe('whole-install cache equivalence', () => {
 });
 
  it('keeps every slow suite on main rather than automatic PR waits',()=>{
-  for(const name of ['ci.yml','page-speed.yml','credential-platform.yml','runner-design.yml'])expect(workflow(name).on).not.toHaveProperty('pull_request');
+  for(const name of ['ci.yml','page-speed.yml','credential-platform.yml'])expect(workflow(name).on).not.toHaveProperty('pull_request');
  });

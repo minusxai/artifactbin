@@ -150,7 +150,7 @@ describe('token routes served by the app', () => {
   it('GET /api/my/tokens shows the account\'s non-expiring web token as a null expiry, still active', async () => {
     const user = await createUser({ email: 'mxmx_test_web@example.com' });
     const actor = { credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true };
-    await mintToken('web', user.id, undefined, { expiresInMs: null });
+    await mintToken('web', user.id, { expiresInMs: null });
     const rows = ((await (await listMine(request('/api/my/tokens', { actor }))).json()) as { tokens: TokenRow[] }).tokens;
     expect(rows[0]).toMatchObject({ status: 'active', expires_at: null });
   });

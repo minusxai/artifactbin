@@ -1,6 +1,7 @@
 /** OAuth 2.1 for `/api`, implemented over the auth domain's clients and credentials. */
 import { createHash, randomBytes } from 'node:crypto';
-import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLocalDevelopmentHost,type Queryable} from '@artifactbin/contracts';
+import {sessionBoundSql} from './bearer';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 // Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
@@ -26,6 +27,24 @@ export function isAllowedRedirectUri(uri: string): boolean {
 export const isValidCodeChallenge = (value: string): boolean => /^[A-Za-z0-9_-]{43}$/.test(value);
 export const isValidCodeVerifier = (value: string): boolean => /^[A-Za-z0-9._~-]{43,128}$/.test(value);
 
+/**
+ * An operator-registered client's redirect: https, or http on a local development host (`isLocalDevelopmentHost`,
+ * the product's one rule for a plain-http origin), as the operator's other origins are. A dynamic client keeps
+ * `isAllowedRedirectUri` (https, or http loopback only).
+ */
+function isAllowedConfiguredRedirectUri(uri: string): boolean {
+  let url: URL;
+  try { url = new URL(uri); } catch { return false; }
+  if (url.hash || url.username || url.password) return false;
+  return url.protocol === 'https:' || (url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname));
+}
+
+/** May `client` be sent back to `redirectUri`: one of its registered redirects, under its kind's redirect rule. */
+export function clientRedirects(client: OAuthClient, redirectUri: string): boolean {
+  const allowed = client.configured ? isAllowedConfiguredRedirectUri(redirectUri) : isAllowedRedirectUri(redirectUri);
+  return allowed && client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri));
+}
+
 /** Exact redirects, except that native HTTP loopback clients may change only their ephemeral port. */
 export function sameRedirectTarget(registered: string, requested: string): boolean {
   if (registered === requested) return true;
@@ -48,12 +67,49 @@ interface AuthorizationGrant {
   redirectUri: string;
   resource: string;
   scope: string;
+  /** A first-party client's grant: the browser session that approved it, which the grant then lives no longer than. */
+  sessionId?: string | null;
 }
 
-interface OAuthClient {
+export interface OAuthClient {
   clientId: string;
   clientName: string;
   redirectUris: string[];
+  /** Registered by the operator (IDENTITY__OAUTH_CLIENTS), so its name is shown at consent; a dynamic client's is not. */
+  configured?: boolean;
+  /** Operator-registered as part of this deployment's own sign-in (`first_party`): see `parseOAuthClients`. */
+  firstParty?: boolean;
+}
+
+/** An operator-registered client (IDENTITY__OAUTH_CLIENTS): a fixed id, a name people see at consent, its redirects. */
+export interface ConfiguredOAuthClient { clientId: string; name: string; redirectUris: string[]; firstParty: boolean }
+const WHAT_CLIENTS = 'IDENTITY__OAUTH_CLIENTS must be a JSON array of {"client_id": "<lower-case id>", "name": "<shown at consent>", "redirect_uris": ["https://…"], "first_party"?: true|false}';
+/**
+ * IDENTITY__OAUTH_CLIENTS, validated whole (a malformed entry throws naming the setting): public clients (PKCE, no
+ * secret) with fixed ids, e.g. another service's web application, which then needs no dynamic registration. An id is
+ * lower-case letters, digits and hyphens, so it can never be a dynamic one (`afbin_…`). Redirects are https, or http
+ * on a local development host (`isAllowedConfiguredRedirectUri`).
+ *
+ * `first_party: true` makes the client part of this deployment's own sign-in, the operator's decision: a signed-in
+ * browser is sent back with a code without a consent page (a signed-out one goes straight to the login page), and
+ * every grant it obtains is bound to the browser session that approved it, ending when that session does (signing
+ * out ends it; `sessionBoundSql`). Default false: consent on every authorization, grants independent of the browser.
+ */
+export function parseOAuthClients(raw: string | undefined): readonly ConfiguredOAuthClient[] {
+  if (raw === undefined || raw.trim() === '') return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error(WHAT_CLIENTS); }
+  if (!Array.isArray(parsed)) throw new Error(WHAT_CLIENTS);
+  const out: ConfiguredOAuthClient[] = [];
+  for (const entry of parsed) {
+    const e = entry as Record<string, unknown> | null;
+    if (!e || typeof e !== 'object' || typeof e.client_id !== 'string' || !/^[a-z][a-z0-9-]{2,62}$/.test(e.client_id) || typeof e.name !== 'string' || !/^[^\u0000-\u001f<>]{1,80}$/.test(e.name.trim())
+      || !Array.isArray(e.redirect_uris) || !e.redirect_uris.length || e.redirect_uris.length > 10 || !e.redirect_uris.every((uri) => typeof uri === 'string' && uri.length <= 2048 && isAllowedConfiguredRedirectUri(uri))
+      || (e.first_party !== undefined && typeof e.first_party !== 'boolean')
+      || out.some((other) => other.clientId === e.client_id)) throw new Error(WHAT_CLIENTS);
+    out.push({ clientId: e.client_id, name: e.name.trim(), redirectUris: [...new Set(e.redirect_uris as string[])], firstParty: e.first_party === true });
+  }
+  return out;
 }
 
 interface RefreshGrant {
@@ -70,7 +126,8 @@ export interface OAuthStore {
   client(clientId: string): Promise<OAuthClient | null>;
   issueAuthorizationCode(grant: AuthorizationGrant, codeChallenge: string, now?: number, ttlMs?: number): Promise<string>;
   consumeAuthorizationCode(input: { code: string; clientId: string; redirectUri: string; resource: string; codeVerifier: string }, now?: number): Promise<AuthorizationGrant | null>;
-  issueRefresh(grant: Omit<RefreshGrant, 'token'> & { accessTokenId: string }): Promise<string>;
+  /** `sessionId`: a first-party grant's approving browser session, recorded on the new family (`sessionBoundSql`). */
+  issueRefresh(grant: Omit<RefreshGrant, 'token'> & { accessTokenId: string; sessionId?: string | null }): Promise<string>;
   /** Mint privately, then atomically consume, record membership and publish against the live family. */
   rotateAndMint<T extends {id:string}>(token:string, clientId:string, resources:readonly string[], mint:(grant:RefreshGrant)=>Promise<T>):Promise<{grant:RefreshGrant;minted:T}|null>;
   revokeRefresh(token:string,clientId:string):Promise<void>;
@@ -98,11 +155,11 @@ function registration(body: Record<string, unknown>): { clientName: string; redi
 
 const refreshToken = (): string => `mxr_${randomBytes(32).toString('base64url')}`;
 
-export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: string): OAuthStore {
+export function createOAuthStore(db: Queryable, schema = 'auth', configured: readonly ConfiguredOAuthClient[] = []): OAuthStore {
   const s = identifier(schema, 'schema');
   const clients = `${s}.clients`;
   const credentials = `${s}.credentials`;
-  const accessTokens = `${appSchema ? `${identifier(appSchema, 'app schema')}.` : ''}tokens`;
+  const accessTokens = `${s}.tokens`;
   const sweep = () => db.query(`DELETE FROM ${credentials} WHERE expires_at <= now() AND kind NOT IN ('refresh_token', 'refresh_family')`);
   return {
     async register(body) {
@@ -119,6 +176,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       return { client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), ...metadata };
     },
     async client(clientId) {
+      const fixed = configured.find((client) => client.clientId === clientId);
+      if (fixed) return { clientId: fixed.clientId, clientName: fixed.name, redirectUris: [...fixed.redirectUris], configured: true, firstParty: fixed.firstParty };
       const row = (await db.query<{ id: string; metadata: Record<string, unknown> | string }>(
         `SELECT id, metadata FROM ${clients} WHERE id = $1 AND deleted_at IS NULL`,
         [clientId],
@@ -136,7 +195,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       const code = randomBytes(24).toString('base64url');
       await db.query(
         `INSERT INTO ${credentials} (kind, credential_hash, subject_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-        [AUTHORIZATION_CODE, hash(code), grant.userId, JSON.stringify({ client_id: grant.clientId, redirect_uri: grant.redirectUri, resource: grant.resource, scope: grant.scope, code_challenge: codeChallenge }), new Date(now + Math.min(ttlMs, AUTH_CODE_TTL_MS)).toISOString()],
+        [AUTHORIZATION_CODE, hash(code), grant.userId, JSON.stringify({ client_id: grant.clientId, redirect_uri: grant.redirectUri, resource: grant.resource, scope: grant.scope, code_challenge: codeChallenge, ...(grant.sessionId ? { session_id: grant.sessionId } : {}) }), new Date(now + Math.min(ttlMs, AUTH_CODE_TTL_MS)).toISOString()],
       );
       return code;
     },
@@ -154,7 +213,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       if (payload.resource !== input.resource) return null;
       if (typeof payload.code_challenge !== 'string' || s256(input.codeVerifier) !== payload.code_challenge) return null;
       if (typeof payload.scope !== 'string') return null;
-      return { userId: row.subject_id, clientId: input.clientId, redirectUri: payload.redirect_uri, resource: input.resource, scope: payload.scope };
+      return { userId: row.subject_id, clientId: input.clientId, redirectUri: payload.redirect_uri, resource: input.resource, scope: payload.scope, sessionId: typeof payload.session_id === 'string' ? payload.session_id : null };
     },
     async issueRefresh(grant) {
       await sweep();
@@ -163,9 +222,10 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       await db.query(
         `WITH family AS (
           INSERT INTO ${credentials} (kind, credential_hash, group_id, payload, expires_at)
-          VALUES ('refresh_family', $4, $4, '{}'::jsonb, $6)
+          VALUES ('refresh_family', $4, $4, $7::jsonb, $6)
         ) INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [REFRESH_TOKEN, hash(token), grant.userId, family, JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString()],
+        [REFRESH_TOKEN, hash(token), grant.userId, family, JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(),
+          JSON.stringify(grant.sessionId ? { session_id: grant.sessionId } : {})],
       );
       return token;
     },
@@ -184,7 +244,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       return (await db.query(`SELECT 1 FROM ${credentials} member
         JOIN ${credentials} family ON family.kind='refresh_family' AND family.credential_hash=member.group_id
         WHERE member.kind=$1 AND member.payload->>'access_token_id'=$2
-          AND family.deleted_at IS NULL
+          AND family.deleted_at IS NULL AND ${sessionBoundSql(s, 'family')}
           AND NOT EXISTS (
             SELECT 1 FROM ${credentials} sibling LEFT JOIN ${accessTokens} access ON access.id=sibling.payload->>'access_token_id'
             WHERE sibling.kind=$1 AND sibling.group_id=member.group_id

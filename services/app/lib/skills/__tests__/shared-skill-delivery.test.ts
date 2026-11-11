@@ -66,7 +66,7 @@ describe('installable shared skill folder',()=>{
   }
   for(const shim of ['scripts/publication-bundle.mjs','scripts/preview.mjs'])expect(expected[shim]).toBeUndefined();
   expect(expected['scripts/toolbox-publish-legacy.mjs']).toBeUndefined();
-  expect(expected['resolvers/resolver-public-url.ts']).toContain("export const roles = { test: 'owner' };");
+  expect(Object.keys(expected).some(name=>name.startsWith('resolvers/'))).toBe(false);
   expect(expected['references/datasets.md']).toContain('dataset');
   expect(expected['components/file-upload.ts']).toContain('uploadFile');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
@@ -103,7 +103,7 @@ describe('installable shared skill folder',()=>{
    try {
     const hosted=async(pathname:string)=>{const answer=await fetch(server.base+pathname);expect(answer.status,pathname).toBe(200);return answer.text();};
     const imports=JSON.parse(await hosted('/af/import-map.json')).imports as Record<string,string>;
-    expect(imports['@afbin/vega']).toBe('/libraries/vega-6.3.1/index.js');expect(imports['@afbin/tabs']).toBe('/af/components/tabs.js');
+    expect(imports['@afbin/vega']).toBe('/af/lib/vega-6.3.1/index.js');expect(imports['@afbin/tabs']).toBe('/af/components/tabs.js');
     for(const pathname of [imports['@afbin/vega']!,imports['@afbin/vega-lite']!,imports['@afbin/tabs']!,'/af/core.js','/af/apollo.js','/af/state.js','/af/reader.js']){
      const response=await fetch(new URL(pathname,preview.url));
      expect(response.status,pathname).toBe(200);expect(await response.text(),pathname).toBe(await hosted(pathname));

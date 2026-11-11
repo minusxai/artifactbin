@@ -17,7 +17,8 @@ import {refuseEmpty,placeholderProblems,headBaseline,markedBaseline,unmarked,emp
   updateNext} from './toolbox-publish-guard.mjs';
 import {markerOf,stripMarker} from './toolbox-source.mjs';
 import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
-import {TEMPLATES,applyTemplate,routineChanges} from './toolbox-publish-dataset.mjs';
+import {TEMPLATES,applyTemplate,publishConnection,routineChanges} from
+  './toolbox-publish-dataset.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};
@@ -35,8 +36,7 @@ const client=makeClient(server,options),done=await finishPublication(await resum
 const file=await realpath(positional(positionals)),server=serverOrigin(selectedServer(values,
    options.env)),client=makeClient(server,options),bytes=await readFile(file),extension=
    path.extname(file).toLowerCase();
-if(extension==='.ts')throw new ToolError('backend_requires_page',
-   'Publish backend TypeScript through its declaring HTML page.',2);
+if(values.type==='connection')return publishConnection(client,file,values);
 const type=values.type?enumValue(values.type,['html','dataset','asset'],'type'):['.html',
    '.htm'].includes(extension)?'html':['.csv','.json'].includes(extension)?'dataset':media[
    extension]?'asset':null;
@@ -110,12 +110,10 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   source=fixed.html;
 const mappings=Object.fromEntries((baseline?.dependencyReceipts??[]).map(({path,...receipt})=>[path,
     receipt]));
-const prepared=await prepareBundle({root,entry:entryPath,entryHtml:source,server,mappings,
-    retainedBackends:baseline?.retainedBackends??[]});body=
+const prepared=await prepareBundle({root,entry:entryPath,entryHtml:source,server,mappings});body=
     prepared.body;
 const {inspectPublicationBundle}=await platform();inspectPublicationBundle(body.html,
-    body.publicationBundle,{resolvedBackendNames:(baseline?.retainedBackends??[]).map(link=>
-    link.name)});
+    body.publicationBundle);
  }else if(type==='dataset'){
 let dataset=source;if(extension==='.json'){try{dataset=JSON.parse(source);}catch{
     throw new ToolError('invalid_dataset','Dataset JSON is malformed.',2);}if(!Array.isArray(
@@ -158,7 +156,7 @@ return {dryRun:true,...(body.destination?{destination:body.destination}:{}),...(
     baseline?'PUT':'POST',artifact:baseline?.id??null,files:body.publicationBundle?.files.map(file=>
     ({path:file.path,contentType:file.contentType,bytes:Buffer.from(file.base64,
     'base64').length}))??[],note:
-    'Local planning only; access, backend execution and rendering remain unverified.'};
+    'Local planning only; access and rendering remain unverified.'};
  }
 const intent=journalIntent({server,method:baseline?'PUT':'POST',path:'/api/artifacts'+(
    baseline?'/'+baseline.id:''),body,operation:'publish',source:{file,sha256:hash(bytes),root,

@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb,type Queryable} from '@/lib/platform/db';
-import {overrideConfig} from '@/lib/platform/config';
+import {overrideConfig,serviceAudiences} from '@/lib/platform/config';
 import {canUseDeploymentIdentity} from '@/lib/accounts';
 import {DeploymentError,admitDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
 useAppHarness();
@@ -52,7 +52,7 @@ describe('company admission',()=>{
   expect(await admitDeploymentIdentity(identity('outsider','outside@other.com'))).toBe(false);
   expect(await admitDeploymentIdentity(identity('elsewhere','elsewhere@example.com'))).toBe(false);
  });
- it('locks live group snapshots within setup and admission transactions (structural SQL contract)',async()=>{
+ it('reads the live default group in setup and admission without locking it (identity rows are never locked by the app)',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false'});
   await admitDeploymentIdentity(identity('owner','owner@example.com'));
   const db=await getDb();
@@ -65,7 +65,8 @@ describe('company admission',()=>{
   }}));
   try{await setupDeployment('owner','locked');expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);}
   finally{db.transaction=transaction;}
-  expect(reads).toHaveLength(2);for(const sql of reads)expect(sql).toContain('FOR UPDATE OF g');
+  expect(reads).toHaveLength(2);for(const sql of reads)expect(sql).not.toMatch(/FOR (UPDATE|SHARE)/);
+  expect(await getDb().then(db=>db.query("SELECT role FROM group_members WHERE group_id='locked' AND user_id='member'"))).toMatchObject({rows:[{role:'viewer'}]});
  });
  it('serializes competing owner binds and never gives a changed email the owner ID',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
@@ -124,5 +125,33 @@ describe('deployment configuration and public mode',()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
   for(const id of [null,undefined,'','nobody'])expect(await canUseDeploymentIdentity(id)).toBe(false);
   expect(await getDeploymentState(null)).toMatchObject({mode:'company',setup_complete:false,is_owner:false,default_group:null});
+ });
+});
+
+describe('service audiences at boot',()=>{
+ const unset={APP__DEPLOYMENT_MODE:'public',AUTH__ALLOWED_EMAIL_PATTERNS:undefined,IDENTITY__SERVICE_AUDIENCES:undefined};
+ const hash='a'.repeat(64);
+ it('none set: no service',()=>{
+  overrideConfig({},unset);
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+  expect(serviceAudiences()).toEqual([]);
+ });
+ it('a complete set boots and normalizes origins',()=>{
+  overrideConfig({},{...unset,IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:'https://Data.Example.com/',introspection_secret_sha256:hash}])});
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+  expect(serviceAudiences()).toEqual([{id:'warehouse',origin:'https://data.example.com',introspectionSecretSha256:hash}]);
+ });
+ it('a malformed value refuses the boot by name',()=>{
+  for(const [bad,message] of [
+   [{IDENTITY__SERVICE_AUDIENCES:'{}'},/IDENTITY__SERVICE_AUDIENCES must be a JSON array/],
+   [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'Warehouse',origin:'https://a.example'}])},/IDENTITY__SERVICE_AUDIENCES/],
+   [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'http://a.example'}])},/IDENTITY__SERVICE_AUDIENCES/],
+   [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'https://a.example/path'}])},/IDENTITY__SERVICE_AUDIENCES/],
+   [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'https://a.example',introspection_secret_sha256:'secret'}])},/IDENTITY__SERVICE_AUDIENCES/],
+   [{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'w',origin:'https://a.example'},{id:'w',origin:'https://b.example'}])},/repeats/],
+  ] as const){
+   overrideConfig({},{...unset,...bad});
+   expect(()=>validateDeploymentConfiguration(),JSON.stringify(bad).slice(0,80)).toThrow(message);
+  }
  });
 });

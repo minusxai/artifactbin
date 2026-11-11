@@ -31,7 +31,7 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
    expect(css,name).toContain('[data-af-dark="true"]');
    for(const face of css.match(/@font-face\s*\{[^}]*\}/g)??[]){
     const url=/src:\s*url\("([^"\n]+)"\)/.exec(face)![1]!;
-    const expected=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===url.replace('/af',''))!;
+    const expected=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===url)!;
     expect(expected,url).toBeTruthy();
     expect(face).toContain(`font-family: "${expected.family}"`);
     expect(face).toContain(`font-weight: ${expected.weight}`);
@@ -52,17 +52,17 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
    expect(origin.requests).toContain('/af/styles.css?system=almanac');
    const hosted=/src: url\("(\/af\/fonts\/[^"]+)"\)/.exec(platform)![1]!,hostedFont=await fetch(new URL(hosted,preview.url));
    expect(hostedFont.status).toBe(200);expect(hostedFont.headers.get('content-type')).toContain('font/woff2');
-   const face=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===hosted.replace('/af',''))!;
-   expect(Buffer.from(await hostedFont.arrayBuffer())).toEqual(readFileSync(path.resolve('public',face.url.slice(1))));
+   const face=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===hosted)!;
+   expect(Buffer.from(await hostedFont.arrayBuffer())).toEqual(readFileSync(path.resolve('public/fonts',face.url.split('/').at(-1)!)));
    // Only the /af/fonts/ name resolves: neither the stored hashed file name nor an unknown name does.
    expect((await fetch(new URL(face.url,preview.url))).status).toBe(404);
    expect((await fetch(new URL('/af/fonts/not-a-font.woff2',preview.url))).status).toBe(404);
-   // A page's boundary fetch (/geojson/NAME.json) reads the selected server's file from the preview's own origin.
-   const boundary=await fetch(new URL('/geojson/india-states.json',preview.url));expect(boundary.status).toBe(200);
+   // A page's boundary fetch (/af/geojson/NAME.json) reads the selected server's file from the preview's own origin.
+   const boundary=await fetch(new URL('/af/geojson/india-states.json',preview.url));expect(boundary.status).toBe(200);
    expect(boundary.headers.get('content-type')).toContain('application/json');
    expect(Buffer.from(await boundary.arrayBuffer())).toEqual(readFileSync(path.resolve('public/geojson/india-states.json')));
-   expect(origin.requests).toContain('/geojson/india-states.json');
-   expect((await fetch(new URL('/geojson/not-a-boundary.json',preview.url))).status).toBe(404);
+   expect(origin.requests).toContain('/af/geojson/india-states.json');
+   expect((await fetch(new URL('/af/geojson/not-a-boundary.json',preview.url))).status).toBe(404);
   }finally{await preview.close();}
   const {prepareBundle}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
   const request=await prepareBundle({root:installed,entry:'index.html',server:'https://publish.example'});

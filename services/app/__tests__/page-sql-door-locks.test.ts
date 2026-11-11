@@ -9,8 +9,9 @@ import { getDb, TransactionConflict } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
-import { resolverDatasets } from '@/lib/graphql-compat';
-import { createGroup, deleteGroup, removeGroupMember } from '@/lib/groups';
+import { updateLiveConnection } from '@/lib/live-datasets';
+import { overrideConfig } from '@/lib/platform/config';
+import { createGroup, deleteGroup } from '@/lib/groups';
 import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
 import { type Person, person, params, publish, sql, gql, fixture, stored } from './page-sql-door-fixture';
@@ -39,7 +40,7 @@ it('review3: malformed requests do not distinguish an unreadable page from a mis
   expect(await call(f.page)).toEqual(await call('missing_review3_page'));
 });
 
-it.each(['graphql', 'resolver'] as const)('review3: a group revoke between dataset authorization and page locks prevents %s commit', async door => {
+it('review3: a group revoke between dataset authorization and page locks prevents a graphql commit', async () => {
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle:'review3_group', name:'Review group'});
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
@@ -60,8 +61,7 @@ it.each(['graphql', 'resolver'] as const)('review3: a group revoke between datas
   }));
   try {
     const query = 'mutation { update_staff(where: {}, _set: {team: "black"}) { affected_rows } }';
-    if (door === 'graphql') await gql(f.page, f.other, query);
-    else await resolverDatasets.query!({pageId:f.page, caller:{subject:f.other.userId!, role:'viewer'}, operation:'mutation', args:{query}});
+    await gql(f.page, f.other, query);
   } finally { spy.mockRestore(); }
   expect(revoked).toBe(true);
   expect(await stored(f.staff)).toEqual(before);
@@ -135,19 +135,21 @@ it.each(['sql', 'graphql'] as const)('a private page answers malformed requests 
  * THE LOCK ORDER, traced (lib/artifact-access locks.ts). Every guarded path locks its artifacts first, by tier
  * (documents: the page, then datasets) and within a tier by the shared `lockOrder`, before any fact; facts then lock
  * themselves as the decision reads them, in no fixed order between them (the retry is the net for that). Only the
- * FIRST lock of a row counts (re-reading a row already held takes nothing new). The competing writers that cannot
- * follow it (a group deletion, a test user's erasure, a group-owned publish) take a fact first: for them only the
- * artifact order is checked, and each is proven to retry its whole transaction (below).
+ * FIRST lock of a row counts (re-reading a row already held takes nothing new). App facts are shares and group
+ * shares; identity rows (accounts, groups, memberships) are read, never locked, by the app, and the identity module's
+ * own writes (membership, deletion, subgroups, reparenting) are not in this order at all: they neither wait for nor
+ * hold up a decision. A group-owned publish is traced for its artifact order only.
  */
 it('every writer locks its artifacts by tier and lockOrder, before its facts', async () => {
   const f = await fixture(), db = await getDb(), transaction = db.transaction.bind(db);
   const group = await createGroup(f.owner.userId!, { handle: 'lock_order_group', name: 'Lock order' });
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
-  const doomed = await createGroup(f.owner.userId!, { handle: 'lock_order_doomed', name: 'Doomed' });
+  overrideConfig({}, { DATASETS__ALLOW_PRIVATE_NETWORK: '1' });
+  const live = (await publish(f.owner, { connection: { connector: 'postgres', host: '127.0.0.1', database: 'd', user: 'u', password: 'p', tls: 'disable' }, title: 'Live' })).body.id;
   const formats = new Map((await db.query<{ id: string; format: string }>('SELECT id, format FROM artifacts')).rows.map((r) => [r.id, r.format]));
   const isArtifactLock = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM artifacts\b/.test(s) && !/JOIN/.test(s);
-  const isFact = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM (artifact_shares|artifact_group_shares|groups|group_members|users)\b/.test(s)
-    || /^(DELETE FROM|UPDATE) (artifact_shares|artifact_group_shares|group_members)\b/.test(s);
+  const isFact = (s: string) => / FOR (UPDATE|SHARE)/.test(s) && /FROM (artifact_shares|artifact_group_shares)\b/.test(s)
+    || /^(DELETE FROM|UPDATE) (artifact_shares|artifact_group_shares)\b/.test(s);
   const traces: Array<{ path: string; problems: string[]; artifacts: string[]; facts: number }> = [];
   let path = '';
   const spy = vi.spyOn(db, 'transaction').mockImplementation((callback) => transaction(async (tx) => {
@@ -171,20 +173,18 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
     path = 'sql door'; await sql(f.page, f.other, "insert into staff (name) values ('o1')");
     path = 'sql door, cross-link read'; await sql(f.page, f.other, 'insert into staff (name) select note from notes');
     path = 'graphql'; await gql(f.page, f.other, 'mutation { insert_staff_one(object: {name: "o2"}) { name } }');
-    path = 'resolver'; await resolverDatasets.query!({ pageId: f.page, caller: { subject: f.other.userId!, role: 'viewer' }, operation: 'mutation', args: { query: 'mutation { insert_staff_one(object: {name: "o3"}) { name } }' } });
+    path = 'live connection edit'; expect((await updateLiveConnection(f.owner.actor, live, { password: 'q' })).status).toBe(200);
     path = 'sharing'; await updateSharingFor(f.owner.actor, f.page, { shares: [] });
     path = 'group share'; await setArtifactGroupShare(f.owner.actor, f.page, group.id, 'viewer');
-    path = 'group member'; await removeGroupMember(f.owner.userId!, group.id, f.other.userId!);
     path = 'group-owned publish'; await createArtifact(null, f.owner.userId, { format: 'html', source: '<p>group page</p>', meta: {}, title: 'Group page', destination: { type: 'group', id: group.id } });
-    path = 'group deletion'; await deleteGroup(f.owner.userId!, doomed.id, 'lock_order_doomed');
   } finally { spy.mockRestore(); }
   const bad = traces.filter((t) => t.problems.length);
   expect(bad, JSON.stringify(bad)).toEqual([]);
   // Each path locked something it is pinned for; the guarded ones locked their page before the dataset.
   // (A test user's erasure, the third competing writer, is pinned in lib/operations' own test: testusers-erase.test.ts.)
-  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'resolver', 'sharing', 'group share', 'group member', 'group-owned publish', 'group deletion'])
+  for (const p of ['sql door', 'sql door, cross-link read', 'graphql', 'live connection edit', 'sharing', 'group share'])
     expect(traces.some((t) => t.path === p && (t.artifacts.length || t.facts)), p).toBe(true);
-  for (const p of ['sql door', 'graphql', 'resolver']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
+  for (const p of ['sql door', 'graphql']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
   expect(traces.find((t) => t.path === 'sql door, cross-link read' && t.artifacts.length)?.artifacts.slice(0, 3)).toEqual([f.page, ...[f.staff, f.notes].sort(lockOrder)]);
 });
 
@@ -202,16 +202,15 @@ describe('retry on deadlock and serialization failure', () => {
       return transaction(callback);
     });
   };
-  it.each(['40P01', '40001'])('guarded writes (SQL door, page GraphQL, caps.query) retry whole and apply once (%s)', async (code) => {
+  it.each(['40P01', '40001'])('guarded writes (SQL door, page GraphQL) retry whole and apply once (%s)', async (code) => {
     const f = await fixture(), db = await getDb();
     for (const [door, write] of [
       ['sql', () => sql(f.page, f.other, "insert into staff (name) values ('retried-sql')")],
       ['graphql', () => gql(f.page, f.other, 'mutation { insert_staff_one(object: {name: "retried-gql"}) { name } }')],
-      ['resolver', () => resolverDatasets.query!({ pageId: f.page, caller: { subject: f.other.userId!, role: 'viewer' }, operation: 'mutation', args: { query: 'mutation { insert_staff_one(object: {name: "retried-resolver"}) { name } }' } })],
     ] as const) {
       const spy = failing(db, 1, code);
       try { await write(); } finally { spy.mockRestore(); }
-      expect([door, (await stored(f.staff)).filter((r) => String(r.name).startsWith(`retried-${door === 'sql' ? 'sql' : door === 'graphql' ? 'gql' : 'resolver'}`)).length]).toEqual([door, 1]);
+      expect([door, (await stored(f.staff)).filter((r) => String(r.name).startsWith(`retried-${door === 'sql' ? 'sql' : 'gql'}`)).length]).toEqual([door, 1]);
     }
   });
   it('an exhausted retry is a clean retryable conflict, nothing is written, and its key replays the refusal', async () => {
@@ -232,7 +231,7 @@ describe('retry on deadlock and serialization failure', () => {
     expect(await stored(f.staff)).toEqual(before);
   });
   // A test user's erasure, the third competing writer, is pinned in lib/operations' own test (testusers-erase.test.ts).
-  it('the competing writers (group deletion, group-owned publish, replace) retry whole', async () => {
+  it('the competing writers (the identity module\'s group deletion, group-owned publish, replace) retry whole', async () => {
     const f = await fixture(), db = await getDb();
     const doomed = await createGroup(f.owner.userId!, { handle: 'retry_doomed', name: 'Doomed' });
     const team = await createGroup(f.owner.userId!, { handle: 'retry_team', name: 'Team' });

@@ -8,12 +8,11 @@ import {canUseDeploymentIdentity} from './deployment-identity';
  * creates inherit that owner at publish time.
  */
 import crypto from 'crypto';
-import { getDb, Queryable, emit, generateTokenId, currentRequest } from '../platform';
+import { getDb, emit, currentRequest, services } from '../platform';
 import type { Harness } from './client-identity';
 import { canAuthenticateUser } from '../user-kinds';
 import type { AccessActor } from './actors';
 
-const TOKEN_PREFIX = 'mx_';
 
 /**
  * SQL predicate shared by every app query that treats a token as a live
@@ -85,12 +84,9 @@ interface MintedToken {
   expiresAt: string | null;
 }
 
-/** Default lifetime of a minted token: six hours. */
-export const DEFAULT_TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
-/** Longest explicit bearer lifetime: 365 days, independent of browser session expiry. */
-export const MAX_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
-/** The shortest: one hour. */
-export const MIN_TOKEN_TTL_MS = 60 * 60 * 1000;
+/** Token lifetimes: six hours by default, one hour at least, 365 days at most (independent of browser session expiry). */
+import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS } from '@artifactbin/contracts';
+export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS };
 
 interface MintOptions {
   /**
@@ -118,51 +114,30 @@ export function tokenStatus(
   return 'active';
 }
 
-/**
- * `q` lets callers already inside a transaction mint without re-entering the
- * adapter (PGLite serializes ops — a nested getDb() query would deadlock).
- */
+/** Mint through the identity module (the tokens table's only writer). Never call it inside an open transaction. */
 export async function mintToken(
   name?: string,
   userId?: string | null,
-  q?: Queryable,
   options: MintOptions = {},
 ): Promise<MintedToken> {
   const expiresInMs = options.expiresInMs === undefined ? DEFAULT_TOKEN_TTL_MS : options.expiresInMs;
   if (expiresInMs !== null && (!Number.isFinite(expiresInMs) || expiresInMs < MIN_TOKEN_TTL_MS || expiresInMs > MAX_TOKEN_TTL_MS)) {
     throw new RangeError(`token expiry must be between ${MIN_TOKEN_TTL_MS} and ${MAX_TOKEN_TTL_MS} ms`);
   }
-  const runner = q ?? (await getDb());
-  const id = generateTokenId();
-  const token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
-  const expiresAt = expiresInMs === null ? null : new Date(Date.now() + expiresInMs).toISOString();
-  await runner.query('INSERT INTO tokens (id, name, token_hash, user_id, expires_at, audience, scope, request_authority) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [
-    id,
-    name ?? null,
-    sha256(token),
-    userId ?? null,
-    expiresAt,
-    options.audience ?? null,
-    options.scope ?? null,
-    options.requestAuthority === true,
-  ]);
+  const minted = await services().identity.mintToken({
+    name: name ?? null, userId: userId ?? null, expiresInMs,
+    audience: options.audience ?? null, scope: options.scope ?? null, requestAuthority: options.requestAuthority === true,
+  });
   forgetRequestCredentials();
   /*
    * THE ONE CHOKEPOINT. Every mint in the product — anonymous, operator,
-   * browser, the agent-link start door — comes through this insert, so the log
-   * learns of a credential coming into being in exactly one place. The subject
-   * is the owning account when the token is born attached and nobody when it
-   * is not; the plaintext token is returned to the caller and never said.
-   *
-   * NOT AWAITED, unlike every other state change in this file: `q` may be a
-   * TRANSACTION handle, and PGLite serialises its op queue behind an open
-   * transaction — an awaited log write would wait on a transaction that is
-   * waiting on it. Fired instead, so the writer's INSERT queues behind the
-   * commit and lands after it. `emit` never rejects, so the `void` cannot
-   * become an unhandled rejection.
+   * browser, the agent-link start door — comes through here, so the log learns
+   * of a credential coming into being in exactly one place. The subject is the
+   * owning account when the token is born attached and nobody when it is not;
+   * the plaintext token is returned to the caller and never said.
    */
-  void emit(userId ? { kind: 'user', id: userId } : null, 'minted', { kind: 'token', id }, { name: name ?? null });
-  return { id, name: name ?? null, token, expiresAt };
+  void emit(userId ? { kind: 'user', id: userId } : null, 'minted', { kind: 'token', id: minted.id }, { name: name ?? null });
+  return minted;
 }
 
 /**
@@ -179,7 +154,12 @@ export async function ensureUserToken(userId: string): Promise<string> {
     [userId],
   );
   if (existing.rows[0]) return existing.rows[0].id;
-  return (await mintToken('web', userId, undefined, { expiresInMs: null })).id;
+  const web = await services().identity.ensureWebToken({ userId });
+  if (web.minted) {
+    forgetRequestCredentials();
+    void emit({ kind: 'user', id: userId }, 'minted', { kind: 'token', id: web.id }, { name: 'web' });
+  }
+  return web.id;
 }
 
 /**
@@ -205,22 +185,18 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
   const hash = sha256(presented);
   return answeredOnce(`token:${hash}`, () => lookUpToken(hash));
 }
+/** The hash is a secret column only the identity module reads: it answers the live row, this decides admission. */
 async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
+  const row = await services().identity.findToken({ hash });
   const db = await getDb();
-  const r = await db.query<{ id: string; user_id: string | null; client_harness: Harness | null; audience:string|null }>(
-    `SELECT id, user_id, client_harness, audience FROM tokens WHERE token_hash = $1 AND ${LIVE_TOKEN_SQL}`,
-    [hash],
-  );
-  const row = r.rows[0];
-  return row && await canUseDeploymentIdentity(row.user_id,db) && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness, ...(row.audience?{audience:row.audience}:{}) } : null;
+  return row && await canUseDeploymentIdentity(row.userId,db) && await canAuthenticateUser(row.userId, db) ? { id: row.id, userId: row.userId, clientHarness: row.clientHarness as Harness | null, ...(row.audience?{audience:row.audience}:{}) } : null;
 }
 
 /** Remember a declared/observed agent harness for attribution on later stateless calls. */
 export async function rememberTokenClient(id: string, harness: Harness): Promise<void> {
   // An annotation's byline, never an authorization input, so the caller must
   // not fail over it.
-  const db = await getDb();
-  await db.query('UPDATE tokens SET client_harness = $2 WHERE id = $1', [id, harness]);
+  await services().identity.setTokenHarness({ id, harness });
   forgetRequestCredentials();
 }
 
@@ -253,10 +229,8 @@ export async function resolveTokenById(id: string): Promise<ResolvedToken | null
  * it is the same statement, not a second read.
  */
 export async function revokeToken(id: string): Promise<boolean> {
-  const db = await getDb();
-  const r = await db.query<{ name: string | null }>('UPDATE tokens SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING name', [id]);
+  const row = await services().identity.revokeToken({ id });
   forgetRequestCredentials();
-  const row = r.rows[0];
   if (!row) return false;
   await emit(null, 'revoked', { kind: 'token', id }, { name: row.name });
   return true;
@@ -264,7 +238,7 @@ export async function revokeToken(id: string): Promise<boolean> {
 
 /**
  * Stamp `last_used_at` for a token the app just trusted. SAMPLED: the row is written only when the
- * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one UPDATE a minute, not one per
+ * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one identity write a minute, not one per
  * request. Never throws to the caller — attribution, not authorization. Called once per request from the
  * place the app first trusts a token-bearing actor (lib/authentication/request-identity), in BOTH shapes: the bearer it resolves
  * and the actor the proxy attaches (the proxy's reader is SELECT-only and cannot stamp).
@@ -272,11 +246,11 @@ export async function revokeToken(id: string): Promise<boolean> {
 export const TOUCH_INTERVAL_MS = 60 * 1000;
 export async function touchToken(id: string): Promise<void> {
   try {
-    const db = await getDb();
-    await db.query(
-      "UPDATE tokens SET last_used_at = now() WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '60 seconds')",
-      [id],
-    );
+    // The sample is read here first (the tokens view's last_used_at), so the identity module (an HTTP hop with an
+    // auth host) is asked at most once a minute per token, not on every request.
+    const due = (await (await getDb()).query(
+      "SELECT 1 FROM tokens WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '60 seconds')", [id])).rows.length > 0;
+    if (due) await services().identity.touchToken({ id });
   } catch {
     // Usage attribution must never turn a trusted request into a failure.
   }
@@ -313,8 +287,8 @@ async function readCredentialDescriptor(owner:string,id:string):Promise<{name:st
 
 /** Deployment extensions may upgrade their own server-minted grant namespace.
  * The account service owns the SQL; callers provide provenance, not requests. */
-export async function markRequestAuthority(prefix:string,q:Queryable):Promise<void>{
+export async function markRequestAuthority(prefix:string):Promise<void>{
  if(!prefix||prefix.length>256)throw Error('request_authority_prefix_invalid');
- await q.query('UPDATE tokens SET request_authority=true WHERE left(name,length($1))=$1 AND request_authority=false',[prefix]);
+ await services().identity.markRequestAuthority({prefix});
  forgetRequestCredentials();
 }

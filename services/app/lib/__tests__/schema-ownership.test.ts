@@ -42,8 +42,8 @@ it('keeps editor annotation receipts beside app-owned atomic source edits',()=>{
 
 it('sharing revision belongs to app artifact state',()=>{expect(renderedSchema().schema).toMatch(/sharing_revision/);});
 
-it('guest workspace adoption belongs to app users',()=>{
- expect(declared()['app.users']).toBe('app');
+it('guest workspace adoption belongs to the identity module\'s users',()=>{
+ expect(declared()['auth.users']).toBe('auth');
  expect(renderedSchema().schema).toContain('merged_into_user_id TEXT');
 });
 
@@ -71,7 +71,6 @@ it('retired storage is not declared and is dropped from existing databases',()=>
   expect(sql).toContain(`DROP TABLE IF EXISTS app.${name};`);
   expect(sql).not.toMatch(new RegExp(`(?:CREATE|ALTER) TABLE(?: IF NOT EXISTS)? app\\.${name}\\b`));
  }
- expect(sql).toContain('ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;');
 });
 
 it('canonical document storage belongs to artifact heads and archived versions',()=>{
@@ -99,11 +98,12 @@ it('retired mutation-notification storage is declared by nobody and dropped on b
 });
 it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});
 
-it('native backend runner persistence keeps owner-scoped admission without retired hosted jobs',()=>{
+it('the removed page functions\' storage is declared by nobody and never dropped: its rows stay, unread, for their owners',()=>{
  const sql=renderedSchema().schema;
- for(const table of ['runner_runs','runner_events'])expect(declared()['app.'+table]).toBe('app');
- expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key)');
- for(const table of ['hosted_conversations','hosted_branches','runner_schedules','runner_schedule_attempts','runner_schedule_occurrences'])expect(declared()['app.'+table]).toBeUndefined();
+ for(const table of ['html_backend_versions','html_backend_secrets','page_function_schedules','runner_runs','runner_events','hosted_conversations','hosted_branches','runner_schedules','runner_schedule_attempts','runner_schedule_occurrences']){
+  expect(declared()['app.'+table],table).toBeUndefined();
+  if(!['hosted_conversations','hosted_branches'].includes(table))expect(sql,table).not.toMatch(new RegExp(`(?:CREATE|ALTER|DROP) TABLE(?: IF (?:NOT )?EXISTS)? app\\.${table}\\b`));
+ }
 });
 it('the pages sessions behind the documents\' own origins belong to the app and store only a cookie hash',()=>{
  expect(declared()['app.pages_sessions']).toBe('app');
@@ -112,6 +112,11 @@ it('the pages sessions behind the documents\' own origins belong to the app and 
 it('a reader\'s document trust belongs to the app, one row per person per document, erased with the person',()=>{
  expect(declared()['app.document_trust']).toBe('app');
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.document_trust \([\s\S]*?user_id TEXT NOT NULL[\s\S]*?extensions JSONB NOT NULL[\s\S]*?PRIMARY KEY \(user_id, artifact_id\)/);
+});
+it('a group\'s approved addresses belong to the app, one row per group, data directive and exact host, never keyed on user_id',()=>{
+ expect(declared()['app.group_trust']).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.group_trust \([\s\S]*?created_by TEXT NOT NULL[\s\S]*?PRIMARY KEY \(group_id, directive, host\)[\s\S]*?directive IN \('connect','img','media'\)/);
+ expect(renderedSchema().schema).not.toMatch(/app\.group_trust ADD COLUMN IF NOT EXISTS user_id/);
 });
 
 it('optional comment view state stays with app-owned annotations', () => {
@@ -124,8 +129,8 @@ it('the hot-path indexes are declared, created at boot only when missing, and pa
  expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifact_shares_user ON app.artifact_shares (user_id)');
  expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifact_shares_email ON app.artifact_shares (email)');
  // The unique (group_id, email) index stays; the lookup by address alone is a second, plain one.
- expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email)');
- expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON app.group_invitations (email)');
+ expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON auth.group_invitations (group_id, email)');
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON auth.group_invitations (email)');
 });
 
 it('native identity provenance belongs to the app and preserves multiple verified aliases',()=>{
@@ -136,16 +141,15 @@ it('native identity provenance belongs to the app and preserves multiple verifie
  expect(sql).not.toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_native_identity_imports_target');
 });
 
-it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');expect(declared()['app.comment_reaction_events']).toBe('app');});
+it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');expect(declared()['app.comment_reaction_events']).toBeUndefined();});
 
-it('group mail retries and fenced claims belong to app durable state',()=>{
- expect(declared()['app.group_mail_outbox']).toBe('app');
- const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS app.group_mail_outbox (')[1]?.split(');')[0];
+it('group mail retries and fenced claims belong to the identity module\'s durable state',()=>{
+ expect(declared()['auth.group_mail_outbox']).toBe('auth');
+ const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS auth.group_mail_outbox (')[1]?.split(');')[0];
  for(const column of ['claim_token TEXT','attempts INTEGER NOT NULL DEFAULT 0','next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()','quarantined_at TIMESTAMPTZ'])expect(declaration).toContain(column);
 });
-it('the head\'s content publisher and the scheduled run\'s fencing epoch belong to the app',()=>{
+it('the head\'s content publisher column stays on the app\'s artifacts, kept with its data',()=>{
  const sql=renderedSchema().schema;
- expect(declared()['app.artifacts']).toBe('app');expect(declared()['app.page_function_schedules']).toBe('app');
+ expect(declared()['app.artifacts']).toBe('app');
  expect(sql).toContain('ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT');
- expect(sql).toMatch(/ALTER TABLE app\.page_function_schedules ADD COLUMN IF NOT EXISTS claim_epoch BIGINT NOT NULL DEFAULT 0|claim_epoch BIGINT NOT NULL DEFAULT 0/);
 });

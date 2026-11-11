@@ -1,7 +1,7 @@
-import { identityForUser, lockMembershipUsers, testAccountMayReach, type AccessActor } from '@/lib/accounts';
+import { identityForUser, testAccountMayReach, type AccessActor } from '@/lib/accounts';
 import { JOIN_RELATIONS, setRelationState } from '@/lib/social';
 import {artifactQuery} from '../document';
-import {recordEvent, getDb} from '@/lib/platform';
+import {recordEvent, getDb, lockSubjects} from '@/lib/platform';
 import {DatasetError} from '@/lib/datasets';
 import { readThrough } from '@/lib/artifact-access';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
@@ -91,7 +91,7 @@ export async function changeMembership(actor: AccessActor, id: string, input: Me
   await db.transaction(async tx=>{
     const current=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[id])).rows[0];
     if(!current||current.user_id!==artifact.user_id||current.token_id!==artifact.token_id||(current.sharing_revision??0)!==(artifact.sharing_revision??0))fail('Artifact access changed; try again',409);
-    await lockMembershipUsers(tx,[userId,...targets]);
+    await lockSubjects(tx,'artifact-membership',[userId,...targets]);
     for(const target of targets) {
       if(input.action==='invite'){
         if(input.includeAccess&&!(await readThrough(tx,current,identityForUser(target)))){
@@ -146,7 +146,7 @@ export async function changeMembership(actor: AccessActor, id: string, input: Me
 /** The saved artifact is already locked by the caller. Shared by UI, CLI and saved mentions. */
 export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:AccessActor,targets:string[],source?:string,explicitInvitation=false):Promise<void>{
  const sender=actor.userId;if(!sender)return fail('Sign in to mention people');
- await lockMembershipUsers(tx,[sender,...targets]);
+ await lockSubjects(tx,'artifact-membership',[sender,...targets]);
  const identities=(await tx.query<{id:string;kind:string;auto_accept_mentions:boolean}>('SELECT id,kind,auto_accept_mentions FROM users WHERE id=ANY($1::text[]) AND (expires_at IS NULL OR expires_at>now())',[[sender,...targets,artifact.user_id]])).rows;
  const initiator=identities.find(u=>u.id===sender);
  if(!initiator||initiator.kind==='guest'||(initiator.kind==='testuser'&&identities.find(u=>u.id===artifact.user_id)?.kind!=='testuser'))fail('Sign in to mention people');

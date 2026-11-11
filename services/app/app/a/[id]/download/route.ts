@@ -56,7 +56,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     }
     let resources:Array<OfflineDependencyInput['resources'][number]>;
     try{resources=await loadBundleAssetResources(request,actor,id);}catch{return json({error:'not_found'},404);}
-    // A script's fetch of a file the page published reads it from disk too (html-runtime fn-fetch): the copy carries the
+    // A script's fetch of a file the page published reads it from disk too (html-runtime page-fetch): the copy carries the
     // bytes this reader was just admitted to, or, past the size limit, the file's address on the platform.
     const published=new Map(resources.map(resource=>[resource.url,resource]));
     // The platform's boundary files the page fetches by their path (/geojson/NAME.json) ride in the same table.

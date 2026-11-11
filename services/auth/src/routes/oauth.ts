@@ -1,25 +1,41 @@
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
  * token minting remains app-owned and runs as the consenting session actor.
+ *
+ * A grant's RESOURCE (RFC 8707 `resource`) is this deployment's API (`<origin>/api`, scope `artifacts`, the
+ * default) or the origin of a configured service (IDENTITY__SERVICE_AUDIENCES; scope empty): a token for a
+ * service is the person's own credential at that service, which the bearer admission never accepts at this API
+ * (its audience is not ours). `/api/authentication/token` takes the service by id (`{"audience": "<id>"}`).
+ *
+ * THE EXCHANGE (contracts `SERVICE_TOKEN_PATH`, `{"audience": "<id>"}`): a credential the caller already holds here, a
+ * browser session (same Origin, as every cookie-borne write) or an ordinary API bearer, for a short-lived token for one
+ * configured service (../identity/service-tokens, `parent` naming that credential), and no refresh token: the browser
+ * page or agent asks again before it expires. A service token or an exchanged one is no bearer here, so none is
+ * exchanged again.
+ *
+ * A FIRST-PARTY client (IDENTITY__OAUTH_CLIENTS `first_party`, identity/oauth `parseOAuthClients`) is part of this
+ * deployment's own sign-in: `/oauth/authorize` answers a signed-in browser with its code at once (no consent page) and
+ * sends a signed-out one to the login page and back; the code, and the grant it becomes, carry the approving browser
+ * session, so the grant ends with it.
  */
 import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   authServerMetadata,
+  clientRedirects,
   consumeAuthCode,
   createAuthCode,
-  isAllowedRedirectUri,
   isValidCodeChallenge,
   isValidCodeVerifier,
   ARTIFACT_SCOPE,
   type OAuthStore,
   protectedResourceMetadata,
-  sameRedirectTarget,
 } from '../identity/oauth';
+import { signServiceToken } from '../identity/service-tokens';
 import type { AuthApp, SessionStore } from '../parts';
 
 type App = AuthApp;
@@ -74,6 +90,10 @@ interface OAuthRoutesOptions {
   trustedHops: number;
   publicBaseUrl?: string;
   aliasOrigins?: readonly string[];
+  /** IDENTITY__SERVICE_AUDIENCES: the other resources a grant may be for. */
+  serviceAudiences?: readonly ServiceAudience[];
+  /** The exchanged tokens' signing key (service-tokens `serviceTokenKey` of AUTH__SECRET); null: the exchange answers 503. */
+  serviceTokenKey?: Buffer | null;
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
@@ -107,22 +127,61 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const origins = (request: Request) => acceptedOriginsOf(request, o.trustedHops, o.publicBaseUrl, o.aliasOrigins);
   const sameOrigin = (request: Request) => origins(request).includes(request.headers.get('origin') ?? '');
   const resources = (request: Request) => origins(request).map((origin) => `${origin}${API_RESOURCE_PATH}`);
-  const acceptsResource = (request: Request, requested: string) => resources(request).includes(requested);
-  // Direct integrations obtain a bearer from an email-verified session, without device/browser grants.
+  const serviceFor = (requested: string) => (o.serviceAudiences ?? []).find((service) => service.origin === requested);
+  const acceptsResource = (request: Request, requested: string) => resources(request).includes(requested) || !!serviceFor(requested);
+  /** The scope a grant for `resource` stores: `artifacts` for this API (the default), nothing for a service; null when the request names another. */
+  const scopeFor = (requested: string, scope: string): string | null =>
+    serviceFor(requested) ? (scope === '' ? '' : null) : ((scope || ARTIFACT_SCOPE) === ARTIFACT_SCOPE ? ARTIFACT_SCOPE : null);
+  /*
+   * Direct integrations obtain a bearer from an email-verified session, without device/browser grants: a 24 h access
+   * token and a 30-day refresh token, for a client outside any page (the skill's sign-in, curl, a server). A page's
+   * script never receives one: a browser marks every request a page makes with `Sec-Fetch-Site` and `Sec-Fetch-Dest`,
+   * which page code cannot remove, so a request carrying either is refused, and a page asks SERVICE_TOKEN_PATH for a
+   * short-lived token instead. `Sec-Fetch-Mode` alone is NOT a page: Node's own fetch (the skill's sign-in) sends it.
+   * The app's own pages never call this.
+   */
   app.post('/api/authentication/token', async (c) => {
+    if(['sec-fetch-site','sec-fetch-dest'].some(name=>c.req.header(name)!==undefined))
+      return new Response(JSON.stringify({error:'page_context_refused',hint:`A page uses POST ${SERVICE_TOKEN_PATH} for a short-lived token.`}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
     const actor=c.get('actor') ?? ANONYMOUS;
     if(actor.credential!=='session'||!actor.userId||!actor.email||actor.emailVerified!==true)
       return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
     if(!sameOrigin(c.req.raw))
       return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
+    // An optional {"audience":"<service id>"}: a grant for that configured service instead of this API.
+    let requested:unknown;
+    try{const text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});requested=text.trim()?(JSON.parse(text) as {audience?:unknown}|null)?.audience:undefined;}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
+    const service=typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
+    if(requested!==undefined&&!service)return new Response(JSON.stringify({error:'invalid_audience',hint:'Name a configured service id, or send no audience for this API.'}),{status:400,headers:{'Content-Type':'application/json',...NO_STORE}});
+    const scope=service?'':ARTIFACT_SCOPE;
     try{
       const client=await o.oauth.register({client_name:'artifactbin HTTP',redirect_uris:['http://127.0.0.1/callback']});
       const clientId=String(client.client_id);
-      const grant={userId:actor.userId,resource:resource(c.req.raw),scope:ARTIFACT_SCOPE};
+      const grant={userId:actor.userId,resource:service?service.origin:resource(c.req.raw),scope};
       const minted=await mintFor(o,c.req.raw,grant);
       const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
-      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope,resource:grant.resource}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
     }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
+  });
+  app.post(SERVICE_TOKEN_PATH, async (c) => {
+    const actor=c.get('actor') ?? ANONYMOUS;
+    const refuse=(status:number,error:string,hint?:string)=>new Response(JSON.stringify({error,...(hint?{hint}:{})}),{status,headers:{'Content-Type':'application/json',...NO_STORE}});
+    const parent:ServiceTokenParent|null=actor.credential==='session'&&actor.sessionId?{kind:'session',id:actor.sessionId}:actor.credential==='bearer'&&actor.tokenId?{kind:'token',id:actor.tokenId}:null;
+    if(!parent||!actor.userId)return refuse(401,'authentication_required','Send this host\'s own API bearer, or call from a signed-in page.');
+    // A cookie is ambient: only this deployment's own pages may spend it here. A bearer is explicit and needs no Origin.
+    if(parent.kind==='session'&&!sameOrigin(c.req.raw))return refuse(403,'forbidden');
+    let requested:unknown;
+    try{requested=(JSON.parse(await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'})) as {audience?:unknown}|null)?.audience;}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
+    const service=typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
+    if(!service)return refuse(400,'invalid_audience','Name a configured service id.');
+    if(!o.serviceTokenKey)return refuse(503,'temporarily_unavailable');
+    // The same account rule as every grant here: a verified email account this deployment admits.
+    const identity=await o.sessions.identity?.(actor.userId).catch(()=>null);
+    if(!identity?.email||!identity.emailVerified||identity.userId!==actor.userId||(o.admitIdentity&&!await o.admitIdentity(identity)))return refuse(403,'deployment_admission_required');
+    const issued=signServiceToken(o.serviceTokenKey,service,{userId:actor.userId,parent});
+    return new Response(JSON.stringify({access_token:issued.token,token_type:'Bearer',expires_in:Math.round((Date.parse(issued.expiresAt)-Date.now())/1000),expires_at:issued.expiresAt,audience:service.id,resource:service.origin}),{status:200,headers:{'Content-Type':'application/json',...NO_STORE}});
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
   app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
@@ -151,25 +210,37 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const state = q.get('state') ?? '';
     const expectedResource = resource(c.req.raw);
     const requestedResource = q.get('resource') ?? expectedResource;
-    const scope = q.get('scope') || ARTIFACT_SCOPE;
+    const scope = scopeFor(requestedResource, q.get('scope') ?? '');
     const client = clientId ? await o.oauth.client(clientId) : null;
     const problem =
       !client ? 'Unknown client.'
       : q.get('response_type') !== 'code' ? 'Unsupported response type.'
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
-      : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
+      : !clientRedirects(client, redirectUri) ? 'Redirect URI not registered.'
       : !acceptsResource(c.req.raw, requestedResource) ? 'Invalid API resource.'
-      : scope !== ARTIFACT_SCOPE ? 'Unsupported scope.'
+      : scope === null ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${escapeHtml(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
-    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope)}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
+    const retryPath = `/oauth/authorize?${q.toString()}`;
+    if (client?.firstParty) {
+      // Part of this deployment's sign-in: no consent page. Signed out, the login page, then here again.
+      if (actor.credential !== 'session' || !actor.userId) return new Response(null, { status: 303, headers: { Location: `/login?callbackUrl=${encodeURIComponent(retryPath)}`, ...NO_STORE } });
+      if (!actor.sessionId) return page('artifactbin — error', '<h1>Can’t connect</h1><p class="err">Sign in again.</p>', 400);
+      const url = new URL(redirectUri);
+      url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope: scope!, sessionId: actor.sessionId }, codeChallenge));
+      if (state) url.searchParams.set('state', state);
+      return new Response(null, { status: 303, headers: { Location: url.href, ...NO_STORE, 'Referrer-Policy': 'no-referrer' } });
+    }
+    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope ?? '')}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
+    const service = serviceFor(requestedResource);
+    // Only an operator-registered client is named: a dynamic client's name is whatever it registered with.
+    const who = client?.configured ? `<strong>${escapeHtml(client.clientName)}</strong>` : service ? 'An application' : 'Your coding agent';
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
-      <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>
+      ${service ? `<p>${who} wants to act as you at <strong>${escapeHtml(service.id)}</strong> (${escapeHtml(service.origin)}), as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>. It cannot use this site as you.</p>` : client?.configured ? `<p>${who} wants to use this site as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>: read what you may and publish as you.</p>` : `<p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>`}
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
     }
-    const retryPath = `/oauth/authorize?${q.toString()}`;
     return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
     <p>Your coding agent wants to publish artifacts — shareable pages it creates and updates. Log in with your email to connect it; artifacts will belong to your account.</p>
     <form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${escapeHtml(retryPath)}"><button type="submit" aria-label="Log in to connect">Log in with email</button></form>
@@ -190,18 +261,20 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scope !== ARTIFACT_SCOPE) {
+    if (!client || !clientRedirects(client, redirectUri) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scopeFor(requestedResource, scope) !== scope) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
+    // A first-party grant is always bound to the browser session that approved it, also when approved by form.
+    if (client.firstParty && !actor.sessionId) return c.json({ error: 'unauthorized' }, 401);
     const url = new URL(redirectUri);
     if (form.get('action') === 'deny') {
       url.searchParams.set('error','access_denied');
       if (typeof state === 'string' && state) url.searchParams.set('state',state);
       return Response.redirect(url,303);
     }
-    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope }, codeChallenge));
+    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope, ...(client.firstParty ? { sessionId: actor.sessionId } : {}) }, codeChallenge));
     if (typeof state === 'string' && state) url.searchParams.set('state', state);
     return Response.redirect(url, 303);
   });
@@ -249,9 +322,10 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
       if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
       try {
-        // New grants always bind the canonical resource, also when the code was spent through an alias.
-        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: expectedResource, scope: grant.scope });
-        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: expectedResource, scope: grant.scope, accessTokenId: minted.id });
+        // New grants always bind the canonical resource, also when the code was spent through an alias; a service's is its origin.
+        const bound = serviceFor(requestedResource) ? requestedResource : expectedResource;
+        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: bound, scope: grant.scope });
+        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: bound, scope: grant.scope, accessTokenId: minted.id, sessionId: grant.sessionId ?? null });
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
       } catch (error) {
         return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);
@@ -264,7 +338,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (!acceptsResource(c.req.raw, requestedResource)) return oauthError('invalid_target', 'Invalid API resource');
       // A grant issued under a former canonical name (now an alias) refreshes, and moves to the canonical resource.
       try {
-        const result=await o.oauth.rotateAndMint(body.refresh_token,body.client_id,resources(c.req.raw),grant=>mintFor(o,c.req.raw,grant));
+        const result=await o.oauth.rotateAndMint(body.refresh_token,body.client_id,serviceFor(requestedResource)?[requestedResource]:resources(c.req.raw),grant=>mintFor(o,c.req.raw,grant));
         if(!result)return oauthError('invalid_grant','Invalid, expired, revoked, or already-used refresh token');
         const {grant,minted}=result;
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });

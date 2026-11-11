@@ -1,6 +1,8 @@
+import { liveConnectionDetails, liveSchema, testLiveConnection, updateLiveConnection } from '@/lib/live-datasets';
+import { connectionTestRateLimited } from '@/lib/allowances';
 import {documentOwner} from '@/lib/user-pages';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
-import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, ScheduleLimitError, transferArtifact } from '@/lib/artifacts';
+import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
@@ -125,10 +127,10 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  */
 const CONTENT_FIELDS = {
   publicationBundle:z.object({entryPath:z.string(),files:z.array(z.object({path:z.string(),contentType:z.string(),base64:z.string()})).max(99),mappings:z.record(z.string(),z.object({kind:z.enum(['asset','dataset']),id:z.string(),revision:z.string(),state:z.string().regex(/^[a-f0-9]{64}$/).optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional()})).optional()}).optional(),
-  resolverSources:z.record(z.string(),z.string()).optional().describe('Named backend TypeScript files (functions a page calls with fetch(\'/fn/NAME\'); see /llms/functions), one per <link rel="af-resolver" data-af-name>, validated and published atomically with html.'),
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
+  connection: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('A LIVE dataset: one connector configuration, {"connector":"postgres", host, port, database, user, password, tls, ca} (GET /api/connections lists the connectors and their fields). Its secret fields are stored encrypted and never returned; the rows stay in the database. Create only: change it with PATCH /api/artifacts/ID/connection.'),
   columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date', 'timestamp']), choices:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(100).optional() })).optional().describe('dataset: declared column types (win over inference)'),
   viz: z.record(z.string(), z.unknown()).optional().describe('viz tier: a recipe {description, engine, bindings, params?, template} with {{slot}} tokens'),
   image: z.string().optional().describe('image tier: a base64 data: URL (png|jpeg|webp|gif|svg+xml)'),
@@ -164,12 +166,10 @@ const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "fold
 const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
 
 /** The shared write refusals, stated once and spread into each writer's table. */
-const SCHEDULE_LIMIT: OperationError = { status: 400, code: 'schedule_limit', fix: 'the page would give its publishing account more than 20 active scheduled functions: remove a schedule from it or another page that account published first' };
 const CONTENT_ERRORS: OperationError[] = [
   {status:400,code:'native_html_required',fix:'Use the html field with a complete HTML document.'},
   {status:400,code:'invalid_html',fix:'Fix the named HTML identities or declaration problem and resubmit the complete source.'},
   {status:400,code:'portable_copy_unverified',fix:'This HTML is an exported copy edited outside the source it carries: publish the original source, or export the page again.'},
-  {status:400,code:'invalid_backend',fix:'Fix the backend file\'s exports (default functions, roles, secrets, schedule); the detail names the problem (invalid_functions, invalid_roles, invalid_schedule, schedule_limit). HTML and backend versions publish together.'},
   {status:400,code:'invalid_dataset_binding',fix:'Use a valid dataset link that the authenticated publisher can read.'},
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
   { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
@@ -178,7 +178,6 @@ const CONTENT_ERRORS: OperationError[] = [
   { status: 400, code: 'public_not_enabled', fix: 'this deployment has not opened public documents — use "unlisted"' },
   { status: 400, code: 'private_requires_account', fix: 'private needs a logged-in owner — claim the token or use unlisted' },
   INVALID_PARENT,
-  SCHEDULE_LIMIT,
 ];
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
@@ -199,7 +198,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, optional resolverSources, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
+  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
   input: { ...CONTENT_FIELDS, name: z.string().optional().describe("dataset only: the new dataset's GraphQL root name (default from the title, else data), stored as its policy configuration.custom_name and never changeable. ^[A-Za-z][A-Za-z0-9_]*$, at most 64 characters, not reserved (__*, _id, _and, _or, _not, true, false, null) and generating no shared type (Query, String, order_by, dataset_meta…); single-table stored datasets only, not with forked_from"), destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
@@ -425,7 +424,6 @@ const revertArtifactOp: Operation = {
     { status: 409, code: 'version_not_archived', fix: 'that checkpoint was never archived (save-less edits coalesce) — list_versions shows the real ones' },
     { status: 400, code: 'version_required', fix: 'version must be a positive integer from list_versions' },
     POLICY_LOCKED,
-    SCHEDULE_LIMIT,
   ],
   async run(ctx, input) {
     if (typeof input.version !== 'number' || !Number.isInteger(input.version) || input.version < 1) {
@@ -433,9 +431,7 @@ const revertArtifactOp: Operation = {
     }
     const expected = parseExpectedVersion(input);
     if (expected instanceof Response) return fromResponse(expected);
-    let row: Awaited<ReturnType<typeof revertArtifactFor>>;
-    try { row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected); }
-    catch (error) { if (error instanceof ScheduleLimitError) return reply({ error: error.code, details: [error.message] }, error.status); throw error; }
+    const row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected);
     // Distinct from not_found: the artifact is yours, that checkpoint just was
     // never archived (save-less edits coalesce). list_versions has the real ones.
     if (isVersionNotArchived(row)) {
@@ -490,12 +486,9 @@ const restoreArtifactOp: Operation = {
     // the trash is not something this door can act on, and saying which would
     // tell a stranger whether the id exists.
     NOT_FOUND,
-    SCHEDULE_LIMIT,
   ],
   async run(ctx, input) {
-    let restored: Awaited<ReturnType<typeof restoreArtifactFor>>;
-    try { restored = await restoreArtifactFor(ctx.actor, String(input.id)); }
-    catch (error) { if (error instanceof ScheduleLimitError) return reply({ error: error.code, details: [error.message] }, error.status); throw error; }
+    const restored = await restoreArtifactFor(ctx.actor, String(input.id));
     if (!restored) return reply({ error: 'not_found' }, 404);
     return reply({ id: restored.id, url: `${ctx.base}/a/${restored.id}`, parent_id: restored.ancestor_ids.at(-1) ?? null, ancestor_ids: restored.ancestor_ids });
   },
@@ -524,6 +517,38 @@ const getDatasetPolicyTemplatesOp: Operation = {
   description:'Owners and editors: the three starting version 3 policies built for this dataset\'s tables, each {name, ok, policy, readBack, warnings} or {name, ok:false, errors}, plus the current revision. read-only: everyone who reaches the dataset reads; only owner and editors write. own-rows (needs ownerColumn): everyone reads; viewer and signed_in add rows stamped with their user ID in ownerColumn and change or delete only their own. editors-only: no rule; only owner and editors read or write. Save one with set_dataset_policy.',
   input:{id:z.string(),ownerColumn:z.string().optional()}, annotations:{readOnly:true},example:{input:{id:'aB3xK9',ownerColumn:'created_by'}},errors:[NOT_FOUND],
   async run(ctx,input){const r=await datasetPermissionTemplates(ctx.actor,String(input.id),typeof input.ownerColumn==='string'&&input.ownerColumn?input.ownerColumn:undefined);return reply(r.body,r.status);},
+};
+
+/** A live dataset's connection (lib/live-datasets): read, change, test and its tables. */
+const LIVE_SECRET_REQUIRED: OperationError = { status: 400, code: 'secret_required', fix: 'send the secret field (password, credentials) again with the change: a stored secret is never sent to a changed connection' };
+const getLiveConnectionOp: Operation = {
+  name:'get_live_connection',title:'Read a live dataset\'s connection',
+  http:{method:'GET',path:'/api/artifacts/{id}/connection'},
+  description:'Anyone who can open a live dataset (a dataset that is a database connection): {role, connection:{connector,label,fields}, declaredQueryRoles, pages}; its owner and editors also get config (every non-secret field) and secrets (the NAMES of the secret fields stored). A secret value is never answered.',
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
+  async run(ctx,input){const r=await liveConnectionDetails(ctx.actor,String(input.id));return reply(r.body,r.status);},
+};
+const updateLiveConnectionOp: Operation = {
+  name:'update_live_connection',title:'Change a live dataset\'s connection',
+  http:{method:'PATCH',path:'/api/artifacts/{id}/connection'},
+  description:'Owners and editors: change a live dataset\'s connection fields (the connector stays). A secret field left out is kept only while every other field stays as stored; changing host, port, database, user, tls or ca needs the secret again.',
+  input:{id:z.string(),connection:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()]))},annotations:{idempotent:true},example:{input:{id:'aB3xK9',connection:{database:'sales',password:'…'}}},
+  errors:[NOT_FOUND,LIVE_SECRET_REQUIRED,{status:403,code:'permission_denied',fix:'ask the dataset\'s owner or an editor'}],
+  async run(ctx,input){const r=await updateLiveConnection(ctx.actor,String(input.id),input.connection);return reply(r.body,r.status);},
+};
+const testLiveConnectionOp: Operation = {
+  name:'test_live_connection',title:'Test a live dataset\'s connection',
+  http:{method:'POST',path:'/api/artifacts/{id}/connection/test'},
+  description:'Owners and editors: open a session on the live dataset\'s database and run SELECT 1 as you: {ok, latencyMs} or {ok:false, error:{code,message}}. Counts against your hourly connection-test allowance.',
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND,{status:429,code:'rate_limited',fix:'wait for the hourly allowance'}],
+  async run(ctx,input){if(!ctx.actor.userId)return reply({error:'unauthorized',message:'sign in to test a connection'},401);if(connectionTestRateLimited(ctx.actor.userId))return reply({error:'rate_limited',message:'Too many connection tests this hour; try again later.'},429);const r=await testLiveConnection(ctx.actor,String(input.id));return reply(r.body,r.status);},
+};
+const getLiveSchemaOp: Operation = {
+  name:'get_live_schema',title:'List a live dataset\'s tables',
+  http:{method:'GET',path:'/api/artifacts/{id}/connection/schema'},
+  description:'Owners and editors: the tables and views (namespace, name, kind, columns with name and type) the live dataset\'s account can read, from the database itself.',
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
+  async run(ctx,input){const r=await liveSchema(ctx.actor,String(input.id));return reply(r.body,r.status);},
 };
 
 const mutateDatasetOp: Operation = {
@@ -793,6 +818,6 @@ const queryDatasetGraphqlOp:Operation={
 export const OPERATIONS: Operation[] = [
   ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, getLiveConnectionOp, updateLiveConnectionOp, testLiveConnectionOp, getLiveSchemaOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp, ...REGION_OPERATIONS,
 ];

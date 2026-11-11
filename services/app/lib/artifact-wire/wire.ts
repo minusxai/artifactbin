@@ -1,7 +1,7 @@
 import {userPageUrl,userPageUrlForOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {monitoringGuidance} from './monitoring-guidance';
 import {parseSharingEntries} from '@artifactbin/utils';
-import {catalogOf, datasetCreateFields, loadDatasetRows} from '@/lib/datasets';
+import {catalogOf, datasetCreateFields, liveConnectionOf, loadDatasetRows} from '@/lib/datasets';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
  * write body is validated, and the replace pipeline both write paths run.
@@ -167,7 +167,8 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
           // The write ACL, beside the read one — an agent has to know before
           // it publishes a <Mutation> naming this dataset.
           access: row.access,
-          ...(catalogOf(row)?{meta:{catalog:catalogOf(row)}}:{}),
+          // A live dataset shows its connection's summary (never a secret) and has no rows here (lib/live-datasets).
+          ...(liveConnectionOf(meta)?{meta:{connection:liveConnectionOf(meta)}}:catalogOf(row)?{meta:{catalog:catalogOf(row)}}:{}),
           columns: (meta as { columns?: unknown }).columns ?? [],
           rowCount: (meta as { rowCount?: unknown }).rowCount ?? 0,
           ...(meta as { totalRows?: number; truncated?: boolean }).truncated
@@ -175,7 +176,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
           // The rows themselves, from wherever they live (the object store, a
           // catalog). The editor resolves refs client-side through this
           // endpoint, so a chart in edit mode has nowhere else to read them.
-          rows: await loadDatasetRows(row),
+          rows: liveConnectionOf(meta) ? [] : await loadDatasetRows(row),
         }
       : {}),
     ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(source ?? '') } : {}),

@@ -51,6 +51,9 @@ export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
  * only from its own frame's window and origin, and the page (solid/document/create-framed-story) puts exactly
  * those `$` pairs in its own address, so the address bar, a copied link and a reload carry the selection.
  * Unkeyed on purpose: the author's script can move every value anyway, so it gains nothing by forging one.
+ * `push: true` asks for a new history entry instead of a replaced one (lib/html-runtime/page-route `route.set`).
+ * The other way, the app page → its frame, the same `{ type, search }` says what its address holds after the reader's
+ * Back or Forward, and the page's route follows it.
  */
 export const STORY_URL_VALUES_MESSAGE = 'mx:url-values';
 
@@ -114,6 +117,13 @@ export const STORY_ANNOTATIONS_EVENT = 'annotations';
  * ──────────────────────────────────────────────────────────────────────────── */
 export const STORY_FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';
 
+/** PAGE → FRAME: a newer published version (lib/html-runtime/live-morph draws it); the frame answers with one of the three below. */
+export const HTML_VERSION_MESSAGE = 'mx:version';
+export const HTML_VERSION_APPLIED = 'mx:version-applied';
+export const HTML_VERSION_REFUSED = 'mx:version-refused';
+/** The frame could not draw the version in place and is rebuilding its document from it, the reader's place kept. */
+export const HTML_VERSION_REBUILT = 'mx:version-rebuilt';
+
 /** What the page tells the frame when it attaches: the controller's inputs (createIslandController). */
 export interface FrameBridgeAttach {
   kind: 'attach';
@@ -163,8 +173,6 @@ export type FrameBridgeFramePayload =
   /** One of the controller's app requests (IslandControllerInput.appFetch), for the page to make with its session. */
   | { kind: 'upload-file'; call:number; datasetId:string; filename:string; contentType:string; requestId:string; bytes:Uint8Array }
   | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
-  /** The frame no longer wants that `fetch`'s answer (a page function call's AbortSignal): the page aborts its request. */
-  | { kind: 'fetch-cancel'; call: number }
   /** The document scrolled: geometry the page placed over it moves. */
   | { kind: 'scroll'; scrollX: number; scrollY: number }
   | { kind: 'error'; message: string }

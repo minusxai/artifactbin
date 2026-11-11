@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { expect, it } from 'vitest';
 import { DROPPED_TABLES, SCHEMA_STATEMENTS } from '../schema';
 
-it('drops the retired resolver store, the connected-dataset secrets and cache, the api column and the other retired tables from a database that still has them', async () => {
+it('drops the retired resolver store, the connected-dataset secrets and cache and the other retired tables, and keeps the removed page functions\' data unread and in place', async () => {
   const db = new PGlite();
   try {
     await db.exec(`CREATE TABLE html_backend_stores (backend_id TEXT, key TEXT, value JSONB);
@@ -26,7 +26,8 @@ it('drops the retired resolver store, the connected-dataset secrets and cache, t
       expect(present).toContain('html_backend_versions');
       expect(DROPPED_TABLES).toEqual(expect.arrayContaining(['dataset_secrets', 'dataset_result_cache']));
       for (const name of DROPPED_TABLES) expect(present).not.toContain(name);
-      expect(await columns()).not.toContain('api');
+      // The removed page functions' modules stay as they were, for their owners' export: nothing creates, reads or drops them.
+      expect(await columns()).toEqual(expect.arrayContaining(['backend_id', 'version', 'api']));
     }
   } finally { await db.close(); }
 });

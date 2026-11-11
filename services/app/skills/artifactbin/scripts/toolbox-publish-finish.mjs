@@ -30,8 +30,7 @@ if(!saved.source)throw new ToolError('source_snapshot_missing',
    saved.source.sha256;
   written=await saveSource({record:receipt,server:saved.server,output:inPlace?saved.source.file:
    saved.source.output,entryPath:saved.source.entryPath,receipts:receipt.dependencyReceipts??[],
-   localReferences:true,replace:inPlace,backendLinks:saved.body.html===undefined?[]:(
-   await platform()).previewBackendLinks(saved.body.html)});
+   localReferences:true,replace:inPlace});
  }
 const result={id:receipt.id,url:receipt.url,...(receipt.user_page_url?{user_page_url:
   receipt.user_page_url}:{}),version:receipt.version,journal,...(written.source?{source:

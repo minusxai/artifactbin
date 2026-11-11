@@ -2,7 +2,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
 import { requestOrSessionActor } from '@/lib/authentication';
 import {readJson,json} from '@/lib/http';
-import {catalogOf, datasetResponse, executeCatalog, DatasetError} from '@/lib/datasets';
+import {LIVE_DATASET_REFUSAL, liveConnectionOf, catalogOf, datasetResponse, executeCatalog, DatasetError} from '@/lib/datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '@/lib/dataset-permissions';
 const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
 /**
@@ -12,6 +12,7 @@ const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
  */
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
  const {id}=await ctx.params;const actor=await requestOrSessionActor(request);const row=await getArtifactById(id);
+ if(row?.format==='dataset'&&liveConnectionOf(row.meta))return json({error:'live_dataset',message:LIVE_DATASET_REFUSAL},400);
  const decision=row?.format==='dataset'?await datasetReadAccess(row,actor):null;
  if(!row||!decision?.allowed)return json({error:'not_found'},404);
  const body=await readJson(request);

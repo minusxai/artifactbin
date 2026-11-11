@@ -14,6 +14,8 @@ export interface StoredPolicyInput {
   policy: unknown;
   /** The dataset's catalog tables (none: a flat dataset's one `public.rows`): what the default covers. */
   tables: readonly DatasetTableName[];
+  /** A live dataset (lib/live-datasets): with no policy stored, no rule role may run anything (owner and editors only). */
+  live?: boolean;
 }
 export interface StoredPolicy {
   /** `none`: no policy is stored and `policy` is the default. */
@@ -27,6 +29,7 @@ const versionOf = (policy: unknown) =>
 /** The stored policy as v3 permissions. Throws for anything that is not null or a valid version 3 policy. */
 export function storedPolicy(input: StoredPolicyInput): StoredPolicy {
   if (input.policy === null || input.policy === undefined) {
+    if (input.live) return { source: 'none', policy: { version: 3, tables: input.tables.map((table) => ({ table: { schema: table.schema, name: table.name }, select_permissions: [] })) } };
     const tables = input.tables.length ? input.tables : [{ schema: 'public', name: 'rows' }];
     return {
       source: 'none',

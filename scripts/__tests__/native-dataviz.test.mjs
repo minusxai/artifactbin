@@ -6,7 +6,7 @@ it('uses both shipped reference grammars and separate exact registered ESM impor
  const reference=await readFile(new URL('../../services/app/skills/artifactbin/references/dataviz.md',import.meta.url),'utf8');
  const examples=datavizExamples(reference),source=nativeDatavizFixture(examples);
  expect(examples.lite.mark).toBe('bar');expect(examples.vega.data[0].name).toBe('rows');
- expect(source).toContain('/libraries/vega-6.3.1/index.js');expect(source).toContain('/libraries/vega-lite-6.4.3/index.js');
+ expect(source).toContain('/af/lib/vega-6.3.1/index.js');expect(source).toContain('/af/lib/vega-lite-6.4.3/index.js');
  expect(source).toContain('expressionInterpreter');expect(source).toContain('Content-Security-Policy');expect(source).not.toContain("'unsafe-eval'");expect(source).toContain('Completed tasks by category');
  expect(()=>datavizExamples('```json\n{}\n```')).toThrow('two');
 });

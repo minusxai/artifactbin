@@ -53,16 +53,17 @@ if(bytes.length>4_000_000||bytes.subarray(0,4).toString('latin1')!=='wOF2')throw
  };
 }
 /**
- * The platform's boundary files, /geojson/<name>.json, which a page fetches from its own origin: a
- * source checkout reads the app's public/geojson; otherwise each is fetched once from the selected
- * server and served from this origin, so the private CSP keeps connect-src 'self'.
+ * The platform's boundary files, /af/geojson/<name>.json, which a page fetches from its own
+ * origin: a source checkout reads the app's public/geojson; otherwise each is fetched once from
+ * the selected server and served from this origin, so the private CSP keeps connect-src 'self'.
  */
-const BOUNDARY=/^\/geojson\/([a-z0-9-]+)\.json$/;
+const BOUNDARY=/^\/af\/geojson\/([a-z0-9-]+)\.json$/;
 export function platformBoundaries(origin){
  const fetched=new Map();
  return async pathname=>{
   const match=BOUNDARY.exec(pathname);if(!match)return null;
-  const local=await readFile(fileURLToPath(new URL(`../../../public${pathname}`,import.meta.url)))
+  const local=await readFile(fileURLToPath(new URL(`../../../public/geojson/${match[1]}.json`,
+   import.meta.url)))
    .catch(error=>{if(error.code==='ENOENT'||error.code==='ENOTDIR')return null;throw error;});
   if(local||!origin)return local;
   if(!fetched.has(pathname))fetched.set(pathname,(async()=>{

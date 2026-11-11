@@ -38,6 +38,15 @@ function sweepExpiredBuckets(now: number): void {
   }
 }
 
+/**
+ * "Test connection" on the settings page makes THIS SERVER open a database session: a person gets
+ * CONNECTION_TESTS_PER_HOUR attempts an hour, in the same buckets.
+ */
+const CONNECTION_TESTS_PER_HOUR = 30;
+export function connectionTestRateLimited(userId: string, now = Date.now()): boolean {
+  return hourlyAttemptsExhausted(`connection-test:${userId}`, CONNECTION_TESTS_PER_HOUR, now);
+}
+
 /** Number of live buckets — a test seam for the sweep. */
 export function webIngestBucketCount(): number { return webIngestTimes.size; }
 

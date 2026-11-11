@@ -1,43 +1,34 @@
 /**
- * THE AUTHORIZATION LOCK ORDER. A write that decides access inside its transaction locks the
- * artifacts it goes through first, in ONE global order, and then decides; every fact the decision reads (a share,
- * a group share, a membership, an account) locks exactly the rows it reads, FOR SHARE, as it reads them
- * (./access-facts `transactionAccessFacts`). So a revocation of anything the decision used (an UPDATE or DELETE of
- * one of those rows) waits for the write's commit, and one that committed first is what the decision reads
- * (Postgres READ COMMITTED takes each later statement's snapshot after the earlier locks are granted).
+ * THE AUTHORIZATION LOCK ORDER. A write that decides access inside its transaction locks the artifacts it goes
+ * through first, in ONE global order, and then decides; every APP fact the decision reads (a named share, a group
+ * share) locks exactly the rows it reads, FOR SHARE, as it reads them (./access-facts `transactionAccessFacts`). So a
+ * revocation of one of those rows waits for the write's commit, and one that committed first is what the decision
+ * reads (Postgres READ COMMITTED takes each later statement's snapshot after the earlier locks are granted).
  *
- * INSERTS CAN NARROW TOO. Dataset rules match exactly one role, so a NEW row can take access away: a membership in a
- * group with a viewer share, or a viewer named share, turns `signed_in` (allowed) into `viewer` (denied). An absent
- * row cannot be locked, so each such insert is serialized through the parent row its writer locks first:
- *  - named shares, group shares, link role, visibility, owning group, policy: the artifact's own row, which this
- *    write holds (step 1 or 2) — every writer of them locks the artifact FOR UPDATE first;
- *  - memberships: the group's row, which the decision takes FOR SHARE for every group that could change the role
- *    (the artifact's owning group and every group its group shares name, joined or not) — every membership writer
- *    locks the group FOR UPDATE first.
- * The remaining facts are existing rows (the accounts' kinds), locked as they are read. Editor-group trust only widens
- * (it admits `backend_only` rules, it never changes the role). Facts the decision did not read are not locked.
+ * INSERTS CAN NARROW TOO. Dataset rules match exactly one role, so a NEW row can take access away (a viewer named
+ * share turns `signed_in` into `viewer`). Named shares, group shares, link role, visibility, owning group and policy
+ * are written only while holding the artifact's own row, which this write holds (step 1 or 2).
+ *
+ * IDENTITY IS NOT LOCKED. Accounts, groups, memberships and the tree are the identity module's rows
+ * (contracts `IDENTITY_OWNED_TABLES`; the app role holds SELECT only on them in a split-role database). A decision
+ * reads them at decision time inside its own transaction and takes no lock on them, so it never waits for, or holds
+ * up, an identity write: a membership granted or revoked, a subtree moved, a group deleted takes effect from the next
+ * decision. The hierarchy revision (`group_hierarchy`) is a counter readers of the tree may watch, not a lock.
  *
  * The order, on the normal path:
  *
  *   1. documents: the page a write goes through, and the documents its user columns' memberOf names, by `lockOrder`
  *   2. datasets: the dataset written (FOR UPDATE) and those its values were read from (FOR SHARE), by `lockOrder`
- *   3. facts, as the decision reads them: shares, group shares, groups, memberships, accounts
- *
- * Two tails come after the artifacts too: a transaction that activates scheduled functions locks each affected
- * publisher's `users` row FOR UPDATE, by `lockOrder`, as a step-3 fact (lib/artifacts schedule-capacity.ts); a page
- * function call's write locks its schedule row FOR SHARE last (lib/function-schedules claims.ts), which is neither an
- * artifact nor an access fact.
+ *   3. app facts, as the decision reads them: named shares, group shares
  *
  * Writers that lock several artifacts take them by `lockOrder` too (publishing a page locks it, then its linked
  * datasets). SQL that locks artifacts in one statement orders `id COLLATE "C"`, the same code-unit order.
  *
- * THE SAFETY NET. Not every writer can follow this order (a group's deletion locks the group before the shares
- * that name it; erasing a test user locks its account first; a group-owned publish locks the group before the
- * page), and facts are read in the decision's order. When two writers meet in opposite orders, Postgres aborts one
- * with 40P01: nothing of it commits, so no write ever lands under stale authority. Guarded writes and those competing
- * writers run their whole transaction under lib/platform `retryOnConflict` (bounded, jittered), and answer a
- * retryable conflict when it is exhausted. Correctness rests on locking what is read before deciding; the order only
- * keeps the retries rare.
+ * THE SAFETY NET. Not every writer can follow this order (erasing a test user takes its artifacts by owner). When two
+ * writers meet in opposite orders, Postgres aborts one with 40P01: nothing of it commits, so no write ever lands under
+ * stale authority. Guarded writes and those competing writers run their whole transaction under lib/platform
+ * `retryOnConflict` (bounded, jittered), and answer a retryable conflict when it is exhausted. Correctness rests on
+ * locking what is read before deciding; the order only keeps the retries rare.
  *
  * Pinned by services/app/__tests__/page-sql-door-locks.test.ts ("lock order") and the two-connection Postgres
  * regression services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts.
@@ -58,7 +49,7 @@ export interface AuthorizationLocks {
   read?: readonly string[];
 }
 
-/** Steps 1–2: the artifacts, in the global order. Facts lock themselves as the decision reads them. */
+/** Steps 1–2: the artifacts, in the global order. App facts lock themselves as the decision reads them. */
 export async function lockAuthorization(tx: Queryable, locks: AuthorizationLocks): Promise<void> {
   const write = locks.write ?? null;
   const documents = [...new Set([...(locks.page ? [locks.page] : []), ...(locks.documents ?? [])])].filter((id) => id !== write).sort(lockOrder);

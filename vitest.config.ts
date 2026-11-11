@@ -41,12 +41,12 @@ const leaking = (include: string[], exclude: string[]) => globSync(include, { cw
   .map((file) => file.split(path.sep).join('/'));
 const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
-const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
+const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
- * A resolver's `caps.db` against a disposable `postgres:17-alpine` and a `mysql:8`, each with TLS, and the
- * authorization lock order across two real Postgres connections: `integration` only, as the Docker proofs are.
+ * The authorization lock order across two real Postgres connections and the split-role grants: `integration` only,
+ * as the Docker proofs are.
  */
-const REAL_DATABASE_RESOLVER_TESTS = ['services/app/lib/page-operations/__tests__/database-postgres.test.ts', 'services/app/lib/page-operations/__tests__/database-mysql.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts'];
+const REAL_DATABASE_TESTS = ['services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
@@ -95,13 +95,17 @@ export default defineConfig({
           name: 'api',
           environment: 'node',
           // One module graph per worker, not per file: re-importing the app for each of ~260 files
-          // was a third of every api shard. The harness gives each file a fresh database (restored
-          // from the worker's schema image, test/setup/vitest.setup.ts) and resets the rate limiter, so files stay
+          // was a third of every api shard. The harness starts each file on a database in a fresh one's state
+          // (recycled, or restored from the worker's schema image) and resets the rate limiter, so files stay
           // independent; a file that leaves process-level state behind must clean it up itself.
           isolate: false,
           include: API_INCLUDE,
           exclude: [...API_EXCLUDE, ...API_MOCKING],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
+          // And one database per worker: the harness recycles it between files and opens a fresh one after any file
+          // that changed what a wipe cannot undo (services/app/__tests__/harness.ts). Both keys: a project's
+          // `provide` is its own.
+          provide: { schemaImageDir: schemaImageDir(import.meta.dirname), harnessReusesDatabase: true },
         },
       },
       {
@@ -129,7 +133,7 @@ export default defineConfig({
             '**/*.ui.test.{ts,tsx}',
             ...CHROMIUM_TESTS,
             'scripts/__tests__/reserved-ids-proof.test.mjs',
-            ...REAL_DATABASE_RESOLVER_TESTS,
+            ...REAL_DATABASE_TESTS,
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
             ...PROPERTY_SOAK_TESTS,
           ],
@@ -157,8 +161,8 @@ export default defineConfig({
             // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
             // a disposable Postgres (a `skipIf` on the image).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
-            // caps.db end to end: a resolver through the tunnel to a disposable TLS Postgres and MySQL (a `skipIf` on each image).
-            ...REAL_DATABASE_RESOLVER_TESTS,
+            // The connectors against a disposable TLS Postgres and MySQL, and the lock order on real Postgres (a `skipIf` on each image).
+            ...REAL_DATABASE_TESTS,
             ...SERVER_BOOT_TESTS,
             ...PROPERTY_SOAK_TESTS,
           ],

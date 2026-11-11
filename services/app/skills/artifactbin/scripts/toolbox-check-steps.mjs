@@ -135,7 +135,7 @@ export async function runSteps(page, hosted, task, ready, evidence) {
     evidence.stepsMs = Date.now() - started;
   } catch (error) {
     evidence.stepsMs = Date.now() - started;
-    // The step that did not finish (null outside a step): check may excuse it (an unset secret).
+    // The step that did not finish (null outside a step).
     evidence.failedStep = current?.label ?? null;
     const deadline = /^Task deadline exceeded/.test(error.message);
     expired = true;

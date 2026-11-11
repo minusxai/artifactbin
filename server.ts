@@ -1,6 +1,8 @@
 import {isUserPagesHost,handleFromUserPagesHost} from './services/app/lib/user-pages';
 import {userHostIngress,userHostStaticPath,USER_HOST_CREDENTIAL_HEADERS} from './services/app/server/user-host';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from './services/app/lib/deployment';
+import {closeDefaultConnection,validateDefaultConnection} from './services/app/lib/connections';
+import {trustedForwarded} from './services/app/lib/http';
 /**
  * OSS single-process host: shared authentication wraps the app. SQL, browser
  * and events run locally unless their service URLs select HTTP implementations.
@@ -68,11 +70,13 @@ async function main(): Promise<void> {
   const { getDb } = await import('@/lib/platform');
   const { canAuthenticateUser } = await import('@/lib/user-kinds');
   const { createAppServer } = await import('@/server/app');
+  // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot.
+  (await import('@/lib/skills')).skillExtras();
 
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
-    RUNNER_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
+    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
   } = await import('@/lib/platform');
 
   /*
@@ -125,18 +129,6 @@ async function main(): Promise<void> {
       console.error('[events] schema setup failed:', error);
     }
   }
-  let closeRunner:()=>Promise<void>=async()=>{};
-  if(!RUNNER_SERVICE_URL){
-    // Native worker/compiler loaded only by the local composition, never a remote app image.
-    const {createRunner}=await import('@artifactbin/runner/local');
-    const {runnerConfig}=await import('./services/runner/src/config');
-    const {localPageBackendCapability}=await import('@/lib/page-operations');
-    const {resolverDatasets}=await import('@/lib/graphql-compat');
-    const config=runnerConfig(env);for(const name of config.names)sessionEnvNames.add(name);
-    const runner=await createRunner({db:queryable,dockerImage:config.image,maxConcurrent:config.concurrent,database:{allowLoopback:config.databaseLoopback},capabilities:async(ctx,operation,args)=>{
-      return localPageBackendCapability(ctx.request,operation,args,ctx.signal,resolverDatasets);
-    }});setServices({runner});closeRunner=()=>runner.close();
-  }
   /*
    * ONE `events` FOR THE WHOLE PROCESS. The authentication parts and Better Auth's
    * hooks say their moments into the SAME writer the app emits through — the
@@ -176,7 +168,9 @@ async function main(): Promise<void> {
   const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
   await ensureAuthSchema(queryable, authSchema);
   if (appOnly) await ensureHumanAuthSchema({ schema: authSchema, ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }) });
-  const reader = createBearerReader({ db: queryable, authSchema, appSchema: readEnv(env, 'APP__SCHEMA'), admitBearer: token => canAuthenticateUser(token.userId) });
+  const reader = createBearerReader({ db: queryable, authSchema, admitBearer: token => canAuthenticateUser(token.userId) });
+  // DATASETS__DEFAULT_CONNECTION: a bad value stops the start here, naming the setting (never its value).
+  validateDefaultConnection();
   if (!appOnly) {
     validateDeploymentConfiguration();
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
@@ -204,6 +198,10 @@ async function main(): Promise<void> {
 
 
   }
+
+  // The identity read surface again, now that Better Auth's tables exist (its `sessions` view), when this process
+  // hosts identity (lib/platform identity-host; its database open made the rest).
+  await (await import('@/lib/platform')).ensureLocalIdentity(db);
 
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.
@@ -266,8 +264,9 @@ async function main(): Promise<void> {
    */
   const server = http.createServer(withRequestLog(
     vite ? (req, res) => {
-      const addressed=req.headers['x-forwarded-host']??req.headers.host??new URL(baseURL).host;
-      const host=(Array.isArray(addressed)?addressed[0]!:addressed).split(',')[0]!.trim();
+      // The addressed host as the app reads it (lib/http trustedForwarded): a forwarded host only from a trusted hop.
+      const header=(name:string)=>{const value=req.headers[name];return Array.isArray(value)?value.join(','):value??null;};
+      const host=trustedForwarded({get:header},'x-forwarded-host')??req.headers.host??new URL(baseURL).host;
       if(isUserPagesHost(host,USER_PAGES_HOST)){
         const pathname=new URL(req.url??'/',baseURL).pathname;
         // Vite normally fronts authentication. Owner hosts must never reach its
@@ -290,11 +289,11 @@ async function main(): Promise<void> {
   });
   const { installShutdown } = await import('@/lib/runtime');
   installShutdown({ steps: [
-    closeRunner,
     stopBackgroundTasks,
     () => services().events.close?.() ?? Promise.resolve(),
     () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())),
     async () => { await vite?.close(); },
+    closeDefaultConnection,
     () => db.close(),
   ] });
 

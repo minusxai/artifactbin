@@ -27,6 +27,6 @@ export async function POST(request: Request) {
   if (!email) return json({ error: 'email_auth_required' }, 400);
   const owner = await getUserByEmail(email);
   if (!owner || owner.kind !== 'account') return json({ error: 'account_not_found' }, 404);
-  const minted = await mintToken(name ?? 'admin', owner.id, undefined, { expiresInMs });
+  const minted = await mintToken(name ?? 'admin', owner.id, { expiresInMs });
   return json({ id: minted.id, name, token: minted.token, expiresAt: minted.expiresAt }, 201);
 }

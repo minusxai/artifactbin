@@ -2,8 +2,7 @@
  * The installed starters (skills/artifactbin/examples/*.html) run as pages: each imports only hosted `@afbin/<name>`
  * modules, and the data-driven ones, filled with the sample CSV (examples/gen-deliveries.mjs) through a stubbed
  * `@afbin/apollo` `sql` tag whose statements run on the real SQLite engine, build their queries from their DATA
- * block, take every number from SQL (never summing rows in script), call their backend functions with
- * fetch('/fn/NAME') (stubbed), hand
+ * block, take every number from SQL (never summing rows in script), hand
  * Vega-Lite a spec naming those values with titled tooltips, and pass their own copy-unchanged steps files. jsdom runs
  * the page scripts with the hosted modules stubbed; every spec a page hands Vega-Lite is then compiled and rendered
  * headless by the pinned vega and vega-lite packages, as the page's no-eval interpreter would.
@@ -42,15 +41,14 @@ const ROWS = LINES.map((line, index) => Object.fromEntries([['_id', 'r' + index]
   distance_km: number; minutes: number; amount: number}>;
 
 interface Page {dom: JSDOM; queries: string[]; variables: Array<Record<string, any>>; specs: Array<Record<string, any>>;
-  writes: Array<{text: string; params: Record<string, unknown>}>; calls: Array<{name: string; method: string; input: Record<string, unknown>}>;
-  watches: Array<() => Promise<unknown>>; error?: unknown; change?: (names: string[]) => void; settled: Array<Promise<unknown>>;
+  writes: Array<{text: string; params: Record<string, unknown>}>;
+  watches: Array<() => Promise<unknown>>; error?: unknown; signIn?: (state: SignIn) => void; settled: Array<Promise<unknown>>;
   clicks: Array<(event: unknown, item: unknown) => void>; decks: Array<Record<string, any>>; observers: Array<() => void>}
 /** What the stubbed `sql` answers for one statement (its text with `$p0`… for each `${…}`, and those values): a read's
  *  rows, a write's {affected, returning}, or a throw (the page shows its message). */
 type Answer = (text: string, params: Record<string, unknown>) => unknown;
-/** What the stubbed fetch('/fn/NAME') answers: the function's JSON and a status (200 unless given). */
-type Fn = (name: string, input: Record<string, unknown>, method: string) => {status?: number; body: unknown} | Promise<{status?: number; body: unknown}>;
-const NO_FUNCTIONS: Fn = name => ({status: 404, body: {error: 'unknown_function', message: 'This page has no function ' + name}});
+/** What the stubbed `watchUploadContext` says about the reader: the page's frame's sign-in hint. */
+type SignIn = 'signed-in' | 'signed-out' | 'read-only';
 
 /** A page's own local module scripts (`<script type="module" src="./x.mjs">`) inlined, as the browser runs them. */
 const inline = (html: string) => html.replace(/<script type="module" src="\.\/([\w-]+\.mjs)"><\/script>/g,
@@ -60,7 +58,7 @@ const source = (name: string) => inline(read(name));
 
 /**
  * Loads a starter in jsdom: the module scripts (local ones inlined) run in order with `@afbin/*` imports replaced by
- * stubs. `answer` is what the stubbed `sql` returns for a statement and `fn` what a function call answers; each Vega view draws one bar path per
+ * stubs. `answer` is what the stubbed `sql` returns for a statement and `signedIn` the reader's sign-in hint; each Vega view draws one bar path per
  * value it is given and keeps its click listener; a deck.gl map draws a canvas and keeps its props.
  */
 type View = {width: number; height: number; longitude: number; latitude: number; zoom: number};
@@ -69,11 +67,11 @@ const project = ({width, height, longitude, latitude, zoom}: View, [lon, lat]: n
   const k = 512 * 2 ** zoom / 360;
   return [width / 2 + (lon! - longitude) * k, height / 2 - (lat! - latitude) * k];
 };
-async function load(html: string, answer: Answer, fn: Fn = NO_FUNCTIONS): Promise<Page> {
+async function load(html: string, answer: Answer, signedIn: SignIn = 'signed-out'): Promise<Page> {
   html = inline(html);
   const scripts = [...html.matchAll(/<script type="module"[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]!);
   const dom = new JSDOM(html.replace(/<script type="module"[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only', url: 'https://page.test/'});
-  const page: Page = {dom, queries: [], variables: [], specs: [], writes: [], calls: [], watches: [], settled: [], clicks: [], decks: [], observers: []};
+  const page: Page = {dom, queries: [], variables: [], specs: [], writes: [], watches: [], settled: [], clicks: [], decks: [], observers: []};
   // The sql tag as the runtime builds it: every value bound as $p0, $p1…; a statement runs each time it is awaited.
   const run = async (text: string, params: Record<string, unknown>) => {
     page.queries.push(text);page.variables.push(params);
@@ -97,20 +95,17 @@ async function load(html: string, answer: Answer, fn: Fn = NO_FUNCTIONS): Promis
     return {getState: () => doc, subscribe: (l: (s: unknown) => void) => { listeners.add(l); return () => listeners.delete(l); },
       setState: async (partial: unknown) => { doc = {...doc, ...(typeof partial === 'function' ? partial(doc) : partial)}; listeners.forEach(l => l(doc)); }}; };
   const stateBlock = dom.window.document.querySelector('[data-af="state"]')?.textContent;
-  dom.window.fetch = (async (input: string, init?: {method?: string; body?: string}) => {
-    const url = new URL(String(input), dom.window.location.href), method = init?.method ?? 'GET';
-    if (!url.pathname.startsWith('/fn/')) throw new TypeError('Failed to fetch');
-    const name = url.pathname.slice(4), input2 = method === 'POST' ? JSON.parse(init?.body || '{}') : Object.fromEntries(url.searchParams);
-    page.calls.push({name, method, input: input2});
-    const {status = 200, body} = await fn(name, input2, method);
-    return new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json'}});
-  }) as never;
+  // No page code reaches the network here: a starter reads and writes only through `sql`.
+  dom.window.fetch = (async () => { throw new TypeError('Failed to fetch'); }) as never;
   // jsdom has no canvas (the page then reads tokens as grey) and no ResizeObserver.
   dom.window.HTMLCanvasElement.prototype.getContext = (() => null) as never;
   class Layer { constructor(public props: Record<string, any>) {} }
   Object.assign(dom.window, {IntersectionObserver: class { observe() {} disconnect() {} },
     ResizeObserver: class { constructor(callback: () => void) { page.observers.push(callback); } observe() {} disconnect() {} }, stubs: {
-    apollo: {sql, onResolverChange: (listener: (names: string[]) => void) => { page.change = listener; return {unsubscribe() {}}; }},
+    apollo: {sql, onResolverChange: () => ({unsubscribe() {}}),
+      // As the runtime's: the current hint at once, then each change.
+      watchUploadContext: (listener: (context: {state: SignIn; scope: string}) => void) => {
+        page.signIn = state => listener({state, scope: state}); listener({state: signedIn, scope: signedIn}); return {unsubscribe() {}}; }},
     state: store(stateBlock ? JSON.parse(stateBlock) : {}),
     compile: (spec: Record<string, unknown>) => { page.specs.push(spec); return {spec}; },
     deck: {Deck: class { constructor(public props: Record<string, any>) { page.decks.push(props); props.parent.append(dom.window.document.createElement('canvas')); } finalize() {} },
@@ -133,7 +128,7 @@ async function load(html: string, answer: Answer, fn: Fn = NO_FUNCTIONS): Promis
   try {
     for (const script of scripts) {
       const body = script.replace(/^import .*$/gm, '').replaceAll("import('@afbin/deck-gl')", 'Promise.resolve(stubs.deck)');
-      await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile,collab,state}=stubs,{sql,onResolverChange}=stubs.apollo;${body}})()`);
+      await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile,collab,state}=stubs,{sql,onResolverChange,watchUploadContext}=stubs.apollo;${body}})()`);
     }
     await settle(page);
   } catch (error) {
@@ -198,8 +193,7 @@ const picked = (page: Page, n: number) => new Set(page.variables.slice(-n).flatM
 const fmt = (n: number, digits = 0) => n.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits});
 
 it('imports only hosted @afbin modules from every starter', () => {
-  for (const name of ['csv-dashboard.html', 'deck.html', 'report.html', 'tracker.html',
-    'api-dashboard.html']) {
+  for (const name of ['csv-dashboard.html', 'deck.html', 'report.html', 'tracker.html']) {
     const names = [...source(name).matchAll(/(?:from|import)\s*\(?\s*['"]@afbin\/([a-z0-9-]+)['"]/g)].map(m => m[1]!);
     expect(names.length, name).toBeGreaterThan(0);
     for (const imported of names) expect(HOSTED.has(imported), `${name} imports @afbin/${imported}`).toBe(true);
@@ -485,30 +479,26 @@ it('hands Vega-Lite specs that the pinned libraries compile and render with mark
 const tracker = async (preset: 'tasks' | 'list') =>
   fill((await trackerFiles(trackerFeatures({preset}), {preset}))['index.html']!);
 type Entry = {id: string; name: string; grp: string; note: string; by: string | null};
-type Me = {signedIn: boolean; id: string | null; role: string};
-const READER: Me = {signedIn: true, id: 'usr_me', role: 'signed_in'}, GUEST: Me = {signedIn: false, id: null, role: 'anonymous'};
-/** The tracker's statements on the SQL engine over the dataset `entries` (its group sizes and total counted there),
- *  and its functions: `me` (who reads), `add` and `save` (limits). */
+/** The tracker's statements on the SQL engine over the dataset `entries` (its group sizes and total counted there). */
 const trackerAnswer = (entries: Entry[]): Answer => (text, params) => {
   if (/^\s*(?:insert|update|delete)/i.test(text)) return {affected: 1, returning: []};
   const rows = entries.map(({id, name, grp, note, by}) => ({_id: id, name, grp, note, created_by: by, description: null}));
   const columns = ['_id', 'name', 'grp', 'note', 'created_by', 'description'].map(name => ({name, type: 'string' as const}));
   return runSql(text, params, {entries: {columns, rows}});
 };
-const trackerFns = (me: Me): Fn => name => name === 'me' ? {body: me} : name === 'add' || name === 'save'
-  ? {body: {affected: 1, returning: [{_id: 'new'}]}} : NO_FUNCTIONS(name, {}, 'GET');
 
-it('shows the tracker\'s add form, and Edit and Remove only on entries the rules let this reader change', async () => {
+it('shows a signed-in reader the add form and Edit and Remove on every entry, and a guest none: the rules decide', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'},
     {id: 'b2', name: 'Bo', grp: 'Second choice', note: '', by: 'usr_other'},
     {id: 'c3', name: 'Cy', grp: 'A shift since renamed', note: '', by: null}];
-  const signedIn = await load(await tracker('list'), trackerAnswer(entries), trackerFns(READER));
+  const signedIn = await load(await tracker('list'), trackerAnswer(entries), 'signed-in');
   expect(signedIn.error).toBeUndefined();
   const doc = signedIn.dom.window.document, ids = (suffix: string) =>
     [...doc.querySelectorAll(`[data-af-id$="${suffix}"]`)].map(n => (n as HTMLElement).dataset.afId);
   expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(false);
-  // own-rows: a signed-in reader changes only the entries they added (the rules decide; the page follows).
-  expect(ids('-edit')).toEqual(['entry-a1-edit']);expect(ids('-remove')).toEqual(['entry-a1-remove']);
+  // The page cannot know whose an entry is: it offers every one, and a write the rules refuse says so.
+  expect(ids('-edit')).toEqual(['entry-a1-edit', 'entry-b2-edit', 'entry-c3-edit']);
+  expect(ids('-remove')).toHaveLength(3);
   // Counts are SQL's: one per listed group, and an entry whose group is no longer listed counts under Other.
   expect(doc.querySelector('[data-af-id="group-first-choice-count"]')?.textContent).toBe('1');
   expect(doc.querySelector('[data-af-id="group-third-choice-empty"]')?.textContent).toBe('Nothing yet.');
@@ -517,37 +507,36 @@ it('shows the tracker\'s add form, and Edit and Remove only on entries the rules
   // One watched statement: the rows with their group sizes, the listed groups a bound value.
   expect(signedIn.queries).toHaveLength(1);
   expect(signedIn.queries[0]).toMatch(/count\(\*\) over \(partition by case when grp in \(select value from json_each\(\$p0\)\)/);
-  expect(signedIn.calls).toEqual([{name: 'me', method: 'GET', input: {}}]);
-  // The owner changes every entry.
-  const owner = await load(await tracker('list'), trackerAnswer(entries), trackerFns({signedIn: true, id: 'usr_o', role: 'owner'}));
-  expect(owner.dom.window.document.querySelectorAll('[data-af-id$="-edit"]')).toHaveLength(3);
-  // Signed out: no form, the sign-in prompt, and no controls.
-  const guest = await load(await tracker('list'), trackerAnswer(entries), trackerFns(GUEST));
-  const g = guest.dom.window.document;
-  expect((g.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
-  expect((g.querySelector('#signin') as HTMLElement).hidden).toBe(false);
-  expect(g.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]').length).toBe(0);
+  // Signed out, or a read-only (archived) frame: no form and no controls; signed out also the sign-in prompt.
+  for (const state of ['signed-out', 'read-only'] as const) {
+    const guest = await load(await tracker('list'), trackerAnswer(entries), state);
+    const g = guest.dom.window.document;
+    expect((g.querySelector('#add') as HTMLFormElement).hidden, state).toBe(true);
+    expect((g.querySelector('#signin') as HTMLElement).hidden, state).toBe(false);
+    expect(g.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]').length, state).toBe(0);
+  }
+  // Signing out on the open page takes the controls away.
+  signedIn.signIn!('signed-out');
+  expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
+  expect(doc.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
 });
 
-it('team: a reader the page is shared with, as viewer or commenter, gets Edit on every entry; a page reader only on theirs', async () => {
-  const entries = [{id: 'a1', name: 'Ada', grp: 'To do', note: '', by: 'usr_me'}, {id: 'b2', name: 'Bo', grp: 'Doing', note: '', by: 'usr_other'}];
-  for (const [role, edits] of [['viewer', 2], ['commenter', 2], ['signed_in', 1]] as const) {
-    const page = await load(await tracker('tasks'), trackerAnswer(entries), trackerFns({...READER, role}));
-    expect(page.error).toBeUndefined();
-    expect(page.dom.window.document.querySelectorAll('#lists [data-af-id$="-edit"]'), role).toHaveLength(edits);
-  }
+it('team and own-rows trackers are the same page: only the dataset rules differ', async () => {
+  const strip = (html: string) => html.replace(/^.*@only (?:team|own-rows).*$\n?/gm, '');
+  expect(strip(await tracker('tasks'))).toContain('const canAdd=()=>signedIn,canChange=()=>signedIn;');
+  for (const preset of ['tasks', 'list'] as const) expect(await tracker(preset)).not.toMatch(/fetch\(|\/fn\/|tracker\.ts|APP\.limit/);
 });
 
 it('writes with sql, every value bound, and says so when the rules let a write change nothing', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'}];
   let affected = 1;
   const answer = trackerAnswer(entries);
-  const page = await load(await tracker('list'), (text, params) => /^\s*(?:update|delete|insert)/i.test(text) ? {affected, returning: []} : answer(text, params), trackerFns(READER));
+  const page = await load(await tracker('list'), (text, params) => /^\s*(?:update|delete|insert)/i.test(text) ? {affected, returning: []} : answer(text, params), 'signed-in');
   const doc = page.dom.window.document, wait = () => new Promise(resolve => setTimeout(resolve, 5));
   (doc.querySelector('#add-name') as HTMLInputElement).value = 'Bea';
   doc.querySelector('#add')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
   await wait();
-  expect(page.writes[0]).toEqual({text: 'insert into entries (name, grp, note)\n  values ($p0, $p1, $p2)', params: {p0: 'Bea', p1: 'First choice', p2: ''}});
+  expect(page.writes[0]).toEqual({text: 'insert into entries (name, grp, note) values ($p0, $p1, $p2)', params: {p0: 'Bea', p1: 'First choice', p2: ''}});
   expect(doc.querySelector('#status')?.textContent).toBe('Added Bea to First choice.');
   affected = 0;
   (doc.querySelector('[data-af-id="entry-a1-remove"]') as HTMLButtonElement).click();
@@ -556,16 +545,18 @@ it('writes with sql, every value bound, and says so when the rules let a write c
   expect(doc.querySelector('#status')?.textContent).toMatch(/^Nothing changed: you may not change that entry/);
 });
 
-it('clears the tracker\'s rows and every control that needed who reads when access is refused, and says why', async () => {
+it('clears the tracker\'s rows and every control when access is refused, and says why', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'}];
   let allowed = true;
-  const page = await load(await tracker('list'), trackerAnswer(entries), name => name === 'me' && !allowed
-    ? {status: 404, body: {error: 'not_found', message: 'This page is no longer shared with you'}} : trackerFns(READER)(name, {}, 'GET'));
+  const answer = trackerAnswer(entries);
+  const page = await load(await tracker('list'), (text, params) => {
+    if (!allowed) throw Error('This page is no longer shared with you');
+    return answer(text, params);
+  }, 'signed-in');
   const doc = page.dom.window.document;
   expect(doc.querySelectorAll('[data-af-id$="-edit"]')).toHaveLength(1);
-  // Access removed: signing out (or the share revoked) makes the identity refresh fail.
-  allowed = false;page.change!(['viewer']);
-  await new Promise(resolve => setTimeout(resolve, 5));
+  // Access removed: the watched read is refused.
+  allowed = false;await rerun(page);
   expect(doc.querySelector('#status')?.textContent).toBe('This page is no longer shared with you');
   expect(doc.querySelectorAll('[data-af-id^="entry-"]')).toHaveLength(0);
   expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
@@ -574,7 +565,7 @@ it('clears the tracker\'s rows and every control that needed who reads when acce
 
 it('keeps what someone typed into an open tracker entry when another change refreshes the list', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'}];
-  const page = await load(await tracker('list'), trackerAnswer(entries), trackerFns(READER));
+  const page = await load(await tracker('list'), trackerAnswer(entries), 'signed-in');
   const doc = page.dom.window.document;
   (doc.querySelector('[data-af-id="entry-a1-edit"]') as HTMLButtonElement).click();
   const note = () => doc.querySelector('[data-af-id="entry-a1-note-input"]') as HTMLInputElement | null;
@@ -585,222 +576,14 @@ it('keeps what someone typed into an open tracker entry when another change refr
   expect(note()?.value).toBe('typed, not saved');
 });
 
-/** The API starter's notes on the SQL engine (the dataset `notes`). */
-const notesAnswer = (notes: Array<Record<string, unknown>>): Answer => (text, params) => runSql(text, params,
-  {notes: {columns: ['_id', 'item', 'note', 'created_by'].map(name => ({name, type: 'string'})), rows: notes}});
-/** Its functions (api.ts): `items` (the API's list, or its refusal) and `me`. */
-const apiFns = (items: {status?: number; body: unknown}, me: Me = READER): Fn => name =>
-  name === 'items' ? items : name === 'me' ? {body: me} : NO_FUNCTIONS(name, {}, 'GET');
-const DEALS = [{id: 7, name: 'Acme renewal', category: 'Proposal', amount: 1200, owner: 'x'},
-  {id: 8, name: 'Globex pilot', category: 'Proposal', amount: 300}, {id: 9, name: 'Initech', category: 'Won', amount: 50},
-  {id: 10, name: 'Closed one', category: 'Won', amount: 999, status: 'lost'}];
-const NOTES = [{_id: 'n1', item: '7', note: 'Call Tuesday', created_by: 'usr_me'},
-  {_id: 'n2', item: '9', note: 'Signed', created_by: 'usr_other'}, {_id: 'n3', item: 'gone', note: 'Old deal', created_by: null}];
-/** Money as the page formats it in this locale. */
-const usd = (n: number) => new Intl.NumberFormat(undefined, {style: 'currency', currency: 'USD', maximumFractionDigits: 0}).format(n);
-const apiPage = (items: {status?: number; body: unknown}, notes: Array<Record<string, unknown>>, me: Me = READER, edit = (html: string) => html) =>
-  load(edit(fill(read('api-dashboard.html'))), notesAnswer(notes), apiFns(items, me));
-
-it('groups the API starter\'s items with totals, shows every note on its item and offers a note form to signed-in readers', async () => {
-  const page = await apiPage({body: DEALS}, NOTES);
-  expect(page.error).toBeUndefined();
-  const doc = page.dom.window.document, text = (id: string) => doc.querySelector(`[data-af-id="${id}"]`)?.textContent;
-  // The items (a function) and the notes (sql) load apart: the items failing never hides the notes.
-  expect(page.queries).toHaveLength(1);expect(page.calls.map(c => c.name).sort()).toEqual(['items', 'me']);
-  expect([...doc.querySelectorAll('#board > section')].map(s => (s as HTMLElement).dataset.afId)).toEqual(['group-proposal', 'group-won', 'other-notes']);
-  expect(text('group-proposal-total')).toBe(`2 · ${usd(1500)}`);
-  expect(text('total-count-value')).toBe('4');expect(text('total-amount-value')).toBe(usd(2549));
-  expect(text('item-7-name')).toBe('Acme renewal');expect(text('item-7-amount')).toBe(usd(1200));
-  expect(text('item-7-notes')).toContain('Call Tuesday');expect(text('item-9-notes')).toContain('Signed');
-  // A note whose item the API no longer lists stays readable, under its item id.
-  expect(text('other-notes')).toContain('Old deal');expect(text('other-notes')).toContain('gone');
-  // Remove only on the reader's own notes (own-rows); a form on every item for a signed-in reader.
-  expect([...doc.querySelectorAll('[data-af-id$="-remove"]')].map(n => (n as HTMLElement).dataset.afId)).toEqual(['note-n1-remove']);
-  expect(doc.querySelector('[data-af-id="note-n1-remove"]')!.getAttribute('aria-label')).toBe('Remove note: Call Tuesday');
-  // Edit on the same notes: the rules that let a reader remove a note let them change it; the owner changes every note.
-  expect([...doc.querySelectorAll('[data-af-id$="-edit"]')].map(n => (n as HTMLElement).dataset.afId)).toEqual(['note-n1-edit']);
-  expect(doc.querySelector('[data-af-id="note-n1-edit"]')!.getAttribute('aria-label')).toBe('Edit note: Call Tuesday');
-  const owner = await apiPage({body: DEALS}, NOTES, {signedIn: true, id: 'usr_o', role: 'owner'});
-  expect(owner.dom.window.document.querySelectorAll('[data-af-id$="-edit"]')).toHaveLength(3);
-  expect(doc.querySelectorAll('form.add-note')).toHaveLength(4);
-  expect((doc.querySelector('#signin') as HTMLElement).hidden).toBe(true);
-  expect(doc.querySelector('#board')!.getAttribute('aria-busy')).toBe('false');
-  // Script-made nodes carry unique data-af-ids.
-  const ids = [...doc.querySelectorAll('[data-af-id]')].map(node => node.getAttribute('data-af-id'));
-  expect(new Set(ids).size).toBe(ids.length);
-});
-
-it('shows only the items APP.only keeps, and maps the API\'s own field names through APP.fields', async () => {
-  const renamed = DEALS.map(({id, name, category, amount, status}) => ({deal_id: id, title: name, stage: category, value: amount, status}));
-  const page = await apiPage({body: renamed}, [], READER, html => html.replace(/fields: \{[^}]*\}/,
-    "fields: {id:'deal_id', name:'title', group:'stage', amount:'value'}").replace('only: {}', "only: {status: 'lost'}"));
-  const doc = page.dom.window.document;
-  expect([...doc.querySelectorAll('li.item strong')].map(n => n.textContent)).toEqual(['Closed one']);
-  expect(doc.querySelector('[data-af-id="total-amount-value"]')!.textContent).toBe(usd(999));
-});
-
-it('says why the API starter\'s items cannot load, still shows the notes, and gives a guest no controls', async () => {
-  const failed = {status: 500, body: {error: 'backend_failed', message: 'The function failed'}};
-  const page = await apiPage(failed, NOTES, GUEST);
-  expect(page.error).toBeUndefined();
-  const doc = page.dom.window.document;
-  expect(doc.querySelector('#status')!.textContent).toMatch(/The function failed[^]*API_KEY[^]*Resolvers/);
-  expect(doc.querySelector('[data-af-id="other-notes"]')!.textContent).toContain('Call Tuesday');
-  expect(doc.querySelectorAll('form.add-note,[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
-  expect((doc.querySelector('#signin') as HTMLElement).hidden).toBe(false);
-  expect(doc.querySelector('#board')!.getAttribute('aria-busy')).toBe('false');
-});
-
-/** The notes dataset as the page SQL door keeps it under own-rows rules: an insert is the reader's, an update or delete
- *  reaches only their own rows (every row for the owner), and a refused one changes nothing (affected 0). */
-const notesStore = (notes: Array<Record<string, unknown>>, me: () => Me = () => READER): Answer => {
-  let made = 0;
-  return (text, params) => {
-    const mine = (id: unknown) => notes.find(n => n._id === id && me().signedIn && (me().role === 'owner' || n.created_by === me().id));
-    if (/^\s*insert/i.test(text)) { notes.push({_id: 'new' + ++made, item: params.p0, note: params.p1, created_by: me().id}); return {affected: 1, returning: []}; }
-    const row = /^\s*update/i.test(text) ? mine(params.p1) : /^\s*delete/i.test(text) ? mine(params.p0) : undefined;
-    if (/^\s*update/i.test(text)) { if (row) row.note = params.p0; return {affected: row ? 1 : 0, returning: []}; }
-    if (/^\s*delete/i.test(text)) { if (row) notes.splice(notes.indexOf(row), 1); return {affected: row ? 1 : 0, returning: []}; }
-    return notesAnswer(notes)(text, params);
-  };
-};
-
-it('lets a reader change their own note in place, keeps an open edit through the page\'s refreshes and says when the rules refuse', async () => {
-  const notes = NOTES.map(n => ({...n})), store = notesStore(notes);
-  let me = READER, refuse = false;
-  const page = await load(fill(read('api-dashboard.html')), (text, params) => refuse && /^\s*update/i.test(text)
-    ? {affected: 0, returning: []} : store(text, params), name => apiFns({body: DEALS}, me)(name, {}, 'GET'));
-  expect(page.error).toBeUndefined();
-  const doc = page.dom.window.document, wait = () => new Promise(resolve => setTimeout(resolve, 5));
-  const el = (id: string) => doc.querySelector(`[data-af-id="${id}"]`) as HTMLInputElement | null;
-  const submit = async () => { el('note-n1-form')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true})); await wait(); };
-  el('note-n1-edit')!.click();
-  const input = el('note-n1-input')!;
-  expect(input.value).toBe('Call Tuesday');
-  input.value = 'Call Wednesday';
-  // The dataset changes (another reader's note): the open edit is the same node, with what was typed.
-  notes.push({_id: 'n4', item: '8', note: 'Pilot booked', created_by: 'usr_other'});
-  page.change!(['notes']);await wait();
-  expect(el('note-n1-input')).toBe(input);expect(input.value).toBe('Call Wednesday');
-  // Refused: the page says nothing changed and keeps the form open with the typed text.
-  refuse = true;await submit();
-  expect(page.writes.at(-1)).toEqual({text: 'update notes set note = $p0 where _id = $p1', params: {p0: 'Call Wednesday', p1: 'n1'}});
-  expect(doc.querySelector('#status')!.textContent).toMatch(/^Nothing changed/);
-  expect(el('note-n1-input')!.value).toBe('Call Wednesday');
-  // Saved: one bound update, the form closed, the list caught up.
-  refuse = false;await submit();
-  expect(doc.querySelector('#status')!.textContent).toBe('Changed a note.');
-  expect(el('note-n1-input')).toBeNull();expect(el('note-n1-text')!.textContent).toBe('Call Wednesday');
-  expect(el('note-n4-text')!.textContent).toBe('Pilot booked');
-  // Cancel closes without a write.
-  const writes = page.writes.length;
-  el('note-n1-edit')!.click();el('note-n1-cancel')!.click();
-  expect(el('note-n1-input')).toBeNull();expect(page.writes).toHaveLength(writes);
-  // Signing out with a note open closes it: a signed-out reader gets no form and no controls.
-  el('note-n1-edit')!.click();me = GUEST;page.change!(['viewer']);await wait();
-  expect(doc.querySelectorAll('form,[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
-  expect(el('note-n1-text')!.textContent).toBe('Call Wednesday');
-});
-
-it('passes its own steps: a note added and changed through the page, a guest offered no controls, cleanup removing it', async () => {
-  const notes = NOTES.map(n => ({...n})), html = fill(read('api-dashboard.html'));
-  const signedIn = await load(html, notesStore(notes), apiFns({body: DEALS}));
-  const wide = await steps(signedIn.dom, read('api-dashboard-steps.mjs'));
-  expect(wide.failure).toBeNull();expect(wide.labels[1]).toMatch(/added, changed/);
-  const test = notes.filter(n => String(n.note).startsWith('Check note (test)'));
-  expect(test).toHaveLength(1);expect(test[0]!.note).not.toBe('Check note (test)');expect(test[0]!.created_by).toBe('usr_me');
-  const guest = await load(html, notesStore(notes, () => GUEST), apiFns({body: DEALS}, GUEST));
-  const read2 = await steps(guest.dom, read('api-dashboard-guest.mjs'));
-  expect(read2.failure).toBeNull();expect(read2.labels[1]).toMatch(/Edit/);
-  // A guest offered an Edit fails them.
-  const offered = await load(html.replace('canChange=n=>', 'canChange=n=>true||'), notesStore(notes, () => GUEST), apiFns({body: DEALS}, GUEST));
-  expect((await steps(offered.dom, read('api-dashboard-guest.mjs'))).failure).toMatch(/guest sees/);
-  const cleanup = await load(html, notesStore(notes), apiFns({body: DEALS}));
-  expect((await steps(cleanup.dom, read('api-dashboard-cleanup.mjs'))).failure).toBeNull();
-  expect(notes.filter(n => String(n.note).startsWith('Check note (test)'))).toEqual([]);
-});
-
-it('reads the API starter\'s list from the body or its first list, keeps only scalar fields and lets an unset key throw', async () => {
-  const {functionFileSurface} = await import('@/lib/page-operations');
-  const {secretHostMap} = await import('@/lib/html-backend-secrets');
-  const resolver = await import('../../../skills/artifactbin/examples/api-dashboard.ts');
-  expect(await functionFileSurface(read('api-dashboard.ts'))).toEqual({functions: {items: 'anonymous', test: 'owner', me: 'anonymous'}, schedule: null});
-  expect(resolver.default.me({}, {subject: null, role: 'anonymous'})).toEqual({signedIn: false, id: null, role: 'anonymous'});
-  expect(secretHostMap(resolver.secrets)).toEqual({API_KEY: 'api.example.com'});
-  const sent: Array<{url: string; headers?: Record<string, string>}> = [];
-  const caps = (body: unknown, ok = true) => ({fetch: async (url: string, init?: {headers?: Record<string, string>}) => {
-    sent.push({url, ...init});
-    return {ok, status: ok ? 200 : 401, text: async () => 'bad key', json: async () => body};
-  }});
-  const row = {id: 1, name: 'Acme', stage: 'Won', amount: 5, open: true, contact: {email: 'x@y'}, tags: ['a']};
-  expect(await resolver.default.items({}, null, caps({total: 1, data: [row, 'junk']}))).toEqual([{id: 1, name: 'Acme', stage: 'Won', amount: 5, open: true}]);
-  expect(await resolver.default.items({}, null, caps([row]))).toHaveLength(1);
-  // The key is a placeholder the host fills, sent only to HOST.
-  expect(sent[0]).toEqual({url: 'https://api.example.com/v1/items', headers: {Authorization: 'Bearer {{API_KEY}}', Accept: 'application/json'}});
-  expect(await resolver.default.test({}, null, caps([row]))).toBe('Read 1 items from api.example.com/v1/items; fields: id, name, stage, amount, open');
-  await expect(resolver.default.items({}, null, caps({}, false))).rejects.toThrow('api.example.com answered 401: bad key');
-  await expect(resolver.default.items({}, null, caps({count: 3}))).rejects.toThrow('sent no list');
-  const unset = {fetch: async () => { throw Error('secret_unavailable: API_KEY'); }};
-  await expect(resolver.default.items({}, null, unset)).rejects.toThrow('secret_unavailable: API_KEY');
-});
-
-it('shows each group as N of its limit, and a full group refuses an entry before any write', async () => {
-  const entries = Array.from({length: 5}, (_, i) => ({id: 'e' + i, name: 'Task ' + i, grp: 'To do', note: '', by: 'usr_me'}));
-  const page = await load(await tracker('tasks'), trackerAnswer(entries), trackerFns(READER));
-  expect(page.error).toBeUndefined();
-  const doc = page.dom.window.document;
-  expect(doc.querySelector('[data-af-id="group-to-do-count"]')?.textContent).toBe('5 of 5');
-  expect(doc.querySelector('[data-af-id="group-doing-count"]')?.textContent).toBe('0 of 5');
-  (doc.querySelector('#add-name') as HTMLInputElement).value = 'One more';
-  doc.querySelector('#add')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
-  await new Promise(resolve => setTimeout(resolve, 0));
-  expect(doc.querySelector('#status')?.textContent).toBe('To do is full.');
-  expect(page.writes).toEqual([]);expect(page.calls.filter(c => c.name === 'add')).toEqual([]);
-  // Another group still takes it, through tracker.ts's add (a POST), never a direct insert.
-  (doc.querySelector('#add-group') as HTMLSelectElement).value = 'Doing';
-  doc.querySelector('#add')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
-  await new Promise(resolve => setTimeout(resolve, 5));
-  expect(page.calls.filter(c => c.name === 'add')).toEqual([{name: 'add', method: 'POST', input: {name: 'One more', grp: 'Doing', note: ''}}]);
-  expect(page.writes).toEqual([]);
-});
-
-it('moves an entry through tracker.ts save, and a full group refuses a move before any call, the entry left in place', async () => {
-  const entries = [...Array.from({length: 5}, (_, i) => ({id: 'e' + i, name: 'Task ' + i, grp: 'To do', note: '', by: 'usr_me'})),
-    {id: 'm1', name: 'Mover', grp: 'Doing', note: 'mine', by: 'usr_me'}];
-  const page = await load(await tracker('tasks'), trackerAnswer(entries), trackerFns(READER));
-  expect(page.error).toBeUndefined();
-  const doc = page.dom.window.document, wait = () => new Promise(resolve => setTimeout(resolve, 5));
-  const saves = () => page.calls.filter(c => c.name === 'save'), status = () => doc.querySelector('#status')?.textContent;
-  const submit = async (id: string, grp: string) => {
-    (doc.querySelector(`[data-af-id="entry-${id}-edit"]`) as HTMLButtonElement | null)?.click();
-    (doc.querySelector(`[data-af-id="entry-${id}-group-input"]`) as HTMLSelectElement).value = grp;
-    doc.querySelector(`[data-af-id="entry-${id}-form"]`)!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
-    await wait();
-  };
-  await submit('m1', 'To do');
-  expect(status()).toBe('To do is full.');
-  expect(saves()).toEqual([]);expect(page.writes).toEqual([]);
-  // The entry is still listed in its own group, its form open for another choice.
-  expect(doc.querySelector('[data-af-id="group-doing-list"] [data-af-id="entry-m1-form"]')).not.toBeNull();
-  // A group with room takes it, through tracker.ts's save (a POST), never a direct update.
-  await submit('m1', 'Done');
-  expect(saves()).toEqual([{name: 'save', method: 'POST', input: {id: 'm1', name: 'Mover', grp: 'Done', note: 'mine'}}]);
-  expect(page.writes).toEqual([]);expect(status()).toBe('Saved Mover.');
-  // An edit that keeps its entry in a full group is no move: it saves.
-  await submit('e0', 'To do');
-  expect(saves().at(-1)).toEqual({name: 'save', method: 'POST', input: {id: 'e0', name: 'Task 0', grp: 'To do', note: ''}});
-  expect(status()).toBe('Saved Task 0.');
-});
-
-it('without limits, saves an edit with one bound sql update', async () => {
+it('saves an edit, a move into another group included, with one bound sql update', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'}];
-  const page = await load(await tracker('list'), trackerAnswer(entries), trackerFns(READER));
+  const page = await load(await tracker('list'), trackerAnswer(entries), 'signed-in');
   const doc = page.dom.window.document;
   (doc.querySelector('[data-af-id="entry-a1-edit"]') as HTMLButtonElement).click();
   (doc.querySelector('[data-af-id="entry-a1-group-input"]') as HTMLSelectElement).value = 'Second choice';
   doc.querySelector('[data-af-id="entry-a1-form"]')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
   await new Promise(resolve => setTimeout(resolve, 5));
-  expect(page.writes).toEqual([{text: 'update entries set name = $p0, grp = $p1,\n  note = $p2 where _id = $p3',
+  expect(page.writes).toEqual([{text: 'update entries set name = $p0, grp = $p1, note = $p2\n  where _id = $p3',
     params: {p0: 'Ada', p1: 'Second choice', p2: 'gloves', p3: 'a1'}}]);
-  expect(page.calls.filter(c => c.name === 'save')).toEqual([]);
 });

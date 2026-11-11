@@ -1,17 +1,10 @@
 /**
- * Page-level GraphQL over linked backend files (contract:
- * ./af-namespace-contracts.ts). Pure: graphql-js only, no I/O.
+ * Page-level GraphQL (deprecated, lib/graphql-compat): the composed schema a page's GraphQL door executes. Pure:
+ * graphql-js only, no I/O.
  *
- * Composition renames every type a file declares to `<name>__<Type>` and
- * mounts the file's roots as `Query.<name>` / `Mutation.<name>`. The composed
- * SDL is self-describing: each namespace field carries
- * `@backend(file, version)`, so execution needs nothing but the SDL.
- *
- * A dataset link on the generated API (`dataset-hasura` source) is the
- * exception: its roots mount flat on Query/Mutation with
- * `@dataset(link, file, version, table, field)`, its types keep their names
- * (the shared prelude once), and they execute through the request's dataset
- * port (lib/graphql-compat `loadPageDatasets`), a mutation whole.
+ * A dataset link on the generated API (`dataset-hasura` source) mounts its roots flat on Query/Mutation with
+ * `@dataset(link, file, version, table, field)`, its types keep their names (the shared prelude once), and they
+ * execute through the request's dataset port (lib/graphql-compat `loadPageDatasets`), a mutation whole.
  *
  * Every page also answers the built-in `viewer` (contracts `PAGE_VIEWER_ROOT`) from the caller alone, and a page
  * that links a dataset the read-only `_sql` (contracts `PAGE_SQL_ROOT`) through the request's dataset port; no link
@@ -20,52 +13,30 @@
 import {
   execute,
   getDirectiveValues,
-  getNamedType,
   getOperationAST,
   getVariableValues,
   GraphQLError,
-  isAbstractType,
   Kind,
   parse,
   print,
-  responsePathAsArray,
   validate,
-  visit,
   type DocumentNode,
   type FieldNode,
   type FragmentDefinitionNode,
   type OperationDefinitionNode,
   type SelectionSetNode,
-  type GraphQLDirective,
-  type GraphQLField,
   type GraphQLFieldResolver,
   type GraphQLObjectType,
   type GraphQLSchema,
-  type GraphQLTypeResolver,
-  type TypeNode,
 } from "graphql";
-import { DATASET_ROLES, PAGE_SQL_ROOT, PAGE_SQL_TYPES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, SQL_READ_LIMITS, datasetRoleAtLeast, type Scalar, type DatasetRole, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
-import { PAGE_OPERATION_RESULT_BYTES, FIELD_ERROR_CODE, FieldFailed, FieldNotExecuted, boundedDetail, type ExecuteOptions, type RemoteError } from './contracts';
+import { PAGE_SQL_ROOT, PAGE_SQL_TYPES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, SQL_READ_LIMITS, datasetRoleAtLeast, type Scalar, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
+import { PAGE_OPERATION_RESULT_BYTES, FIELD_ERROR_CODE, type ExecuteOptions, type RemoteError } from './contracts';
+import { boundedDocument, boundedSchema } from "./execution-policy";
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
-import {
-  BACKEND_PLATFORM_SDL,
-  boundedBackendSchema,
-  boundedDocument,
-  boundedSchema,
-} from "./execution-policy";
 
 const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
 const SEPARATOR = "__";
-const SHARED_TYPES = new Set([
-  "String",
-  "Int",
-  "Float",
-  "Boolean",
-  "ID",
-  "Role",
-]);
-const BACKEND_DIRECTIVE =
-  "directive @backend(file: String!, version: String!) on FIELD_DEFINITION\n";
+const SHARED_TYPES = new Set(["String", "Int", "Float", "Boolean", "ID"]);
 /** A generated dataset root's mount (the counterpart of @backend): its link, dataset, version, table root and kind. */
 const DATASET_DIRECTIVE =
   "directive @dataset(link: String!, file: String!, version: String!, table: String!, field: String!) on FIELD_DEFINITION\n";
@@ -77,27 +48,6 @@ const SQL_SDL = `"One read-only SQL answer: its columns in order, and its rows a
 const SQL_FIELD = `  "One read-only SQL statement over the page's linked datasets, as this reader: a single-table dataset is the table named like its link, a multi-table one <link>.<table>; each shows only the rows and columns the reader's rule shows. $name params bind values. A rule without allow_aggregations refuses it."\n  ${PAGE_SQL_ROOT}(sql: String!, params: JSON): SqlResult`;
 const BUILT_IN_SQL = "the built-in read-only SQL query";
 const SQL_PARAM = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
-const authRole = (value: unknown): DatasetRole | null =>
-  typeof value === 'string' && (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
-
-/**
- * THE RESOLVER FIELD DECISION: why a caller with this page role may not run a field carrying this
- * `@auth` rule, or null when it may. Every role means "at least" (anonymous < signed_in < viewer <
- * editor < owner); `signedIn: true` is at least `signed_in`; no directive is anonymous (any reader).
- * A caller without a page role, or a rule naming no known role, is refused.
- */
-export function resolverFieldRefusal(
-  role: DatasetRole | null,
-  rule: { role?: unknown; signedIn?: unknown } | undefined,
-): 'Sign in required' | 'Not allowed' | null {
-  if (!role || !(DATASET_ROLES as readonly string[]).includes(role)) return 'Not allowed';
-  const named = rule?.role === undefined || rule.role === null ? 'anonymous' : authRole(rule.role);
-  if (!named) return 'Not allowed';
-  const signIn = rule?.signedIn === true || named === 'signed_in';
-  if (signIn && role === 'anonymous') return 'Sign in required';
-  if (!datasetRoleAtLeast(role, named)) return 'Not allowed';
-  return null;
-}
 const MAX_SOURCES = 64;
 const MAX_COMPOSED_BYTES = 1048576;
 const MAX_VARIABLE_BYTES = 65536;
@@ -120,132 +70,35 @@ const TYPE_DEFINITIONS = new Set<string>([
 const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : "invalid";
 
-interface Mounted {
-  namespace: string;
-  fileId: string;
-  version: string;
-  type: GraphQLObjectType;
-}
 interface Compiled {
   schema: GraphQLSchema;
-  auth: GraphQLDirective;
-  query: Map<string, Mounted>;
-  mutation: Map<string, Mounted>;
-  namespaces: string[];
   /** Generated dataset roots (flat), by field name → their link. */
   datasetQuery: Map<string, string>;
   datasetMutation: Map<string, string>;
 }
 const compiledSchemas = new WeakMap<PageSchema, Compiled>();
 
-/** Rename a file's own types into its namespace; root fields become nullable so one failure stays local. */
-function renameFile(name: string, typeDefs: string): string {
-  const document = parse(typeDefs);
-  const rename = (type: string) =>
-    SHARED_TYPES.has(type) ? type : name + SEPARATOR + type;
-  const nullable = (type: TypeNode): TypeNode =>
-    type.kind === Kind.NON_NULL_TYPE ? type.type : type;
-  const renamed = visit(document, {
-    NamedType: (node) => ({
-      ...node,
-      name: { ...node.name, value: rename(node.name.value) },
-    }),
-    enter(node) {
-      if (!TYPE_DEFINITIONS.has(node.kind) || !("name" in node) || !node.name)
-        return undefined;
-      const original = node.name.value;
-      const root =
-        (node.kind === Kind.OBJECT_TYPE_DEFINITION ||
-          node.kind === Kind.OBJECT_TYPE_EXTENSION) &&
-        (original === "Query" || original === "Mutation");
-      return {
-        ...node,
-        name: { ...node.name, value: rename(original) },
-        ...(root && "fields" in node && node.fields
-          ? {
-              fields: node.fields.map((field) =>
-                "type" in field
-                  ? { ...field, type: nullable(field.type) }
-                  : field,
-              ),
-            }
-          : {}),
-      };
-    },
-  }) as DocumentNode;
-  return print(renamed);
-}
-
 export function composePageSchema(
   sources: readonly NamespaceSource[],
 ): PageSchema {
   if (!Array.isArray(sources) || sources.length > MAX_SOURCES)
-    throw Error(`A page links at most ${MAX_SOURCES} backends`);
+    throw Error(`A page links at most ${MAX_SOURCES} datasets`);
+  if (sources.some((source) => source?.kind !== "dataset-hasura"))
+    throw Error("A page schema composes dataset links only");
   const names: string[] = [];
-  const owners = new Map<string, string>();
-  const parts = [BACKEND_PLATFORM_SDL, BACKEND_DIRECTIVE, VIEWER_SDL];
+  const parts = [VIEWER_SDL];
   const query: string[] = [`  ${PAGE_VIEWER_ROOT}: ${PAGE_VIEWER_TYPE}!`];
   const mutation: string[] = [];
-  const generated = sources.filter((source) => source?.kind === "dataset-hasura");
-  for (const source of sources) {
-    if (source?.kind === "dataset-hasura") continue;
-    const name = source?.name;
-    const label = JSON.stringify(String(name));
-    if (
-      typeof name !== "string" ||
-      !GRAPHQL_NAME.test(name) ||
-      name.startsWith(SEPARATOR)
-    )
-      throw Error(`Backend name ${label} is not a GraphQL name`);
-    if (name === PAGE_VIEWER_ROOT)
-      throw Error(`Backend name ${label} is reserved for ${BUILT_IN_VIEWER}`);
-    if (name === PAGE_SQL_ROOT)
-      throw Error(`Backend name ${label} is reserved for ${BUILT_IN_SQL}`);
-    if (names.includes(name))
-      throw Error(`Backend name ${label} is used more than once`);
-    if (
-      typeof source.fileId !== "string" ||
-      !FILE_ID_PATTERN.test(source.fileId)
-    )
-      throw Error(`Backend ${name} has an invalid file ID`);
-    if (typeof source.version !== "string" || !source.version)
-      throw Error(`Backend ${name} has no version`);
-    // A typeDefs-free file (./functions) is called by name over HTTP only: its link name is taken, nothing mounts.
-    if (source.typeDefs === "") { names.push(name); continue; }
-    let fileSchema: GraphQLSchema;
-    try {
-      fileSchema = boundedBackendSchema(source.typeDefs);
-    } catch (error) {
-      throw Error(`Backend ${name} has an invalid schema: ${messageOf(error)}`);
-    }
-    names.push(name);
-    for (const type of Object.keys(fileSchema.getTypeMap())) {
-      if (type.startsWith("__") || SHARED_TYPES.has(type)) continue;
-      const composed = name + SEPARATOR + type;
-      const other = owners.get(composed);
-      if (other !== undefined)
-        throw Error(
-          `Backend ${name} type ${type} collides with backend ${other}`,
-        );
-      owners.set(composed, name);
-    }
-    parts.push(renameFile(name, source.typeDefs));
-    const mount = `@backend(file: ${JSON.stringify(source.fileId)}, version: ${JSON.stringify(source.version)})`;
-    if (fileSchema.getQueryType())
-      query.push(`  ${name}: ${name}${SEPARATOR}Query! ${mount}`);
-    if (fileSchema.getMutationType())
-      mutation.push(`  ${name}: ${name}${SEPARATOR}Mutation! ${mount}`);
-  }
-  if (generated.length) {
-    parts.splice(2, 0, DATASET_DIRECTIVE, SQL_SDL);
+  if (sources.length) {
+    parts.unshift(DATASET_DIRECTIVE, SQL_SDL);
     query.push(SQL_FIELD);
-    mountDatasets(generated, names, owners, parts, query, mutation);
+    mountDatasets(sources, names, parts, query, mutation);
   }
   parts.push(`type Query {\n${query.join("\n")}\n}`);
   if (mutation.length) parts.push(`type Mutation {\n${mutation.join("\n")}\n}`);
   const sdl = parts.join("\n");
   if (new TextEncoder().encode(sdl).length > MAX_COMPOSED_BYTES)
-    throw Error("The page's backend schemas are too large");
+    throw Error("The page's dataset schemas are too large");
   const schema: PageSchema = Object.freeze({
     sdl,
     namespaces: Object.freeze([...names]),
@@ -257,12 +110,11 @@ export function composePageSchema(
 /**
  * Mount the generated dataset sources flat: each root on Query/Mutation, nullable (one failure stays local), with
  * `@dataset`; each type once under its own name (the shared prelude repeats identically across links). A root
- * equal to a resolver link's name, or another link's root, refuses the page: `graphql_root_collision`.
+ * another link also generates refuses the page: `graphql_root_collision`.
  */
 function mountDatasets(
   sources: readonly NamespaceSource[],
   names: string[],
-  owners: Map<string, string>,
   parts: string[],
   query: string[],
   mutation: string[],
@@ -274,7 +126,7 @@ function mountDatasets(
     const label = JSON.stringify(String(name));
     if (typeof name !== "string" || !GRAPHQL_NAME.test(name) || name.startsWith(SEPARATOR))
       throw Error(`Dataset name ${label} is not a GraphQL name`);
-    if (names.includes(name)) throw Error(`Backend name ${label} is used more than once`);
+    if (names.includes(name)) throw Error(`Dataset name ${label} is used more than once`);
     if (typeof source.fileId !== "string" || !FILE_ID_PATTERN.test(source.fileId))
       throw Error(`Dataset ${name} has an invalid file ID`);
     if (typeof source.version !== "string" || !source.version)
@@ -319,7 +171,7 @@ function mountDatasets(
       const claimed = rootOwner.get(type);
       if (claimed !== undefined && claimed !== name)
         throw Error(`graphql_root_collision: link ${name} generates ${type}, which link ${claimed} also names`);
-      if (prior !== undefined || owners.has(type) || SHARED_TYPES.has(type))
+      if (prior !== undefined || SHARED_TYPES.has(type))
         throw Error(`graphql_root_collision: link ${name} generates the type ${type}, which another link also names`);
       types.set(type, printed);
       parts.push(printed);
@@ -329,31 +181,6 @@ function mountDatasets(
 
 function compile(sdl: string): Compiled {
   const schema = boundedSchema(sdl, MAX_COMPOSED_BYTES);
-  const backend = schema.getDirective("backend");
-  const auth = schema.getDirective("auth");
-  if (!backend || !auth) throw Error("Not a page schema");
-  const mounts = (root: GraphQLObjectType | null | undefined) => {
-    const mounted = new Map<string, Mounted>();
-    for (const field of Object.values(root?.getFields() ?? {})) {
-      const meta = field.astNode
-        ? getDirectiveValues(backend, field.astNode)
-        : undefined;
-      if (!meta) continue;
-      const type = getNamedType(field.type);
-      if (!type || !("getFields" in type) || isAbstractType(type))
-        throw Error("Not a page schema");
-      mounted.set(field.name, {
-        namespace: field.name,
-        fileId: String(meta.file),
-        version: String(meta.version),
-        type: type as GraphQLObjectType,
-      });
-    }
-    return mounted;
-  };
-  const query = mounts(schema.getQueryType());
-  const mutation = mounts(schema.getMutationType());
-  const namespaces = [...new Set([...query.keys(), ...mutation.keys()])];
   const dataset = schema.getDirective("dataset");
   const datasetMounts = (root: GraphQLObjectType | null | undefined) => {
     const mounted = new Map<string, string>();
@@ -364,39 +191,17 @@ function compile(sdl: string): Compiled {
     }
     return mounted;
   };
-  return { schema, auth, query, mutation, namespaces, datasetQuery: datasetMounts(schema.getQueryType()), datasetMutation: datasetMounts(schema.getMutationType()) };
+  return { schema, datasetQuery: datasetMounts(schema.getQueryType()), datasetMutation: datasetMounts(schema.getMutationType()) };
 }
 
 const json = <T>(value: unknown): T =>
   value === undefined ? (null as T) : (JSON.parse(JSON.stringify(value)) as T);
 
-/**
- * The invoke port's sanitized reason, if it gave one (FieldNotExecuted/FieldFailed),
- * with what the backend said only for the page owner, and only bounded.
- */
-function extensionsOf(
-  error: unknown,
-  owner: boolean,
-): { code: string; detail?: string } | undefined {
-  if (
-    !(error instanceof FieldNotExecuted || error instanceof FieldFailed) &&
-    !(
-      error instanceof Error &&
-      (error.name === "FieldNotExecuted" || error.name === "FieldFailed")
-    )
-  )
-    return undefined;
-  const { code, detail } = error as { code?: unknown; detail?: unknown };
-  if (typeof code !== "string" || !FIELD_ERROR_CODE.test(code)) return undefined;
-  const bounded = owner ? boundedDetail(detail) : undefined;
-  return bounded === undefined ? { code } : { code, detail: bounded };
-}
-
 function plainErrors(errors: readonly GraphQLError[]): RemoteError[] {
   return errors.map((error) => {
     const plain: RemoteError = { message: error.message };
     if (error.path) plain.path = [...error.path];
-    // Only the code (and owner-only detail) this module attached to a backend field's error.
+    // Only the code a dataset field's error carries.
     const code = error.extensions?.code;
     if (
       error.originalError &&
@@ -418,15 +223,15 @@ const failure = (message: string): RemoteResponse => ({
 export async function executePageOperation(
   options: ExecuteOptions,
 ): Promise<RemoteResponse> {
-  const { caller, request, invoke } = options;
+  const { request } = options;
   let compiled: Compiled;
   try {
     compiled =
       compiledSchemas.get(options.schema) ?? compile(options.schema.sdl);
   } catch {
-    return failure("The page's backend schema is unavailable");
+    return failure("The page's schema is unavailable");
   }
-  const { schema, auth } = compiled;
+  const { schema } = compiled;
   if (!request || typeof request.query !== "string")
     return failure("A query string is required");
   let document: DocumentNode;
@@ -462,93 +267,7 @@ export async function executePageOperation(
 
   const mutating = operation.operation === "mutation";
   const signal = options.signal ?? new AbortController().signal;
-  // A caller without a page role never reaches a resolver (refused first); anonymous is only the type's floor.
-  const principal = { tenant: caller.pageId, subject: caller.subject, role: caller.role ?? "anonymous" as const };
-  // The owner may read what their own backend said; nobody else learns more than the code.
-  const owner = caller.role === "owner";
-  const outcomes: Record<string, Outcome> = {};
-  let chain: Promise<unknown> = Promise.resolve();
-
-  /** Why this caller may not run a field, or null when it may. */
-  const refusal = (field: GraphQLField<unknown, unknown>): string | null =>
-    resolverFieldRefusal(
-      caller.role,
-      field.astNode ? getDirectiveValues(auth, field.astNode) : undefined,
-    );
-
-  const namespaceValue = (mounted: Mounted) => {
-    const resolvers = Object.create(null) as Record<string, unknown>;
-    for (const field of Object.values(mounted.type.getFields())) {
-      resolvers[field.name] = (
-        args: Record<string, unknown>,
-        _context: unknown,
-        info: { path: Parameters<typeof responsePathAsArray>[0] },
-      ) => {
-        const key = responsePathAsArray(info.path).join(".");
-        const settle = (outcome: Outcome) => {
-          if (mutating) outcomes[key] = outcome;
-        };
-        const run = async (): Promise<AfJson> => {
-          const refused = refusal(field);
-          if (refused) {
-            settle("rejected");
-            throw new GraphQLError(refused);
-          }
-          if (signal.aborted) {
-            settle("rejected");
-            throw new GraphQLError("Cancelled before execution");
-          }
-          let value: AfJson;
-          let reported: Outcome | undefined;
-          try {
-            value = await invoke({
-              namespace: mounted.namespace,
-              fileId: mounted.fileId,
-              version: mounted.version,
-              operation: mutating ? "mutation" : "query",
-              field: field.name,
-              args: json<AfJsonObject>(args),
-              principal: { ...principal },
-              signal,
-              reportOutcome: outcome => { reported=outcome; },
-            });
-          } catch (error) {
-            const extensions = extensionsOf(error, owner);
-            if (
-              error instanceof FieldNotExecuted ||
-              (error instanceof Error && error.name === "FieldNotExecuted")
-            ) {
-              settle("rejected");
-              throw new GraphQLError(
-                extensions?.code === "retryable"
-                  ? "Backend busy: the runner refused admission (busy or restarting) after retries; nothing ran, so retrying is safe"
-                  : "Backend request rejected before execution",
-                { extensions },
-              );
-            }
-            settle("unknown");
-            // A message the resolver threw (redacted by the invoker) is shown to every caller; any other failure is not.
-            const shown = extensions ? boundedDetail((error as { shown?: unknown }).shown) : undefined;
-            throw new GraphQLError(shown ?? "Backend execution failed", { extensions });
-          }
-          settle(reported ?? "committed");
-          // Results are data only: no getters, functions or prototypes reach graphql-js.
-          return json<AfJson>(value);
-        };
-        if (!mutating) return run();
-        // Mutation fields run one at a time in the order written; graphql-js
-        // calls nested resolvers synchronously in selection order.
-        const next = chain.then(run);
-        chain = next.catch(() => undefined);
-        return next;
-      };
-    }
-    return resolvers;
-  };
-  const roots = mutating ? compiled.mutation : compiled.query;
   const rootValue = Object.create(null) as Record<string, unknown>;
-  for (const [name, mounted] of roots)
-    rootValue[name] = namespaceValue(mounted);
   if (!mutating) rootValue[PAGE_VIEWER_ROOT] = viewerValue(options);
   if (!mutating) rootValue[PAGE_SQL_ROOT] = (args: Record<string, unknown>) => pageSql(options, args, signal);
 
@@ -582,26 +301,6 @@ export async function executePageOperation(
     const value = (source as Record<string, unknown>)[info.fieldName];
     return typeof value === "function" ? value(args, context, info) : value;
   };
-  // Abstract types: a backend names its own types; map them into its namespace.
-  const typeResolver: GraphQLTypeResolver<unknown, unknown> = (
-    value,
-    _context,
-    _info,
-    abstractType,
-  ) => {
-    const own =
-      value && typeof value === "object"
-        ? (value as Record<string, unknown>).__typename
-        : undefined;
-    if (typeof own !== "string") return undefined;
-    for (const namespace of compiled.namespaces) {
-      if (!abstractType.name.startsWith(namespace + SEPARATOR)) continue;
-      const name = namespace + SEPARATOR + own;
-      if (schema.getType(name)) return name;
-    }
-    return undefined;
-  };
-
   const result = await execute({
     schema,
     document,
@@ -609,7 +308,6 @@ export async function executePageOperation(
     variableValues: variables,
     operationName: request.operationName ?? undefined,
     fieldResolver,
-    typeResolver,
   });
   let data = (
     result.data === undefined ? null : json(result.data)
@@ -624,20 +322,20 @@ export async function executePageOperation(
   }
   const response: RemoteResponse = { data };
   if (errors?.length) response.errors = errors;
-  if (mutating) response.extensions = { outcomes };
+  if (mutating) response.extensions = { outcomes: {} };
   return response;
 }
 
 /**
- * The built-in viewer, from the caller alone: signed in when `@auth(signedIn: true)` admits an account. Then `id` is
- * the subject a resolver sees and `name` its display name, read through the port only when selected; anyone else
+ * The built-in viewer, from the caller alone: signed in when the caller's page role is at least `signed_in`. Then
+ * `id` is the caller's account and `name` its display name, read through the port only when selected; anyone else
  * reads nulls. `canEdit` is the page edit check the live-region editor uses (the `canEdit` port), read only when
  * selected; false without one. Nothing else about the reader is here.
  */
 function viewerValue({ caller, viewerName, canEdit }: ExecuteOptions): Record<string, unknown> {
   const subject = caller.subject;
   const editable = async () => (await canEdit?.()) === true;
-  if (subject === null || resolverFieldRefusal(caller.role, { signedIn: true }) !== null)
+  if (subject === null || !caller.role || !datasetRoleAtLeast(caller.role, "signed_in"))
     return { signedIn: false, id: null, name: null, canEdit: editable };
   return { signedIn: true, id: subject, name: async () => (await viewerName?.(subject)) ?? null, canEdit: editable };
 }

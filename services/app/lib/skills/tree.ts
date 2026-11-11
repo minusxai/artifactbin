@@ -320,7 +320,7 @@ export function loadSkillSources(root = path.resolve(process.cwd(), 'skills')): 
     for (const entry of readdirSync(full)) {
       const entryPath = path.join(full, entry);
       if (statSync(entryPath).isDirectory()) {
-        if(['scripts','examples','resolvers','design-systems','components'].includes(entry))continue;
+        if(['scripts','examples','design-systems','components'].includes(entry))continue;
         if(entry==='fragments'){
           if(readdirSync(entryPath).some(file=>!FILE_RE.test(file)||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/fragments: only flat Markdown source fragments are supported`);
           continue;

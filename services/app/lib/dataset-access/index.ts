@@ -9,13 +9,12 @@
  * page changes behaviour.
  */
 export {authorizeDatasetBinding,datasetBindingCatalog,DatasetBindingUnsupportedError,resolveDatasetBinding} from './authority';
-export {columnsOf,fenced,linkedRoot,load,loadLinked,notFound,refusal,type Loaded,type LoadedTable,type PageCommitGuard,type PageScope} from './linked';
+export {fenced,linkedRoot,load,loadLinked,notFound,refusal,type Loaded,type LoadedTable,type PageCommitGuard,type PageScope} from './linked';
 export type {HasuraColumn,HasuraRowCan,HasuraScalar,HasuraTableModel} from './table-model';
 export {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 export {authorityShape,readAuthorityIn,rowsNow,shownRows,type ReadAuthority,type WrittenOutcome} from './write-reply';
 export type {DatasetSnapshot,DatasetStatement} from './types';
 export {runPageSql,type PageSqlAnswer,type PageSqlCall} from './page-sql';
-export {planLinkedDatasetTables} from './sql-read';
 export {executePageSql} from './page-sql-door';
 export {offlinePageSqlData} from './offline-sql';
 export {datasetPermissionTemplates,readDatasetPermissions,writeDatasetPermissions} from './policy';

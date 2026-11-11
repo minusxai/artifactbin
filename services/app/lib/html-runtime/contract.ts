@@ -13,10 +13,11 @@ export interface HtmlRuntimeConfig {
   live?: number;
   /** Source-owned identities, supplied by assembly before author code runs. */
   savedNodeIds?: readonly string[];
+  /** Every linked name the page declares (its dataset and default-connection links), in source order. */
   backends: readonly string[];
-  /** Dataset links: their generated roots are flat remote fields (apollo `datasets`); the rest of `backends` are resolver namespaces. */
+  /** Stored dataset links: their generated roots are flat remote fields (apollo `datasets`). */
   datasets?: readonly string[];
-  /** Namespace -> immutable linked resource ID, for backend invalidation notifications. */
+  /** Link name -> the dataset's ID, for invalidation notifications. */
   bindings?: Readonly<Record<string, string>>;
   /** Exact platform origin. Never a credential or a URL carrying one. */
   appOrigin?: string;
@@ -26,9 +27,11 @@ export interface HtmlRuntimeConfig {
   publishOrigin?: string;
   /**
    * The files the page's publication recorded: the path a script fetches each by (relative to the page) -> where it is
-   * read (the page's asset door, or an offline copy's bytes). The core's fetch maps exactly these (./fn-fetch).
+   * read (the page's asset door, or an offline copy's bytes). The core's fetch maps exactly these (./page-fetch).
    */
   files?: Readonly<Record<string, string>>;
+  /** The https origins the page declares in `csp-connect`: its core sends a GET to one through the page's fetch door (./page-fetch). */
+  connect?: readonly string[];
   /** `@afbin/<name>` -> platform library URL, resolved server-side from the page's recorded pins. */
   libraries?: Readonly<Record<string, string>>;
   initialState?: HtmlJsonObject;
@@ -78,7 +81,11 @@ export interface HtmlAssemblyInput {
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string; regions?:string; regionsPath?:string; nativeRegions?:string; nativeRegionsPath?:string; nativeMarkdown?:string; nativeMarkdownPath?:string; collab?:string; collabPath?:string; state?:string; statePath?:string; offlineSql?:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string; regions?:string; regionsPath?:string; nativeRegions?:string; nativeRegionsPath?:string; nativeMarkdown?:string; nativeMarkdownPath?:string; collab?:string; collabPath?:string; state?:string; statePath?:string; offlineSql?:string;
+ /** The document host module (lib/html-reader/host-shell) at /af/host.js: a shell's, never a page's, so it has no RUNTIME_MODULE_PATHS entry. */
+ host?:string;
+ /** The host comments module (solid/document/browser-host-comments) the host module imports when a shell asks for comments. */
+ hostComments?:string }
 /** D17: the platform runtime's flat public addresses (core: lib/html-page/core-script). No version or hash; strong ETag and `no-cache`. */
 export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',regionsPath:'/af/regions.js',nativeRegionsPath:'/af/native-regions.js',nativeMarkdownPath:'/af/native-markdown.js',collabPath:'/af/collab.js',statePath:'/af/state.js'} as const;
 /** `Symbol.for` key under which core records its build id for the lazy modules' skew guard (build.server). */

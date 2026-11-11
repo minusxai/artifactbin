@@ -154,14 +154,6 @@ it('keeps partial dependency-update receipts and never increments an already-upd
  expect(await (await send()).json()).toEqual(receipt);
  const db=await harness.db();expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[dataset.id])).rows[0]?.version).toBe(2);expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[saved.id])).rows[0]?.version).toBe(1);
 });
-it('publishes selected local backend files atomically with the page rather than as assets',async()=>{
- const {setServices}=await import('@/lib/platform');setServices({runner:{start:async()=>({runId:'backend-schema-test'}),getRun:async()=>({runId:'backend-schema-test',status:'completed',output:{typeDefs:'type Query { count:Int! }'},receipt:null}),events:async()=>({events:[],nextSequence:0,hasMore:false}),cancel:async()=>{}}});
- try{
- const actor=await mintAccountToken('bundle-local-backend');const source='export const typeDefs="type Query { count:Int! }"; export default {count:()=>1};';
- const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_local_backend_create'},json:{html:'<link rel="af-resolver" data-af-name="jobs" href="./api.ts"><h1>Jobs</h1>',publicationBundle:{entryPath:'index.html',files:[file('api.ts',source,'text/typescript')]}}}));const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);
- const db=await harness.db();const page=(await db.query<{source:string;meta:{htmlLinks:Array<{kind:string;name:string}>}}>('SELECT source,meta FROM artifacts WHERE id=$1',[saved.id])).rows[0]!;expect(page.source).not.toContain('href="./api.ts"');expect(page.meta.htmlLinks).toMatchObject([{kind:'backend',name:'jobs'}]);expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(1);
- }finally{setServices({});}
-});
 it('delegates private dependencies when the page is shared later and revokes with page or owner authority',async()=>{
  const {createUser}=await import('@/lib/accounts');const {updateSharingFor,transferArtifact}=await import('@/lib/artifacts');const {createGroup}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {GET:rawGet}=await import('@/app/a/[id]/raw/route');
  const user=await createUser({email:'mxmx_test_bundle_late_share_owner@example.com'}),reader=await createUser({email:'mxmx_test_bundle_late_share_reader@example.com'});const owner=await mintAccountToken('bundle-late-share',user.id);

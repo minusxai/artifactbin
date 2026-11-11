@@ -16,25 +16,15 @@ export async function projectNotifications(tx:Queryable,event:EventEnvelope):Pro
  const objectId=event.object_id;
  const payload=event.payload;
  if(event.object_kind==='group'&&sender){
-  const group=(await tx.query<{name:string;handle:string}>('SELECT name,handle FROM groups WHERE id=$1',[objectId])).rows[0];
-  const addresses=new Map<string,string|null>();
+  // The inbox rows. A group change's MAIL is the identity module's outbox (written with the change, or asked for
+  // after an app change commits: lib/groups mailGroupChanges), never this projection's.
   const recipients=new Set(Array.isArray(payload.recipients)?payload.recipients.map(String):[]);
   if(typeof payload.invitation_id==='string'){
    const invite=(await tx.query<{email:string}>('SELECT email FROM group_invitations WHERE id=$1',[payload.invitation_id])).rows[0];
-   if(invite){const users=(await tx.query<{id:string}>("SELECT id FROM users WHERE email=$1 AND kind='account'",[invite.email])).rows;
-    if(!users.length)addresses.set(invite.email,null);
-    for(const user of users)recipients.add(user.id);
-   }
+   if(invite)for(const user of (await tx.query<{id:string}>("SELECT id FROM users WHERE email=$1 AND kind='account'",[invite.email])).rows)recipients.add(user.id);
   }
   for(const recipient of recipients){if(recipient===sender||await blocked(tx,sender,recipient))continue;
-   const user=(await tx.query<{email:string}>('SELECT email FROM users WHERE id=$1',[recipient])).rows[0];if(user?.email)addresses.set(user.email,recipient);
    await recordNotification(tx,{id:`group:${event.id}:${recipient}`,artifactId:null,recipientId:recipient,senderId:sender,kind:`group_${payload.action}`,source:`group:${objectId}`,once:true,sourceEventId:event.id});
-  }
-  if(group)for(const [email,recipient] of addresses){
-   // Test senders never reach real mail, and blocked recipients stay excluded.
-   if((await tx.query('SELECT 1 FROM users WHERE id=$1 AND test_account',[sender])).rows.length)continue;
-   if(recipient&&await blocked(tx,sender,recipient))continue;
-   await tx.query('INSERT INTO group_mail_outbox(id,email,recipient_id,group_id,group_name,handle,action,sender_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING',[`group:${event.id}:${email}`,email,recipient,objectId,group.name,group.handle,payload.action,sender]);
   }
   return;
  }
@@ -43,9 +33,8 @@ export async function projectNotifications(tx:Queryable,event:EventEnvelope):Pro
   return;
  }
  if(!sender)return;
- if(event.object_kind==='artifact'&&['annotated','annotation_resolved','annotation_reopened'].includes(event.verb)){
-  // A new root has no earlier conversation to update. Explicit mentions are their own facts.
-  if(event.verb==='annotated'&&!payload.reply_id)return;
+ if(event.object_kind==='artifact'&&['annotation_replied','annotation_resolved','annotation_reopened'].includes(event.verb)){
+  // A new root (`annotated`) has no earlier conversation to update. Explicit mentions are their own facts.
   const kind=event.verb==='annotation_reopened'?'reopened':event.verb==='annotation_resolved'?'resolved':payload.resolved?'reply_resolved':'reply';
   await notifyThread(tx,objectId,String(payload.annotation_id),sender,kind,payload.agent===true,String(payload.reply_id??payload.annotation_id),event.id);
   return;

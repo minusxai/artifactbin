@@ -1,14 +1,17 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Sign in, inspect or remove this origin's private grant.
 It uses an email one-time code.
-Usage: node scripts/auth.mjs status
+Usage: node scripts/auth.mjs status [--audience SERVICE]
        node scripts/auth.mjs login --email ADDRESS
-       node scripts/auth.mjs login --challenge HANDLE --code-file FILE
-       node scripts/auth.mjs logout [--local]
+       node scripts/auth.mjs login --challenge HANDLE --code-file FILE [--audience SERVICE]
+       node scripts/auth.mjs logout [--local] [--audience SERVICE]
 Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
   --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
-  completes it. Common: --server ORIGIN (default: the archive origin), --json, --output FILE
-  (never overwrites), --help.
+  completes it. The one grant reaches a service this server issues tokens for: scripts exchange
+  it for short-lived tokens (toolbox-service-token.mjs). --audience SERVICE there also saves a
+  separate long grant for that service, rarely needed; status and logout take it.
+  Common: --server ORIGIN (default: the archive origin), --json, --output FILE (never
+  overwrites), --help.
 Examples:
   node scripts/auth.mjs status                        # reuse an existing grant before signing
                                                       #   in again
@@ -52,11 +55,14 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     shared = await platform();
   // status: where the grant comes from (environment or the private store) and whether it has
   // expired.
+  const audience = values.audience;
+  if (audience !== undefined && !/^[a-z][a-z0-9-]{0,62}$/.test(audience))
+    throw new ToolError('invalid_audience', 'Use the service id the server is configured for.', 2);
   if (sub === 'status') {
-    let saved = await shared.readCredentials(server, root),
+    let saved = await shared.readCredentials(server, root, audience),
       refresh = null;
     const stored = !!saved;
-    const environment = !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN);
+    const environment = !audience && !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN);
     // A saved grant is always refreshed, exactly as any other script would when its token is due,
     // so status proves the grant with the server: one revoked or ended elsewhere reads as signed
     // out, never as a still-unexpired local token. A refused refresh means log in again.
@@ -70,6 +76,7 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     }
     return {
       server,
+      ...(audience ? {audience} : {}),
       authenticated: environment || !!saved,
       ...(refresh ? {refresh} : {}),
       source: environment ? 'environment' : stored ? 'private-store' : 'none',
@@ -77,7 +84,7 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     };
   }
   if (sub === 'logout')
-    return {...await logoutGrant({values, server, root, shared, env, fetcher})};
+    return {...await logoutGrant({values, server, root, shared, env, fetcher, audience})};
 
   const client = makeClient(server, {env, fetcher});
   // login step 1: email a one-time code and save a private challenge file bound to this origin.
@@ -137,6 +144,13 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     headers: {Cookie: cookies},
     authenticated: false
   });
+  // The service grant, from the same sign-in: its own token, bound to that service's origin.
+  const serviceResponse = audience ? await client.request('/api/authentication/token', {
+    method: 'POST',
+    body: {audience},
+    headers: {Cookie: cookies},
+    authenticated: false
+  }) : null;
   if (
     typeof tokenResponse.access_token !== 'string' ||
     typeof tokenResponse.refresh_token !== 'string' ||
@@ -154,8 +168,24 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     },
     root
   );
+  if (serviceResponse) {
+    const grant = serviceResponse;
+    if (typeof grant.access_token !== 'string' || typeof grant.refresh_token !== 'string' ||
+      typeof grant.client_id !== 'string' || typeof grant.resource !== 'string' ||
+      !Number.isFinite(grant.expires_in))
+      throw new ToolError('invalid_grant_response', 'The service grant was incomplete.', 1);
+    await shared.saveCredentials({
+      server,
+      audience,
+      resource: serviceResponse.resource,
+      token: serviceResponse.access_token,
+      refreshToken: serviceResponse.refresh_token,
+      clientId: serviceResponse.client_id,
+      expiresAt: Date.now() + serviceResponse.expires_in * 1000
+    }, root);
+  }
   // The challenge is single-use.
   await unlink(file);
-  return {server, authenticated: true};
+  return {server, authenticated: true, ...(audience ? {audience} : {})};
 }
 await runTool('auth', import.meta.url, authCommand);

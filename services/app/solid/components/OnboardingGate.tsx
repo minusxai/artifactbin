@@ -3,6 +3,7 @@ import { createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation } from '@solidjs/router';
 import { readIntent } from '@/lib/http/intent';
 import { useSession } from '../lib/session';
+import { isEmbeddedView } from '../lib/embedded';
 
 const EXEMPT = new Set(['/local/publish', '/local/connect', '/welcome', '/login', '/start', '/connect', '/getting-started']);
 
@@ -22,8 +23,12 @@ function pageArrived(): () => boolean {
   return arrived;
 }
 
-/** A pending document instruction keeps its route until the user leaves it. */
+/**
+ * A pending document instruction keeps its route until the user leaves it. The embedded view (lib/embedded) defers
+ * the welcome: a page inside another app's frame is never replaced by it; the person meets it in the app itself.
+ */
 export function OnboardingGate(props: { children: JSX.Element }): JSX.Element {
+  if (isEmbeddedView()) return props.children;
   const { session } = useSession();
   const location = useLocation();
   const arrived = pageArrived();

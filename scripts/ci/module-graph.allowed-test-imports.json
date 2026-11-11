@@ -14,9 +14,6 @@
       "../../../../services/app/lib/html-components/data-table",
       "../../../../services/app/lib/html-components/select"
     ],
-    "services/app/__tests__/annotation-changes.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
     "services/app/__tests__/document-serving-headers.test.ts": [
       "@/lib/object-store/image-store",
       "@/lib/object-store/pdf-store"

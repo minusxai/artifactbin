@@ -44,7 +44,7 @@ const ts = createRequire(import.meta.url)('typescript');
 
 const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
-const PACKAGES = ['auth', 'browser', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
+const PACKAGES = ['auth', 'browser', 'connectors', 'contracts', 'events', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
@@ -159,7 +159,7 @@ const BUNDLED_IMPORTERS = [
 const BUNDLED_LEAVES = {
   'lib/html-component-specs': ['boundary-ids', 'comparison', 'deck-spec', 'isometric-spec', 'mermaid-source'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
-  'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'frame-bridge/parent', 'frame-markup', 'reader-mode', 'reload'],
+  'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
   'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http', 'region-http'],
   'lib/capture': ['contract', 'png', 'screen'],
@@ -177,7 +177,7 @@ const BUNDLED_LEAVES = {
   // carries the server's parse5 readers and compaction. The page's link dialog checks a URL through `href` alone.
   // `cells` (a dataset text cell's text, no ProseMirror) is the page library @afbin/collab's door.
   'lib/live-regions': ['native-browser', 'native-markdown', 'cells', 'href'],
-  'lib/html-runtime': ['native-editing-behavior', 'native-code-presentation', 'browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
+  'lib/html-runtime': ['native-editing-behavior', 'native-code-presentation', 'browser-portable', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',
@@ -254,8 +254,8 @@ export const DEEP_MODULES = {
 /**
  * Rule 5's table: the deprecated GraphQL compatibility layer (lib/graphql-compat/AGENTS.md) as path prefixes or exact
  * paths without extension, the header each of its files opens with, and the only files outside it that may import
- * it, each with why. New code reads data through `sql` (lib/dataset-access) and calls functions through
- * `fetch('/fn/<name>')` (lib/page-doors); an entry here is a reviewed edit, and the list only shrinks.
+ * it, each with why. New code reads and writes data through `sql` (lib/dataset-access, lib/page-doors); an entry here
+ * is a reviewed edit, and the list only shrinks.
  */
 export const GRAPHQL_COMPAT = {
   paths: ['services/app/lib/graphql-compat/', 'services/app/lib/html-runtime/apollo/graphql-compat'],
@@ -265,9 +265,7 @@ export const GRAPHQL_COMPAT = {
     'services/app/lib/operations/registry.ts': "the dataset GraphQL route's operation (executeDatasetGraphql)",
     'services/app/lib/local-connection/server.ts': "the local connection's page GraphQL route",
     'services/app/lib/html-runtime/browser-client.ts': 'the browser client entry: `client` and `gql` in @afbin/apollo',
-    'services/app/lib/publish/publish/requests.ts': "publishing checks a page's gql documents and generated root names",
-    'server.ts': "a resolver's caps.query in process (resolverDatasets)",
-    'services/app/app/api/runner/operations/route.ts': "a remote resolver's caps.query (resolverDatasets)",
+    'services/app/lib/publish/publish/requests.ts': "publishing checks a page's generated root names",
   },
 };
 /** A lib module without a row: entered only through its index (rule 4's default). */
@@ -538,7 +536,7 @@ function graphqlFenceViolations(imports, fenced, fence) {
   const stale = Object.keys(fence.importers).filter(file => !used.has(file)).sort();
   const unheaded = fenced.filter(({ opening }) => opening !== fence.header).map(({ file }) => `  ${file}`);
   return [
-    ...(refused.length ? ['The GraphQL compatibility layer (lib/graphql-compat, html-runtime/apollo/graphql-compat) is deprecated: only its routes, the browser client entry and the files in GRAPHQL_COMPAT.importers (scripts/ci/module-graph.mjs) import it. Read data with `sql` (lib/dataset-access) and call functions with fetch(\'/fn/<name>\') (lib/page-doors) instead:', ...[...new Set(refused)]] : []),
+    ...(refused.length ? ['The GraphQL compatibility layer (lib/graphql-compat, html-runtime/apollo/graphql-compat) is deprecated: only its routes, the browser client entry and the files in GRAPHQL_COMPAT.importers (scripts/ci/module-graph.mjs) import it. Read and write data with `sql` (lib/dataset-access, lib/page-doors) instead:', ...[...new Set(refused)]] : []),
     ...(stale.length ? ['GraphQL compatibility importers that no longer import it; remove them from GRAPHQL_COMPAT.importers in scripts/ci/module-graph.mjs:', ...stale.map(file => `  ${file}`)] : []),
     ...(unheaded.length ? [`Every file of the GraphQL compatibility layer opens with its header line: ${fence.header}`, ...unheaded] : []),
   ];

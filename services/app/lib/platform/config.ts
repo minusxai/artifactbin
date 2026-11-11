@@ -2,7 +2,7 @@ import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
-import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, isLocalDevelopmentHost, parseAliasOrigins, parseServiceAudiences, parseTestDomainSignIn, type ServiceAudience } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -125,7 +125,8 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
 
 /**
  * How many proxies sit in front of this app — which is to say, how much of
- * `X-Forwarded-For` was written by something we trust.
+ * `X-Forwarded-For`, `X-Forwarded-Host` and `X-Forwarded-Proto` was written by something we trust
+ * (lib/http `trustedForwarded`, lib/accounts `forwardedFor`).
  *
  * The header is a list, and each hop APPENDS the address it received the
  * connection from, so a route sees `<whatever the client sent>, <what proxy1
@@ -137,9 +138,14 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
  * of the server — Caddy/Traefik/your host's). Raise it when another trusted hop is added in
  * front (a CDN, say); never raise it past the number of proxies that actually
  * rewrite the header, or the extra hops start reading caller-controlled values
- * again.
+ * again. 0 means no proxy: every forwarded header is the caller's, so none is read and `Host` names the
+ * addressed host. Unparseable or negative: 1.
  */
-export const TRUSTED_PROXY_HOPS = Math.max(1, Math.trunc(Number(env('HTTP', 'TRUSTED_PROXY_HOPS') ?? '1')) || 1);
+function parseTrustedProxyHops(value: string | undefined): number {
+  const hops = Math.trunc(Number(value ?? '1'));
+  return Number.isFinite(hops) && hops >= 0 && value?.trim() !== '' ? hops : 1;
+}
+export let TRUSTED_PROXY_HOPS = parseTrustedProxyHops(env('HTTP', 'TRUSTED_PROXY_HOPS'));
 
 /**
  * Object storage as ONE connection string (see lib/object-store/url.ts):
@@ -256,9 +262,8 @@ export { parseAliasOrigins };
 export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
- * THE ADDRESSES THIS DEPLOYMENT'S OUTBOUND TRAFFIC LEAVES FROM: resolver database connections, `caps.fetch`, web
- * ingestion, webhooks. Served publicly at `GET /api/outbound-ips` and shown beside each database connection in the
- * Resolvers panel, so an owner knows what to allow in a database firewall. Comma-separated IP addresses (IPv4 or
+ * THE ADDRESSES THIS DEPLOYMENT'S OUTBOUND TRAFFIC LEAVES FROM: web ingestion, webhooks. Served publicly at
+ * `GET /api/outbound-ips`, so an owner knows what to allow in a firewall. Comma-separated IP addresses (IPv4 or
  * IPv6); deployment-specific, so empty by default. A malformed entry throws at module load (`parseOutboundIps`).
  */
 export let OUTBOUND_IPS = parseOutboundIps(env('APP', 'OUTBOUND_IPS'));
@@ -345,6 +350,16 @@ export let USER_PAGES_HOST = parseUserPagesHost(env('APP', 'USER_PAGES_HOST'));
 export let BROWSER_SERVICE_URL = env('BROWSER', 'SERVICE_URL');
 /** Origin of the owning auth service for split-host human pages sessions. */
 export const AUTH_SERVICE_URL = env('AUTH', 'SERVICE_URL');
+/**
+ * AUTH__SCHEMA: the identity module's own schema, where its base tables live (users, tokens, groups and the rest:
+ * contracts `IDENTITY_OWNED_TABLES`). The app never reads them there; it names it only when it hosts identity itself.
+ */
+export const AUTH_SCHEMA = env('AUTH', 'SCHEMA') ?? 'auth';
+/**
+ * IDENTITY__SCHEMA: the identity read surface (the views named as the identity tables), which this process's
+ * search_path resolves after its own schema, and every other reader reads. One per deployment sharing a database.
+ */
+export const IDENTITY_READ_SCHEMA = env('IDENTITY', 'SCHEMA') ?? IDENTITY_SCHEMA;
 export let INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
 
 /**
@@ -374,20 +389,10 @@ export let EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
 export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
 
 /**
- * A SHORTER FUNCTION SCHEDULE for local checks: whole minutes (at least 1) that a development or test process allows
- * below the product minimum (lib/page-operations FUNCTION_SCHEDULE_MIN_MINUTES). Any other process ignores it, so a
- * production deployment cannot lower the minimum. Read at each publish (a test's `overrideConfig` environment applies).
+ * The secret signed actor requests carry (proxy to app, browser to app): read by a composition that signs them
+ * (`services/utils` signActor), never by the app's own request path.
  */
-env('SCHEDULES', 'MIN_INTERVAL_MINUTES');
-export function functionScheduleMinimumMinutes(): number | undefined {
-  if (!IS_DEV && !IS_TEST) return undefined;
-  const minutes = Number(env('SCHEDULES', 'MIN_INTERVAL_MINUTES'));
-  return Number.isInteger(minutes) && minutes >= 1 ? minutes : undefined;
-}
-
-/** Optional runner HTTP boundary; otherwise the composition root registers a local runner. */
-export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
-export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
+export const ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
 
 /**
  * THE TEST OVERRIDE for configuration: replaces the settings below, and `env()` reads, without touching the
@@ -399,7 +404,7 @@ export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
 const SETTING_DEFAULTS = {
   publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, userPagesHost: USER_PAGES_HOST, outboundIps: OUTBOUND_IPS,
   browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
-  testDomain: TEST_DOMAIN,
+  testDomain: TEST_DOMAIN, trustedProxyHops: TRUSTED_PROXY_HOPS,
 };
 type ConfigOverrides = { [K in keyof typeof SETTING_DEFAULTS]?: (typeof SETTING_DEFAULTS)[K] };
 export function overrideConfig(settings: ConfigOverrides, environment: Record<string, string | undefined> = {}): void {
@@ -413,13 +418,14 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
   if ('sqlServiceUrl' in settings) SQL_SERVICE_URL = settings.sqlServiceUrl;
   if ('eventsServiceUrl' in settings) EVENTS_SERVICE_URL = settings.eventsServiceUrl;
   if ('testDomain' in settings) TEST_DOMAIN = settings.testDomain;
+  if ('trustedProxyHops' in settings) TRUSTED_PROXY_HOPS = settings.trustedProxyHops!;
   for (const [key, value] of Object.entries(environment)) envOverrides.set(key, value);
 }
 export function resetConfigOverrides(): void {
   PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
   USER_PAGES_HOST = SETTING_DEFAULTS.userPagesHost; OUTBOUND_IPS = SETTING_DEFAULTS.outboundIps; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
-  TEST_DOMAIN = SETTING_DEFAULTS.testDomain;
+  TEST_DOMAIN = SETTING_DEFAULTS.testDomain; TRUSTED_PROXY_HOPS = SETTING_DEFAULTS.trustedProxyHops;
   envOverrides.clear();
 }
 
@@ -431,3 +437,86 @@ export function deploymentConfig():{mode:'public'|'company';ownerEmail:string|un
  if(mode==='company'&&(!ownerEmail||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)))throw new Error('Company deployment requires APP__DEPLOYMENT_OWNER_EMAIL.');
  return {mode,ownerEmail};
 }
+
+/**
+ * IDENTITY__SERVICE_AUDIENCES (contracts `parseServiceAudiences`): the services that accept this installation's
+ * identity tokens. An identity-side setting the app also reads, for the identity store it may host, the views' row
+ * (./identity-host) and the token mint's audience check; empty by default. Read at each use, so a test's
+ * `overrideConfig` applies; a malformed value refuses the boot (lib/deployment `validateDeploymentConfiguration`).
+ */
+env('IDENTITY', 'SERVICE_AUDIENCES');
+export const serviceAudiences = (): readonly ServiceAudience[] => parseServiceAudiences(env('IDENTITY', 'SERVICE_AUDIENCES'));
+
+/**
+/**
+ * DATASETS__DEFAULT_CONNECTION: the install's default connection, one connector configuration JSON object
+ * (contracts `CONNECTORS`; `{"connector":"postgres","host":…,"password":…}`), secrets included. Every signed-in person
+ * may query it read-only from a page (`<link rel="af-dataset" href="default:">`) or an agent. Unset, the default: none.
+ * Checked at boot (lib/connections `validateDefaultConnection`): a bad value stops the start naming this setting and
+ * never echoing the value. Read at each use, so a test's `overrideConfig` environment applies.
+ */
+env('DATASETS', 'DEFAULT_CONNECTION');
+export const defaultConnectionSetting = (): string | null => env('DATASETS', 'DEFAULT_CONNECTION')?.trim() || null;
+/**
+ * DATASETS__ALLOW_PRIVATE_NETWORK: `1` lets connections reach loopback and private addresses and turn TLS off
+ * (`"tls":"disable"`), for development or a database on the install's own network. `0` (unset, the default): public
+ * addresses over verified TLS only. Link-local and cloud metadata addresses are refused either way. Any other value
+ * refuses the boot.
+ */
+env('DATASETS', 'ALLOW_PRIVATE_NETWORK');
+export function datasetsAllowPrivateNetwork(): boolean {
+  const value = env('DATASETS', 'ALLOW_PRIVATE_NETWORK')?.trim() || '0';
+  if (value !== '0' && value !== '1') throw new Error('DATASETS__ALLOW_PRIVATE_NETWORK must be 0 (the default) or 1.');
+  return value === '1';
+}
+
+/**
+ * APP__SHELL_FILE: the path of one HTML file this process can read, served in place of the app's own screens
+ * (server/custom-shell says which addresses, and what stays the app's). Unset, the default: the app's screens.
+ */
+env('APP', 'SHELL_FILE');
+export const shellFile = (): string | null => env('APP', 'SHELL_FILE')?.trim() || null;
+
+/**
+ * SKILLS__EXTRA_DIR: a directory this process can read whose files the author skill this origin serves
+ * (`/skills/artifactbin.zip`) carries under `extras/`, beside, never in place of, the product's own files
+ * (lib/skills/extras says which files, and the limits). Off by default. They are the operator's content, shipped to
+ * agents as instructions and code, and public: never put a secret there. Read once at boot; an invalid directory
+ * refuses the boot.
+ */
+env('SKILLS', 'EXTRA_DIR');
+export const skillExtrasDir = (): string | null => env('SKILLS', 'EXTRA_DIR')?.trim() || null;
+
+/**
+ * TRUST__GROUP_APPROVALS: `on` (unset, the default) lets a group's editors approve, for every member of the group and
+ * its subgroups, the exact addresses a page may call or load data from (lib/trust/group-trust); `off` offers no such
+ * choice, refuses the group addresses API (`group_approvals_disabled`) and ignores the stored approvals, which are kept.
+ * Read at each use, so a test's `overrideConfig` environment applies. Any other value refuses the boot.
+ */
+env('TRUST', 'GROUP_APPROVALS');
+export function groupTrustApprovalsEnabled(): boolean {
+  const value = env('TRUST', 'GROUP_APPROVALS')?.trim() || 'on';
+  if (value !== 'on' && value !== 'off') throw new Error('TRUST__GROUP_APPROVALS must be on (the default) or off.');
+  return value === 'on';
+}
+
+/**
+ * TRUSTED EMBEDDERS: `EMBED__TRUSTED_ORIGINS`, comma-separated origins (https, or http on a local development host)
+ * that may frame a document's address, the `/a/<id>` app page and the document it frames on its own origin, and
+ * nothing else of the app. `?embed=1` on that address is the EMBEDDED view, which only these origins may frame (no
+ * one when the list is empty). Empty by default: app pages and documents are framed by the app alone. A malformed
+ * entry refuses the boot. Read at each use, so a test's `overrideConfig` environment applies.
+ */
+env('EMBED', 'TRUSTED_ORIGINS');
+export function embedTrustedOrigins(): string[] {
+  const text = env('EMBED', 'TRUSTED_ORIGINS')?.trim();
+  if (!text) return [];
+  return text.split(',').map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    let url: URL | undefined;
+    try { url = new URL(entry); } catch { url = undefined; }
+    const ok = url && url.origin === entry.replace(/\/+$/, '') && (url.protocol === 'https:' || (url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname)));
+    if (!ok) throw new Error('EMBED__TRUSTED_ORIGINS must be comma-separated origins: https, or http on a local development host.');
+    return url!.origin;
+  });
+}
+

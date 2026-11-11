@@ -3,7 +3,7 @@ import type {BundleReceipt} from './execute';
 /** What a page's saved metadata records of its publication (lib/publish): its files' receipts and the entry's project path. */
 export interface PublicationRecord {htmlPublicationDependencies?:readonly BundleReceipt[];htmlPublicationEntryPath?:string}
 /**
- * The page core's file table (html-runtime config `files`, read by html-runtime fn-fetch): each file the page's own
+ * The page core's file table (html-runtime config `files`, read by html-runtime page-fetch): each file the page's own
  * publication recorded, keyed by the path a script on the page fetches it by, to where it is read. Keys are relative
  * to the page (its entry's folder; a page published before the entry was recorded sits at its project's root), with
  * `%`, `?` and `#` escaped so the browser's URL parser reads each as one path, however the author spelled it.

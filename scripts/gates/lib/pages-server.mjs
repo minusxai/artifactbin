@@ -14,6 +14,8 @@
  *
  *   const pages = await pagesServer(process.argv[2], 'frame-editor');
  *   const crossSite = await pagesServer(process.argv[2], 'live-regions-oop', { pagesHost: 'localhost' });
+ *   const shell = await pagesServer(process.argv[2], 'host-comments', { env: { APP__SHELL_FILE: file }, drives: isShell });
+ *   // `env`: settings for the server it boots; a given base is driven only when `drives(base)` says it is set up so.
  *   // pages.app, pages.port, pages.origin(id), pages.browserArgs, pages.booted; pages.stop() on exit (also automatic)
  */
 import { spawn } from 'node:child_process';
@@ -51,14 +53,14 @@ async function framesPagesAt(port, host) {
   } catch { return false; }
 }
 
-export async function pagesServer(given, name, { pagesHost = PAGES_HOST } = {}) {
+export async function pagesServer(given, name, { pagesHost = PAGES_HOST, env = {}, drives = async () => true } = {}) {
   let child = null;
   let scratch = null;
   const stop = () => { if (child && child.exitCode === null) child.kill('SIGKILL'); if (scratch) rmSync(scratch, { recursive: true, force: true }); scratch = null; };
   process.on('exit', stop);
   const url = given ? new URL(given) : null;
   const givenPort = url ? Number(url.port || (url.protocol === 'https:' ? 443 : 80)) : null;
-  let port = givenPort && await servesPages(givenPort, pagesHost) && (pagesHost === PAGES_HOST || await framesPagesAt(givenPort, pagesHost)) ? givenPort : null;
+  let port = givenPort && await servesPages(givenPort, pagesHost) && (pagesHost === PAGES_HOST || await framesPagesAt(givenPort, pagesHost)) && await drives(`http://app.${PAGES_HOST}:${givenPort}`) ? givenPort : null;
   if (!port) {
     const bundle = path.join(ROOT, 'dist/server.mjs');
     if (!existsSync(bundle)) throw new Error(`the ${name} gate boots its own server from dist/server.mjs: run \`npm run build\` first`);
@@ -85,6 +87,7 @@ export async function pagesServer(given, name, { pagesHost = PAGES_HOST } = {}) 
         OBJECT_STORE__LOCAL_DIR: objects,
         ARTIFACTS__ALLOW_PUBLIC: '1',
         EMAIL__DEV_OUTBOX_PATH: process.env.EMAIL__DEV_OUTBOX_PATH,
+        ...env,
       },
     });
     let up = false;

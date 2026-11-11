@@ -2,7 +2,7 @@
  * TWO AGENTS ON ONE COMPUTER SHARE ONE SIGN-IN, NOT ONE IDENTITY. Claude Code and Codex run the installed comment
  * command with the same token and sign-in folder, against the real app (createAppServer): each comment shows its own
  * session's name, a watch prints the other agent's comments and never its own, and one agent starting a watch never
- * stops the other's. The server keeps a declared full name ("Claude Code Red") and marks `you` per session.
+ * stops the other's. The server keeps a declared full name ("Claude Code Red"), and the events feed marks `you` per session.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -35,8 +35,8 @@ async function twoAgents() {
   const printed: unknown[] = [];
   const options = { env: { ...shared, ...env }, fetcher, retryDelays: [], ps: extra.ps, deliver: async (line: unknown) => { printed.push(line); } };
   const run = (sub: string, values: Record<string, unknown>) => commentCommand({ sub, values: extra.as ? { as: extra.as, ...values } : values, positionals: [doc.id] }, options);
-  /** One watch --next call; what it printed: others' comments as their bodies, then its own lines. */
-  const watch = async (values: Record<string, unknown> = {}) => { printed.length = 0;await run('watch', { next: true, ...values });return printed.map(v => typeof v === 'string' ? v : (({ event }) => event.body ?? `${event.type}:${event.change}`)(v as { event: { body?: string; type: string; change?: string } })); };
+  /** One watch --next call; what it printed: others' comments as their words (read for the event), then its own lines. */
+  const watch = async (values: Record<string, unknown> = {}) => { printed.length = 0;await run('watch', { next: true, ...values });return printed.map(v => typeof v === 'string' ? v : (({ event, comment }) => event.type === 'artifact.annotation_reaction_changed' ? `${event.type}:${event.payload.active ? 'added' : 'removed'}` : comment?.body ?? event.type)(v as { event: { type: string; payload: { active?: boolean } }; comment?: { body: string } })); };
   return { run, watch };
  };
  return { doc, anchor, session, a: session({ CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'claude-session-a' }), b: session({ CODEX_THREAD_ID: 'codex-thread-b' }) };
@@ -105,5 +105,5 @@ it('an edit or a reaction by the other agent on the same account reaches the wat
  await b.run('edit', { comment: mine.thread.id, body: 'A asks (B clarified)' });
  await b.run('react', { comment: mine.thread.id, active: 'true' });
  const printed = (await a.watch()).filter(line => !line.startsWith('next:'));
- expect(printed).toEqual(['A asks (B clarified)', 'artifactbin.comment_reaction:added']);
+ expect(printed).toEqual(['A asks (B clarified)', 'artifact.annotation_reaction_changed:added']);
 }, 60_000);

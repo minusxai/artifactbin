@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
-import { afterEach, expect, it, vi } from 'vitest';
-import { waitFor } from '@testing-library/dom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CspConsentBar, cspAskSentence } from '../CspConsentBar';
 import { EMPTY_CSP_EXTENSIONS, type CspRequest } from '@/lib/document/csp-extensions';
@@ -91,4 +91,42 @@ it('names a failure and keeps the choices', async () => {
   fireEvent.click(view.getByRole('button', { name: 'Never' }));
   await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Sign in to keep this choice.'));
   expect(view.getByRole('button', { name: 'Allow once' })).toBeInTheDocument();
+});
+
+describe('Always for a group', () => {
+  const TEAM = { id: 'g1', handle: 'team', name: 'Team' }, OPS = { id: 'g2', handle: 'ops', name: 'Ops' };
+  const eligible = { ...EMPTY_CSP_EXTENSIONS, connect: ['https://api.open-meteo.com'] };
+  const WITH_GROUP: CspRequest = { ...ASK, group: { eligible, groups: [TEAM] } };
+
+  it('is offered only when the request names a group, and says what still needs a per-page answer', () => {
+    const plain = render(() => <CspConsentBar id="abc123" request={ASK} accountSession />);
+    expect(plain.queryByRole('button', { name: /Always for (Team|a group)/ })).toBeNull();
+    plain.unmount();
+    const view = render(() => <CspConsentBar id="abc123" request={WITH_GROUP} accountSession />);
+    expect(view.getByRole('button', { name: 'Always for Team' })).toBeInTheDocument();
+    const bar = view.getByRole('region', { name: 'Document network access' });
+    expect(bar).toHaveTextContent('every member of the group may then reach api.open-meteo.com on any page');
+    expect(bar).toHaveTextContent('Scripts, styles, frames and wildcard addresses still need an answer for this page: cdn.plot.ly.');
+  });
+
+  it('approves the eligible part for the group, reads the reader\'s standing again and reloads', async () => {
+    const fetcher = vi.fn(async (url: string, _init?: RequestInit) => url.startsWith('/api/groups/') ? Response.json({ changed: eligible, addresses: [] }) : Response.json({ cspRequest: { ...ASK, asking: { ...EMPTY_CSP_EXTENSIONS, script: ['https://cdn.plot.ly'] } } }));
+    vi.stubGlobal('fetch', fetcher);
+    const reload = vi.fn();
+    const view = render(() => <CspConsentBar id="abc123" request={WITH_GROUP} accountSession reload={reload} />);
+    fireEvent.click(view.getByRole('button', { name: 'Always for Team' }));
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(fetcher.mock.calls[0]![0]).toBe('/api/groups/g1/allowed-addresses');
+    expect(JSON.parse((fetcher.mock.calls[0]![1] as RequestInit).body as string)).toEqual({ connect: ['https://api.open-meteo.com'], img: [], media: [] });
+    expect(fetcher.mock.calls[1]![0]).toBe('/api/trust?artifactId=abc123');
+    expect(view.getByRole('region', { name: 'Document network access' })).toHaveTextContent('load scripts from cdn.plot.ly');
+  });
+
+  it('offers a picker when the reader edits several groups, and shows a refusal', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'forbidden', detail: 'Only an editor of this group may change what it approves.' }, { status: 403 })));
+    const view = render(() => <CspConsentBar id="abc123" request={{ ...WITH_GROUP, group: { eligible, groups: [TEAM, OPS] } }} accountSession reload={vi.fn()} />);
+    fireEvent.click(view.getByRole('button', { name: 'Always for a group' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Always for Ops' }));
+    await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Only an editor of this group may change what it approves.'));
+  });
 });

@@ -1,7 +1,7 @@
 /**
  * Internal: an HTML source's af-authoring marker, its last line and the only local record of the
  * page it publishes over (server, id, version, state, entryPath, the source's hash without it):
- * read, check, stamp and save it, restore local backend hrefs, and pick where read --output saves.
+ * read, check, stamp and save it, and pick where read --output saves.
  * Used by: toolbox-publish.mjs, toolbox-publish-finish.mjs, read.mjs, toolbox-check-command.mjs,
  *   new-page.mjs, new-app.mjs, new-codebase-report.mjs.
  */
@@ -43,29 +43,16 @@ export function markerOf(file,source,server){
   `To make it the current page anyway: ${by}.`);
  return marker;
 }
-/** Canonical HTML drops resolver (af-resolver) hrefs; put the author's local
- * path back so later backend edits are published. */
-function restoreBackendHrefs(source,links){
-const hrefs=new Map((links??[]).filter(link=>link.name&&link.href).map(link=>[link.name,
-   link.href]));if(!hrefs.size)return source;
- return source.replace(/<link\b[^>]*>/gi,tag=>{
-  if(!/\brel\s*=\s*["'][^"']*\baf-resolver\b/i.test(tag)||/\shref\s*=/i.test(tag))
-   return tag;
-  const name=tag.match(/\sdata-af-name\s*=\s*["']([^"']+)["']/i)?.[1],href=name&&hrefs.get(name);
-return href?tag.replace(/^<link\b/i,'<link href="'+href.replace(/&/g,'&amp;').replace(/"/g,
-    '&quot;')+'"'):tag;
- });
-}
 /** Writes a page record as editable source with its marker: `replace` only for publish's own
  * unchanged input or a read over a file still unchanged since; otherwise never over a file. */
 export async function saveSource({record,server,output,entryPath=path.basename(output),receipts,
-  localReferences=false,historical=false,replace=false,backendLinks=[]}){
+  localReferences=false,historical=false,replace=false}){
 if(typeof record.html!=='string')throw new ToolError('not_html','This record is not editable HTML.',
    2);
  const shared=await platform();
  let source=localReferences?shared.authoringHtml(record.html,{server,pageId:record.id,entryPath,
   receipts:receipts??record.dependencyReceipts??[]}):record.html;
- source=stripMarker(restoreBackendHrefs(source,backendLinks));
+ source=stripMarker(source);
  source=stampSource(source,{server,id:record.id,version:record.version,state:record.state,
   sha256:hash(source),entryPath,...(historical?{historical:true}:{}),...(Number.isSafeInteger(
   record.sharing_revision)?{sharingRevision:record.sharing_revision}:{})});

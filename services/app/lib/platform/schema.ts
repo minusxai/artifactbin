@@ -1,7 +1,5 @@
-import {RUN_TABLES} from '@artifactbin/runner/schema';
 /**
- * Schema as data → idempotent DDL. (Distilled from minusx
- * lib/database/schema/tables.ts + render.ts.)
+ * Schema as data → idempotent DDL.
  *
  * The APP's table declarations — the data only. The renderer (renderSchema,
  * ensureTable) lives in @artifactbin/utils and is shared; `SCHEMA_STATEMENTS`
@@ -18,102 +16,7 @@ import { renderDroppedTables, renderSchema } from '@artifactbin/utils';
  */
 export const TITLE_SLUG_SQL = "(rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-'))";
 
-const USERS: Table = {
-  name: 'users',
-  columns: [
-    { name: 'id', type: 'TEXT', notNull: true }, // 'usr_' + base36
-    { name: 'email', type: 'TEXT', relaxNotNull: true },
-    /*
-     * THE KIND. One column answers what a user IS, and every permission
-     * decision reads it through `lib/capabilities` rather than re-deriving it:
-     *   'account'  — a signed-in person;
-     *   'guest'    — an anonymous browser that saved something, claimable at login;
-     *   'testuser' — a throwaway second person an account minted (parent_user_id),
-     *                erased with everything it owns.
-     * The default is 'account' so the additive ALTER is legal on a non-empty
-     * table.
-     */
-    { name: 'kind', type: 'TEXT', notNull: true, default: "'account'" },
-    /** The ACCOUNT that minted a test user; NULL for everyone else. */
-    { name: 'parent_user_id', type: 'TEXT' },
-    /** A test user's death date; NULL for an account or a guest, which do not expire. */
-    { name: 'expires_at', type: 'TIMESTAMPTZ' },
-    // Verified guest adoption preserves the identity pinned by existing CLI workspaces.
-    { name: 'merged_into_user_id', type: 'TEXT' },
-    { name: 'name', type: 'TEXT' },
-    // Public handle for pretty URLs (/@username/...). Lowercase [a-z0-9_],
-    // auto-assigned at login (localpart_xxxx), renameable. Nullable so the
-    // additive ALTER is legal on non-empty tables; backfilled lazily at login.
-    { name: 'username', type: 'TEXT' },
-    // The profile picture: an object-store key (`avatar/<sha256>`), one square
-    // WebP written by lib/avatars. NULL = no picture; the client draws a
-    // generated initial. Public by id, like the handle.
-    { name: 'image_key', type: 'TEXT' },
-    // TRUE from the moment the app first creates a row for a NEW person
-    // (lib/profiles) until they confirm the welcome page. Existing rows take the
-    // default and never see it; no backfill needed, which is why this is a flag
-    // set at insert rather than a timestamp that would have to be back-dated.
-    { name: 'auto_accept_mentions', type: 'BOOLEAN', notNull: true, default: 'true' },
-    { name: 'welcome_pending', type: 'BOOLEAN', notNull: true, default: 'false' },
-    // TRUE for an account whose row was CREATED for an address at the test domain while test-domain
-    // sign-in was on (lib/accounts/test-accounts). Set at insert only, like welcome_pending: existing
-    // rows take the default and are never marked, so a later cleanup can select exactly these.
-    { name: 'test_account', type: 'BOOLEAN', notNull: true, default: 'false' },
-    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-  ],
-  primaryKey: ['id'],
-  // Both unique constraints use the `indexes` form ON PURPOSE: entries in
-  // `uniques` only render inside CREATE TABLE, so they never reach a
-  // database that already exists — an index applies retroactively.
-  indexes: [
-    { name: 'idx_users_email', columns: ['email'], unique: true },
-    { name: 'idx_users_username', columns: ['username'], unique: true },
-    // "How many live test users does this account hold?" and "erase them all"
-    // are both this index; the cap is read on every mint.
-    { name: 'idx_users_parent', columns: ['parent_user_id'] },
-  ],
-  // `is_guest` (replaced by `kind`, which says more: a test user is not a guest) and
-  // `password_hash` (login is email + OTP; there are no passwords). Dead data, dropped on boot.
-  dropped: ['is_guest', 'password_hash'],
-};
 
-const TOKENS: Table = {
-  name: 'tokens',
-  columns: [
-    { name: 'id', type: 'TEXT', notNull: true }, // 'tok_' + base36 — non-secret handle
-    { name: 'name', type: 'TEXT' }, // human label ("vivek-laptop")
-    { name: 'token_hash', type: 'TEXT', notNull: true }, // sha256 hex of plaintext; the ONLY thing stored
-    { name: 'user_id', type: 'TEXT' }, // NULL = anonymous (claimable via /api/tokens/claim)
-    // The harness last declared on the agent header, for display attribution on
-    // later stateless calls. Self-reported telemetry only — never authorization.
-    { name: 'client_harness', type: 'TEXT' },
-    // The exact resource an OAuth-issued access token is restricted to.
-    // NULL keeps manually minted tokens general-purpose.
-    { name: 'audience', type: 'TEXT' },
-    { name: 'scope', type: 'TEXT' },
-    { name: 'request_authority', type: 'BOOLEAN', notNull: true, default: 'false' },
-    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-    // NULL = live. The verb stays REVOKE everywhere a person or a function
-    // reads it (revokeToken, tokenStatus 'revoked', the dashboard's copy); the
-    // COLUMN is `deleted_at` because every table that can lose a row spells it
-    // the same way, and one pattern with no exception is worth more than a
-    // column name that reads slightly better on this one table. Declared as a
-    // rename, so a database built from the old declaration copies the stamps
-    // across on its next boot rather than un-revoking every revoked token.
-    { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' },
-    // Nullable so the additive boot DDL is the migration: existing tokens are
-    // grandfathered as non-expiring, and new mints set their own policy.
-    { name: 'expires_at', type: 'TIMESTAMPTZ' },
-    // Nullable so the same additive migration preserves "never used".
-    { name: 'last_used_at', type: 'TIMESTAMPTZ' },
-  ],
-  primaryKey: ['id'],
-  indexes: [
-    { name: 'idx_tokens_hash', columns: ['token_hash'], unique: true },
-    // An account's live tokens (lib/accounts/tokens: the web token, the token list).
-    { name: 'idx_tokens_user', columns: ['user_id'], where: 'deleted_at IS NULL' },
-  ],
-};
 
 const ARTIFACTS: Table = {
   name: 'artifacts',
@@ -174,11 +77,7 @@ const ARTIFACTS: Table = {
     // version row when this state is archived, so history can say who.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
-    // WHO PUBLISHED THE HEAD'S CONTENT — the account whose creation, fork, publication or revert made the content now at
-    // the head. Unlike actor_user_id (the last accepted writer of anything, metadata included), only those writes stamp
-    // it, in the same statement; metadata, sharing, transfer, trash restore and live-region saves keep it. A page's
-    // scheduled functions run as this account (lib/function-schedules), so an edit that is not a publication never
-    // lends its author's authority to code someone else published. NULL: no account published it (a token).
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
     { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
@@ -242,6 +141,8 @@ const ARTIFACT_VERSIONS: Table = {
     // Who produced THIS state (artifacts.actor_* at the moment it was archived).
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'version'],
@@ -271,6 +172,8 @@ const ARTIFACT_EDITS: Table = {
     // Who made the splice — NULL on rows that predate attribution.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['seq'],
@@ -317,6 +220,8 @@ const REGION_UPDATES: Table = {
     { name: 'update', type: 'BYTEA', notNull: true },
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
+    // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
+    { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'region_id', 'seq'],
@@ -432,19 +337,11 @@ const ANNOTATIONS: Table = {
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
     // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
-    // The comment feed's position for an edit: a fresh value from `seq`'s own sequence, so one cursor orders
-    // new comments and edits alike (lib/annotations/changes). NULL = never edited (or edited by an agent before edits all moved).
-    { name: 'change_seq', type: 'BIGINT' },
-    // The credential behind the latest edit, beside its position: the feed marks a watcher's own rewrite `you`.
-    { name: 'change_token_id', type: 'TEXT' },
-    // The agent session that wrote the row and made its latest edit: the opaque `Artifactbin-Session` value, beside the
-    // credential. Self-reported, never authorization: the feed's `you` is the credential AND, when both sides name one,
-    // the session, so two agents sharing one sign-in each see the other's comments (lib/annotations/changes).
-    { name: 'author_session', type: 'TEXT' },
-    { name: 'change_session', type: 'TEXT' },
   ],
   primaryKey: ['id'],
-  indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }, { name: 'idx_annotations_artifact_change_seq', columns: ['artifact_id', 'change_seq'] }],
+  // The retired comment feed's edit positions and writer credential/session (the events feed carries its own origin).
+  dropped: ['change_seq', 'change_token_id', 'author_session', 'change_session'],
+  indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],
 };
 
 /** One account can independently react once per kind; no identities leave the aggregate read. */
@@ -462,30 +359,6 @@ const COMMENT_REACTIONS: Table = {
   primaryKey: ['comment_id','user_id','kind'],
 };
 
-/**
- * Every effective reaction change, appended and never rewritten: the comment feed's reaction half
- * (lib/annotations/changes). `seq` comes from `annotations.seq`'s sequence, so one cursor orders comments, edits and
- * reactions. Per (comment, user, kind) rows strictly alternate `active`; `count` is that kind's count right after.
- */
-const COMMENT_REACTION_EVENTS: Table = {
-  name: 'comment_reaction_events',
-  columns: [
-    {name:'seq',type:'BIGINT',notNull:true},
-    {name:'artifact_id',type:'TEXT',notNull:true},
-    {name:'comment_id',type:'TEXT',notNull:true},
-    {name:'user_id',type:'TEXT',notNull:true},
-    {name:'kind',type:'TEXT',notNull:true},
-    {name:'active',type:'BOOLEAN',notNull:true},
-    {name:'reactor_kind',type:'TEXT',notNull:true},
-    {name:'reactor_label',type:'TEXT'},
-    {name:'count',type:'INTEGER',notNull:true},
-    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-    {name:'token_id',type:'TEXT'}, // the credential that reacted: the feed marks a watcher's own reaction `you`
-    {name:'session',type:'TEXT'}, // the agent session that reacted (annotations.author_session); never authorization
-  ],
-  primaryKey: ['seq'],
-  indexes: [{name:'idx_comment_reaction_events_artifact_seq',columns:['artifact_id','seq']}],
-};
 
 
 /**
@@ -808,7 +681,6 @@ const MERMAID_HARVESTS: Table = {
 };
 
 /** At-most-once mutation admission, before the content transaction. */
-// RUN_TABLES remain internal: the native backend controller performs boot recovery against them.
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
  columns:[
@@ -848,6 +720,21 @@ const DATASET_POLICY_AUDIT: Table = {
     {name:'actor_token_id',type:'TEXT'},
     {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
   ], primaryKey:['dataset_id','revision'],
+};
+/**
+ * A LIVE DATASET'S CONNECTION (lib/live-datasets): the connector configuration without its secret fields (`config`),
+ * the secret fields sealed (lib/platform sealSecret, the dataset ID as context; null when the connector needs none),
+ * and a revision every change moves (an open connection is reused only while it matches).
+ */
+const DATASET_CONNECTIONS: Table = {
+  name: 'dataset_connections',
+  columns: [
+    {name:'dataset_id',type:'TEXT',notNull:true},
+    {name:'config',type:'JSONB',notNull:true},
+    {name:'sealed',type:'TEXT'},
+    {name:'revision',type:'INTEGER',notNull:true,default:'1'},
+    {name:'updated_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  ], primaryKey:['dataset_id'],
 };
 const DATASET_USAGE: Table = {
   name:'dataset_usage',
@@ -983,21 +870,35 @@ const DOCUMENT_TRUST: Table = {
  ],primaryKey:['user_id','artifact_id'],
 };
 
-/** Independent group owners, shared handles, preferences and company admission state. */
-const GROUPS:Table={name:'groups',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
- {name:'name',type:'TEXT',notNull:true},{name:'description',type:'TEXT',notNull:true,default:"''"},
- {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- {name:'deleted_at',type:'TIMESTAMPTZ'},
-],primaryKey:['id'],indexes:[{name:'idx_groups_handle',columns:['handle'],unique:true}]};
-const GROUP_MAIL_OUTBOX:Table={name:'group_mail_outbox',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},{name:'recipient_id',type:'TEXT'},
- {name:'group_id',type:'TEXT',notNull:true},{name:'group_name',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
- {name:'action',type:'TEXT',notNull:true},{name:'sender_id',type:'TEXT',notNull:true},
- {name:'lease_until',type:'TIMESTAMPTZ'},{name:'claim_token',type:'TEXT'},
- {name:'attempts',type:'INTEGER',notNull:true,default:'0'},{name:'next_attempt_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- {name:'quarantined_at',type:'TIMESTAMPTZ'},{name:'sent_at',type:'TIMESTAMPTZ'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id'],indexes:[{name:'idx_group_mail_pending',columns:['created_at'],where:'sent_at IS NULL'}]};
+/**
+ * A GROUP'S STANDING APPROVAL of one address a page may call (lib/trust/group-trust): every member of the group and
+ * of its subgroups is pre-approved for `host` under `directive` on any page they open. Only the directives that call
+ * or load data (connect, img, media), and only an exact origin (never a wildcard). `created_by` is the editor who
+ * approved, never `user_id`: erasing that person must not take the group's approval with them. A deleted group's
+ * rows stay and grant nothing (every read keeps live groups only).
+ */
+const GROUP_TRUST: Table = {
+ name:'group_trust',columns:[
+  {name:'group_id',type:'TEXT',notNull:true},
+  {name:'directive',type:'TEXT',notNull:true},
+  {name:'host',type:'TEXT',notNull:true},
+  {name:'created_by',type:'TEXT',notNull:true},
+  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],primaryKey:['group_id','directive','host'],checks:[{name:'group_trust_directive',expression:"directive IN ('connect','img','media')"}],
+};
+
+/**
+ * THE CONFIGURATION THE SHARED IDENTITY VIEWS READ (lib/groups identity-views): one row, id 'installation', written
+ * from this process's settings on every boot, so the views stay static SQL and the rules they apply
+ * keep one definition. `deployment_mode` is APP__DEPLOYMENT_MODE; `api_audiences` the `<origin>/api` an OAuth access
+ * token may be bound to (APP__PUBLIC_BASE_URL and APP__ALIAS_ORIGINS); `service_audiences` the origins of the services
+ * that accept this installation's identity tokens (IDENTITY__SERVICE_AUDIENCES).
+ */
+const IDENTITY_SETTINGS:Table={name:'identity_settings',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'deployment_mode',type:'TEXT',notNull:true},
+ {name:'api_audiences',type:'TEXT[]',notNull:true,default:"'{}'"},
+ {name:'service_audiences',type:'TEXT[]',notNull:true,default:"'{}'"},
+],primaryKey:['id']};
 const GROUP_QUOTAS:Table={name:'group_quotas',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'action',type:'TEXT',notNull:true},{name:'window_start',type:'BIGINT',notNull:true},{name:'used',type:'INTEGER',notNull:true}],primaryKey:['user_id','action']};
 const GROUP_AUDIT:Table={name:'group_audit',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'actor_user_id',type:'TEXT',notNull:true},{name:'actor_token_id',type:'TEXT'},{name:'client_harness',type:'TEXT'},
@@ -1008,28 +909,12 @@ const ARTIFACT_GROUP_SHARES:Table={name:'artifact_group_shares',columns:[
  {name:'role',type:'TEXT',notNull:true},
  {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['artifact_id','group_id'],checks:[{name:'artifact_group_share_role',expression:"role IN ('viewer','commenter','editor')"}],indexes:[{name:'idx_artifact_group_shares_group',columns:['group_id','artifact_id']}]};
-const GROUP_MEMBERS:Table={name:'group_members',columns:[
- {name:'group_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
- {name:'role',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['group_id','user_id'],indexes:[{name:'idx_group_members_user',columns:['user_id']}]};
-const GROUP_INVITATIONS:Table={name:'group_invitations',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},
- {name:'role',type:'TEXT',notNull:true},{name:'invited_by',type:'TEXT',notNull:true},
- {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id'],indexes:[
- {name:'idx_group_invitations_email',columns:['group_id','email'],unique:true},
- // acceptGroupInvitations asks by the verified address alone, which the unique (group_id, email) cannot lead.
- {name:'idx_group_invitations_by_email',columns:['email']},
-]};
 const GROUP_LINKS:Table={name:'group_links',columns:[
  {name:'group_id',type:'TEXT',notNull:true},{name:'linked_group_id',type:'TEXT',notNull:true},
 ],primaryKey:['group_id','linked_group_id']};
 const ACCOUNT_PREFERENCES:Table={name:'account_preferences',columns:[
  {name:'user_id',type:'TEXT',notNull:true},{name:'default_destination',type:'JSONB',notNull:true,default:"'{\"type\":\"inherit\"}'::jsonb"},
 ],primaryKey:['user_id']};
-const HANDLE_RESERVATIONS:Table={name:'handle_reservations',columns:[
- {name:'handle',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},{name:'subject_id',type:'TEXT',notNull:true},
-],primaryKey:['handle'],indexes:[{name:'idx_handle_reservations_subject',columns:['kind','subject_id'],unique:true}]};
 const DEPLOYMENT_STATE:Table={name:'deployment_state',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'owner_user_id',type:'TEXT'},
  {name:'default_group_id',type:'TEXT'},{name:'setup_complete',type:'BOOLEAN',notNull:true,default:'false'},
@@ -1043,46 +928,6 @@ const OWNERSHIP_TRANSFERS:Table={name:'ownership_transfers',columns:[
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_ownership_transfers_artifact',columns:['artifact_id','created_at']}]};
 
-/** Immutable backend modules referenced by exact versions from HTML artifact snapshots. */
-const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
- {name:'backend_id',type:'TEXT',notNull:true},{name:'version',type:'TEXT',notNull:true},
- {name:'page_id',type:'TEXT',notNull:true},{name:'name',type:'TEXT',notNull:true},
- {name:'source',type:'TEXT',notNull:true},{name:'type_defs',type:'TEXT',notNull:true},
- {name:'compiled',type:'TEXT',notNull:true},{name:'owner_id',type:'TEXT',notNull:true},
- {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
- // Resolver contract: name->host bindings of the secrets map.
- {name:'secret_hosts',type:'JSONB',notNull:true,default:"'{}'::jsonb"},
- // A typeDefs-free file's functions and the role each needs (page-operations/functions); null for a legacy (typeDefs) file.
- {name:'function_roles',type:'JSONB'},
- // Such a file's `export const schedule`, {name: intervalMs} (page-operations/schedule); null without one.
- {name:'function_schedules',type:'JSONB'},
-],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']},{name:'idx_html_backend_scheduled',columns:['page_id'],where:'function_schedules IS NOT NULL'}],
- // `api` marked the removed resolver format (1 = caps.store/secrets.get); dead data.
- dropped:['api']};
-
-/**
- * A scheduled page function's run state (lib/function-schedules), one row per (page, backend link, function) the page
- * HEAD schedules: derived from the heads on every tick, so a republish without the schedule, a trash or a delete
- * removes it. `lease_until`/`claim_token` hold a run open (no overlap, across processes); `failures` drives backoff;
- * `last_*` is what the owner's Resolvers panel shows. Due times are the scheduler's clock; the lease is database time.
- */
-const PAGE_FUNCTION_SCHEDULES:Table={name:'page_function_schedules',columns:[
- {name:'page_id',type:'TEXT',notNull:true},{name:'link',type:'TEXT',notNull:true},{name:'function',type:'TEXT',notNull:true},
- {name:'every_ms',type:'BIGINT',notNull:true},{name:'next_run_at',type:'TIMESTAMPTZ',notNull:true},
- // The lease is DATABASE time (now()), never a process clock; claim_epoch is the fencing token: it grows by one per claim,
- // and every effect a run commits checks, inside its transaction, that its (claim_token, claim_epoch) is still current.
- {name:'lease_until',type:'TIMESTAMPTZ'},{name:'claim_token',type:'TEXT'},{name:'claim_epoch',type:'BIGINT',notNull:true,default:'0'},
- {name:'failures',type:'INTEGER',notNull:true,default:'0'},
- {name:'last_started_at',type:'TIMESTAMPTZ'},{name:'last_finished_at',type:'TIMESTAMPTZ'},
- {name:'last_status',type:'TEXT'},{name:'last_error',type:'TEXT'},{name:'last_message',type:'TEXT'},{name:'last_detail',type:'TEXT'},
-
-],primaryKey:['page_id','link','function'],indexes:[{name:'idx_page_function_schedules_due',columns:['next_run_at']}]};
-
-const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
- {name:'owner_id',type:'TEXT',notNull:true},{name:'backend_id',type:'TEXT',notNull:true},
- {name:'name',type:'TEXT',notNull:true},{name:'ciphertext',type:'TEXT',notNull:true},
-],primaryKey:['owner_id','backend_id','name']};
-
 /** Host-only migration attribution/provenance. Multiple verified source aliases may share one account. */
 const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'source_namespace',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},
@@ -1093,20 +938,21 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
  * annotation-anchor aliases and node-identity migration cursors, the login/OAuth code tables merged into `codes`,
  * copied web fonts, the shared rate-limit counter, browser test-user leases, hosted agents and their branches,
- * remote agents and work, the api 1 resolvers' `caps.store` state, the retired mutation-notification jobs and
+ * remote agents and work, the api 1 resolvers' store state, the retired mutation-notification jobs and
  * their inbox rows (both empty when dropped), and the deleted connected Postgres datasets' encrypted connection
- * secrets and result cache.
+ * secrets and result cache, and the retired comment feed's reaction log (the events feed records reactions now).
  */
 export const DROPPED_TABLES: readonly string[] = [
   'custom_domains', 'artifact_node_aliases', 'node_identity_migration_jobs', 'login_codes', 'oauth_codes', 'webfonts',
   'rate_limit_hits', 'browser_test_users', 'hosted_conversations', 'hosted_branches', 'remote_agents', 'remote_work',
   'html_backend_stores', 'notification_jobs', 'mutation_notifications', 'dataset_secrets', 'dataset_result_cache',
+  'comment_reaction_events',
 ];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */

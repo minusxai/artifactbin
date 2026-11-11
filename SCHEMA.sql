@@ -46,56 +46,21 @@ ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS receipt JSONB NO
 
 ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-CREATE TABLE IF NOT EXISTS app.group_mail_outbox (
+CREATE TABLE IF NOT EXISTS app.identity_settings (
   id TEXT NOT NULL,
-  email TEXT NOT NULL,
-  recipient_id TEXT,
-  group_id TEXT NOT NULL,
-  group_name TEXT NOT NULL,
-  handle TEXT NOT NULL,
-  action TEXT NOT NULL,
-  sender_id TEXT NOT NULL,
-  lease_until TIMESTAMPTZ,
-  claim_token TEXT,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  quarantined_at TIMESTAMPTZ,
-  sent_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deployment_mode TEXT NOT NULL,
+  api_audiences TEXT[] NOT NULL DEFAULT '{}',
+  service_audiences TEXT[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (id)
 );
 
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS email TEXT NOT NULL;
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS deployment_mode TEXT NOT NULL;
 
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS recipient_id TEXT;
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS api_audiences TEXT[] NOT NULL DEFAULT '{}';
 
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS sender_id TEXT NOT NULL;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS claim_token TEXT;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS quarantined_at TIMESTAMPTZ;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
-
-ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE INDEX IF NOT EXISTS idx_group_mail_pending ON app.group_mail_outbox (created_at) WHERE sent_at IS NULL;
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS service_audiences TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS app.group_quotas (
   user_id TEXT NOT NULL,
@@ -208,190 +173,6 @@ ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS created_at TIME
 
 CREATE INDEX IF NOT EXISTS idx_native_identity_imports_target ON app.native_identity_imports (kind, target_id);
 
-CREATE TABLE IF NOT EXISTS app.html_backend_secrets (
-  owner_id TEXT NOT NULL,
-  backend_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  ciphertext TEXT NOT NULL,
-  PRIMARY KEY (owner_id, backend_id, name)
-);
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS ciphertext TEXT NOT NULL;
-
-CREATE TABLE IF NOT EXISTS app.html_backend_versions (
-  backend_id TEXT NOT NULL,
-  version TEXT NOT NULL,
-  page_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  source TEXT NOT NULL,
-  type_defs TEXT NOT NULL,
-  compiled TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
-  secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb,
-  function_roles JSONB,
-  function_schedules JSONB,
-  PRIMARY KEY (backend_id, version)
-);
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS version TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS type_defs TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS compiled TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_hosts JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_roles JSONB;
-
-ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS function_schedules JSONB;
-
-ALTER TABLE app.html_backend_versions DROP COLUMN IF EXISTS api;
-
-CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
-
-CREATE INDEX IF NOT EXISTS idx_html_backend_scheduled ON app.html_backend_versions (page_id) WHERE function_schedules IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS app.page_function_schedules (
-  page_id TEXT NOT NULL,
-  link TEXT NOT NULL,
-  function TEXT NOT NULL,
-  every_ms BIGINT NOT NULL,
-  next_run_at TIMESTAMPTZ NOT NULL,
-  lease_until TIMESTAMPTZ,
-  claim_token TEXT,
-  claim_epoch BIGINT NOT NULL DEFAULT 0,
-  failures INTEGER NOT NULL DEFAULT 0,
-  last_started_at TIMESTAMPTZ,
-  last_finished_at TIMESTAMPTZ,
-  last_status TEXT,
-  last_error TEXT,
-  last_message TEXT,
-  last_detail TEXT,
-  PRIMARY KEY (page_id, link, function)
-);
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS link TEXT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS function TEXT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS every_ms BIGINT NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS next_run_at TIMESTAMPTZ NOT NULL;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS claim_token TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS claim_epoch BIGINT NOT NULL DEFAULT 0;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS failures INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_started_at TIMESTAMPTZ;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_finished_at TIMESTAMPTZ;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_status TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_error TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_message TEXT;
-
-ALTER TABLE app.page_function_schedules ADD COLUMN IF NOT EXISTS last_detail TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_page_function_schedules_due ON app.page_function_schedules (next_run_at);
-
-CREATE TABLE IF NOT EXISTS app.groups (
-  id TEXT NOT NULL,
-  handle TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  created_by TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at TIMESTAMPTZ,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL;
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_handle ON app.groups (handle);
-
-CREATE TABLE IF NOT EXISTS app.group_members (
-  group_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  role TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (group_id, user_id)
-);
-
-ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
-
-ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
-
-ALTER TABLE app.group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE INDEX IF NOT EXISTS idx_group_members_user ON app.group_members (user_id);
-
-CREATE TABLE IF NOT EXISTS app.group_invitations (
-  id TEXT NOT NULL,
-  group_id TEXT NOT NULL,
-  email TEXT NOT NULL,
-  role TEXT NOT NULL,
-  invited_by TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
-
-ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS email TEXT NOT NULL;
-
-ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
-
-ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS invited_by TEXT NOT NULL;
-
-ALTER TABLE app.group_invitations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email);
-
-CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON app.group_invitations (email);
-
 CREATE TABLE IF NOT EXISTS app.group_links (
   group_id TEXT NOT NULL,
   linked_group_id TEXT NOT NULL,
@@ -411,21 +192,6 @@ CREATE TABLE IF NOT EXISTS app.account_preferences (
 ALTER TABLE app.account_preferences ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
 
 ALTER TABLE app.account_preferences ADD COLUMN IF NOT EXISTS default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb;
-
-CREATE TABLE IF NOT EXISTS app.handle_reservations (
-  handle TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  subject_id TEXT NOT NULL,
-  PRIMARY KEY (handle)
-);
-
-ALTER TABLE app.handle_reservations ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
-
-ALTER TABLE app.handle_reservations ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
-
-ALTER TABLE app.handle_reservations ADD COLUMN IF NOT EXISTS subject_id TEXT NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_handle_reservations_subject ON app.handle_reservations (kind, subject_id);
 
 CREATE TABLE IF NOT EXISTS app.deployment_state (
   id TEXT NOT NULL,
@@ -476,55 +242,6 @@ ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS next_owner JSONB NO
 ALTER TABLE app.ownership_transfers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_ownership_transfers_artifact ON app.ownership_transfers (artifact_id, created_at);
-
-CREATE TABLE IF NOT EXISTS app.runner_runs (
-  id TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  request_key TEXT NOT NULL,
-  fingerprint TEXT NOT NULL,
-  status TEXT NOT NULL,
-  request JSONB NOT NULL,
-  admitted_at TEXT NOT NULL,
-  started_at TEXT,
-  receipt JSONB,
-  output JSONB,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS request_key TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS fingerprint TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS status TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS request JSONB NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS admitted_at TEXT NOT NULL;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS started_at TEXT;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS receipt JSONB;
-
-ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS output JSONB;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key);
-
-CREATE TABLE IF NOT EXISTS app.runner_events (
-  run_id TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
-  event JSONB NOT NULL,
-  PRIMARY KEY (run_id, sequence)
-);
-
-ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS run_id TEXT NOT NULL;
-
-ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL;
-
-ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS event JSONB NOT NULL;
 
 CREATE TABLE IF NOT EXISTS app.pages_sessions (
   id_hash TEXT NOT NULL,
@@ -587,6 +304,27 @@ ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS decision TEXT NOT NULL D
 ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS extensions JSONB NOT NULL;
 
 ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.group_trust (
+  group_id TEXT NOT NULL,
+  directive TEXT NOT NULL,
+  host TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, directive, host)
+);
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS directive TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS host TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+DO $check$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='app.group_trust'::regclass AND conname='group_trust_directive') THEN ALTER TABLE app.group_trust ADD CONSTRAINT group_trust_directive CHECK (directive IN ('connect','img','media')); END IF; END $check$;
 
 CREATE TABLE IF NOT EXISTS app.event_outbox (
   id TEXT NOT NULL,
@@ -893,6 +631,25 @@ ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_token_id TEX
 
 ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.dataset_connections (
+  dataset_id TEXT NOT NULL,
+  config JSONB NOT NULL,
+  sealed TEXT,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (dataset_id)
+);
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS dataset_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS config JSONB NOT NULL;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS sealed TEXT;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+
+ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.dataset_usage (
   bucket TEXT NOT NULL,
   calls INTEGER NOT NULL DEFAULT 0,
@@ -902,116 +659,6 @@ CREATE TABLE IF NOT EXISTS app.dataset_usage (
 ALTER TABLE app.dataset_usage ADD COLUMN IF NOT EXISTS bucket TEXT NOT NULL;
 
 ALTER TABLE app.dataset_usage ADD COLUMN IF NOT EXISTS calls INTEGER NOT NULL DEFAULT 0;
-
-CREATE TABLE IF NOT EXISTS app.users (
-  id TEXT NOT NULL,
-  email TEXT,
-  kind TEXT NOT NULL DEFAULT 'account',
-  parent_user_id TEXT,
-  expires_at TIMESTAMPTZ,
-  merged_into_user_id TEXT,
-  name TEXT,
-  username TEXT,
-  image_key TEXT,
-  auto_accept_mentions BOOLEAN NOT NULL DEFAULT true,
-  welcome_pending BOOLEAN NOT NULL DEFAULT false,
-  test_account BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS email TEXT;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'account';
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS parent_user_id TEXT;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS merged_into_user_id TEXT;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS name TEXT;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS username TEXT;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS image_key TEXT;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS auto_accept_mentions BOOLEAN NOT NULL DEFAULT true;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS welcome_pending BOOLEAN NOT NULL DEFAULT false;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS test_account BOOLEAN NOT NULL DEFAULT false;
-
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.users ALTER COLUMN email DROP NOT NULL;
-
-ALTER TABLE app.users DROP COLUMN IF EXISTS is_guest;
-
-ALTER TABLE app.users DROP COLUMN IF EXISTS password_hash;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON app.users (email);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON app.users (username);
-
-CREATE INDEX IF NOT EXISTS idx_users_parent ON app.users (parent_user_id);
-
-CREATE TABLE IF NOT EXISTS app.tokens (
-  id TEXT NOT NULL,
-  name TEXT,
-  token_hash TEXT NOT NULL,
-  user_id TEXT,
-  client_harness TEXT,
-  audience TEXT,
-  scope TEXT,
-  request_authority BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ,
-  last_used_at TIMESTAMPTZ,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS name TEXT;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS token_hash TEXT NOT NULL;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS user_id TEXT;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS client_harness TEXT;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS audience TEXT;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS scope TEXT;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS request_authority BOOLEAN NOT NULL DEFAULT false;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
-
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-     WHERE table_schema = 'app' AND table_name = 'tokens' AND column_name = 'revoked_at'
-  ) THEN
-    UPDATE app.tokens SET deleted_at = revoked_at WHERE deleted_at IS NULL AND revoked_at IS NOT NULL;
-    ALTER TABLE app.tokens DROP COLUMN IF EXISTS revoked_at;
-  END IF;
-END $$;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON app.tokens (token_hash);
-
-CREATE INDEX IF NOT EXISTS idx_tokens_user ON app.tokens (user_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS app.artifacts (
   id TEXT NOT NULL,
@@ -1147,6 +794,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_versions (
   meta JSONB NOT NULL DEFAULT '{}',
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (artifact_id, version)
 );
@@ -1171,6 +819,8 @@ ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
+ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
+
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifact_versions DROP COLUMN IF EXISTS content;
@@ -1189,6 +839,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_edits (
   document_state JSONB,
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (seq),
   UNIQUE (edit_id)
@@ -1219,6 +870,8 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS document_state JSONB;
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
@@ -1266,6 +919,7 @@ CREATE TABLE IF NOT EXISTS app.region_updates (
   update BYTEA NOT NULL,
   actor_user_id TEXT,
   actor_token_id TEXT,
+  content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (artifact_id, region_id, seq)
 );
@@ -1283,6 +937,8 @@ ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS update BYTEA NOT NULL;
 ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
 
 ALTER TABLE app.region_updates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
@@ -1372,10 +1028,6 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
-  change_seq BIGINT,
-  change_token_id TEXT,
-  author_session TEXT,
-  change_session TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1427,17 +1079,15 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_seq BIGINT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_seq;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_token_id TEXT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_token_id;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_session TEXT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS author_session;
 
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_session TEXT;
+ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_session;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
-
-CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
 
 CREATE TABLE IF NOT EXISTS app.comment_reactions (
   comment_id TEXT NOT NULL,
@@ -1460,48 +1110,6 @@ ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_kind TEXT;
 ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_label TEXT;
 
 ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS app.comment_reaction_events (
-  seq BIGINT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  comment_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  active BOOLEAN NOT NULL,
-  reactor_kind TEXT NOT NULL,
-  reactor_label TEXT,
-  count INTEGER NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  token_id TEXT,
-  session TEXT,
-  PRIMARY KEY (seq)
-);
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_kind TEXT NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_label TEXT;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS count INTEGER NOT NULL;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS token_id TEXT;
-
-ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS session TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_comment_reaction_events_artifact_seq ON app.comment_reaction_events (artifact_id, seq);
 
 CREATE TABLE IF NOT EXISTS app.codes (
   kind TEXT NOT NULL,
@@ -1886,6 +1494,8 @@ DROP TABLE IF EXISTS app.dataset_secrets;
 
 DROP TABLE IF EXISTS app.dataset_result_cache;
 
+DROP TABLE IF EXISTS app.comment_reaction_events;
+
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (
@@ -1969,6 +1579,270 @@ CREATE INDEX IF NOT EXISTS idx_auth_credentials_expiry ON auth.credentials (expi
 
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_access ON auth.credentials ((payload->>'access_token_id')) WHERE kind='refresh_token';
 
+-- schema "auth" — the identity module's base tables (users, tokens, groups …), owned by the auth role; declared by services/auth/src/identity-store/schema.ts; read only through the identity views
+
+CREATE TABLE IF NOT EXISTS auth.users (
+  id TEXT NOT NULL,
+  email TEXT,
+  kind TEXT NOT NULL DEFAULT 'account',
+  parent_user_id TEXT,
+  expires_at TIMESTAMPTZ,
+  merged_into_user_id TEXT,
+  name TEXT,
+  username TEXT,
+  image_key TEXT,
+  auto_accept_mentions BOOLEAN NOT NULL DEFAULT true,
+  welcome_pending BOOLEAN NOT NULL DEFAULT false,
+  test_account BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'account';
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS parent_user_id TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS merged_into_user_id TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS name TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS username TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS image_key TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS auto_accept_mentions BOOLEAN NOT NULL DEFAULT true;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS welcome_pending BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS test_account BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.users ALTER COLUMN email DROP NOT NULL;
+
+ALTER TABLE auth.users DROP COLUMN IF EXISTS is_guest;
+
+ALTER TABLE auth.users DROP COLUMN IF EXISTS password_hash;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON auth.users (email);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON auth.users (username);
+
+CREATE INDEX IF NOT EXISTS idx_users_parent ON auth.users (parent_user_id);
+
+CREATE TABLE IF NOT EXISTS auth.tokens (
+  id TEXT NOT NULL,
+  name TEXT,
+  token_hash TEXT NOT NULL,
+  user_id TEXT,
+  client_harness TEXT,
+  audience TEXT,
+  scope TEXT,
+  request_authority BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  last_used_at TIMESTAMPTZ,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS name TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS token_hash TEXT NOT NULL;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS user_id TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS client_harness TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS audience TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS scope TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS request_authority BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'auth' AND table_name = 'tokens' AND column_name = 'revoked_at'
+  ) THEN
+    UPDATE auth.tokens SET deleted_at = revoked_at WHERE deleted_at IS NULL AND revoked_at IS NOT NULL;
+    ALTER TABLE auth.tokens DROP COLUMN IF EXISTS revoked_at;
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON auth.tokens (token_hash);
+
+CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth.tokens (user_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS auth.handle_reservations (
+  handle TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  PRIMARY KEY (handle)
+);
+
+ALTER TABLE auth.handle_reservations ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
+
+ALTER TABLE auth.handle_reservations ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE auth.handle_reservations ADD COLUMN IF NOT EXISTS subject_id TEXT NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_handle_reservations_subject ON auth.handle_reservations (kind, subject_id);
+
+CREATE TABLE IF NOT EXISTS auth.groups (
+  id TEXT NOT NULL,
+  handle TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  parent_id TEXT,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS parent_id TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_handle ON auth.groups (handle);
+
+CREATE INDEX IF NOT EXISTS idx_groups_parent ON auth.groups (parent_id) WHERE parent_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS auth.group_hierarchy (
+  id TEXT NOT NULL,
+  revision BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.group_hierarchy ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.group_hierarchy ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS auth.group_members (
+  group_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+
+ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
+
+ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON auth.group_members (user_id);
+
+CREATE TABLE IF NOT EXISTS auth.group_invitations (
+  id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  invited_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.group_invitations ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.group_invitations ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_invitations ADD COLUMN IF NOT EXISTS email TEXT NOT NULL;
+
+ALTER TABLE auth.group_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
+
+ALTER TABLE auth.group_invitations ADD COLUMN IF NOT EXISTS invited_by TEXT NOT NULL;
+
+ALTER TABLE auth.group_invitations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON auth.group_invitations (group_id, email);
+
+CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON auth.group_invitations (email);
+
+CREATE TABLE IF NOT EXISTS auth.group_mail_outbox (
+  id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  recipient_id TEXT,
+  group_id TEXT NOT NULL,
+  group_name TEXT NOT NULL,
+  handle TEXT NOT NULL,
+  action TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  lease_until TIMESTAMPTZ,
+  claim_token TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  quarantined_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS email TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS recipient_id TEXT;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS sender_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS claim_token TEXT;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS quarantined_at TIMESTAMPTZ;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
+ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_group_mail_pending ON auth.group_mail_outbox (created_at) WHERE sent_at IS NULL;
+
 -- schema "events" — owned by the events role; tables declared by services/events/src/schema.ts
 
 CREATE TABLE IF NOT EXISTS events.events (
@@ -1981,6 +1855,8 @@ CREATE TABLE IF NOT EXISTS events.events (
   object_kind TEXT NOT NULL,
   object_id TEXT NOT NULL,
   payload JSONB NOT NULL DEFAULT '{}',
+  position BIGINT,
+  accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
 );
 
@@ -2002,11 +1878,23 @@ ALTER TABLE events.events ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
 
 ALTER TABLE events.events ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}';
 
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS position BIGINT;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS idx_events_object_at ON events.events (object_id, at);
 
 CREATE INDEX IF NOT EXISTS idx_events_subject_at ON events.events (subject_id, at);
 
 CREATE INDEX IF NOT EXISTS idx_events_kind_verb_at ON events.events (object_kind, verb, at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_position ON events.events (position);
+
+CREATE INDEX IF NOT EXISTS idx_events_object_position ON events.events (object_id, position);
+
+CREATE INDEX IF NOT EXISTS idx_events_kind_verb_position ON events.events (object_kind, verb, position);
+
+CREATE INDEX IF NOT EXISTS idx_events_accepted_position ON events.events (accepted_at, position);
 
 CREATE TABLE IF NOT EXISTS events.deliveries (
   event_id TEXT NOT NULL,
@@ -2031,4 +1919,14 @@ ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS claim TEXT;
 ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_delivery_pending ON events.deliveries (subscriber, available_at) WHERE delivered_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS events.feed_head (
+  id INTEGER NOT NULL,
+  position BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE events.feed_head ADD COLUMN IF NOT EXISTS id INTEGER NOT NULL;
+
+ALTER TABLE events.feed_head ADD COLUMN IF NOT EXISTS position BIGINT NOT NULL DEFAULT 0;
 

@@ -14,7 +14,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
-import { isHostedComponent } from './index';
+import { hostedComponentEntries, isHostedComponent } from './index';
 
 // Same package-cwd contract as lib/libraries/assets.server (public/) and the server-reader build output.
 const componentDir = path.resolve('lib/build-assets/components');
@@ -54,4 +54,24 @@ export async function loadComponentFile(file: string): Promise<LoadedComponentFi
   pending.catch(() => { if (loaded.get(name)?.file === pending) loaded.delete(name); });
   loaded.set(name, { version, file: pending });
   return pending;
+}
+
+const CHUNK_IMPORT = /["']\.\/(chunk-[a-z0-9]+\.js)["']/g;
+/**
+ * The public components' current files: every `hosted.json` `components` entry and the chunks they import, read
+ * transitively (legacy wrappers and the chunks only they use stay out). The pinned bundle a host page loads
+ * (lib/document-serving/hosted-blocks) is exactly these. Null when this build has not produced them.
+ */
+export async function publicComponentFiles(): Promise<Map<string, LoadedComponentFile> | null> {
+  const files = new Map<string, LoadedComponentFile>();
+  const queue = hostedComponentEntries().map(name => `${name}.js`);
+  while (queue.length) {
+    const file = queue.pop()!;
+    if (files.has(file)) continue;
+    const loaded = await loadComponentFile(file);
+    if (!loaded) return null;
+    files.set(file, loaded);
+    for (const match of loaded.body.toString('utf8').matchAll(CHUNK_IMPORT)) queue.push(match[1]!);
+  }
+  return files;
 }

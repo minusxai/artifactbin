@@ -2,7 +2,7 @@
  * CONTENT ENCODING — which bytes a response carries for the encodings its
  * request accepts. One module, two sources of compressed bytes:
  *
- *  - STATIC, content-addressed trees (/assets, /islands, /libraries, /offline):
+ *  - STATIC, content-addressed trees (/af/app, /af/lib and the other /af/ directories):
  *    the brotli/gzip siblings the build wrote beside each file
  *    (services/app/scripts/precompress.mjs). Chosen per request, never computed.
  *  - DYNAMIC pages and page data: brotli at a fast quality, computed per

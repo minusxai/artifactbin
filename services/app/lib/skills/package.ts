@@ -4,10 +4,13 @@ import {createHash} from 'node:crypto';
 import {loadSkillAssets,skillAssetName,type SkillPackageAssets} from './assets';
 import {isShippedSkillTopic} from './public-surface';
 import {renderTree,skillFileWithFrontmatter} from './serve';
+import {skillExtraName,type SkillExtras} from './extras';
 import type {SkillTree} from './tree';
-export function skillPackageFiles(tree:SkillTree,base:string,assets:SkillPackageAssets=loadSkillAssets()):Record<string,string>{
+/** `extras` (./extras) join under `extras/` only, and SKILL.md then names their index. */
+export function skillPackageFiles(tree:SkillTree,base:string,assets:SkillPackageAssets=loadSkillAssets(),extras:SkillExtras|null=null):Record<string,string>{
  for(const name of Object.keys(assets))if(!skillAssetName(name))throw Error(`Unsupported skill asset: ${name}`);
- return {...assets,...Object.fromEntries(renderTree(tree,base,true).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
+ for(const name of Object.keys(extras?.files??{}))if(!skillExtraName(name))throw Error(`Unsupported skill extra: ${name}`);
+ return {...extras?.files,...assets,...Object.fromEntries(renderTree(tree,base,true,extras!==null).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
 }
 /** Minimal stored ZIP: standard UTF-8 members, deterministic timestamps and CRC32.
  * Stored members preserve compatibility with already-installed managed updaters. No binary members: fonts load from the platform (D16). */
@@ -17,7 +20,7 @@ const RETIRED_MEMBERS=new Set(['scripts/preview-runtime.mjs','scripts/preview-li
 export function skillZip(files:SkillArchiveFiles):Uint8Array<ArrayBuffer>{
  const local:Buffer[]=[],central:Buffer[]=[];let offset=0;
  for(const [relative,content] of Object.entries(files).sort(([a],[b])=>a.localeCompare(b))){
-  if(typeof content!=='string'||RETIRED_MEMBERS.has(relative)||!(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md)$/.test(relative)||skillAssetName(relative)))throw new Error(`Unsupported skill member: ${relative}`);
+  if(typeof content!=='string'||RETIRED_MEMBERS.has(relative)||!(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md)$/.test(relative)||skillAssetName(relative)||skillExtraName(relative)))throw new Error(`Unsupported skill member: ${relative}`);
   const name=Buffer.from(`artifactbin/${relative}`),data=Buffer.from(content);let crc=0xffffffff;
   for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
   const head=Buffer.alloc(30);head.writeUInt32LE(0x04034b50);head.writeUInt16LE(20,4);head.writeUInt16LE(0x800,6);head.writeUInt16LE(0x21,12);head.writeUInt32LE(crc,14);head.writeUInt32LE(data.length,18);head.writeUInt32LE(data.length,22);head.writeUInt16LE(name.length,26);

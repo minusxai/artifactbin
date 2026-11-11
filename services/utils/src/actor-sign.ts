@@ -7,7 +7,7 @@
  * same" HMAC is how a proxy signs something the app rejects.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ACTOR_TTL_SECONDS, CREDENTIALS, DATASET_ROLES, runnerAdmissionOf, type Actor, type Credential, type RunnerCaller } from '@artifactbin/contracts';
+import { ACTOR_TTL_SECONDS, CREDENTIALS, type Actor, type Credential } from '@artifactbin/contracts';
 
 /** Tolerated clock difference between proxy and app. */
 const SKEW_SECONDS = 30;
@@ -61,22 +61,5 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   if (typeof claims.email === 'string') actor.email = claims.email;
   if (typeof claims.sessionId === 'string') actor.sessionId = claims.sessionId;
   if (typeof claims.emailVerified === 'boolean') actor.emailVerified = claims.emailVerified;
-  if (claims.runner !== undefined) {
-    const r = claims.runner;
-    if (!r || !['runId','artifactId','version','editId','sourceHash'].every(k => typeof (r as unknown as Record<string,unknown>)[k] === 'string') || !Number.isSafeInteger(r.callId) || r.callId < 1) return null;
-    if (r.pageBackendOperation !== undefined && r.pageBackendOperation !== 'query' && r.pageBackendOperation !== 'mutation') return null;
-    // A caller is optional (older runners sign none), but one that is present must be exactly a subject and a role.
-    let caller: RunnerCaller | undefined;
-    if (r.caller !== undefined) {
-      const c = r.caller as unknown as Record<string, unknown> | null;
-      if (!c || typeof c !== 'object' || Array.isArray(c) || Object.keys(c).some(k => k !== 'subject' && k !== 'role')) return null;
-      if (!(c.subject === null || typeof c.subject === 'string' && c.subject.length > 0) || !(DATASET_ROLES as readonly unknown[]).includes(c.role)) return null;
-      caller = { subject: c.subject as string | null, role: c.role as RunnerCaller['role'] };
-    }
-    // An admission is optional (a run that is not a page function call has none), but one that is present must be exact.
-    const admission = r.admission === undefined ? undefined : runnerAdmissionOf(r.admission);
-    if (admission === null) return null;
-    actor.runner = {pageBackendOperation:r.pageBackendOperation,runId:r.runId,artifactId:r.artifactId,version:r.version,editId:r.editId,sourceHash:r.sourceHash,callId:r.callId,...(caller ? { caller } : {}),...(admission ? { admission } : {})};
-  }
   return actor;
 }

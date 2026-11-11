@@ -1,6 +1,6 @@
 /**
  * A page script's plain `fetch('./data.json')` of a file published with the page: publish finds the literal path and
- * uploads the file, and every surface the page is read from tells its core (html-runtime/fn-fetch) where that path
+ * uploads the file, and every surface the page is read from tells its core (html-runtime/page-fetch) where that path
  * now lives — the page's own asset door, which answers exactly whoever may read the page. Only paths the page's own
  * publication recorded are in the table.
  */
@@ -110,22 +110,22 @@ describe('a platform boundary file a page fetches by its path',()=>{
   const {readFileSync}=await import('node:fs');const path=await import('node:path');
   const {pagesOriginFor}=await import('@/lib/http');const {createAppServer}=await import('@/server/app');
   const geo=readFileSync(path.resolve('public/geojson/india-states.json'));
-  const html='<!doctype html><html><head><title>States</title></head><body><script type="module">const states=await (await fetch("/geojson/india-states.json")).json();document.body.dataset.states=String(states.features.length);</script></body></html>';
+  const html='<!doctype html><html><head><title>States</title></head><body><script type="module">const states=await (await fetch("/af/geojson/india-states.json")).json();document.body.dataset.states=String(states.features.length);</script></body></html>';
   const owner=await mintAccountToken('boundary_unlisted');
   const created=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html,visibility:'unlisted'}}));
   expect(created.status).toBe(201);const {id}=await created.json() as {id:string};
   const site=testPagesSite('pages.example.test','https://app.example.test'),self=pagesOriginFor(id,site);
   const app=createAppServer({indexHtml:async()=>'<html><body><div id="root"></div></body></html>',pagesSite:site});
   const page=await app.request(self+'/');expect(page.status).toBe(200);
-  expect(await page.text()).toContain('fetch("/geojson/india-states.json")');
+  expect(await page.text()).toContain('fetch("/af/geojson/india-states.json")');
   expect(page.headers.get('content-security-policy')).toMatch(/connect-src 'self'/);
-  const read=await app.request(self+'/geojson/india-states.json');expect(read.status).toBe(200);
+  const read=await app.request(self+'/af/geojson/india-states.json');expect(read.status).toBe(200);
   expect(read.headers.get('content-type')).toMatch(/^application\/json/);
   expect(Buffer.from(await read.arrayBuffer())).toEqual(geo);
   // A download has no origin to fetch from: it carries the file under the same path.
   const copy=await download(request(`/a/${id}/download`,{token:owner.token}),params(id));expect(copy.status).toBe(200);
   const files=runtimeOf(await copy.text()).files!;
-  expect(Object.keys(files)).toEqual(['/geojson/india-states.json']);
-  expect(Buffer.from(files['/geojson/india-states.json']!.replace('data:application/json;base64,',''),'base64')).toEqual(geo);
+  expect(Object.keys(files)).toEqual(['/af/geojson/india-states.json']);
+  expect(Buffer.from(files['/af/geojson/india-states.json']!.replace('data:application/json;base64,',''),'base64')).toEqual(geo);
  });
 });

@@ -11,7 +11,7 @@
  * takes the tab) and nothing it does not; the app's own CSP `frame-src` admits only the pages hosts.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { STORY_FRAMED_ATTR } from '@/lib/html-reader/frame-markup';
+import { FRAME_ALLOW, FRAME_SANDBOX, STORY_FRAMED_ATTR } from '@/lib/html-reader/frame-markup';
 import { APP_BAR_H } from '@/lib/html-reader/edit-bar';
 
 /** What the app page needs to draw a document's frame and name the document in its head. */
@@ -28,8 +28,6 @@ export interface DocumentFrame {
   head: { title: string; description: string | null; image: string };
 }
 
-export const FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads';
-export const FRAME_ALLOW = 'fullscreen; clipboard-write';
 const GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /**

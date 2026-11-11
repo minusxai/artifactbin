@@ -20,6 +20,8 @@ interface TrustedOverlayHost {
   show(): void;
   /** Leave the top layer and suppress the inner root, including inherited-style resets. */
   hide(): void;
+  /** Draw this root light or dark from now on, whatever the document's `data-theme` says (a host page's own pick). */
+  setTheme(mode: 'light' | 'dark'): void;
   dispose(): void;
 }
 
@@ -43,7 +45,9 @@ export function createTrustedOverlayHost(options: { doc?: Document; parent?: HTM
   root.append(content, portal);
   shadow.append(style, root);
   (options.parent ?? doc.body).append(host);
-  const syncTheme = () => root.setAttribute('data-theme', doc.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+  // The app's document says its theme on <html data-theme>; a root told one explicitly (setTheme) keeps that instead.
+  let told = false;
+  const syncTheme = () => { if (!told) root.setAttribute('data-theme', doc.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'); };
   syncTheme();
   const observer = new MutationObserver(syncTheme);
   observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -57,6 +61,7 @@ export function createTrustedOverlayHost(options: { doc?: Document; parent?: HTM
   show();
   return {
     host, content, portal, show,
+    setTheme(mode) { told = true; root.setAttribute('data-theme', mode === 'dark' ? 'dark' : 'light'); },
     hide() {
       overlays.delete(root);
       if (overlay) { try { root.hidePopover(); } catch { /* already closed */ } }

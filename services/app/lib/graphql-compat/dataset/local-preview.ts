@@ -41,7 +41,7 @@ export async function createLocalPreviewDatasets(root:string,declarations:readon
  for(const [i,entry] of generated.entries())if(entry.dataset.revision()!==initialGenerated[i])namespaces.push(entry.name);
  return {dirty:namespaces.length>0,namespaces};
  },
- execute:(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>&{idempotencyKey?:string},signal:AbortSignal)=>executePageOperation({schema,request,signal,caller:{pageId:'local-preview',subject:null,role:'owner'},canEdit:async()=>true,datasets:{queryRoots:datasets.queryRoots,sql:datasets.sql,mutate:mutation=>datasets.mutate({...mutation,...(request.idempotencyKey?{idempotencyKey:request.idempotencyKey}:{})})},invoke:()=>{throw new Error('local_dataset_namespace');}}),
+ execute:(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>&{idempotencyKey?:string},signal:AbortSignal)=>executePageOperation({schema,request,signal,caller:{pageId:'local-preview',subject:null,role:'owner'},canEdit:async()=>true,datasets:{queryRoots:datasets.queryRoots,sql:datasets.sql,mutate:mutation=>datasets.mutate({...mutation,...(request.idempotencyKey?{idempotencyKey:request.idempotencyKey}:{})})}}),
  export:(namespace:string)=>{const generatedEntry=generated.find(e=>e.name===namespace);if(!generatedEntry)throw new Error('local_dataset_namespace');return generatedEntry.dataset.export();}
  };
 }

@@ -39,7 +39,7 @@ describe('the deployment and the evals compose from', () => {
 
   it('these settings', () => {
     // Present, whatever this process's environment sets them to.
-    for (const name of ['AUTH_SERVICE_URL', 'BROWSER_SERVICE_URL', 'DATABASE_URL', 'INTERNAL_SERVICE_SECRET', 'RUNNER_ACTOR_SECRET', 'SQL_SERVICE_URL'])
+    for (const name of ['AUTH_SERVICE_URL', 'BROWSER_SERVICE_URL', 'DATABASE_URL', 'ACTOR_SECRET', 'INTERNAL_SERVICE_SECRET', 'SQL_SERVICE_URL'])
       expect(name in config, name).toBe(true);
   });
 

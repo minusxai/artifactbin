@@ -34,15 +34,17 @@ describe('a verified-email browser request', () => {
     expect(touching(sql, 'group_invitations')).toHaveLength(1);
   });
 
-  it('still accepts an invitation the moment one exists, in the same locked transaction as before', async () => {
+  it('still accepts an invitation the moment one exists: the identity module\'s one locked transaction, then the app\'s audit', async () => {
     const actor = verified('usr_invited', 'invited@example.com');
     await sessionActor(request('/api/my/artifacts', { actor }));
     const db = await getDb();
     await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('g1','crew','Crew','usr_invited')");
     await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_1','g1','invited@example.com','editor','usr_invited')");
     const { transactions, sql } = await recordStatements(() => sessionActor(request('/api/my/artifacts', { actor })));
-    expect(transactions).toBe(1);
-    expect(sql.some((text) => /FOR UPDATE OF g,i/.test(text))).toBe(true);
+    expect(transactions).toBe(2);
+    // Identity locks the invited groups first (one statement, canonical order), then the invitation rows.
+    expect(sql.some((text) => /FROM auth\.groups WHERE id=ANY\(\$1::text\[\]\) AND deleted_at IS NULL ORDER BY id COLLATE "C" FOR UPDATE/.test(text))).toBe(true);
+    expect(sql.some((text) => /FOR UPDATE OF i/.test(text))).toBe(true);
     expect((await db.query("SELECT role FROM group_members WHERE group_id='g1' AND user_id='usr_invited'")).rows).toEqual([{ role: 'editor' }]);
     expect((await db.query("SELECT id FROM group_invitations WHERE id='gin_1'")).rows).toEqual([]);
   });
@@ -79,8 +81,8 @@ describe('a bearer-token operation request', () => {
     const { token } = await mintAccountToken('budget');
     expect((await call(token)).status).toBe(200);
     const { sql, count } = await recordStatements(() => call(token));
-    console.info('[budget] bearer GET /api/artifacts: statements=%d resolve=%d authority=%d', count, sql.filter((text) => /FROM tokens WHERE token_hash/.test(text)).length, sql.filter((text) => /request_authority/.test(text)).length);
-    expect(sql.filter((text) => /FROM tokens WHERE token_hash/.test(text))).toHaveLength(1);
+    console.info('[budget] bearer GET /api/artifacts: statements=%d resolve=%d authority=%d', count, sql.filter((text) => /FROM (auth\.)?tokens WHERE token_hash/.test(text)).length, sql.filter((text) => /request_authority/.test(text)).length);
+    expect(sql.filter((text) => /FROM (auth\.)?tokens WHERE token_hash/.test(text))).toHaveLength(1);
     expect(sql.filter((text) => /request_authority/.test(text))).toHaveLength(1);
   });
 

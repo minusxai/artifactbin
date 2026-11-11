@@ -1,6 +1,7 @@
 /**
- * The table-ownership check (scripts/ci/table-ownership.mjs) bites on a write outside its owner, reads only
- * literals (a comment quoting a statement is not one), passes locks and other tables, and the real tree is clean.
+ * The table-ownership check (scripts/ci/table-ownership.mjs) bites on a write outside its owner and on a row lock of
+ * an identity table outside the identity module, reads only literals (a comment quoting a statement is not one),
+ * passes artifact locks, reads and other tables, and the real tree is clean.
  */
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -18,22 +19,38 @@ describe('table ownership', () => {
     expect(check(OUTSIDE, 'q.query(`insert into "tokens"(id) values ($1)`);')).toHaveLength(1);
     expect(check(OUTSIDE, "q.query('DELETE FROM ONLY public.users WHERE id=$1');")).toHaveLength(1);
     expect(check(OUTSIDE, 'q.query(`WITH updated AS (\n  UPDATE\n    artifacts SET meta = ${meta}\n) SELECT 1`);')).toHaveLength(1);
-    expect(check('scripts/lib/any.mjs', 'run("update users set name = $1")')[0]).toContain('lib/accounts function');
+    expect(check('scripts/lib/any.mjs', 'run("update users set name = $1")')[0]).toContain('call the identity service');
+    for (const table of ['groups', 'group_members', 'group_invitations', 'group_hierarchy', 'handle_reservations', 'group_mail_outbox'])
+      expect(check(OUTSIDE, `q.query('DELETE FROM ${table} WHERE id=$1')`), table).toHaveLength(1);
+    expect(check(OUTSIDE, 'q.query(`UPDATE ${schema}.users SET name=$2`)')).toHaveLength(1);
   });
 
   it("passes the owner's own writes and the listed importers", () => {
     expect(check('services/app/lib/artifacts/store.ts', "q.query('UPDATE artifacts SET title=$2 WHERE id=$1')")).toEqual([]);
-    expect(check('services/app/lib/accounts/users.ts', "q.query('UPDATE users SET name=$2'); q.query('DELETE FROM tokens')")).toEqual([]);
+    expect(check('services/auth/src/identity-store/accounts.ts', "q.query('UPDATE users SET name=$2'); q.query('DELETE FROM tokens'); q.query('SELECT id FROM users WHERE id=$1 FOR UPDATE')")).toEqual([]);
+    expect(check('services/app/lib/accounts/users.ts', "q.query('UPDATE users SET name=$2')")).toHaveLength(1);
     expect(check('services/app/lib/accounts/users.ts', "q.query('UPDATE artifacts SET user_id=$1')")).toHaveLength(1);
     expect(check('services/app/lib/native-history-import/index.ts', "q.query('UPDATE artifacts SET version=$2')")).toHaveLength(1);
     expect(check('services/test-support/src/db.ts', "q.query('INSERT INTO tokens (id) VALUES ($1)')")).toEqual([]);
-    expect(check('services/app/lib/operations/testuser-erase.ts', "q.query('DELETE FROM users WHERE id = $1')")).toEqual([]);
+    expect(check('services/app/lib/operations/testuser-erase.ts', "q.query('DELETE FROM artifacts WHERE id = $1')")).toEqual([]);
+    // An importer of app rows is not one of identity's: the erase asks the identity module for those.
+    expect(check('services/app/lib/operations/testuser-erase.ts', "q.query('DELETE FROM users WHERE id = $1')")).toHaveLength(1);
   });
 
-  it('passes reads, joins, locks, comments, tests and tables whose names merely start with an owned one', () => {
+  it('refuses a row lock covering an identity table outside the identity module, by alias or whole statement', () => {
+    for (const text of [
+      "q.query('SELECT id FROM tokens WHERE id=$1 FOR SHARE')",
+      "q.query('SELECT id FROM users WHERE id=$1 FOR UPDATE')",
+      "q.query('SELECT s.role FROM artifact_group_shares s JOIN group_members m ON m.group_id=s.group_id FOR SHARE OF s, m')",
+      "q.query('SELECT id FROM groups WHERE id=ANY($1) ORDER BY id FOR UPDATE NOWAIT')",
+    ]) expect(check(OUTSIDE, text), text).toHaveLength(1);
+    expect(check(OUTSIDE, "q.query('SELECT s.role FROM artifact_group_shares s JOIN group_members m ON m.group_id=s.group_id FOR SHARE OF s')")).toEqual([]);
+  });
+
+  it('passes reads, joins, artifact locks, comments, tests and tables whose names merely start with an owned one', () => {
     const fine = [
       "q.query('SELECT id FROM artifacts WHERE id=$1 FOR UPDATE')",
-      "q.query('SELECT id FROM tokens WHERE id=$1 FOR SHARE')",
+      "q.query('SELECT id FROM tokens WHERE id=$1')",
       "q.query('SELECT 1 FROM users u JOIN artifacts a ON a.user_id=u.id FOR UPDATE OF a')",
       "q.query('INSERT INTO artifact_versions (artifact_id) VALUES ($1)')",
       "q.query('DELETE FROM user_blocks WHERE user_id=$1')",

@@ -149,15 +149,15 @@ it('supports a verified browser account transfer without a bearer or token ID an
  expect((await getArtifactById(id))?.group_id).toBe('grp_ownership');
 });
 
-it('uses nonblocking transfer locks and rolls back busy artifact or group ownership changes',async()=>{
+it('uses nonblocking transfer locks and rolls back a busy ownership change; the group is read, never locked',async()=>{
  const f=await fixture(),id=await f.make({html:nativeHtml('<p>Busy ownership</p>')});
  const original=f.db.transaction.bind(f.db);const statements:string[][]=[];
- for(const busy of ['artifacts','groups']){
+ for(const busy of ['artifacts']){
   const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>{
    const queries:string[]=[];statements.push(queries);
    return fn({query:async(sql,values)=>{
     queries.push(sql);
-    if((busy==='artifacts'&&sql.startsWith('LOCK TABLE artifacts'))||(busy==='groups'&&sql.includes('FROM groups')&&sql.includes('FOR UPDATE')))throw Object.assign(new Error('could not obtain lock'),{code:'55P03'});
+    if(busy==='artifacts'&&sql.startsWith('LOCK TABLE artifacts'))throw Object.assign(new Error('could not obtain lock'),{code:'55P03'});
     return tx.query(sql,values);
    }});
   }));
@@ -173,9 +173,11 @@ it('uses nonblocking transfer locks and rolls back busy artifact or group owners
   return fn({query:async(sql,values)=>{queries.push(sql);return tx.query(sql,values);}});
  }));
  try{expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);}finally{spy.mockRestore();}
- for(const queries of statements){
+ // The transfer's own transactions (after it, the identity module queues the group's mail in its own).
+ for(const queries of statements.filter(queries=>queries[0]?.startsWith('LOCK TABLE'))){
   expect(queries[0]).toBe('LOCK TABLE artifacts IN EXCLUSIVE MODE NOWAIT');
   for(const sql of queries.filter(sql=>/FOR (UPDATE|SHARE)/.test(sql)))expect(sql).toContain('NOWAIT');
+  expect(queries.filter(sql=>/FROM groups/.test(sql)&&/FOR (UPDATE|SHARE)/.test(sql))).toEqual([]);
  }
 });
 

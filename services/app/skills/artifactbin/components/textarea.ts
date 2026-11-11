@@ -8,10 +8,11 @@
  * Gotchas: reflect your state value back for controlled use.
  */
 import { registerComponent } from './register-component';
+import { NamedHost, movingName } from './host-name';
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract,
   type TextControlController } from './text-control';
 
-class AfTextarea extends HTMLElement implements TextControlContract {
+class AfTextarea extends NamedHost implements TextControlContract {
   static observedAttributes = [...textControlAttributes];
   private controller?: TextControlController;
   private propertyControlled = false;
@@ -29,7 +30,7 @@ this.controller?.disconnect(); this.controller = connectTextControl(this, 'texta
       )=>this.propertyControlled,value:()=>this.propertyValue});
   }
   disconnectedCallback(): void { this.controller?.disconnect(); this.controller = undefined; }
-  attributeChangedCallback(): void { this.refresh(); }
+  attributeChangedCallback(): void { if (!movingName(this)) this.refresh(); }
   private refresh(): void { if (!this.isConnected) return; this.controller?.sync(); }
 }
 

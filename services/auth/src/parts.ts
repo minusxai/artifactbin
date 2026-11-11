@@ -1,11 +1,12 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
-import {createOAuthStore} from './identity/oauth';
+import {serviceTokenKey} from './identity/service-tokens';
+import {createOAuthStore,parseOAuthClients} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
@@ -25,7 +26,8 @@ export interface AuthOptions {
  sessions:SessionStore;
  cookieSecret:string;
  secure?:boolean;
- identityDb?:Queryable;
+ /** The auth host's own database. With transactions (`identityDbOf(pool)`) it also hosts the identity module's calls. */
+ identityDb?:Queryable|TransactionalQueryable;
  appSchema?:string;
  events?:EventsService;
  /** Private deployments may explicitly trust their preceding transport. OSS leaves this zero. */
@@ -141,6 +143,15 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
           c.res.headers.set(CODE_DELIVERY_HEADER, usesDevOutbox(origin) ? 'operator_outbox' : 'email');
         }
       });
+      // A sign-in sets a session cookie, so another site must not be able to start one in this browser (login
+      // CSRF). Better Auth checks Origin only on requests that already carry a cookie. No Origin: not a browser.
+      a.post('/api/auth/sign-in/*', async (c, next) => {
+        const origin = c.req.header('origin');
+        const accepted = acceptedOriginsOf(c.req.raw, o.trustedHops ?? 0, readEnv(o.env, 'APP__PUBLIC_BASE_URL'), aliasOriginsOf(o));
+        if ((origin !== undefined && !accepted.includes(origin)) || c.req.header('sec-fetch-site') === 'cross-site')
+          return c.json({ error: 'forbidden_origin' }, 403);
+        return next();
+      });
       if (o.sessions.handler) a.all('/api/auth/*', async c => {
         const response=await o.sessions.handler!(c.req.raw);
         if(!o.admitIdentity||response.status>=400)return response;
@@ -163,15 +174,16 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
     mount: (app) => {
       if (!o.identityDb) return;
       const schema = readEnv(o.env, 'AUTH__SCHEMA') ?? 'auth';
-      const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         sessions: o.sessions,
         admitIdentity:o.admitIdentity,
-        oauth: createOAuthStore(o.identityDb, schema, appSchema),
+        oauth: createOAuthStore(o.identityDb, schema, parseOAuthClients(readEnv(o.env, 'IDENTITY__OAUTH_CLIENTS'))),
         upstream: o.upstream,
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
         aliasOrigins: aliasOriginsOf(o),
+        serviceAudiences: parseServiceAudiences(readEnv(o.env, 'IDENTITY__SERVICE_AUDIENCES')),
+        serviceTokenKey: o.cookieSecret ? serviceTokenKey(o.cookieSecret) : null,
       });
     },
   };

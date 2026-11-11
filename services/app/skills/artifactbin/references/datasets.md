@@ -11,8 +11,8 @@ A dataset is stored CSV or JSON rows; a page links it and reads and writes it wi
 ```
 
 Publishing the page makes a CSV linked by path a dataset named by the file, updated as it
-changes; link a published one as `ref:ID`. `data-af-name` is unique per page. Live is the
-default; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
+changes; link a published one as `ref:ID`. `data-af-name` is unique per page. A link follows the
+latest rows; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
 `node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
 `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
 from page HTML:
@@ -23,12 +23,11 @@ from page HTML:
 
 New datasets are readable by anyone who can
 open them; only the owner and editors change rows. To let readers add or edit rows,
-set rules: [permissions](permissions.md). To read your own Postgres or MySQL database, use a
-backend function ([`caps.db`](functions.md#capsdb-your-own-database)).
+set rules: [permissions](permissions.md). The install's own database: [default](#the-default-connection).
 
 ## Contents
 
-[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
+[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset) · [Default](#the-default-connection)
 
 ## Tables: discover before querying
 
@@ -84,7 +83,7 @@ grants writes. Pinned links and archived page versions read only.
 ## Live views
 
 `sql.watch(statement, rows=>…, error=>…)` runs it now and again whenever a dataset it names
-changes (another reader's write, a schedule's), one request at a time; it returns the stop
+changes (another reader's write), one request at a time; it returns the stop
 function. The statement must name its tables in its text. Never poll.
 
 ```js
@@ -94,9 +93,8 @@ const stop=sql.watch(sql`select count(*) as open from tasks where not done`,
 ```
 
 `onResolverChange(names=>…)` from `@afbin/apollo` names changed links (and `viewer` on sign-in
-or out): re-call [functions](functions.md) whose answers depend on them.
-`examples/csv-dashboard.html` watches its SQL group-bys; `examples/tracker.html` writes rows
-directly, counts with SQL and, with its limits feature, adds through a function.
+or out). `examples/csv-dashboard.html` watches its SQL group-bys; `examples/tracker.html` writes
+rows directly and counts with SQL.
 
 ## Type together (`@afbin/collab`)
 
@@ -134,3 +132,16 @@ files: `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files` (bytes, Content-T
 `X-Filename`). Both need `X-Edit-Id` from the page head and a unique `Idempotency-Key` (replay the
 same bytes and key after an uncertain response). The response returns the stored ref and a read URL
 under the same permissions. Pinned bindings cannot upload.
+
+## The default connection
+
+`<link rel="af-dataset" data-af-name="wh" href="default:DB">` reads the install's database
+([[ connectors ]]; empty DB: its default), signed in, read-only: `wh.table` in its own SQL.
+Agents: `sql.mjs query default:DB 'SQL'`; `schema default:DB`.
+
+## Live datasets
+
+A database: `publish.mjs db.json --type connection --secret-file -`. Owner/editors' `sql` names
+`NAME.table`; others run only declared queries, `sql.query('mine', {…})` for
+`<script type="application/sql" data-af-query="mine" data-af-dataset="NAME">SQL</script>`;
+the server fills `:viewer_id`, `:viewer_email`, `:viewer_groups`.

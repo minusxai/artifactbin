@@ -30,7 +30,7 @@ beforeEach(async () => {
   bob = await createUser({ email: 'mxmx_test_feed_bob@example.com' });
   carol = await createUser({ email: 'mxmx_test_feed_carol@example.com' });
   await db.query(`UPDATE users SET username = CASE id WHEN $1 THEN 'alice' WHEN $2 THEN 'bob' ELSE username END WHERE id IN ($1, $2)`, [alice.id, bob.id]);
-  const ta = await mintToken('web', alice.id, undefined, { expiresInMs: null });
+  const ta = await mintToken('web', alice.id, { expiresInMs: null });
   const doc = (title: string, visibility: 'public' | 'private') => ({ format: 'html' as const, content: '', source: '<!doctype html><html><body><div>hi</div></body></html>', meta: {}, title, description: null, visibility });
   pubA = (await createArtifact(ta.id, alice.id, doc('Alice public', 'public'))).id;
 });

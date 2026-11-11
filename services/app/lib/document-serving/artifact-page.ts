@@ -3,7 +3,7 @@ import {htmlAppearance} from '@/lib/html-page';
 import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
-import { publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
+import { liveConnectionOf, publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
 import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/lib/dataset-permissions';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
@@ -100,14 +100,24 @@ function readerPickOf(request: Request): 'light' | 'dark' | null {
   return value === 'light' || value === 'dark' ? value : null;
 }
 
-export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<{ src: string; origin: string } | null> {
+export interface FreshFrame {
+  src: string;
+  /** The document's own origin, the only one its messages count from. */
+  origin: string;
+  /** The one parent origin the document trusts: a page that frames it anywhere else is refused by its door. */
+  appOrigin: string;
+  /** The head the frame is served (the trusted revision a relay pins) and its edit pointer, as the app page's bootstrap has them. */
+  revision: string;
+  editId: string;
+}
+export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<FreshFrame | null> {
   if (!ID_RE.test(id)) return null;
   // The frame's address needs the row's identity and format, never its document.
   const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'html') return null;
   const actor = await sessionActor(request);
   if (!holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return null;
-  return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
+  return { ...await admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request)), appOrigin: site.app, revision: String(artifact.version), editId: artifact.edit_id };
 }
 
 /** The frame's first URL for a reader this request already admitted to `artifact` (one admission per view). */
@@ -239,7 +249,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // Source stays on the runner origin; independent shell reads run beside one another.
   const viewerId = actor.userId;
   // A dataset page shows the reader's role view (lib/dataset-permissions); its creating token and an export read whole.
-  const datasetDecision = artifact.format === 'dataset' && !exporting && !holdsCreatingToken(artifact, actor) ? await datasetReadAccess(artifact, actor) : null;
+  // A LIVE dataset's page is its connection (lib/live-datasets): its sharing admitted the reader; it has no rows here.
+  const liveConnection = artifact.format === 'dataset' ? liveConnectionOf(artifact.meta) : null;
+  const datasetDecision = artifact.format === 'dataset' && !liveConnection && !exporting && !holdsCreatingToken(artifact, actor) ? await datasetReadAccess(artifact, actor) : null;
   if (datasetDecision && !datasetDecision.allowed) return notFound();
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
@@ -252,7 +264,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
      */
     pageSocial({ artifactId: artifact.id, authorId: artifact.user_id, viewerId, annotations: isDoc }),
     forkedFromCredit(artifact.forked_from),
-    artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
+    liveConnection ? Promise.resolve('[]') : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
@@ -342,6 +354,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     }),
     dataPreview,
     columns: meta.columns ?? [],
+    ...(liveConnection ? { liveConnection } : {}),
     ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:datasetDecision?.allowed?viewCatalog(datasetDecision,publicCatalogOf(artifact)!):publicCatalogOf(artifact)!,
       // May the reader run SQL in the explorer (dataset-permissions `sqlRefusal`, the check its door applies)? A creator holding its token owns it.
       canRunSql:datasetDecision?!sqlRefusal(datasetDecision):true}:{}),

@@ -30,6 +30,7 @@ Examples:
   node scripts/publish.mjs index.html --artifact ID       # index.html replaces page ID
   node scripts/publish.mjs page.html --create --group design_team  # new page in a group
   node scripts/publish.mjs signups.csv --template own-rows --owner-column created_by
+  node scripts/publish.mjs db.json --type connection --secret-file - < pw  # live dataset
   node scripts/publish.mjs --resume JOURNAL               # after exit 5 (unknown outcome);
                                                             replays the exact request
 Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written against the old
@@ -44,8 +45,7 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   files, 4 MB each, 16 MB total). A CSV linked by its path (<link rel="af-dataset"
   data-af-name="sales" href="./sales.csv">) becomes a dataset named by the file, and a later
   publish after it changes updates that same dataset. Computed imports and cyclic graphs are
-  refused; remote URLs, absolute server paths and ref: links stay as written. af-resolver
-  files go in as resolver sources, never as public assets. An update is
+  refused; remote URLs, absolute server paths and ref: links stay as written. An update is
   conditional on the version its marker saw: a newer version (exit 4) is never overwritten;
   then run read.mjs ID --output page.html, reapply your edits there and publish it. The
   journal is saved before sending and --resume never changes it. A dataset or file keeps no

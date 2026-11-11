@@ -37,6 +37,20 @@ it.each([
  const {calls}=await harness(sub,[...args],values);expect(calls.at(-1)).toEqual({path,method,body});
  if(!['list','create','show','link','unlink'].includes(sub))expect(calls.filter(c=>c.path==='/api/groups/design_crit')).toHaveLength(1);
 });
+it('create --parent resolves the parent once and sends its stable ID',async()=>{
+ const {calls}=await harness('create',['retail'],{name:'Retail',parent:'other'});
+ expect(calls).toEqual([{path:'/api/groups/other',method:'GET',body:undefined},{path:'/api/groups',method:'POST',body:{handle:'retail',name:'Retail',parent_id:'grp_other'}}]);
+});
+it('reparent sends the parent it read, refuses before HTTP without --yes or with both --parent and --root',async()=>{
+ const {calls}=await harness('reparent',['design_crit'],{parent:'other',yes:true});
+ expect(calls.at(-1)).toEqual({path:'/api/groups/grp_stable/parent',method:'PUT',body:{parent_id:'grp_other',from_parent_id:null}});
+ expect((await harness('reparent',['design_crit'],{root:true,yes:true})).calls.at(-1)).toEqual({path:'/api/groups/grp_stable/parent',method:'PUT',body:{parent_id:null,from_parent_id:null}});
+ const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let sent=0;
+ const fetcher=async()=>{sent++;throw Error('unexpected');};
+ await expect(groupsCommand({sub:'reparent',positionals:['design_crit'],values:{parent:'other'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher})).rejects.toMatchObject({code:'confirmation_required',exit:2});
+ await expect(groupsCommand({sub:'reparent',positionals:['design_crit'],values:{parent:'other',root:true,yes:true}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher})).rejects.toMatchObject({code:'invalid_parent',exit:2});
+ expect(sent).toBe(0);
+});
 it('share --datasets reads the page first, then shares it at its role and each linked dataset at viewer',async()=>{
  const {result,calls}=await harness('share',['PAGE12'],{group:'design_crit',role:'commenter',datasets:true});
  expect(calls.filter(c=>c.method!=='GET')).toEqual([

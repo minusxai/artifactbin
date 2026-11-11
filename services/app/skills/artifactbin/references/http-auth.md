@@ -12,6 +12,8 @@ HTTP authentication requires an email account. Only missing, revoked or unrefres
 2. `POST /api/auth/sign-in/email-otp` with `{"email":"<recipient email>","otp":"<user code>"}`. Retain cookies privately.
 3. `POST /api/authentication/token` with those cookies. `201` returns `access_token`, `refresh_token`, `client_id` and `expires_in`.
 
+A service this host issues tokens for needs no second sign-in: `POST /api/authentication/service-token` with your bearer and `{"audience":"<service id>"}` returns `access_token` and `expires_at` (5 minutes, no refresh token); send it only to that service and ask again near expiry.
+
 Sign-in: `account_created_this_login`. Token: `has_created_document` (first-artifact design).
 
 Save origin, tokens, client ID and expiry privately in that store across sessions (without files, a persistent secret store). Atomically replace rotated tokens and expiry; never duplicate a rotating grant.

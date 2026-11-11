@@ -44,7 +44,6 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/app/scripts/copy-assets.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:5 (runs it from the toolkit root for the native build)'] },
   { path: 'services/app/scripts/build-server-reader.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:6 (runs it from toolkit/services/app)'] },
   { path: 'services/app/lib/html-runtime/build.server.ts', repo: SERVER, usedAt: ['scripts/build-native-core.mjs:9,33 (imports the runtime build)'] },
-  { path: 'services/runner/src/', repo: SERVER, holds: ['model.mjs', 'runner-worker.mjs', 'server.ts'], usedAt: ['services/runner/application.ts:1 (imports model.mjs)', 'scripts/build-source.mjs:35 (copies every .mjs beside the worker)', 'scripts/source-api.mjs:14 (aliases src/server.ts)'] },
   { path: 'services/sql/src/', repo: SERVER, holds: ['pool-worker.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:40 (emits pool-worker beside the bundle)', 'scripts/source-api.mjs:14'] },
   { path: 'services/browser/src/', repo: SERVER, holds: ['upload-gateway-server.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:41 (bundles the upload gateway)', 'services/browser/main.mjs:1', 'scripts/source-api.mjs:14'] },
   { path: 'services/events/src/server.ts', repo: SERVER, usedAt: ['scripts/source-api.mjs:14 (aliases @artifactbin/events/server)'] },
@@ -53,6 +52,11 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/app/lib/html-systems/font-manifest.json', repo: SERVER, usedAt: ['scripts/native-runtime-cache.mjs:42 and the install action (cache key)'] },
   { path: 'vite.config.mts', repo: SERVER, usedAt: ['vite.config.mts:2 (extends the toolkit configuration)'] },
   { path: 'tsconfig.json', repo: SERVER, usedAt: ['tsconfig.json:2 (extends it)', 'scripts/build-source.mjs'] },
+  // The generated SQL the server's one-shot database jobs apply (its SETUP.md).
+  { path: 'SCHEMA.sql', repo: SERVER, usedAt: ['SETUP.md (fresh database: the tables, by owning schema)'] },
+  { path: 'roles.sql', repo: SERVER, usedAt: ['toolkit/roles.sql (fresh database: one login role per package and the schemas each owns)'] },
+  { path: 'grants.sql', repo: SERVER, usedAt: ['toolkit/grants.sql (cross-schema reads, applied after the boots that create each object)'] },
+  { path: 'IDENTITY.sql', repo: SERVER, usedAt: ['SETUP.md (the identity read surface every reader of the identity views reads)'] },
   { path: 'scripts/lib/dev-env.mjs', repo: EVALS, usedAt: ['lib/dev-server.ts:18 (imports declaredPort, loadDotEnv, resolvePort)'] },
   { path: 'scripts/lib/shard.mjs', repo: EVALS, usedAt: ['lib/task-set.ts:30 (imports parseShardSpec)'] },
   { path: 'scripts/lib/env.ts', repo: EVALS, usedAt: ['lib/env.ts:2 (re-exports it)'] },
@@ -92,7 +96,7 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(18);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(21);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(4);
   });
 

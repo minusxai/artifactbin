@@ -3,7 +3,6 @@
  * reads, events and wakeups). Each is scoped by `ownerPredicate(actor)` — the one scope that reads past the
  * trash gate — so a subtree is only ever the actor's own rows.
  */
-import { assertScheduleCapacity } from './schedule-capacity';
 import type { AccessActor } from '@/lib/accounts';
 import type { Queryable } from '@artifactbin/contracts';
 import { ancestorsForMove } from './placement';
@@ -40,14 +39,12 @@ export async function trashSubtree(q: Queryable, actor: AccessActor, id: string)
 /** Clear the trash stamp on `id` and on the descendants its deletion stamped (`stamp`), never on rows trashed by another act. */
 export async function restoreTrashedSubtree(tx: Queryable, actor: AccessActor, id: string, stamp: string): Promise<void> {
   const owner = ownerPredicate(actor);
-  const restored = await tx.query<{ id: string }>(
+  await tx.query(
     `UPDATE artifacts SET deleted_at = NULL
       WHERE (id = $1 OR (ancestor_ids @> ARRAY[$1] AND deleted_at = $3))
         AND deleted_at IS NOT NULL AND (${owner.where('$2')}) RETURNING id`,
     [id, owner.val, stamp],
   );
-  // Restored pages' schedules are active again: each publisher's capacity, in this transaction (./schedule-capacity).
-  await assertScheduleCapacity(tx, restored.rows.map((row) => row.id));
 }
 
 /** File `row` (and, by the same prefix swap a move runs, everything under it) at the root. */

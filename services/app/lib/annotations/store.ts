@@ -6,7 +6,7 @@ import { reactionScope, annotationScope, effectiveRole, type Scope } from '@/lib
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
-import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
+import { type AnnotationAuthor, type AnnotationCommentWire, type EventOrigin, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -187,6 +187,9 @@ const notify = (q: Queryable, artifactId: string, annotationId: string) =>
  * that fetches the comments — never a lookup per comment. A subquery aliased
  * back to `annotations`, so each reader's WHERE/ORDER stays as written.
  */
+/** The credential and agent session a comment change was made with: the events feed marks the reader's own `you`. */
+const origin = (actor: AccessActor, session?: string | null): EventOrigin => ({ token_id: actor.tokenId, session: session ?? null });
+
 const ANNOTATIONS_READ =
   '(SELECT a.*, u.image_key AS author_image_key FROM annotations a LEFT JOIN users u ON u.id = a.author_user_id) annotations';
 
@@ -285,16 +288,15 @@ export async function createAnnotationFor(
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor, author_session)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16)`,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
       anchorKey, row.version, snippet,
-      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null,
-      author.writerSession ?? null],
+      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
-    await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent'});
+    await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent',via:origin(actor,author.writerSession)});
     await commentMentions(tx,row,actor,input.body,id);
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows, actor.userId);
@@ -521,9 +523,9 @@ export async function actOnAnnotationFor(
       }
       await tx.query(
         `INSERT INTO annotations
-           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote, author_session)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10, $11)`,
-        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null,author.writerSession ?? null],
+           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
+        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null],
       );
     }
     if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
@@ -538,7 +540,8 @@ export async function actOnAnnotationFor(
     }
     if(replied || resolved || (!statusConflict && action.reopen && root.status==='resolved')){
       await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
-      await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:author.kind==='agent'});
+      // A reply that also resolved is ONE fact: the reply, with the thread's new state (`resolved: true`).
+      await recordEvent(tx,actorSubject(actor),replied?'annotation_replied':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:author.kind==='agent',via:origin(actor,author.writerSession)});
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would
@@ -609,14 +612,11 @@ export async function editAnnotationCommentFor(
 
     const changed = comment.body !== edit.body;
     if (changed) {
-      // Every edit, a person's or an agent's, takes a new feed position from seq's own sequence, under the artifact
-      // lock already held, so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
-      // The editing credential and agent session are kept beside it: the feed marks the watcher's own rewrite `you`.
-      await tx.query("UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')), change_token_id = $3, change_session = $4 WHERE id = $1",
-        [comment.id, edit.body, actor.tokenId, edit.writerSession ?? null]);
+      await tx.query('UPDATE annotations SET body = $2, edited_at = now() WHERE id = $1', [comment.id, edit.body]);
       await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1', [root.id]);
       await recordEvent(tx, actorSubject(actor), 'annotation_edited', { kind: 'artifact', id: artifactId }, {
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
+        via: origin(actor, edit.writerSession),
       });
       await commentMentions(tx, row, actor, edit.body, comment.id, comment.body);
       await notify(tx, artifactId, root.id);
@@ -688,7 +688,7 @@ export async function deleteAnnotationFor(actor: AccessActor, artifactId: string
       await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [rootId]);
     }
     await recordEvent(tx, actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, {
-      annotation_id: rootId, ...(replyId ? { reply_id: replyId } : {}),
+      annotation_id: rootId, ...(replyId ? { reply_id: replyId } : {}), via: origin(actor),
     });
     await notify(tx, artifactId, rootId);
     if (replyId) return { anchorKey: null };
@@ -718,10 +718,8 @@ export async function countOpenAnnotations(artifactId: string): Promise<number> 
 /**
  * Desired per-account/per-kind state. Artifact→root locks serialize against deletion and all comment mutations.
  *
- * An effective change (not a repeat of the current state) also appends one row to `comment_reaction_events` with a
- * position from `annotations.seq`'s sequence, allocated under the artifact lock like every comment-feed position, so
- * the comment feed (./changes) orders reactions with comments on one cursor. Per account, comment and kind the
- * log strictly alternates added/removed, which is what lets the feed net out a toggle since a checkpoint.
+ * An effective change (not a repeat of the current state) records one `annotation_reaction_changed` fact through the
+ * outbox, in this transaction: the public events feed's reaction event (lib/event-feed), with the count right after.
  * `reactor` is decided at the door, as a comment's author is: a browser session is the person, a bearer an agent.
  */
 export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput,reactor:Pick<AnnotationAuthor,'kind'|'label'|'writerSession'>):Promise<AnnotationWire|null>{
@@ -739,11 +737,10 @@ export async function setCommentReactionFor(actor:AccessActor,artifactId:string,
       ?await tx.query('INSERT INTO comment_reactions (comment_id,user_id,kind,reactor_kind,reactor_label) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING comment_id',[commentId,actor.userId,input.kind,reactor.kind,reactor.label])
       :await tx.query('DELETE FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3 RETURNING comment_id',[commentId,actor.userId,input.kind]);
     if(result.rows.length){
-      await tx.query(
-        `INSERT INTO comment_reaction_events (seq,artifact_id,comment_id,user_id,kind,active,reactor_kind,reactor_label,count,token_id,session)
-         VALUES (nextval(pg_get_serial_sequence('annotations','seq')),$1,$2,$3,$4,$5,$6,$7,
-           (SELECT count(*) FROM comment_reactions WHERE comment_id=$2 AND kind=$4),$8,$9)`,
-        [artifactId,commentId,actor.userId,input.kind,input.active,reactor.kind,reactor.label,actor.tokenId,reactor.writerSession??null]);
+      const count=Number((await tx.query<{n:string|number}>('SELECT count(*) AS n FROM comment_reactions WHERE comment_id=$1 AND kind=$2',[commentId,input.kind])).rows[0]?.n??0);
+      await recordEvent(tx,actorSubject(actor),'annotation_reaction_changed',{kind:'artifact',id:artifactId},{
+        annotation_id:rootId,...(commentId!==rootId?{reply_id:commentId}:{}),kind:input.kind,active:input.active,count,
+        agent:reactor.kind==='agent',via:origin(actor,reactor.writerSession)});
       await notify(tx,artifactId,rootId);
     }
     const fresh=(await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id=$1`,[rootId])).rows;

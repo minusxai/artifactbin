@@ -69,11 +69,8 @@ it('gives the id a dataset write is stamped with (X-Hasura-User-Id), so a page c
   expect(viewer.body.data).toEqual({ viewer: { id: writer.userId }, notes: [{ by: writer.userId }] });
 });
 
-it('refuses to publish a link named viewer, resolver or dataset: the built-in cannot be shadowed', async () => {
+it('refuses to publish a dataset link named viewer: the built-in cannot be shadowed', async () => {
   const owner = await person('shadow');
-  const resolver = await publish(owner, { html: '<html><head><link rel="af-resolver" data-af-name="viewer" href="./viewer.ts"></head><body>x</body></html>', resolverSources: { viewer: 'export const typeDefs="type Query { signedIn: Boolean }"; export default { signedIn: () => true };' } });
-  expect(resolver.status).toBe(400);
-  expect(resolver.body).toEqual({ error: 'graphql_root_collision', details: ['link "viewer" names viewer, the built-in viewer query; rename the link'] });
   const dataset = await publish(owner, { dataset: [{ name: 'x' }], title: 'Shadow' });
   const linked = await publish(owner, { html: `<html><head><link rel="af-dataset" data-af-name="viewer" href="ref:${dataset.body.id}"></head><body>x</body></html>` });
   expect(linked.status).toBe(400);

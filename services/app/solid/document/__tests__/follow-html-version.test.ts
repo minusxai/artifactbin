@@ -1,6 +1,7 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {followHtmlVersion,followPublication} from '../follow-html-version';
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
+import {followHtmlVersion} from '@/lib/html-reader/follow-version';
+import {followPublication} from '../follow-html-version';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from '@/lib/html-reader/contract';
 
 /** A frame controller that answers the version command with `answer` (or stays silent). */
 function frame(answer?:(command:{type:string;version:number})=>unknown){

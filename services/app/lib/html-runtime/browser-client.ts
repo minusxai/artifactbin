@@ -20,9 +20,11 @@ export {gql};
  * through the app, even when the copy is connected: without that module (no data in the copy) it refuses, and says so
  * where the reader sees it (offlineSqlNoData).
  */
-const offlineSql=(request:{sql:string;params:Record<string,string|number|boolean|null>})=>{
+const offlineSql=(request:{sql?:string;query?:string;params:Record<string,string|number|boolean|null>})=>{
+  // A declared query reads a live dataset, whose rows no copy carries.
+  if(request.query!==undefined)return Promise.reject(new SqlError('unavailable','a declared query reads a live dataset, which an offline copy does not carry'));
   const name='@afbin/offline-sql';
-  return (import(name) as Promise<typeof import('./offline-sql')>).then((engine)=>engine.runOfflineSql(request),offlineSqlNoData);
+  return (import(name) as Promise<typeof import('./offline-sql')>).then((engine)=>engine.runOfflineSql({sql:request.sql??'',params:request.params}),offlineSqlNoData);
 };
 export const sql=createSql({
   run:(request)=>config.localPreview?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))

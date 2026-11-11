@@ -21,7 +21,7 @@ const ACCESS_COLUMNS='id,user_id,token_id,group_id,visibility,format,edit_id,dat
 export type ReadRow = Pick<ArtifactRow,'id'|'user_id'|'token_id'|'visibility'|'format'> & Partial<Pick<ArtifactRow,'group_id'|'dataset_policy'>>;
 /** Called inside an optional existing transaction; never enqueues work on the outer database. `facts` defaults to `tx`'s. */
 export async function readThrough(tx:Queryable,row:ReadRow,actor:AccessActor,facts:AccessFacts=transactionAccessFacts(actor,tx)):Promise<boolean>{
- if(row.group_id&&await facts.groupRole(row.group_id))return true;
+ if(row.group_id&&(await facts.groupRole(row.group_id)||await facts.groupAudience(row.group_id)))return true;
  if(ownsArtifact(row,actor)||row.visibility!=='private')return true;
  if(!actor.userId)return false;
  return await facts.sharedWith(row.id)||await facts.groupShareRole(row.id)!=='none';
@@ -33,7 +33,7 @@ export async function uploadGrantContext(dataset:GrantDataset,actor:AccessActor,
 }
 async function savedGrantContext(dataset:GrantDataset,actor:AccessActor,document:{id:string;editId:string},tx:Queryable|undefined,verifyHtml:(db:Queryable)=>Promise<boolean>):Promise<DatasetGrantContext>{
  const db=tx??await getDb();
- const editorGroups=actor.userId?(await db.query<{group_id:string}>("SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL FOR SHARE OF gm,g",[actor.userId])).rows.map(r=>r.group_id):[];
+ const editorGroups=actor.userId?(await db.query<{group_id:string}>("SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL",[actor.userId])).rows.map(r=>r.group_id):[];
  const context:DatasetGrantContext={caller:actor,owner:principalOf(dataset),callerEditorGroupIds:editorGroups};
  const identity=actor.userId?(await db.query<{kind:string}>("SELECT kind FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now())",[actor.userId])).rows[0]:null;
  if(actor.userId&&(!identity||identity.kind==='guest'))throw new DatasetError('Sign in to change data',403);

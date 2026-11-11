@@ -241,7 +241,8 @@ it('keeps the monitor instruction and the served watch guide on the same loop se
  const section = text.slice(text.indexOf('## Watch for comments'));
  const end = section.indexOf('\n## ', 3);
  expect(end < 0 ? section : section.slice(0, end)).toContain(WATCH_LOOP);
- expect(section).toContain('/annotations/changes?after=now');
+ expect(section).toContain('/api/events?artifact_id=ID&category=comments&after=now');
+ expect(section).not.toContain('/annotations/changes');
  expect(text).toContain(`(#${anchor})`);
 });
 

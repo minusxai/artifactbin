@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
 import { createSql, SqlError, type SqlPort } from '../apollo/sql';
 
-function port(reply: (request: { sql: string; params: Record<string, unknown> }) => unknown = () => ({ columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] })) {
+function port(reply: (request: { sql?: string; query?: string; params: Record<string, unknown> }) => unknown = () => ({ columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] })) {
   const listeners = new Set<(names?: readonly string[]) => void>();
-  const sent: Array<{ sql: string; params: Record<string, unknown>; idempotencyKey: string }> = [];
+  const sent: Array<{ sql?: string; query?: string; params: Record<string, unknown>; idempotencyKey: string }> = [];
   const p: SqlPort = {
     async run(request) { sent.push(request); return reply(request) as never; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
@@ -30,7 +30,7 @@ it('binds every ${…} as a parameter, never as SQL text, and answers rows with 
 });
 
 it('answers a write as {affected, returning}, each run its own Idempotency-Key, and rejects a refusal with its code', async () => {
-  const { p, sent } = port((r) => (r.sql.startsWith('insert') ? { affected: 1, returning: [{ _id: 'r_1', title: 't' }] } : { error: 'permission_denied', message: 'no' }));
+  const { p, sent } = port((r) => (r.sql?.startsWith('insert') ? { affected: 1, returning: [{ _id: 'r_1', title: 't' }] } : { error: 'permission_denied', message: 'no' }));
   const sql = createSql(p);
   const insert = sql`insert into tasks (title) values (${'t'})`;
   expect(await insert).toEqual({ affected: 1, returning: [{ _id: 'r_1', title: 't' }] });
@@ -66,4 +66,21 @@ it('watch: answers at once, again on an invalidation naming a link it reads, one
   invalidate(['tasks']);
   await Promise.resolve();
   expect(sent).toHaveLength(3);
+});
+
+it('sends a declared query by name with its values, never SQL text, and watches it like a statement', async () => {
+  const { p, sent, invalidate } = port();
+  const sql = createSql(p);
+  expect(await sql.query('revenue', { year: 2026, since: new Date('2026-01-01T00:00:00Z') })).toEqual([{ n: 1 }]);
+  expect(sent[0]).toEqual({ query: 'revenue', params: { year: 2026, since: '2026-01-01T00:00:00.000Z' }, idempotencyKey: expect.any(String) });
+  expect(sent[0]).not.toHaveProperty('sql');
+  expect(() => sql.query('revenue', { bad: {} as never })).toThrow(TypeError);
+  expect(() => sql.query('' as never)).toThrow(TypeError);
+  const seen: unknown[] = [];
+  const stop = sql.watch(sql.query('mine'), (rows) => seen.push(rows));
+  await vi.waitFor(() => expect(seen).toHaveLength(1));
+  invalidate();
+  await vi.waitFor(() => expect(seen).toHaveLength(2));
+  stop();
+  expect(sent.slice(1).map((r) => r.query)).toEqual(['mine', 'mine']);
 });

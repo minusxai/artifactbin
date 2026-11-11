@@ -32,7 +32,7 @@ import { datasetPermissionsTemplate, readBackDatasetPermissions, validateDataset
 import type { AccessActor } from '@/lib/accounts';
 import { commitDatasetPolicy, getArtifactFor, type ArtifactRow } from '@/lib/artifacts';
 import { storedPolicy, type StoredPolicy } from '@/lib/dataset-permissions';
-import { catalogOf, keepDatasetConfiguration, LEGACY_POLICY_REFUSED, type DatasetTable } from '@/lib/datasets';
+import { catalogOf, keepDatasetConfiguration, LEGACY_POLICY_REFUSED, LIVE_QUERY_TABLE, liveConnectionOf, liveQueryRoles, liveRulesProblems, type DatasetTable } from '@/lib/datasets';
 import { writeDatasetPolicy } from '@/lib/document-data';
 import { getDb } from '@/lib/platform';
 import { hasuraNames, storedConfiguration } from '@/lib/datasets/graphql-names';
@@ -50,6 +50,8 @@ const graphqlType = (type: DatasetColumn['type']) => (type === 'number' ? 'Float
 async function editable(actor: AccessActor, id: string): Promise<{ row: ArtifactRow; tables: DatasetTable[] } | null> {
   const row = await getArtifactFor(actor, id);
   if (!row || row.format !== 'dataset') return null;
+  // A live dataset's one rule table (lib/datasets live-rules): who may run the queries pages declare.
+  if (liveConnectionOf(row.meta)) return { row, tables: [{ ...LIVE_QUERY_TABLE, columns: [] }] };
   const catalog = catalogOf(row);
   const flat = { schema: 'public', name: 'rows', columns: (row.meta.columns ?? []) as DatasetColumn[] };
   return { row, tables: catalog?.tables ?? [flat] };
@@ -77,9 +79,11 @@ export async function readDatasetPermissions(actor: AccessActor, id: string): Pr
   const { row, tables } = found;
   const names = hasuraNames(tables, { title: row.title, configuration: storedConfiguration(row.dataset_policy) });
   let reading: StoredPolicy | null = null, unreadable = '';
-  try { reading = storedPolicy({ policy: row.dataset_policy, tables: tables.map(({ schema, name }) => ({ schema, name })) }); }
+  try { reading = storedPolicy({ policy: row.dataset_policy, tables: tables.map(({ schema, name }) => ({ schema, name })), live: !!liveConnectionOf(row.meta) }); }
   catch (error) { unreadable = error instanceof Error ? error.message : String(error); }
+  const live = liveConnectionOf(row.meta);
   return ok({
+    ...(live ? { live: { connector: live.connector, declaredQueryRoles: reading ? liveQueryRoles(reading.policy) : [], meaning: 'A select entry on public.queries lets that role run the queries pages declare on this live dataset; owner and editors run any SQL.' } } : {}),
     revision: row.policy_revision ?? 0,
     source: reading?.source ?? 'unreadable',
     report: reading ? [] : [{ code: 'unreadable', message: `${unreadable} Until then nobody below editor can use the data.` }],
@@ -117,6 +121,8 @@ export async function writeDatasetPermissions(actor: AccessActor, id: string, bo
     return invalid([{ path: 'expectedPolicyRevision', message: 'expected the nonnegative integer revision GET answered' }]);
   const checked = validateDatasetPermissions(value, shapeOf(tables));
   if (!checked.ok) return invalid(checked.errors);
+  const liveProblems = liveConnectionOf(row.meta) ? liveRulesProblems(checked.policy) : [];
+  if (liveProblems.length) return invalid(liveProblems);
   const untyped = collaborativeTypeErrors(checked.policy, tables);
   if (untyped.length) return invalid(untyped);
   const kept = keepDatasetConfiguration(checked.policy, row.dataset_policy);

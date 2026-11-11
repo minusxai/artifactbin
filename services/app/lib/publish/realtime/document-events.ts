@@ -6,7 +6,7 @@
  * may read the page may watch it change — it reveals nothing a reload would
  * not.
  *
- * The transport is the minusx chat-stream pattern: a NOTIFY is only a wakeup
+ * The transport is the chat-stream pattern: a NOTIFY is only a wakeup
  * pointer, and every wakeup does a catch-up SELECT, so a missed notification
  * costs nothing. The first frame is always the current state, which makes the
  * stream self-syncing — a client that connects late, reconnects, or misses a
@@ -14,7 +14,7 @@
  */
 import {presenceAccountIdentity, createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
 import { getDb, ID_RE } from '@/lib/platform';
-import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
+import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-publication';
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';

@@ -15,3 +15,4 @@ export { buildPreviewParser, buildToolboxPlatform } from './preview-assets.serve
 export { isPublicSkillTopic } from './public-surface';
 export type { SetupInstructionOptions } from './setup-instructions';
 export { archiveFor, skillServer } from './delivery';
+export { skillExtras } from './extras';

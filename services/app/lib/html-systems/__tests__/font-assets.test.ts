@@ -13,7 +13,7 @@ import { storyFontFaceCss, STORY_FAMILY_ASSETS,storyFontManifest } from '@/lib/h
 
 const FONT_DIR = path.join(process.cwd(), 'public', 'fonts');
 const allAssets = () => Object.values(STORY_FAMILY_ASSETS).flat();
-const bytesOf = (url: string) => readFileSync(path.join(FONT_DIR, url.slice('/fonts/'.length)));
+const bytesOf = (url: string) => readFileSync(path.join(FONT_DIR, url.slice('/af/fonts/'.length)));
 
 /**
  * The WOFF2 table directory, by tag.
@@ -98,14 +98,14 @@ describe('bundled font assets are subset WOFF2, and safe to serve immutable', ()
   });
 
   /**
-   * The server serves /fonts/* as `immutable`, which is a promise that the
+   * The server serves /af/fonts/* as `immutable`, which is a promise that the
    * bytes at a URL never change. The content hash in the filename is what
    * makes that true; if a file is replaced without renaming it, the promise
    * breaks and readers keep a stale font forever.
    */
   it('every filename carries the sha256 prefix of its own bytes', () => {
     for (const a of allAssets()) {
-      const name = a.url.slice('/fonts/'.length);
+      const name = a.url.slice('/af/fonts/'.length);
       const declared = /\.([0-9a-f]{8})\.woff2$/.exec(name)?.[1];
       expect(declared, `${name} has no content hash`).toBeTruthy();
       const actual = createHash('sha256').update(bytesOf(a.url)).digest('hex').slice(0, 8);
@@ -195,7 +195,7 @@ describe('storyFontManifest', () => {
   it('maps families, the app shell and the design systems to hashed woff2 files', () => {
     const families = Object.entries(storyFontManifest.families);
     expect(families.length).toBeGreaterThan(0);
-    for (const [, assets] of families) for (const asset of assets) expect(asset.url).toMatch(/^\/fonts\/[a-z0-9-]+\.[a-f0-9]{8}\.woff2$/);
+    for (const [, assets] of families) for (const asset of assets) expect(asset.url).toMatch(/^\/af\/fonts\/[a-z0-9-]+\.[a-f0-9]{8}\.woff2$/);
     expect(storyFontManifest.app.length).toBeGreaterThan(0);
     for (const face of storyFontManifest.app) expect(face.url).toMatch(/\.woff2$/);
     expect(Object.keys(storyFontManifest.systems).length).toBeGreaterThan(0);

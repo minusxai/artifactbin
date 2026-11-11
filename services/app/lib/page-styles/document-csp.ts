@@ -12,7 +12,7 @@
  *  - connections to this origin (its own doors, server/pages-host), this document's doors on the app
  *    origin path-exact, and the same CDNs — never the app's other routes;
  *  - frames: the default players (`FRAME_HOSTS`) and any host the document declares with `csp-frame`;
- *  - `frame-ancestors`: the app alone.
+ *  - `frame-ancestors`: the app, and the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS), never anyone else.
  *
  * `extensions` are the https origins a document declares in its Helmet (`csp-*` metas, lib/document/csp-extensions)
  * that this reader trusts (lib/trust/document-trust `cspExtensionsFor`), appended per directive — except `connect`: a
@@ -20,7 +20,7 @@
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
-import { STYLESHEET_PATH } from './shared-paths';
+import { withLegacy } from '@artifactbin/contracts';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document';
 
@@ -34,6 +34,8 @@ interface DocumentCspInput {
   /** A configured public asset origin (APP__ASSETS_ORIGIN), admitted for its bytes. */
   assetOrigin?: string | null;
   extensions?: CspExtensions;
+  /** Other origins that may frame the document (lib/platform `embedTrustedOrigins`); none by default. */
+  framers?: readonly string[];
 }
 
 
@@ -52,7 +54,7 @@ function httpsOrigins(list: readonly string[]): string[] {
 
 const join = (...parts: ReadonlyArray<string | readonly string[]>): string => parts.flat().filter(Boolean).join(' ');
 
-export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions = EMPTY_CSP_EXTENSIONS }: DocumentCspInput): string {
+export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions = EMPTY_CSP_EXTENSIONS, framers = [] }: DocumentCspInput): string {
   new URL(self); // a malformed origin is a thrown error, never a policy
   const appOrigin = new URL(app).origin;
   const asset = assetOrigin ? [new URL(assetOrigin).origin] : [];
@@ -70,16 +72,15 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     // Never a declared host (`extensions.connect`): a script reaches those through its own `/fetch`
     // door (app/a/[id]/fetch), so the reader's address never leaves for them.
     join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
-    // The shared document sheets (lib/page-styles/linked-sheets.server) are the app's own, content-addressed under
-    // /islands/c/ — one URL for every document, so one cache entry — and the faces they declare are its /fonts.
-    join('style-src', "'self'", "'unsafe-inline'", `${appOrigin}${STYLESHEET_PATH}/`, FONT_STYLES, ext.style),
-    join('font-src', "'self'", 'data:', `${appOrigin}/fonts/`, FONT_FILES, asset, ext.style),
+    // The faces a document's sheets declare are the app's /af/fonts/ files (and their old /fonts/ address).
+    join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
+    join('font-src', "'self'", 'data:', withLegacy('/af/fonts/').map((dir) => `${appOrigin}${dir}`), FONT_FILES, asset, ext.style),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', `${appOrigin}/api/users/`, asset, ext.img),
     join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
     // An author `<iframe>` (lib/jsx/validate): the default players, then the hosts the document declares.
     join('frame-src', FRAME_HOSTS, ext.frame),
     "form-action 'none'",
     "base-uri 'none'",
-    `frame-ancestors ${appOrigin}`,
+    join('frame-ancestors', appOrigin, framers.map((origin) => new URL(origin).origin)),
   ].join('; ');
 }

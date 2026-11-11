@@ -1,7 +1,6 @@
 /**
- * The address rules every host-side connection on a page's behalf obeys (web ingestion, `caps.fetch`, the
- * resolver database tunnel). Pure, so every range and encoding gets a case; the tunnel's tests prove the rules
- * are applied to every DNS answer before a socket opens.
+ * The address rules every host-side connection on a page's behalf obeys (web ingestion). Pure, so every range and
+ * encoding gets a case.
  */
 import { describe, expect, it } from 'vitest';
 import { addressClass, hostNameSyntax, isAllowedAddress, parseIPv4, parseIPv6, parseOutboundIps } from '../src/public-address';

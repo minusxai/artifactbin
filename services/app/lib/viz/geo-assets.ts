@@ -1,5 +1,5 @@
 /**
- * Named boundary-asset registry: the MinusX-approved boundaries the
+ * Named boundary-asset registry: the approved boundaries the
  * vega geo recipes look up against. Vega may NOT fetch geometry from the network (the
  * data policy rejects `data.url`), so choropleth/point recipes reference a boundary by
  * a reserved local DATASET NAME and the render pipeline injects the resolved features
@@ -29,7 +29,7 @@ type GeoProjection = 'albersUsa' | 'mercator' | 'equalEarth';
 interface GeoAsset {
   /** Menu label. */
   label: string;
-  /** Public file under `/geojson/<file>.json`. */
+  /** Public file under `/af/geojson/<file>.json`. */
   file: string;
   /** GeoJSON feature `properties` key holding the region name (the lookup key). */
   nameProp: string;
@@ -80,7 +80,7 @@ export const GENERATED_BOUNDARIES: Readonly<Record<string, { file: string; topoj
   countries: { file: 'countries', topojsonObject: 'countries' },
 };
 
-/** The file under `/geojson/` a boundary set lives in, or null for anything unlisted. */
+/** The file under `/af/geojson/` a boundary set lives in, or null for anything unlisted. */
 export function boundaryFile(id: string): string | null {
   return isGeoAsset(id) ? GEO_ASSETS[id].file : Object.hasOwn(GENERATED_BOUNDARIES, id) ? GENERATED_BOUNDARIES[id]!.file : null;
 }
@@ -121,7 +121,7 @@ export function assetFeatures(id: string, json: unknown): Feature[] {
 const cache: Record<string, Feature[]> = {};
 
 /**
- * How a boundary file is fetched, given its PUBLIC path (`/geojson/<file>.json`). The default is
+ * How a boundary file is fetched, given its PUBLIC path (`/af/geojson/<file>.json`). The default is
  * the browser fetch (same-origin static asset). Root-relative URLs are unparseable in Node, so
  * a NO-ORIGIN context (a headless server render — Slack images, scripts) has to replace this
  * fetcher with a filesystem one, or its geo charts silently render without geometry.
@@ -147,7 +147,7 @@ export async function loadGeoFeatures(id: string): Promise<Feature[]> {
     throw new Error(`unknown geo boundary "${id}" — available: ${BOUNDARY_IDS.join(', ')}`);
   }
   if (cache[id]) return cache[id];
-  const features = assetFeatures(id, await assetFetcher(`/geojson/${file}.json`));
+  const features = assetFeatures(id, await assetFetcher(`/af/geojson/${file}.json`));
   cache[id] = features;
   return features;
 }

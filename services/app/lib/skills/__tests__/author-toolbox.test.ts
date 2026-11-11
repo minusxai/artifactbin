@@ -9,7 +9,7 @@ it('counts an older page\'s /graphql post as a page call and reports its refusal
  const {callKind,calls}=await import('../../../skills/artifactbin/scripts/toolbox-check-calls.mjs');
  expect(callKind('https://h.test/api/artifacts/PAGE12/graphql')).toEqual({kind:'graphql'});
  expect(callKind('https://h.test/api/artifacts/PAGE12/sql')).toEqual({kind:'sql'});
- expect(callKind('https://h.test/api/artifacts/PAGE12/fn/notes')).toEqual({kind:'fn',name:'notes'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/fn/notes')).toBeNull();
  expect(callKind('https://h.test/api/artifacts/PAGE12/annotations')).toBeNull();
  const response=(status:number,body:unknown)=>({url:()=>'https://h.test/api/artifacts/PAGE12/graphql',status:()=>status,json:async()=>body,
   request:()=>({postDataJSON:()=>({query:'query{sales{amount}}'}),method:()=>'POST'})});
@@ -39,15 +39,16 @@ it('flushes watch events before checkpoints, deduplicates replay and validates t
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-watch-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
- const event={type:'artifactbin.comment',event_id:'e1',annotation_id:'A',author:{kind:'human',you:false},body:'Hi'};
+ const event={id:'e1',type:'artifact.annotated',payload:{annotation_id:'A'},actor:{kind:'user',id:'usr_bob',you:false}};
  try{
-  // Every page of the feed repeats e1; thread A stays open, so a resumed call stops on its owed answer.
+  // A full first page (limit 2) of the replay asks again at once; every page repeats e1, deduplicated by its id. Thread A
+  // stays open, so a resumed call stops on its owed answer.
   const afters:string[]=[];let calls=0;const client={server,request:async(route:string)=>{const url=new URL(route,server);if(url.pathname.endsWith('/annotations'))return {annotations:[{id:'A'}],next_cursor:null};
-   afters.push(url.searchParams.get('after')!);calls++;return {events:[event],next_cursor:'opaque'+calls,has_more:calls===1};}};
-  await watchComments(client,'PAGE12',{next:true,output},{deliver:async()=>{}});
+   afters.push(url.searchParams.get('after')??'start');calls++;return {events:calls===1?[event,event]:[event],next:'opaque'+calls};}};
+  await watchComments(client,'PAGE12',{next:true,output},{deliver:async()=>{},limit:2});
   const records=(await readFile(output,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(records.map(record=>record.kind)).toEqual(['watch','window','event','printed','checkpoint']);
-  await watchComments(client,'PAGE12',{next:true,append:true,output},{deliver:async()=>{}});
+  await watchComments(client,'PAGE12',{next:true,append:true,output},{deliver:async()=>{},limit:2});
   expect(afters).toEqual(['start','opaque1','opaque2']);
   expect((await readFile(output,'utf8')).match(/"kind":"event"/g)).toHaveLength(1);
   await expect(watchComments({...client,server:'https://other.test'},'PAGE12',{next:true,append:true,output})).rejects.toMatchObject({code:'log_mismatch'});
@@ -136,6 +137,43 @@ it('uses private origin-bound login challenges and saves grants without exposing
   expect(await authCommand({sub:'logout',values:{},positionals:[]},options)).toMatchObject({localGrantRemoved:true,serverRevoked:true});
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:false});
  }finally{await rm(root,{recursive:true,force:true});}
+});
+it('login --audience saves a second grant for that service beside the API grant; plain login asks for the API grant alone',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs'),{platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-auth-audience-')),codeFile=path.join(root,'code.txt'),server='https://example.test';
+ const asked:unknown[]=[];
+ try{
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});
+   const body=JSON.parse(init.body);if(pathname==='/api/authentication/token')asked.push(body);
+   return Response.json(body.audience?{access_token:'service_access',refresh_token:'service_refresh',client_id:'service_client',expires_in:3600,resource:'https://warehouse.example'}:{access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
+  await writeFile(codeFile,'123456');
+  for(const audience of ['warehouse',undefined]){
+   const challenge=await authCommand({sub:'login',values:{email:'author@example.test'},positionals:[]},options);
+   const result=await authCommand({sub:'login',values:{challenge:challenge.challenge,'code-file':codeFile,...(audience?{audience}:{})},positionals:[]},options);
+   expect(JSON.stringify(result)).not.toMatch(/service_access|synthetic_access/);
+  }
+  expect(asked).toEqual([{},{audience:'warehouse'},{}]);
+  const shared=await platform();
+  expect(await shared.readCredentials(server,root)).toMatchObject({token:'synthetic_access'});
+  expect(await shared.readCredentials(server,root,'warehouse')).toMatchObject({token:'service_access',audience:'warehouse',resource:'https://warehouse.example'});
+  await expect(authCommand({sub:'status',values:{audience:'Not An Id'},positionals:[]},options)).rejects.toMatchObject({code:'invalid_audience'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('serviceToken exchanges the one saved grant for a short-lived service token, reusing it in memory until near expiry',async()=>{
+ const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const {serviceToken}=await import('../../../skills/artifactbin/scripts/toolbox-service-token.mjs');
+ const server='https://exchange.example';const seen:{auth:string|null;body:unknown}[]=[];let life=300_000;
+ const fetcher=async(url:any,init:any)=>{const request=new Request(url,init);expect(new URL(request.url).pathname).toBe('/api/authentication/service-token');
+  seen.push({auth:request.headers.get('authorization'),body:await request.json()});
+  return Response.json({access_token:`svc_${seen.length}`,token_type:'Bearer',expires_in:life/1000,expires_at:new Date(Date.now()+life).toISOString(),audience:'warehouse'});};
+ const client=makeClient(server,{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'the_one_grant'},fetcher:fetcher as typeof fetch,identity:{name:'test'} as never});
+ expect(await serviceToken(client,'warehouse')).toBe('svc_1');
+ expect(await serviceToken(client,'warehouse')).toBe('svc_1');
+ expect(seen).toEqual([{auth:'Bearer the_one_grant',body:{audience:'warehouse'}}]);
+ // Another audience is its own token; one within 30 s of expiry is exchanged again.
+ life=20_000;expect(await serviceToken(client,'ledger')).toBe('svc_2');
+ expect(await serviceToken(client,'ledger')).toBe('svc_3');
 });
 it('status proves an unexpired saved grant with the server, so a grant revoked elsewhere reads as signed out',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
@@ -472,7 +510,7 @@ it('does not ask agents to write what the platform adds, and says what each side
  expect(http).not.toMatch(/<script src="\/af\/[^"]*core\.js"/);
  expect(http).not.toMatch(/(?:write|add|load|keep)[^.\n]*core (?:script )?tag/i);
  expect(http).not.toMatch(/<html[^>]*data-af-[a-z-]+="/);
- for(const example of ['report','csv-dashboard','tracker','api-dashboard','deck']){
+ for(const example of ['report','csv-dashboard','tracker','deck']){
   const html=await readFile(new URL(`../../../skills/artifactbin/examples/${example}.html`,import.meta.url),'utf8');
   expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }
@@ -589,7 +627,7 @@ it('reads Built with from the page starter comment, and only datasets with a sto
  const {builtWith,datasetLinks,replyFacts}=await import('../../../skills/artifactbin/scripts/toolbox-check-reply.mjs');
  const {readFile}=await import('node:fs/promises');
  const app=await readFile(new URL('../../../skills/artifactbin/examples/tracker.html',import.meta.url),'utf8');
- expect(builtWith(app)).toMatch(/^one HTML page; .* read and written with sql; tracker\.ts functions\.$/);expect(builtWith(app)).not.toContain('//');
+ expect(builtWith(app)).toMatch(/^one HTML page; .* read and written with sql\.$/);expect(builtWith(app)).not.toContain('//');
  expect(builtWith('<!-- Example: x.\nBuilt with: one HTML page and\n  a CSV dataset. -->\n<p>x</p>')).toBe('one HTML page and a CSV dataset.');
  expect(builtWith('<p>no starter</p>')).toBeNull();
  const html='<link rel="af-dataset" data-af-name="targets" href="ref:DATA12"><link href="ref:DATA34" rel="af-dataset" data-af-name="rows"><link rel="stylesheet" href="ref:CSS123">';
@@ -659,84 +697,42 @@ it('fails a published page that links a dataset but never reads it, and passes o
   expect(passed.smokePassed).toBe(true);expect(passed.unreadDatasets).toBeUndefined();expect(passed.reply?.permissions).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('lists what an unset secret blocked as Not tested and names every other failed call with its owner detail',async()=>{
+it('names every failed sql call with its detail, and asks a guest\'s failed read again as the owner, never a write',async()=>{
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const {checkDigest,toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'check-secret-')),steps=path.join(root,'steps.mjs'),guest=path.join(root,'guest.mjs');
- await writeFile(steps,"await step('Forecast shows',async()=>{});");await writeFile(guest,"await step('Guest sees alerts',async()=>{});");
- const failed='Backend execution failed',base={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Pipeline',overflow:{viewport:1,content:1,fits:true},steps:{ran:true,passed:false},verified:['board loads']};
- const unset={field:'fn/forecast',kind:'fn',message:failed,code:'backend_failed',detail:'secret_unavailable: WEATHER_KEY',pageErrorsBefore:0,consoleErrorsBefore:0};
+ const root=await mkdtemp(path.join(tmpdir(),'check-calls-')),steps=path.join(root,'steps.mjs'),guest=path.join(root,'guest.mjs');
+ await writeFile(steps,"await step('Board shows',async()=>{});");await writeFile(guest,"await step('Guest sees alerts',async()=>{});");
+ const base={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Pipeline',overflow:{viewport:1,content:1,fits:true},steps:{ran:true,passed:true},verified:['board loads']};
  const notOnPage={field:'sql',kind:'sql',message:'no such table',code:'invalid_sql',detail:'no such table: deal_notes',pageErrorsBefore:0,consoleErrorsBefore:1};
- // What the page logged after the refusal came from it.
- const blocked={...base,consoleErrors:[failed+' {"code":"backend_failed"}'],error:'Timeout 6000ms exceeded (step call #2 page.getByText("Sunny"))',failedStep:'Forecast shows',callErrors:[unset]};
- const quiet={...base,steps:{ran:true,passed:true}};
- let results:Record<string,any>={},set:string[]=[];const asked:string[]=[],replays:any[]=[];
- const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));asked.push(url.pathname);
+ let results:Record<string,any>={};const replays:any[]=[];
+ const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));
   if(url.pathname==='/a/PAGE12/raw')return new Response('<main>Pipeline</main>');
-  if(url.pathname==='/api/my/artifacts/PAGE12/resolvers')return Response.json({revision:'3',resolvers:[{name:'weather',backendId:'BACK12',version:'v1',test:false,secrets:{WEATHER_KEY:'api.weather.test'},set}]});
-  if(url.pathname==='/api/artifacts/PAGE12/fn/forecast'){replays.push({fn:url.pathname+url.search,method:init?.method??'GET'});return Response.json({error:'backend_failed',message:'The function failed',detail:'HTTP 401: Upstream refused'},{status:500});}
   if(url.pathname==='/api/artifacts/PAGE12/sql'){replays.push(JSON.parse(String(init.body)));return Response.json({columns:[],rows:[]});}
   const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
-  const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!,found=results[(body.viewer??'self')+w]??quiet;
+  const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!,found=results[(body.viewer??'self')+w]??base;
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{...found,viewport:{width:Number(w),height:Number(h)}}});};
  const env={ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root};
  const check=(values:Record<string,unknown>)=>checkCommand({values:{steps,...values},positionals:['PAGE12']},{env,fetcher});
- const why="(needs secret WEATHER_KEY, which the owner sets in the page's Resolvers settings)";
  try{
-  // Unset: the blocked step is Not tested, the errors it caused are gone, and the pass ends on the reply facts.
-  results={self1280:blocked,self390:blocked};
-  const passed=await check({});
-  expect(passed.smokePassed).toBe(true);expect(passed.needsSecrets).toEqual([{step:'Forecast shows',fields:['fn/forecast'],secrets:['WEATHER_KEY']}]);
-  expect(passed.checks[0]).toMatchObject({consoleErrors:[],needsSecret:{step:'Forecast shows',secrets:['WEATHER_KEY']}});
-  expect(passed.checks[0].error).toBeUndefined();expect(passed.callFailures).toBeUndefined();
-  const proved=checkDigest({ok:true,code:'completed',...passed});
-  expect(proved).not.toContain(`  Not tested: "Forecast shows"`);
-  expect(proved).toContain(`\nNot tested: "Forecast shows" ${why}; visual appearance\n`);
-  expect(proved).toMatch(/1280x800: no errors.*steps stopped at "Forecast shows": needs secret WEATHER_KEY/);
-  // The same refusal for a secret the owner did set is a failure that names the field and the detail.
-  set=['WEATHER_KEY'];
-  const stillSet=await check({}).catch((e:any)=>e);
-  expect(stillSet).toMatchObject({code:'check_failed',details:{smokePassed:false}});
-  const named=checkDigest(toolFailure('check',stillSet));
-  expect(named).toContain('  function forecast failed: secret_unavailable: WEATHER_KEY (owner detail)');
-  expect(named).not.toContain('Not tested');expect(named).not.toContain('For your reply:');
-  // Another failed call in the same viewport keeps it failing, and so does an error logged before
-  // the refusal; the step is still Not tested there.
-  set=[];results={self1280:{...blocked,consoleErrors:['favicon missing',failed],callErrors:[{...unset,consoleErrorsBefore:1}]},
-   self390:{...blocked,consoleErrors:['favicon missing',failed],callErrors:[unset,notOnPage]}};
-  const mixed=await check({}).catch((e:any)=>e);
-  expect(mixed.details.smokePassed).toBe(false);
-  const both=checkDigest(toolFailure('check',mixed));
-  expect(both).toContain('  sql failed: no such table: deal_notes (owner detail)');
-  expect(both).toContain(`  Not tested: "Forecast shows" ${why}`);expect(both).not.toContain('For your reply:');
-  expect(both).toMatch(/1280x800: consoleErrors 1: favicon missing; .*steps stopped at "Forecast shows"/);
-  expect(both).toMatch(/390x844: consoleErrors 2: favicon missing; .*task error: Timeout/);
-  // A call that failed for the owner fails the check even when every step passed.
-  results={self1280:{...quiet,callErrors:[notOnPage]},self390:quiet};
+  // A call that failed for the owner fails the check even when every step passed, and names its detail.
+  results={self1280:{...base,callErrors:[notOnPage]},self390:base};
   const unnoticed=await check({}).catch((e:any)=>e);
   expect(unnoticed).toMatchObject({code:'check_failed',details:{smokePassed:false}});
-  expect(checkDigest(toolFailure('check',unnoticed))).not.toContain('For your reply:');
+  const named=checkDigest(toolFailure('check',unnoticed));
+  expect(named).toContain('  sql failed: no such table: deal_notes (owner detail)');
+  expect(named).not.toContain('For your reply:');
   // A guest gets no detail: a read is asked again as the owner, a write never is.
-  const fnFailed={message:'The function failed',code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0};
-  results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',callErrors:[
-   {field:'fn/forecast',kind:'fn',...fnFailed,replay:{search:'?city=Oslo'}},{field:'fn/addNote',kind:'fn',...fnFailed},
-   {field:'sql',kind:'sql',message:'not allowed',code:'permission_denied',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{sql:'select count(*) as n from notes',params:{},revision:'3'}}]}};
+  const refused={message:'not allowed',code:'permission_denied',pageErrorsBefore:0,consoleErrorsBefore:0};
+  results={guest1280:{...base,steps:{ran:true,passed:false},error:'Timeout',failedStep:'Guest sees alerts',callErrors:[
+   {field:'sql',kind:'sql',...refused,replay:{sql:'select count(*) as n from notes',params:{},revision:'3'}},{field:'sql',kind:'sql',...refused,message:'write refused'}]},
+   guest390:base};
   const asGuest=await check({'guest-steps':guest}).catch((e:any)=>e);
-  // Reads are asked again as the owner (a GET function, a SELECT); writes never are.
-  expect(replays).toEqual([{fn:'/api/artifacts/PAGE12/fn/forecast?city=Oslo',method:'GET'},{sql:'select count(*) as n from notes',params:{},revision:'3'}]);
+  expect(replays).toEqual([{sql:'select count(*) as n from notes',params:{},revision:'3'}]);
   const told=checkDigest(toolFailure('check',asGuest));
-  expect(told).toContain('  function forecast failed for the guest (backend_failed); as owner the detail is: HTTP 401: Upstream refused');
-  expect(told).toContain('  function addNote failed for the guest (backend_failed); not a read, so it was not run again as owner');
   expect(told).toContain('  sql failed for the guest (permission_denied); as owner it succeeds');
-  expect(told).not.toContain('select count');expect(told).not.toContain('Bearer');
-  // An unset secret a function needed is Not tested under the function's name.
-  results={self1280:{...blocked,callErrors:[{...unset,field:'fn/forecast',kind:'fn'}]},self390:quiet};
-  const fnUnset=await check({});
-  expect(fnUnset.needsSecrets).toEqual([{step:'Forecast shows',fields:['fn/forecast'],secrets:['WEATHER_KEY']}]);
-  expect(checkDigest({ok:true,code:'completed',...fnUnset,checks:fnUnset.checks.map((c:any)=>({...c,error:undefined}))})).toContain('WEATHER_KEY');
-  // No failed call with a secret's detail: no resolver read at all.
-  expect(asked.filter(p=>p.endsWith('/resolvers'))).toHaveLength(4);
+  expect(told).toContain('  sql failed for the guest (permission_denied); not a read, so it was not run again as owner');
+  expect(told).not.toContain('select count');expect(told).not.toContain('Bearer');expect(told).not.toContain('secret');
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('repeats a status read through a transient network failure but never resubmits a lost script',async()=>{

@@ -33,7 +33,7 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
     if(row.id===refId)continue;
     if(row.format==='html'){
       const links=(row.meta.htmlLinks??[]) as readonly HtmlPageLink[];
-      if(links.some(link=>link.kind==='dataset'&&targets.has(link.datasetId)))found.set(row.id,row);
+      if(links.some(link=>(link.kind==='dataset'||link.kind==='live-dataset')&&targets.has(link.datasetId)))found.set(row.id,row);
       continue;
     }
 

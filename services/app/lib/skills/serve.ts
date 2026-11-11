@@ -1,8 +1,8 @@
 /** Projections of the rendered skill: the zip's files and the /llms pages' links. */
 import {renderSkill} from './render';
 import {SKILL_FILE_NAME,resolveSkillLink,type SkillFile,type SkillTree} from './tree';
-export function renderTree(tree:SkillTree,base:string,shipped=false):Array<{file:SkillFile;text:string}>{
- return tree.files.filter(file=>file.audience==='agent').map(file=>({file,text:renderSkill(file,{base,shipped})}));
+export function renderTree(tree:SkillTree,base:string,shipped=false,extras=false):Array<{file:SkillFile;text:string}>{
+ return tree.files.filter(file=>file.audience==='agent').map(file=>({file,text:renderSkill(file,{base,shipped,extras})}));
 }
 export function skillFileWithFrontmatter(file:SkillFile,text:string):string{
  const fm=[`name: ${file.file===SKILL_FILE_NAME?file.name:JSON.stringify(file.name)}`,`description: ${JSON.stringify(file.description)}`].join('\n');

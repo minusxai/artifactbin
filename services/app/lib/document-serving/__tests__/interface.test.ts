@@ -12,7 +12,7 @@ import {
   DOCUMENT_FRAME_CSS, cachedShell, componentModuleResponse, documentFrameFallback, documentFrameHtml, documentHeadTags, nativeHtmlApolloResponse,
   nativeHtmlCoreResponse, nativeHtmlModuleResponse, nativeHtmlReaderResponse, nativeHtmlTitle, serveRawDocument,
 } from '@/lib/document-serving';
-import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/document-serving/document-frame';
+import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/html-reader/frame-markup';
 
 useAppHarness();
 

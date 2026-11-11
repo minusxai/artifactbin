@@ -1,23 +1,31 @@
 import {canUseDeploymentIdentity} from '../accounts';
-import {recordGroupMutation} from '../groups';
+import {recordGroupChanges} from '../groups';
+import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
-import { getDb, type Queryable, deploymentConfig, env } from '../platform';
+import { getDb, type Queryable, deploymentConfig, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
+import {groupTrustApprovalsEnabled} from '../platform';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
 const ID='company';
 export class DeploymentError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
+/** Run at boot (server.ts): a refused setting stops the start with its name. */
 export function validateDeploymentConfiguration():void {
+ serviceAudiences();embedTrustedOrigins();
+ // DATASETS__DEFAULT_CONNECTION (lib/connections): here too, so a downstream composition refuses a bad value at boot.
+ validateDefaultConnection();
  const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  if(config.mode==='company'&&!policy.matches(config.ownerEmail!))throw new Error('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
+ groupTrustApprovalsEnabled();
 }
 async function state(db:Queryable,lock=false):Promise<State> {
  await db.query('INSERT INTO deployment_state(id) VALUES ($1) ON CONFLICT DO NOTHING',[ID]);
  return (await db.query<State>('SELECT owner_user_id,default_group_id,setup_complete FROM deployment_state WHERE id=$1'+(lock?' FOR UPDATE':''),[ID])).rows[0]!;
 }
-async function group(db:Queryable,id:string|null,userId:string|null,lock=false):Promise<GroupSummary|null> {
+/** The live group and the reader's direct role in it, read at decision time (identity rows are never locked here). */
+async function group(db:Queryable,id:string|null,userId:string|null):Promise<GroupSummary|null> {
  if(!id)return null;
- return (await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.id=$1 AND g.deleted_at IS NULL'+(lock?' FOR UPDATE OF g':''),[id,userId])).rows[0]??null;
+ return (await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.id=$1 AND g.deleted_at IS NULL',[id,userId])).rows[0]??null;
 }
 export async function getDeploymentState(userId:string|null):Promise<DeploymentState> {
  const {mode}=deploymentConfig();if(mode==='public')return {mode,setup_complete:true,is_owner:false,default_group:null};
@@ -34,7 +42,7 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
  if(deploymentConfig().mode!=='company')throw new DeploymentError('company_required',400,'Company deployment required');
  const db=await getDb();await db.transaction(async tx=>{
   const s=await state(tx,true);if(s.owner_user_id!==userId)throw new DeploymentError('deployment_owner_required',403,'Deployment owner required');
-  const g=await group(tx,groupId,userId,true);if(g?.role!=='editor')throw new DeploymentError('default_group_unavailable',403,'Default group requires editor membership');
+  const g=await group(tx,groupId,userId);if(g?.role!=='editor')throw new DeploymentError('default_group_unavailable',403,'Default group requires editor membership');
   await tx.query('UPDATE deployment_state SET default_group_id=$2,setup_complete=true WHERE id=$1',[ID,groupId]);
  });return getDeploymentState(userId);
 }
@@ -61,7 +69,7 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
  const email=identity.email?.trim().toLowerCase(),db=await getDb();
  const settled=await settledAdmission(db,identity,email,config,e=>policy.matches(e));
  if(settled!==undefined)return settled;
- return db.transaction(async tx=>{
+ const decided=await db.transaction(async tx=>{
   const s=await state(tx,true);
   if(s.owner_user_id===identity.userId)return true;
   if(await canUseDeploymentIdentity(identity.userId,tx))return true;
@@ -70,13 +78,15 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
    await tx.query('UPDATE deployment_state SET owner_user_id=$2 WHERE id=$1',[ID,identity.userId]);
    await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
   }
-  if(!s.setup_complete||!policy.matches(email)||!await group(tx,s.default_group_id,null,true))return false;
-  const invitation=(await tx.query<{role:'editor'|'viewer'}>('SELECT role FROM group_invitations WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE',[s.default_group_id,email])).rows[0];
-  if(policy.inviteOnly&&!invitation)return false;
-  const previous=(await tx.query<{role:string}>('SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2',[s.default_group_id,identity.userId])).rows[0]?.role??null;
-  await tx.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN group_members.role='editor' THEN 'editor' ELSE excluded.role END",[s.default_group_id,identity.userId,invitation?.role??'viewer']);
-  if(invitation)await tx.query('DELETE FROM group_invitations WHERE group_id=$1 AND lower(email)=$2',[s.default_group_id,email]);
-  if(!previous||(previous==='viewer'&&invitation?.role==='editor'))await recordGroupMutation(tx,identity.userId,s.default_group_id!,'joined',{previous_role:previous,role:previous==='editor'?'editor':invitation?.role??'viewer'},[]);
-  await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
+  if(!s.setup_complete||!policy.matches(email)||!s.default_group_id||!await group(tx,s.default_group_id,null))return false;
+  return {groupId:s.default_group_id};
  });
+ if(typeof decided==='boolean')return decided;
+ // Joining the default group is the identity module's write, after this transaction (never inside it); the admission
+ // row follows once it succeeded. An admission is never taken back, so a crash between the two only re-asks.
+ const admitted=await services().identity.admitToGroup({userId:identity.userId,email:email!,groupId:decided.groupId,inviteOnly:policy.inviteOnly});
+ if(!admitted.admitted)return false;
+ await recordGroupChanges(admitted.changes);
+ await db.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);
+ return true;
 }

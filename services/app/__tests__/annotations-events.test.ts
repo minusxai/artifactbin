@@ -40,7 +40,7 @@ const said = async (...verbs:string[]) => (await (await getDb()).query<{envelope
 /** A markup document owned by an account, plus the actor that speaks for it — with the log reset after the fixture's own `created`. */
 async function publish(email: string) {
   const owner = await createUser({ email });
-  const tok = await mintToken('web', owner.id, undefined, { expiresInMs: null });
+  const tok = await mintToken('web', owner.id, { expiresInMs: null });
   const row = await createArtifact(tok.id, owner.id, doc);
   await vi.waitFor(() => expect(fake.events.map((e) => e.verb)).toContain('created'));
   await listen();
@@ -87,14 +87,15 @@ describe('a thread opened', () => {
 });
 
 describe('a reply', () => {
-  it('says artifact.annotated with the ROOT thread id, never the reply\'s own', async () => {
+  it('says artifact.annotation_replied with the ROOT thread id, never the reply\'s own', async () => {
     const { owner, row, actor } = await publish('mxmx_test_ann_reply@example.com');
     const wire = await open(actor, row.id, row.edit_id, 'this number looks wrong');
     await listen();
     const replied = await actOnAnnotationFor(actor, row.id, wire.id, { reply: 'it is right' }, author);
     expect(replied).not.toBeNull();
-    expect((await said('annotated'))).toHaveLength(1);
-    expect((await said('annotated'))[0]).toMatchObject({
+    expect((await said('annotated'))).toEqual([]);
+    expect((await said('annotation_replied'))).toHaveLength(1);
+    expect((await said('annotation_replied'))[0]).toMatchObject({
       subject_kind: 'user', subject_id: owner.id, object_kind: 'artifact', object_id: row.id,
       payload: { annotation_id: wire.id },
     });
@@ -138,9 +139,9 @@ describe('a thread closed', () => {
     const wire = await open(actor, row.id, row.edit_id, 'please fix');
     await listen();
     expect(await actOnAnnotationFor(actor, row.id, wire.id, { reply: 'done', resolve: true }, author)).toMatchObject({ status: 'resolved' });
-    expect((await said('annotated', 'annotation_resolved')).map((e) => e.verb)).toEqual(['annotated']);
-    expect((await said('annotated'))[0]?.payload).toMatchObject({resolved:true,reply_id:expect.any(String)});
-    for (const e of (await said('annotated', 'annotation_resolved'))) expect(e).toMatchObject({ object_id: row.id, payload: { annotation_id: wire.id } });
+    expect((await said('annotation_replied', 'annotation_resolved')).map((e) => e.verb)).toEqual(['annotation_replied']);
+    expect((await said('annotation_replied'))[0]?.payload).toMatchObject({resolved:true,reply_id:expect.any(String)});
+    for (const e of (await said('annotation_replied', 'annotation_resolved'))) expect(e).toMatchObject({ object_id: row.id, payload: { annotation_id: wire.id } });
   });
 });
 
