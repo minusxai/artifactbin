@@ -35,7 +35,6 @@ export interface AuthorJournal {
  baseline?:AuthorBaseline;
 }
 export interface AuthorResult {ok:boolean;code:string;recovery?:string;[key:string]:unknown}
-export interface CommentCheckpoint {kind:'comment-checkpoint';schema:1;server:string;artifact:string;stream:'comments';cursor:string;eventIds:string[]}
 
 /** Check diagnostics stay at the top level on success and refusal. */
 export interface AuthorCheckResult {

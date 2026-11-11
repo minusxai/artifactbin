@@ -43,17 +43,15 @@ describe('access on the bearer API', () => {
     expect(list.artifacts.find((a) => a.id === body.id)?.access).toBe('readwrite');
   });
 
-  it('access: readwrite on create is stored and echoed, with sql reads and writes in the usage hints', async () => {
+  it('access: readwrite on create is stored and echoed, beside the ref a page links the dataset by', async () => {
     const t = await mintToken('t');
     const res = await create(t.token, { dataset: ROWS, access: 'readwrite' });
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; access: string; usage: string; writes: string };
+    const body = (await res.json()) as { id: string; access: string; ref: string };
     expect(body.access).toBe('readwrite');
-    expect(body.usage).toContain('sql`select * from data limit 1000`');
-    expect(body.writes).toContain('insert into data');
-    expect(body.usage).not.toContain('rows(tableId:');
-    expect(body.usage).toContain('af-dataset');
-    expect(body.usage).not.toContain('<Mutation');
+    expect(body.ref).toBe(`ref:${body.id}`);
+    expect(body).not.toHaveProperty('usage');
+    expect(body).not.toHaveProperty('writes');
     expect((await getArtifactById(body.id))!.access).toBe('readwrite');
   });
 

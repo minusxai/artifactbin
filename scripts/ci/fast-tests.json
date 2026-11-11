@@ -21,7 +21,6 @@
   "services/app/lib/dataflow/__tests__/number-format.test.ts",
   "services/app/lib/dataset-access/__tests__/model.test.ts",
   "services/app/lib/datasets/__tests__/catalog-metadata.test.ts",
-  "services/app/lib/datasets/__tests__/dataset-usage.test.ts",
   "services/app/lib/datasets/__tests__/input.test.ts",
   "services/app/lib/document/__tests__/annotation-area.test.ts",
   "services/app/lib/document/__tests__/social-preview.test.ts",

@@ -6,7 +6,7 @@
  * usage, references teach technique. ONE table, one reason per row (its ruling): a hit says why the phrase went. The
  * scopes are SKILL.md, references, examples, component and design-system CSS headers, script sources, the API's monitoring guidance, the
  * operations registry, the page runtime, and every product source's strings outside the deprecated GraphQL layer (the hints
- * and replies the product hands an agent: a dataset's usage, a refusal's hint). The single exception is lib/html-runtime/legacy-page-names.ts, the
+ * and replies the product hands an agent: a create reply's note, a refusal's hint). The single exception is lib/html-runtime/legacy-page-names.ts, the
  * isolated alias live pages still call. It reads files by path, so it runs in the `pr fast` guard tier
  * (scripts/ci/guard-tests.json).
  */

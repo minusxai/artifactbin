@@ -230,7 +230,7 @@ export async function replaceArtifactWithBody(
   }
   const prepared: PreparedContent | Response = current.format === 'folder'
     ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
-    : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
+    : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),template:current.meta.template,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,current,objects),
       loadRef: refLoaderForActor(owner),
       // Account-owned imports may have no historical creator credential.
