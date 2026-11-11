@@ -25,13 +25,15 @@ const APP_ASSETS_DIR = 'af/app';
  */
 const precompressAssets = (): Plugin => {
   let writesFiles = true;
+  /** The tree this build writes (`--outDir` included: the shell size guard builds into a temporary one). */
+  let builtDir = outDir;
   return {
     name: 'artifactbin-precompress',
     apply: 'build',
-    configResolved(config) { writesFiles = config.build.write !== false; },
+    configResolved(config) { writesFiles = config.build.write !== false; builtDir = path.resolve(config.root, config.build.outDir); },
     async writeBundle() {
       if (!writesFiles) return;
-      this.info(describePrecompression('dist/web/af/app', await precompressTree(path.join(outDir, APP_ASSETS_DIR))));
+      this.info(describePrecompression(path.join(path.relative(import.meta.dirname, builtDir), APP_ASSETS_DIR), await precompressTree(path.join(builtDir, APP_ASSETS_DIR))));
     },
   };
 };
