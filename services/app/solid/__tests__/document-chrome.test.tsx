@@ -602,6 +602,22 @@ it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, nav
   } finally { delete document.documentElement.dataset.theme; }
 });
 
+it('opens the framed page with the app address\'s #af-state, then leaves it out of the address so a reload keeps the reader\'s own state', async () => {
+  mockKind = 'anon'; mockRole = 'viewer';
+  const { frame, posted } = await mountReady('/a/doc?$tab=2#af-state=eyJhIjoxfQ&top');
+  doorOpens(frame);
+  await settle();
+  frameReady(frame, attaches(posted)[0]!.key!, 'seed-nonce');
+  await settle();
+  expect(envelopes(posted)).toContainEqual({ type: STORY_FRAME_HASH_MESSAGE, hash: '#af-state=eyJhIjoxfQ&top' });
+  expect(window.location.search).toBe('?$tab=2');
+  expect(window.location.hash).toBe('#top');
+  posted.mockClear();
+  frame.dispatchEvent(new Event('load'));
+  expect(envelopes(posted)).toContainEqual({ type: STORY_FRAME_HASH_MESSAGE, hash: '#top' });
+  expect(envelopes(posted).some((message) => message.hash?.includes('af-state'))).toBe(false);
+});
+
 /** The frame half reports the reader's first press, touch, key or selection in a document attached without its tree. */
 const framePressed = (frame: HTMLIFrameElement, key: string) => window.dispatchEvent(new MessageEvent('message', {
   data: { type: 'mx:frame-bridge', key, payload: { kind: 'pressed' } }, origin: FRAME_ORIGIN, source: frame.contentWindow,

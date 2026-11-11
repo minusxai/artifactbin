@@ -17,6 +17,7 @@ const version = block?.getAttribute(STATE_VERSION_ATTRIBUTE) ?? null;
 const page = createPageState({
   pageId: config.pageId, revision: config.revision ?? null, initial: initial ?? {}, version: version !== null && isStateVersion(version) ? version : null, hash: location.hash, backends: config.backends ?? [], stateBlock: block, owner: document,
   storage: { getItem: (key) => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) },
+  onHash(listener) { const changed = () => listener(location.hash); addEventListener('hashchange', changed); return () => removeEventListener('hashchange', changed); },
   onStorage(listener) { const changed = (event: StorageEvent) => listener(event.key); addEventListener('storage', changed); return () => removeEventListener('storage', changed); },
   ...(navigator.locks ? { lock: (name: string, work: () => Promise<StoreReceipt>) => Promise.resolve(navigator.locks.request(name, work)) } : {}),
 });
