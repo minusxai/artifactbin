@@ -13,11 +13,14 @@
  *    the document's owner included: an owner whose editor added a host is asked like any reader.
  *  - A reader who allowed the rest ONCE (this browser session only: a signed session cookie, never a
  *    row) or ALWAYS FOR THIS DOCUMENT (a `document_trust` row covering the set they were asked about).
- *  - Everyone else gets their own hosts only; the rest wait on the consent bar and the script's requests
- *    to them fail. A reader who said NEVER has a deny (a row, or a session entry when signed out), which
+ *  - A MEMBER OF A GROUP whose editor approved a host for the group (./group-trust): connect, img and media
+ *    exact origins only, on any page, for the group's members and its subgroups' members alone.
+ *  - Everyone else gets their own hosts (and their groups' approvals) only; the rest wait on the consent bar
+ *    and the script's requests to them fail. A reader who said NEVER has a deny (a row, or a session entry when signed out), which
  *    the bar shows as a one-line note instead of asking again.
  *
  * A grant covers a SET of hosts on ONE document, never "anything": a republish that asks for more asks again.
+ * A reader's Never on a document wins there over every allow, a group's included.
  *
  * `cspExtensionsFor` is the serving hook (the document response appends what it answers);
  * `cspRequestFor` is what the app page tells the consent bar.
@@ -29,8 +32,9 @@ import { type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {nativeCspDeclarations} from './native-csp';
+import { approvableGroupsFor, groupApprovedFor } from './group-trust';
 import {
-  CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, emptyCspExtensions, hasCspExtensions,
+  CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, emptyCspExtensions, groupEligibleCspExtensions, hasCspExtensions,
   mergeCspExtensions, storedCspExtensions, subtractCspExtensions, type CspExtensions, type CspRequest,
 } from '@/lib/document';
 
@@ -260,16 +264,23 @@ export async function revokeTrust(userId: string, artifactId: string): Promise<v
 
 /* ------------------------------------------------------------------ the answers */
 
-interface Standing { request: CspRequest; published: CspExtensions }
+interface Standing { request: CspRequest; served: CspExtensions }
 
-async function standingOf({ artifact, viewer, request, carried }: TrustQuery): Promise<Standing> {
+/**
+ * Where this reader stands, and what is served to them. In order: the hosts they published apply; a group they reach
+ * approved some of the rest (./group-trust: connect, img and media exact origins only); a Never of theirs on this
+ * document (the session's, or a row covering what is still asked) wins over both a group and an allow, and leaves only
+ * their own hosts; an allow (once, or a row covering what is still asked) admits everything declared. `withGroups`
+ * (the bar's answer only) also names the groups the reader could approve the eligible rest for.
+ */
+async function standingOf({ artifact, viewer, request, carried }: TrustQuery, withGroups = false): Promise<Standing> {
   const extensions = 'declared' in artifact ? artifact.declared : declaredAt(artifact.id, artifact.version, artifact.source);
-  if (!hasCspExtensions(extensions)) return { request: { extensions, asking: emptyCspExtensions(), status: 'none', denied: false }, published: emptyCspExtensions() };
+  if (!hasCspExtensions(extensions)) return { request: { extensions, asking: emptyCspExtensions(), status: 'none', denied: false }, served: emptyCspExtensions() };
   const published = await hostsPublishedBy(artifact, viewer, extensions);
-  const asking = subtractCspExtensions(extensions, published);
-  const answered = (status: CspRequest['status'], denied = false): Standing =>
-    ({ request: { extensions, asking: status === 'blocked' ? asking : emptyCspExtensions(), status, denied }, published });
-  if (!hasCspExtensions(asking)) return answered('publisher');
+  const unpublished = subtractCspExtensions(extensions, published);
+  if (!hasCspExtensions(unpublished)) return { request: { extensions, asking: emptyCspExtensions(), status: 'publisher', denied: false }, served: extensions };
+  const approved = await groupApprovedFor(viewer?.userId, unpublished);
+  const asking = subtractCspExtensions(unpublished, approved);
   const subject = subjectOf(viewer);
   const session = [...readSession(request, subject), ...carriedEntries(carried, subject)]
     .find((entry) => entry.id === artifact.id && entry.hash === extensionsHash(extensions));
@@ -282,21 +293,27 @@ async function standingOf({ artifact, viewer, request, carried }: TrustQuery): P
       else allowed = true;
     }
   }
-  if (denied) return answered('blocked', true);
-  return answered(allowed ? 'allowed' : 'blocked');
+  // A Never wins on this document: no group approval applies, and the note names everything held back.
+  if (denied) return { request: { extensions, asking: unpublished, status: 'blocked', denied: true }, served: published };
+  if (allowed || !hasCspExtensions(asking)) return { request: { extensions, asking: emptyCspExtensions(), status: 'allowed', denied: false }, served: extensions };
+  const blocked: CspRequest = { extensions, asking, status: 'blocked', denied: false };
+  const eligible = groupEligibleCspExtensions(asking);
+  if (withGroups && hasCspExtensions(eligible)) {
+    const groups = await approvableGroupsFor(viewer?.userId);
+    if (groups.length) blocked.group = { eligible, groups };
+  }
+  return { request: blocked, served: mergeCspExtensions(published, approved) };
 }
 
-/** Where this reader stands on what this document asks for. */
+/** Where this reader stands on what this document asks for (the consent bar's answer). */
 export async function cspRequestFor(query: TrustQuery): Promise<CspRequest> {
-  return (await standingOf(query)).request;
+  return (await standingOf(query, true)).request;
 }
 
 /**
- * THE SERVING HOOK: the origins to append to this document's policy for this reader — every declared
- * host when they published them all or allowed the rest, otherwise only the hosts they published.
+ * THE SERVING HOOK: the origins to append to this document's policy for this reader — every declared host when they
+ * published them all or allowed the rest, otherwise the hosts they published and those a group of theirs approved.
  */
 export async function cspExtensionsFor(query: TrustQuery): Promise<CspExtensions> {
-  const { request, published } = await standingOf(query);
-  if (request.status === 'none') return EMPTY_CSP_EXTENSIONS;
-  return request.status === 'publisher' || request.status === 'allowed' ? request.extensions : published;
+  return (await standingOf(query)).served;
 }

@@ -4,6 +4,7 @@ import {recordGroupChanges} from '../groups';
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
 import { getDb, type Queryable, dataServices, deploymentConfig, embedTrustedOrigins, env, pageSchedulesEnabled, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
+import {groupTrustApprovalsEnabled} from '../platform';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
 const ID='company';
 export class DeploymentError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
@@ -12,6 +13,7 @@ export function validateDeploymentConfiguration():void {
  serviceAudiences();dataServices();pageSchedulesEnabled();embedTrustedOrigins();
  const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  if(config.mode==='company'&&!policy.matches(config.ownerEmail!))throw new Error('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
+ groupTrustApprovalsEnabled();
 }
 async function state(db:Queryable,lock=false):Promise<State> {
  await db.query('INSERT INTO deployment_state(id) VALUES ($1) ON CONFLICT DO NOTHING',[ID]);

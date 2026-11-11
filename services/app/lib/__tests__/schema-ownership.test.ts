@@ -113,6 +113,11 @@ it('a reader\'s document trust belongs to the app, one row per person per docume
  expect(declared()['app.document_trust']).toBe('app');
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.document_trust \([\s\S]*?user_id TEXT NOT NULL[\s\S]*?extensions JSONB NOT NULL[\s\S]*?PRIMARY KEY \(user_id, artifact_id\)/);
 });
+it('a group\'s approved addresses belong to the app, one row per group, data directive and exact host, never keyed on user_id',()=>{
+ expect(declared()['app.group_trust']).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.group_trust \([\s\S]*?created_by TEXT NOT NULL[\s\S]*?PRIMARY KEY \(group_id, directive, host\)[\s\S]*?directive IN \('connect','img','media'\)/);
+ expect(renderedSchema().schema).not.toMatch(/app\.group_trust ADD COLUMN IF NOT EXISTS user_id/);
+});
 
 it('optional comment view state stays with app-owned annotations', () => {
   expect(declared()['app.annotations']).toBe('app');

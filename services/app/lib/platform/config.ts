@@ -484,6 +484,19 @@ env('SKILLS', 'EXTRA_DIR');
 export const skillExtrasDir = (): string | null => env('SKILLS', 'EXTRA_DIR')?.trim() || null;
 
 /**
+ * TRUST__GROUP_APPROVALS: `on` (unset, the default) lets a group's editors approve, for every member of the group and
+ * its subgroups, the exact addresses a page may call or load data from (lib/trust/group-trust); `off` offers no such
+ * choice, refuses the group addresses API (`group_approvals_disabled`) and ignores the stored approvals, which are kept.
+ * Read at each use, so a test's `overrideConfig` environment applies. Any other value refuses the boot.
+ */
+env('TRUST', 'GROUP_APPROVALS');
+export function groupTrustApprovalsEnabled(): boolean {
+  const value = env('TRUST', 'GROUP_APPROVALS')?.trim() || 'on';
+  if (value !== 'on' && value !== 'off') throw new Error('TRUST__GROUP_APPROVALS must be on (the default) or off.');
+  return value === 'on';
+}
+
+/**
  * TRUSTED EMBEDDERS: `EMBED__TRUSTED_ORIGINS`, comma-separated origins (https, or http on a local development host)
  * that may frame a document's address, the `/a/<id>` app page and the document it frames on its own origin, and
  * nothing else of the app. `?embed=1` on that address is the EMBEDDED view, which only these origins may frame (no

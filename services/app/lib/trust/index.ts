@@ -4,3 +4,5 @@ export {
   revokeTrust, sessionTrustCookie,
 } from './document-trust';
 export { nativeCspDeclarations } from './native-csp';
+export { listGroupAddresses, parseGroupAddresses, setGroupAddresses, TrustError } from './group-trust';
+export { refusedTrustWrite } from './write-guard';

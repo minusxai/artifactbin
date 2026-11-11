@@ -467,6 +467,27 @@ ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS extensions JSONB NOT NUL
 
 ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.group_trust (
+  group_id TEXT NOT NULL,
+  directive TEXT NOT NULL,
+  host TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, directive, host)
+);
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS directive TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS host TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL;
+
+ALTER TABLE app.group_trust ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+DO $check$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='app.group_trust'::regclass AND conname='group_trust_directive') THEN ALTER TABLE app.group_trust ADD CONSTRAINT group_trust_directive CHECK (directive IN ('connect','img','media')); END IF; END $check$;
+
 CREATE TABLE IF NOT EXISTS app.event_outbox (
   id TEXT NOT NULL,
   envelope JSONB NOT NULL,

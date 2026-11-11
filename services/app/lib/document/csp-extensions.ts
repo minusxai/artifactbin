@@ -49,7 +49,16 @@ export interface CspRequest {
   status: 'publisher' | 'allowed' | 'blocked' | 'none';
   /** The reader said Never: the bar collapses to a note. Only ever true while `status` is 'blocked'. */
   denied: boolean;
+  /**
+   * What the reader could approve for a whole group instead (lib/trust/group-trust): present only while the bar asks,
+   * group approvals are on (TRUST__GROUP_APPROVALS), the asked set holds an exact connect, img or media origin, and the
+   * reader edits at least one group. `eligible` is that part of `asking`; the rest still needs a per-page answer.
+   */
+  group?: { eligible: CspExtensions; groups: CspApprovalGroup[] };
 }
+
+/** A group the reader may approve addresses for (one they directly edit). */
+export interface CspApprovalGroup { id: string; handle: string; name: string }
 
 export const CSP_DIRECTIVES: readonly CspDirective[] = ['connect', 'script', 'style', 'img', 'frame', 'media'];
 export const EMPTY_CSP_EXTENSIONS: CspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [], frame: [], media: [] }) as CspExtensions;
@@ -133,6 +142,19 @@ export function cspOriginMatches(declared: string, origin: string): boolean {
   try { url = new URL(origin); } catch { return false; }
   if (url.protocol !== 'https:' || url.origin !== origin) return false;
   return url.hostname.endsWith(`.${wild[1]}`) && (url.port ? `:${url.port}` : '') === (wild[2] ?? '');
+}
+
+/**
+ * The directives a GROUP may approve: the ones that call or load data. Script, style (and fonts) and frame run or embed
+ * code, so they stay a per-page answer and are never granted by a group.
+ */
+export const GROUP_CSP_DIRECTIVES: readonly CspDirective[] = ['connect', 'img', 'media'];
+
+/** The part of a set a group may approve: its exact origins (never a wildcard) under `GROUP_CSP_DIRECTIVES`. */
+export function groupEligibleCspExtensions(extensions: CspExtensions): CspExtensions {
+  const out = emptyCspExtensions();
+  for (const d of GROUP_CSP_DIRECTIVES) out[d] = extensions[d].filter((origin) => !origin.includes('*'));
+  return out;
 }
 
 /** Does this set ask for anything at all? */

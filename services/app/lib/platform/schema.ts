@@ -856,6 +856,23 @@ const DOCUMENT_TRUST: Table = {
 };
 
 /**
+ * A GROUP'S STANDING APPROVAL of one address a page may call (lib/trust/group-trust): every member of the group and
+ * of its subgroups is pre-approved for `host` under `directive` on any page they open. Only the directives that call
+ * or load data (connect, img, media), and only an exact origin (never a wildcard). `created_by` is the editor who
+ * approved, never `user_id`: erasing that person must not take the group's approval with them. A deleted group's
+ * rows stay and grant nothing (every read keeps live groups only).
+ */
+const GROUP_TRUST: Table = {
+ name:'group_trust',columns:[
+  {name:'group_id',type:'TEXT',notNull:true},
+  {name:'directive',type:'TEXT',notNull:true},
+  {name:'host',type:'TEXT',notNull:true},
+  {name:'created_by',type:'TEXT',notNull:true},
+  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],primaryKey:['group_id','directive','host'],checks:[{name:'group_trust_directive',expression:"directive IN ('connect','img','media')"}],
+};
+
+/**
  * THE CONFIGURATION THE SHARED IDENTITY VIEWS READ (lib/groups identity-views): one row, id 'installation', written
  * from this process's settings on every boot, so the views stay static SQL and the rules they apply
  * keep one definition. `deployment_mode` is APP__DEPLOYMENT_MODE; `api_audiences` the `<origin>/api` an OAuth access
@@ -946,7 +963,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,PAGE_FUNCTION_SCHEDULES,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,

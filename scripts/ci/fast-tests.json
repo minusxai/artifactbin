@@ -24,6 +24,7 @@
   "services/app/lib/datasets/__tests__/input.test.ts",
   "services/app/lib/document/__tests__/annotation-area.test.ts",
   "services/app/lib/document/__tests__/social-preview.test.ts",
+  "services/app/lib/document/__tests__/group-csp.test.ts",
   "services/app/lib/html-backends/__tests__/authority.test.ts",
   "services/app/lib/html-page/__tests__/assets.test.ts",
   "services/app/lib/html-page/__tests__/canonical.test.ts",

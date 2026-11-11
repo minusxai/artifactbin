@@ -22,6 +22,7 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 import { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/WorkspaceLayout';
 import { GroupTreePanel, GroupTreeSummary, SubgroupAudience } from './GroupTree';
+import { GroupAddresses } from './GroupAddresses';
 
 /** A group's page at its own address: details first, then its shelf. Home hands `GroupWorkspace` both at once. */
 export function GroupPage(props: { identity: string }): JSX.Element {
@@ -73,6 +74,7 @@ function GroupSettings(props:{detail:GroupDetail;refresh:()=>void}):JSX.Element 
  <Show when={error()}><StatusMessage kind="error" class="my-3">{error()}</StatusMessage></Show>
  <GroupManagement detail={props.detail} refresh={props.refresh}/>
  <div class="mt-6"><GroupTreePanel detail={props.detail} refresh={props.refresh}/></div>
+ <div class="mt-6"><GroupAddresses group={props.detail.group}/></div>
  </div>;
 }
 
