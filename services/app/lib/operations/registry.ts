@@ -157,7 +157,6 @@ const CONTENT_FIELDS = {
 
 /** The placement refusals, stated once. One code covers every way a parent can be wrong. */
 const INVALID_PARENT: OperationError = { status: 400, code: 'invalid_parent', fix: "parent_id must be the id of a FOLDER you own, not inside the thing you are moving, and no more than 6 levels deep — one code on purpose, because naming which would reveal whether an id exists. Create a folder with {\"format\":\"folder\"}" };
-const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fix: "the `folder` path field is gone — send parent_id: the id of a folder artifact (create one with format: 'folder')" };
 /**
  * GOVERNANCE IS THE OWNER'S. The replace door runs under `editorScope`, so a
  * named editor reaches it — and `visibility`/`access` decide who else may read
@@ -185,7 +184,6 @@ const CONTENT_ERRORS: OperationError[] = [
   { status: 400, code: 'public_not_enabled', fix: 'this deployment has not opened public documents — use "unlisted"' },
   { status: 400, code: 'private_requires_account', fix: 'private needs a logged-in owner — claim the token or use unlisted' },
   INVALID_PARENT,
-  FOLDER_RETIRED,
   SCHEDULE_LIMIT,
 ];
 
