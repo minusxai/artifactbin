@@ -16,7 +16,7 @@
  */
 import { STORY_URL_VALUES_MESSAGE } from '../html-reader/contract';
 
-export type PageSeatKind = 'app' | 'address' | 'raw' | 'offline' | 'preview';
+type PageSeatKind = 'app' | 'address' | 'raw' | 'offline' | 'preview';
 export interface PageSeat {
   kind: PageSeatKind;
   pageId: string;
