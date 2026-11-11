@@ -3,10 +3,10 @@
  * service composed as server.ts composes it: a browser without a session gets the operator's file at `/login` (its
  * query kept, its nonce and the app page's policy); the file's JSON calls sign the person in (test-domain code) to a
  * session cookie; `/login` then sends that browser to its callbackUrl, same-origin only; the code's attempt cap holds;
- * sign-out ends the session and `/login` is the file again. Better Auth's Origin rule (a sign-in POST naming another
- * Origin, and a cookie-bearing POST from one, 403) is off under NODE_ENV=test, read once at its import, so the
- * deployment harness that runs the server in development checks it in a browser instead.
+ * sign-out ends the session and `/login` is the file again; a sign-in another site starts is refused (the login
+ * routes' own Origin rule; Better Auth's is off under NODE_ENV=test).
  */
+import {request} from '@/__tests__/harness';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -28,9 +28,9 @@ beforeAll(async()=>{
   EMAIL__DEV_OUTBOX_PATH:join(dir,'outbox.jsonl')});
 });
 afterAll(async()=>{await application?.close().catch(()=>{});await rm(dir,{recursive:true,force:true});});
-const get=(path:string,cookie='')=>application.fetch(new Request(ORIGIN+path,{headers:{accept:'text/html',...(cookie?{cookie}:{})}}));
-const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(new Request(ORIGIN+path,{method:'POST',
- headers:{origin:ORIGIN,'content-type':'application/json',...headers},body:JSON.stringify(body)}));
+const get=(path:string,cookie='')=>application.fetch(request(path,{headers:{accept:'text/html'},...(cookie?{cookie}:{})}));
+const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(request(path,{method:'POST',
+ headers:{origin:ORIGIN,...headers},json:body}));
 const cookieOf=(response:Response)=>response.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
 
 it('serves the shell at /login, signs in through the JSON API to a session cookie, then sends the browser on, same-origin only',async()=>{
