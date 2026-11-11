@@ -54,8 +54,8 @@ describe('the classifier and the allowlists that derive from it', () => {
     // The classifier's literal patterns say what the published strings say.
     for (const [pathname, kind] of cases) expect(new RegExp(URL_SPACE.handle).test(pathname), pathname).toBe(kind === 'handle');
     for (const [pathname, kind] of cases.filter(([p]) => p.startsWith('/a/'))) expect(new RegExp(`^${URL_SPACE.page.prefix}${URL_SPACE.page.id}`).test(pathname), pathname).toBe(kind.startsWith('page-'));
-    for (const screen of ['/', '/trash', '/a/Abc123', '/@sam', '/@sam/q3-review']) expect(isScreenPath(screen), screen).toBe(true);
-    for (const other of ['/api/me', '/af/core.js', '/a/Abc123/raw', '/a/Abc123/app/', '/login', '/welcome', '/start', '/local/connect', '/geojson/world.json']) expect(isScreenPath(other), other).toBe(false);
+    for (const screen of ['/', '/trash', '/a/Abc123', '/@sam', '/@sam/q3-review', '/login']) expect(isScreenPath(screen), screen).toBe(true);
+    for (const other of ['/api/me', '/af/core.js', '/a/Abc123/raw', '/a/Abc123/app/', '/login/cli', '/welcome', '/start', '/local/connect', '/geojson/world.json']) expect(isScreenPath(other), other).toBe(false);
   });
 
   it('lets a document origin load every public file, old file addresses and stored bytes, and nothing of the app', () => {

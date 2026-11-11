@@ -586,7 +586,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const url = new URL(c.req.url);
       return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw)), 302);
     }
-    return page(c);
+    // Signed out: a custom shell's own sign-in screen when one is set (./custom-shell), else the app page.
+    return customShell ? screen(c) : page(c);
   });
   // The tour for people.
   app.get('/docs', (c) => {

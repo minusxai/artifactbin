@@ -12,13 +12,19 @@
  *    document itself (the hosted host module, `/af/host.js`) from the JSON doors: `GET /api/page/profile/@<handle>/
  *    <path>` resolves a pretty address (`{kind: "artifact", id}`, `{kind: "redirect", to}`, a profile, or 404),
  *    `GET /api/page/artifact/<id>` is the access decision (404 for a reader who may not read it) with the title and
- *    description, and `GET /api/page/frame/<id>` the frame's first URL with its one-time ticket.
+ *    description, and `GET /api/page/frame/<id>` the frame's first URL with its one-time ticket;
+ *  - the sign-in screen `/login` (with its query, e.g. `callbackUrl`), for a browser WITHOUT a session (the map's fixed
+ *    path marked `shell`). The file signs the person in through the JSON sign-in API at this origin (`POST
+ *    /api/auth/email-otp/send-verification-otp`, then `POST /api/auth/sign-in/email-otp`) and then loads `/login` again:
+ *    a browser WITH a session is never given the file there but sent (302) to its `callbackUrl`, same-origin only
+ *    (lib/http/safe-redirect `loginRedirectTarget`; anything else is `/`), so the file never follows the address itself.
  *
  * WHAT STAYS ARTIFACTBIN'S, unchanged: everything the map does not call a screen —
  *  - the API (`/api/*`, including sign-in `/api/auth/*`, the token endpoints and every refusal JSON), `/af/*`, the old
- *    addresses (the map's `legacy`), and every fixed path: OAuth and discovery, `/llms*`, `/skills/*`, stored bytes,
- *    and the screens the product draws itself, `/login`, `/welcome` (the first sign-in's handle step), `/start` (the
- *    create door and agent handoff) and `/local/connect` (the local-file helper). Sign-out is the API;
+ *    addresses (the map's `legacy`), and every other fixed path: OAuth and discovery (the consent page included),
+ *    `/llms*`, `/skills/*`, stored bytes, and the screens the product draws itself, `/welcome` (the first sign-in's
+ *    handle step), `/start` (the create door and agent handoff) and `/local/connect` (the local-file helper). Sign-out
+ *    is the API;
  *  - everything that is data or files under a page (its doors), and the installed-app entry `/a/<id>/app` and
  *    `/a/<id>/app/` (`page-app`: its page carries the app's manifest and icons, which a shell cannot name for it);
  *  - a page screen carrying an export key (`?key=`: the exporter photographs the app's own page);

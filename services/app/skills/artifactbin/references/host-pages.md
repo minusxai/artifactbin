@@ -22,6 +22,7 @@ only frame the app page `/a/<id>` (its origin must be in the deployment's truste
 - [The manifest](#the-manifest)
 - [Components and a design system under a strict CSP](#components-and-a-design-system-under-a-strict-csp)
 - [A document in a shell on the app's origin](#a-document-in-a-shell-on-the-apps-origin)
+- [Sign-in in that shell](#sign-in-in-that-shell)
 
 ## The manifest
 
@@ -117,3 +118,14 @@ event), `af-document-scroll`, `af-document-url-values` (`{search, push}`: replac
 another document loads in the tab), `af-document-closed`.
 Not included: uploads (refused), comments, presence, region and cell editing, and the live
 version stream; call `followVersion` and `notifyData` from your own stream.
+
+## Sign-in in that shell
+
+That shell also draws `/login` (query kept) for a browser without a session. Sign in with
+[HTTP authentication](http-auth.md) steps 1 and 2, same-origin `fetch`, then load `/login`
+again: a browser with a session gets `302` to its `callbackUrl` when that is a path on this
+origin, else `/`, so never follow `callbackUrl` yourself. Send: `400` `INVALID_EMAIL`. Sign-in:
+`200` sets the HttpOnly session cookie; `400` `INVALID_OTP`; five wrong codes `403`
+`TOO_MANY_ATTEMPTS` (send again); `403` `deployment_admission_required`. Call from this origin:
+a send, or a call carrying the cookie, that names another `Origin` is `403`. Sign-out:
+`POST /api/auth/sign-out` `{}`. Store nothing; OAuth consent stays the app's.

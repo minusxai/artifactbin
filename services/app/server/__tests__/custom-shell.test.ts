@@ -1,8 +1,8 @@
 /**
  * A CUSTOM SHELL (APP__SHELL_FILE, ../custom-shell): the operator's one HTML file answers every screen, the page and
- * handle screens included, under the policy the app page at that address carries; the API, assets, sign-in screens,
- * every door and file under a page, the installed app and export captures stay the app's; unset, the app answers
- * exactly as before.
+ * handle screens and the signed-out sign-in screen included, under the policy the app page at that address carries; the
+ * API, assets, the handle step, every door and file under a page, the installed app and export captures stay the app's;
+ * unset, the app answers exactly as before. The sign-in through a shell, end to end: custom-shell-sign-in.test.ts.
  */
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
@@ -38,7 +38,7 @@ describe('with a custom shell',()=>{
  it('answers / , every app screen, the page and handle screens and every unserved address: 200, uncached, under the app page\'s policy, with the agent pointer',async()=>{
   const app=server(plain),reference=await server(null).request('/login',html);
   for(const path of ['/','/projects/42/settings','/x','/account','/groups','/groups/g_1/settings','/trash','/docs-human','/getting-started','/local/publish',
-   `/a/${ID}`,`/a/${ID}/edit`,'/@nobody_here','/@nobody_here/a-doc','/@nobody_here/a-doc/edit']){
+   `/a/${ID}`,`/a/${ID}/edit`,'/@nobody_here','/@nobody_here/a-doc','/@nobody_here/a-doc/edit','/login','/login?callbackUrl=%2Fa%2FAb3xK9Lm']){
    const response=await app.request(path,html);
    expect(response.status,path).toBe(200);
    expect(await response.text(),path).toBe(SHELL);
@@ -60,9 +60,9 @@ describe('with a custom shell',()=>{
   expect((await app.request(`/a/${ID}?embed=1`,html)).headers.get('content-security-policy')).toContain('frame-ancestors https://portal.example');
   expect((await app.request('/account',html)).headers.get('content-security-policy')).toContain("frame-ancestors 'self';");
  });
- it('leaves the sign-in screens, the agent handoff, the API, assets, every door and file under a page, the installed app and export captures to the app',async()=>{
+ it('leaves the handle step, the agent handoff, the API, assets, every door and file under a page, the installed app and export captures to the app',async()=>{
   const app=server(plain);
-  for(const path of ['/login','/welcome','/start','/start?agent=1','/local/connect']){
+  for(const path of ['/welcome','/start','/start?agent=1','/local/connect']){
    const response=await app.request(path,html);
    expect(response.status,path).toBe(200);expect(await isShell(response),path).toBe(false);expect(await response.text()).toContain('id="root"');
   }

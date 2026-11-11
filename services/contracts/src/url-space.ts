@@ -13,14 +13,16 @@
  *   /a/<id>/...         one page: its screens (`/a/<id>`, `/edit`), its installed-app entry (`/app`, `/app/`) and its
  *                       doors (everything else under it)
  *   /@handle[/...]      a person's or group's address and a document's pretty address
- *   FIXED               the few root addresses that are stable public links or another service's, and the screens the
- *                       product draws itself even when a custom shell stands in for the others (below)
+ *   FIXED               the few root addresses that are stable public links or another service's: the screens the product
+ *                       draws itself even when a custom shell stands in for the others, and `/login`, the product's screen
+ *                       unless a shell is set (`shell: true`, below)
  *   LEGACY              old prefixes still answering (legacy-public-paths.ts, never taught)
  *   everything else     a screen (the app shell; unknown ones are its 404 page)
  *
- * ONE ANSWER TO "IS THIS A SCREEN" (`isScreenPath`): `screen`, `page-screen` and `handle`. A custom shell
- * (APP__SHELL_FILE, server/custom-shell) answers exactly those and a co-hosted router may claim exactly those;
- * `fixed` and `page-app` addresses stay the product's (`server/__tests__/custom-shell.test.ts` pins the server to it).
+ * ONE ANSWER TO "IS THIS A SCREEN" (`isScreenPath`): `screen`, `page-screen`, `handle` and a fixed path marked
+ * `shell: true` (`/login`). A custom shell (APP__SHELL_FILE, server/custom-shell) answers exactly those and a co-hosted
+ * router may claim exactly those; every other `fixed` address and `page-app` stay the product's
+ * (`server/__tests__/custom-shell.test.ts` pins the server to it).
  *
  * `server/__tests__/url-space.test.ts` fails when the route table holds a route this map does not classify,
  * when an `/af/` handler reads a credential, or when the published JSON drifts from these constants.
@@ -116,10 +118,12 @@ interface FixedPath {
   /** Why it is not under `/api/` or `/af/`. */
   readonly why: string;
   readonly hosts: readonly FixedHost[];
+  /** The product's screen unless a custom shell is set, which then answers it like any screen (its query included). */
+  readonly shell?: true;
 }
 /** As small as it can be: each is a link already out in the world, a convention, or another service's. */
 const FIXED_PATHS: readonly FixedPath[] = [
-  { path: '/login', match: 'exact', what: 'the sign-in screen', why: 'sign-in links, OAuth and the proxy\'s login routes return to it by name', hosts: [] },
+  { path: '/login', match: 'exact', what: 'the sign-in screen', why: 'sign-in links, OAuth and the proxy\'s login routes return to it by name', hosts: [], shell: true },
   { path: '/welcome', match: 'exact', what: 'the first sign-in\'s handle step', why: 'the onboarding gate and sign-in send a new account to it by name, with its callbackUrl', hosts: [] },
   { path: '/start', match: 'exact', what: 'the create door and the agent handoff (`?agent=1`)', why: 'agents and links hand people this exact address to make a page and open it', hosts: [] },
   { path: '/local/connect', match: 'exact', what: 'the local-file helper screen', why: 'local files and loopback documents frame it by name, under their own frame-ancestors', hosts: [] },
@@ -168,12 +172,13 @@ export function classifyPath(pathname: string): PathKind {
 
 /**
  * THE SCREENS RULE, for a custom shell: true when the app or a shell standing in for it draws this address —
- * a page's screens, a handle's address and everything that is not `/api/`, `/af/`, a page door or app entry, a fixed
- * path or a legacy address. A screen the app does not know is still a screen: its 404 page.
+ * a page's screens, a handle's address, the sign-in screen (the fixed paths marked `shell`) and everything that is not
+ * `/api/`, `/af/`, a page door or app entry, another fixed path or a legacy address. A screen the app does not know is
+ * still a screen: its 404 page.
  */
 export const isScreenPath = (pathname: string): boolean => {
   const kind = classifyPath(pathname);
-  return kind === 'screen' || kind === 'page-screen' || kind === 'handle';
+  return kind === 'screen' || kind === 'page-screen' || kind === 'handle' || (kind === 'fixed' && !!fixedOf(pathname)?.shell);
 };
 
 /** The `/af/` class an address belongs to (after canonicalizing a legacy file address), or null. */
