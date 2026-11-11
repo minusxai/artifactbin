@@ -1,3 +1,3 @@
 /** The libraries module's server entry: its node-only names, kept out of the index that browser and skill bundles import (DEEP_MODULES in scripts/ci/module-graph.mjs). */
 export { referencedBoundaryFiles, referencedLibraryResources } from './assets.server';
-export { COMPONENT_CHUNK, loadComponentFile } from './components.server';
+export { COMPONENT_CHUNK, loadComponentFile, publicComponentFiles } from './components.server';

@@ -14,7 +14,7 @@ import { apiFetch } from '../api';
 import { SessionProvider, useSession } from '../session';
 import { usePageData } from '../use-page-data';
 import { useSetupDeployment } from '../deployment-setup';
-import { freshFrameSrc } from '../../document/frame-src';
+import { freshFrameSrc } from '@/lib/html-reader/frame-src';
 
 const ok = (body: unknown) => () => Response.json(body);
 const pathOf = (url: string) => new URL(url, 'http://app.test').pathname;

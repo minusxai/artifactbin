@@ -44,6 +44,8 @@ const components: readonly string[] = hostedComponents.components;
 /** Served at /af/components/: the components, and the legacy `af-deck-gl`/`af-mermaid` wrappers, which have no
  * `@afbin/` name (the deck.gl library owns `@afbin/deck-gl`; new maps and diagrams use the libraries) and load by URL. */
 export const isHostedComponent = (name: string): boolean => components.includes(name) || hostedComponents.legacy.includes(name);
+/** The public components (`hosted.json` `components`): what a page imports as `@afbin/<name>` and a host page loads. */
+export const hostedComponentEntries = (): readonly string[] => components;
 export const componentUrl = (name: string, origin = ''): string => `${origin}${COMPONENTS_PATH}${name}.js`;
 /** Every hosted component's import-map entry. */
 export function componentImports(origin = ''): Record<string, string> {

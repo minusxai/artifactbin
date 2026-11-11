@@ -100,14 +100,24 @@ function readerPickOf(request: Request): 'light' | 'dark' | null {
   return value === 'light' || value === 'dark' ? value : null;
 }
 
-export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<{ src: string; origin: string } | null> {
+export interface FreshFrame {
+  src: string;
+  /** The document's own origin, the only one its messages count from. */
+  origin: string;
+  /** The one parent origin the document trusts: a page that frames it anywhere else is refused by its door. */
+  appOrigin: string;
+  /** The head the frame is served (the trusted revision a relay pins) and its edit pointer, as the app page's bootstrap has them. */
+  revision: string;
+  editId: string;
+}
+export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<FreshFrame | null> {
   if (!ID_RE.test(id)) return null;
   // The frame's address needs the row's identity and format, never its document.
   const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'html') return null;
   const actor = await sessionActor(request);
   if (!holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return null;
-  return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
+  return { ...await admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request)), appOrigin: site.app, revision: String(artifact.version), editId: artifact.edit_id };
 }
 
 /** The frame's first URL for a reader this request already admitted to `artifact` (one admission per view). */

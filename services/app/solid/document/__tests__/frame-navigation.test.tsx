@@ -16,7 +16,7 @@ let served: HTMLElement | null = null;
 vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'viewer', archived: null, surface: { id: 'doc12345', title: 'A doc', format: 'html', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: null } }) }));
 vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
-import { answerFrameNavigation, appNavigationTarget } from '../frame-navigation';
+import { answerFrameNavigation, appNavigationTarget } from '@/lib/html-reader/frame-navigation';
 import { DocumentPage } from '../../pages/Document';
 
 let fetcher: ReturnType<typeof vi.fn>;

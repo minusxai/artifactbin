@@ -28,7 +28,7 @@ import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
 import type { FramedStory, RegionUi } from '../document/create-framed-story';
 import { framedDocumentFor } from '../document/frame-src';
-import { answerFrameNavigation } from '../document/frame-navigation';
+import { answerFrameNavigation } from '@/lib/html-reader/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createAppAppearance } from '../ui/theme';
 import { createIsPhoneViewport } from '../ui/MobileSheet';

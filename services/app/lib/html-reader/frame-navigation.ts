@@ -1,5 +1,6 @@
 /**
- * THE APP PAGE FOLLOWS ITS FRAME'S LINKS — the page half of lib/islands/frame-links.
+ * THE APP PAGE FOLLOWS ITS FRAME'S LINKS — the page half of lib/islands/frame-links (the app's document page and
+ * the document host module, ./host-shell).
  *
  * A reader's click on a link to an app path inside the framed document arrives as STORY_NAVIGATE_MESSAGE
  * (`{ type, href }`). Only the frame's own window on the document's origin is heard, only a root-relative path on this
@@ -11,7 +12,7 @@
  *  · anything else — another document, whose frame only the server draws — by a full load (`location.assign`), so
  *    back and forward cross documents as the browser's own history entries.
  */
-import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE, type StoryNavigateMessage } from '@/lib/html-reader/contract';
+import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE, type StoryNavigateMessage } from './contract';
 import { isAppPagePath } from '@/lib/http/app-pages';
 
 interface FrameNavigationOptions {

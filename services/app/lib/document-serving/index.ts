@@ -17,4 +17,5 @@ export { artifactAppPath } from './artifact-pwa';
 export { artifactAppAsset, artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
 export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { componentModuleResponse } from './components.server';
+export { hostedBlocksManifestResponse, pinnedComponentResponse, pinnedHostResponse, pinnedStylesResponse } from './hosted-blocks.server';
 export { nativeHtmlApolloResponse, nativeHtmlCoreResponse, nativeHtmlDocument, nativeHtmlModuleResponse, nativeHtmlReaderResponse, nativeHtmlSystemsResponse, nativeHtmlTitle } from './native-html.server';

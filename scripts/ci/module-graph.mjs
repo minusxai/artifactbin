@@ -159,7 +159,7 @@ const BUNDLED_IMPORTERS = [
 const BUNDLED_LEAVES = {
   'lib/html-component-specs': ['boundary-ids', 'comparison', 'deck-spec', 'isometric-spec', 'mermaid-source'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
-  'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'frame-bridge/parent', 'frame-markup', 'reader-mode', 'reload'],
+  'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
   'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http', 'region-http'],
   'lib/capture': ['contract', 'png', 'screen'],
@@ -177,7 +177,7 @@ const BUNDLED_LEAVES = {
   // carries the server's parse5 readers and compaction. The page's link dialog checks a URL through `href` alone.
   // `cells` (a dataset text cell's text, no ProseMirror) is the page library @afbin/collab's door.
   'lib/live-regions': ['native-browser', 'native-markdown', 'cells', 'href'],
-  'lib/html-runtime': ['native-editing-behavior', 'native-code-presentation', 'browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
+  'lib/html-runtime': ['native-editing-behavior', 'native-code-presentation', 'browser-portable', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',
