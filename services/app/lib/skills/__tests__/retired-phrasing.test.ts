@@ -100,6 +100,8 @@ const RETIRED: Retired[] = [
     reason: 'H11: check reports only Tested: and Not tested:'},
   {pattern: /\/af\/core\.js/, scopes: DOCS,
     reason: 'H9: the platform loads the core runtime; no page or example writes the core script'},
+  {pattern: /(?<![\w/.])\/(?:libraries|geojson|fonts|people|email|workspace)\//, scopes: [...AGENT_TEXT, 'monitoring', 'registry'],
+    reason: 'URL space: public files live under /af/ (/af/lib/, /af/geojson/, /af/fonts/) and links under /api/; the old addresses answer only for what already names them (contracts legacy-public-paths)'},
   {pattern: /\bcore script\b/i, scopes: ['references'],
     reason: 'H9: runtime.md says the platform loads the core runtime'},
   {pattern: /\bedit_artifact\b/, scopes: [...AGENT_TEXT, 'registry'],
