@@ -179,8 +179,10 @@ export function inspectPublicationBundle(html:string,bundle:PublicationBundle,co
  const plan=planPublicationBundle(html,bundle,context);
  return {entryPath:plan.entryPath,backends:plan.backends,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
 }
-/** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. */
-export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html',admittedAssets:readonly {id:string;revision:string}[]=[]):string{
+/** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. `captureKey`: an
+ * export capture's verified key (lib/export read-key), set on each own-door address so the capture's next request is
+ * admitted too; given only when serving that capture its own bytes, never for anything stored or kept. */
+export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html',admittedAssets:readonly {id:string;revision:string}[]=[],captureKey:string|null=null):string{
  const matches=links(source,contentType==='text/css',/^(?:text|application)\/javascript$/.test(contentType));let result=source;
  for(const link of matches.sort((a,b)=>b.start-a.start)){
   if(!/^\/a\/[A-Za-z0-9]+\/assets\?/.test(link.value))continue;
@@ -191,6 +193,7 @@ export function pinPublicationAssetUrls(source:string,pageId:string,version:numb
    url.pathname=`/a/${pageId}/assets`;
   }
   url.searchParams.set('version',String(version));
+  if(captureKey)url.searchParams.set('key',captureKey);
   const address=url.pathname+url.search+url.hash;
   const escaped=link.htmlAttribute?escapeSourceAttribute(address):address;
   result=result.slice(0,link.start)+escaped+result.slice(link.end);

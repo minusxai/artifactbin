@@ -8,10 +8,12 @@ import {serveStoredFile} from '@/lib/datasets';
 import {REVALIDATE,etagOf,matchingTag,notModified} from '@/lib/http';
 import type {BundleReceipt} from './execute';
 interface Admission {delegator:AccessActor;version:number;receipts:BundleReceipt[]}
-async function admission(request:Request,actor:AccessActor,pageId:string):Promise<Admission|null>{
- const page=await getArtifactById(pageId);if(!page||page.format!=='html'||!await canReadArtifact(page,actor))return null;
+/** `capture`: the door verified an export key for this page (lib/export read-key), which admits the page and the version
+ * the capture shows, on exactly the terms the capture's own page is admitted (document-serving/raw). */
+async function admission(request:Request,actor:AccessActor,pageId:string,capture=false):Promise<Admission|null>{
+ const page=await getArtifactById(pageId);if(!page||page.format!=='html'||!(capture||await canReadArtifact(page,actor)))return null;
  // Naming the current version grants no history access beyond the already-readable head.
- const version=new URL(request.url).searchParams.get('version')===String(page.version)?null:await archivedVersionFor(request,page,()=>requestOrSessionActor(request));
+ const version=new URL(request.url).searchParams.get('version')===String(page.version)?null:await archivedVersionFor(request,page,()=>requestOrSessionActor(request),{capture});
  if(version==='not_found')return null;
  return {delegator:writerFor(page),version:version?.version??page.version,receipts:((version?.meta??page.meta) as {htmlPublicationDependencies?:BundleReceipt[]}).htmlPublicationDependencies??[]};
 }
@@ -22,9 +24,13 @@ async function assetVersion(actor:AccessActor,receipt:BundleReceipt):Promise<{id
  const archived=(await (await getDb()).query<{meta:Record<string,unknown>;format:string}>('SELECT meta,format FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[receipt.id,Number(receipt.revision)])).rows[0];
  return archived&&['file','image','pdf'].includes(archived.format)?{id:asset.id,meta:archived.meta}:null;
 }
-/** Page admission selects immutable bytes; the current page ACL and the current owner’s child-read grant are checked on every request. */
-export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:string,dependencyId:string):Promise<Response|null>{
- const admitted=await admission(request,actor,pageId);if(!admitted)return null;
+/**
+ * Page admission selects immutable bytes; the current page ACL and the current owner’s child-read grant are checked on every request.
+ * `captureKey`: an export key the door already verified for this page (app/a/[id]/assets). The capture holds no session, so
+ * pinned text it is served names its own-door addresses with that key, and nothing keyed is cached or revalidated.
+ */
+export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:string,dependencyId:string,captureKey:string|null=null):Promise<Response|null>{
+ const admitted=await admission(request,actor,pageId,captureKey!==null);if(!admitted)return null;
  const askedRevision=new URL(request.url).searchParams.get('revision');
  const receipt=admitted.receipts.find(item=>item.kind==='asset'&&item.id===dependencyId&&(!askedRevision||item.revision===askedRevision));if(!receipt)return null;
  const asset=await assetVersion(admitted.delegator,receipt);if(!asset)return null;
@@ -34,13 +40,14 @@ export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:
  const pinned=new URL(request.url).searchParams.has('version');
  const etag=etagOf({page:pageId,dependency:dependencyId,revision:receipt.revision,object:asset.meta.objectKey??null,sha256:asset.meta.sha256??null,
   pin:pinned?{version:admitted.version,receipts:admitted.receipts.filter(item=>item.kind==='asset'),rewrite:PIN_REWRITE}:null});
- const held=matchingTag(request.headers.get('if-none-match'),etag);
+ const held=captureKey===null&&matchingTag(request.headers.get('if-none-match'),etag);
  if(held){const answer=notModified(held);answer.headers.set('Access-Control-Allow-Origin','*');return answer;}
  // Opaque /raw runners need CORS for admitted modules and fonts; admission
  // above remains the authority, and no credentialed wildcard is granted.
  const response=await serveStoredFile(request,asset,true),contentType=response.headers.get('content-type')??'';
- const headers=new Headers(response.headers);if(response.ok){headers.set('Cache-Control',REVALIDATE);headers.set('ETag',etag);}
- if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&pinned)return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset')),{status:response.status,headers});
+ const headers=new Headers(response.headers);
+ if(captureKey!==null){headers.set('Cache-Control','no-store');headers.delete('ETag');}else if(response.ok){headers.set('Cache-Control',REVALIDATE);headers.set('ETag',etag);}
+ if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&pinned)return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset'),captureKey),{status:response.status,headers});
  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
 /** The pinning rewrite's own identity: a change to how pinned text is rewritten is a change to its bytes. */
