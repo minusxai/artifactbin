@@ -157,7 +157,7 @@ export default defineConfig({
             // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
             // a disposable Postgres (a `skipIf` on the image).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
-            // caps.db end to end: a resolver through the tunnel to a disposable TLS Postgres and MySQL (a `skipIf` on each image).
+            // The connectors against a disposable TLS Postgres and MySQL, and the lock order on real Postgres (a `skipIf` on each image).
             ...REAL_DATABASE_TESTS,
             ...SERVER_BOOT_TESTS,
             ...PROPERTY_SOAK_TESTS,

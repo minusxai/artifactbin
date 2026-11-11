@@ -1,6 +1,5 @@
 /**
- * THE MYSQL-PROTOCOL CONNECTOR (mysql2), adapted from the runner's `caps.db` client
- * (services/runner/src/worker-database.mjs `mysqlClient`). On the wire:
+ * THE MYSQL-PROTOCOL CONNECTOR (mysql2). On the wire:
  *
  *  1. Handshake, once per session (sessions are shared by viewers, one database each): TCP to the address ./network
  *     judged; TLS (verify-full, TLS 1.2+, `ca` if configured) unless the install allows `tls: 'disable'`;

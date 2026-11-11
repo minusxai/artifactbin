@@ -189,6 +189,8 @@ jobs:
       # download alone, not an apt pass (~30s).
       - run: npx playwright install chromium
       - run: docker pull postgres:17-alpine
+      # The connectors' real-database test starts its own TLS MySQL from this image (and skips without it).
+      - run: docker pull mysql:8
       # The test global setup builds the server reader and the hosted libraries behind one content marker
       # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
       # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer

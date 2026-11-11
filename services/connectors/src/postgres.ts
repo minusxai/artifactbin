@@ -1,6 +1,5 @@
 /**
- * THE POSTGRES-PROTOCOL CONNECTOR (postgres.js), adapted from the runner's `caps.db` client
- * (services/runner/src/worker-database.mjs `postgresClient`). On the wire, exactly:
+ * THE POSTGRES-PROTOCOL CONNECTOR (postgres.js). On the wire, exactly:
  *
  *  1. Startup, once per session (sessions are shared by viewers, one database each): TCP to the address ./network
  *     judged; SSLRequest and TLS (verify-full, TLS 1.2+, `ca` if configured) unless the install allows

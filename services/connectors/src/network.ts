@@ -1,5 +1,5 @@
 /**
- * WHERE A CONNECTION MAY REACH, the rule the runner's database tunnel applies (services/runner/src/database-tunnel.ts):
+ * WHERE A CONNECTION MAY REACH:
  * the host name is resolved once per new session, EVERY answer must be allowed (one private answer refuses them all)
  * and the socket connects to the exact address judged, so DNS cannot switch it to an internal one between the check
  * and the connect. Allowed: public addresses; with the install's `allowPrivateNetwork` (development, or a database on

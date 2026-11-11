@@ -2,7 +2,6 @@
  * THE ONE ERROR SHAPE (contracts `ConnectorError`): every connector rejects with a `ConnectorFailure`, and a driver's
  * own error becomes one through `driverFailure`, which keeps the database's SQLSTATE and message, maps sign-in,
  * TLS, network and timeout failures to their codes, and removes every secret of the connection from the text.
- * Adapted from the runner's `describeDatabaseError` (services/runner/src/database-errors.mjs).
  */
 import type { ConnectorError, ConnectorErrorCode } from '@artifactbin/contracts';
 
