@@ -14,16 +14,21 @@
  *    (./service-audiences) it covers only tokens bound to that service's audience, every other token answering
  *    `{active: false}`. JSON in and out, read from committed state at request time.
  */
+import type { ServiceTokenParent } from './service-audiences';
+
 export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
 
 /**
  * The introspection answer. `audience`: the origin the token is bound to (null: a general-purpose token of this
  * installation, which no other service may accept). `expires_at`: ISO time, null when it does not expire. `actor`: set
  * only on a viewer token (./service-audiences): a first-party service (`id`) acting for `user_id`, and the page and
- * function that asked; `token_id` is then the token's own id, never a row of `tokens`.
+ * function that asked. `parent`: set only on an exchanged token (./service-audiences `SERVICE_TOKEN_PATH`): the person's
+ * own credential it was issued for, `token` (a `tokens` row) or `session` (a `sessions` row), which a service re-checks
+ * by that id in the matching view (`live`). On a viewer or exchanged token `token_id` is the token's own id (`vtk_…`),
+ * never a row of `tokens`.
  */
 export type IdentityIntrospectResponse =
-  | { active: true; user_id: string; token_id: string; scopes: string[]; audience: string | null; expires_at: string | null; actor: IntrospectedActor | null }
+  | { active: true; user_id: string; token_id: string; scopes: string[]; audience: string | null; expires_at: string | null; actor: IntrospectedActor | null; parent: ServiceTokenParent | null }
   | { active: false };
 interface IntrospectedActor { id: string; artifact_id: string | null; function: string | null }
 

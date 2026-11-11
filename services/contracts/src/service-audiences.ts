@@ -11,7 +11,11 @@
  *  - a VIEWER token (`IdentityService.issueViewerToken`): minted only by a trusted first-party caller (the identity
  *    call path is service-authenticated) for the viewer it already knows, for ONE audience, living
  *    `VIEWER_TOKEN_TTL_SECONDS`, naming the page and function that asked. It is signed, not stored, and verified only
- *    by introspection.
+ *    by introspection;
+ *  - an EXCHANGED token (`POST SERVICE_TOKEN_PATH` `{"audience": "<id>"}`): the same signed form, for a person who
+ *    already holds a credential here, a browser session (same Origin) or an ordinary API bearer, living
+ *    `SERVICE_TOKEN_TTL_SECONDS`, with no refresh token. It names that credential (`parent`), and introspection answers
+ *    for it only while the parent is live, so signing out or revoking the parent ends it on the next check.
  */
 import { normalizeOrigin } from './server-identity';
 
@@ -29,6 +33,13 @@ export const FIRST_PARTY_ACTOR = 'artifactbin';
 
 /** A viewer token's whole life (`exp - iat`): minted per use, never stored or refreshed. */
 export const VIEWER_TOKEN_TTL_SECONDS = 60;
+
+/** The exchange: a short-lived token for one configured service, for the caller's own session or API bearer. */
+export const SERVICE_TOKEN_PATH = '/api/authentication/service-token';
+/** An exchanged token's whole life (`exp - iat`): minutes, never refreshed; the caller asks again. */
+export const SERVICE_TOKEN_TTL_SECONDS = 300;
+/** The credential an exchanged token was issued for: an access token (`tokens` row) or a browser session (`sessions` row). */
+export interface ServiceTokenParent { kind: 'token' | 'session'; id: string }
 
 /** What asked for a viewer token, recorded in it and answered by introspection (for the service's audit). */
 export interface ViewerTokenActor { artifactId?: string | null; function?: string | null }

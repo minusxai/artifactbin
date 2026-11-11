@@ -160,6 +160,21 @@ it('login --audience saves a second grant for that service beside the API grant;
   await expect(authCommand({sub:'status',values:{audience:'Not An Id'},positionals:[]},options)).rejects.toMatchObject({code:'invalid_audience'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('serviceToken exchanges the one saved grant for a short-lived service token, reusing it in memory until near expiry',async()=>{
+ const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const {serviceToken}=await import('../../../skills/artifactbin/scripts/toolbox-service-token.mjs');
+ const server='https://exchange.example';const seen:{auth:string|null;body:unknown}[]=[];let life=300_000;
+ const fetcher=async(url:any,init:any)=>{const request=new Request(url,init);expect(new URL(request.url).pathname).toBe('/api/authentication/service-token');
+  seen.push({auth:request.headers.get('authorization'),body:await request.json()});
+  return Response.json({access_token:`svc_${seen.length}`,token_type:'Bearer',expires_in:life/1000,expires_at:new Date(Date.now()+life).toISOString(),audience:'warehouse'});};
+ const client=makeClient(server,{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'the_one_grant'},fetcher:fetcher as typeof fetch,identity:{name:'test'} as never});
+ expect(await serviceToken(client,'warehouse')).toBe('svc_1');
+ expect(await serviceToken(client,'warehouse')).toBe('svc_1');
+ expect(seen).toEqual([{auth:'Bearer the_one_grant',body:{audience:'warehouse'}}]);
+ // Another audience is its own token; one within 30 s of expiry is exchanged again.
+ life=20_000;expect(await serviceToken(client,'ledger')).toBe('svc_2');
+ expect(await serviceToken(client,'ledger')).toBe('svc_3');
+});
 it('status proves an unexpired saved grant with the server, so a grant revoked elsewhere reads as signed out',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs'),{platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');

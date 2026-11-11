@@ -569,6 +569,74 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
  });
 });
 
+describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here for a short-lived token for one configured service', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const withService=async(audiences:unknown=[{id:'warehouse',origin:SERVICE}])=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__SERVICE_AUDIENCES:JSON.stringify(audiences)}}));};
+ const exchange=(host:ReturnType<typeof assemble<any>>,headers:Record<string,string>,body:unknown={audience:'warehouse'})=>host.request(`${BASE}/api/authentication/service-token`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
+ const signedIn=()=>{session={userId:'usr_1',email:'u@example.com',sessionId:'ses_1'};identities.set('usr_1',{userId:'usr_1',email:'u@example.com',emailVerified:true});return {cookie:'sess=1'};};
+ const claimsOf=(token:string)=>JSON.parse(Buffer.from(token.slice(4).split('.')[0]!,'base64url').toString());
+ const bearer=async(id:string)=>{const token=`mx_${id.padEnd(40,'z')}`;
+  await testDb().query('INSERT INTO auth.tokens (id,name,token_hash,user_id,audience,scope) VALUES ($1,$2,$3,$4,$5,$6)',[id,'agent',hashToken(token),'usr_1',null,null]);
+  identities.set('usr_1',{userId:'usr_1',email:'u@example.com',emailVerified:true});return token;};
+ const NO_REFRESH=['refresh_token','client_id','id'];
+
+ it('a signed-in page, same Origin only: five minutes for that service, bound to the session, no refresh token, no row written, never a credential here',async()=>{
+  const host=await withService();
+  const rows=async()=>Number((await testDb().query<{n:string}>('SELECT count(*) AS n FROM auth.tokens')).rows[0]!.n);
+  const before=await rows();
+  const response=await exchange(host,{...signedIn(),origin:BASE});
+  expect(response.status,await response.clone().text()).toBe(200);
+  expect(response.headers.get('cache-control')).toContain('no-store');
+  const body=await response.json() as Record<string,unknown>&{access_token:string;expires_in:number;expires_at:string};
+  expect(body).toMatchObject({token_type:'Bearer',audience:'warehouse',resource:SERVICE});
+  for(const field of NO_REFRESH)expect(body,field).not.toHaveProperty(field);
+  expect(body.expires_in).toBeGreaterThan(290);expect(body.expires_in).toBeLessThanOrEqual(300);
+  expect(Date.parse(body.expires_at)-Date.now()).toBeLessThanOrEqual(300_000);
+  expect(claimsOf(body.access_token)).toMatchObject({sub:'usr_1',aud:SERVICE,svc:'warehouse',par:{kind:'session',id:'ses_1'}});
+  expect(await rows()).toBe(before);
+  // At this API it is nobody, and it cannot be exchanged again.
+  session=null;
+  expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${body.access_token}`}})).json()).toMatchObject({credential:'none'});
+  expect((await exchange(host,{authorization:`Bearer ${body.access_token}`})).status).toBe(401);
+ });
+ it('refuses a cookie from another Origin or none, the anonymous, and an unknown or missing audience',async()=>{
+  const host=await withService();
+  expect((await exchange(host,{...signedIn(),origin:'https://evil.example'})).status).toBe(403);
+  expect((await exchange(host,signedIn())).status).toBe(403);
+  session=null;
+  expect(await(await exchange(host,{origin:BASE})).json()).toMatchObject({error:'authentication_required'});
+  for(const body of [{audience:'payroll'},{},{audience:SERVICE}]){
+   const response=await exchange(host,{...signedIn(),origin:BASE},body);
+   expect(response.status,JSON.stringify(body)).toBe(400);expect(await response.json()).toMatchObject({error:'invalid_audience'});
+  }
+  // A host that names no such service exchanges nothing.
+  expect((await exchange(await withService([]),{...signedIn(),origin:BASE})).status).toBe(400);
+ });
+ it('an ordinary API bearer, no Origin needed: the same short-lived token, bound to that bearer',async()=>{
+  const host=await withService(),personal=await bearer('tok_personal');
+  const response=await exchange(host,{authorization:`Bearer ${personal}`});
+  expect(response.status,await response.clone().text()).toBe(200);
+  const body=await response.json() as {access_token:string};
+  for(const field of NO_REFRESH)expect(body,field).not.toHaveProperty(field);
+  expect(claimsOf(body.access_token)).toMatchObject({sub:'usr_1',aud:SERVICE,par:{kind:'token',id:'tok_personal'}});
+  // The OAuth grant sign-in gives for this API is an ordinary bearer too.
+  const api=await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'})).json() as {id:string;access_token:string};
+  session=null;
+  const viaGrant=await exchange(host,{authorization:`Bearer ${api.access_token}`});
+  expect(viaGrant.status,await viaGrant.clone().text()).toBe(200);
+  expect(claimsOf((await viaGrant.json() as {access_token:string}).access_token)).toMatchObject({par:{kind:'token',id:api.id}});
+ });
+ it('a token for the service itself, an unknown bearer, or an unverified account is refused: only this host\'s own credentials exchange',async()=>{
+  const host=await withService();
+  const direct=await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})})).json() as {access_token:string};
+  session=null;
+  expect((await exchange(host,{authorization:`Bearer ${direct.access_token}`})).status).toBe(401);
+  expect((await exchange(host,{authorization:`Bearer mx_${'q'.repeat(40)}`})).status).toBe(401);
+  const personal=await bearer('tok_unverified');identities.set('usr_1',{userId:'usr_1',email:'u@example.com',emailVerified:false});
+  expect(await(await exchange(host,{authorization:`Bearer ${personal}`})).json()).toMatchObject({error:'deployment_admission_required'});
+ });
+});
+
 describe('an operator-registered client (IDENTITY__OAUTH_CLIENTS): a fixed id, named at consent, no dynamic registration', () => {
  const SERVICE='http://warehouse.localhost:7444';
  const CLIENTS=[{client_id:'warehouse-web',name:'Warehouse',redirect_uris:[REGISTERED_REDIRECT]}];

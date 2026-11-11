@@ -1,6 +1,6 @@
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, type ServiceAudience} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
@@ -10,6 +10,12 @@ import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, type ServiceAudience} from '@arti
  * default) or the origin of a configured service (IDENTITY__SERVICE_AUDIENCES; scope empty): a token for a
  * service is the person's own credential at that service, which the bearer admission never accepts at this API
  * (its audience is not ours). `/api/authentication/token` takes the service by id (`{"audience": "<id>"}`).
+ *
+ * THE EXCHANGE (contracts `SERVICE_TOKEN_PATH`, `{"audience": "<id>"}`): a credential the caller already holds here, a
+ * browser session (same Origin, as every cookie-borne write) or an ordinary API bearer, for a short-lived token for one
+ * configured service (../identity/service-tokens, `parent` naming that credential), and no refresh token: the browser
+ * page or agent asks again before it expires. A service token, a viewer token or an exchanged one is no bearer here, so
+ * none is exchanged again.
  *
  * A FIRST-PARTY client (IDENTITY__OAUTH_CLIENTS `first_party`, identity/oauth `parseOAuthClients`) is part of this
  * deployment's own sign-in: `/oauth/authorize` answers a signed-in browser with its code at once (no consent page) and
@@ -29,6 +35,7 @@ import {
   type OAuthStore,
   protectedResourceMetadata,
 } from '../identity/oauth';
+import { signViewerToken } from '../identity/service-tokens';
 import type { AuthApp, SessionStore } from '../parts';
 
 type App = AuthApp;
@@ -85,6 +92,8 @@ interface OAuthRoutesOptions {
   aliasOrigins?: readonly string[];
   /** IDENTITY__SERVICE_AUDIENCES: the other resources a grant may be for. */
   serviceAudiences?: readonly ServiceAudience[];
+  /** The exchanged tokens' signing key (service-tokens `viewerTokenKey` of AUTH__SECRET); null: the exchange answers 503. */
+  serviceTokenKey?: Buffer | null;
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
@@ -145,6 +154,25 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
       return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope,resource:grant.resource}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
     }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
+  });
+  app.post(SERVICE_TOKEN_PATH, async (c) => {
+    const actor=c.get('actor') ?? ANONYMOUS;
+    const refuse=(status:number,error:string,hint?:string)=>new Response(JSON.stringify({error,...(hint?{hint}:{})}),{status,headers:{'Content-Type':'application/json',...NO_STORE}});
+    const parent:ServiceTokenParent|null=actor.credential==='session'&&actor.sessionId?{kind:'session',id:actor.sessionId}:actor.credential==='bearer'&&actor.tokenId?{kind:'token',id:actor.tokenId}:null;
+    if(!parent||!actor.userId)return refuse(401,'authentication_required','Send this host\'s own API bearer, or call from a signed-in page.');
+    // A cookie is ambient: only this deployment's own pages may spend it here. A bearer is explicit and needs no Origin.
+    if(parent.kind==='session'&&!sameOrigin(c.req.raw))return refuse(403,'forbidden');
+    let requested:unknown;
+    try{requested=(JSON.parse(await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'})) as {audience?:unknown}|null)?.audience;}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
+    const service=typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
+    if(!service)return refuse(400,'invalid_audience','Name a configured service id.');
+    if(!o.serviceTokenKey)return refuse(503,'temporarily_unavailable');
+    // The same account rule as every grant here: a verified email account this deployment admits.
+    const identity=await o.sessions.identity?.(actor.userId).catch(()=>null);
+    if(!identity?.email||!identity.emailVerified||identity.userId!==actor.userId||(o.admitIdentity&&!await o.admitIdentity(identity)))return refuse(403,'deployment_admission_required');
+    const issued=signViewerToken(o.serviceTokenKey,service,{userId:actor.userId,parent});
+    return new Response(JSON.stringify({access_token:issued.token,token_type:'Bearer',expires_in:Math.round((Date.parse(issued.expiresAt)-Date.now())/1000),expires_at:issued.expiresAt,audience:service.id,resource:service.origin}),{status:200,headers:{'Content-Type':'application/json',...NO_STORE}});
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
   app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
