@@ -33,8 +33,8 @@ Skill map (each file's top comment explains it):
 - `resolvers/`: public-url, http-json, google-sheets, bigquery, supabase, neon
 - `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
 serve, new-app, new-page
-- `references/`: guides (read those you need): runtime, datasets, permissions, functions,
-dataviz, diagrams, maps, groups
+- `references/`: guides (read those you need): runtime, page-apps, datasets, permissions,
+functions, dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (read only its header: the shared tokens)
 
@@ -109,7 +109,8 @@ ask in chat. ACLs and trash have no script. Groups: `node scripts/groups.mjs lis
   Keep the starter's design system unless the user names one; then set its `<meta
   name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
   its stylesheet and fonts). Keep viewer-local state in `state` from `@afbin/state`
-  ([runtime](references/runtime.md)); state everyone sees lives in a dataset.
+  ([runtime](references/runtime.md)); state everyone sees lives in a dataset. Screens, routes,
+  dialogs and where the page runs: [page apps](references/page-apps.md).
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -176,12 +177,13 @@ ask in chat. ACLs and trash have no script. Groups: `node scripts/groups.mjs lis
   scripts/export.mjs ID --format html --output copy.html` for a portable copy; one chart or
   section of a page saves as an image with `--format png --element SELECTOR`, so nothing else
   needs publishing or redrawing.
-- **Network and install.** To call an external API add `<meta name="csp-connect"
-  content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
-  `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid
-  declarations. For an installable page use the `artifactbin:pwa-enabled`, `-name`, `-short-name`,
-  `-theme-color`, `-background-color` and `-icon` metas in `<head>`; autofix explains invalid
-  values.
+- **Network and install.** To GET an external API add `<meta name="csp-connect"
+  content="https://api.example.com">` in `<head>` and `fetch` it ([page
+  apps](references/page-apps.md#calling-an-external-api)); also `csp-script`, `csp-style`,
+  `csp-img`, `csp-frame`, `csp-media`. Readers are asked to allow new origins and publish rejects
+  invalid declarations. For an installable page use the `artifactbin:pwa-enabled`, `-name`,
+  `-short-name`, `-theme-color`, `-background-color` and `-icon` metas in `<head>`; autofix
+  explains invalid values.
 
 ## Known failure modes
 

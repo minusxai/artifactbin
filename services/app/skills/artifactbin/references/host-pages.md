@@ -109,9 +109,10 @@ doc.select('title', { reveal: true });
 ```
 
 Methods: `setMode`, `setDesignSystem(name, mode)`, `select(path, { reveal })`, `scrollToHash`,
-`setInset(px)`, `followVersion(version)`, `notifyData(datasets)`, `destroy`; `bridge` is the raw
-bridge. Events on the container: `af-document-ready`, `af-document-selection`,
-`af-document-event` (every frame event), `af-document-scroll`, `af-document-url-values`,
+`setUrlValues(search)` (your address's `$` values after Back or Forward), `setInset(px)`,
+`followVersion(version)`, `notifyData(datasets)`, `destroy`; `bridge` is the raw bridge. Events
+on the container: `af-document-ready`, `af-document-selection`, `af-document-event` (every frame
+event), `af-document-scroll`, `af-document-url-values` (`{search, push}`: replace or push),
 `af-document-navigate` (a link to an app page: `preventDefault()` routes it yourself; a link to
 another document loads in the tab), `af-document-closed`.
 Not included: uploads (refused), comments, presence, region and cell editing, and the live

@@ -7,7 +7,7 @@ description: "Read before a page uses an API with a key, an owner's database, se
 Shared rows (sign-ups, targets) live in a dataset: the page reads and writes it with `sql` under
 the dataset's rules ([datasets](datasets.md)). Someone else's public API
 needs no server code: declare `<meta name="csp-connect" content="https://api.example.com">` and
-call it with `fetch`. Write a backend function for what the page cannot do itself: check or
+GET it with `fetch`. Write a backend function for what the page cannot do itself: check or
 derive values before a write (the tracker starter's `tracker.ts`), reach an API or database
 with a secret, or refresh data on a schedule. A backend file is TypeScript published with the
 page and run on the server in a sandbox:
