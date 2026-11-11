@@ -1,4 +1,4 @@
-import {groupQuota,recordGroupMutation,GroupError,getGroupRole,subtreeMemberIds} from '../groups';
+import {groupQuota,mailGroupChanges,recordGroupMutation,GroupError,getGroupRole,subtreeMemberIds} from '../groups';
 import { ownerScope,editorScope, type ArtifactRow } from '@/lib/artifact-access';
 import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
@@ -123,9 +123,8 @@ export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:
   const observed=(await tx.query<{group_id:string|null}>('SELECT group_id FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE NOWAIT',[id])).rows[0];
   if(!observed)return null;
   const previous=(await tx.query<{role:string}>('SELECT role FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2 FOR UPDATE',[id,groupId])).rows[0]?.role??null;
-  const groups=[...new Set([groupId,...(observed.group_id?[observed.group_id]:[])])].sort();
-  const locked=await tx.query('SELECT id FROM groups WHERE id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY id FOR UPDATE NOWAIT',[groups]);
-  if(locked.rows.length!==groups.length||!await getGroupRole(actor.userId,groupId,tx))throw new GroupError('share_refused',403);
+  // Membership read at decision time, unlocked (the identity module's rows); a deleted group is no member's.
+  if(!await getGroupRole(actor.userId,groupId,tx))throw new GroupError('share_refused',403);
   const scope=ownerScope(actor);
   const row=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
   if(!row)return null;
@@ -137,7 +136,6 @@ export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:
   await tx.query(`SELECT ${notifyArtifactSql('id','edit_id')} FROM artifacts WHERE id=$1`,[id]);
   // The share's audience: direct members of the group and of every subgroup (lib/groups hierarchy).
   const members=await subtreeMemberIds(tx,groupId);
-  await recordGroupMutation(tx,actor.userId!,groupId,role===null?'unshared':'shared',{artifact_id:id,previous_role:previous,role},members,actor);
-  return {changed:true};
- }).catch(error=>{if(error&&typeof error==='object'&&'code' in error&&error.code==='55P03')throw new GroupError('share_refused',409);throw error;});
+  return {changed:true,change:await recordGroupMutation(tx,actor.userId!,groupId,role===null?'unshared':'shared',{artifact_id:id,previous_role:previous,role},members,actor)};
+ }).then(async result=>{if(result&&'change' in result&&result.change){await mailGroupChanges([result.change]);return {changed:true};}return result?{changed:false}:null;}).catch(error=>{if(error&&typeof error==='object'&&'code' in error&&error.code==='55P03')throw new GroupError('share_refused',409);throw error;});
 }

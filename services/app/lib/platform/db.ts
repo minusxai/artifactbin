@@ -11,7 +11,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATABASE_URL } from './config';
+import { AUTH_SERVICE_URL, DATABASE_URL } from './config';
+import { ensureIdentityRows } from '@artifactbin/auth/identity-store';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
 import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
@@ -436,8 +437,6 @@ async function createDb(): Promise<Db> {
 
 // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
 const BACKFILLS: readonly string[] = [
-  // The hierarchy guard row (schema GROUP_HIERARCHY): it must exist before any decision locks it FOR SHARE.
-  "INSERT INTO group_hierarchy(id,revision) VALUES('installation',0) ON CONFLICT (id) DO NOTHING",
   "UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL",
 ];
 
@@ -449,6 +448,9 @@ const BACKFILLS: readonly string[] = [
  */
 async function applyBackfills(db: Queryable): Promise<void> {
   for (const statement of BACKFILLS) await db.query(statement);
+  // Identity's own boot rows, when identity runs in this process (no auth host: lib/platform services); an auth
+  // host ensures them itself.
+  if (!AUTH_SERVICE_URL) await ensureIdentityRows(db);
 }
 
 /**

@@ -12,9 +12,8 @@ export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient,
 export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, type AccessActor, type RequestIdentity, type TokenHoldingActor } from './actors';
 
 /** Users and handles. */
-export { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, replaceUserImageKey, setAutoAcceptMentions, setUsername } from './users';
-export { HANDLE_RE, isValidHandle, RESERVED_HANDLES, reserveHandle } from './handles';
-export { lockMembershipUsers } from './membership-lock';
+export { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, replaceUserImageKey, setUsername } from './users';
+export { HANDLE_RE, isValidHandle, RESERVED_HANDLES } from './handles';
 export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } from './profiles';
 
 /** Whether an account may act on this deployment. */

@@ -1,7 +1,8 @@
 /** Accounts: creation, email changes, usernames, and the tokens an account may claim (the claim itself: lib/authentication). */
 import { describe, expect, it } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
-import { USERNAME_RE, setUserEmail, usernameFromEmail } from '@/lib/accounts/users';
+import { USERNAME_RE } from '@/lib/accounts/users';
+import { usernameFromEmail } from '@artifactbin/auth/identity-store/accounts';
 import { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, revokeUserToken, ownerUsername, setUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 
@@ -67,11 +68,10 @@ describe('usernames', () => {
     expect(await authorHandle({ actor_user_id: null })).toBeNull();
   });
 
-  it('inside a caller\'s transaction a taken handle throws, so the caller\'s transaction aborts', async () => {
+  it('a handle held by another account answers taken and changes nothing', async () => {
     const a = await createUser({ email: 'a@example.test' }), b = await createUser({ email: 'b@example.test' });
     await setUsername(a.id, 'held');
-    const db = await getDb();
-    await expect(db.transaction((tx) => setUsername(b.id, 'held', tx))).rejects.toMatchObject({ code: '23505' });
+    expect(await setUsername(b.id, 'held')).toEqual({ error: 'taken' });
     expect((await getUserById(b.id))!.username).toBeNull();
   });
 });
@@ -94,13 +94,6 @@ describe('accounts', () => {
     expect(guest!.kind).toBe('guest');
     expect(isAccountRow(guest)).toBe(false);
     expect(isAccountRow(null)).toBe(false);
-  });
-
-  it('setUserEmail records a normalized address; the old one finds nobody', async () => {
-    const user = await createUser({ email: 'old@example.test' });
-    await setUserEmail(user.id, ' New@Example.TEST');
-    expect(await getUserByEmail('old@example.test')).toBeNull();
-    expect((await getUserByEmail('new@example.test'))!.id).toBe(user.id);
   });
 
   it('hasCreatedDocument is true only for an html artifact the user created', async () => {

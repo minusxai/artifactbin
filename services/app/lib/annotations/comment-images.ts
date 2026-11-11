@@ -13,7 +13,7 @@ import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentIma
 import { annotationScope } from '@/lib/artifact-access';
 import { readableArtifact, assetByteQuotaLimit } from '@/lib/artifacts';
 import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
-import { getDb, type Queryable, generateInternalId } from '../platform';
+import { getDb, type Queryable, generateInternalId, lockSubjects } from '../platform';
 import {objectStore,ObjectUnavailable} from '../object-store/index';
 import {json} from '../http';
 
@@ -68,8 +68,7 @@ export async function stageCommentImage(actor:TokenHoldingActor,artifactId:strin
  const bytes=originals.length+previews.length+thumbnail.length,id='cim_'+generateInternalId();
  const reserved=await db.transaction(async tx=>{
   // Serialize reservations across every token owned by this uploader.
-  if(actor.userId)await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[actor.userId]);
-  else await tx.query('SELECT id FROM tokens WHERE id=$1 FOR UPDATE',[actor.tokenId]);
+  await lockSubjects(tx,actor.userId?'comment-images:user':'comment-images:token',[(actor.userId??actor.tokenId)!]);
   const column=actor.userId?'user_id':'token_id',subject=actor.userId??actor.tokenId;
   const total=await tx.query<{n:string}>(`SELECT
    (SELECT COALESCE(SUM((meta->>'bytes')::bigint),0) FROM artifacts WHERE ${column}=$1 AND meta ? 'bytes')+

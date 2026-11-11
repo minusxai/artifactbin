@@ -1,4 +1,5 @@
-import {transferArtifact} from '@/lib/artifacts';
+import {setArtifactGroupShare,transferArtifact} from '@/lib/artifacts';
+import {effectiveRole,type ArtifactRow} from '@/lib/artifact-access';
 import {getDb} from '@/lib/platform';
 import {identityForUser} from '@/lib/accounts';
 import {mine} from '@/__tests__/artifact-fixtures';
@@ -45,16 +46,36 @@ it('updates presentation, protects default/nonempty groups, retains handle tombs
  await expect(groups.createGroup(owner.id,{handle:group.handle,name:'Reclaim'})).rejects.toMatchObject({code:'handle_taken'});
 });
 
-it('serializes deletion versus publishing and moving owned work',async()=>{
+it('deletion racing a publish or a move into the group: whatever lands, a deleted group grants its ex-members nothing',async()=>{
  const owner=await account('race_owner');const actor={...identityForUser(owner.id,null),userId:owner.id};
  const group=await groups.createGroup(owner.id,{handle:'publish_race',name:'Publish'});
- const results=await Promise.allSettled([groups.deleteGroup(owner.id,group.id,group.handle),mine(actor,'New',{destination:{type:'group',id:group.id}})]);
- const db=await getDb();
- const live=(await db.query('SELECT id FROM artifacts WHERE group_id=$1 AND deleted_at IS NULL',[group.id])).rows;
- expect(live.length===0||await groups.getGroupById(group.id)!==null).toBe(true);
- expect(results.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+ await Promise.allSettled([groups.deleteGroup(owner.id,group.id,group.handle),mine(actor,'New',{destination:{type:'group',id:group.id}})]);
  const second=await groups.createGroup(owner.id,{handle:'transfer_race',name:'Transfer'});const page=await mine(actor);
  await Promise.allSettled([groups.deleteGroup(owner.id,second.id,second.handle),transferArtifact(actor,page.id,{type:'group',id:second.id})]);
- const row=(await db.query<{group_id:string|null}>('SELECT group_id FROM artifacts WHERE id=$1',[page.id])).rows[0];
- expect(row.group_id===null||await groups.getGroupById(row.group_id)!==null).toBe(true);
+ const db=await getDb();
+ for(const id of [group.id,second.id]){
+  if(await groups.getGroupById(id))continue;
+  // Soft deleted: rows that still name it stay as they are and are read through a group no one belongs to.
+  for(const row of (await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE group_id=$1 AND deleted_at IS NULL',[id])).rows)
+   expect(await effectiveRole(row,actor)).toBe('none');
+ }
+});
+
+it('a deleted group grants nothing through what still names it: its pages, its shares, its links',async()=>{
+ const owner=await account('ex_owner'),member=await account('ex_member');const actor={...identityForUser(owner.id,null),userId:owner.id};
+ const group=await groups.createGroup(owner.id,{handle:'gone_team',name:'Gone'}),other=await groups.createGroup(owner.id,{handle:'kept_team',name:'Kept'});
+ await groups.inviteGroupMember(owner.id,group.id,member.email,'viewer');await groups.acceptGroupInvitations(member.id,member.email);
+ await groups.setGroupLink(owner.id,other.id,group.id,true);
+ const shared=await mine(actor,'Shared');
+ await setArtifactGroupShare(actor,shared.id,group.id,'editor');
+ const memberActor={...identityForUser(member.id,null),userId:member.id};
+ const db=await getDb(),row=async(id:string)=>(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1',[id])).rows[0]!;
+ expect(await effectiveRole(await row(shared.id),memberActor)).toBe('editor');
+ await groups.deleteGroup(owner.id,group.id,group.handle);
+ // The share row is left in place (no cleanup across modules) and grants nothing.
+ expect((await db.query('SELECT 1 FROM artifact_group_shares WHERE group_id=$1',[group.id])).rows).toHaveLength(1);
+ expect(await effectiveRole(await row(shared.id),memberActor)).toBe('none');
+ expect(await groups.getGroupRole(member.id,group.id)).toBeNull();
+ expect((await groups.getGroupDetail(owner.id,other.id))?.linked_groups).toEqual([]);
+ expect(await groups.listGroups(member.id)).toEqual([]);
 });

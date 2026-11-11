@@ -1,5 +1,5 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
@@ -25,7 +25,8 @@ export interface AuthOptions {
  sessions:SessionStore;
  cookieSecret:string;
  secure?:boolean;
- identityDb?:Queryable;
+ /** The auth host's own database. With transactions (`identityDbOf(pool)`) it also hosts the identity module's calls. */
+ identityDb?:Queryable|TransactionalQueryable;
  appSchema?:string;
  events?:EventsService;
  /** Private deployments may explicitly trust their preceding transport. OSS leaves this zero. */

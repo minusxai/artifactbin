@@ -40,7 +40,7 @@ const said = async (...verbs:string[]) => (await (await getDb()).query<{envelope
 /** A markup document owned by an account, plus the actor that speaks for it — with the log reset after the fixture's own `created`. */
 async function publish(email: string) {
   const owner = await createUser({ email });
-  const tok = await mintToken('web', owner.id, undefined, { expiresInMs: null });
+  const tok = await mintToken('web', owner.id, { expiresInMs: null });
   const row = await createArtifact(tok.id, owner.id, doc);
   await vi.waitFor(() => expect(fake.events.map((e) => e.verb)).toContain('created'));
   await listen();

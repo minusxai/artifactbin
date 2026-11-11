@@ -21,8 +21,7 @@
 import type { AccessActor } from './actors';
 import type { TestUser } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
-import { getDb, generateInternalId } from '../platform';
-import { mintToken } from './tokens';
+import { emit, getDb, generateInternalId, services } from '../platform';
 import { userKindOf } from '../user-kinds';
 import { testUserSessionCount } from './testuser-sessions';
 
@@ -47,15 +46,13 @@ interface TestUserMinted extends TestUser {
 const labelFor = (): string => `${TESTUSER_LABEL} ${generateInternalId().slice(-4)}`;
 
 /** The live ones this account holds: not expired, not erased. */
-const LIVE_TESTUSER_SQL = "kind = 'testuser' AND (expires_at IS NULL OR expires_at > now())";
 
 /**
  * Mint one. The caller is an ACCOUNT — a guest has no data of its own to keep a
  * second person away from, and an anonymous token is not a person — and it may
  * hold `TESTUSER_LIMITS.perAccount` at once.
  *
- * The cap is counted inside the same transaction as the insert, so two
- * simultaneous mints cannot both see room for the last slot.
+ * The identity module counts the cap in the transaction that inserts the row.
  */
 export async function createTestUser(parent: AccessActor): Promise<TestUserMinted | TestUserRefusal> {
   if (!parent.userId || (await userKindOf(parent.userId)) !== 'account') {
@@ -64,23 +61,14 @@ export async function createTestUser(parent: AccessActor): Promise<TestUserMinte
       message: 'A test user is a second person alongside YOUR account: sign in first. A guest or a test user cannot mint one.',
     };
   }
-  const db = await getDb();
-  const id = 'usr_' + generateInternalId();
   const label = labelFor();
-  const expiresAt = new Date(Date.now() + TESTUSER_LIMITS.ttlMs).toISOString();
-  const minted = await db.transaction(async (tx) => {
-    const live = await tx.query<{ id: string }>(
-      `SELECT id FROM users WHERE parent_user_id = $1 AND ${LIVE_TESTUSER_SQL} FOR UPDATE`, [parent.userId],
-    );
-    if (live.rows.length >= TESTUSER_LIMITS.perAccount) return null;
-    const row = await tx.query<{ created_at: string; expires_at: string }>(
-      `INSERT INTO users (id, email, kind, parent_user_id, expires_at, name)
-       VALUES ($1, NULL, 'testuser', $2, $3, $4) RETURNING created_at, expires_at`,
-      [id, parent.userId, expiresAt, label],
-    );
-    const token = await mintToken(`${TESTUSER_TOKEN_PREFIX}${label.replace(/\s+/g, '_').toLowerCase()}`, id, tx, { expiresInMs: TESTUSER_LIMITS.ttlMs });
-    return { ...row.rows[0]!, tokenId: token.id, token: token.token };
+  // The cap is counted inside the identity module's transaction, under the parent's row, so two simultaneous mints
+  // cannot both see room for the last slot.
+  const tokenName = `${TESTUSER_TOKEN_PREFIX}${label.replace(/\s+/g, '_').toLowerCase()}`;
+  const minted = await services().identity.createTestUser({
+    parentId: parent.userId, label, ttlMs: TESTUSER_LIMITS.ttlMs, limit: TESTUSER_LIMITS.perAccount, tokenName,
   });
+  if (minted) void emit({ kind: 'user', id: minted.id }, 'minted', { kind: 'token', id: minted.tokenId }, { name: tokenName });
   if (!minted) {
     return {
       ok: false, status: 409, error: TESTUSER_ERRORS.limit,
@@ -88,7 +76,7 @@ export async function createTestUser(parent: AccessActor): Promise<TestUserMinte
     };
   }
   return {
-    ok: true, id, userId: id, label, tokenId: minted.tokenId, token: minted.token,
+    ok: true, id: minted.id, userId: minted.id, label, tokenId: minted.tokenId, token: minted.token,
     created_at: minted.created_at, expires_at: minted.expires_at, artifacts: 0, sessions: 0,
   };
 }

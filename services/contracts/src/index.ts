@@ -22,6 +22,8 @@ export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, ClaimResult, CodeStore } from './identity';
 export * from './identity-service';
+export * from './identity-module';
+export * from './handles';
 export type { Column, Table } from './schema';
 export * from './dataset-policy';
 export * from './dataset-permissions';

@@ -55,13 +55,13 @@ export async function bearerIdentity() {
 }
 
 export async function mintAccountToken(...args: Parameters<typeof mintRawToken>) {
-  const [name, suppliedUserId, query, options] = args;
-  if (suppliedUserId === null) return { ...await mintRawToken(name, null, query, options), userId: null, email: null };
+  const [name, suppliedUserId, options] = args;
+  if (suppliedUserId === null) return { ...await mintRawToken(name, null, options), userId: null, email: null };
   const userId = suppliedUserId ?? `mxmx_test_${randomUUID()}`;
-  const db = query ?? await getDb();
+  const db = await getDb();
   await db.query("INSERT INTO users (id,email,kind) VALUES ($1,$2,'account') ON CONFLICT (id) DO NOTHING", [userId, `mxmx_test_${Buffer.from(userId).toString('hex')}@example.test`]);
   const { rows } = await db.query<{ email: string | null }>('SELECT email FROM users WHERE id=$1', [userId]);
-  return { ...await mintRawToken(name, userId, db, options), userId, email: rows[0]?.email ?? null };
+  return { ...await mintRawToken(name, userId, options), userId, email: rows[0]?.email ?? null };
 }
 
 /** What a route test may send. `token` (bearer) and `actor` (proxy-attached) are two DIFFERENT credentials: naming both is a test bug, refused. */
@@ -121,10 +121,8 @@ export async function agentCookie(tokenIds: string[]): Promise<string> {
 /** A legacy guest row (no login identity) with one token: no product code mints one any more, but historical references and rejection tests still meet them. */
 export async function createGuestOwner(options: { name?: string; tokenName?: string; expiresInMs?: number } = {}): Promise<{ userId: string; tokenId: string; cookie: string }> {
   const userId = 'usr_' + generateInternalId();
-  const tokenId = await (await getDb()).transaction(async (tx) => {
-    await tx.query("INSERT INTO users (id, email, kind, name) VALUES ($1, NULL, 'guest', $2)", [userId, options.name ?? null]);
-    return (await mintRawToken(options.tokenName ?? 'guest-browser', userId, tx, { expiresInMs: options.expiresInMs ?? MAX_TOKEN_TTL_MS })).id;
-  });
+  await (await getDb()).query("INSERT INTO users (id, email, kind, name) VALUES ($1, NULL, 'guest', $2)", [userId, options.name ?? null]);
+  const tokenId = (await mintRawToken(options.tokenName ?? 'guest-browser', userId, { expiresInMs: options.expiresInMs ?? MAX_TOKEN_TTL_MS })).id;
   return { userId, tokenId, cookie: await agentCookie([tokenId]) };
 }
 

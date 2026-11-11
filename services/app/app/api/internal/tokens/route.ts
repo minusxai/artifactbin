@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       return json({ error: 'invalid_audience' }, 400);
     }
   }
-  const minted = await mintToken(sourcedTokenName('api'), userId, undefined, { expiresInMs, audience, scope });
+  const minted = await mintToken(sourcedTokenName('api'), userId, { expiresInMs, audience, scope });
   return json(
     {
       has_created_document: await hasCreatedDocument(userId!),

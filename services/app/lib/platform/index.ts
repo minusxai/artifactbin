@@ -25,5 +25,6 @@ export { currentHeaders, currentRequest, overrideRequestHeaders, runWithRequest 
 export { measureQueries } from './query-stats';
 export { isTransactionConflict, retryOnConflict, TransactionConflict, type ConflictRetry } from './conflict-retry';
 export { SCHEMA_STATEMENTS, TABLES, TITLE_SLUG_SQL } from './schema';
-export { services, setServices } from './services';
+export { identityIsLocal, services, setServices } from './services';
+export { lockSubjects } from './advisory-locks';
 export type { Services } from './services';

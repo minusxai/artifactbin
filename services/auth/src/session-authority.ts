@@ -7,14 +7,21 @@
  *    identity). Every other identity fact MinusX reads from the shared `identity` views, not from here;
  *  - MinusX's job events (contracts `EVENTS_PUBLISH_PATH`, cross-repository contract §6): the durable publish onto
  *    this process's events service, accepting only `source: 'minusx'` job envelopes with a catalogued verb and the ids
- *    the feed authorizes on. 2xx only once stored; a storage failure is 503, so MinusX's outbox keeps the batch.
+ *    the feed authorizes on. 2xx only once stored; a storage failure is 503, so MinusX's outbox keeps the batch;
+ *  - THE IDENTITY MODULE's calls (contracts `IDENTITY_CALL_PATH`, `IdentityService`): every write to users, tokens,
+ *    handles, groups, memberships, invitations and the group mail outbox, run by the identity store
+ *    (`./identity-store`) on `identityDb` (which must offer transactions: `identityDbOf(pool)`) against the app's
+ *    tables (`appSchema`). `{method, input}` in; `{result}` or `{refused: {code, status, retry_after?, detail?}}` out,
+ *    both 200; anything else (no transactional database, a failure) is 503 and the caller's call throws.
  */
-import {API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type Part,type TokenRecord} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,EVENT_VERBS,EVENTS_PUBLISH_MAX_BATCH,EVENTS_PUBLISH_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,type EventEnvelope,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf} from './routes/oauth';
 import {readEnv} from './env';
+import {testDomainSignInOf} from './config';
+import {createIdentityStore,ensureIdentityRows} from './identity-store';
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const text=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=256;
 /** A job event as MinusX publishes it: the only envelope another product may put on this installation's feed. */
@@ -59,6 +66,30 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   try{token=await live(c,await o.tokens.byToken(input.token));}catch{return answer({error:'session_unavailable'},503);}
   if(!token)return answer({active:false} satisfies IdentityIntrospectResponse);
   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[]} satisfies IdentityIntrospectResponse);
+ });
+ const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
+ let identity:Promise<IdentityService>|null=null;
+ /** The store over the auth host's own connection, its boot rows ensured once (a failure is retried on the next call). */
+ const store=():Promise<IdentityService>=>identity??=(async()=>{
+  const db=o.identityDb;if(!transactional(db))throw Error('identity_unavailable');
+  const appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
+  await ensureIdentityRows(db,appSchema);
+  return createIdentityStore({db,appSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
+ })().catch(error=>{identity=null;throw error;});
+ app.all(IDENTITY_CALL_PATH,async c=>{
+  const input=await admit(c);if(input instanceof Response)return input;
+  const method=input.method as IdentityMethod;
+  if(typeof method!=='string'||!IDENTITY_METHODS.includes(method)||!input.input||typeof input.input!=='object'||Array.isArray(input.input))return answer({error:'bad_request'},400);
+  let service:IdentityService;
+  try{service=await store();}catch{return answer({error:'identity_unavailable'},503);}
+  try{
+   const call=service[method] as (argument:unknown)=>Promise<unknown>;
+   const result=await call(input.input);
+   return answer({result:result===undefined?null:result});
+  }catch(error){
+   if(error instanceof IdentityError)return answer({refused:{code:error.code,status:error.status,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{}),...(error.detail!==undefined?{detail:error.detail}:{})}});
+   return answer({error:'identity_unavailable'},503);
+  }
  });
  app.all(EVENTS_PUBLISH_PATH,async c=>{
   const refused=await admit(c,false);if(refused instanceof Response)return refused;

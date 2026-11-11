@@ -53,7 +53,7 @@ describe('company admission',()=>{
   expect(await admitDeploymentIdentity(identity('outsider','outside@other.com'))).toBe(false);
   expect(await admitDeploymentIdentity(identity('elsewhere','elsewhere@example.com'))).toBe(false);
  });
- it('locks live group snapshots within setup and admission transactions (structural SQL contract)',async()=>{
+ it('reads the live default group in setup and admission without locking it (identity rows are never locked by the app)',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false'});
   await admitDeploymentIdentity(identity('owner','owner@example.com'));
   const db=await getDb();
@@ -66,7 +66,8 @@ describe('company admission',()=>{
   }}));
   try{await setupDeployment('owner','locked');expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);}
   finally{db.transaction=transaction;}
-  expect(reads).toHaveLength(2);for(const sql of reads)expect(sql).toContain('FOR UPDATE OF g');
+  expect(reads).toHaveLength(2);for(const sql of reads)expect(sql).not.toMatch(/FOR (UPDATE|SHARE)/);
+  expect(await getDb().then(db=>db.query("SELECT role FROM group_members WHERE group_id='locked' AND user_id='member'"))).toMatchObject({rows:[{role:'viewer'}]});
  });
  it('serializes competing owner binds and never gives a changed email the owner ID',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});

@@ -1,3 +1,4 @@
+import {isValidHandle} from './handles';
 /** Group identity is independent of accounts and artifacts. IDs, never handles, carry authority. */
 export type GroupRole = 'editor' | 'viewer';
 export type ArtifactDestination = {type:'personal'} | {type:'group';id:string};
@@ -28,3 +29,14 @@ export interface NewArtifactDestinationContext {
 export interface UpdateGroupInput {name?:string;description?:string;}
 export type GroupShareRole = 'viewer' | 'commenter' | 'editor';
 export interface GroupShare {group:GroupSummary;role:GroupShareRole;}
+/**
+ * A create-group request normalized (handle lowercased and trimmed, name and description trimmed), or null when it
+ * is malformed: the one rule the app checks before charging its quota and the identity module enforces.
+ */
+export function normalizeCreateGroup(input:{handle?:unknown;name?:unknown;description?:unknown;parent_id?:unknown}|null|undefined):{handle:string;name:string;description:string;parentId:string|null}|null{
+ if(typeof input?.handle!=='string'||typeof input?.name!=='string'||(input.description!==undefined&&typeof input.description!=='string')
+  ||(input.parent_id!==undefined&&input.parent_id!==null&&(typeof input.parent_id!=='string'||!input.parent_id)))return null;
+ const handle=input.handle.toLowerCase().trim(),name=input.name.trim(),description=(input.description as string|undefined)?.trim()??'';
+ if(!isValidHandle(handle)||!name||name.length>120||description.length>2000)return null;
+ return {handle,name,description,parentId:(input.parent_id as string|null|undefined)??null};
+}

@@ -1,14 +1,2 @@
-/** One reservation boundary shared by account and group identity. Call inside the owning transaction. */
-import type { Queryable } from '../platform';
-/** 3–32 lowercase letters/digits, with underscores only inside the handle. */
-export const HANDLE_RE = /^[a-z0-9][a-z0-9_]{1,30}[a-z0-9]$/;
-export const RESERVED_HANDLES=new Set(['admin','root','support','help','about','settings','security','artifactbin','artifact_bin','api','docs','mcp','oauth','a','login','tokens','www','app','mail','smtp','static','cdn','status','pages','runner','assets','blog','auth','ns1','ns2','u']);
-export const isValidHandle = (handle:string):boolean => HANDLE_RE.test(handle) && !RESERVED_HANDLES.has(handle);
-export async function reserveHandle(query:Queryable,handle:string,kind:'user'|'group',id:string):Promise<void>{
- // Backfill legacy account handles before any new claim. Existing names always win.
- await query.query("INSERT INTO handle_reservations(handle,kind,subject_id) SELECT username,'user',id FROM users WHERE username=$1 ON CONFLICT DO NOTHING",[handle]);
- await query.query('DELETE FROM handle_reservations WHERE kind=$1 AND subject_id=$2 AND handle<>$3',[kind,id,handle]);
- const existing=(await query.query<{kind:string;subject_id:string}>('SELECT kind,subject_id FROM handle_reservations WHERE handle=$1',[handle])).rows[0];
- if(existing&&(existing.kind!==kind||existing.subject_id!==id)){const error=Object.assign(new Error('Handle is taken'),{code:'23505'});throw error;}
- await query.query('INSERT INTO handle_reservations(handle,kind,subject_id) VALUES($1,$2,$3) ON CONFLICT(handle) DO UPDATE SET handle=EXCLUDED.handle WHERE handle_reservations.kind=EXCLUDED.kind AND handle_reservations.subject_id=EXCLUDED.subject_id RETURNING handle',[handle,kind,id]).then(result=>{if(!result.rows.length)throw Object.assign(new Error('Handle is taken'),{code:'23505'});});
-}
+/** The handle namespace accounts and groups share: its shape lives in contracts; reservations are the identity module's. */
+export { HANDLE_RE, isValidHandle, RESERVED_HANDLES } from '@artifactbin/contracts';

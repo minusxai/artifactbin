@@ -1,8 +1,7 @@
 import { JOIN_RELATIONS, dismissPendingRelations } from '@/lib/social';
-import { setAutoAcceptMentions } from '@/lib/accounts';
 import {canAnnotate} from '@artifactbin/contracts';
 import {notificationChanged,notificationsChanged} from './write';
-import {getDb} from '@/lib/platform';
+import {getDb,lockSubjects,services} from '@/lib/platform';
 import { MembershipError } from '@/lib/artifacts';
 import { effectiveRole } from '@/lib/artifact-access';
 import { type ArtifactRow } from '@/lib/artifacts';
@@ -30,9 +29,14 @@ export async function membershipInbox(actor:AccessActor,offset=0,onlyId:string|n
 export async function updateMembershipInbox(actor:AccessActor,input:{autoAccept?:boolean;read?:string;readAll?:boolean;revision?:number;block?:string;unblock?:string}){
  if(!actor.userId)throw new MembershipError('Sign in to update notifications');
  const db=await getDb();
+ // The preference is the account's (the identity module's row): set before the inbox transaction, never inside it.
+ if(input.autoAccept!==undefined){
+  if(!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind<>'guest'",[actor.userId])).rows.length)throw new MembershipError('Sign in to update notifications');
+  await services().identity.setAutoAcceptMentions({userId:actor.userId,autoAccept:input.autoAccept===true});
+ }
  await db.transaction(async tx=>{
-  const account=await tx.query("SELECT id FROM users WHERE id=$1 AND kind<>'guest' FOR UPDATE",[actor.userId]);if(!account.rows.length)throw new MembershipError('Sign in to update notifications');
-  if(input.autoAccept!==undefined)await setAutoAcceptMentions(tx,actor.userId!,input.autoAccept);
+  const account=await tx.query("SELECT id FROM users WHERE id=$1 AND kind<>'guest'",[actor.userId]);if(!account.rows.length)throw new MembershipError('Sign in to update notifications');
+  await lockSubjects(tx,'inbox',[actor.userId!]);
   if(input.readAll){
    // Acknowledge the current revisions across the whole inbox, including unloaded pages.
    const changed=(await tx.query<{id:string;revision:number}>('UPDATE member_notifications SET seen_revision=revision,read_at=now() WHERE recipient_id=$1 AND (seen_revision<revision OR read_at IS NULL) RETURNING id,revision',[actor.userId])).rows;

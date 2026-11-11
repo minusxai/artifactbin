@@ -6,10 +6,11 @@
  * restore (restoreTrashedSubtree). An unchanged republish (replaceArtifactInTx's early return) writes nothing and
  * stamps no publisher, so it activates nothing. Metadata, sharing and transfer never change the publisher.
  *
- * SERIALIZED PER PUBLISHER: the check locks each affected publisher's `users` row FOR UPDATE before counting, so two
- * transactions that add to one publisher's count run one after the other and the second counts the first. LOCK
- * ORDER (lib/artifact-access locks.ts): the account rows are facts, step 3, taken after the transaction's artifacts,
- * in `lockOrder`; a deadlock with a writer in another order aborts one, which rolls back whole.
+ * SERIALIZED PER PUBLISHER: the check takes each affected publisher's schedule-capacity advisory lock (lib/platform
+ * lockSubjects; the account row is identity's and never locked by the app) before counting, so two transactions that
+ * add to one publisher's count run one after the other and the second counts the first. LOCK ORDER (lib/artifact-access
+ * locks.ts): a tail after the transaction's artifacts, in `lockOrder`; a deadlock with a writer in another order
+ * aborts one, which rolls back whole.
  *
  * WHO OWNS RECURRING WORK (contract §7): with `SCHEDULES__OWNER=minusx` the same transactions refuse to activate any
  * page schedule the page's live head did not already declare before the write (`schedules_owned_by_minusx`, 409), by
@@ -20,9 +21,8 @@
  * schedule export is the way back.
  */
 import {FUNCTION_SCHEDULE_LIMIT,type Queryable} from '@artifactbin/contracts';
-import {lockOrder} from '@/lib/artifact-access';
 import {DatasetError} from '@/lib/datasets';
-import {schedulesOwner} from '@/lib/platform';
+import {lockSubjects,schedulesOwner} from '@/lib/platform';
 
 /** A write refused because it would activate page schedules: its code and the lines a caller shows (`details`). */
 export class ScheduleRefusal extends DatasetError {
@@ -62,8 +62,8 @@ export async function assertScheduleCapacity(tx:Queryable,ids:readonly string[],
   const added=(await liveSchedules(tx,ids)).filter(entry=>!before.has(keyOf(entry)));
   if(added.length)throw new SchedulesOwnedByMinusxError(added);
  }
- const publishers=(await tx.query<{publisher:string}>(`SELECT DISTINCT a.content_publisher_user_id AS publisher ${HEADS} WHERE ${LIVE_SCHEDULED} AND a.id=ANY($1::text[]) AND a.content_publisher_user_id IS NOT NULL`,[ids])).rows.map(r=>r.publisher).sort(lockOrder);
- for(const publisher of publishers)await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[publisher]);
+ const publishers=(await tx.query<{publisher:string}>(`SELECT DISTINCT a.content_publisher_user_id AS publisher ${HEADS} WHERE ${LIVE_SCHEDULED} AND a.id=ANY($1::text[]) AND a.content_publisher_user_id IS NOT NULL`,[ids])).rows.map(r=>r.publisher);
+ await lockSubjects(tx,'schedule-capacity',publishers);
  for(const publisher of publishers){
   const total=(await tx.query<{n:number}>(`SELECT count(*)::int AS n ${HEADS} CROSS JOIN LATERAL jsonb_object_keys(v.function_schedules) AS k(name) WHERE ${LIVE_SCHEDULED} AND a.content_publisher_user_id=$1`,[publisher])).rows[0]?.n??0;
   if(total>FUNCTION_SCHEDULE_LIMIT)throw new ScheduleLimitError(total);

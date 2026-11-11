@@ -5,11 +5,11 @@
  * Its own file because the registry imports the operations: an erase importer must not load
  * TESTUSER_OPERATIONS halfway through that cycle.
  */
-import { TESTUSER_LIMITS } from '@artifactbin/contracts';
+import { IDENTITY_OWNED_TABLES, TESTUSER_LIMITS } from '@artifactbin/contracts';
 import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations';
 import { objectStore } from '@/lib/object-store';
-import { getDb, retryOnConflict, TABLES } from '@/lib/platform';
+import { getDb, retryOnConflict, services, TABLES } from '@/lib/platform';
 
 /** What an erase removed — what the person was holding at the moment it ran. */
 interface TestUserErased { erased: boolean; artifacts: number; sessions: number }
@@ -29,7 +29,7 @@ const ERASE_BY_ARTIFACT = TABLES.flatMap((table) => {
   return key ? [{ table: table.name, key }] : [];
 });
 const ERASE_BY_USER = TABLES.flatMap((table) =>
-  table.name === 'users' || !table.columns.some((col) => col.name === 'user_id') ? [] : [table.name],
+  (IDENTITY_OWNED_TABLES as readonly string[]).includes(table.name) || !table.columns.some((col) => col.name === 'user_id') ? [] : [table.name],
 );
 
 /**
@@ -39,7 +39,9 @@ const ERASE_BY_USER = TABLES.flatMap((table) =>
  * parent's artifact COUNT quota is charged against the parent's token, so the
  * slots come back with the rows.
  *
- * ONE transaction for the data. The live browser sessions are closed OUTSIDE
+ * ONE transaction for the app's data, then the identity module erases the identity rows (the account row, its
+ * tokens, memberships and handle) in its own: a failure between the two leaves only an account row that owns
+ * nothing, which the next erase or sweep finishes. The live browser sessions are closed OUTSIDE
  * it (the session service is an HTTP call, and PGLite serialises one connection
  * — reaching out from inside the callback is the deadlock), before the rows go,
  * so a page cannot write through an identity that is about to disappear. Its
@@ -56,11 +58,11 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
   await closeTestUserSessions(testUserId);
   const db = await getDb();
   let picture: string | null = null;
-  // It locks the account before the shares and artifacts that name it, against the global lock order
-  // (lib/artifact-access locks.ts): a deadlock with a guarded write aborts one side, and the whole erasure is retried.
+  // A deadlock with a guarded write (it takes artifacts by owner, against the global lock order: lib/artifact-access
+  // locks.ts) aborts one side, and the whole erasure is retried.
   const erased = await retryOnConflict(() => db.transaction(async (tx) => {
     const user = await tx.query<{ id: string; image_key: string | null }>(
-      "SELECT id, image_key FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
+      "SELECT id, image_key FROM users WHERE id = $1 AND kind = 'testuser'", [testUserId],
     );
     if (!user.rows.length) return { erased: false, artifacts: 0, sessions };
     picture = user.rows[0]!.image_key;
@@ -83,9 +85,9 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
     await tx.query('DELETE FROM relations WHERE initiated_by=$1',[testUserId]);
     await tx.query('DELETE FROM user_blocks WHERE blocked_user_id=$1',[testUserId]);
     await tx.query('DELETE FROM annotations WHERE author_user_id = $1', [testUserId]);
-    await tx.query('DELETE FROM users WHERE id = $1', [testUserId]);
     return { erased: true, artifacts: ids.length, sessions };
   }));
+  if (erased.erased) await services().identity.eraseTestUser({ userId: testUserId });
   // After the commit, and never able to fail the erase: an object the store has
   // already lost is housekeeping nobody can do, not a reason to keep the row.
   if (picture) await objectStore().delete(picture).catch(() => {});

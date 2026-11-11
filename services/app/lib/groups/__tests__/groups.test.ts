@@ -78,7 +78,7 @@ describe('independent group owner contracts',()=>{
   await inviteGroupMember(owner.id,group.id,invited.email,'viewer');
   expect(await getGroupDetail(outsider.id,group.id)).toBeNull();
   await expect(acceptGroupInvitations(outsider.id,invited.email)).rejects.toThrow('verified_email_mismatch');
-  const db=await getDb();expect(await db.transaction(tx=>acceptGroupInvitations(invited.id,invited.email,tx))).toEqual([group.id]);
+  expect(await acceptGroupInvitations(invited.id,invited.email)).toEqual([group.id]);
   expect(await getGroupRole(invited.id,group.id)).toBe('viewer');
   expect((await getGroupDetail(invited.id,group.id))?.invitations).toBeUndefined();
   expect((await getGroupDetail(owner.id,group.id))?.invitations).toEqual([]);
