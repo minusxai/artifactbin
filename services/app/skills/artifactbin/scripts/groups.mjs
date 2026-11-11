@@ -17,6 +17,8 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs link GROUP OTHER_GROUP
        node scripts/groups.mjs unlink GROUP OTHER_GROUP --yes
        node scripts/groups.mjs delete GROUP --handle HANDLE --yes
+       node scripts/groups.mjs addresses GROUP
+       node scripts/groups.mjs allow|disallow GROUP ORIGIN... [--kind connect|img|media] --yes
 Flags: --server ORIGIN, --json, --output FILE (exclusive; never overwrites), --help.
 Examples:
   node scripts/groups.mjs create design_crit --name "Design Crit"
@@ -63,9 +65,9 @@ async function command({sub,values,positionals},options){
  // These checks precede even identity lookup HTTP, so refusal cannot accidentally mutate.
  confirmation(sub,values);
  const pageVerb=['share','unshare','move'].includes(sub);
- if(sub==='invite'){
+ if(['invite','allow','disallow'].includes(sub)){
   if(positionals.length<2)throw new ToolError('invalid_arguments',
-  'Supply GROUP and one or more emails.',2);
+  'Supply GROUP and one or more '+(sub==='invite'?'emails.':'origins.'),2);
  }else positional(positionals,sub==='list'?0:['role','remove','uninvite','link',
   'unlink'].includes(sub)?2:1);
  let role;
@@ -121,6 +123,10 @@ async function command({sub,values,positionals},options){
   values.cursor);
   return {...shown,pages:await client.request('/api/artifacts?'+query)};
  }
+ if(sub==='addresses')return client.request(base+'/allowed-addresses');
+ if(['allow','disallow'].includes(sub))return write(base+'/allowed-addresses',sub==='allow'?'POST':
+  'DELETE',{[enumValue(values.kind??'connect',['connect','img','media'],'kind')]:
+  positionals.slice(1)});
  if(sub==='update')return write(base,'PATCH',patch);
  if(sub==='reparent')return write(base+'/parent','PUT',{parent_id:values.root?null:
   (await resolveGroup(client,values.parent)).group.id,from_parent_id:group.parent_id??null});

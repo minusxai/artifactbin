@@ -77,7 +77,9 @@ const commands = {
       yes: flag('boolean')},
     unshare: {group: flag(), datasets: flag('boolean'), yes: flag('boolean')},
     move: {group: flag(), personal: flag('boolean'), yes: flag('boolean')},
-    link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')}
+    link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')},
+    addresses: {}, allow: {kind: flag(), yes: flag('boolean')},
+    disallow: {kind: flag(), yes: flag('boolean')}
   }},
   comment: {
     sub: {

@@ -74,6 +74,11 @@ default. Last-editor removal, demotion and leave are refused. Update changes nam
 not handle. Group handles have 3–32 lowercase letters/digits with internal underscores; no
 hyphens or edge underscores. Examples use `design_crit`.
 
+Group addresses: a page asks each reader before it calls an address outside the default policy. An
+editor's `allow GROUP ORIGIN... [--kind connect|img|media] --yes`, after consent, stops that question
+for every member of the group and its subgroups on any page; `addresses GROUP` lists, `disallow`
+removes. Scripts, styles, frames and wildcards are always asked page by page.
+
 ## HTTP contract
 
 Use the normal origin-bound authenticated HTTP API only when the script cannot do the job.
