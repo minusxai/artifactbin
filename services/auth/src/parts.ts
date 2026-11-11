@@ -143,6 +143,15 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
           c.res.headers.set(CODE_DELIVERY_HEADER, usesDevOutbox(origin) ? 'operator_outbox' : 'email');
         }
       });
+      // A sign-in sets a session cookie, so another site must not be able to start one in this browser (login
+      // CSRF). Better Auth checks Origin only on requests that already carry a cookie. No Origin: not a browser.
+      a.post('/api/auth/sign-in/*', async (c, next) => {
+        const origin = c.req.header('origin');
+        const accepted = acceptedOriginsOf(c.req.raw, o.trustedHops ?? 0, readEnv(o.env, 'APP__PUBLIC_BASE_URL'), aliasOriginsOf(o));
+        if ((origin !== undefined && !accepted.includes(origin)) || c.req.header('sec-fetch-site') === 'cross-site')
+          return c.json({ error: 'forbidden_origin' }, 403);
+        return next();
+      });
       if (o.sessions.handler) a.all('/api/auth/*', async c => {
         const response=await o.sessions.handler!(c.req.raw);
         if(!o.admitIdentity||response.status>=400)return response;

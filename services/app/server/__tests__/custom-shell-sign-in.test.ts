@@ -86,3 +86,12 @@ it('keeps the code\'s attempt cap: five wrong codes spend it',async()=>{
  expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
  expect((await post('/api/auth/sign-in/email-otp',{email,otp:CODE})).status).toBe(200);
 });
+
+it('refuses a sign-in another site starts, so it cannot plant a session; no Origin (a script) and this origin pass',async()=>{
+ const email=`crosssite@${DOMAIN}`;
+ expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
+ const foreign=await post('/api/auth/sign-in/email-otp',{email,otp:CODE},{origin:'https://evil.example'});
+ expect(foreign.status).toBe(403);expect(foreign.headers.getSetCookie()).toEqual([]);
+ expect((await post('/api/auth/sign-in/email-otp',{email,otp:CODE},{'sec-fetch-site':'cross-site'})).status).toBe(403);
+ expect((await post('/api/auth/sign-in/email-otp',{email,otp:CODE},{origin:ORIGIN})).status).toBe(200);
+});
