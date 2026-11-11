@@ -88,10 +88,10 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
     for (const table of IDENTITY_OWNED_TABLES)
       if (await relationKind(tx, app, table) === 'r' && !await relationKind(tx, auth, table)) moving.push(table);
     if (moving.length) {
-      try { for (const statement of identityMoveStatements({auth, app}, moving)) await tx.query(statement); }
+      try { for (const table of moving) await tx.query(`ALTER TABLE ${app}.${table} SET SCHEMA ${auth}`); }
       catch (error) {
         if ((error as {code?: string}).code !== '42501') throw error;
-        throw new IdentityNotReady(`identity: ${moving.map(table => `${app}.${table}`).join(', ')} must move to ${auth} once, as a role that owns them and may create in ${auth}:\n${identityMoveStatements({auth, app}, moving).join(';\n')};`);
+        throw new IdentityNotReady(`identity: ${moving.map(table => `${app}.${table}`).join(', ')} must move to ${auth} once, as a superuser (identityMoveStatements), for example:\n${identityMoveStatements({auth, app, read, owner: '<the identity role>'}).join(';\n')};`);
       }
     }
     await ensureTable(tx, IDENTITY_TABLES, {schema: auth});
@@ -109,9 +109,21 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
   });
 }
 
-/** The one-time move of base tables left in the app's schema into the identity module's own. */
-export function identityMoveStatements(schemas: Pick<IdentitySchemas, 'auth' | 'app'>, tables: readonly string[] = IDENTITY_OWNED_TABLES): string[] {
-  return tables.map(table => `ALTER TABLE ${schemas.app}.${table} SET SCHEMA ${schemas.auth}`);
+/**
+ * THE ONE-TIME MOVE for a split-role database whose identity tables (and identity views) the app role still owns, run
+ * once by a superuser with every Artifactbin process stopped, before the new version boots: each base table moves into
+ * AUTH__SCHEMA (rows, indexes and constraints with it) and is handed to the identity role, the read schema is handed to
+ * it too, and the former views (the app role's) are dropped for the identity boot to create again. `owner` is the
+ * identity role. In a single-role install `ensureIdentitySchema` moves the tables itself.
+ */
+export function identityMoveStatements(schemas: IdentitySchemas & {owner: string}): string[] {
+  const auth = plainIdentifier(schemas.auth, 'auth schema'), app = plainIdentifier(schemas.app, 'app schema'), read = plainIdentifier(schemas.read, 'read schema');
+  const owner = /^<.*>$/.test(schemas.owner) ? schemas.owner : plainIdentifier(schemas.owner, 'owner role');
+  return [
+    ...IDENTITY_OWNED_TABLES.flatMap(table => [`ALTER TABLE IF EXISTS ${app}.${table} SET SCHEMA ${auth}`, `ALTER TABLE IF EXISTS ${auth}.${table} OWNER TO ${owner}`]),
+    `ALTER SCHEMA ${read} OWNER TO ${owner}`,
+    `DROP VIEW IF EXISTS ${['groups', 'memberships', 'hierarchy', 'users', 'sessions', 'tokens'].map(view => `${read}.${view}`).join(', ')} CASCADE`,
+  ];
 }
 
 /** A `pg` pool as the store's database: each transaction on one checked-out client, released after. */

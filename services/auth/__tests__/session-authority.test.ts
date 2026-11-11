@@ -106,3 +106,17 @@ describe('MinusX job events (contracts EVENTS_PUBLISH_PATH)',()=>{
   expect((await post(host({emit:async()=>{},publish:async()=>{throw Error('database down');}}),[job('e1')])).status).toBe(503);
  });
 });
+
+describe('the identity tables\' one-time move (identityMoveStatements)',()=>{
+ it('moves every identity table, hands it and the read schema to the identity role, and drops the former views',async()=>{
+  const {identityMoveStatements}=await import('../src/identity-store');
+  const statements=identityMoveStatements({auth:'afbin_auth',app:'afbin_app',read:'identity',owner:'afbin_auth_role'});
+  for(const table of ['users','tokens','handle_reservations','groups','group_members','group_invitations','group_hierarchy','group_mail_outbox']){
+   expect(statements).toContain(`ALTER TABLE IF EXISTS afbin_app.${table} SET SCHEMA afbin_auth`);
+   expect(statements).toContain(`ALTER TABLE IF EXISTS afbin_auth.${table} OWNER TO afbin_auth_role`);
+  }
+  expect(statements).toContain('ALTER SCHEMA identity OWNER TO afbin_auth_role');
+  expect(statements.at(-1)).toBe('DROP VIEW IF EXISTS identity.groups, identity.memberships, identity.hierarchy, identity.users, identity.sessions, identity.tokens CASCADE');
+  expect(()=>identityMoveStatements({auth:'a',app:'b; drop',read:'identity',owner:'x'})).toThrow(/plain/);
+ });
+});

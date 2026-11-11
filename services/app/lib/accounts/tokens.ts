@@ -238,7 +238,7 @@ export async function revokeToken(id: string): Promise<boolean> {
 
 /**
  * Stamp `last_used_at` for a token the app just trusted. SAMPLED: the row is written only when the
- * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one UPDATE a minute, not one per
+ * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one identity write a minute, not one per
  * request. Never throws to the caller — attribution, not authorization. Called once per request from the
  * place the app first trusts a token-bearing actor (lib/authentication/request-identity), in BOTH shapes: the bearer it resolves
  * and the actor the proxy attaches (the proxy's reader is SELECT-only and cannot stamp).
@@ -246,7 +246,11 @@ export async function revokeToken(id: string): Promise<boolean> {
 export const TOUCH_INTERVAL_MS = 60 * 1000;
 export async function touchToken(id: string): Promise<void> {
   try {
-    await services().identity.touchToken({ id });
+    // The sample is read here first (the tokens view's last_used_at), so the identity module (an HTTP hop with an
+    // auth host) is asked at most once a minute per token, not on every request.
+    const due = (await (await getDb()).query(
+      "SELECT 1 FROM tokens WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '60 seconds')", [id])).rows.length > 0;
+    if (due) await services().identity.touchToken({ id });
   } catch {
     // Usage attribution must never turn a trusted request into a failure.
   }

@@ -7,6 +7,9 @@
  *  - both readers are refused (42501) every base identity table, every write through a view, and a row lock;
  *  - both readers SELECT the views, no view exposes a secret column, and the app role, with its real search_path
  *    (`app, identity`), resolves `users` to the view and runs the app's own access SQL over it correctly.
+ * And the production upgrade: a database whose app role still owns the identity tables (and the former identity views)
+ * refuses the identity boot with the one-time move named; after `identityMoveStatements`, run by a superuser, it boots,
+ * every row is kept, and the app role reads them only through the views.
  * Runs in the `integration` project; skipped without the image.
  */
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -15,7 +18,7 @@ import {join} from 'node:path';
 import pg from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {IDENTITY_OWNED_TABLES,IDENTITY_VIEWS,type Queryable} from '@artifactbin/contracts';
-import {createIdentityStore,ensureIdentitySchema,identityDbOf} from '@artifactbin/auth/identity-store';
+import {IdentityNotReady,createIdentityStore,ensureIdentitySchema,identityDbOf,identityMoveStatements} from '@artifactbin/auth/identity-store';
 import {SECRET_COLUMNS} from '@artifactbin/auth/identity-store/schema';
 import {ensureHumanAuthSchema} from '@artifactbin/auth';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
@@ -28,7 +31,7 @@ const ROOT=join(__dirname,'../../../../..');
 describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=>{
  let container='',port=0;
  const pools:pg.Pool[]=[];
- const pool=(user:string,searchPath:string)=>{const p=new pg.Pool({host:'127.0.0.1',port,user,password:'pw',database:'postgres',options:`-c search_path=${searchPath}`,max:2});pools.push(p);return p;};
+ const pool=(user:string,searchPath:string,database='postgres')=>{const p=new pg.Pool({host:'127.0.0.1',port,user,password:'pw',database,options:`-c search_path=${searchPath}`,max:2});pools.push(p);return p;};
  const code=(promise:Promise<unknown>)=>promise.then(()=>'ok',(error:{code?:string})=>error.code??String(error));
  let superuser:pg.Pool,app:pg.Pool,auth:pg.Pool,minusx:pg.Pool;
 
@@ -149,5 +152,37 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
    expect(await facts.userKind(owner)).toBe('account');
    await client.query('COMMIT');
   }finally{client.release();}
+ });
+
+ it('upgrades a database whose app role owns the identity tables: refused until the one-time move, then every row kept and only the views readable', async()=>{
+  await superuser.query('CREATE DATABASE upgrade');
+  const root=pool('postgres','public','upgrade');
+  // The former layout: identity's tables in the app's schema, the identity views the app's.
+  await root.query(`REVOKE CREATE ON DATABASE upgrade FROM PUBLIC; CREATE SCHEMA app AUTHORIZATION artifactbin_app; CREATE SCHEMA auth AUTHORIZATION artifactbin_auth;
+   CREATE SCHEMA identity AUTHORIZATION artifactbin_app; GRANT USAGE ON SCHEMA app TO artifactbin_auth; GRANT USAGE ON SCHEMA auth TO artifactbin_app`);
+  const oldApp=pool('artifactbin_app','app','upgrade');
+  await oldApp.query(`CREATE TABLE users (id text PRIMARY KEY, email text, kind text NOT NULL DEFAULT 'account'); INSERT INTO users(id,email) VALUES ('usr_kept','kept@example.com');
+   CREATE TABLE tokens (id text PRIMARY KEY, token_hash text NOT NULL, user_id text); INSERT INTO tokens VALUES ('tok_kept','hash-kept','usr_kept');
+   CREATE TABLE groups (id text PRIMARY KEY, handle text NOT NULL, name text NOT NULL, created_by text NOT NULL); INSERT INTO groups VALUES ('grp_kept','kept','Kept','usr_kept');
+   CREATE VIEW identity.users AS SELECT id, true AS active FROM app.users`);
+  for(const statement of SCHEMA_STATEMENTS)await oldApp.query(statement);
+  await oldApp.query("INSERT INTO identity_settings(id,deployment_mode) VALUES('installation','public')");
+  await root.query('GRANT SELECT ON app.deployment_members, app.deployment_state, app.identity_settings TO artifactbin_auth');
+  const authDb=identityDbOf(pool('artifactbin_auth','auth','upgrade')),schemas={auth:'auth',app:'app',read:'identity'};
+  await expect(ensureIdentitySchema(authDb,schemas)).rejects.toBeInstanceOf(IdentityNotReady);
+  await expect(ensureIdentitySchema(authDb,schemas)).rejects.toThrow(/ALTER TABLE IF EXISTS app\.users SET SCHEMA auth/);
+  // The operator's one-shot, then the grants as grants.sql gives them, then the identity boot.
+  for(const statement of identityMoveStatements({...schemas,owner:'artifactbin_auth'}))await root.query(statement);
+  await root.query(`REVOKE USAGE ON SCHEMA auth FROM artifactbin_app; GRANT USAGE ON SCHEMA identity TO artifactbin_app;
+   ALTER DEFAULT PRIVILEGES FOR ROLE artifactbin_auth IN SCHEMA identity GRANT SELECT ON TABLES TO artifactbin_app`);
+  await ensureIdentitySchema(authDb,schemas);
+  const app2=pool('artifactbin_app','app,identity','upgrade');
+  expect((await app2.query("SELECT n.nspname AS schema,c.relkind::text AS kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass('users')")).rows).toEqual([{schema:'identity',kind:'v'}]);
+  expect((await app2.query('SELECT id,email,active FROM users')).rows).toEqual([{id:'usr_kept',email:'kept@example.com',active:true}]);
+  expect((await app2.query('SELECT id,user_id FROM tokens')).rows).toEqual([{id:'tok_kept',user_id:'usr_kept'}]);
+  expect((await app2.query('SELECT id,deleted_at FROM groups')).rows).toEqual([{id:'grp_kept',deleted_at:null}]);
+  for(const table of ['users','tokens','groups'])expect(await code(app2.query(`SELECT 1 FROM auth.${table}`)),table).toBe('42501');
+  expect((await root.query("SELECT tablename,tableowner FROM pg_tables WHERE schemaname='auth' AND tablename IN ('users','tokens','groups') ORDER BY 1")).rows)
+   .toEqual(['groups','tokens','users'].map(tablename=>({tablename,tableowner:'artifactbin_auth'})));
  });
 });
