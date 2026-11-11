@@ -51,10 +51,21 @@ export const NativeIndentation=Extension.create({
 /** Follow the original content through splits; a copied identity must not move an existing comment to new text. */
 export const NativeIdentityRepair=Extension.create({
  name:'nativeIdentityRepair',
- addProseMirrorPlugins(){return [new Plugin({appendTransaction(transactions,_old,state){
+ addProseMirrorPlugins(){
+  // Keep the first original content point across typing transactions. Re-seeding it
+  // from the block start would mistake prepended text for the original at a later split.
+  const points=(doc:PMNode,previous=new Map<string,number>(),tr?:Transaction)=>{
+   const next=new Map<string,number>();
+   doc.descendants((node,pos)=>{if(!node.isText)for(const key of ['afId','codeAfId']){
+    const id=node.attrs[key];if(typeof id!=='string'||!id||next.has(id))continue;
+    const point=previous.get(id);next.set(id,point===undefined?pos+1:tr?tr.mapping.map(point,1):point);
+   }});return next;
+  };
+  const plugin:Plugin<Map<string,number>>=new Plugin({
+   state:{init:(_,state)=>points(state.doc),apply:(tr,previous)=>points(tr.doc,previous,tr)},
+   appendTransaction(transactions,_old,state){
   if(!transactions.some(tr=>tr.docChanged))return null;
-  const original=new Map<string,number>();
-  _old.doc.descendants((node,pos)=>{if(!node.isText)for(const key of ['afId','codeAfId']){const id=node.attrs[key];if(typeof id==='string'&&id)original.set(id,transactions.reduce((point,tr)=>tr.mapping.map(point,1),pos+1));}});
+  const original=plugin.getState(state)!;
   const retained=new Map<string,number>();let repair:Transaction|undefined;
   state.doc.descendants((node,pos)=>{if(!node.isText)for(const key of ['afId','codeAfId']){
    const id=node.attrs[key];if(typeof id!=='string'||!id)continue;
@@ -68,5 +79,5 @@ export const NativeIdentityRepair=Extension.create({
    if(attrs!==node.attrs){repair??=state.tr;repair.setNodeMarkup(pos,undefined,attrs);}
   });
   return repair?.setMeta('addToHistory',false)??null;
- }})];},
+ }});return [plugin];},
 });

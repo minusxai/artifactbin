@@ -306,6 +306,15 @@ it('Enter at the beginning keeps the anchor with the original paragraph content'
  expect(e.view.dom.children[0]?.hasAttribute('data-af-id')).toBe(false);
 });
 
+it('prepended typing and deletion keep the original-content anchor through a later split',()=>{
+ const e=single('<p data-af-id="original">Original content</p>');
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,1)));
+ e.replay([{text:'Hi'},{key:'Backspace'},{text:'!'},{key:'Enter'},{text:'Next '}]);
+ expect(e.view.dom.querySelector('[data-af-id="original"]')?.textContent).toBe('Next Original content');
+ expect(e.view.dom.children[0]?.textContent).toBe('H!');
+ expect(e.view.dom.children[0]?.hasAttribute('data-af-id')).toBe(false);
+});
+
 it('two peers preserve a task comment identity through split, peer typing and local undo/redo',()=>{
  const initial=createRegionState('rich-native-v1','<ul data-type="taskList"><li data-af-id="task" data-type="taskItem" data-checked="false"><p data-af-id="task-text">Task work</p></li></ul>').state;
  let state=initial;
