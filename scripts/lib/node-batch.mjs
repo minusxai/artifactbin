@@ -43,6 +43,10 @@ export const NODE_BATCH_GUARDED = Object.freeze([
   'services/app/lib/html-runtime/__tests__/build.test.ts',
   // The live dataset channel's events and counts: failed on main after merge.
   'services/app/lib/publish/__tests__/live-data-events.test.ts',
+  // The skill's page check, read through its own scripts: failed on main after the skill dropped GraphQL, and the
+  // skill's own tests (a guard list) do not cover what the check reports for a page's calls.
+  'services/app/lib/html-publication-bundle/__tests__/author-check.test.ts',
+  'services/app/lib/html-publication-bundle/__tests__/check-steps.test.ts',
 ]);
 
 /** The pr fast lists whose files already run on every pull request. */
