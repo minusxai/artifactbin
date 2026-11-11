@@ -73,8 +73,10 @@ describe('one installable native HTML author skill',()=>{
   for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|resolvers\/[a-z0-9-]+\.ts|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
   // Pages import components as @afbin/<component> and the preview fetches the runtime and libraries from the server (D20).
   expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
-  for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
+  for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
   expect(members.some(name=>/^components\/(?:deck-gl|mermaid)/.test(name))).toBe(false);
+  // GraphQL is deprecated: the archive ships no GraphQL command or local GraphQL dataset preview.
+  for(const gone of ['scripts/graphql.mjs','scripts/toolbox-graphql.mjs','scripts/preview-datasets.mjs','scripts/preview-sessions.mjs'])expect(members).not.toContain(gone);
   // The size budget is lib/skills/__tests__/skill-archive-budget.test.ts, which the pr fast guard tier runs.
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
@@ -100,7 +102,7 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','sql','graphql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','sql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
    // The installed autofix runs standalone and edits only the selected file.
    const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
    expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);

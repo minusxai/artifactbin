@@ -142,8 +142,7 @@ group's job runs): `node scripts/events.mjs watch --help`.
   inside a `data-af-editable` region (a doc) is the exception, since people may be typing in
   it: `node scripts/doc.mjs read ID --output doc.md`, edit doc.md, then `node scripts/doc.mjs
   write doc.md`, which merges your edit with their
-  typing ([live docs](references/live-docs.md)). Editing an older page that uses `gql`: it keeps
-  working as it is; write any new code with `sql`, `fetch` and `state`.
+  typing ([live docs](references/live-docs.md)).
 - **Check.** A starter's Usage names its steps files and check command; add a step for each
   requested value they don't check. Without a starter, write one short steps file of
   `step('label', …)` checks (wait for your data, check the requested values and behaviour), then

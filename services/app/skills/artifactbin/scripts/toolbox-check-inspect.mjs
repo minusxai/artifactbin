@@ -64,7 +64,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   page.on('console', message => {
     if (message.type() === 'error') {
       const url = message.location?.().url;
-      // A refused sql, function or GraphQL call is reported once, as a call failure (below).
+      // A refused page call is reported once, as a call failure (below).
       if (url && parts.callKind(url)) return;
       if (url && classify(url)) record(telemetry, {url, error: message.text()});
       else if (!(url && offPlatform(url))) record(consoleErrors, message.text());
@@ -74,8 +74,9 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   // aborts are not page failures.
   let navigation = 0;
   const started = new WeakMap();
-  // The page's dataset reads, on load and in its steps: its sql, its functions, an older page's
-  // GraphQL and its live dataset cells. check fails a linked dataset that none read.
+  // The page's dataset reads, on load and in its steps: its sql, its functions, its live dataset
+  // cells (and a page published before sql, its /graphql posts). check fails a linked dataset
+  // that none read.
   let datasetReads = 0;
   const cell = /^\/api\/(?:artifacts|local-connection)\/[^/]+\/regions\/cell(?::|%3A)/i;
   page.on('request', request => {

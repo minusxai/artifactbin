@@ -5,12 +5,20 @@ it('binds targets to one origin and rejects target/server mismatches',async()=>{
  expect(()=>resolveTarget('https://example.test/a/PAGE12','https://other.test')).toThrow();
  expect(()=>resolveTarget('https://user:secret@example.test/a/PAGE12')).toThrow();
 });
-it('validates GraphQL selected operation type before transport',async()=>{
- const {selectedOperation}=await import('../../../skills/artifactbin/scripts/toolbox-graphql.mjs');
- expect(await selectedOperation('query A{x} mutation B{y}','B','mutate')).toBe('mutation');
- await expect(selectedOperation('mutation {increment}',undefined,'query')).rejects.toThrow();
- await expect(selectedOperation('query A{x} query B{y}',undefined,'query')).rejects.toThrow();
- await expect(selectedOperation('subscription {x}',undefined,'query')).rejects.toThrow();
+it('counts an older page\'s /graphql post as a page call and reports its refusal like any other, with no GraphQL replay',async()=>{
+ const {callKind,calls}=await import('../../../skills/artifactbin/scripts/toolbox-check-calls.mjs');
+ expect(callKind('https://h.test/api/artifacts/PAGE12/graphql')).toEqual({kind:'graphql'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/sql')).toEqual({kind:'sql'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/fn/notes')).toEqual({kind:'fn',name:'notes'});
+ expect(callKind('https://h.test/api/artifacts/PAGE12/annotations')).toBeNull();
+ const response=(status:number,body:unknown)=>({url:()=>'https://h.test/api/artifacts/PAGE12/graphql',status:()=>status,json:async()=>body,
+  request:()=>({postDataJSON:()=>({query:'query{sales{amount}}'}),method:()=>'POST'})});
+ const into:any[]=[],waits:Promise<void>[]=[];
+ // A 200 is not a refusal; a refused one keeps its status as the code and is never asked again.
+ calls(response(200,{data:{sales:[]}}),{pageErrorsBefore:0},into,waits,callKind);
+ calls(response(403,{errors:[{message:'denied'}]}),{pageErrorsBefore:0},into,waits,callKind);
+ await Promise.all(waits);
+ expect(into).toEqual([{field:'graphql',kind:'graphql',message:'http_403',code:'http_403',pageErrorsBefore:0}]);
 });
 it('retains exact journal snapshots after unknown writes and refuses cross-origin replay',async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
@@ -45,7 +53,7 @@ it('flushes watch events before checkpoints, deduplicates replay and validates a
 });
 it('classifies unreadable successful write bodies as unknown without automatic replay',async()=>{
  const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
- for(const route of ['/api/artifacts','/api/artifacts/PAGE12/annotations','/api/artifacts/PAGE12/graphql']){
+ for(const route of ['/api/artifacts','/api/artifacts/PAGE12/annotations','/api/artifacts/PAGE12/sql']){
   let calls=0;const client=makeClient('https://example.test',{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>{calls++;return new Response('{"truncated":',{status:200});}});
   await expect(client.request(route,{method:'POST',body:{},unsafe:true})).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(calls).toBe(1);
  }
@@ -78,19 +86,6 @@ it('exports actual image bytes exclusively and reports dimensions',async()=>{
   await expect(exportCommand({values:{format:'html',element:'#orders-chart',output:path.join(root,'copy.html')},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'unsupported_element',exit:2});
   const {parseCommand}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
   expect(parseCommand('export',['PAGE12','--format','png','--element','#orders-chart','--output','x.png']).values.element).toBe('#orders-chart');
- }finally{await rm(root,{recursive:true,force:true});}
-});
-it('validates selected GraphQL against SDL and never replays an unknown mutation',async()=>{
- const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
- const {graphqlCommand}=await import('../../../skills/artifactbin/scripts/graphql.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'author-graphql-')),document=path.join(root,'op.graphql');
- try{
-  let writes=0;const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(_url:any,init:any)=>{if(init.method==='GET')return Response.json({sdl:'type Query{count:Int} type Mutation{increment:Int}',revision:'3'});writes++;return new Response('{',{status:200});}};
-  await writeFile(document,'mutation { increment }');
-  await expect(graphqlCommand({sub:'query',values:{document},positionals:['PAGE12']},options)).rejects.toThrow();expect(writes).toBe(0);
-  await expect(graphqlCommand({sub:'mutate',values:{document},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(writes).toBe(1);
-  await expect(graphqlCommand({sub:'mutate',values:{document,'idempotency-key':'k'},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'idempotency_key_unsupported',exit:2});expect(writes).toBe(1);
-  await writeFile(document,'mutation { unknownField }');await expect(graphqlCommand({sub:'mutate',values:{document},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'graphql_validation'});expect(writes).toBe(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('answers every sql.mjs statement in the documented shape, through a page or a dataset, paging a dataset read up to --limit',async()=>{
@@ -447,14 +442,12 @@ it('quotes every user-facing command in Core flows with flags and verbs its scri
  const {readFileSync}=await import('node:fs');
  for(const name of Object.keys(COMMANDS)){
   if(calls.some(call=>call[1]===name))continue;
-  // graphql.mjs is for older pages only: nothing routes a new page to it.
-  if(name==='graphql')continue;
   expect(COMMANDS[name].starter,name).toBeTruthy();
   const usage=/\/\/ Usage:[\s\S]*?\/\/ Built with:/.exec(readFileSync(new URL(`../../../skills/artifactbin/${COMMANDS[name].starter}`,import.meta.url),'utf8'))?.[0]??'';
   expect(usage,name).toContain(`node scripts/${name}.mjs --title`);
  }
  for(const [,name,rest] of calls){
-  expect(COMMANDS[name!],name).toBeDefined();expect(name,'Core flows route data to sql.mjs').not.toBe('graphql');
+  expect(COMMANDS[name!],name).toBeDefined();
   const description=descriptionOf(name!);
   // Flags used in the flows are documented by the script itself; so is a leading verb (list, reply, watch ...).
   for(const flag of rest!.match(/--[a-z-]+/g)??[])expect(description,`${name} ${flag}`).toContain(flag);
@@ -679,15 +672,15 @@ it('fails a published page that links a dataset but never reads it, and passes o
   expect(passed.smokePassed).toBe(true);expect(passed.unreadDatasets).toBeUndefined();expect(passed.reply?.permissions).toHaveLength(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-it('lists what an unset resolver secret blocked as Not tested and names every other failed field with its owner detail',async()=>{
+it('lists what an unset secret blocked as Not tested and names every other failed call with its owner detail',async()=>{
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const {checkDigest,toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'check-secret-')),steps=path.join(root,'steps.mjs'),guest=path.join(root,'guest.mjs');
  await writeFile(steps,"await step('Forecast shows',async()=>{});");await writeFile(guest,"await step('Guest sees alerts',async()=>{});");
  const failed='Backend execution failed',base={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Pipeline',overflow:{viewport:1,content:1,fits:true},steps:{ran:true,passed:false},verified:['board loads']};
- const unset={field:'weather.forecast',message:failed,code:'backend_failed',detail:'secret_unavailable: WEATHER_KEY',pageErrorsBefore:0,consoleErrorsBefore:0};
- const notOnPage={field:'pipeline.addNote',message:failed,code:'backend_failed',detail:'validation_failed: field insert_deal_notes_one is not on this page',pageErrorsBefore:0,consoleErrorsBefore:1};
+ const unset={field:'fn/forecast',kind:'fn',message:failed,code:'backend_failed',detail:'secret_unavailable: WEATHER_KEY',pageErrorsBefore:0,consoleErrorsBefore:0};
+ const notOnPage={field:'sql',kind:'sql',message:'no such table',code:'invalid_sql',detail:'no such table: deal_notes',pageErrorsBefore:0,consoleErrorsBefore:1};
  // What the page logged after the refusal came from it.
  const blocked={...base,consoleErrors:[failed+' {"code":"backend_failed"}'],error:'Timeout 6000ms exceeded (step call #2 page.getByText("Sunny"))',failedStep:'Forecast shows',callErrors:[unset]};
  const quiet={...base,steps:{ran:true,passed:true}};
@@ -695,7 +688,6 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
  const fetcher=async(input:any,init:any)=>{const url=new URL(String(input));asked.push(url.pathname);
   if(url.pathname==='/a/PAGE12/raw')return new Response('<main>Pipeline</main>');
   if(url.pathname==='/api/my/artifacts/PAGE12/resolvers')return Response.json({revision:'3',resolvers:[{name:'weather',backendId:'BACK12',version:'v1',test:false,secrets:{WEATHER_KEY:'api.weather.test'},set}]});
-  if(url.pathname==='/api/artifacts/PAGE12/graphql'){replays.push(JSON.parse(String(init.body)));return Response.json({data:null,errors:[{message:failed,path:['weather','alerts'],extensions:{code:'backend_failed',detail:'HTTP 401: Upstream refused'}}]});}
   if(url.pathname==='/api/artifacts/PAGE12/fn/forecast'){replays.push({fn:url.pathname+url.search,method:init?.method??'GET'});return Response.json({error:'backend_failed',message:'The function failed',detail:'HTTP 401: Upstream refused'},{status:500});}
   if(url.pathname==='/api/artifacts/PAGE12/sql'){replays.push(JSON.parse(String(init.body)));return Response.json({columns:[],rows:[]});}
   const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
@@ -708,7 +700,7 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   // Unset: the blocked step is Not tested, the errors it caused are gone, and the pass ends on the reply facts.
   results={self1280:blocked,self390:blocked};
   const passed=await check({});
-  expect(passed.smokePassed).toBe(true);expect(passed.needsSecrets).toEqual([{step:'Forecast shows',fields:['weather.forecast'],secrets:['WEATHER_KEY']}]);
+  expect(passed.smokePassed).toBe(true);expect(passed.needsSecrets).toEqual([{step:'Forecast shows',fields:['fn/forecast'],secrets:['WEATHER_KEY']}]);
   expect(passed.checks[0]).toMatchObject({consoleErrors:[],needsSecret:{step:'Forecast shows',secrets:['WEATHER_KEY']}});
   expect(passed.checks[0].error).toBeUndefined();expect(passed.callFailures).toBeUndefined();
   const proved=checkDigest({ok:true,code:'completed',...passed});
@@ -720,20 +712,20 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   const stillSet=await check({}).catch((e:any)=>e);
   expect(stillSet).toMatchObject({code:'check_failed',details:{smokePassed:false}});
   const named=checkDigest(toolFailure('check',stillSet));
-  expect(named).toContain('  resolver weather.forecast failed: secret_unavailable: WEATHER_KEY (owner detail)');
+  expect(named).toContain('  function forecast failed: secret_unavailable: WEATHER_KEY (owner detail)');
   expect(named).not.toContain('Not tested');expect(named).not.toContain('For your reply:');
-  // Another failed field in the same viewport keeps it failing, and so does an error logged before
+  // Another failed call in the same viewport keeps it failing, and so does an error logged before
   // the refusal; the step is still Not tested there.
   set=[];results={self1280:{...blocked,consoleErrors:['favicon missing',failed],callErrors:[{...unset,consoleErrorsBefore:1}]},
    self390:{...blocked,consoleErrors:['favicon missing',failed],callErrors:[unset,notOnPage]}};
   const mixed=await check({}).catch((e:any)=>e);
   expect(mixed.details.smokePassed).toBe(false);
   const both=checkDigest(toolFailure('check',mixed));
-  expect(both).toContain('  resolver pipeline.addNote failed: validation_failed: field insert_deal_notes_one is not on this page (owner detail)');
+  expect(both).toContain('  sql failed: no such table: deal_notes (owner detail)');
   expect(both).toContain(`  Not tested: "Forecast shows" ${why}`);expect(both).not.toContain('For your reply:');
   expect(both).toMatch(/1280x800: consoleErrors 1: favicon missing; .*steps stopped at "Forecast shows"/);
   expect(both).toMatch(/390x844: consoleErrors 2: favicon missing; .*task error: Timeout/);
-  // A field that failed for the owner fails the check even when every step passed.
+  // A call that failed for the owner fails the check even when every step passed.
   results={self1280:{...quiet,callErrors:[notOnPage]},self390:quiet};
   const unnoticed=await check({}).catch((e:any)=>e);
   expect(unnoticed).toMatchObject({code:'check_failed',details:{smokePassed:false}});
@@ -741,20 +733,16 @@ it('lists what an unset resolver secret blocked as Not tested and names every ot
   // A guest gets no detail: a read is asked again as the owner, a write never is.
   const fnFailed={message:'The function failed',code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0};
   results={guest1280:{...base,consoleErrors:[failed],error:'Timeout',failedStep:'Guest sees alerts',callErrors:[
-   {field:'weather.alerts',kind:'graphql',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{query:'query{weather{alerts}}',revision:'3'}},
-   {field:'pipeline.addNote',kind:'graphql',message:failed,code:'backend_failed',pageErrorsBefore:0,consoleErrorsBefore:0},
    {field:'fn/forecast',kind:'fn',...fnFailed,replay:{search:'?city=Oslo'}},{field:'fn/addNote',kind:'fn',...fnFailed},
    {field:'sql',kind:'sql',message:'not allowed',code:'permission_denied',pageErrorsBefore:0,consoleErrorsBefore:0,replay:{sql:'select count(*) as n from notes',params:{},revision:'3'}}]}};
   const asGuest=await check({'guest-steps':guest}).catch((e:any)=>e);
-  // Reads are asked again as the owner (a GraphQL query, a GET function, a SELECT); writes never are.
-  expect(replays).toEqual([{query:'query{weather{alerts}}',revision:'3'},{fn:'/api/artifacts/PAGE12/fn/forecast?city=Oslo',method:'GET'},{sql:'select count(*) as n from notes',params:{},revision:'3'}]);
+  // Reads are asked again as the owner (a GET function, a SELECT); writes never are.
+  expect(replays).toEqual([{fn:'/api/artifacts/PAGE12/fn/forecast?city=Oslo',method:'GET'},{sql:'select count(*) as n from notes',params:{},revision:'3'}]);
   const told=checkDigest(toolFailure('check',asGuest));
-  expect(told).toContain('  resolver weather.alerts failed for the guest (backend_failed); as owner the detail is: HTTP 401: Upstream refused');
-  expect(told).toContain('  resolver pipeline.addNote failed for the guest (backend_failed); not a read, so it was not run again as owner');
   expect(told).toContain('  function forecast failed for the guest (backend_failed); as owner the detail is: HTTP 401: Upstream refused');
   expect(told).toContain('  function addNote failed for the guest (backend_failed); not a read, so it was not run again as owner');
   expect(told).toContain('  sql failed for the guest (permission_denied); as owner it succeeds');
-  expect(told).not.toContain('query{');expect(told).not.toContain('select count');expect(told).not.toContain('Bearer');
+  expect(told).not.toContain('select count');expect(told).not.toContain('Bearer');
   // An unset secret a function needed is Not tested under the function's name.
   results={self1280:{...blocked,callErrors:[{...unset,field:'fn/forecast',kind:'fn'}]},self390:quiet};
   const fnUnset=await check({});

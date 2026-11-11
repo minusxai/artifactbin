@@ -1,8 +1,7 @@
 /**
- * THE SKILL'S PERMISSION AND DATASET GRAPHQL COMMANDS against the real app (createAppServer, real tokens):
- * policy.mjs get/explain/template/set (dry run, revision from the file, conflict exit 4, invalid exit 2 with
- * every error by path, access exit 3) and graphql.mjs on a dataset ID (the server says it is a dataset; the
- * role's schema; queries; a mutation's idempotency key printed and replayed at most once; --revision refused).
+ * THE SKILL'S PERMISSION COMMAND against the real app (createAppServer, real tokens): policy.mjs
+ * get/explain/template/set (dry run, revision from the file, conflict exit 4, invalid exit 2 with every error by
+ * path, access exit 3).
  */
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,6 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/datasets';
 import { createAppServer } from '@/server/app';
 
 useAppHarness();
@@ -23,10 +21,8 @@ const app = createAppServer({ webDir: 'dist/web' });
 const fetcher = (async (input: string | URL | Request, init?: RequestInit) => app.fetch(new Request(String(input), init))) as typeof fetch;
 const options = (token: string) => ({ env: { ARTIFACTBIN_URL: SERVER, ARTIFACTBIN_TOKEN: token }, fetcher, retryDelays: [] });
 const { policyCommand } = await import('../skills/artifactbin/scripts/policy.mjs');
-const { graphqlCommand } = await import('../skills/artifactbin/scripts/graphql.mjs');
 type Values = Record<string, unknown>;
 const policy = (token: string, sub: string, positionals: string[], values: Values = {}) => policyCommand({ sub, positionals, values }, options(token));
-const graphql = (token: string, sub: string, positionals: string[], values: Values = {}) => graphqlCommand({ sub, positionals, values }, options(token));
 const failure = async (run: Promise<unknown>) => { try { await run; } catch (error) { return error as { code: string; exit: number; details?: any }; } throw new Error('expected a refusal'); };
 
 async function fixture() {
@@ -76,26 +72,4 @@ it('exits 2 with every error by path for an invalid policy, 2 for a legacy file,
   expect(await failure(policy(f.owner.token, 'set', [f.id], { file: legacy, 'expected-revision': '0' }))).toMatchObject({ code: 'policy_version_unsupported', exit: 2 });
   expect(await failure(policy(f.viewer.token, 'get', [f.id]))).toMatchObject({ code: 'not_found', exit: 3 });
   expect(await failure(policy(f.viewer.token, 'set', [f.id], { file: bad, 'dry-run': true }))).toMatchObject({ code: 'not_found', exit: 3 });
-});
-
-it('targets a dataset ID through graphql.mjs: the role\'s schema, a query, and a keyed mutation that applies at most once', async () => {
-  const f = await fixture();
-  const schema = await graphql(f.owner.token, 'schema', [f.id]);
-  expect(schema).toMatchObject({ target: 'dataset', role: 'owner' });
-  expect(schema.sdl).toContain('insert_signups_one(');
-  expect(await graphql(f.viewer.token, 'schema', [f.id])).toMatchObject({ target: 'dataset', role: 'viewer' });
-  expect(await failure(graphql(f.owner.token, 'schema', [f.id], { revision: '1' }))).toMatchObject({ code: 'revision_unsupported', exit: 2 });
-
-  const query = await f.file('q.graphql', '{ signups { name } }');
-  expect(await graphql(f.viewer.token, 'query', [f.id], { document: query })).toEqual({ data: { signups: [{ name: 'seed' }] } });
-  const mutation = await f.file('m.graphql', 'mutation Add($name: String) { insert_signups_one(object: {name: $name}) { name } }');
-  const variables = await f.file('v.json', { name: 'ada' });
-  const added = await graphql(f.owner.token, 'mutate', [f.id], { document: mutation, variables });
-  expect(added).toMatchObject({ data: { insert_signups_one: { name: 'ada' } }, idempotencyKey: expect.any(String) });
-  const replayed = await graphql(f.owner.token, 'mutate', [f.id], { document: mutation, variables, 'idempotency-key': added.idempotencyKey });
-  expect(replayed).toEqual(added);
-  expect((await loadDatasetRows((await getArtifactById(f.id))!)).map((r) => r.name)).toEqual(['seed', 'ada']);
-  // The viewer has no write rule (read-only reading): the SDL has no mutation root, so the document is refused locally.
-  expect(await failure(graphql(f.viewer.token, 'mutate', [f.id], { document: mutation, variables }))).toMatchObject({ code: 'graphql_validation', exit: 2, details: { errors: ['This schema has no mutations: your role may not write here.'] } });
-  expect(await failure(graphql(f.owner.token, 'query', ['nOsUcH1d'], { document: query }))).toMatchObject({ exit: 3 });
 });

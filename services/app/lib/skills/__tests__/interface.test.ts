@@ -1,9 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { SKILL_FILE_NAME, buildPreviewDatasets, buildPreviewParser, buildToolboxPlatform, skillTree } from '..';
+import { SKILL_FILE_NAME, buildPreviewParser, buildToolboxPlatform, skillTree } from '..';
 import { AGENT_HELP_TITLE, AUTHENTICATION_INSTRUCTION, EMAIL_AUTHENTICATION_INSTRUCTION, agentDiscovery } from '../agent-discovery';
 
 /** Bare specifiers an archive module may not carry: installs need only Node. */
@@ -36,20 +32,6 @@ describe('agentDiscovery', () => {
 });
 
 describe('archive preview assets', () => {
-  it('bundles the local dataset preview with graphql into one self-contained module, once per process', async () => {
-    const first = buildPreviewDatasets();
-    expect(buildPreviewDatasets()).toBe(first);
-    const code = await first;
-    expect(bareImports(code)).toEqual([]);
-    const dir = mkdtempSync(path.join(tmpdir(), 'preview-datasets-'));
-    try {
-      writeFileSync(path.join(dir, 'preview-datasets.mjs'), code);
-      const module = await import(pathToFileURL(path.join(dir, 'preview-datasets.mjs')).href) as { buildSchema(source: string): { getQueryType(): { name: string } | null }; parse: unknown };
-      expect(module.buildSchema('type Query { a: Int }').getQueryType()?.name).toBe('Query');
-      expect(typeof module.parse).toBe('function');
-    } finally { rmSync(dir, { recursive: true, force: true }); }
-  }, 30_000);
-
   it('bundles the preview parser with the shared publication helpers and answers the same bundle for the same source', async () => {
     const source = "export const marker = 'preview-parser-marker';";
     const [code, again] = await Promise.all([buildPreviewParser(source), buildPreviewParser(source)]);
@@ -64,6 +46,6 @@ describe('archive preview assets', () => {
     const code = await buildToolboxPlatform();
     expect(bareImports(code)).toEqual([]);
     expect(code).toContain('./preview-html.mjs');
-    expect(code).not.toMatch(/from\s*["']graphql["']/);
+    expect(code).not.toMatch(/graphql|preview-datasets/);
   }, 30_000);
 });

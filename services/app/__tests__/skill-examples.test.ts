@@ -60,7 +60,7 @@ describe('installed native author examples',()=>{
    const page=await get(first.id),byPath=Object.fromEntries(page.dependencyReceipts.map((r:any)=>[r.path,r]));
    expect(byPath['deliveries.csv']).toMatchObject({kind:'dataset',revision:'1'});expect(byPath['notes.csv']).toMatchObject({kind:'dataset',revision:'1'});
    expect(page.html).toContain('ref:'+byPath['deliveries.csv'].id);
-   // Each dataset is named by its file: the GraphQL root its page links it by, and its title.
+   // Each dataset is named by its file: the name its page links it by, and its title.
    for(const [file,name] of [['deliveries.csv','deliveries'],['notes.csv','notes']]){
     const id=byPath[file].id,dataset=await get(id);expect(dataset.title).toBe(file);
     const policy=await (await readPolicy(request(`/api/artifacts/${id}/policy`,{token:owner.token}),{params:Promise.resolve({id})})).json();

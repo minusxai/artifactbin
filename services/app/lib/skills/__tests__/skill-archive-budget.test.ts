@@ -30,15 +30,12 @@ import {archiveFor} from '@/lib/skills';
 // what to write for an unlinked or unsupported file) beside the reply-before-watch guidance for several pages (~1 KB).
 // 1.78 MiB: main sat 217 bytes under 1.77 once the tracker's limit held for moves (its save function and checks);
 // exporting one chart or section of a page (export.mjs --element, its limits and refusals) needs about 1 KB more.
-// 1.78 MiB: main sat about 4 KB under 1.76. Governed data (scripts/minusx.mjs and references/governed-data.md, ~9.5 KB)
-// lets an agent on a combined installation discover a group's MinusX connections and bind a page to one; the events
-// watch (scripts/events.mjs and its loop toolbox-events.mjs, ~9 KB net of the comment watch it replaces) is one watch
-// over GET /api/events for every page and a group's job runs, and comment.mjs watch is now its comments alias.
-// 1.79 MiB: main's 1.78 and this branch's 1.78 each held their own additions; merged they store 1,873,284 bytes,
-// and the governed-data guide ships in the archive too (about 3.5 KB), which fits after trimming it.
-// 1.80 MiB: main grew about 2.3 KB under its own 1.78 (served boundary files in the maps guide, the editor-grant
-// wording); merged with this branch the archive stores 1,879,186 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.80*1024*1024;
+// 1.58 MiB: GraphQL is deprecated, so the skill carries nothing for it: graphql.mjs, toolbox-graphql.mjs, the bundled
+// graphql library and the local GraphQL dataset preview (preview-datasets.mjs, its sessions and routes) went, leaving
+// the archive at 1,650,778 bytes (1.574 MiB, down from 1,859,312); the cap keeps the usual few KB of headroom.
+// 1.60 MiB: this branch adds governed data (scripts/minusx.mjs, references/governed-data.md) and the events watch
+// (scripts/events.mjs, toolbox-events.mjs) on top of main's 1.58.
+const SKILL_ARCHIVE_MAX_BYTES=1.60*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
