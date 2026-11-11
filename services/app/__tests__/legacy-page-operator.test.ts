@@ -114,7 +114,7 @@ it.each(['aria-checked="mixed"','aria-checked="true" aria-disabled="yes"','aria-
 
 it.each([false,true])('uses the saved heading/title projection for a dirty document (trashed=%s)',async trashed=>{
  const user=await createUser({email:'mxmx_test_migration_title@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',title:'Before',source:'<!doctype html><html><head><title>Before</title></head><body><article data-af-editable="rich"><h1>Before</h1><p>Keep</p></article></body></html>',meta:{template:'doc'},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',title:'Before',source:'<!doctype html><html><head><title>Before</title></head><body><article data-af-editable="rich"><h1>Before</h1><p>Keep</p></article></body></html>',meta:{template:'doc'},visibility:'private'});
  const db=await harness.db();
  const region=editableRegions(row.source!)[0]!;
  const initial=createRegionState('rich',region.inner),doc=openRegionDoc(initial.state);
@@ -157,7 +157,7 @@ it.each([false,true])('uses the saved heading/title projection for a dirty docum
 
 it('rolls back saved dirty state, archives and publication if the final receipt cannot be stored',async()=>{
  const user=await createUser({email:'mxmx_test_migration_atomic@example.com'});
- const row=await createArtifact(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Before</p></article>',meta:{},visibility:'private'});
+ const row=await createHistoricalPage(null,user.id,{format:'html',source:'<article data-af-editable="rich"><p>Before</p></article>',meta:{},visibility:'private'});
  const db=await harness.db(),region=editableRegions(row.source!)[0]!;
  const initial=createRegionState('rich',region.inner),doc=openRegionDoc(initial.state);
  regionText(doc).insert(0,'Pending ');
