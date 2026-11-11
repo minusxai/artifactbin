@@ -12,8 +12,10 @@ finds nothing.
 import {route,seat} from '@afbin/state';
 const show=({screen='home',id})=>{/* draw that screen */};
 show(route.get());route.subscribe(show); // also fires on the reader's Back and Forward
-openButton.onclick=()=>route.set({screen:'detail',id:item.id},{push:true});
-shareLink.href=route.href({screen:'detail',id:item.id});
+const go=(link,values)=>{link.href=route.href(values); // copy and new tab work
+ link.onclick=e=>{if(e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+  e.preventDefault();route.set(values,{push:true});};}; // a plain click stays in the page
+go(detailLink,{screen:'detail',id:item.id});
 ```
 
 - `route.get()`: this address's `$` values, by name without the `$`, as strings.
@@ -23,7 +25,8 @@ shareLink.href=route.href({screen:'detail',id:item.id});
 - `route.subscribe(listener)`: every change, your own `set` and the reader's Back or Forward;
   returns the unsubscribe. It does not fire on the current value.
 - `route.href(values)`: an absolute link to this page with exactly those values (in the app,
-  its `/a/ID` address). Use it for "copy link" and `<a>` to a screen.
+  its `/a/ID` address), for copying and opening elsewhere. A plain click on it reloads the whole
+  page, so handle the click with `route.set` as above.
 
 In the app, the reader's address bar, a copied link, a reload and Back all follow `route`; at
 the page's own address, in `/raw` and in a download it uses that page's own history. A screen

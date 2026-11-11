@@ -36,9 +36,9 @@ import {archiveFor} from '@/lib/skills';
 // 1.579 MiB: the unused and retired paths left the scripts (serve --runtime-dir among them), leaving 1,651,541 bytes.
 // 1.577 MiB: comment watch --once, --cursor and --append went, leaving 1,650,146 bytes.
 // 1.586 MiB: this branch adds the events watch (scripts/events.mjs, toolbox-events.mjs) and service sign-in (auth.mjs --audience).
-// 1.587 MiB: the page-apps guide (routes in `$` values, seat(), confirmations, external APIs) and root-relative files in
-// publish, leaving 1,663,907 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.587*1024*1024;
+// 1.592 MiB: the page-apps guide (routes in `$` values, seat(), confirmations, external APIs) and root-relative files in
+// publish, leaving 1,668,856 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.592*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
