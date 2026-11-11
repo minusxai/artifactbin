@@ -40,7 +40,23 @@ it('decodes bounded explicit selection segments and rejects malformed parts',()=
 });
 it('resolves a unique unchanged quote after append or stale offsets, but refuses ambiguity and deletion',()=>{
  const picked=anchor({quote:'Task work',range:{start:0,end:9,length:9,fingerprint:htmlTextFingerprint('Task work')}});
- for(const text of ['Task work peer','prefix Task work'])expect(resolveHtmlCommentAnchor(new Map([['n1',{nodeId:'n1',text}]]),picked).quoteFound).toBe(true);
- for(const text of ['Task work Task work','peer','Task changed'])expect(resolveHtmlCommentAnchor(new Map([['n1',{nodeId:'n1',text}]]),picked).quoteFound).toBe(false);
+ for(const text of ['Task work peer','prefix Task work'])expect(resolveHtmlCommentAnchor(new Map([['n1',{nodeId:'n1',text}]]),picked,new Map([['n1',{nodeId:'n1',text:'Task work'}]])).quoteFound).toBe(true);
+ for(const text of ['Task work Task work','peer','Task changed'])expect(resolveHtmlCommentAnchor(new Map([['n1',{nodeId:'n1',text}]]),picked,new Map([['n1',{nodeId:'n1',text:'Task work'}]])).quoteFound).toBe(false);
  expect(validHtmlCommentRange({nodeId:'n1',text:'Task work peer'},picked)).toBe(false);
+});
+
+it('never uses current quote matches as proof of invalid or unavailable capture evidence',()=>{
+ const original=htmlCommentNodes('<p data-af-id="n1">same words</p>');
+ const current=htmlCommentNodes('<p data-af-id="n1">same words appended</p>');
+ const picked=anchor({range:{start:0,end:10,length:10,fingerprint:htmlTextFingerprint('same words')}});
+ expect(resolveHtmlCommentAnchor(current,picked,original).quoteFound).toBe(true);
+ expect(resolveHtmlCommentAnchor(current,picked,new Map()).quoteFound).toBe(false);
+ expect(resolveHtmlCommentAnchor(current,{...picked,range:{...picked.range!,fingerprint:'forged'}},original).quoteFound).toBe(false);
+});
+
+it('does not promote originally invalid segmented evidence after the source acquires its words',()=>{
+ const original=htmlCommentNodes('<p data-af-id="n1">old words</p>');
+ const current=htmlCommentNodes('<p data-af-id="n1">new words</p>');
+ const selected=anchor({quote:'new words',segments:[{nodeId:'n1',quote:'new words',range:{start:0,end:9,length:9,fingerprint:htmlTextFingerprint('new words')}}]});
+ expect(resolveHtmlCommentAnchor(current,selected,original).quoteFound).toBe(false);
 });

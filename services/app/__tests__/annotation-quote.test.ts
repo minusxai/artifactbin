@@ -9,7 +9,7 @@ import {POST as createPage} from '@/app/api/artifacts/route';
 import {PUT as updatePage} from '@/app/api/artifacts/[id]/route';
 import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {GET as listComments} from '@/app/api/artifacts/[id]/annotations/route';
-useAppHarness();
+const harness=useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 const text='Revenue grew 40% in Q3, ahead of plan.';
 const body='<p data-af-id="intro">An intro paragraph.</p><p data-af-id="rev"><strong>Revenue grew</strong> 40% in Q3, ahead of plan.</p><p data-af-id="costs">Costs fell too.</p>';
@@ -27,3 +27,24 @@ it.each([{start:10,end:2,length:20,fingerprint:'x'},{start:0,end:21,length:20,fi
 it('does not claim source verification for a forged fingerprint or a rendered label absent from source',async()=>{const f=await fixture();expect((await comment(f,{...capture(),range:{...capture().range!,fingerprint:'incorrect'}})).status).toBe(201);expect((await comment(f,nativeAnchor('rev',1,'Rendered runtime label'))).status).toBe(201);expect((await list(f)).every((a:{quote_found:boolean})=>a.quote_found===false)).toBe(true);});
 it('uses DOM textContent order without inserting characters between adjacent tags',async()=>{const f=await fixture('<p data-af-id="rev"><span>Rev</span><b>enue</b> grew</p>');const anchor=capture('Revenue grew','Revenue grew');expect((await comment(f,anchor)).status).toBe(201);expect((await list(f))[0]).toMatchObject({quote_found:true,snippet:'Revenue grew'});});
 it('stores fractional area evidence without words and rejects contradictory words or out-of-bounds boxes',async()=>{const f=await fixture(),range={v:1,kind:'area',box:{x:0.1,y:0.2,w:0.3,h:0.4}};expect((await comment(f,nativeAnchor('rev'),{range})).status).toBe(201);expect((await list(f))[0].range).toEqual(range);expect((await comment(f,nativeAnchor('rev',1,'Revenue'),{range})).status).toBe(400);expect((await comment(f,nativeAnchor('rev'),{range:{...range,box:{x:2,y:0,w:1,h:1}}})).status).toBe(400);});
+
+it('keeps verified saved selections through peer appends without promoting invalid captures',async()=>{
+ const f=await fixture(),anchor=capture();
+ await comment(f,anchor);
+ await comment(f,{...anchor,range:{...anchor.range!,fingerprint:'forged'}});
+ await comment(f,nativeAnchor('rev',1,'Later runtime label'));
+ await replace(f,body.replace('ahead of plan.','ahead of plan. Peer append. Later runtime label'));
+ expect((await list(f)).map((row:{quote_found:boolean})=>row.quote_found)).toEqual([true,false,false]);
+ await replace(f,body.replace('ahead of plan.','ahead of plan. grew 40% in Q3,'));
+ expect((await list(f)).map((row:{quote_found:boolean})=>row.quote_found)).toEqual([false,false,false]);
+ await replace(f,body.replace('grew</strong> 40% in Q3,','fell</strong> 12% in Q4,'));
+ expect((await list(f)).map((row:{quote_found:boolean})=>row.quote_found)).toEqual([false,false,false]);
+});
+
+it('keeps historical captures conservative when their original snapshot is unavailable',async()=>{
+ const f=await fixture();await comment(f,capture());
+ await replace(f,body.replace('ahead of plan.','ahead of plan. Peer append.'));
+ expect((await list(f))[0].quote_found).toBe(true);
+ await (await harness.db()).query('DELETE FROM artifact_versions WHERE artifact_id=$1 AND version=1',[f.doc.id]);
+ expect((await list(f))[0]).toMatchObject({orphaned:false,quote_found:false});
+});

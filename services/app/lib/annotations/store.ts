@@ -366,9 +366,22 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
 
   const htmlNodes = roots.some(root => root.html_anchor) ? htmlCommentNodes(source) : null;
 
+  // Reconstruct provenance from immutable snapshots, including anchors saved before
+  // this verification rule existed. Never promote an unverified DOM capture when
+  // its words happen to appear in a later edit. Batch revisions for the whole page.
+  const revisions = [...new Set(roots.map(root => parseHtmlNodeAnchor(root.html_anchor)?.revision).filter((revision): revision is string => !!revision && /^[0-9]{1,15}$/.test(revision)))];
+  const captures = new Map<string, ReturnType<typeof htmlCommentNodes>>();
+  if (revisions.length) {
+    const snapshots = await artifactQuery<Pick<ArtifactRow, 'source'> & {version: number}>(db,
+      `SELECT version, document, source FROM artifacts WHERE id=$1 AND version::text=ANY($2::text[])
+       UNION ALL SELECT version, document, source FROM artifact_versions WHERE artifact_id=$1 AND version::text=ANY($2::text[])`,
+      [head.id, revisions]);
+    for (const snapshot of snapshots.rows) captures.set(String(snapshot.version), htmlCommentNodes(snapshot.source ?? ''));
+  }
+
   return roots.map((root) => {
     const htmlAnchor = parseHtmlNodeAnchor(root.html_anchor);
-    const htmlResolved = htmlAnchor && htmlNodes ? resolveHtmlCommentAnchor(htmlNodes, htmlAnchor) : null;
+    const htmlResolved = htmlAnchor && htmlNodes ? resolveHtmlCommentAnchor(htmlNodes, htmlAnchor, captures.get(htmlAnchor.revision) ?? new Map()) : null;
     const anchored = !!htmlResolved?.node;
     const range = storedRange(root.range);
     const viewState = parseCommentViewState(root.view_state);

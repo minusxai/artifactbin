@@ -38,13 +38,17 @@ export function htmlCommentNodes(html: string): Map<string, HtmlCommentNode> {
   return nodes;
 }
 /** A missing identity never falls back to the same words elsewhere. */
-export function resolveHtmlCommentAnchor(nodes: ReadonlyMap<string, HtmlCommentNode>, anchor: HtmlNodeAnchor): HtmlAnchorResolution {
+export function resolveHtmlCommentAnchor(nodes: ReadonlyMap<string, HtmlCommentNode>, anchor: HtmlNodeAnchor, capturedNodes: ReadonlyMap<string, HtmlCommentNode> = nodes): HtmlAnchorResolution {
   // A dynamic target is evidence captured in the viewer DOM, scoped to a
   // persisted ancestor. The server verifies that ancestor, never invents text.
   const node = anchor.ancestorId ? nodes.has(anchor.nodeId ?? '') ? null : nodes.get(anchor.ancestorId) ?? null : anchor.nodeId ? nodes.get(anchor.nodeId) ?? null : null;
   if (anchor.ancestorId) return {node,quoteFound:anchor.quote ? false : null};
-  if(anchor.segments) return {node,quoteFound:!!node && anchor.segments.length>0 && anchor.segments.every(part=>{const target=nodes.get(part.nodeId);return !!target && validHtmlCommentRange(target,{...anchor,nodeId:part.nodeId,quote:part.quote,range:part.range,segments:undefined});})};
-  return { node, quoteFound: anchor.quote ? !!node && resolveHtmlTextRange(node.text, anchor).status === 'exact' : null };
+  if(anchor.segments) return {node,quoteFound:!!node && anchor.segments.length>0 && anchor.segments.every(part=>{const target=nodes.get(part.nodeId), captured=capturedNodes.get(part.nodeId);const selection={...anchor,nodeId:part.nodeId,quote:part.quote,range:part.range,segments:undefined};return !!captured && validHtmlCommentRange(captured,selection) && !!target && validHtmlCommentRange(target,selection);})};
+  // Quote fallback is safe only after the original revision verifies the capture.
+  // Missing historical evidence stays unverified; matching today's words is not proof.
+  const captured = anchor.nodeId ? capturedNodes.get(anchor.nodeId) : undefined;
+  const verified = !!captured && validHtmlCommentRange(captured, anchor) && resolveHtmlTextRange(captured.text, anchor).status === 'exact';
+  return { node, quoteFound: anchor.quote ? verified && !!node && resolveHtmlTextRange(node.text, anchor).status === 'exact' : null };
 }
 
 /** A newly captured range must describe the selected node's exact text. */
