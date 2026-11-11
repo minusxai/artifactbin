@@ -127,8 +127,8 @@ restyle it. Not included: uploads (refused), region and cell editing.
 
 ## Sign-in in that shell
 
-That shell also draws `/login` (query kept) when there is no session. Sign in with
-[HTTP authentication](http-auth.md) steps 1 and 2 by same-origin `fetch`, then load `/login`
+That shell also draws `/login` when there is no session. Sign in with
+[HTTP authentication](http-auth.md) steps 1 and 2, same-origin, then load `/login`
 again: it answers `302` to `callbackUrl` when that is a path on this origin, else `/`. Send:
 `400` `INVALID_EMAIL`. Sign-in: `200` sets the HttpOnly cookie; `400` `INVALID_OTP`; five wrong
 codes `403` `TOO_MANY_ATTEMPTS`; `403` `deployment_admission_required`; another `Origin` `403`.
