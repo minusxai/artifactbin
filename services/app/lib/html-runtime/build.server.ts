@@ -66,6 +66,7 @@ import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door
 import {installFunctionFetch} from ${JSON.stringify(fileURLToPath(new URL('./fn-fetch.ts',import.meta.url)))};
 import {startNativeHtmlTableScroll} from ${JSON.stringify(fileURLToPath(new URL('./table-scroll.ts',import.meta.url)))};
 import {restoreReadingPlace} from ${JSON.stringify(fileURLToPath(new URL('./reading-place.ts',import.meta.url)))};
+import {noticeBlockedModals} from ${JSON.stringify(fileURLToPath(new URL('./modal-notice.ts',import.meta.url)))};
 globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})]=${JSON.stringify(buildId)};
 const platformNonce=document.currentScript?.nonce;
 const supplied=document.querySelector('[data-af="runtime"]');
@@ -74,6 +75,7 @@ const config=supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location
 // arrives as ?mx-mode= (the reader adds it to the frame URL) and later as reader messages; page code only reads them.
 const look=config.appearance;if(look&&typeof look==='object'){const root=document.documentElement;if(typeof look.designSystem==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(look.designSystem))root.setAttribute('data-af-design-system',look.designSystem);let mode=look.mode==='dark'?'dark':'light';try{const asked=new URLSearchParams(location.search).get('mx-mode');if(asked==='dark'||asked==='light')mode=asked;}catch{}root.setAttribute('data-af-dark',mode==='dark'?'true':'false');root.style.colorScheme=mode;}
 startNativeHtmlTableScroll(document);
+noticeBlockedModals(window);
 const blob=source=>URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
 const portableReader=document.querySelector('[data-af="reader"]');
 if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!portableReader)throw Error('Portable HTML is missing its reader module');
