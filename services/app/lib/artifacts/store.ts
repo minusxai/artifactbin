@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {convertLegacyPage,editableRegions} from '../live-regions';
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
@@ -385,8 +387,8 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
  * Doors own refusal/policy decisions and content preparation. Publication always archives,
  * bumps/stamps the head and moves any folder subtree.
  * No notification/telemetry outside tx may run here (PGLite has one serialized connection). */
-async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) {
-  const scope = editorScope(actor);
+async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, maintenance = false) {
+  const scope = maintenance ? {where: (parameter:string) => `${parameter}::text IS NULL`,val:null} : editorScope(actor);
   const current = (await artifactQuery<ArtifactRow>(tx,
     `SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val],
   )).rows[0];
@@ -991,4 +993,48 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     if (patch.access || patch.visibility || patch.link_role || patch.shares || patch.policy!==undefined) await db.query('SELECT pg_notify($1,$2)',[artifactChannel(id),result.edit_id]);
   }
   return result;
+}
+
+/** Privileged local maintenance door. Never expose this function through a public route. */
+export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):Promise<string>{
+ const db=await getDb();
+ return db.transaction(async tx=>{
+  const actor=identityForUser(null);
+  let write=await lockArtifactWrite(tx,actor,id,true);
+  if(!write)return 'missing';
+  if((await tx.query('SELECT 1 FROM legacy_page_migrations WHERE artifact_id=$1',[id])).rows.length)return 'already_migrated';
+  if(write.current.format!=='html')return 'ineligible';
+  const kinds=editableRegions(write.current.source??'').map(region=>region.kind);
+  if(!kinds.includes('rich')&&!kinds.includes('text'))return 'ineligible';
+  if(kinds.includes('rich-native-v1'))throw new Error('Mixed generation migration refused');
+  const plan=await planRegionSave(tx,write.current,await pageLedger(tx,write.current));
+  const converted=convertLegacyPage(plan?.html??write.current.source??'');
+  // Saving legacy state can erase unsupported inline anchors: refuse rather than publish such a loss.
+  const oldIds=canonicalizeHtmlPage(write.current.source??'').nodeIds;
+  const newIds=canonicalizeHtmlPage(converted.html).nodeIds;
+  for(const sourceId of oldIds)if(!newIds.includes(sourceId))throw new Error('Migration identity loss');
+  if(!converted.states.length)return 'ineligible';
+  if(!options.apply)return 'eligible';
+  // SQL JSON serialization retains BYTEA as exact hex and timestamp precision, unlike JS row decoding.
+  const backup:Record<string,unknown>={};
+  for(const table of ['artifacts','region_states','region_updates','region_snapshots','artifact_source_ids','annotations']){
+   const key=table==='artifacts'?'id':'artifact_id';
+   const rows=(await tx.query<{value:unknown}>(`SELECT to_jsonb(t) AS value FROM ${table} t WHERE ${key}=$1`,[id])).rows.map(row=>row.value);
+   backup[table==='artifacts'?'head':table]=table==='artifacts'?rows[0]:rows;
+  }
+  const before=write.current;
+  if((await saveRegionsLocked(tx,actor,write)).published)write=(await lockArtifactWrite(tx,actor,id,true))!;
+  const proof=convertLegacyPage(write.current.source??'');
+  if(proof.html!==converted.html)throw new Error('Migration save changed conversion proof');
+  const updated=await write.publish({format:'html',source:proof.html,meta:write.current.meta});
+  await logWholeDocumentWrite(tx,write.current,updated);
+  await closeLiveRegions(tx,id);
+  for(const region of proof.states){
+   await tx.query(`INSERT INTO region_states(artifact_id,region_id,kind,state,saved_version,created_at) VALUES($1,$2,'rich-native-v1',$3,$4,GREATEST(clock_timestamp(),$5::timestamptz+interval '1 millisecond'))`,[id,region.id,Buffer.from(region.state),updated.version,(backup.region_states as {created_at:string}[]).find(old=>'region_id' in old && old.region_id===region.id)?.created_at??before.created_at]);
+   await tx.query('INSERT INTO region_snapshots(artifact_id,region_id,version,snapshot) VALUES($1,$2,$3,$4)',[id,region.id,updated.version,Buffer.from(region.snapshot)]);
+  }
+  const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
+  await tx.query('INSERT INTO legacy_page_migrations(artifact_id,backup,receipt) VALUES($1,$2::jsonb,$3::jsonb)',[id,JSON.stringify(backup),JSON.stringify({converter:1,oldVersion:before.version,newVersion:updated.version,oldEdit:before.edit_id,newEdit:updated.edit_id,oldHash:hash(before.source??''),newHash:hash(proof.html)})]);
+  return 'migrated';
+ });
 }
