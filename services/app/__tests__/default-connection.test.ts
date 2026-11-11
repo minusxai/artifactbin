@@ -109,7 +109,7 @@ it('lets an agent read its schema and query it as its account, never anonymously
   const { alice } = await readers();
   const schema = await schemaGet(request('/api/default-connection/schema?namespace=warehouse%2Ffinance', { token: alice.token }));
   expect(schema.status).toBe(200);
-  const tables = (await schema.json() as { connector: string; tables: { name: string; kind: string }[] });
+  const tables = (await schema.json() as { connector: string; tables: { namespace: string; name: string; kind: string }[] });
   expect([tables.connector, tables.tables.filter((t) => t.namespace === 'sales').map((t) => [t.name, t.kind])]).toEqual(['postgres', [['mine', 'view'], ['orders', 'table']]]);
   expect(ok(await agent(alice, { sql: 'select id from sales.mine order by id', namespace: 'warehouse/finance' })).rows).toEqual([{ id: 1 }, { id: 3 }]);
   expect(ok(await agent(alice, { sql: 'select item from sales.orders where id = $id', params: { id: 2 } })).rows).toEqual([{ item: 'cake' }]);

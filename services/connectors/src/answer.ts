@@ -25,7 +25,7 @@ export function limitsOf(query: Pick<ConnectorQuery, 'limits'>): ConnectorLimits
  * What follows `default:`: on Postgres and MySQL the database a session opens, passed through as written (a gateway's
  * `warehouse/finance` included) in the handshake, never into SQL text; on BigQuery a dataset. Bounded and plain.
  */
-export const NAMESPACE = /^[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127}$/;
+const NAMESPACE = /^[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127}$/;
 export function checkedNamespace(_dialect: ConnectorDialect, namespace: string | undefined): string | undefined {
   if (namespace === undefined || namespace === '') return undefined;
   if (!NAMESPACE.test(namespace)) throw new ConnectorFailure('invalid_query', 'what follows default: is a database name: letters, digits and _ $ . : / -, at most 128');

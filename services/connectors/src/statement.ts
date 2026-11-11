@@ -141,7 +141,7 @@ export function leadingWords(dialect: ConnectorDialect, text: string): Set<strin
 }
 
 /** The dialect's quoted identifier. */
-export function quoteIdentifier(dialect: ConnectorDialect, name: string): string {
+function quoteIdentifier(dialect: ConnectorDialect, name: string): string {
   return dialect === 'postgres' ? `"${name.replaceAll('"', '""')}"` : `\`${name.replaceAll('`', '``')}\``;
 }
 

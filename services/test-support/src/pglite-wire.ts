@@ -10,7 +10,7 @@ import net from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 
 /** One frontend message as received: its type letter, and for Query and Parse its SQL text. */
-export interface WireMessage { type: string; sql?: string }
+interface WireMessage { type: string; sql?: string }
 export interface PgliteWire { port: number; db: PGlite; messages: WireMessage[]; close(): Promise<void> }
 
 export async function startPgliteWire(setup: string): Promise<PgliteWire> {
