@@ -1,3 +1,4 @@
+import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
 import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, ScheduleRefusal, setMetadataFor } from '@/lib/artifacts';
@@ -383,7 +384,7 @@ async function createArtifactFromBodyPrepared(
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup,receiptOwner);
   let operation;
   try {operation = await creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}),request?.headers.get('X-Artifactbin-Account'));}
-  catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
+  catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
   if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
@@ -437,7 +438,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof ScheduleRefusal)return json({error:error.code,details:error.details},error.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof ScheduleRefusal)return json({error:error.code,details:error.details},error.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

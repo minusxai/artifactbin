@@ -1,3 +1,4 @@
+import {createHistoricalPage} from './historical-page';
 /**
  * Live region sessions through their HTTP doors (contract @artifactbin/contracts region-sessions): who may open, send
  * and stream (editors only, the uniform 404 for everyone else), the open's row and snapshot, validated updates relayed
@@ -25,8 +26,9 @@ import { mintAccountToken, request, useAppHarness, type RequestOptions } from '.
 import { sseStream } from './sse';
 
 const harness = useAppHarness();
+const nativeText=(doc:Y.Doc)=>(doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(0) as Y.XmlText;
 
-const BODY = '<article data-af-editable="rich"><p>Hello world</p><h2>Plan</h2><p>Second paragraph</p></article><h1 data-af-editable="text">Title</h1><p>Outside</p>';
+const BODY = '<article data-af-editable="rich-native-v1"><p>Hello world</p><h2>Plan</h2><p>Second paragraph</p></article><section data-af-id="plain" data-af-editable="rich-native-v1"><p>Title</p></section><p>Outside</p>';
 type Person = { id: string; email: string };
 let owner: Person, editor: Person, viewer: Person, commenter: Person, stranger: Person;
 let pageId: string, rich: string, plain: string;
@@ -74,11 +76,11 @@ async function join(person: Person | null, regionId = rich, extra: RequestOption
   const response = await open(person, id, regionId, extra);
   expect(response.status).toBe(200);
   const reply = await response.json() as { clientId: number; seq: number; state: string; kind: string; savedVersion: number };
-  const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
+  const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { kind:reply.kind as 'rich-native-v1',clientId: reply.clientId });
   const pending: Uint8Array[] = [];
   doc.on('update', (update: Uint8Array, origin: unknown) => { if (origin !== 'server') pending.push(update); });
   return {
-    reply, doc, text: regionText(doc), pending,
+    reply, doc, text: reply.kind==='rich-native-v1'?nativeText(doc):regionText(doc), pending,
     /** Sends everything typed since the last push, merged, and answers the reply. */
     async push() {
       const update = Y.mergeUpdates(pending.splice(0));
@@ -86,7 +88,7 @@ async function join(person: Person | null, regionId = rich, extra: RequestOption
       return { status: response.status, body: await response.json() as Record<string, unknown>, update };
     },
     receive(updates: string[]) { for (const update of updates) Y.applyUpdate(doc, Buffer.from(update, 'base64'), 'server'); },
-    html: () => regionHtml(reply.kind as 'rich' | 'text', Y.encodeStateAsUpdate(doc)),
+    html: () => regionHtml(reply.kind as 'rich-native-v1', Y.encodeStateAsUpdate(doc)),
   };
 }
 
@@ -114,8 +116,8 @@ beforeEach(async () => {
   const row = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
   pageId = row.id;
   const regions = editableRegions(row.source!);
-  rich = regions.find((region) => region.kind === 'rich')!.id;
-  plain = regions.find((region) => region.kind === 'text')!.id;
+  rich = regions.find((region) => region.kind === 'rich-native-v1')!.id;
+  plain = regions.find((region) => region.id === 'plain')!.id;
   const q = await db();
   for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer'], [commenter, 'commenter']] as const) await q.query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [pageId, who.email, role]);
 });
@@ -130,7 +132,7 @@ describe('who may edit live', () => {
     expect(unknown.status).toBe(404);
     const uniform = await unknown.text();
     const unlisted = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'unlisted' });
-    const unlistedRegion = editableRegions(unlisted.source!).find((region) => region.kind === 'rich')!.id;
+    const unlistedRegion = editableRegions(unlisted.source!).find((region) => region.kind === 'rich-native-v1')!.id;
     const token = await mintAccountToken('regions-agent', owner.id);
     const refused: [string, () => Promise<Response>][] = [
       ['viewer', () => open(viewer)], ['commenter', () => open(commenter)], ['stranger', () => open(stranger)], ['signed out', () => open(null)],
@@ -159,7 +161,7 @@ describe('who may edit live', () => {
   it('a region the page does not declare is region_not_found; one whose saved content the kind cannot hold is unsupported_content', async () => {
     const missing = await open(owner, pageId, 'nosuchregion');
     expect([missing.status, await missing.json()]).toEqual([404, { error: 'region_not_found' }]);
-    const svg = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml('<section data-af-editable="rich"><p>a</p><svg></svg></section>'), meta: {}, visibility: 'private' });
+    const svg = await createHistoricalPage(null, owner.id, { format: 'html', source: nativeHtml('<section data-af-editable="rich-native-v1"><p>a</p><svg></svg></section>'), meta: {}, visibility: 'private' });
     const region = editableRegions(svg.source!)[0]!.id;
     const refused = await open(owner, svg.id, region);
     expect([refused.status, (await refused.json()).error]).toEqual([422, 'unsupported_content']);
@@ -200,12 +202,12 @@ describe('a browser session\'s scripted browser', () => {
     const minted = await createTestUser(identityForUser(owner.id, parent.id));
     if (!minted.ok) throw new Error(minted.error);
     const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'unlisted' });
-    const sandboxRich = editableRegions(sandbox.source!).find((region) => region.kind === 'rich')!.id;
+    const sandboxRich = editableRegions(sandbox.source!).find((region) => region.kind === 'rich-native-v1')!.id;
     const browser = scripted(minted.userId, minted.tokenId);
     expect((await open(null, sandbox.id, sandboxRich, browser)).status).toBe(200);
     expect((await open(null, pageId, rich, browser)).status).toBe(404);
     const unlisted = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'unlisted' });
-    expect((await open(null, unlisted.id, editableRegions(unlisted.source!).find((region) => region.kind === 'rich')!.id, browser)).status).toBe(404);
+    expect((await open(null, unlisted.id, editableRegions(unlisted.source!).find((region) => region.kind === 'rich-native-v1')!.id, browser)).status).toBe(404);
   });
 });
 
@@ -217,9 +219,9 @@ describe('opening a region', () => {
     expect(new Set(replies.map((reply) => reply.clientId)).size).toBe(4);
     expect(replies.map((reply) => reply.seq).sort()).toEqual([1, 2, 3, 4]);
     expect(replies.every((reply) => reply.savedVersion === 1)).toBe(true);
-    const doc = openRegionDoc(Buffer.from(replies[0]!.state, 'base64'), { gc: true });
-    expect(regionHtml('rich', Y.encodeStateAsUpdate(doc))).toBe(regionHtml('rich', Buffer.from(replies[3]!.state, 'base64')));
-    expect(regionText(doc).toString()).toContain('Hello world');
+    const doc = openRegionDoc(Buffer.from(replies[0]!.state, 'base64'), { gc: true,kind:'rich-native-v1' });
+    expect(regionHtml('rich-native-v1', Y.encodeStateAsUpdate(doc))).toBe(regionHtml('rich-native-v1', Buffer.from(replies[3]!.state, 'base64')));
+    expect(nativeText(doc).toString()).toContain('Hello world');
   });
 });
 
@@ -296,8 +298,8 @@ describe('the stream', () => {
     const stale = await stream(editor, `${rich}:0`);
     const [reset] = await framesUntil(stale.frames!, (frame) => frame.type === 'reset');
     expect(reset).toMatchObject({ type: 'reset', regionId: rich, seq: Number(row!.last_seq) });
-    const doc = openRegionDoc(Buffer.from(reset!.state as string, 'base64'), { gc: true });
-    expect(regionText(doc).toString()).toContain('saved Hello');
+    const doc = openRegionDoc(Buffer.from(reset!.state as string, 'base64'), { gc: true,kind:'rich-native-v1' });
+    expect(nativeText(doc).toString()).toContain('saved Hello');
     const ahead = await stream(editor, `${rich}:999`);
     expect((await framesUntil(ahead.frames!, (frame) => frame.type === 'reset'))[0]).toMatchObject({ seq: Number(row!.last_seq) });
     a.text.insert(0, 'more ', {});
@@ -330,9 +332,9 @@ describe('saving as page versions', () => {
     const a = await join(owner), b = await join(editor), t = await join(owner, plain);
     const { frames } = await stream(editor, `${rich}:${b.reply.seq + 0}`);
     a.text.insert(0, 'From owner. ', {});
-    b.text.insert(b.text.length - 1, ' And editor', { bold: true });
+    b.text.insert(b.text.length, ' And editor', { bold: {} });
     t.text.insert(t.text.length, ' renamed', {});
-    await a.push(); await b.push(); await t.push();
+    expect((await a.push()).status).toBe(200); expect((await b.push()).status).toBe(200); expect((await t.push()).status).toBe(200);
     const flushed = await flush(editor);
     expect(await flushed.json()).toEqual({ version: 2 });
     const head = (await getArtifactById(pageId))!;
@@ -343,10 +345,10 @@ describe('saving as page versions', () => {
     for (const frame of seen) if (frame.type === 'updates') b.receive(frame.updates as string[]);
     expect(seen.at(-1)).toMatchObject({ type: 'saved', version: 2 });
     // Inline ids are canonicalizeHtmlPage's (the comments track stops assigning them inside regions); blocks match exactly.
-    expect(normalizeRegionHtml('rich', (await savedRegion()).inner)).toBe(b.html());
+    expect(normalizeRegionHtml('rich-native-v1', (await savedRegion()).inner)).toBe(b.html());
     expect((await savedRegion()).inner).toContain('From owner. Hello world');
     expect((await savedRegion()).inner).toMatch(/<strong[^>]*> And editor<\/strong>/);
-    expect((await savedRegion(plain)).inner).toBe('Title renamed');
+    expect((await savedRegion(plain)).inner).toMatch(/>Title renamed<\/p>/);
     const snapshots = await rows('region_snapshots');
     expect(snapshots.filter((row) => row.version === 2).map((row) => row.region_id).sort()).toEqual([plain, rich].sort());
     expect(await (await flush(owner)).json()).toEqual({ version: 2 });
@@ -367,16 +369,17 @@ describe('a whole-page PUT while editors type', () => {
     expect(stored.inner).toContain('revised by the author');
     const seen = await framesUntil(frames!, (frame) => frame.type === 'saved');
     for (const frame of seen) if (frame.type === 'updates') b.receive(frame.updates as string[]);
-    expect(b.html()).toBe(normalizeRegionHtml('rich', stored.inner));
+    expect(b.html()).toBe(normalizeRegionHtml('rich-native-v1', stored.inner));
     const [row] = await rows('region_states');
     expect([row!.dirty_since, row!.saved_version]).toEqual([null, 2]);
   });
 
   it('closes a region the PUT removes (removed) or re-declares as another kind (kind_changed), deleting its rows', async () => {
+    await (await db()).query("UPDATE artifacts SET source=replace(source,'data-af-id=\"plain\" data-af-editable=\"rich-native-v1\"','data-af-id=\"plain\" data-af-editable=\"rich\"') WHERE id=$1",[pageId]);
     const a = await join(owner), t = await join(owner, plain);
     const { frames } = await stream(owner, `${rich}:${a.reply.seq},${plain}:${t.reply.seq}`);
     const saved = (await getArtifactById(pageId))!.source!;
-    const withoutRich = saved.replace(/<article[\s\S]*<\/article>/, '').replace('data-af-editable="text"', 'data-af-editable="rich"');
+    const withoutRich = saved.replace(/<article[\s\S]*<\/article>/, '').replace('data-af-editable="rich"', 'data-af-editable="rich-native-v1"');
     expect((await put(withoutRich)).status).toBe(200);
     const closed = (await framesUntil(frames!, (frame) => frame.type === 'closed' && frame.regionId === plain)).filter((frame) => frame.type === 'closed');
     const reasons = Object.fromEntries((closed.length < 2 ? [...closed, ...(await framesUntil(frames!, (frame) => frame.type === 'closed'))] : closed).map((frame) => [frame.regionId, frame.reason]));
@@ -397,7 +400,7 @@ describe('a whole-page PUT while editors type', () => {
     const saved = (await getArtifactById(pageId))!.source!;
     const response = await put(saved.replace('Outside', 'Outside, edited'));
     expect(response.status).toBe(200);
-    expect((await savedRegion(plain)).inner).toBe('Title');
+    expect((await savedRegion(plain)).inner).toMatch(/>Title<\/p>/);
   });
 
   it('a PUT from a stale version is the existing version conflict, and changes no region row', async () => {
@@ -451,9 +454,9 @@ it('document multiplex delivers ordinary pings and authorized region catchup, th
   const opened=await multiplex(editor,`${rich}:0`);expect(opened.response.status).toBe(200);
   const caught=(await opened.frames!.named('regions',1,1000))[0]?.data;
   expect(caught).toMatchObject({type:'updates',regionId:rich,from:1});
-  const follower=openRegionDoc(Buffer.from(writer.reply.state,'base64'));
+  const follower=openRegionDoc(Buffer.from(writer.reply.state,'base64'),{kind:'rich-native-v1'});
   for(const update of caught!.updates as string[])Y.applyUpdate(follower,Buffer.from(update,'base64'));
-  expect(regionText(follower).toString()).toContain('Before stream ');follower.destroy();
+  expect(nativeText(follower).toString()).toContain('Before stream ');follower.destroy();
   expect((await opened.frames!.named('message',1,1000))[0]?.data).toHaveProperty('version');
   // Current ACL, not the original admission, controls every catch-up.
   await (await harness.db()).query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[pageId,editor.email]);

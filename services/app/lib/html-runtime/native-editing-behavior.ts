@@ -3,7 +3,7 @@ import { safeHref } from '../live-regions/href';
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
 import { Fragment, Slice, type Node as PMNode } from 'prosemirror-model';
-import type { EditorState, Transaction } from 'prosemirror-state';
+import {Plugin, type EditorState, type Transaction} from 'prosemirror-state';
 
 /** Copied blocks are new identities, even when an internal clipboard slice carries original attributes. */
 export function freshClipboard(slice:Slice):Slice {
@@ -46,4 +46,21 @@ export const NativeIndentation=Extension.create({
   'Shift-Tab':()=>this.editor.isActive('codeBlock')?false:indentNative(this.editor,true),
   Escape:()=>{this.editor.view.dom.blur();return true;},
  };},
+});
+
+/** Splitting a block creates a new identity; the surviving right block keeps the old anchor, as it did before cutover. */
+export const NativeIdentityRepair=Extension.create({
+ name:'nativeIdentityRepair',
+ addProseMirrorPlugins(){return [new Plugin({appendTransaction(transactions,_old,state){
+  if(!transactions.some(tr=>tr.docChanged))return null;
+  const last=new Map<string,number>();let repair:Transaction|undefined;
+  state.doc.descendants((node,pos)=>{if(!node.isText)for(const key of ['afId','codeAfId']){const id=node.attrs[key];if(typeof id==='string'&&id)last.set(id,pos);}});
+  state.doc.descendants((node,pos)=>{
+   if(node.isText)return;
+   let attrs=node.attrs;
+   for(const key of ['afId','codeAfId']){const id=attrs[key];if(typeof id!=='string'||!id)continue;if(last.get(id)!==pos)attrs={...attrs,[key]:null};}
+   if(attrs!==node.attrs){repair??=state.tr;repair.setNodeMarkup(pos,undefined,attrs);}
+  });
+  return repair?.setMeta('addToHistory',false)??null;
+ }})];},
 });

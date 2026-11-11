@@ -1,3 +1,5 @@
+import {createArtifact} from '@/lib/artifacts';
+import {createHistoricalPage} from './historical-page';
 /**
  * Agents on live regions through their HTTP doors (operations read_region, write_region, save_regions; contract
  * region-sessions RegionContentReply/RegionWriteReply): reading a region as Markdown or HTML as the page reads now (an
@@ -8,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { createUser } from '@/lib/accounts';
-import { createArtifact, getArtifactById } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { runWithRequest } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
@@ -101,7 +103,7 @@ const head = async () => (await getArtifactById(pageId))!.version;
 beforeEach(async () => {
   const person = async (name: string) => { const user = await createUser({ email: `mxmx_test_agentregions_${name}@example.com` }); return { id: user.id, email: user.email! }; };
   [owner, editor, viewer, stranger] = await Promise.all(['owner', 'editor', 'viewer', 'stranger'].map(person));
-  const row = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
+  const row = await createHistoricalPage(null, owner.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
   pageId = row.id;
   const regions = editableRegions(row.source!);
   rich = regions.find((region) => region.kind === 'rich')!.id;
@@ -171,12 +173,12 @@ describe('reading a region', () => {
 
   it('names the regions there are when the path names none, or `_doc` is ambiguous', async () => {
     expect(await read({ token: agent }, 'nosuch')).toEqual({ status: 404, body: { error: 'region_not_found', regions: [{ regionId: plain, kind: 'text' }, { regionId: rich, kind: 'rich' }] } });
-    const two = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml('<section data-af-editable="rich"><p>a</p></section><section data-af-editable="rich"><p>b</p></section>'), meta: {}, visibility: 'private' });
+    const two = await createHistoricalPage(null, owner.id, { format: 'html', source: nativeHtml('<section data-af-editable="rich"><p>a</p></section><section data-af-editable="rich"><p>b</p></section>'), meta: {}, visibility: 'private' });
     const ambiguous = await read({ token: agent }, '_doc', '', two.id);
     expect(ambiguous.status).toBe(409);
     expect(ambiguous.body.error).toBe('region_ambiguous');
     expect((ambiguous.body.regions as unknown[]).length).toBe(2);
-    const none = await createArtifact(null, owner.id, { format: 'html', source: nativeHtml('<p>plain page</p>'), meta: {}, visibility: 'private' });
+    const none = await createHistoricalPage(null, owner.id, { format: 'html', source: nativeHtml('<p>plain page</p>'), meta: {}, visibility: 'private' });
     expect(await read({ token: agent }, '_doc', '', none.id)).toEqual({ status: 404, body: { error: 'region_not_found', regions: [] } });
   });
 });

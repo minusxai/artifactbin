@@ -1,3 +1,4 @@
+/** Test-only historical editor oracle for storage/CRDT compatibility; never shipped by production entries. */
 /**
  * THE ProseMirror ↔ Y.Text BINDING (the one module that writes a region's shared text from an editor).
  *
@@ -21,8 +22,8 @@ import { Plugin, PluginKey, Selection, TextSelection, type Command, type EditorS
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import * as Y from 'yjs';
-import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from './lines';
-import type { RegionKind } from './schema';
+import { documentUnits, insertUnits, keysOf, Linear, readText, type Attrs, type Unit } from '../lines';
+import type { RegionKind } from '../schema';
 
 interface BindingState { binding: Binding; pending: readonly Transaction[] }
 const bindingKey = new PluginKey<BindingState>('live-region-binding');

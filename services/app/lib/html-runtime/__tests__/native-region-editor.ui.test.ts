@@ -3,7 +3,7 @@ import * as Y from 'yjs';
 import { TextSelection } from 'prosemirror-state';
 import { createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
 import { mountRegionEditor } from '../native-region-editor';
-import type { RegionEditor } from '../region-editor';
+import type { RegionEditor } from '../region-editor-contract';
 const cleanup:Array<()=>void>=[];
 afterEach(()=>cleanup.splice(0).forEach(fn=>fn()));
 it('real native collaboration undo keeps a peer insertion in the first local text node',()=>{
@@ -194,4 +194,11 @@ it('legacy checkbox interaction cannot mutate a read-only native editor',()=>{
  e.view.setProps({editable:()=>false});
  e.view.dom.querySelector('li')!.click();
  expect(e.view.state.doc.firstChild!.firstChild!.attrs.legacyChecked).toBe('false');
+});
+
+it('refuses an old page session before decoding or changing the saved DOM',()=>{
+ const root=document.createElement('article');root.innerHTML='<p>Saved legacy text</p>';
+ const post=()=>{throw new Error('No update may leave a refused session');};
+ expect(()=>mountRegionEditor({win:window,root,regionId:'synthetic-region',kind:'rich',clientId:100,state:createRegionState('rich','<p>Old</p>').state,post})).toThrow('Legacy page editor retired');
+ expect(root.innerHTML).toBe('<p>Saved legacy text</p>');expect(root.hasAttribute('data-af-region-editor')).toBe(false);
 });

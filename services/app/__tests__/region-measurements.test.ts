@@ -1,3 +1,4 @@
+import {createHistoricalPage} from './historical-page';
 /**
  * The two numbers the live-region design asks for, measured rather than estimated. Opt-in (REGION_MEASURE=1): they
  * take seconds, and their value is the printed numbers, not a pass.
@@ -11,7 +12,6 @@ import { appendFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { createArtifact } from '@/lib/artifacts';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { compactRegion, createRegionState, editableRegions, openRegionDoc, regionText, validateRegionUpdate } from '@/lib/live-regions';
 import { createRegionSessions } from '@/lib/region-sessions';
@@ -59,7 +59,7 @@ it.skipIf(!measure)('(a) state size over 500 saves of a 2,000-word region with t
 it.skipIf(!measure)('(b) server time per validated update into a 10,000-word region (p50/p95)', async () => {
   const user = await createUser({ email: 'mxmx_test_region_measure@example.com' });
   const actor = identityForUser(user.id, null);
-  const row = await createArtifact(null, user.id, { format: 'html', source: nativeHtml(`<article data-af-editable="rich">${paragraphs(10_000)}</article>`), meta: {}, visibility: 'private' });
+  const row = await createHistoricalPage(null, user.id, { format: 'html', source: nativeHtml(`<article data-af-editable="rich">${paragraphs(10_000)}</article>`), meta: {}, visibility: 'private' });
   const regionId = editableRegions(row.source!)[0]!.id;
   const sessions = createRegionSessions({ db: getDb, keepaliveFrame: () => '', subscribe: async (channel, handler, onLost) => (await getDb()).listen(channel, handler, onLost) });
   const opened = await sessions.open(actor, row.id, regionId);

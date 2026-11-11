@@ -23,9 +23,9 @@ import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERS
 const MORPH_MODULE='@afbin/morph';
 const loadLiveMorph=()=>import(/* @vite-ignore */ MORPH_MODULE) as Promise<typeof import('./live-morph')>;
 /** The region editor (build.server `@afbin/regions`), fetched only when the parent opens a region session (./frame-regions). */
-const REGIONS_MODULE='@afbin/regions';
 const NATIVE_REGIONS_MODULE='@afbin/native-regions';
-const loadRegionEditor=(kind?:string)=>import(/* @vite-ignore */ kind === 'rich-native-v1' ? NATIVE_REGIONS_MODULE : REGIONS_MODULE) as Promise<typeof import('./region-editor')>;
+// The lazy native module validates the session kind before decoding its state.
+const loadRegionEditor=()=>import(/* @vite-ignore */ NATIVE_REGIONS_MODULE) as Promise<typeof import('./native-region-editor')>;
 import {startFrameRegions} from './frame-regions';
 import {createCellPort} from './frame-cells';
 import {RemoteUnreachable,type RemotePort,type QueryInvalidation} from './apollo/apollo-contracts';

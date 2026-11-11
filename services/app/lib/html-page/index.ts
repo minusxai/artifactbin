@@ -48,6 +48,7 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
  const seen=new Set<string>();
  // Inline elements inside an editable region carry no identity: an id written in the source is removed.
  const unidentified=regionInlineElements(document);
+ if(options.preserveInlineIds)for(const element of unidentified)if(attribute(element,'data-af-id')!==null)unidentified.delete(element);
  const edits:import('./html-source').Edit[]=[];
  for(const element of unidentified){
   const at=element.sourceCodeLocation?.attrs?.['data-af-id'];

@@ -9,55 +9,10 @@
  */
 import type { EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import { decodeRelativePosition, encodeRelativePosition } from 'yjs';
-import type { RegionCaret, RegionFrameMessage } from '@artifactbin/contracts';
-import { absolutePosition, relativePosition } from '../live-regions/browser';
+import type { RegionCaret } from '@artifactbin/contracts';
 
-/** A collaborator's caret as the parent paints it (contracts `region-paint`). */
+/** A collaborator's caret as the parent paints it (contracts region-paint). */
 export type RegionCaretPaint = RegionCaret & { id: string; colorId?: string; label: string };
-type CaretMessage = Extract<RegionFrameMessage, { kind: 'region-caret' }>;
-
-/** The contract's bound on one encoded position. */
-const MAX_POSITION_BYTES = 256;
-
-const toBase64 = (bytes: Uint8Array): string => { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary); };
-function fromBase64(text: string): Uint8Array | null {
-  if (typeof text !== 'string' || text.length > Math.ceil(MAX_POSITION_BYTES / 3) * 4) return null;
-  try { const binary = atob(text); return Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); } catch { return null; }
-}
-
-/** A document position of this editor as a contract position (base64 Yjs relative position). */
-export function encodePosition(state: EditorState, pos: number): string {
-  return toBase64(encodeRelativePosition(relativePosition(state, pos)));
-}
-/** A contract position back in this editor's document, or null (undecodable, or not in this region's text). */
-export function decodePosition(state: EditorState, position: string): number | null {
-  const bytes = fromBase64(position);
-  if (!bytes) return null;
-  try { return absolutePosition(state, decodeRelativePosition(bytes)); } catch { return null; }
-}
-
-/**
- * The block at the caret, as the toolbar names it: `code`, `rule`, `h1`..`h6`, `bullet`, `ordered`, `quote` or
- * `paragraph` (a heading wins over its list or quote, a list over its quote).
- */
-function blockName(state: EditorState): string {
-  const { $head } = state.selection;
-  const node = $head.depth >= 1 ? $head.node(1) : state.doc.firstChild;
-  if (!node) return 'paragraph';
-  if (node.type.name === 'code_block') return 'code';
-  if (node.type.name === 'rule') return 'rule';
-  if (node.attrs.level) return `h${node.attrs.level}`;
-  if (node.attrs.list) return node.attrs.list;
-  return node.attrs.quote ? 'quote' : 'paragraph';
-}
-
-/** This editor's caret: its selection as relative positions, and the marks and block at its head. */
-export function captureRegionCaret(state: EditorState, regionId: string): CaretMessage {
-  const { selection } = state;
-  const marks = (state.storedMarks ?? selection.$head.marks()).map((mark) => mark.type.name);
-  return { kind: 'region-caret', regionId, anchor: encodePosition(state, selection.anchor), head: encodePosition(state, selection.head), marks, block: blockName(state) };
-}
 
 /** A stable, readable colour per collaborator. */
 function colourOf(id: string): string {
@@ -77,7 +32,7 @@ export interface RegionCaretPainter {
 }
 
 /** Draws other people's carets for one region's editor, in document coordinates (they scroll with the page). */
-export function createRegionCaretPainter(view: EditorView, regionId: string, decode = decodePosition): RegionCaretPainter {
+export function createRegionCaretPainter(view: EditorView, regionId: string, decode: (state: EditorState, position: string) => number | null): RegionCaretPainter {
   const doc = view.dom.ownerDocument;
   const win = doc.defaultView!;
   const layer = doc.createElement('div');

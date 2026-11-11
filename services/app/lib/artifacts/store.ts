@@ -19,6 +19,7 @@ import {
   newEditId,
 } from '../document';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
+import {normalizeNewHtmlPage} from './new-page';
 import { seedOwnerJoin } from '@/lib/social';
 import { claimArtifactId } from './identities';
 import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, loadDatasetRows } from '@/lib/datasets';
@@ -163,7 +164,7 @@ export async function createArtifact(
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
   if(input.format==='html'&&input.source){
-    const page=canonicalizeHtmlPage(input.source);
+    const page=normalizeNewHtmlPage(input.source);
     input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions()}};
   }
   // A document is born in the current data syntax (lib/dataflow/data-syntax).
@@ -445,9 +446,9 @@ async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 're
   if (mode === 'replace') await restore();
 }
 
-/** A migration receipt is a permanent format boundary, including for immutable old archives. */
-async function migratedContent(tx: Queryable, id: string, input: ArtifactInput): Promise<ArtifactInput | Response> {
-  if (input.format !== 'html' || !(await tx.query('SELECT 1 FROM legacy_page_migrations WHERE artifact_id=$1', [id])).rows.length) return input;
+/** Every restored head is native, regardless of receipts; archive bytes remain immutable. */
+function restoredContent(input: ArtifactInput): ArtifactInput | Response {
+  if (input.format !== 'html') return input;
   try { return {...input, source: convertLegacyPage(input.source ?? '').html}; }
   catch (error) {
     if (error instanceof LiveRegionRefusal) return json({error: error.code, details: error.details}, 409);
@@ -600,7 +601,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     const moved = condition(current, {expectedVersion: initial.version, expectedState: artifactState(initial)}); if (moved) return {notArchived:true,refusal:moved};
-    const normalized = await migratedContent(tx, id, target);
+    const normalized = restoredContent(target);
     if (normalized instanceof Response) return {notArchived:true, refusal:normalized};
     target = {...target, ...normalized};
     // A revert replaces the whole page under its live regions: their unsaved typing is saved as its own version
@@ -727,9 +728,6 @@ async function replaceArtifactInTx(
   const fromLive = opts.expectedLive !== undefined && current.format === 'html' && input.format === 'html';
   if (fromLive && (await liveRevisionOf(tx, id)).live !== opts.expectedLive) return conflictOf(current, 'content');
   if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
-  const normalized = await migratedContent(tx, id, input);
-  if (normalized instanceof Response) return normalized;
-  input = normalized;
   // A page leaving HTML takes its live regions with it: their unsaved typing is saved as its own version first.
   const leavingHtml = current.format === 'html' && input.format !== 'html';
   if (leavingHtml && (await saveRegionsLocked(tx, actor, write)).published) {
@@ -743,8 +741,8 @@ async function replaceArtifactInTx(
     const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
     const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
     let page:ReturnType<typeof canonicalizeHtmlPage>;
-    try{page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});}
-    catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
+    try{page=normalizeNewHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});}
+    catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
     // Live regions: the written page with editors' unsaved typing merged in, three-way from the head (./regions).
     const merged=current.format==='html'?await planRegionMerge(tx,current,page,{from:fromLive?'live':'saved'}):null;
     if(merged instanceof Response)return merged;
@@ -1033,7 +1031,10 @@ export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):P
   if(!kinds.includes('rich')&&!kinds.includes('text'))return 'ineligible';
   if(kinds.includes('rich-native-v1'))throw new Error('Mixed generation migration refused');
   const plan=await planRegionSave(tx,write.current,await pageLedger(tx,write.current));
-  const converted=convertLegacyPage(plan?.html??write.current.source??'');
+  // Match saveRegionsLocked's complete storage projection, including heading-following titles.
+  // Otherwise dry-run accepts dirty docs whose apply fails its post-save equality proof.
+  const plannedHtml=plan ? (docTitleAfterSave(write.current,plan.html)?.html??plan.html) : (write.current.source??'');
+  const converted=convertLegacyPage(plannedHtml);
   // Saving legacy state can erase unsupported inline anchors: refuse rather than publish such a loss.
   const oldIds=canonicalizeHtmlPage(write.current.source??'').nodeIds;
   const newIds=canonicalizeHtmlPage(converted.html).nodeIds;

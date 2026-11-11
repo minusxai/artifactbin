@@ -10,11 +10,11 @@ import { TextSelection } from 'prosemirror-state';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { installEditorGeometry } from '../../../test/setup/editor-geometry';
-import { createRegionState, openRegionDoc, regionHtml, regionText } from '../../live-regions';
+import { createRegionState, openRegionDoc, regionHtml } from '../../live-regions';
+import * as nativeEditorModule from '../native-region-editor';
 import { startFrameRegions, type FrameRegions } from '../frame-regions';
 import { applyHtmlVersion, LOADED_SOURCE } from '../live-morph';
-import { REGION_BATCH_MS, type RegionEditor } from '../region-editor';
-import { encodePosition } from '../../html-bridge/region-carets';
+import { REGION_BATCH_MS, type RegionEditor } from '../region-editor-contract';
 
 let restoreGeometry: () => void;
 beforeAll(() => { restoreGeometry = installEditorGeometry(); });
@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 function page(region = SAVED) {
-  document.body.innerHTML = `<header><h1 data-af-id="t">Plan</h1></header><article data-af-id="r1" data-af-editable="rich" class="notes">${region}</article><p data-af-id="after">Outside</p>`;
+  document.body.innerHTML = `<header><h1 data-af-id="t">Plan</h1></header><article data-af-id="r1" data-af-editable="rich-native-v1" class="notes">${region}</article><p data-af-id="after">Outside</p>`;
   return document.querySelector('article')!;
 }
 
@@ -61,13 +61,13 @@ function open({ live = LIVE, loads = { count: 0 }, pageId = undefined as string 
     post: (message) => posted.push(message),
     load: async () => {
       loads.count++;
-      const module = await import('../region-editor');
+      const module = nativeEditorModule;
       return { mountRegionEditor: (options) => { const editor = module.mountRegionEditor(options); editors.push(editor); return editor; } };
     },
     pageId,
   });
-  const { state } = createRegionState('rich', live);
-  const server = openRegionDoc(state);
+  const { state } = createRegionState('rich-native-v1', live);
+  const server = openRegionDoc(state,{kind:'rich-native-v1'});
   harness = {
     regions, posted, editors, server, root,
     receive: (message) => { expect(regions.receive(message)).toBe(true); },
@@ -80,16 +80,20 @@ async function session(h: Harness) {
   h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
   h.root.querySelector('p')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
   expect(h.posted).toContainEqual({ kind: 'region-open', regionId: 'r1' });
-  h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+  h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
   await settle();
-  expect(h.editors).toHaveLength(1);
+  expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
   return h.editors[0]!;
 }
+/** Native paragraphs store inline text in XML, independently of the cell Y.Text engine. */
+function nativeText(doc:Y.Doc,block=0):Y.XmlText {
+ return (doc.getXmlFragment('native-v1').get(block) as Y.XmlElement).get(0) as Y.XmlText;
+}
 /** A collaborator's change, as the server would relay it. */
-function peerEdit(h: Harness, change: (text: Y.Text) => void, clientID = 99): Uint8Array {
-  const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { clientId: clientID });
+function peerEdit(h: Harness, change: (text: Y.XmlText) => void, clientID = 99, block = 0): Uint8Array {
+  const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { clientId: clientID, kind:'rich-native-v1' });
   const before = Y.encodeStateVector(peer);
-  change(regionText(peer));
+  change(nativeText(peer,block));
   const update = Y.encodeStateAsUpdate(peer, before);
   Y.applyUpdate(h.server, update);
   return update;
@@ -103,8 +107,9 @@ const typeInto = (editor: RegionEditor, text: string) => {
   }
 };
 const select = (editor: RegionEditor, pos: number) => editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, pos)));
-const texts = (root: Element) => [...root.children].map((child) => child.textContent);
-const serverHtml = (h: Harness) => regionHtml('rich', Y.encodeStateAsUpdate(h.server));
+const content = (root: Element) => root.querySelector('.ProseMirror') ?? root;
+const texts = (root: Element) => [...content(root).children].map((child) => child.textContent);
+const serverHtml = (h: Harness) => regionHtml('rich-native-v1', Y.encodeStateAsUpdate(h.server));
 
 describe('a region session in the page frame', () => {
   it('fetches the editor only for a session, and mounts it IN PLACE on the region element with the session\'s text', async () => {
@@ -120,15 +125,15 @@ describe('a region session in the page frame', () => {
     expect(h.posted).toEqual([{ kind: 'region-open', regionId: 'r1' }]);
     expect(loads.count).toBe(0);
     expect(h.root.getAttribute('tabindex')).toBe('0');
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
     await settle();
     expect(loads.count).toBe(1);
     expect(document.querySelector('article')).toBe(h.root);
-    expect(h.root.getAttribute('contenteditable')).toBe('true');
-    expect(h.root.getAttribute('data-af-region-editor')).toBe('rich');
+    expect(content(h.root).getAttribute('contenteditable')).toBe('true');
+    expect(h.root.getAttribute('data-af-region-editor')).toBe('rich-native-v1');
     expect(h.root.classList.contains('notes')).toBe(true);
     expect(texts(h.root)).toEqual(['Live text', 'Second']);
-    expect(document.head.querySelector('style[data-af="region-editor"]')!.textContent).toContain('[data-af-region-editor]>[data-list="ordered"][data-depth="2"]');
+    expect(document.head.querySelector('[data-af-native-editor-style]')).not.toBeNull();
     // Everything outside the region is untouched.
     expect(document.querySelector('[data-af-id="after"]')!.textContent).toBe('Outside');
   });
@@ -136,7 +141,7 @@ describe('a region session in the page frame', () => {
   it('refuses a session for a region that is not declared, or declared with another kind', async () => {
     const loads = { count: 0 };
     const h = open({ loads });
-    h.receive({ kind: 'region-session', regionId: 'nope', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 1 });
+    h.receive({ kind: 'region-session', regionId: 'nope', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 1 });
     h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'text', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 1 });
     await settle();
     expect(loads.count).toBe(0);
@@ -165,8 +170,8 @@ describe('a region session in the page frame', () => {
     Y.applyUpdate(h.server, sent[0]!.update);
     expect(serverHtml(h)).toBe('<p data-af-id="a1">&gt;Live text!!</p><p data-af-id="a2">Second</p>');
     // A second Y.Doc started from the same bytes converges on the same text.
-    const other = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true });
-    expect(regionText(other).toString()).toBe(regionText(h.server).toString());
+    const other = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true, kind:'rich-native-v1' });
+    expect(other.getXmlFragment('native-v1').toString()).toBe(h.server.getXmlFragment('native-v1').toString());
   });
 
   it('applies region-remote updates to the DOM, keeps the caret on its character, and tolerates duplicates', async () => {
@@ -214,7 +219,7 @@ describe('a region session in the page frame', () => {
     const editor = await session(h);
     const ownAttributes = ['class', 'data-af-editable', 'data-af-id', 'tabindex'];
     typeInto(editor, 'x');
-    (window as unknown as Record<symbol, unknown>)[LOADED_SOURCE] = `<!doctype html><html><body><article data-af-id="r1" data-af-editable="rich" class="notes"><p data-af-id="a1">Saved by flush.</p></article></body></html>`;
+    (window as unknown as Record<symbol, unknown>)[LOADED_SOURCE] = `<!doctype html><html><body><article data-af-id="r1" data-af-editable="rich-native-v1" class="notes"><p data-af-id="a1">Saved by flush.</p></article></body></html>`;
     h.receive({ kind: 'region-closed', regionId: 'r1', reason: 'removed' });
     expect(document.querySelector('article')).toBe(h.root);
     expect(h.root.innerHTML).toBe('<p data-af-id="a1">Saved by flush.</p>');
@@ -223,7 +228,7 @@ describe('a region session in the page frame', () => {
     // Without a kept source, what the region showed before the editor took it.
     delete (window as unknown as Record<symbol, unknown>)[LOADED_SOURCE];
     h.root.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
     await settle();
     expect(texts(h.root)).toEqual(['Live text', 'Second']);
     h.receive({ kind: 'region-closed', regionId: 'r1', reason: 'access' });
@@ -235,17 +240,17 @@ describe('a region session in the page frame', () => {
     h.receive({ kind: 'regions-enabled', regionIds: ['r1'] });
     const start = Y.encodeStateAsUpdate(h.server);
     const remote = peerEdit(h, (text) => text.insert(0, 'Hi '));
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: start, seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: start, seq: 3 });
     h.receive({ kind: 'region-remote', regionId: 'r1', updates: [remote], seq: 4 });
     h.receive({ kind: 'region-command', regionId: 'r1', name: 'heading', args: { level: 2 } });
     await settle();
-    expect(h.root.firstElementChild!.outerHTML).toBe('<h2 data-af-id="a1">Hi Live text</h2>');
+    expect(content(h.root).firstElementChild!.outerHTML).toBe('<h2 data-af-id="a1">Hi Live text</h2>');
     const editor = h.editors[0]!;
     // The stream reset: a new session for the mounted region merges, never remounts.
-    const later = peerEdit(h, (text) => text.insert(text.length - 1, ' end'));
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT + 1, state: Y.encodeStateAsUpdate(h.server), seq: 9 });
+    const later = peerEdit(h, (text) => text.insert(text.length, ' end'), 98, 1);
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT + 1, state: Y.encodeStateAsUpdate(h.server), seq: 9 });
     void later;
-    expect(h.editors).toHaveLength(1);
+    expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
     expect(texts(h.root)).toEqual(['Hi Live text', 'Second end']);
     await sleep(REGION_BATCH_MS + 30);
     h.posted.length = 0;
@@ -260,13 +265,13 @@ describe('a region session in the page frame', () => {
     const editor = await session(h);
     editor.view.coordsAtPos = (pos: number) => ({ left: pos * 10, right: pos * 10, top: 100, bottom: 118 });
     h.receive({ kind: 'region-command', regionId: 'r1', name: 'list', args: { type: 'ordered' } });
-    expect(h.root.firstElementChild!.getAttribute('data-list')).toBe('ordered');
+    expect(content(h.root).firstElementChild!.tagName).toBe('OL');
     h.receive({ kind: 'region-command', regionId: 'r1', name: 'nonsense' });
     select(editor, 1 + 'Live text'.length);
     typeInto(editor, '/');
     expect(h.posted.some((message) => message.kind === 'region-slash')).toBe(false);
     const end = editor.view.state.doc.content.size;
-    editor.view.dispatch(editor.view.state.tr.insert(end, editor.view.state.schema.nodes.textblock!.create()));
+    editor.view.dispatch(editor.view.state.tr.insert(end, editor.view.state.schema.nodes.paragraph!.create()));
     select(editor, end + 1);
     typeInto(editor, '/');
     expect(h.posted.filter((message) => message.kind === 'region-slash')).toEqual([{ kind: 'region-slash', regionId: 'r1', x: (end + 1) * 10, y: 118 }]);
@@ -285,7 +290,7 @@ describe('a region session in the page frame', () => {
     expect(last).toMatchObject({ regionId: 'r1', marks: [], block: 'paragraph' });
     expect(atob(last.head).length).toBeLessThanOrEqual(256);
     // The position is the shared text's: a peer resolves it to the same character.
-    const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true });
+    const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true, kind:'rich-native-v1' });
     const resolved = Y.createAbsolutePositionFromRelativePosition(Y.decodeRelativePosition(Uint8Array.from(atob(last.head), (ch) => ch.charCodeAt(0))), peer);
     expect(resolved?.index).toBe('Live'.length);
     editor.view.dom.dispatchEvent(new FocusEvent('blur'));
@@ -296,8 +301,8 @@ describe('a region session in the page frame', () => {
     const h = open();
     const editor = await session(h);
     editor.view.coordsAtPos = (pos: number) => ({ left: pos * 10, right: pos * 10, top: 20, bottom: 36 });
-    const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true });
-    const at = (index: number) => btoa(String.fromCharCode(...Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(regionText(peer), index))));
+    const peer = openRegionDoc(Y.encodeStateAsUpdate(h.server), { gc: true, kind:'rich-native-v1' });
+    const at = (index: number) => btoa(String.fromCharCode(...Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(nativeText(peer), index))));
     h.receive({ kind: 'region-paint', carets: [
       { regionId: 'r1', anchor: at(4), head: at(4), id: 'u2', label: 'Ana' },
       { regionId: 'other', anchor: at(1), head: at(1), id: 'u3', label: 'Elsewhere' },
@@ -316,7 +321,7 @@ describe('a region session in the page frame', () => {
     h.receive({ kind: 'region-remote', regionId: 'r1', updates: [peerEdit(h, (text) => text.insert(0, 'Hi '))], seq: 4 });
     expect(caret()!.style.left).toBe('80px');
     // The same position this editor would encode.
-    expect(encodePosition(editor.view.state, 8)).toBeTypeOf('string');
+    expect(editor.caret()?.head).toBeTypeOf('string');
     const paintIdentity = (id: string, colorId: string, label: string) => {
       h.receive({ kind: 'region-paint', carets: [{ regionId: 'r1', anchor: at(4), head: at(4), id, colorId, label }] });
       return document.querySelector<HTMLElement>('[data-af-region-caret]')!.firstElementChild as HTMLElement;
@@ -332,7 +337,7 @@ describe('a region session in the page frame', () => {
 describe('a saved version arriving while a region is edited', () => {
   const runtime = (revision: number, ids: string[]) => `<script type="application/json" data-af="runtime">${JSON.stringify({ revision: String(revision), savedNodeIds: ids, scriptFingerprint: 'fp' })}</script>`;
   const served = (revision: number, region: string, outside = 'Outside') => {
-    const body = `<header data-af-id="hd"><h1 data-af-id="t">Plan</h1></header><article data-af-id="r1" data-af-editable="rich" class="notes">${region}</article><p data-af-id="after">${outside}</p>`;
+    const body = `<header data-af-id="hd"><h1 data-af-id="t">Plan</h1></header><article data-af-id="r1" data-af-editable="rich-native-v1" class="notes">${region}</article><p data-af-id="after">${outside}</p>`;
     const ids = [...body.matchAll(/data-af-id="([^"]+)"/g)].map((match) => match[1]!);
     return `<!doctype html><html><head>${runtime(revision, ids)}</head><body>${body}</body></html>`;
   };
@@ -411,9 +416,9 @@ describe('keys typed between the press and the editor', () => {
     key(input, 'b', { ctrlKey: true });
     typeKeys(input, 'bold');
     expect(texts(h.root)).toEqual(['Saved text.']);
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
     await settle();
-    expect(h.editors).toHaveLength(1);
+    expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
     expect(loads.count).toBe(1);
     expect(texts(h.root)).toEqual(['H!', 'Next boldLive text', 'Second']);
     // The editor has the focus the keys' input had.
@@ -433,7 +438,7 @@ describe('keys typed between the press and the editor', () => {
     const input = keysInput()!;
     typeKeys(input, 'a');
     compose(input, ['k', 'か', 'かn', 'かな']);
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
     await settle();
     // Mounting now would end the composition: the editor waits for it.
     expect(h.editors).toHaveLength(0);
@@ -442,7 +447,7 @@ describe('keys typed between the press and the editor', () => {
     input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'かな' }));
     input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: 'かな' }));
     await settle();
-    expect(h.editors).toHaveLength(1);
+    expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
     expect(texts(h.root)[0]).toBe('aかなLive text');
   });
 
@@ -455,7 +460,7 @@ describe('keys typed between the press and the editor', () => {
     compose(input, ['か', 'かな'], '仮名');
     key(input, 'Enter');
     typeKeys(input, 'y');
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
     await settle();
     expect(texts(h.root)).toEqual(['x仮名', 'yLive text', 'Second']);
   });
@@ -505,12 +510,12 @@ describe('keys typed between the press and the editor', () => {
     const input = keysInput()!;
     expect(document.activeElement).toBe(input);
     typeKeys(input, 'My ');
-    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
+    h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(h.server), seq: 3 });
     typeKeys(input, 'title');
     key(input, 'Enter');
     typeKeys(input, 'x');
     await settle();
-    expect(h.editors).toHaveLength(1);
+    expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
     expect(texts(h.root)).toEqual(['My title', 'xLive text', 'Second']);
     expect(h.editors[0]!.view.hasFocus()).toBe(true);
     expect(keysInput()).toBeNull();
@@ -537,7 +542,7 @@ describe('the focus coming back from the page', () => {
 
 describe('the editor\'s toolbar, menu and shortcut commands', () => {
   const keyDown = (editor: RegionEditor, init: KeyboardEventInit) => editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
-  const blocks = (root: Element) => [...root.children].map((child) => `${child.tagName.toLowerCase()}${child.getAttribute('data-list') ? `[${child.getAttribute('data-list')}]` : ''}${child.hasAttribute('data-quote') ? '[quote]' : ''}:${child.textContent}`);
+  const blocks = (root: Element) => [...content(root).children].map((child) => `${child.tagName.toLowerCase()}${child.getAttribute('data-list') ? `[${child.getAttribute('data-list')}]` : ''}${child.hasAttribute('data-quote') ? '[quote]' : ''}:${child.textContent}`);
 
   it('the slash menu\'s commands: removeSlash takes the `/` that opens the caret\'s block only, rule draws a divider, paragraph undoes a code block', async () => {
     const h = open();
@@ -545,7 +550,7 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     select(editor, 1 + 'Live'.length);
     expect(editor.command('removeSlash')).toBe(false);
     const end = editor.view.state.doc.content.size;
-    editor.view.dispatch(editor.view.state.tr.insert(end, editor.view.state.schema.nodes.textblock!.create()));
+    editor.view.dispatch(editor.view.state.tr.insert(end, editor.view.state.schema.nodes.paragraph!.create()));
     select(editor, end + 1);
     typeInto(editor, '/');
     // Keys typed right after the choice may reach the text before the command does.
@@ -555,15 +560,15 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     expect(editor.command('removeSlash')).toBe(false);
     editor.view.dispatch(editor.view.state.tr.delete(editor.view.state.selection.head - 2, editor.view.state.selection.head));
     expect(editor.command('heading', { level: 2 })).toBe(true);
-    expect(h.root.lastElementChild!.tagName).toBe('H2');
+    expect(content(h.root).lastElementChild!.tagName).toBe('H2');
     expect(editor.command('rule')).toBe(true);
-    expect([...h.root.children].map((child) => child.tagName)).toEqual(['P', 'P', 'HR', 'H2']);
+    expect([...content(h.root).children].map((child) => child.tagName)).toEqual(['P', 'P', 'HR', 'H2']);
     typeInto(editor, 'x');
-    expect(h.root.lastElementChild!.textContent).toBe('x');
+    expect(content(h.root).lastElementChild!.textContent).toBe('x');
     expect(editor.command('codeBlock', { on: true })).toBe(true);
-    expect(h.root.lastElementChild!.tagName).toBe('PRE');
+    expect(content(h.root).lastElementChild!.tagName).toBe('PRE');
     expect(editor.command('paragraph')).toBe(true);
-    expect(h.root.lastElementChild!.outerHTML).toBe('<p>x</p>');
+    expect(content(h.root).lastElementChild!.outerHTML).toBe('<p>x</p>');
     // Back to the text: the caret stays; `focus` (a doc opened without a press) takes it to the start.
     const at = editor.view.state.selection.head;
     expect(editor.command('resume')).toBe(true);
@@ -580,15 +585,15 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     expect(editor.command('link', { href: 'javascript:alert(1)' })).toBe(false);
     expect(editor.command('link', { href: null })).toBe(false);
     expect(editor.command('link', { href: 'https://a.example/' })).toBe(true);
-    expect(h.root.firstElementChild!.innerHTML).toBe('Live <a href="https://a.example/">https://a.example/</a>text');
+    expect(content(h.root).firstElementChild!.innerHTML.replace(/ target="[^"]*"| rel="[^"]*"/g,'')).toBe('Live <a href="https://a.example/">https://a.example/</a>text');
     // Typing after the link is not part of it.
     typeInto(editor, '!');
-    expect(h.root.firstElementChild!.innerHTML).toBe('Live <a href="https://a.example/">https://a.example/</a>!text');
+    expect(content(h.root).firstElementChild!.innerHTML.replace(/ target="[^"]*"| rel="[^"]*"/g,'')).toBe('Live <a href="https://a.example/">https://a.example/</a>!text');
     select(editor, 1 + 'Live https'.length);
     expect(editor.command('link', { href: '/inside' })).toBe(true);
-    expect(h.root.firstElementChild!.innerHTML).toBe('Live <a href="/inside">https://a.example/</a>!text');
+    expect(content(h.root).firstElementChild!.innerHTML.replace(/ target="[^"]*"| rel="[^"]*"/g,'')).toBe('Live <a href="/inside">https://a.example/</a>!text');
     expect(editor.command('link', { href: null })).toBe(true);
-    expect(h.root.firstElementChild!.innerHTML).toBe('Live https://a.example/!text');
+    expect(content(h.root).firstElementChild!.innerHTML.replace(/ target="[^"]*"| rel="[^"]*"/g,'')).toBe('Live https://a.example/!text');
   });
 
   it('Mod-K asks the parent for a link with the one at the caret; Mod-Alt-1..3, Mod-Shift-7/8/9 toggle headings, lists and quote', async () => {
@@ -603,18 +608,18 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     expect(h.posted.at(-1)).toEqual({ kind: 'region-link', regionId: 'r1', href: 'https://b.example/' });
     select(editor, 2);
     keyDown(editor, { key: '2', code: 'Digit2', keyCode: 50, ctrlKey: true, altKey: true });
-    expect(h.root.firstElementChild!.tagName).toBe('H2');
+    expect(content(h.root).firstElementChild!.tagName).toBe('H2');
     keyDown(editor, { key: '2', code: 'Digit2', keyCode: 50, ctrlKey: true, altKey: true });
-    expect(h.root.firstElementChild!.tagName).toBe('P');
+    expect(content(h.root).firstElementChild!.tagName).toBe('P');
     // Shifted digits arrive as their symbol: the key code names the digit.
     keyDown(editor, { key: '*', code: 'Digit8', keyCode: 56, ctrlKey: true, shiftKey: true });
-    expect(blocks(h.root)[0]).toMatch(/^p\[bullet\]:/);
+    expect(blocks(h.root)[0]).toMatch(/^ul:/);
     keyDown(editor, { key: '&', code: 'Digit7', keyCode: 55, ctrlKey: true, shiftKey: true });
-    expect(blocks(h.root)[0]).toMatch(/^p\[ordered\]:/);
+    expect(blocks(h.root)[0]).toMatch(/^ol:/);
     keyDown(editor, { key: '&', code: 'Digit7', keyCode: 55, ctrlKey: true, shiftKey: true });
     expect(blocks(h.root)[0]).toMatch(/^p:/);
     keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
-    expect(blocks(h.root)[0]).toMatch(/^p\[quote\]:/);
+    expect(blocks(h.root)[0]).toMatch(/^blockquote:/);
     keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
     expect(blocks(h.root)[0]).toMatch(/^p:/);
   });
@@ -641,7 +646,7 @@ describe('a rebuild under an editor (a version not drawn in place)', () => {
     keys.value = 'Z';
     keys.dispatchEvent(new InputEvent('input', { bubbles: true }));
     // The same server: its state holds the shared text the kept positions point into.
-    after.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich', clientId: CLIENT, state: Y.encodeStateAsUpdate(before.server), seq: 3 });
+    after.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT, state: Y.encodeStateAsUpdate(before.server), seq: 3 });
     await settle();
     const reopened = after.editors[0]!;
     expect(reopened.view.hasFocus()).toBe(true);
