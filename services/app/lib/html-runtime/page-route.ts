@@ -109,7 +109,9 @@ export function createPageRoute(win: Window, facts: Pick<SeatFacts, 'pageId' | '
     win.addEventListener('message', (event: MessageEvent) => {
       const data = event.data as { type?: unknown; search?: unknown } | null;
       if (event.source !== win.parent || event.origin !== appOrigin || data?.type !== STORY_URL_VALUES_MESSAGE || typeof data.search !== 'string') return;
-      write(withValues(search(), routeSearch(routeValuesOf(data.search))), false);
+      let next: string;
+      try { next = routeSearch(routeValuesOf(data.search)); } catch { return; /* past the bound: the app never sends one */ }
+      write(withValues(search(), next), false);
       changed();
     });
   } else win.addEventListener('popstate', changed);

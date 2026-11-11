@@ -95,6 +95,7 @@ describe('route in the app\'s frame',()=>{
   // Another window or origin moves nothing.
   page.fire('message',{source:{},origin:APP,data:{type:'mx:url-values',search:'?$screen=x'}});
   page.fire('message',{source:page.parent,origin:'https://evil.test',data:{type:'mx:url-values',search:'?$screen=x'}});
+  page.fire('message',{source:page.parent,origin:APP,data:{type:'mx:url-values',search:'?$big='+'x'.repeat(9000)}});
   expect(route.get()).toEqual({screen:'detail',id:'7'});
   expect(seen).toHaveBeenCalledTimes(3);
   // A link is the app's address for this page: `$` values only, never the frame's ticket.
