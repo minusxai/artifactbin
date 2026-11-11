@@ -32,9 +32,10 @@ export const LENSES = Object.freeze(['node-batch', 'pr-guards', 'pr-guards-isola
 
 const OUT = path.resolve(import.meta.dirname, 'test-timings.json');
 const ROOT = path.resolve(import.meta.dirname, '../..');
-/** The Vitest projects CI runs with `--shard` (ci.yml's api, ui and node jobs; pr-fast.yml's suite shards, node batch and
- * guard runners). */
-const SHARDED = ['api', 'api-isolated', 'node', 'ui', 'islands', ...LENSES];
+/** The projects the table records: those CI runs with `--shard` (ci.yml's api, ui and node jobs; pr-fast.yml's suite
+ * shards, node batch and guard runners) and ci.yml's integration job, whose order they set. Any other project in a log
+ * (pr fast's fast module list, `fast-module-unit`) is ignored: it re-runs `node` files, and once moved 97 of them out. */
+export const RECORDED = Object.freeze(['api', 'api-isolated', 'node', 'ui', 'islands', 'integration', ...LENSES]);
 // ` ✓  api  services/app/__tests__/x.test.ts (12 tests) 3456ms` (also ✗/× for a failed file).
 const LINE = /[✓✗×]\s+([\w-]+)\s+(\S+\.test\.\w+)\s+\(\d+ tests?[^)]*\)\s+(\d+)ms/;
 // Vitest colours its lines in CI; `gh run view --log` hands them back as ESC bytes or as literal `^[[…m`.
@@ -84,11 +85,12 @@ export function medianTimings(runs) {
 
 /** The recorded table with these measured times laid over it. A file runs in one of the full suite's projects, so one
  * measured under such a project leaves the one it was recorded under before (a mock moves a file to `api-isolated`);
- * a `LENSES` project's times stand beside the full suite's and move nothing. */
+ * a `LENSES` project's times stand beside the full suite's and move nothing, and a project not `RECORDED` is ignored. */
 export function mergeTimings(timings, measured) {
   const lens = (project) => LENSES.includes(project);
   const files = Object.fromEntries(Object.entries(timings.files).map(([project, recorded]) => [project, { ...recorded }]));
   for (const [project, times] of Object.entries(measured)) {
+    if (!RECORDED.includes(project)) continue;
     if (!lens(project)) for (const [other, recorded] of Object.entries(files)) if (other !== project && !lens(other)) for (const file of Object.keys(times)) delete recorded[file];
     files[project] = { ...files[project], ...times };
   }
@@ -125,10 +127,10 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--su
   const measured = medianTimings(logs.map(parseTimings));
   const timings = mergeTimings(readTimings(OUT), measured);
   const count = Object.values(measured).reduce((sum, files) => sum + Object.keys(files).length, 0);
-  // Only the projects CI shards, and only files that still exist.
+  // Only the recorded projects, and only files that still exist.
   const root = ROOT;
   for (const project of Object.keys(timings.files)) {
-    if (!SHARDED.includes(project)) { delete timings.files[project]; continue; }
+    if (!RECORDED.includes(project)) { delete timings.files[project]; continue; }
     timings.files[project] = Object.fromEntries(Object.entries(timings.files[project])
       .filter(([file]) => existsSync(path.join(root, file)))
       .sort(([a], [b]) => (a < b ? -1 : 1)));

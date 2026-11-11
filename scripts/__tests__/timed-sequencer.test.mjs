@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CI_RUNNER, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
-import { JOBS, LENSES, medianTimings, mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
+import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);
@@ -93,6 +93,9 @@ describe('timed shard packing', () => {
     expect(LENSES).toEqual(expect.arrayContaining(['node-batch', 'pr-guards', 'pr-contracts']));
     // And the full suite's time of a file leaves its lens times alone.
     expect(mergeTimings(merged, { node: { 'n.test.mjs': 800 } }).files['node-batch']).toEqual({ 'n.test.mjs': 40 });
+    // pr fast's fast module list re-runs `node` files under a project the table does not record: it changes nothing.
+    expect(mergeTimings(merged, { 'fast-module-unit': { 'n.test.mjs': 5 } })).toEqual(merged);
+    expect(RECORDED).toEqual(expect.arrayContaining(['node', 'integration', ...LENSES]));
   });
 
   it('records each file\'s median over several runs, so one slow runner sets no file\'s weight', () => {
