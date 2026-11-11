@@ -44,17 +44,19 @@ interface Blocks {
 }
 
 /** The canonical bundle text: sorted file names, so equal files are equal bytes (and one digest). */
-const bundleText = (files: Map<string, Buffer>) =>
-  JSON.stringify({ files: Object.fromEntries([...files].sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, body]) => [name, body.toString('utf8')])) });
+type ComponentFiles = NonNullable<Awaited<ReturnType<typeof publicComponentFiles>>>;
+const sorted = (files: ComponentFiles) => [...files].sort(([a], [b]) => (a < b ? -1 : 1));
+const bundleText = (files: ComponentFiles) => JSON.stringify({ files: Object.fromEntries(sorted(files).map(([name, file]) => [name, file.body.toString('utf8')])) });
 
 let current: { key: string; blocks: Promise<Blocks> } | undefined;
 async function blocks(): Promise<Blocks> {
   const [assets, files] = await Promise.all([buildHtmlAssets(), publicComponentFiles()]);
-  // A development rebuild of the components changes their bytes: the key follows them, so the manifest does too.
-  const text = files ? bundleText(files) : null;
-  const key = sha256(`${text ?? ''}\n${assets.host ?? ''}`);
+  // A development rebuild of the components changes their bytes: the key (their per-file digests, read once per file
+  // by lib/libraries/components.server) follows them, so the manifest does too. The bundle is assembled only then.
+  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '']));
   if (current?.key === key) return current.blocks;
   const pending = (async (): Promise<Blocks> => {
+    const text = files ? bundleText(files) : null;
     const sheets = { all: assets.systems ?? htmlSystemsCss(), ...Object.fromEntries(HTML_SYSTEM_NAMES.map(name => [name, htmlSystemsCss([name])])) } as Record<string, string>;
     const retention = {
       components: createSourceRetention(text ? [text] : [], stores.components, sha256),

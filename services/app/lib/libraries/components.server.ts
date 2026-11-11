@@ -62,15 +62,15 @@ const CHUNK_IMPORT = /["']\.\/(chunk-[a-z0-9]+\.js)["']/g;
  * transitively (legacy wrappers and the chunks only they use stay out). The pinned bundle a host page loads
  * (lib/document-serving/hosted-blocks) is exactly these. Null when this build has not produced them.
  */
-export async function publicComponentFiles(): Promise<Map<string, Buffer> | null> {
-  const files = new Map<string, Buffer>();
+export async function publicComponentFiles(): Promise<Map<string, LoadedComponentFile> | null> {
+  const files = new Map<string, LoadedComponentFile>();
   const queue = hostedComponentEntries().map(name => `${name}.js`);
   while (queue.length) {
     const file = queue.pop()!;
     if (files.has(file)) continue;
     const loaded = await loadComponentFile(file);
     if (!loaded) return null;
-    files.set(file, loaded.body);
+    files.set(file, loaded);
     for (const match of loaded.body.toString('utf8').matchAll(CHUNK_IMPORT)) queue.push(match[1]!);
   }
   return files;

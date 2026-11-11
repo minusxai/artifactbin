@@ -94,7 +94,10 @@ app: it asks `/api/page/frame/<id>` for the frame's one-time ticket with this or
 draws the frame with the app page's sandbox, and relays the document's `sql` and
 `fetch('/fn/NAME')` as the signed-in reader, pinned to the served revision exactly as the app
 page does. It refuses to mount on any origin but the app's; the document's door ignores every
-other parent. A reader who may not read the document gets `HostShellError` `not_found`.
+other parent. A reader who may not read the document gets `HostShellError` `not_found`. It shows
+the current version only (relays pin the head's revision), never an archived one. The shell's
+policy needs `script-src 'self'`, `connect-src 'self'` and `frame-src` admitting the pages host's
+documents (`https://*.<pages host>`); a shell on another origin needs only `frame-src [[ base ]]`.
 
 ```js
 import { mountDocument } from '/af/host.js';
@@ -109,6 +112,7 @@ Methods: `setMode`, `setDesignSystem(name, mode)`, `select(path, { reveal })`, `
 `setInset(px)`, `followVersion(version)`, `notifyData(datasets)`, `destroy`; `bridge` is the raw
 bridge. Events on the container: `af-document-ready`, `af-document-selection`,
 `af-document-event` (every frame event), `af-document-scroll`, `af-document-url-values`,
-`af-document-navigate` (an app link; `preventDefault()` to route it yourself), `af-document-closed`.
+`af-document-navigate` (a link to an app page: `preventDefault()` routes it yourself; a link to
+another document loads in the tab), `af-document-closed`.
 Not included: uploads (refused), comments, presence, region and cell editing, and the live
 version stream; call `followVersion` and `notifyData` from your own stream.
