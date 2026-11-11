@@ -29,7 +29,8 @@
     "render:schema": "node scripts/render-schema.mjs",
     "generate:env-snapshot": "node scripts/generate-env-snapshot.mjs",
     "generate:design-systems": "node scripts/design-systems.mjs",
-    "generate:design-system-previews": "node scripts/generate-design-system-previews.mjs"
+    "generate:design-system-previews": "node scripts/generate-design-system-previews.mjs",
+    "migrate:legacy-pages": "tsx --env-file=.env services/app/scripts/migrate-legacy-pages.ts"
   },
   "dependencies": {
     "@artifactbin/auth": "0.1.0",

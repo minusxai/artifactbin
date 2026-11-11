@@ -29,13 +29,13 @@ export function validateNativeTree(doc:Y.Doc):void {
   if(!(type instanceof Y.XmlElement)&&[...type._map.values()].some(item=>!item.deleted))fail('native root attributes');
   for(const child of type.toArray()){
    units++;
-   if(child instanceof Y.XmlText){if(Object.keys(child.getAttributes()).length)fail('native text attributes');for(const run of child.toDelta()){if(typeof run.insert!=='string')fail('embedded native content');units+=run.insert.length;for(const [key,value] of Object.entries(run.attributes??{})){if(!['bold','italic','code','link'].includes(key)||!value||typeof value!=='object')fail('native mark');if(key==='link'){const attrs=value as Record<string,unknown>;if(typeof attrs.href!=='string'||safeHref(attrs.href)!==attrs.href)fail('native link');for(const k of Object.keys(attrs))if(!['href','target','rel','class','title'].includes(k))fail('link attribute');if(attrs.title!=null&&(typeof attrs.title!=='string'||attrs.title.length>512))fail('link title');if(attrs.class!=null || (attrs.target!=null && attrs.target!=='_blank') || (attrs.rel!=null && attrs.rel!=='noopener noreferrer nofollow'))fail('link attribute');}else if(Object.keys(value as object).length)fail('mark attributes');}}continue;}
+   if(child instanceof Y.XmlText){if(Object.keys(child.getAttributes()).length)fail('native text attributes');for(const run of child.toDelta()){if(typeof run.insert!=='string')fail('embedded native content');units+=run.insert.length;for(const [key,value] of Object.entries(run.attributes??{})){if(!['bold','italic','code','link'].includes(key)||!value||typeof value!=='object')fail('native mark');const identity=(value as Record<string,unknown>).afId;if(identity!=null&&!isNodeId(identity))fail('native mark identity');if(key==='link'){const attrs=value as Record<string,unknown>;if(typeof attrs.href!=='string'||safeHref(attrs.href)!==attrs.href)fail('native link');for(const k of Object.keys(attrs))if(!['href','target','rel','class','title','afId'].includes(k))fail('link attribute');if(attrs.title!=null&&(typeof attrs.title!=='string'||attrs.title.length>512))fail('link title');if(attrs.class!=null || (attrs.target!=null && attrs.target!=='_blank') || (attrs.rel!=null && attrs.rel!=='noopener noreferrer nofollow'))fail('link attribute');}else if(Object.keys(value as object).some(k=>k!=='afId'))fail('mark attributes');}}continue;}
    if(!(child instanceof Y.XmlElement)||!nativeSchema.nodes[child.nodeName]||['doc','text'].includes(child.nodeName))fail('native node');
    if (!(child instanceof Y.XmlElement)) return fail('native node');
    const spec=nativeSchema.nodes[child.nodeName]!.spec.attrs??{};
    for(const [key,value] of Object.entries(child.getAttributes())){
     if(!(key in spec))fail('native attribute');
-    if(key==='afId'&&value!==null&&!isNodeId(value))fail('native identity');
+    if((key==='afId'||key==='codeAfId')&&value!==null&&!isNodeId(value))fail('native identity');
     if(key==='level'&&(!Number.isInteger(value)||Number(value)<1||Number(value)>6))fail('heading level');
     if(key==='start'&&(!Number.isSafeInteger(value)||Number(value)<1))fail('list start');
     if(key==='checked'&&typeof value!=='boolean')fail('task checked');
@@ -82,8 +82,12 @@ export function reviseNative(liveBytes:Uint8Array,snapshotBytes:Uint8Array|undef
 /** Write identity-only changes to the existing XML nodes, never replace their text. */
 export function nativeIds(doc:Y.Doc,saved:PMNode):Uint8Array {
  const before=Y.encodeStateVector(doc);
- const walk=(root:Y.XmlFragment,node:PMNode)=>{
-  const children=root.toArray().filter((child):child is Y.XmlElement=>child instanceof Y.XmlElement);
-  let at=0;node.forEach(child=>{if(child.isText)return;const xml=children[at++];if(!xml||xml.nodeName!==child.type.name)throw new LiveRegionRefusal('unsupported_content',['identity shape mismatch']);if(child.attrs.afId!==undefined && xml.getAttribute('afId')!==child.attrs.afId)xml.setAttribute('afId',child.attrs.afId);walk(xml,child);});
- };doc.transact(()=>walk(nativeRoot(doc),saved));return Y.encodeStateAsUpdate(doc,before);
+ const root=nativeRoot(doc);
+ // Only identities may change in this write-back. The binding diffs those attributes
+ // against existing XML/text instead of replacing a peer's character sequence.
+ const semantic=(node:PMNode)=>JSON.stringify(node.toJSON(),(key,value)=>key==='afId'||key==='codeAfId'?undefined:value);
+ if(semantic(nativeDocument(doc))!==semantic(saved))throw new LiveRegionRefusal('unsupported_content',['identity shape mismatch']);
+ const {mapping}=initProseMirrorDoc(root,nativeSchema);
+ doc.transact(()=>updateYFragment(doc,root,saved,{mapping,isOMark:new Map()}));
+ return Y.encodeStateAsUpdate(doc,before);
 }

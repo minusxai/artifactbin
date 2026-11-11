@@ -1,7 +1,7 @@
 /** Strict nested HTML codec for the opt-in native format; never accepts executable attributes. */
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { JSONContent } from '@tiptap/core';
-import type { Node as PMNode } from 'prosemirror-model';
+import type { Mark, Node as PMNode } from 'prosemirror-model';
 import { nativeSchema } from './native-schema';
 import { LiveRegionRefusal } from './refusal';
 import { safeHref, isNodeId } from './schema';
@@ -23,13 +23,13 @@ export function readNativeHtml(html:string):PMNode {
     if(attrs.class && !(node.tagName==='code' && /^language-[\w+-]+$/.test(attrs.class))) refuse('class');
     if(node.tagName==='code' && code) return walk(node.childNodes,[],true);
     const mark=marks[node.tagName];
-    if(mark) { if(mark==='link' && safeHref(attrs.href??'')!==attrs.href) refuse('unsafe link');return walk(node.childNodes,[...inherited,{type:mark,...(mark==='link'?{attrs:{href:attrs.href,title:attrs.title??null,target:null,rel:'noopener noreferrer nofollow',class:null}}:{})}],code); }
+    if(mark) { if(mark==='link' && safeHref(attrs.href??'')!==attrs.href) refuse('unsafe link');return walk(node.childNodes,[...inherited,{type:mark,attrs:{afId:attrs['data-af-id']??null,...(mark==='link'?{href:attrs.href,title:attrs.title??null,target:null,rel:'noopener noreferrer nofollow',class:null}:{})}}],code); }
     let type=/^h[1-6]$/.test(node.tagName)?'heading':tags[node.tagName];
     if(node.tagName==='ul' && attrs['data-type']==='taskList')type='taskList';
     if(node.tagName==='li' && attrs['data-type']==='taskItem')type='taskItem';
     if(!type)return refuse(`node ${node.tagName}`);
     const own:Record<string,unknown>={afId:attrs['data-af-id']??null};
-    if(type==='codeBlock'){const child=node.childNodes.find(n=>'tagName' in n&&n.tagName==='code');if(child&&'attrs' in child){const cls=child.attrs.find(a=>a.name==='class')?.value;if(cls)own.language=cls.replace(/^language-/, '');}}
+    if(type==='codeBlock'){const child=node.childNodes.find(n=>'tagName' in n&&n.tagName==='code');if(child&&'attrs' in child){own.codeAfId=child.attrs.find(a=>a.name==='data-af-id')?.value??null;const cls=child.attrs.find(a=>a.name==='class')?.value;if(cls)own.language=cls.replace(/^language-/, '');}}
     if(type==='heading')own.level=Number(node.tagName[1]);
     if(type==='orderedList'){own.start=Number(attrs.start??1);if(!Number.isSafeInteger(own.start)||Number(own.start)<1)refuse('list start');}
     if(type==='taskItem'){if(!['true','false'].includes(attrs['data-checked']??''))refuse('task checked');own.checked=attrs['data-checked']==='true';}
@@ -40,16 +40,37 @@ export function readNativeHtml(html:string):PMNode {
 }
 const escape=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 export function writeNativeHtml(doc:PMNode):string {
+  const emitted=new Set<string>();
+  const identity=(id:unknown):string=>{
+    if(!id)return '';
+    if(typeof id!=='string'||emitted.has(id))return refuse('duplicate native identity');
+    emitted.add(id);return ` data-af-id="${escape(id)}"`;
+  };
   const render=(node:PMNode):string=>{
-    if(node.isText){let text=escape(node.text!);for(const mark of [...node.marks].reverse()){const tag=({bold:'strong',italic:'em',code:'code',link:'a'} as Record<string,string>)[mark.type.name];if(!tag)refuse('mark');text=`<${tag}${tag==='a'?` href="${escape(mark.attrs.href)}"${mark.attrs.title?` title="${escape(mark.attrs.title)}"`: ''}`:''}>${text}</${tag}>`;}return text;}
-    let inner='';node.forEach(child=>{inner+=render(child);});if(node.type.name==='doc')return inner;
+    if(node.isText)return escape(node.text!);
+    let inner='';
+    const active:Mark[]=[];
+    const tagOf=(mark:Mark)=>({bold:'strong',italic:'em',code:'code',link:'a'} as Record<string,string>)[mark.type.name]??refuse('mark');
+    node.forEach(child=>{
+      let common=0;
+      while(common<active.length&&common<child.marks.length&&active[common]!.eq(child.marks[common]!))common++;
+      while(active.length>common)inner+=`</${tagOf(active.pop()!)}>`;
+      for(const mark of child.marks.slice(common)){
+        const tag=tagOf(mark);
+        inner+=`<${tag}${identity(mark.attrs.afId)}${tag==='a'?` href="${escape(mark.attrs.href)}"${mark.attrs.title?` title="${escape(mark.attrs.title)}"`:''}`:''}>`;
+        active.push(mark);
+      }
+      inner+=render(child);
+    });
+    while(active.length)inner+=`</${tagOf(active.pop()!)}>`;
+    if(node.type.name==='doc')return inner;
     const tag=({paragraph:'p',heading:`h${node.attrs.level}`,bulletList:'ul',orderedList:'ol',listItem:'li',taskList:'ul',taskItem:'li',blockquote:'blockquote',codeBlock:'pre',horizontalRule:'hr',hardBreak:'br'} as Record<string,string>)[node.type.name];
     if(!tag)return refuse('node');
-    let attrs=node.attrs.afId?` data-af-id="${escape(node.attrs.afId)}"`:'';
+    let attrs=identity(node.attrs.afId);
     if(node.type.name==='orderedList'&&node.attrs.start!==1)attrs+=` start="${node.attrs.start}"`;
     if(node.type.name==='taskList')attrs+=' data-type="taskList"';
     if(node.type.name==='taskItem')attrs+=` data-type="taskItem" data-checked="${node.attrs.checked}"`;
-    if(tag==='pre')inner=`<code${node.attrs.language?` class="language-${escape(node.attrs.language)}"`: ''}>${inner}</code>`;
+    if(tag==='pre')inner=`<code${identity(node.attrs.codeAfId)}${node.attrs.language?` class="language-${escape(node.attrs.language)}"`: ''}>${inner}</code>`;
     return `<${tag}${attrs}>`+(['br','hr'].includes(tag)?'':`${inner}</${tag}>`);
   };return render(doc);
 }
