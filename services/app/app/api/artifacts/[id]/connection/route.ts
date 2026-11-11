@@ -1,20 +1,14 @@
 import { withAgentOrBrowserAuth } from '@/lib/authentication';
 import { json, readJson } from '@/lib/http';
-import { liveConnectionDetails, updateLiveConnection } from '@/lib/live-datasets';
+import { runOperation } from '@/lib/operations';
 /**
- * A LIVE DATASET'S CONNECTION (lib/live-datasets). GET: its connector and shown fields, who its rules admit to declared
- * queries and the pages declaring them, for anyone who can read the dataset; an owner or editor also gets the
- * non-secret fields and the names of the secrets stored, never a value. PATCH (owner and editors): change it; an
- * omitted secret is kept only while every other field stays as stored.
+ * A LIVE DATASET'S CONNECTION (lib/live-datasets). GET `get_live_connection`: its connector and shown fields, the roles
+ * its rules admit to declared queries and the pages declaring them; an owner or editor also gets the non-secret fields
+ * and the names of the secrets stored, never a value. PATCH `update_live_connection` (owner and editors): `{connection}`.
  */
-const NO_STORE = { 'Cache-Control': 'no-store' };
-export const GET = withAgentOrBrowserAuth(async (_request, { actor, params }) => {
-  const reply = await liveConnectionDetails(actor, params.id!);
-  return json(reply.body, reply.status, NO_STORE);
-});
+export const GET = withAgentOrBrowserAuth((request, { actor, params }) => runOperation('get_live_connection', request, actor, { id: params.id }));
 export const PATCH = withAgentOrBrowserAuth(async (request, { actor, params }) => {
   const body = await readJson(request).catch(() => null);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const reply = await updateLiveConnection(actor, params.id!, (body as { connection?: unknown }).connection ?? body);
-  return json(reply.body, reply.status, NO_STORE);
+  return runOperation('update_live_connection', request, actor, { id: params.id, connection: (body as { connection?: unknown }).connection ?? body });
 });

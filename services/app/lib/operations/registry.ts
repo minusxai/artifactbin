@@ -1,3 +1,5 @@
+import { liveConnectionDetails, liveSchema, testLiveConnection, updateLiveConnection } from '@/lib/live-datasets';
+import { connectionTestRateLimited } from '@/lib/allowances';
 import {documentOwner} from '@/lib/user-pages';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
 import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
@@ -517,6 +519,38 @@ const getDatasetPolicyTemplatesOp: Operation = {
   async run(ctx,input){const r=await datasetPermissionTemplates(ctx.actor,String(input.id),typeof input.ownerColumn==='string'&&input.ownerColumn?input.ownerColumn:undefined);return reply(r.body,r.status);},
 };
 
+/** A live dataset's connection (lib/live-datasets): read, change, test and its tables. */
+const LIVE_SECRET_REQUIRED: OperationError = { status: 400, code: 'secret_required', fix: 'send the secret field (password, credentials) again with the change: a stored secret is never sent to a changed connection' };
+const getLiveConnectionOp: Operation = {
+  name:'get_live_connection',title:'Read a live dataset\'s connection',
+  http:{method:'GET',path:'/api/artifacts/{id}/connection'},
+  description:'Anyone who can open a live dataset (a dataset that is a database connection): {role, connection:{connector,label,fields}, declaredQueryRoles, pages}; its owner and editors also get config (every non-secret field) and secrets (the NAMES of the secret fields stored). A secret value is never answered.',
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
+  async run(ctx,input){const r=await liveConnectionDetails(ctx.actor,String(input.id));return reply(r.body,r.status);},
+};
+const updateLiveConnectionOp: Operation = {
+  name:'update_live_connection',title:'Change a live dataset\'s connection',
+  http:{method:'PATCH',path:'/api/artifacts/{id}/connection'},
+  description:'Owners and editors: change a live dataset\'s connection fields (the connector stays). A secret field left out is kept only while every other field stays as stored; changing host, port, database, user, tls or ca needs the secret again.',
+  input:{id:z.string(),connection:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()]))},annotations:{idempotent:true},example:{input:{id:'aB3xK9',connection:{database:'sales',password:'…'}}},
+  errors:[NOT_FOUND,LIVE_SECRET_REQUIRED,{status:403,code:'permission_denied',fix:'ask the dataset\'s owner or an editor'}],
+  async run(ctx,input){const r=await updateLiveConnection(ctx.actor,String(input.id),input.connection);return reply(r.body,r.status);},
+};
+const testLiveConnectionOp: Operation = {
+  name:'test_live_connection',title:'Test a live dataset\'s connection',
+  http:{method:'POST',path:'/api/artifacts/{id}/connection/test'},
+  description:'Owners and editors: open a session on the live dataset\'s database and run SELECT 1 as you: {ok, latencyMs} or {ok:false, error:{code,message}}. Counts against your hourly connection-test allowance.',
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND,{status:429,code:'rate_limited',fix:'wait for the hourly allowance'}],
+  async run(ctx,input){if(!ctx.actor.userId)return reply({error:'unauthorized',message:'sign in to test a connection'},401);if(connectionTestRateLimited(ctx.actor.userId))return reply({error:'rate_limited',message:'Too many connection tests this hour; try again later.'},429);const r=await testLiveConnection(ctx.actor,String(input.id));return reply(r.body,r.status);},
+};
+const getLiveSchemaOp: Operation = {
+  name:'get_live_schema',title:'List a live dataset\'s tables',
+  http:{method:'GET',path:'/api/artifacts/{id}/connection/schema'},
+  description:'Owners and editors: the tables and views (namespace, name, kind, columns with name and type) the live dataset\'s account can read, from the database itself.',
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
+  async run(ctx,input){const r=await liveSchema(ctx.actor,String(input.id));return reply(r.body,r.status);},
+};
+
 const mutateDatasetOp: Operation = {
   name: 'mutate_dataset',
   title: 'Write rows into a dataset',
@@ -784,6 +818,6 @@ const queryDatasetGraphqlOp:Operation={
 export const OPERATIONS: Operation[] = [
   ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, getLiveConnectionOp, updateLiveConnectionOp, testLiveConnectionOp, getLiveSchemaOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp, ...REGION_OPERATIONS,
 ];
