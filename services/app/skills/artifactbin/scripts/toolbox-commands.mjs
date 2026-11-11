@@ -65,18 +65,6 @@ const commands = {
       query: {params: flag(), limit: flag(), revision: flag(), 'idempotency-key': flag()}
     }
   },
-  // Older pages only (their gql reads and writes); new pages use sql.
-  graphql: {
-    listed: false,
-    sub: {
-      schema: {revision: flag()},
-      query: {document: flag(), operation: flag(), variables: flag(), revision: flag()},
-      mutate: {
-        document: flag(), operation: flag(), variables: flag(), revision: flag(),
-        'idempotency-key': flag()
-      }
-    }
-  },
   groups: {sub: {
     list: {}, show: {pages: flag('boolean'), cursor: flag()},
     create: {name: flag(), description: flag()}, update: {name: flag(), description: flag()},

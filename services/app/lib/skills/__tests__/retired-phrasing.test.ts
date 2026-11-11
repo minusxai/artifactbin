@@ -140,11 +140,11 @@ const RETIRED: Retired[] = [
   {pattern: /\((?:rulings? )?[HMSL]\d{1,2}(?:, [HMSL]\d{1,2})*\)/, scopes: AGENT_TEXT,
     reason: 'P6: internal ruling tags stay out of agent-readable text'},
   // The 2026-11-10 SQL model (Q): new pages read and write datasets with sql, call their own API with
-  // fetch('/fn/NAME') and keep viewer state in @afbin/state. GraphQL is named once: SKILL.md's note on older pages.
+  // fetch('/fn/NAME') and keep viewer state in @afbin/state. GraphQL is deprecated: the skill carries nothing for it.
   {pattern: /client\s*\.\s*(?:query|mutate|watchQuery|updateQuery|addResolvers)\b/, scopes: AGENT_TEXT,
     reason: 'Q1: datasets are read and written with sql, viewer state with @afbin/state, never the Apollo client'},
-  {pattern: /\bgql\s*[`(\[]|`gql`/, scopes: AGENT_TEXT, allow: 'Editing an older page that uses `gql`',
-    reason: 'Q1: gql is named only in the one note on older pages (SKILL.md)'},
+  {pattern: /\bgql\s*[`(\[]|`gql`/, scopes: AGENT_TEXT,
+    reason: 'Q1: gql is never named: GraphQL is deprecated and the skill carries nothing for older pages'},
   {pattern: /downloaded copy has no app connection: `sql` rejects|show that the data lives in the original page/, scopes: AGENT_TEXT,
     reason: 'Q4: a downloaded copy answers its sql reads from the rows it carries (lib/html-runtime offline-sql)'},
   {pattern: /\btypeDefs\b/, scopes: AGENT_TEXT,
@@ -153,7 +153,9 @@ const RETIRED: Retired[] = [
   {pattern: /(?<![\w.$])_sql\b/, scopes: [...AGENT_TEXT, 'registry'],
     reason: 'Q1: a page computes with the sql tag (sql`…`), not the _sql GraphQL field'},
   {pattern: /\bGraphQL\b|\bApollo (?:state|client|value)/i, scopes: DOCS,
-    reason: 'Q1: no GraphQL teaching for new pages (graphql.mjs --help covers older pages)'},
+    reason: 'Q1: no GraphQL teaching: it is deprecated, and the skill has no command or note for it'},
+  {pattern: /graphql\.mjs|toolbox-graphql|preview-datasets|preview-sessions|__af_preview\/datasets|localPreview/, scopes: AGENT_TEXT,
+    reason: 'Q1: the skill ships no GraphQL command and no local GraphQL dataset preview; sql.mjs reads and writes datasets'},
   // The 2026-11-11 reply order (W): agents holding every link announced the watch instead of replying, and the watch
   // never returned.
   {pattern: /part of every task/i, scopes: [...AGENT_TEXT, 'monitoring'],
@@ -197,6 +199,7 @@ describe('retired skill phrasing', () => {
       'P1: starters': "title: '[Household budget]'", 'P6: internal': 'belongs to another page (H7).',
       'Q1: datasets': 'await client.query({query})', 'Q1: gql is': 'const q=gql`{index}`;', 'Q2: a backend': 'export const typeDefs = `',
       'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
+      'Q1: the skill ships': 'node scripts/graphql.mjs schema ID',
       'W1:': 'Watching is part of every task, however short the reply.',
       'V1:': 'so "my team can view" needs\n  nothing more.',
       'V2:': 'calls the data confidential or\n  internal',

@@ -27,7 +27,7 @@ describe('one root for installed and direct HTTP agents',()=>{
  });
 });
 
-import {existsSync,mkdtempSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -80,15 +80,16 @@ describe('installable shared skill folder',()=>{
    const config=await import(pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-config.mjs')).href);
    expect(config.default).toBe(origin);
    const platform=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-platform.mjs')).href);
-   expect(platform.getOperationAST(platform.parse('query { __typename }')).operation).toBe('query');
+   expect(platform.parse).toBeUndefined();expect(platform.getOperationAST).toBeUndefined();
    expect(typeof platform.inspectPublicationBundle).toBe('function');
    // The installed scripts carry the one shared retry policy (lib/http/retry), bundled in.
    expect(typeof platform.retryFetch).toBe('function');
    const parser=readFileSync(path.join(dir,'artifactbin/scripts/preview-html.mjs'),'utf8');
    expect(parser).not.toMatch(/from\s*["']parse5/);
-   // One copy of the HTML parser and of graphql: toolbox-platform reaches both through its siblings.
+   // One copy of the HTML parser: toolbox-platform reaches it through its sibling. No GraphQL ships.
    const toolbox=readFileSync(path.join(dir,'artifactbin/scripts/toolbox-platform.mjs'),'utf8');
-   expect(toolbox).toMatch(/from\s*["']\.\/preview-html\.mjs["']/);expect(toolbox).toMatch(/from\s*["']\.\/preview-datasets\.mjs["']/);expect(Buffer.byteLength(toolbox)).toBeLessThan(60_000);
+   expect(toolbox).toMatch(/from\s*["']\.\/preview-html\.mjs["']/);
+   for(const gone of ['preview-datasets.mjs','graphql.mjs','toolbox-graphql.mjs','preview-sessions.mjs','preview-dataset-route.mjs'])expect(existsSync(path.join(dir,'artifactbin/scripts',gone)),gone).toBe(false);expect(Buffer.byteLength(toolbox)).toBeLessThan(60_000);
    // The archive carries no runtime, library or component bundles: the preview fetches them from the selected server.
    for(const retired of ['preview-runtime.mjs','preview-libraries.mjs'])expect(existsSync(path.join(dir,'artifactbin/scripts',retired)),retired).toBe(false);
    const installedParser=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/preview-html.mjs')).href);
@@ -116,45 +117,6 @@ describe('installable shared skill folder',()=>{
     const fetched=server.requests.filter(request=>request==='/af/apollo.js').length;
     await fetch(new URL('/af/apollo.js',preview.url));expect(server.requests.filter(request=>request==='/af/apollo.js').length).toBe(fetched);
    } finally {await preview.close();await server.close();}
-   const project=path.join(dir,'project');mkdirSync(project);
-   writeFileSync(path.join(project,'sales.csv'),'amount\n2\n');
-   // Each page previews its own session of the generated API over the same file.
-   writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Local data</h1>');
-   writeFileSync(path.join(project,'generated.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Generated API</h1>');
-   const local=await startPreview({root:project,revisionIntervalMs:0});
-   try {
-    const html=await (await fetch(local.url)).text();
-    const config=JSON.parse(html.match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
-    expect(config.offline).toBe(true);expect(config.localPreview.endpoint).toMatch(/^\/__af_preview\/datasets\/[A-Za-z0-9_-]+$/);
-    const endpoint=new URL(config.localPreview.endpoint,local.url);
-    expect((await fetch(endpoint,{method:'POST',headers:{origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
-    const execute=async(query:string)=>await (await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query})})).json();
-    const mutation=await execute('mutation { insert_sales_one(object: {amount: 9}) { amount } }');
-    expect(mutation.errors).toBeUndefined();expect(mutation.data.insert_sales_one.amount).toBe(9);
-    const exported=await (await fetch(endpoint+'/export/sales')).json();expect(exported.tables[0].rows).toHaveLength(2);
-    expect(readFileSync(path.join(project,'sales.csv'),'utf8')).toBe('amount\n2\n');
-    expect((await fetch(endpoint+'/export/other')).status).toBe(404);
-    const generated=JSON.parse((await (await fetch(new URL('generated.html',local.url))).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
-    expect(generated.datasets).toEqual(['sales']);expect(generated.localPreview.schema.sdl).toContain('insert_sales_one');
-    const flat=new URL(generated.localPreview.endpoint,local.url);
-    const run=async(query:string,key?:string)=>await (await fetch(flat,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json',...(key?{'idempotency-key':key}:{})},body:JSON.stringify({query})})).json();
-    const added=await run('mutation { insert_sales_one(object: {amount: 7}) { _id amount } }','preview_key_0123456789');
-    expect(added.data.insert_sales_one.amount).toBe(7);expect(added.extensions.outcomes).toEqual({insert_sales_one:'committed'});
-    expect(await run('mutation { insert_sales_one(object: {amount: 7}) { _id amount } }','preview_key_0123456789')).toEqual(added);
-    expect((await run('{ _sql(sql: "select count(*) as n, sum(amount) as total from sales") { rows } }')).data).toEqual({_sql:{rows:[{n:2,total:9}]}});
-    expect((await (await fetch(flat+'/export/sales')).json()).tables[0].rows).toEqual([{amount:2},{amount:7}]);
-    const fresh=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
-    expect(fresh.localPreview.endpoint).toBe(config.localPreview.endpoint);
-    writeFileSync(path.join(project,'sales.csv'),'amount\n4\n');
-    const changed=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
-    expect(changed.localPreview.endpoint).toBe(config.localPreview.endpoint);
-    expect(await (await fetch(endpoint+'/status')).json()).toMatchObject({dirty:true,conflict:true});
-    expect((await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query:'{sales{amount}}'})})).status).toBe(200);
-    expect((await (await fetch(endpoint+'/export/sales')).json()).tables[0].rows).toHaveLength(2);
-    expect((await fetch(endpoint+'/discard',{method:'POST',headers:{origin:new URL(local.url).origin}})).status).toBe(200);
-    const reset=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
-    expect(reset.localPreview.endpoint).not.toBe(config.localPreview.endpoint);
-   } finally {await local.close();}
    expect(expected['SKILL.md']).toMatch(/^---\nname: artifactbin\n/);
    expect(expected['SKILL.md']).toContain(origin);
 

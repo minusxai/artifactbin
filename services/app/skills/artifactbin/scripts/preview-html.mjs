@@ -111,19 +111,6 @@ for(const node of parseFragment(notice).childNodes){node.parentNode=body;body.ch
  return serialize(document);
 }
 
-/** Return authored declarations only; the server resolves local paths under its root. */
-export function previewDatasetLinks(source){
- const document=parse(source),links=[];let baseHref;
- function visit(node){
-  const attrs=Object.fromEntries((node.attrs??[]).map(({name,value})=>[name,value]));
-  if(node.nodeName==='base'&&baseHref===undefined)baseHref=attrs.href;
-if(node.nodeName==='link'&&(attrs.rel??'').split(/\s+/).includes('af-dataset')&&attrs[
-    'data-af-name'])links.push({name:attrs['data-af-name'],href:attrs.href??'',table:attrs[
-    'data-af-table'],schema:attrs['data-af-schema']});
-  for(const child of node.childNodes??[])visit(child);
- }visit(document);return {links,baseHref};
-}
-
 /** Backend hrefs are source declarations; a read may explicitly retain their saved remote
  * binding. */
 export function previewBackendLinks(source){

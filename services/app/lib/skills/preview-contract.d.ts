@@ -14,9 +14,6 @@ export interface PreviewOptions {
   libraryAssets?: Readonly<Record<string,string>>;
   /** Short shared content-scan cache; tests may set zero. */
   revisionIntervalMs?: number;
-  /** Trusted embedding/test options; never supplied by page markup or request JSON. */
-  sessionOptions?: { now?: () => number; ttlMs?: number; maxSessions?: number; createDatasets?: unknown };
-  operationTimeoutMs?: number;
 }
 export interface PreviewSession { server: Server; url: string; close(): Promise<void> }
 export declare function startPreview(options: PreviewOptions): Promise<PreviewSession>;
@@ -29,11 +26,6 @@ export interface PreviewLimits { maxFiles: number; maxFileBytes: number; maxTota
 export interface RevisionSource { current(options?: {fresh?: boolean}): Promise<string> }
 /** Concurrent clients share one scan; a monotonic test clock controls the cache. */
 export declare function createRevisionSource(root: string, options?: { now?: () => number; scan?: () => Promise<string>; intervalMs?: number }): RevisionSource;
-/** Local declaration sessions are scoped to one HTML path and disk revision.
- * Requests use an opaque per-session endpoint, bounded JSON bodies and exact Origin.
- * Mutations affect memory only; export is an explicit JSON download.
- */
-export interface PreviewLocalDatasetConfig { endpoint: string; schema: unknown }
 /** Platform code for the preview, admitted only at closed paths (/af/<module>.js, /libraries/<name>-<semver>/index.js,
  * /af/components/<file>.js), fetched once per session; a source checkout's own build outputs come first. */
 export interface PlatformModules {

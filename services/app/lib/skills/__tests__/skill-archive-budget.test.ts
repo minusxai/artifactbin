@@ -30,7 +30,10 @@ import {archiveFor} from '@/lib/skills';
 // what to write for an unlinked or unsupported file) beside the reply-before-watch guidance for several pages (~1 KB).
 // 1.78 MiB: main sat 217 bytes under 1.77 once the tracker's limit held for moves (its save function and checks);
 // exporting one chart or section of a page (export.mjs --element, its limits and refusals) needs about 1 KB more.
-const SKILL_ARCHIVE_MAX_BYTES=1.78*1024*1024;
+// 1.58 MiB: GraphQL is deprecated, so the skill carries nothing for it: graphql.mjs, toolbox-graphql.mjs, the bundled
+// graphql library and the local GraphQL dataset preview (preview-datasets.mjs, its sessions and routes) went, leaving
+// the archive at 1,650,778 bytes (1.574 MiB, down from 1,859,312); the cap keeps the usual few KB of headroom.
+const SKILL_ARCHIVE_MAX_BYTES=1.58*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

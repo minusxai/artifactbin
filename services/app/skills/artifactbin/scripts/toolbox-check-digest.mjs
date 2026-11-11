@@ -112,14 +112,12 @@ export function checkDigest(envelope,file){
 }
 /** One failed call: the owner detail, or for a guest the code and what the owner gets. */
 const failed=({field,kind,message,code,detail,guest,ownerDetail,ownerPasses,notReplayed})=>`${
- kind==='fn'?'function '+field.slice(3):kind==='sql'?'sql':code?.startsWith('backend_')?
- 'resolver '+field:'GraphQL '+field} failed${detail?`: ${detail} (owner `+
+ kind==='fn'?'function '+field.slice(3):field} failed${detail?`: ${detail} (owner `+
  'detail)':guest?` for the guest (${code??message}); ${ownerDetail?'as owner the detail is: '+
  ownerDetail:ownerPasses?'as owner it succeeds':notReplayed?'not a read, so it was '+
  'not run again as owner':'no owner detail'}`:`: ${message}${code?` (${code})`:''}`}`;
-/** A refused call's name as the reply says it: function NAME, sql or resolver FIELD. */
-const called=field=>field.startsWith('fn/')?'function '+field.slice(3):field==='sql'?'sql':
- 'resolver '+field;
+/** A refused call's name as the reply says it: function NAME or sql. */
+const called=field=>field.startsWith('fn/')?'function '+field.slice(3):field;
 /** What an unset secret kept the check from testing, and who sets it. */
 const untested=({step,fields,secrets})=>`${step===undefined?fields.map(called).join(', '):step===
  null?'the steps':JSON.stringify(step)} (needs secret ${secrets.join(', ')}, which the owner `+

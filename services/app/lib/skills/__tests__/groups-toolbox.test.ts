@@ -120,11 +120,10 @@ it('runs every verb through the installed CLI JSON envelope and refuses output o
   res.end(JSON.stringify(route.endsWith('/members')?{members:[{user_id:'usr_member',username:'teammate'}]}:route.endsWith('/invitations')&&req.method==='GET'?{invitations:[{id:'gin_pending',email:'pending@example.test'}]}:req.method==='GET'&&route.startsWith('/api/groups/')?{group:{id:route.endsWith('/other')?'grp_other':'grp_stable',handle:'design_crit'}}:{changed:true}));});
  await new Promise<void>(resolve=>http.listen(0,'127.0.0.1',resolve));const address=http.address();if(!address||typeof address==='string')throw Error('no address');
  const origin='http://127.0.0.1:'+address.port;
- const {skillPackageFiles,skillTree,buildToolboxPlatform,buildPreviewParser,buildPreviewDatasets}=await import('..');
+ const {skillPackageFiles,skillTree,buildToolboxPlatform,buildPreviewParser}=await import('..');
  const files=skillPackageFiles(skillTree(),origin);
  files['scripts/toolbox-platform.mjs']=await buildToolboxPlatform();
  files['scripts/preview-html.mjs']=await buildPreviewParser(files['scripts/preview-html.mjs']!);
- files['scripts/preview-datasets.mjs']=await buildPreviewDatasets();
  const installed=path.join(root,'installed');await mkdir(path.join(installed,'scripts'),{recursive:true});
  for(const [name,content] of Object.entries(files))if(name.startsWith('scripts/'))await writeFile(path.join(installed,name),content);
  const script=path.join(installed,'scripts/groups.mjs');
