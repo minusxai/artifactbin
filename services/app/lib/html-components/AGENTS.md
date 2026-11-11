@@ -21,9 +21,9 @@ renderer share live in `lib/html-component-specs`, not here.
   `services/app/skills/artifactbin/references/host-pages.md`) opts into adopted sheets or its nonce with a `<head>` meta
   (`register-component.ts`), so a component sets inline styles through CSSOM, never a `style` attribute
   (rendered Markdown's table alignment is the one known exception).
-- Public by design: `/af/components/`, `/af/styles.css`, `/af/fonts/`, `/af/host.js`, `/af/manifest.json` and
-  the pinned `/af/v1/` copies (`lib/document-serving/hosted-blocks.server.ts`) are credential-free bytes with
-  `Access-Control-Allow-Origin: *` and no resource policy. Nothing credentialed is ever served cross-origin.
+- Public by design: everything under `/af/` (`/af/components/`, `/af/styles.css`, `/af/fonts/`, `/af/lib/`,
+  `/af/host.js`, `/af/manifest.json`, the pinned `/af/v1/` copies, contracts `url-space.ts`) is credential-free bytes
+  with `Access-Control-Allow-Origin: *` and no resource policy. Nothing credentialed is ever served cross-origin.
 - Components read only the theme contract (`THEME_TOKENS` in `lib/html-systems`) and their own `--af-*`.
 - Shared component shape belongs in a spec file in `lib/html-component-specs` that both sides import, so the
   publish checks refuse what the element cannot draw.
