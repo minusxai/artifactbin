@@ -5,24 +5,48 @@
  * --help and output own flags and next steps (check prints the facts for the reply), starter headers own their
  * usage, references teach technique. ONE table, one reason per row (its ruling): a hit says why the phrase went. The
  * scopes are SKILL.md, references, examples, component and design-system CSS headers, script sources, the API's monitoring guidance, the
- * operations registry and the page runtime. The single exception is lib/html-runtime/legacy-page-names.ts, the
+ * operations registry, the page runtime, and every product source's strings outside the deprecated GraphQL layer (the hints
+ * and replies the product hands an agent: a dataset's usage, a refusal's hint). The single exception is lib/html-runtime/legacy-page-names.ts, the
  * isolated alias live pages still call. It reads files by path, so it runs in the `pr fast` guard tier
  * (scripts/ci/guard-tests.json).
  */
 import {readdirSync, readFileSync} from 'node:fs';
+import ts from 'typescript';
 import {describe, expect, it} from 'vitest';
 import {WATCH_LOOP} from '@/lib/artifact-wire';
 
 const SKILL = new URL('../../../skills/artifactbin/', import.meta.url);
 const LIB = new URL('../../', import.meta.url);
 type Scope = 'skill' | 'references' | 'examples' | 'components' | 'scripts' | 'monitoring' | 'registry' | 'runtime' |
-  'designSystems';
+  'designSystems' | 'product' | 'productStrings';
 const read = (url: URL) => readFileSync(url, 'utf8');
 const dir = (name: string, pattern: RegExp) => readdirSync(new URL(name, SKILL)).filter(file => pattern.test(file)).sort()
   .map(file => ({path: `skills/artifactbin/${name}${file}`, text: read(new URL(name + file, SKILL))}));
 /** The one file allowed to name the old runtime listener: live pages published before 2026-11-04 call it. */
 const COMPAT = 'legacy-page-names.ts';
 const runtime = readdirSync(new URL('html-runtime/', LIB)).filter(file => file.endsWith('.ts')).sort();
+const APP = new URL('../../../', import.meta.url);
+/** The deprecated GraphQL layer (scripts/ci/module-graph.mjs GRAPHQL_COMPAT.paths): what it answers older pages stays. */
+const GRAPHQL_LAYER = ['lib/graphql-compat/', 'lib/html-runtime/apollo/graphql-compat'];
+/** The product's own sources (the skill tree has its scopes above), tests and the GraphQL layer left out. */
+const product = ['app', 'lib', 'server', 'solid'].flatMap(top => readdirSync(new URL(top + '/', APP), {recursive: true,
+  encoding: 'utf8'}).map(file => `${top}/${file}`)).filter(file => /\.tsx?$/.test(file) &&
+  !/(?:^|\/)(?:__tests__|node_modules)\//.test(file) && !GRAPHQL_LAYER.some(prefix => file.startsWith(prefix))).sort()
+  .map(file => ({path: file, text: read(new URL(file, APP))}));
+/** A source with all but its string, template and JSX text blanked, newlines kept: what it says, never its comments. */
+function literals({path, text}: {path: string; text: string}): {path: string; text: string} {
+  if (!text.includes('gql')) return {path, text: ''};
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, false,
+    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const kept = text.replace(/[^\n]/g, ' ').split('');
+  const visit = (node: ts.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateLiteralToken(node) ||
+      ts.isJsxText(node)) for (let i = node.getStart(source); i < node.end; i++) kept[i] = text[i]!;
+    node.forEachChild(visit);
+  };
+  visit(source);
+  return {path, text: kept.join('')};
+}
 /** Each scope's files, as an agent reads them: a component source is read for its header comment only. */
 const FILES: Record<Scope, Array<{path: string; text: string}>> = {
   skill: [{path: 'skills/artifactbin/SKILL.md', text: read(new URL('SKILL.md', SKILL))}],
@@ -35,6 +59,8 @@ const FILES: Record<Scope, Array<{path: string; text: string}>> = {
   designSystems: dir('design-systems/', /\.css$/).map(file => ({...file, text: file.text.slice(0, file.text.indexOf('*/') + 2)})),
   runtime: runtime.filter(file => file !== COMPAT)
     .map(file => ({path: `lib/html-runtime/${file}`, text: read(new URL('html-runtime/' + file, LIB))})),
+  product,
+  productStrings: product.map(literals),
 };
 const DOCS: Scope[] = ['skill', 'references', 'examples', 'components'];
 const AGENT_TEXT: Scope[] = [...DOCS, 'scripts'];
@@ -167,6 +193,11 @@ const RETIRED: Retired[] = [
     reason: 'V2: a page is private on the user\'s own word, never the agent\'s view of the data (one called a sales pipeline internal and published it where the team it was for could not open it)'},
   {pattern: /reaches (?:a|another) file only through a link|fetch its href/, scopes: [...AGENT_TEXT, 'runtime'],
     reason: 'A script fetches a file published with its page by the path it wrote (fetch(\'./data.json\'), html-runtime fn-fetch); no link-and-href recipe'},
+  // The 2026-11-11 product hints (Q5): a dataset's create reply handed agents a gql page and the removed graphql.mjs.
+  {pattern: /graphql\.mjs/, scopes: ['product'],
+    reason: 'Q5: no product text names graphql.mjs, which the skill no longer ships: sql.mjs reads and writes datasets'},
+  {pattern: /\bgql\s*\\?[`(\[]|`gql`|\{[^}]*\bgql\b[^}]*\}\s*from\s*['"]@afbin\/apollo/, scopes: ['productStrings'],
+    reason: 'Q5: no product hint teaches gql: new pages read and write with sql (only the GraphQL layer answers older pages)'},
 ];
 
 /** Every line of the scope's files where the retired pattern occurs. */
@@ -203,6 +234,8 @@ describe('retired skill phrasing', () => {
       'W1:': 'Watching is part of every task, however short the reply.',
       'V1:': 'so "my team can view" needs\n  nothing more.',
       'V2:': 'calls the data confidential or\n  internal',
+      'Q5: no product text': 'Exact fields: node scripts/graphql.mjs schema ID',
+      'Q5: no product hint': "import {client,gql} from '@afbin/apollo';",
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;
@@ -212,6 +245,13 @@ describe('retired skill phrasing', () => {
     // Code that calls a timeout function is not the retired wording.
     expect('AbortSignal.timeout(10000)').not.toMatch(RETIRED.find(row => row.reason.startsWith('H2: the one timeout'))!.pattern);
     expect('const x=1<<n;\n').not.toMatch(RETIRED.find(row => row.reason.startsWith('Principle 6: sandboxes'))!.pattern);
+    // A product hint is read from its strings: the same words in a comment are not handed to anyone.
+    const gqlHint = RETIRED.find(row => row.reason.startsWith('Q5: no product hint'))!.pattern;
+    const strings = (text: string) => literals({path: 'sample.ts', text}).text;
+    expect(strings('const usage = `const q=gql\\`{rows}\\`;`;')).toMatch(gqlHint);
+    expect(strings('// the page\'s own gql`…` documents\nconst gql = 1;')).not.toMatch(gqlHint);
+    expect(FILES.product.map(file => file.path)).toContain('lib/datasets/dataset-usage.ts');
+    expect(FILES.product.some(file => GRAPHQL_LAYER.some(prefix => file.path.startsWith(prefix)))).toBe(false);
   });
   it('allows the old runtime name only in its isolated compatibility module, which says when to delete it', () => {
     expect(runtime).toContain(COMPAT);

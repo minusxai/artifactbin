@@ -219,7 +219,7 @@ export interface PageDatasetCheckSource {
   fileId: string;
   version: string;
   typeDefs: string;
-  /** The dataset's own API names (its direct GraphQL, `graphql.mjs schema DATASET_ID`) → this link's page names. */
+  /** The dataset's own API names (its direct GraphQL) → this link's page names. */
   renames: Record<string, string>;
 }
 
