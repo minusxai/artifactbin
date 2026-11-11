@@ -57,7 +57,7 @@ jobs:
             shard: 2/3
           - part: guards-3
             shard: 3/3
-          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 30 runners, its ui and
+          # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 40 runners, its ui and
           # islands projects on 6, the same files ci.yml's api and ui jobs run after the merge, each group packed
           # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
           # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
@@ -65,94 +65,124 @@ jobs:
           # runner provisions a browser. Add a runner when a group's load nears the clock; never move a file out.
           - part: api-1
             projects: --project=api --project=api-isolated
-            suite: 1/30
+            suite: 1/40
           - part: api-2
             projects: --project=api --project=api-isolated
-            suite: 2/30
+            suite: 2/40
           - part: api-3
             projects: --project=api --project=api-isolated
-            suite: 3/30
+            suite: 3/40
           - part: api-4
             projects: --project=api --project=api-isolated
-            suite: 4/30
+            suite: 4/40
           - part: api-5
             projects: --project=api --project=api-isolated
-            suite: 5/30
+            suite: 5/40
           - part: api-6
             projects: --project=api --project=api-isolated
-            suite: 6/30
+            suite: 6/40
           - part: api-7
             projects: --project=api --project=api-isolated
-            suite: 7/30
+            suite: 7/40
           - part: api-8
             projects: --project=api --project=api-isolated
-            suite: 8/30
+            suite: 8/40
           - part: api-9
             projects: --project=api --project=api-isolated
-            suite: 9/30
+            suite: 9/40
           - part: api-10
             projects: --project=api --project=api-isolated
-            suite: 10/30
+            suite: 10/40
           - part: api-11
             projects: --project=api --project=api-isolated
-            suite: 11/30
+            suite: 11/40
           - part: api-12
             projects: --project=api --project=api-isolated
-            suite: 12/30
+            suite: 12/40
           - part: api-13
             projects: --project=api --project=api-isolated
-            suite: 13/30
+            suite: 13/40
           - part: api-14
             projects: --project=api --project=api-isolated
-            suite: 14/30
+            suite: 14/40
           - part: api-15
             projects: --project=api --project=api-isolated
-            suite: 15/30
+            suite: 15/40
           - part: api-16
             projects: --project=api --project=api-isolated
-            suite: 16/30
+            suite: 16/40
           - part: api-17
             projects: --project=api --project=api-isolated
-            suite: 17/30
+            suite: 17/40
           - part: api-18
             projects: --project=api --project=api-isolated
-            suite: 18/30
+            suite: 18/40
           - part: api-19
             projects: --project=api --project=api-isolated
-            suite: 19/30
+            suite: 19/40
           - part: api-20
             projects: --project=api --project=api-isolated
-            suite: 20/30
+            suite: 20/40
           - part: api-21
             projects: --project=api --project=api-isolated
-            suite: 21/30
+            suite: 21/40
           - part: api-22
             projects: --project=api --project=api-isolated
-            suite: 22/30
+            suite: 22/40
           - part: api-23
             projects: --project=api --project=api-isolated
-            suite: 23/30
+            suite: 23/40
           - part: api-24
             projects: --project=api --project=api-isolated
-            suite: 24/30
+            suite: 24/40
           - part: api-25
             projects: --project=api --project=api-isolated
-            suite: 25/30
+            suite: 25/40
           - part: api-26
             projects: --project=api --project=api-isolated
-            suite: 26/30
+            suite: 26/40
           - part: api-27
             projects: --project=api --project=api-isolated
-            suite: 27/30
+            suite: 27/40
           - part: api-28
             projects: --project=api --project=api-isolated
-            suite: 28/30
+            suite: 28/40
           - part: api-29
             projects: --project=api --project=api-isolated
-            suite: 29/30
+            suite: 29/40
           - part: api-30
             projects: --project=api --project=api-isolated
-            suite: 30/30
+            suite: 30/40
+          - part: api-31
+            projects: --project=api --project=api-isolated
+            suite: 31/40
+          - part: api-32
+            projects: --project=api --project=api-isolated
+            suite: 32/40
+          - part: api-33
+            projects: --project=api --project=api-isolated
+            suite: 33/40
+          - part: api-34
+            projects: --project=api --project=api-isolated
+            suite: 34/40
+          - part: api-35
+            projects: --project=api --project=api-isolated
+            suite: 35/40
+          - part: api-36
+            projects: --project=api --project=api-isolated
+            suite: 36/40
+          - part: api-37
+            projects: --project=api --project=api-isolated
+            suite: 37/40
+          - part: api-38
+            projects: --project=api --project=api-isolated
+            suite: 38/40
+          - part: api-39
+            projects: --project=api --project=api-isolated
+            suite: 39/40
+          - part: api-40
+            projects: --project=api --project=api-isolated
+            suite: 40/40
           - part: ui-1
             projects: --project=ui --project=islands
             suite: 1/6
