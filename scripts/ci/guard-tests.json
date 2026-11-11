@@ -10,6 +10,7 @@
   "scripts/__tests__/integration-admission.test.mjs",
   "scripts/__tests__/markdown-policy.test.mjs",
   "scripts/__tests__/merge-admission.test.mjs",
+  "scripts/__tests__/native-region-gates.test.mjs",
   "scripts/__tests__/page-speed-lab.test.mjs",
   "scripts/__tests__/render-schema-runs.test.mjs",
   "scripts/__tests__/residual-name-guard.test.mjs",
