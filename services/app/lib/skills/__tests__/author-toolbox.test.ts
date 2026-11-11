@@ -851,6 +851,9 @@ it('publish FILE --artifact ID replaces that page over its current head when the
   sent.length=0;
   expect(await publishCommand({values:{artifact:'PAGE12'},positionals:[file]},options)).toMatchObject({id:'PAGE12',version:5});
   expect(sent.map(r=>r.method)).toEqual(['GET','PUT']);expect(sent[1].body).not.toHaveProperty('expectedSharingRevision');
+  // An update that names no visibility sends none: a public or private page stays as it is (it was sent 'unlisted',
+  // which turned a public page unlisted and a private one into anyone-with-the-link on its next publish).
+  expect(sent[1].body).not.toHaveProperty('visibility');
   // A marker that names the page is the baseline itself: its version is the one expected.
   sent.length=0;await writeFile(file,(await readFile(file,'utf8')).replace('Starter','Edited'));
   await publishCommand({values:{artifact:'PAGE12'},positionals:[file]},options);

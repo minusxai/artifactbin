@@ -125,12 +125,13 @@ let dataset=source;if(extension==='.json'){try{dataset=JSON.parse(source);}catch
 }else body={file:{filename:baseline?.filename??path.basename(file),contentType:
    baseline?.contentType??media[extension]??'application/octet-stream',base64:bytes.toString(
    'base64')}};
+// An update sends no visibility unless --visibility asks for one: the page keeps the one it has.
 if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.expectedState=
-   baseline.state;}
+   baseline.state;
  // A visibility change on an update names the sharing revision it saw, when the baseline has one.
- if(baseline&&values.visibility&&Number.isSafeInteger(baseline.sharingRevision))
+ if(values.visibility&&Number.isSafeInteger(baseline.sharingRevision))
   body.expectedSharingRevision=baseline.sharingRevision;
- else body.visibility='unlisted';
+}else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
  // A new dataset is named after its file (sales.csv → sales), the name a page links it by.
