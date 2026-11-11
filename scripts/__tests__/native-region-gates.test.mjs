@@ -26,3 +26,7 @@ it('gate task lookup uses the native node view rather than saved-only data-type'
  expect(NATIVE_TASK_CHECKBOX).toBe('li[data-checked] input[type="checkbox"]');
  expect(read('scripts/gates/gate-live-regions.mjs')).toContain('${EDITOR} ${NATIVE_TASK_CHECKBOX}');
 });
+
+it('reads the region API inner HTML response without requiring a page wrapper',()=>{
+ expect(nativeRegionFacts('<p>Agent line from <strong data-af-id="af-2">Markdown</strong>.</p>')).toEqual({text:'Agent line from Markdown.',strong:['Markdown']});
+});

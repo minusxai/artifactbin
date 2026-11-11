@@ -2,7 +2,7 @@
 import { JSDOM } from 'jsdom';
 export const NATIVE_TASK_CHECKBOX = 'li[data-checked] input[type="checkbox"]';
 export function nativeRegionFacts(html) {
-  const root = JSDOM.fragment(html).querySelector('[data-af-id="notes"]');
-  if (!root) throw new Error('Missing native notes region');
+  const fragment = JSDOM.fragment(html);
+  const root = fragment.querySelector('[data-af-id="notes"]') ?? fragment;
   return { text: root.textContent, strong: [...root.querySelectorAll('strong')].map(node => node.textContent) };
 }
