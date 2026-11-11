@@ -568,3 +568,41 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
   }finally{await rm(root,{recursive:true,force:true});}
  });
 });
+
+describe('an operator-registered client (IDENTITY__OAUTH_CLIENTS): a fixed id, named at consent, no dynamic registration', () => {
+ const SERVICE='http://warehouse.localhost:7444';
+ const CLIENTS=[{client_id:'warehouse-web',name:'Warehouse',redirect_uris:[REGISTERED_REDIRECT]}];
+ const withClient=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:JSON.stringify(CLIENTS),IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'warehouse',origin:SERVICE}])}}));};
+ const authorize=(resource:string,scope='',redirect=REDIRECT)=>`/oauth/authorize?response_type=code&client_id=warehouse-web&redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st&resource=${encodeURIComponent(resource)}${scope}`;
+
+ it('signs a browser in for the service and for this API with the same fixed client, naming it at consent', async () => {
+  const host=await withClient();
+  expect(await(await host.request(authorize(SERVICE),{headers:asUser()})).text()).toContain('<strong>Warehouse</strong> wants to act as you at <strong>warehouse</strong>');
+  expect(await(await host.request(authorize(RESOURCE,'&scope=artifacts'),{headers:asUser()})).text()).toContain('<strong>Warehouse</strong> wants to use this site as');
+  const code=async(resource:string,scope:string)=>{
+   const form=new URLSearchParams({client_id:'warehouse-web',redirect_uri:REDIRECT,code_challenge:s256(verifier),resource,scope,state:'st',grant:'user',action:'approve'});
+   const approved=await host.request('/oauth/authorize/approve',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form});
+   expect(approved.status).toBe(303);
+   return new URL(approved.headers.get('location')!).searchParams.get('code')!;
+  };
+  const exchange=async(resource:string,scope:string)=>{
+   const r=await host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:'warehouse-web',code:await code(resource,scope),code_verifier:verifier,redirect_uri:REDIRECT,resource})});
+   expect(r.status,await r.clone().text()).toBe(200);
+   return (await r.json() as {access_token:string}).access_token;
+  };
+  const reader=createBearerReader({db:{query:testDb().query}});
+  expect(await reader.byToken(await exchange(SERVICE,''))).toMatchObject({userId:'usr_1',audience:SERVICE});
+  const api=await exchange(RESOURCE,'artifacts');
+  expect(await reader.byToken(api)).toMatchObject({userId:'usr_1',audience:RESOURCE,scope:'artifacts'});
+  expect(await(await host.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${api}`}})).json()).toMatchObject({credential:'bearer'});
+ });
+
+ it('keeps its redirects exact, is unknown where it is not configured, and a malformed setting refuses the host', async () => {
+  const host=await withClient();
+  expect(await(await host.request(authorize(SERVICE,'','https://evil.example/callback'),{headers:asUser()})).text()).toContain('Redirect URI not registered.');
+  expect(await(await app.request(authorize(RESOURCE,'&scope=artifacts'),{headers:asUser()})).text()).toContain('Unknown client.');
+  const options=await optionsOf();
+  for(const bad of ['{}',JSON.stringify([{client_id:'afbin_x',name:'X',redirect_uris:[REGISTERED_REDIRECT]}]),JSON.stringify([{client_id:'web',name:'X',redirect_uris:['http://evil.example/cb']}]),JSON.stringify([{client_id:'web',name:'<b>',redirect_uris:[REGISTERED_REDIRECT]}])])
+   expect(()=>assemble(authParts({...options,env:{...options.env,IDENTITY__OAUTH_CLIENTS:bad}})),bad).toThrow(/IDENTITY__OAUTH_CLIENTS/);
+ });
+});

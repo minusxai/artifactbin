@@ -5,7 +5,7 @@ import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
-import {createOAuthStore} from './identity/oauth';
+import {createOAuthStore,parseOAuthClients} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
@@ -167,7 +167,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       mountOAuthRoutes(app, {
         sessions: o.sessions,
         admitIdentity:o.admitIdentity,
-        oauth: createOAuthStore(o.identityDb, schema),
+        oauth: createOAuthStore(o.identityDb, schema, parseOAuthClients(readEnv(o.env, 'IDENTITY__OAUTH_CLIENTS'))),
         upstream: o.upstream,
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
