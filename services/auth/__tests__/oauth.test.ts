@@ -602,7 +602,8 @@ describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here fo
  it('the long grant is for clients outside any page: a request a page makes (any Sec-Fetch-*) is refused, and the page uses the exchange',async()=>{
   const host=await withService();
   const grant=(headers:Record<string,string>,body:unknown={})=>host.request(`${BASE}/api/authentication/token`,{method:'POST',headers:{...signedIn(),origin:BASE,'content-type':'application/json',...headers},body:JSON.stringify(body)});
-  for(const page of [{'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'},{'sec-fetch-site':'same-origin'},{'sec-fetch-mode':'navigate'},{'sec-fetch-dest':'document'}]){
+  const pages:Record<string,string>[]=[{'sec-fetch-site':'same-origin','sec-fetch-mode':'cors','sec-fetch-dest':'empty'},{'sec-fetch-site':'same-origin'},{'sec-fetch-mode':'navigate'},{'sec-fetch-dest':'document'}];
+  for(const page of pages){
    for(const body of [{},{audience:'warehouse'}]){
     const refused=await grant(page,body);
     expect(refused.status,JSON.stringify(page)).toBe(403);
