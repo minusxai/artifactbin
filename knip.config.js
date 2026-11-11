@@ -23,7 +23,7 @@ export default {
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (scripts/AGENTS.md),
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
-        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/{dataset-graphql,dataset-read,resolver}-latency.ts', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
+        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/{dataset-graphql,dataset-read}-latency.ts', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.
@@ -41,6 +41,8 @@ export default {
         // The Solid transform the island build and Vitest apply (scripts/lib/cached-solid.mjs).
         'babel-preset-solid',
       ],
+      // The CI runner's own package database, read by scripts/ci/system-debs.mjs.
+      ignoreBinaries: ['dpkg-query'],
     },
     'services/app': {
       entry: [

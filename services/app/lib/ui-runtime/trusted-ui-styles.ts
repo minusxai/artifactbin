@@ -59,7 +59,7 @@ export function configureTrustedUiStyles(cssText: string): void {
  * SPA's JavaScript (lib/__tests__/reader-bundle-hygiene).
  *
  * Exactly which sheets: the same-origin `<link rel="stylesheet">` elements in
- * the shell's `<head>` (web/index.html → the built `/assets/index-*.css`, or
+ * the shell's `<head>` (web/index.html → the built `/af/app/index-*.css`, or
  * `/shell.css` under the dev server), found ONCE, by the entrypoint, before any
  * Solid tree mounts. Never a `<style>` element and never anything later:
  * author CSS reaches the document only as `<style>` (a server-rendered

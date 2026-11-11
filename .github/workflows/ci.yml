@@ -501,40 +501,38 @@ jobs:
           key: playwright-v2-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # Chromium libraries ship on the runner. Firefox/WebKit need additional system
       # packages even on a browser-cache hit; install them only on shards that use them.
-      # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
-      # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
-      # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
-      # packages already in apt's archive they install without downloading anything.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs AND INSTALLED WITHOUT THE MIRROR
+      # (scripts/ci/system-debs.mjs says why apt's own archive was not enough). RESTORE ONLY: the entry
+      # is the all-engine closure `warm-caches` writes; a shard running one engine would save a part of it.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         if: steps.gate-browsers.outputs.browsers != 'chromium'
         with:
           path: ~/browser-debs
-          key: browser-debs-v1-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          key: browser-debs-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
           CACHE_HIT: ${{ steps.browser-chromium.outputs.cache-hit }}
         run: |
           read -ra selected_engines <<< "$BROWSERS"
-          deps=()
-          # A Chromium-only shard never runs apt: ubuntu-latest ships Chromium's libraries, so a browser
-          # cache miss costs the download alone, never a mirror's mood. (The cache is warmed on main —
-          # see `warm-caches` — so a PR's first run restores it too.)
+          # A Chromium-only shard never installs a system package: ubuntu-latest ships Chromium's libraries,
+          # so a browser cache miss costs the download alone. (The cache is warmed on main — see
+          # `warm-caches` — so a PR's first run restores it too.)
           if [[ "$BROWSERS" != chromium ]]; then
-            deps+=(--with-deps)
-            if compgen -G "$HOME/browser-debs/*.deb" > /dev/null; then sudo cp "$HOME"/browser-debs/*.deb /var/cache/apt/archives/; fi
+            node scripts/ci/system-debs.mjs "$HOME/browser-debs" -- npx playwright install-deps "${selected_engines[@]}"
           fi
           echo "browser cache hit: ${CACHE_HIT:-false}"
-          npx playwright install "${deps[@]}" "${selected_engines[@]}"
-          if [[ "$BROWSERS" != chromium ]]; then
-            mkdir -p "$HOME/browser-debs"
-            cp /var/cache/apt/archives/*.deb "$HOME/browser-debs/" 2>/dev/null || true
-          fi
+          npx playwright install "${selected_engines[@]}"
+      # BUBBLEWRAP, the same way: one package, so any shard may save it on a miss.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/session-debs
+          key: session-debs-v1-${{ runner.os }}-${{ runner.arch }}
       # The sandbox prep below needs nothing `build` produces, so it runs while `build` is still
       # assembling its artifact rather than after waiting for it.
       - name: Prepare isolated browser session workers
         run: |
-          sudo apt-get install -y bubblewrap || { sudo apt-get update; sudo apt-get install -y bubblewrap; }
+          node scripts/ci/system-debs.mjs "$HOME/session-debs" --provides /usr/bin/bwrap -- sh -c 'sudo apt-get install -y bubblewrap || { sudo apt-get update; sudo apt-get install -y bubblewrap; }'
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo mkdir -p /sys/fs/cgroup/afbin-sessions
           echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
@@ -656,16 +654,23 @@ jobs:
         with:
           path: ~/.cache/ms-playwright/webkit-*
           key: playwright-v2-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      # The gate shards' system .debs (scripts/ci/system-debs.mjs): every engine's closure, written here only.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: browser-debs
         with:
           path: ~/browser-debs
-          key: browser-debs-v1-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          key: browser-debs-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - if: steps.browser-chromium.outputs.cache-hit != 'true' || steps.browser-firefox.outputs.cache-hit != 'true' || steps.browser-webkit.outputs.cache-hit != 'true' || steps.browser-debs.outputs.cache-hit != 'true'
         run: |
-          npx playwright install --with-deps chromium firefox webkit
-          mkdir -p "$HOME/browser-debs"
-          cp /var/cache/apt/archives/*.deb "$HOME/browser-debs/" 2>/dev/null || true
+          node scripts/ci/system-debs.mjs "$HOME/browser-debs" -- npx playwright install-deps chromium firefox webkit
+          npx playwright install chromium firefox webkit
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: session-debs
+        with:
+          path: ~/session-debs
+          key: session-debs-v1-${{ runner.os }}-${{ runner.arch }}
+      - if: steps.session-debs.outputs.cache-hit != 'true'
+        run: node scripts/ci/system-debs.mjs "$HOME/session-debs" --provides /usr/bin/bwrap -- sh -c 'sudo apt-get install -y bubblewrap || { sudo apt-get update; sudo apt-get install -y bubblewrap; }'
       - id: build-key
         run: node scripts/ci/ci.mjs build-key
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
