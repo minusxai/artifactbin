@@ -13,7 +13,6 @@ import { overrideConfig } from '@/lib/platform/config';
 import { closeDefaultConnection, validateDefaultConnection } from '@/lib/connections';
 import { getArtifactById } from '@/lib/artifacts';
 import { GET as statusGet } from '@/app/api/default-connection/route';
-import { GET as schemaGet } from '@/app/api/default-connection/schema/route';
 import { POST as agentSql } from '@/app/api/default-connection/sql/route';
 import { POST as testPost } from '@/app/api/default-connection/test/route';
 import { GET as accountGet } from '@/app/api/page/account/route';
@@ -107,15 +106,15 @@ it('answers a page whose install lost its connection with a clear refusal', asyn
 const agent = async (who: Person | null, body: unknown) => { const r = await agentSql(request('/api/default-connection/sql', { method: 'POST', json: body, ...(who ? { token: who.token } : {}) })); return { status: r.status, body: await r.json() as Record<string, unknown> }; };
 it('lets an agent read its schema and query it as its account, never anonymously', async () => {
   const { alice } = await readers();
-  const schema = await schemaGet(request('/api/default-connection/schema?namespace=warehouse%2Ffinance', { token: alice.token }));
+  const schema = await agent(alice, { namespace: 'warehouse/finance' });
   expect(schema.status).toBe(200);
-  const tables = (await schema.json() as { connector: string; tables: { namespace: string; name: string; kind: string }[] });
+  const tables = schema.body as { connector: string; tables: { namespace: string; name: string; kind: string }[] };
   expect([tables.connector, tables.tables.filter((t) => t.namespace === 'sales').map((t) => [t.name, t.kind])]).toEqual(['postgres', [['mine', 'view'], ['orders', 'table']]]);
   expect(ok(await agent(alice, { sql: 'select id from sales.mine order by id', namespace: 'warehouse/finance' })).rows).toEqual([{ id: 1 }, { id: 3 }]);
   expect(ok(await agent(alice, { sql: 'select item from sales.orders where id = $id', params: { id: 2 } })).rows).toEqual([{ item: 'cake' }]);
   expect((await agent(alice, { sql: 'drop table sales.orders' })).body.error).toBe('permission_denied');
   expect((await agent(null, { sql: 'select 1' })).status).toBe(401);
-  expect((await schemaGet(request('/api/default-connection/schema'))).status).toBe(401);
+  expect((await agent(null, {})).status).toBe(401);
 });
 
 it('shows the settings row without the secret, and tests the connection for signed-in sessions only, within the allowance', async () => {

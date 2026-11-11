@@ -23,12 +23,11 @@ from page HTML:
 
 New datasets are readable by anyone who can
 open them; only the owner and editors change rows. To let readers add or edit rows,
-set rules: [permissions](permissions.md). To read your own Postgres or MySQL database, use a
-backend function ([`caps.db`](functions.md#capsdb-your-own-database)).
+set rules: [permissions](permissions.md). The install's own database: [default](#the-default-connection).
 
 ## Contents
 
-[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset)
+[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset) · [Default](#the-default-connection)
 
 ## Tables: discover before querying
 
@@ -134,3 +133,9 @@ files: `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files` (bytes, Content-T
 `X-Filename`). Both need `X-Edit-Id` from the page head and a unique `Idempotency-Key` (replay the
 same bytes and key after an uncertain response). The response returns the stored ref and a read URL
 under the same permissions. Pinned bindings cannot upload.
+
+## The default connection
+
+`<link rel="af-dataset" data-af-name="wh" href="default:DB">` reads the install's database
+([[ connectors ]]; empty DB: its default), signed in, read-only: `wh.table` in its own SQL.
+Agents: `sql.mjs query default:DB 'SQL'`; `schema default:DB`.

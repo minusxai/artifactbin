@@ -2,10 +2,9 @@
 export const DESCRIPTION = `Print a page's or dataset's tables, or run one SQL statement over them.
 A page ID reads the page's linked datasets as its readers do, each table named by its link
 (data-af-name), with _id (the server says which the ID is); a dataset ID reads that dataset's
-table rows; default:[DB] reads the install's default connection as you (DB: what a page's
-href="default:DB" names), in its own SQL, read-only.
-Usage: node scripts/sql.mjs schema ID|URL|default:[DB] [--revision N]
-       node scripts/sql.mjs query ID|URL|default:[DB] 'SQL' [--params FILE] [--limit N]
+table rows; default:DB the install's database.
+Usage: node scripts/sql.mjs schema ID|URL|default:DB [--revision N]
+       node scripts/sql.mjs query ID|URL|default:DB 'SQL' [--params FILE] [--limit N]
          [--revision N] [--idempotency-key KEY]
 Flags: --params FILE a JSON object of the $name values the SQL binds; --limit N the most rows a
   read prints (default 1000, at most 10000); --revision N a saved page revision (default:
@@ -80,8 +79,10 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
   if (!target || extra.length || (sub === 'schema') !== (statement === undefined))
     throw new ToolError('invalid_arguments', sub === 'schema' ? 'schema takes one ID.' :
       'query takes an ID and one SQL statement.', 2, 'Read --help.');
-  if (target.startsWith('default:')) return defaultConnection(sub, target.slice(8), statement,
-    values, options);
+  if (target.startsWith('default:')) return makeClient(selectedServer(values, options.env),
+    options).request('/api/default-connection/sql', {method: 'POST', safeToRepeat: true, body:
+    {sql: statement, namespace: target.slice(8), params: values.params &&
+    await jsonFile(values.params)}});
   const {server, id} = resolveTarget(target, selectedServer(values, options.env)),
     client = makeClient(server, options);
   const revision = values.revision ? String(integer(values.revision, 'revision')) : undefined;
@@ -136,15 +137,6 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
     }
     throw error;
   }
-}
-/** The install's default connection (`default:DB`): its tables, or one read, as you. */
-async function defaultConnection(sub, db, statement, values, options) {
-  const client = makeClient(selectedServer(values, options.env), options);
-  if (sub === 'schema') return client.request('/api/default-connection/schema' +
-    (db ? '?namespace=' + encodeURIComponent(db) : ''));
-  const params = values.params ? await jsonFile(values.params) : {};
-  return client.request('/api/default-connection/sql', {method: 'POST', safeToRepeat: true,
-    body: {sql: statement, params, ...db ? {namespace: db} : {}}});
 }
 /** A dataset ID's read through its query door, pages followed up to LIMIT rows: {columns, rows}. */
 async function datasetRead(client, id, sql, values, limit) {
