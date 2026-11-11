@@ -47,10 +47,16 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
   mx_crm:{id:'tok_crm',userId:'usr_1',audience:CRM.origin},
  };
  const relayed:string[]=[];
+ /** The parents the fake views hold (`kind:id` → owner) and the ones no longer live. */
+ const parents:Record<string,string>={'token:tok_plain':'usr_1','session:ses_1':'usr_1','token:tok_refused':'usr_refused'},dead=new Set<string>();
  const key=viewerTokenKey('test');
  const host=(tokens:TokenReader={byToken:async presented=>records[presented]??null},audiences=AUDIENCES)=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret,APP__PUBLIC_BASE_URL:origin,IDENTITY__SERVICE_AUDIENCES:audiences},cookieSecret:'test',tokens,
   // The one active rule, read where every reader reads it (the identity `users` view), not a host-supplied callback.
-  identityDb:{query:async<T>(sql:string,params?:unknown[])=>{if(!/FROM identity\.users WHERE id=\$1/.test(sql))throw Error(`unexpected ${sql}`);return {rows:[{active:params?.[0]!=='usr_refused'}] as T[]};}},
+  identityDb:{query:async<T>(sql:string,params?:unknown[])=>{
+   // An exchanged token's parent, read where a service re-checks it: the `tokens` and `sessions` views' `live`.
+   if(/FROM identity\.tokens WHERE id=\$1 AND user_id=\$2$/.test(sql)||/FROM identity\.sessions WHERE id=\$1 AND "userId"=\$2$/.test(sql))
+    return {rows:(parents[`${sql.includes('sessions')?'session':'token'}:${params?.[0]}`]===params?.[1]?[{live:!dead.has(String(params?.[0]))}]:[]) as T[]};
+   if(!/FROM identity\.users WHERE id=\$1/.test(sql))throw Error(`unexpected ${sql}`);return {rows:[{active:params?.[0]!=='usr_refused'}] as T[]};}},
   sessions:{resolve:async()=>null},
   upstream:async request=>{relayed.push(new URL(request.url).pathname);return Response.json({error:'not_found'},{status:404});}});
  const call=(app:ReturnType<typeof host>,path:string,body:unknown,auth=secret)=>app.request(origin+path,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:auth,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -68,9 +74,9 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
  });
  it('with the installation\'s secret: user, token id, scopes, audience and expiry of an access token for this API or a configured service, or inactive',async()=>{
   const app=host();
-  expect(await introspect(app,'mx_live')).toEqual({active:true,user_id:'usr_1',token_id:'tok_live',scopes:['artifacts'],audience:`${origin}/api`,expires_at:'2030-01-01T00:00:00.000Z',actor:null});
-  expect(await introspect(app,'mx_plain')).toEqual({active:true,user_id:'usr_1',token_id:'tok_plain',scopes:[],audience:null,expires_at:null,actor:null});
-  expect(await introspect(app,'mx_warehouse')).toEqual({active:true,user_id:'usr_1',token_id:'tok_warehouse',scopes:[],audience:WAREHOUSE.origin,expires_at:null,actor:null});
+  expect(await introspect(app,'mx_live')).toEqual({active:true,user_id:'usr_1',token_id:'tok_live',scopes:['artifacts'],audience:`${origin}/api`,expires_at:'2030-01-01T00:00:00.000Z',actor:null,parent:null});
+  expect(await introspect(app,'mx_plain')).toEqual({active:true,user_id:'usr_1',token_id:'tok_plain',scopes:[],audience:null,expires_at:null,actor:null,parent:null});
+  expect(await introspect(app,'mx_warehouse')).toEqual({active:true,user_id:'usr_1',token_id:'tok_warehouse',scopes:[],audience:WAREHOUSE.origin,expires_at:null,actor:null,parent:null});
   for(const token of ['mx_unknown','mx_elsewhere','mx_refused'])expect(await introspect(app,token),token).toEqual({active:false});
   // A service no longer configured: its tokens are nobody's.
   expect(await introspect(host(undefined,'[]'),'mx_warehouse')).toEqual({active:false});
@@ -88,7 +94,29 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
   const app=host(),now=Date.now();
   const answer=await introspect(app,viewer(WAREHOUSE,'usr_1',now)) as Record<string,unknown>;
   expect(answer).toEqual({active:true,user_id:'usr_1',token_id:expect.stringMatching(/^vtk_/),scopes:[],audience:WAREHOUSE.origin,
-   expires_at:new Date((Math.floor(now/1000)+60)*1000).toISOString(),actor:{id:'artifactbin',artifact_id:'pg_1',function:'revenue'}});
+   expires_at:new Date((Math.floor(now/1000)+60)*1000).toISOString(),actor:{id:'artifactbin',artifact_id:'pg_1',function:'revenue'},parent:null});
+ });
+ it('an exchanged token: the person, the audience, no actor, and the parent credential, answered only while that parent is live',async()=>{
+  const app=host(),now=Date.now();dead.clear();
+  const exchanged=(parent:{kind:'token'|'session';id:string},service=WAREHOUSE,userId='usr_1',at=now)=>signViewerToken(key,service,{userId,parent},at).token;
+  expect(await introspect(app,exchanged({kind:'session',id:'ses_1'}),warehouseSecret)).toEqual({active:true,user_id:'usr_1',token_id:expect.stringMatching(/^vtk_/),scopes:[],
+   audience:WAREHOUSE.origin,expires_at:new Date((Math.floor(now/1000)+300)*1000).toISOString(),actor:null,parent:{kind:'session',id:'ses_1'}});
+  expect(await introspect(app,exchanged({kind:'token',id:'tok_plain'}))).toMatchObject({active:true,parent:{kind:'token',id:'tok_plain'},actor:null});
+  // Another service's secret, another user's parent, an unknown parent, an inactive account: inactive.
+  expect(await introspect(app,exchanged({kind:'session',id:'ses_1'},CRM),warehouseSecret)).toEqual({active:false});
+  expect(await introspect(app,exchanged({kind:'session',id:'ses_1'},WAREHOUSE,'usr_2'))).toEqual({active:false});
+  expect(await introspect(app,exchanged({kind:'token',id:'tok_unknown'}))).toEqual({active:false});
+  expect(await introspect(app,exchanged({kind:'session',id:'tok_plain'}))).toEqual({active:false});
+  expect(await introspect(app,exchanged({kind:'token',id:'tok_refused'},WAREHOUSE,'usr_refused'))).toEqual({active:false});
+  // Its life is five minutes, not a viewer token's minute; past it, refused.
+  expect(await introspect(app,exchanged({kind:'token',id:'tok_plain'},WAREHOUSE,'usr_1',now-120_000))).toMatchObject({active:true});
+  expect(await introspect(app,exchanged({kind:'token',id:'tok_plain'},WAREHOUSE,'usr_1',now-301_000))).toEqual({active:false});
+  // The parent ends (revoked, signed out): so does every token exchanged for it, on the next check.
+  const bySession=exchanged({kind:'session',id:'ses_1'}),byToken=exchanged({kind:'token',id:'tok_plain'});
+  dead.add('ses_1');dead.add('tok_plain');
+  expect(await introspect(app,bySession)).toEqual({active:false});
+  expect(await introspect(app,byToken)).toEqual({active:false});
+  dead.clear();
  });
  it('a viewer token is refused once expired, for an inactive viewer, signed under another key, altered, or for an audience no longer configured',async()=>{
   const app=host();

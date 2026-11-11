@@ -7,10 +7,11 @@ Usage: node scripts/auth.mjs status [--audience SERVICE]
        node scripts/auth.mjs logout [--local] [--audience SERVICE]
 Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
   --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
-  completes it; --audience SERVICE there also saves a second grant, for that service (an id the
-  server is configured to issue tokens for), which only that service accepts; status and logout
-  take it to act on that grant. Common: --server ORIGIN (default: the archive origin), --json,
-  --output FILE (never overwrites), --help.
+  completes it. The one grant reaches a service this server issues tokens for: scripts exchange
+  it for short-lived tokens (toolbox-service-token.mjs). --audience SERVICE there also saves a
+  separate long grant for that service, rarely needed; status and logout take it.
+  Common: --server ORIGIN (default: the archive origin), --json, --output FILE (never
+  overwrites), --help.
 Examples:
   node scripts/auth.mjs status                        # reuse an existing grant before signing
                                                       #   in again

@@ -8,6 +8,7 @@
  * The view names and columns are a cross-repository contract: the literal below pins them, so changing one is a
  * reviewed edit here and in every reader that applies a byte-for-byte copy of IDENTITY.sql.
  */
+import {createHash} from 'node:crypto';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -23,7 +24,9 @@ import {canAuthenticateUser} from '@/lib/user-kinds';
 import {admitGroupMember,useAppHarness} from './harness';
 useAppHarness();
 const SECRET='identity-test-service-secret',origin='http://localhost:3000',WAREHOUSE='http://warehouse.localhost:7444';
-const AUDIENCES=JSON.stringify([{id:'warehouse',origin:WAREHOUSE}]);
+const WAREHOUSE_SECRET='warehouse-introspection-secret',LEDGER_SECRET='ledger-introspection-secret';
+const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
+const AUDIENCES=JSON.stringify([{id:'warehouse',origin:WAREHOUSE,introspection_secret_sha256:sha256(WAREHOUSE_SECRET)},{id:'ledger',origin:'http://ledger.localhost:7445',introspection_secret_sha256:sha256(LEDGER_SECRET)}]);
 let directory='';
 beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());directory=await mkdtemp(join(tmpdir(),'identity-'));});
 afterEach(async()=>{await rm(directory,{recursive:true,force:true});});
@@ -42,7 +45,7 @@ async function composed(){
   const minted=await post('/api/authentication/token',audience===undefined?{}:{audience},{cookie});
   return {status:minted.status,grant:await minted.json(),cookie};
  };
- const get=(path:string)=>application.fetch(new Request(origin+path));
+ const get=(path:string,headers:Record<string,string>={})=>application.fetch(new Request(origin+path,{headers}));
  return {post,get,service,signIn};
 }
 const sql=async<T=Record<string,unknown>>(text:string,params:unknown[]=[])=>(await (await getDb()).query<T>(text,params)).rows;
@@ -110,7 +113,7 @@ it('tokens: a service grant and an API grant are live until revoked; introspect 
  const service=await host.signIn(email,'warehouse');
  expect(service.status).toBe(201);expect(service.grant).toMatchObject({scope:'',resource:WAREHOUSE});
  const user=await userIdOf(email);
- expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),actor:null}});
+ expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),actor:null,parent:null}});
  expect(await token(service.grant.id)).toEqual({user_id:user,scopes:[],live:true});
  const plain=await host.signIn(email);
  expect(plain.grant.scope).toBe('artifacts');
@@ -139,6 +142,51 @@ it('tokens: a service grant and an API grant are live until revoked; introspect 
  expect((await token(plain.grant.id))?.live).toBe(false);
  // Discovery advertises the one scope this API has.
  expect((await (await host.get('/.well-known/oauth-authorization-server')).json()).scopes_supported).toEqual(['artifacts']);
+});
+
+it('the exchange: a signed-in page and an agent\'s one API bearer each get a five-minute token the service introspects with its own secret, nobody here, ending with its parent',async()=>{
+ const host=await composed();
+ const email='mxmx_test_exchange_owner@example.test';
+ const signed=await host.signIn(email);
+ const user=await userIdOf(email);
+ const exchange=async(headers:Record<string,string>)=>{const response=await host.post('/api/authentication/service-token',{audience:'warehouse'},headers);return {status:response.status,body:await response.json() as Record<string,unknown>&{access_token:string}};};
+ const introspect=async(token:string,secret=WAREHOUSE_SECRET)=>(await host.service(IDENTITY_INTROSPECT_PATH,{token},secret)).body;
+ const [session]=await sql<{id:string}>('SELECT id FROM identity.sessions WHERE "userId"=$1',[user]);
+ // (a) the page: its session cookie, same Origin. (b) the agent: its ordinary API grant as the bearer, no cookie.
+ const page=await exchange({cookie:signed.cookie}),agent=await exchange({authorization:`Bearer ${signed.grant.access_token}`});
+ for(const [label,issued] of [['page',page],['agent',agent]] as const){
+  expect(issued.status,label).toBe(200);
+  expect(issued.body,label).not.toHaveProperty('refresh_token');
+  expect(issued.body,label).toMatchObject({token_type:'Bearer',audience:'warehouse',resource:WAREHOUSE,expires_in:expect.any(Number)});
+  // At this deployment's own API it is no credential.
+  expect((await host.get('/api/artifacts',{authorization:`Bearer ${issued.body.access_token}`})).status,label).toBe(401);
+  // Another service's own secret learns nothing of it.
+  expect(await introspect(issued.body.access_token,LEDGER_SECRET),label).toEqual({active:false});
+ }
+ expect((await host.get('/api/artifacts',{authorization:`Bearer ${signed.grant.access_token}`})).status).toBe(200);
+ expect(await introspect(page.body.access_token)).toEqual({active:true,user_id:user,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience:WAREHOUSE,
+  expires_at:page.body.expires_at,actor:null,parent:{kind:'session',id:session!.id}});
+ expect(await introspect(agent.body.access_token)).toMatchObject({active:true,user_id:user,actor:null,parent:{kind:'token',id:signed.grant.id}});
+ // What the service re-checks by the parent's id is the view's `live`: the bearer read's own rule.
+ expect(await token(signed.grant.id)).toMatchObject({live:true});
+ // Revoking the agent's grant ends what it was exchanged for, on the next check; the page's is untouched.
+ expect((await host.post('/oauth/revoke',{client_id:signed.grant.client_id,token:signed.grant.refresh_token})).status).toBe(200);
+ expect((await host.get('/api/artifacts',{authorization:`Bearer ${signed.grant.access_token}`})).status).toBe(401);
+ expect(await token(signed.grant.id)).toMatchObject({live:false});
+ expect(await introspect(agent.body.access_token)).toEqual({active:false});
+ expect(await introspect(page.body.access_token)).toMatchObject({active:true});
+ // A revoked bearer exchanges nothing more.
+ expect((await exchange({authorization:`Bearer ${signed.grant.access_token}`})).status).toBe(401);
+ // An account that may no longer sign in: inactive at once, and again live once it may.
+ await (await getDb()).query("UPDATE users SET kind='guest' WHERE id=$1",[user]);
+ expect(await introspect(page.body.access_token)).toEqual({active:false});
+ await (await getDb()).query("UPDATE users SET kind='account' WHERE id=$1",[user]);
+ expect(await introspect(page.body.access_token)).toMatchObject({active:true});
+ // Signing out ends the session, and with it the page's token.
+ expect((await host.post('/api/auth/sign-out',{},{cookie:signed.cookie})).status).toBe(200);
+ expect(await sql('SELECT live FROM identity.sessions WHERE id=$1',[session!.id])).toEqual([]);
+ expect(await introspect(page.body.access_token)).toEqual({active:false});
+ expect((await exchange({cookie:signed.cookie})).status).toBe(401);
 });
 
 it('sessions: a browser session is live by id for its user until it expires',async()=>{

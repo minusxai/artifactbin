@@ -50,6 +50,16 @@ describe('issueViewerToken',()=>{
   await expect(store().issueViewerToken({userId:'usr bob',service:'warehouse'})).rejects.toEqual(new IdentityError('invalid_request',400));
   await expect(store().issueViewerToken({userId:'usr_bob',service:'warehouse',function:'not a name'})).rejects.toEqual(new IdentityError('invalid_request',400));
  });
+ it('an exchanged token (a parent credential, no asker) lives five minutes; a viewer token may not, and a parent with an asker is refused',async()=>{
+  const {signViewerToken}=await import('../src/identity/service-tokens');
+  const key=viewerTokenKey('host-secret'),now=Date.now();
+  const exchanged=signViewerToken(key,WAREHOUSE,{userId:'usr_bob',parent:{kind:'session',id:'ses_1'}},now).token;
+  expect(verifyViewerToken(key,[WAREHOUSE],exchanged,now+290_000)).toMatchObject({sub:'usr_bob',par:{kind:'session',id:'ses_1'},act:{artifact_id:null,function:null}});
+  expect(verifyViewerToken(key,[WAREHOUSE],exchanged,now+301_000)).toBeNull();
+  expect(verifyViewerToken(key,[WAREHOUSE],signViewerToken(key,WAREHOUSE,{userId:'usr_bob'},now).token,now+61_000)).toBeNull();
+  for(const input of [{parent:{kind:'session' as const,id:'ses_1'},actor:{artifactId:'pg_1'}},{parent:{kind:'group' as never,id:'g_1'}},{parent:{kind:'token' as const,id:'not an id'}}])
+   expect(()=>signViewerToken(key,WAREHOUSE,{userId:'usr_bob',...input}),JSON.stringify(input)).toThrow(/invalid_parent/);
+ });
  it('is no credential at this installation\'s API: the bearer read refuses it before hashing or reading anything',async()=>{
   const {token}=await store().issueViewerToken({userId:'usr_bob',service:'warehouse'});
   queries.length=0;

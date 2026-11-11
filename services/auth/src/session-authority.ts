@@ -6,7 +6,9 @@
  *    scopes, audience, expiry and, for a viewer token, the first-party actor and the page and function that asked. An
  *    access token is read by the one bearer read every API request is admitted by (token, OAuth family fence,
  *    identity) and must be bound to this deployment's API or to a configured service (IDENTITY__SERVICE_AUDIENCES); a
- *    viewer token is verified by its signature (./identity/service-tokens). Either needs an ACTIVE account. Asked
+ *    viewer or exchanged token is verified by its signature (./identity/service-tokens), an exchanged one also by its
+ *    parent credential's `live` in the identity views (`tokens` or `sessions`, the rule every reader re-checks with).
+ *    Every kind needs an ACTIVE account. Asked
  *    with INTERNAL__SERVICE_SECRET the answer covers every token; asked with a configured service's own introspection
  *    secret it covers only tokens bound to that service's origin, every other one answering `{active: false}`;
  *  - THE IDENTITY MODULE's calls (contracts `IDENTITY_CALL_PATH`, `IdentityService`, INTERNAL__SERVICE_SECRET only):
@@ -17,7 +19,7 @@
  *    failure) is 503 and the caller's call throws.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {API_RESOURCE_PATH,FIRST_PARTY_ACTOR,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,FIRST_PARTY_ACTOR,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -65,6 +67,9 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`)&&!audiences.some(service=>service.origin===token.audience))return null;
   return await activeUser(userId)?{...token,userId}:null;
  };
+ /** An exchanged token's parent, still live for that same user: its row in the `tokens` or `sessions` view, as a service re-checks it. */
+ const parentLive=async(parent:ServiceTokenParent,userId:string)=>!!o.identityDb&&(await o.identityDb.query<{live:boolean}>(parent.kind==='token'
+  ?`SELECT live FROM ${readSchema}.tokens WHERE id=$1 AND user_id=$2`:`SELECT live FROM ${readSchema}.sessions WHERE id=$1 AND "userId"=$2`,[parent.id,userId])).rows[0]?.live===true;
  app.all(IDENTITY_INTROSPECT_PATH,async c=>{
   // The installation itself (every token), or one configured service (only tokens bound to its own origin).
   const asker:{only:ServiceAudience|null}={only:null};
@@ -75,13 +80,13 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   try{
    if(isViewerToken(input.token)){
     const claims=viewerKey?verifyViewerToken(viewerKey,audiences,input.token):null;
-    if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub))return inactive;
+    if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub)||(claims.par&&!await parentLive(claims.par,claims.sub)))return inactive;
     return answer({active:true,user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),
-     actor:{id:FIRST_PARTY_ACTOR,artifact_id:claims.act.artifact_id??null,function:claims.act.function??null}} satisfies IdentityIntrospectResponse);
+     actor:claims.par?null:{id:FIRST_PARTY_ACTOR,artifact_id:claims.act.artifact_id??null,function:claims.act.function??null},parent:claims.par??null} satisfies IdentityIntrospectResponse);
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;
-   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,actor:null} satisfies IdentityIntrospectResponse);
+   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,actor:null,parent:null} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';

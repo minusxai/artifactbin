@@ -1,5 +1,5 @@
 import {getDeploymentState} from '@/lib/deployment';
-import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins } from '@/lib/platform';
+import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
 import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
@@ -42,6 +42,7 @@ import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
 import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/user-pages';
 import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
+import { customShellResponse, keptFromShell, loadCustomShell } from './custom-shell';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
@@ -244,6 +245,8 @@ export interface AppServerOptions {
   publicDir?: string;
   /** Every document on its own origin (APP__PAGES_HOST): this deployment's pages site unless a test passes its own. */
   pagesSite?: PagesSite;
+  /** APP__SHELL_FILE unless a test passes its own: the custom shell (./custom-shell) served for the app's screens. */
+  shellFile?: string | null;
 }
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
@@ -348,6 +351,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   /** The policy every app page carries: strict, framing only the pages origins. */
   const appPageCsp = appPagePolicy(pagesSite);
   const pageCsp = (request: Request): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, baseUrl(request), opts.devHmrPort) : appPageCsp);
+  // Read at boot: a file that cannot be read stops the boot here, naming the setting.
+  const configuredShell = opts.shellFile === undefined ? shellFile() : opts.shellFile;
+  const customShell = configuredShell ? loadCustomShell(configuredShell) : null;
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
   const index = async (url: string): Promise<string> => {
@@ -431,6 +437,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),
     } }));
   };
+
+  /** One of the app's own screens: the custom shell in its place when one is set (./custom-shell), else the app page. */
+  const screen = (c: { req: { raw: Request; url: string; method: string } }) =>
+    (customShell ? customShellResponse(customShell, c.req.method, pageCsp(c.req.raw), APP_SECURITY_HEADERS) : page(c));
 
   /**
    * Who may frame this app page: the app alone; `/local/connect` its local hosts; a document's address (`/a/<id>`, its
@@ -563,6 +573,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {
+    if (customShell) return screen(c);
     const signedIn = await runWithRequest(c.req.raw, async () => {
       const actor = await sessionActor(c.req.raw);
       return actor.credential === 'session' && !!actor.userId;
@@ -589,11 +600,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('Cache-Control', 'no-store');
     return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
   });
-  app.on(['GET','HEAD'],'/local/publish',(c)=>page(c));
-  app.get('/docs-human', (c) => page(c));
+  app.on(['GET','HEAD'],'/local/publish',(c)=>screen(c));
+  app.get('/docs-human', (c) => screen(c));
   // The broker is platform-owned chrome, framed by file:// or loopback documents.
   app.get('/local/connect', (c) => page(c));
-  app.get('/getting-started', (c) => page(c));
+  app.get('/getting-started', (c) => screen(c));
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());
   // The app's API and document handlers.
@@ -644,6 +655,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.get('/:user{@[a-z0-9_]+}', (c) => page(c));
   // A root typo gets the SPA too — its 404 page, under the 404 STATUS. A development server also answers its dev pages.
   const appPages = spaPaths({ dev: opts.devHmrPort !== undefined });
-  app.get('*', async (c) => (appPages.test(new URL(c.req.url).pathname) ? page(c) : page(c, 404)));
+  app.get('*', async (c) => {
+    const pathname = new URL(c.req.url).pathname;
+    if (customShell && !keptFromShell(pathname)) return screen(c);
+    return appPages.test(pathname) ? page(c) : page(c, 404);
+  });
   return app;
 }
