@@ -122,10 +122,13 @@ describe('a host page on the app\'s own origin', () => {
     mounted.setMode('dark');
     mounted.select('title', { reveal: true });
     mounted.scrollToHash('#plan');
+    // The host's own Back or Forward: the page's route follows the `$` values it hands over.
+    mounted.setUrlValues('?$screen=list');
     const commands = doc.posted.map((entry) => entry.message as unknown as { type?: string; payload?: { kind: string; command?: unknown } });
     expect(commands.some((message) => (message.payload?.command as { type?: string })?.type === 'mx:reader-mode')).toBe(true);
     expect(commands.some((message) => (message.payload?.command as { type?: string; path?: string })?.path === 'title')).toBe(true);
     expect(commands.some((message) => message.type === 'mx:frame-hash')).toBe(true);
+    expect(doc.posted.map((entry) => entry.message)).toContainEqual({ type: 'mx:url-values', search: '?$screen=list' });
     mounted.destroy();
     expect(container.querySelector('iframe')).toBeNull();
   });

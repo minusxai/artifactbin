@@ -5,7 +5,8 @@
  * and `state` are the same values. Loaded only when a page (or `@afbin/apollo`) imports it; never part of the reader.
  */
 import type { StoreReceipt } from './apollo/apollo-contracts';
-import { config } from './browser-reader';
+import { config, remote } from './browser-reader';
+import { createPageRoute, pageSeat, type PageSeat } from './page-route';
 import { createPageState } from './page-state';
 import { STATE_VERSION_ATTRIBUTE, isStateVersion } from '../../../contracts/src/state-version';
 
@@ -26,3 +27,8 @@ const page = createPageState({
 export const state = page.state;
 /** Platform-internal: the same document as a StatePort, for `@afbin/apollo`'s client. */
 export const statePort = page.port;
+
+/** Where this copy of the page runs and what its data doors can do now (./page-route). */
+export const seat = (): PageSeat => pageSeat(globalThis as unknown as Window, { ...config, online: () => remote.online() });
+/** The page's screen in its address's `$` values: get, set (replace or push), subscribe (Back/Forward too), href. */
+export const route = createPageRoute(globalThis as unknown as Window, config);

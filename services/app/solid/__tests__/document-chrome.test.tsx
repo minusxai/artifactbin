@@ -618,6 +618,29 @@ it('opens the framed page with the app address\'s #af-state, then leaves it out 
   expect(envelopes(posted).some((message) => message.hash?.includes('af-state'))).toBe(false);
 });
 
+it('keeps the document and its frame through Back and Forward over `$` values the page pushed, telling the frame each time', async () => {
+  mockKind = 'anon'; mockRole = 'viewer';
+  const { frame, posted, host } = await mountReady('/a/doc?$screen=home');
+  doorOpens(frame);
+  await settle();
+  frameReady(frame, attaches(posted)[0]!.key!, 'route-nonce');
+  const length = window.history.length;
+  window.dispatchEvent(new MessageEvent('message', { data: { type: 'mx:url-values', search: '?$screen=detail', push: true }, origin: FRAME_ORIGIN, source: frame.contentWindow }));
+  expect(window.location.search).toBe('?$screen=detail');
+  expect(window.history.length).toBe(length + 1);
+  posted.mockClear();
+  const popped = new Promise((resolve) => window.addEventListener('popstate', resolve, { once: true }));
+  window.history.back();
+  await popped;
+  await settle();
+  expect(window.location.search).toBe('?$screen=home');
+  expect(envelopes(posted)).toContainEqual({ type: 'mx:url-values', search: '?$screen=home' });
+  // The same document: its frame was neither moved nor reloaded, and the bridge did not attach again.
+  expect(host.contains(frame)).toBe(true);
+  expect(screen.getByLabelText('Artifact viewport')).toContainElement(frame);
+  expect(attaches(posted)).toEqual([]);
+});
+
 /** The frame half reports the reader's first press, touch, key or selection in a document attached without its tree. */
 const framePressed = (frame: HTMLIFrameElement, key: string) => window.dispatchEvent(new MessageEvent('message', {
   data: { type: 'mx:frame-bridge', key, payload: { kind: 'pressed' } }, origin: FRAME_ORIGIN, source: frame.contentWindow,

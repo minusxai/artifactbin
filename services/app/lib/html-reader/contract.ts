@@ -51,6 +51,9 @@ export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
  * only from its own frame's window and origin, and the page (solid/document/create-framed-story) puts exactly
  * those `$` pairs in its own address, so the address bar, a copied link and a reload carry the selection.
  * Unkeyed on purpose: the author's script can move every value anyway, so it gains nothing by forging one.
+ * `push: true` asks for a new history entry instead of a replaced one (lib/html-runtime/page-route `route.set`).
+ * The other way, the app page → its frame, the same `{ type, search }` says what its address holds after the reader's
+ * Back or Forward, and the page's route follows it.
  */
 export const STORY_URL_VALUES_MESSAGE = 'mx:url-values';
 
