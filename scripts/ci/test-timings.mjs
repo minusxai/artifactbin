@@ -48,6 +48,8 @@ export const JOBS = {
   ui: { projects: ['ui', 'islands'], count: 2 },
   'pr-api': { projects: ['api', 'api-isolated'], count: 22 },
   'pr-ui': { projects: ['ui', 'islands'], count: 6 },
+  // pr-fast.yml's guard runners (vitest.guard.config.ts), packed by their own recorded times (`LENSES`).
+  'pr-guards': { projects: ['pr-guards', 'pr-guards-isolated', 'pr-contracts', 'pr-contracts-isolated'], count: 3 },
   // pr-fast.yml's node batch (vitest.node-batch.config.ts): its files are chosen from the `node` times, not recorded
   // under a project of their own, so `files` names them (from the recorded `node` files on disk).
   'pr-node': { projects: ['node-batch'], count: 3, files: (timings) => nodeBatchFiles({ timings, candidates: recordedOnDisk(timings, ['node', 'node-batch']), lane: laneFiles(ROOT), read: (file) => readFileSync(path.join(ROOT, file), 'utf8') }) },

@@ -45,15 +45,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [ types, lint, tests, guards, guards-2 ]
+        part: [ types, lint, tests, guards, guards-2, guards-3 ]
         # The guard and contract tests were one 35-59s Vitest step, ~100s of worker CPU on the runner's 4 vCPUs (the
-        # contracts boot a database per file). Two jobs split them by measured time
-        # (vitest.guard.config.ts's timed sequencer), each file once.
+        # contracts boot a database per file). Three jobs split them by measured time
+        # (vitest.guard.config.ts's timed sequencer over the guard runners' own times), each file once: on two, the
+        # guard jobs were the slowest of the run in half of pr fast's runs (42-57s; Vitest 19-27s around a 15s file).
         include:
           - part: guards
-            shard: 1/2
+            shard: 1/3
           - part: guards-2
-            shard: 2/2
+            shard: 2/3
+          - part: guards-3
+            shard: 3/3
           # THE API AND JSDOM SUITES, ALL OF THEM: vitest.config.ts's api and api-isolated projects on 22 runners, its ui and
           # islands projects on 6, the same files ci.yml's api and ui jobs run after the merge, each group packed
           # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;

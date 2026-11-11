@@ -22,7 +22,7 @@ import yaml from 'yaml';
 import {fastContexts} from '../lib/merge-admission.mjs';
 it('derives all matrix contexts and uses a trusted bounded completed-workflow observer',()=>{
  const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
- expect(fastContexts(read('.github/workflows/pr-fast.yml'))).toHaveLength(36);
+ expect(fastContexts(read('.github/workflows/pr-fast.yml'))).toHaveLength(37);
  const w=yaml.parse(read('.github/workflows/pr-fast-timing.yml'));
  expect(w.on.workflow_run).toEqual({workflows:['pr fast'],types:['completed']});
  expect(w.permissions).toEqual({contents:'read',actions:'read',statuses:'write'});
@@ -47,9 +47,9 @@ it('integrates exact-head squash admission and emits no merge for invalid eviden
   else{expect(invoke).toThrow();expect(commands).toEqual([]);}
  }
 });
-it('admits the complete 36-context workload and refuses a missing matrix job',()=>{
+it('admits the complete 37-context workload and refuses a missing matrix job',()=>{
  const expected=fastContexts(readFileSync(new URL('../../.github/workflows/pr-fast.yml',import.meta.url),'utf8'));
- const f=fixture();f.jobs={total_count:36,jobs:expected.map((name,i)=>({...f.jobs.jobs[0],id:i+1,name}))};
+ const f=fixture();f.jobs={total_count:37,jobs:expected.map((name,i)=>({...f.jobs.jobs[0],id:i+1,name}))};
  const invoke=()=>completedFastAttempt({...f,repository:repo,head:sha,workflowId:2,attempt:1,expected});
  expect(invoke().seconds).toBe(60);f.jobs.jobs.pop();expect(invoke).toThrow();
 });

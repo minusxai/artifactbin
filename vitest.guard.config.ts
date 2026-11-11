@@ -24,8 +24,8 @@ const byIsolation = (name: string, list: string, test: Record<string, unknown>) 
 //  - pr-contracts (scripts/ci/contract-tests.json): route-level contracts another repository runs against its
 //    production composition after merge (minusxai/artifactbin-server's native acceptance). They need the real
 //    handlers and a database, so they take the full suite's environment and setup file.
-// pr fast runs this config as two `--shard` jobs (`guards`, `guards-2`): on a 4-vCPU runner the whole list was ~100s
-// of worker CPU, a 35-59s step on its own. The full suite's timed sequencer packs both projects' files by their
+// pr fast runs this config as three `--shard` jobs (`guards`, `guards-2`, `guards-3`): on a 4-vCPU runner the whole list
+// was ~100s of worker CPU, a 35-59s step on its own. The full suite's timed sequencer packs the projects' files by their
 // measured CI time (scripts/ci/test-timings.json) onto the shards, longest first, so each file runs exactly once.
 export default defineConfig({
   root: import.meta.dirname,

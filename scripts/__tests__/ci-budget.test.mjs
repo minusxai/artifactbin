@@ -98,10 +98,11 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  // ci.yml's full suite may let main's push skip its tests.
  const runs=job.steps.map(step=>step.run??'').join('\n');
  for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint','vitest.mjs run --config vitest.guard.config.ts'])expect(runs).toContain(command);
- expect(job.strategy.matrix.part).toEqual(['types','lint','tests','guards','guards-2']);
- // The guard config runs as two time-packed shards, every guard part one of them, so each file runs exactly once.
+ expect(job.strategy.matrix.part).toEqual(['types','lint','tests','guards','guards-2','guards-3']);
+ // The guard config runs as three time-packed shards, every guard part one of them, so each file runs exactly once.
  const shards=job.strategy.matrix.include.filter(entry=>entry.shard).map(entry=>[entry.part,entry.shard]);
- expect(shards).toEqual([['guards','1/2'],['guards-2','2/2']]);
+ expect(shards).toEqual([['guards','1/3'],['guards-2','2/3'],['guards-3','3/3']]);
+ expect(JOBS['pr-guards'].count).toBe(shards.length);
  expect(job.steps.find(step=>step.run?.includes('vitest.guard.config.ts'))).toMatchObject({if:'matrix.shard',run:expect.stringMatching(/ --shard=\$\{\{ matrix\.shard \}\}$/)});
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain('sequence: { sequencer: TimedSequencer }');
  expect(runs).not.toContain('docker run');
