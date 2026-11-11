@@ -24,7 +24,7 @@
 import type { HumanSessionAuthority, BrowserService, EventsService, IdentityService, SqlService, RunnerService, TransactionalQueryable } from '@artifactbin/contracts';
 import { createIdentityStore } from '@artifactbin/auth/identity-store';
 import { humanSessionClient, identityClient, browserClient, eventsClient, noopBrowser, noopEvents, noopSql, sqlClient, runnerClient, overHttp } from '@artifactbin/utils';
-import { AUTH_SERVICE_URL, RUNNER_SERVICE_URL, RUNNER_ACTOR_SECRET, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN } from './config';
+import { AUTH_SECRET, AUTH_SERVICE_URL, RUNNER_SERVICE_URL, RUNNER_ACTOR_SECRET, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN, serviceAudiences } from './config';
 import { getDb } from './db';
 
 export interface Services { humanSessions:HumanSessionAuthority; identity:IdentityService; sql: SqlService; browser: BrowserService; events: EventsService; runner: RunnerService }
@@ -63,7 +63,7 @@ export function services(): Services {
   const local = registry();
   return {
     humanSessions:remote.humanSessions??local.humanSessions??noops.humanSessions,
-    identity:remote.identity??local.identity??createIdentityStore({db:appDatabase,testDomain:TEST_DOMAIN}),
+    identity:remote.identity??local.identity??createIdentityStore({db:appDatabase,testDomain:TEST_DOMAIN,serviceTokens:{secret:AUTH_SECRET,audiences:serviceAudiences()}}),
     runner: remote.runner ?? local.runner ?? noops.runner,
     sql: remote.sql ?? local.sql ?? noops.sql,
     browser: remote.browser ?? local.browser ?? noops.browser,

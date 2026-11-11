@@ -1,7 +1,7 @@
 import {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * The data file tiers: dataset (one flat table), viz (an
- * inert recipe template — minusx VizRecipeContent verbatim), image (data-url).
+ * inert recipe template, the chart recipe's content verbatim), image (data-url).
  * Each publishes through the same parseContentInput seam as the other tiers.
  *
  * Datasets: JSON rows, canonical. Declared columns win over inference; rows
@@ -9,7 +9,7 @@ import {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from '@artifactbin/
  * number | boolean | date.
  *
  * Recipes: validated against the VizRecipeContent shape + the template token
- * rule from minusx lib/viz/recipe-file.ts — every {{token}} / {{token:kind}}
+ * recipe-file rule — every {{token}} / {{token:kind}}
  * must name a declared binding slot or param; unknown tokens are hard errors
  * naming the token.
  */

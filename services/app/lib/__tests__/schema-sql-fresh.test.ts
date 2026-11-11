@@ -3,6 +3,7 @@
  * SCHEMA.sql / roles.sql / grants.sql at the repo root, and this test fails the build when a checked-in file is stale
  * or when two packages declare one table.
  */
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -59,7 +60,16 @@ describe('the rendered schema', () => {
     ]);
     expect(read('grants.sql')).not.toMatch(/ON auth\./);
   });
-  it('IDENTITY.sql is exactly what the renderer produces: the views an identity boot creates (MinusX copies it byte for byte)', () => {
+  it('--reader-role adds another reader of the identity views, with exactly the app\'s identity grants, and refuses a name that is not one', () => {
+    const extra = JSON.parse(execFileSync('node', ['scripts/render-schema.mjs', '--json', '--reader-role', 'svc_reader'], { cwd: ROOT, encoding: 'utf8' })) as { roles: string; grants: string };
+    expect(extra.roles).toContain('GRANT USAGE ON SCHEMA identity TO svc_reader;');
+    expect(extra.grants.split('\n').filter((l) => l.includes('svc_reader'))).toEqual([
+      'GRANT SELECT ON ALL TABLES IN SCHEMA identity TO svc_reader;',
+      'ALTER DEFAULT PRIVILEGES FOR ROLE artifactbin_auth IN SCHEMA identity GRANT SELECT ON TABLES TO svc_reader;',
+    ]);
+    expect(spawnSync('node', ['scripts/render-schema.mjs', '--json', '--reader-role', 'x; drop'], { cwd: ROOT }).status).toBe(2);
+  });
+  it('IDENTITY.sql is exactly what the renderer produces: the views an identity boot creates (a reader may copy it byte for byte)', () => {
     expect(read('IDENTITY.sql')).toBe(rendered().identity);
     expect(rendered().identity).toMatch(/^CREATE OR REPLACE VIEW identity\.tokens AS/m);
     // Views only: nothing that writes or drops, and the schema created only where it is missing (no database CREATE needed).

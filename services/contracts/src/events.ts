@@ -17,11 +17,9 @@
  */
 import type { CommentReactionKind } from './annotation-comment';
 
-/** `service`: another product speaking for itself (MinusX's job runs), never a person or a credential. */
-export type SubjectKind = 'user' | 'token' | 'visitor' | 'service';
-/** `job`: a MinusX schedule's run, published by MinusX (CONTRACT §6); observable by direct members of its group. */
-export type ObjectKind = 'group' | 'artifact' | 'user' | 'token' | 'door' | 'route' | 'job';
-export type EventSource = 'app' | 'auth' | 'proxy' | 'minusx';
+export type SubjectKind = 'user' | 'token' | 'visitor';
+export type ObjectKind = 'group' | 'artifact' | 'user' | 'token' | 'door' | 'route';
+export type EventSource = 'app' | 'auth' | 'proxy';
 
 /** Nothing to say beyond the sentence itself. */
 type EmptyPayload = Record<string, never>;
@@ -38,8 +36,6 @@ export interface EventOrigin { token_id: string | null; session: string | null }
 interface AnnotationPayload { annotation_id: string; reply_id?: string; agent?: boolean; resolved?: boolean; via?: EventOrigin }
 /** A reaction added or taken back: `count` is that kind's count on the comment right after the change. */
 interface AnnotationReactionPayload extends AnnotationPayload { kind: CommentReactionKind; active: boolean; count: number }
-/** Ids only: the schedule, this run of it, and the group whose direct members may observe it. */
-interface JobRunPayload { schedule_id: string; occurrence_id: string; group_id: string }
 interface MembershipEventPayload { user_id: string; revision: number; mention_ref?: string | null }
 /** Where a row went. Either end may be the ROOT, which is null — a folder is an artifact, so both are artifact ids. */
 interface MovedPayload { from_parent_id: string | null; to_parent_id: string | null }
@@ -120,11 +116,6 @@ interface EventVerbs {
   route: {
     failed: { status: number; method?: string };
   };
-  job: {
-    run_started: JobRunPayload;
-    run_succeeded: JobRunPayload;
-    run_failed: JobRunPayload;
-  };
 }
 
 export type EventVerb<K extends ObjectKind = ObjectKind> = keyof EventVerbs[K] & string;
@@ -138,7 +129,6 @@ export const EVENT_VERBS = {
   token: ['minted', 'claimed', 'revoked'],
   door: ['denied'],
   route: ['failed'],
-  job: ['run_started', 'run_succeeded', 'run_failed'],
 } as const satisfies { readonly [K in ObjectKind]: readonly EventVerb<K>[] };
 // Every verb of every kind is listed above: a missing one fails the type check here.
 (null as unknown as {
@@ -184,13 +174,3 @@ export type EventSink = (events: EventEnvelope[]) => Promise<void>;
 /** The wire: `emit` (best effort, never rejects) and `publish` (durable, rejects until stored). `serveEvents`/`eventsClient` implement exactly this. */
 export const EVENTS_ROUTES = { emit: '/emit', publish: '/publish' } as const;
 
-/**
- * MinusX's job events (CONTRACT §6) on the APP's origin: the durable `publish`, service-authenticated
- * (SERVICE_AUTH_HEADER carrying INTERNAL__SERVICE_SECRET) and narrowed to `source: 'minusx'`, `object_kind: 'job'`.
- * The auth host serves it in front of its internal boundary, onto whatever events service the process holds, so a
- * one-process installation (events in process, no `/publish` socket) still has a door MinusX's sink can reach;
- * a split deployment may point MinusX at the events service's own `EVENTS_ROUTES.publish` instead.
- */
-export const EVENTS_PUBLISH_PATH = '/api/internal/events/publish';
-/** At most this many envelopes per publish (MinusX drains its outbox in batches of at most 100). */
-export const EVENTS_PUBLISH_MAX_BATCH = 500;

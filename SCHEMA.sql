@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS app.identity_settings (
   id TEXT NOT NULL,
   deployment_mode TEXT NOT NULL,
   api_audiences TEXT[] NOT NULL DEFAULT '{}',
+  service_audiences TEXT[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (id)
 );
 
@@ -58,6 +59,8 @@ ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS deployment_mode TEXT NOT NULL;
 
 ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS api_audiences TEXT[] NOT NULL DEFAULT '{}';
+
+ALTER TABLE app.identity_settings ADD COLUMN IF NOT EXISTS service_audiences TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS app.group_quotas (
   user_id TEXT NOT NULL,

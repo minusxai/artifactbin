@@ -1,11 +1,12 @@
 /**
  * WHAT EVERY READER LEARNS ABOUT WHO SOMEONE IS (cross-repository contract §2), end to end on the composed host: the
  * identity read views (contracts `IDENTITY_VIEWS`, @artifactbin/auth identity-store/views) read with plain SQL, as
- * MinusX's database role and the app itself read them, and the one HTTP door left, bearer introspection, through the
- * auth host in front. A person's agent gets a token carrying the `minusx` scope through the ordinary email sign-in grant.
+ * another service's database role and the app itself read them, and the one HTTP door left, bearer introspection,
+ * through the auth host in front. A person gets a token for a configured service (IDENTITY__SERVICE_AUDIENCES) through
+ * the ordinary email sign-in grant, naming the service.
  *
- * The view names and columns are the cross-repository contract: the literal below pins them, so changing one is a
- * reviewed edit here and in MinusX (its tests apply a byte-for-byte copy of IDENTITY.sql).
+ * The view names and columns are a cross-repository contract: the literal below pins them, so changing one is a
+ * reviewed edit here and in every reader that applies a byte-for-byte copy of IDENTITY.sql.
  */
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -21,23 +22,24 @@ import {canUseDeploymentIdentity,createUser} from '@/lib/accounts';
 import {canAuthenticateUser} from '@/lib/user-kinds';
 import {admitGroupMember,useAppHarness} from './harness';
 useAppHarness();
-const SECRET='identity-test-service-secret',origin='http://localhost:3000';
+const SECRET='identity-test-service-secret',origin='http://localhost:3000',WAREHOUSE='http://warehouse.localhost:7444';
+const AUDIENCES=JSON.stringify([{id:'warehouse',origin:WAREHOUSE}]);
 let directory='';
-beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin});directory=await mkdtemp(join(tmpdir(),'identity-'));});
+beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());directory=await mkdtemp(join(tmpdir(),'identity-'));});
 afterEach(async()=>{await rm(directory,{recursive:true,force:true});});
 
 /** The composed host, whose boot (its database open, then Better Auth's tables) made the views. */
 async function composed(){
- const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
+ const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,IDENTITY__SERVICE_AUDIENCES:AUDIENCES,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(new Request(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)}));
  const service=async(path:string,body:unknown,secret=SECRET)=>{const response=await post(path,body,{[SERVICE_AUTH_HEADER]:secret});return {status:response.status,body:await response.json()};};
- /** Email sign-in, then the bearer grant with `scope` (absent: the default). */
- const signIn=async(email:string,scope?:string)=>{
+ /** Email sign-in, then the bearer grant for `audience`, a configured service id (absent: this API). */
+ const signIn=async(email:string,audience?:string)=>{
   expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
   const sent=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line)).filter(message=>message.to===email);
   const login=await post('/api/auth/sign-in/email-otp',{email,otp:sent.at(-1).otp});expect(login.status).toBe(200);
   const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
-  const minted=await post('/api/authentication/token',scope===undefined?{}:{scope},{cookie});
+  const minted=await post('/api/authentication/token',audience===undefined?{}:{audience},{cookie});
   return {status:minted.status,grant:await minted.json(),cookie};
  };
  const get=(path:string)=>application.fetch(new Request(origin+path));
@@ -70,7 +72,7 @@ it('pins the contract: schema identity holds exactly these views, these columns 
 it('reaches no secret: no login code, session token, token hash or credential hash through any view, and a role granted only the views reads no base table',async()=>{
  const host=await composed();
  const email='mxmx_test_secret_owner@example.test';
- const scoped=await host.signIn(email,'minusx artifacts');
+ const scoped=await host.signIn(email,'warehouse');
  const user=await userIdOf(email);
  const secrets=[
   scoped.grant.access_token,scoped.grant.refresh_token,
@@ -102,36 +104,41 @@ it('reaches no secret: no login code, session token, token hash or credential ha
  }
 });
 
-it('tokens: a minusx-scoped grant is live with its scopes until revoked; introspect answers the bearer; a foreign audience is not live',async()=>{
+it('tokens: a service grant and an API grant are live until revoked; introspect answers user, scopes, audience and expiry; an unserved audience is not live',async()=>{
  const host=await composed();
  const email='mxmx_test_agent_owner@example.test';
- const scoped=await host.signIn(email,'minusx artifacts');
- expect(scoped.status).toBe(201);expect(scoped.grant.scope).toBe('artifacts minusx');
+ const service=await host.signIn(email,'warehouse');
+ expect(service.status).toBe(201);expect(service.grant).toMatchObject({scope:'',resource:WAREHOUSE});
  const user=await userIdOf(email);
- expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:scoped.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:scoped.grant.id,scopes:['artifacts','minusx']}});
- expect(await token(scoped.grant.id)).toEqual({user_id:user,scopes:['artifacts','minusx'],live:true});
+ expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),actor:null}});
+ expect(await token(service.grant.id)).toEqual({user_id:user,scopes:[],live:true});
  const plain=await host.signIn(email);
  expect(plain.grant.scope).toBe('artifacts');
- expect((await host.service(IDENTITY_INTROSPECT_PATH,{token:plain.grant.access_token})).body.scopes).toEqual(['artifacts']);
+ expect((await host.service(IDENTITY_INTROSPECT_PATH,{token:plain.grant.access_token})).body).toMatchObject({scopes:['artifacts'],audience:`${origin}/api`});
  expect((await token(plain.grant.id))?.scopes).toEqual(['artifacts']);
- for(const scope of ['minusx','artifacts admin',''])expect((await host.signIn(email,scope)).status,scope).toBe(400);
+ for(const audience of ['payroll',''])expect((await host.signIn(email,audience)).status,audience).toBe(400);
  // The deployment's API audiences come from its settings: an OAuth token bound to an origin no longer served is not live.
  overrideConfig({publicBaseUrl:'http://elsewhere.test'});await syncIdentitySettings(await getDb());
- expect((await token(scoped.grant.id))?.live).toBe(false);
+ expect((await token(plain.grant.id))?.live).toBe(false);
  overrideConfig({publicBaseUrl:'http://elsewhere.test',aliasOrigins:[origin]});await syncIdentitySettings(await getDb());
- expect((await token(scoped.grant.id))?.live).toBe(true);
+ expect((await token(plain.grant.id))?.live).toBe(true);
  overrideConfig({publicBaseUrl:origin,aliasOrigins:[]});await syncIdentitySettings(await getDb());
+ // So do the services': a service no longer configured holds no live token.
+ overrideConfig({},{IDENTITY__SERVICE_AUDIENCES:'[]'});await syncIdentitySettings(await getDb());
+ expect((await token(service.grant.id))?.live).toBe(false);
+ overrideConfig({},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());
+ expect((await token(service.grant.id))?.live).toBe(true);
  // Revocation: the bearer and the view agree on the next read.
- expect((await host.post('/oauth/revoke',{client_id:scoped.grant.client_id,token:scoped.grant.refresh_token})).status).toBe(200);
- expect((await host.service(IDENTITY_INTROSPECT_PATH,{token:scoped.grant.access_token})).body).toEqual({active:false});
- expect((await token(scoped.grant.id))?.live).toBe(false);
+ expect((await host.post('/oauth/revoke',{client_id:service.grant.client_id,token:service.grant.refresh_token})).status).toBe(200);
+ expect((await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).body).toEqual({active:false});
+ expect((await token(service.grant.id))?.live).toBe(false);
  expect(await token('tok_nobody')).toBeNull();
  // An account that may no longer sign in holds no live token.
  expect((await token(plain.grant.id))?.live).toBe(true);
  await (await getDb()).query("UPDATE users SET kind='guest' WHERE id=$1",[user]);
  expect((await token(plain.grant.id))?.live).toBe(false);
- // Discovery advertises the scope for the authorization-code consent too.
- expect((await (await host.get('/.well-known/oauth-authorization-server')).json()).scopes_supported).toEqual(['artifacts','minusx']);
+ // Discovery advertises the one scope this API has.
+ expect((await (await host.get('/.well-known/oauth-authorization-server')).json()).scopes_supported).toEqual(['artifacts']);
 });
 
 it('sessions: a browser session is live by id for its user until it expires',async()=>{
@@ -151,7 +158,7 @@ it('groups and memberships: direct membership only, the chain to the root, a rev
  const finance=await createGroup(admin.id,{handle:'finance',name:'Finance'});
  const retail=await createGroup(admin.id,{handle:'retail',name:'Retail',parent_id:finance.id});
  await admitGroupMember(admin.id,retail.id,bob.id,'viewer');
- // Thin views: the reader keeps live groups itself, as MinusX does.
+ // Thin views: the reader keeps live groups itself, as every reader does.
  const member=async(user:string,group:string)=>(await sql('SELECT 1 FROM identity.group_members m JOIN identity.groups g ON g.id=m.group_id AND g.deleted_at IS NULL WHERE m.user_id=$1 AND m.group_id=$2',[user,group])).length===1;
  expect(await member(bob.id,retail.id)).toBe(true);
  // Membership of a descendant is not membership of the ancestor.

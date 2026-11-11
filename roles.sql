@@ -18,7 +18,7 @@ CREATE SCHEMA app AUTHORIZATION artifactbin_app;
 CREATE SCHEMA auth AUTHORIZATION artifactbin_auth;
 -- The events service is the log's ONLY writer; every other process reads it.
 CREATE SCHEMA events AUTHORIZATION artifactbin_events;
--- The identity read surface (IDENTITY.sql): the identity module's views, read by the app and MinusX.
+-- The identity read surface (IDENTITY.sql): the identity module's views, read by the app and any reader role.
 CREATE SCHEMA identity AUTHORIZATION artifactbin_auth;
 
 -- The auth must reach the app schema at all to read the admission rows its users view's `active` reads.

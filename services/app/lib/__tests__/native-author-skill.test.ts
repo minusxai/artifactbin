@@ -136,7 +136,7 @@ describe('the shipped skill folder',()=>{
  it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
-  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/functions.md','references/governed-data.md','references/groups.md','references/live-docs.md','references/maps.md','references/permissions.md','references/runtime.md']);
+  expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/functions.md','references/groups.md','references/live-docs.md','references/maps.md','references/permissions.md','references/runtime.md']);
   // The design systems ship as self-documenting stylesheets, not guides.
   expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.

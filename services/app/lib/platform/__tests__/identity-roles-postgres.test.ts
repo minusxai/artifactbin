@@ -2,7 +2,7 @@
  * THE SPLIT-ROLE IDENTITY MODEL on a real PostgreSQL 17 (a disposable `postgres:17-alpine`), with the generated
  * roles.sql and grants.sql applied as an operator would: `artifactbin_app` boots its own tables (search_path `app`),
  * `artifactbin_auth` (the identity module) boots its base tables in `auth` and the read views in `identity`, and a
- * third reader role, `minusx_reader`, gets the IDENTITY.sql grant. Proven:
+ * third reader role, `service_reader`, gets the IDENTITY.sql grant. Proven:
  *  - the identity role performs every identity write, through the identity store itself;
  *  - both readers are refused (42501) every base identity table, every write through a view, and a row lock;
  *  - both readers SELECT the views, no view exposes a secret column, and the app role, with its real search_path
@@ -33,7 +33,7 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
  const pools:pg.Pool[]=[];
  const pool=(user:string,searchPath:string,database='postgres')=>{const p=new pg.Pool({host:'127.0.0.1',port,user,password:'pw',database,options:`-c search_path=${searchPath}`,max:2});pools.push(p);return p;};
  const code=(promise:Promise<unknown>)=>promise.then(()=>'ok',(error:{code?:string})=>error.code??String(error));
- let superuser:pg.Pool,app:pg.Pool,auth:pg.Pool,minusx:pg.Pool;
+ let superuser:pg.Pool,app:pg.Pool,auth:pg.Pool,service:pg.Pool;
 
  beforeAll(async()=>{
   container=execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=pw','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
@@ -44,7 +44,7 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
   }
   // The operator's fresh-database steps: roles.sql (with passwords), the app's boot, the identity host's boot, grants.sql.
   await superuser.query(readFileSync(join(ROOT,'roles.sql'),'utf8'));
-  await superuser.query("ALTER ROLE artifactbin_app PASSWORD 'pw'; ALTER ROLE artifactbin_auth PASSWORD 'pw'; CREATE ROLE minusx_reader LOGIN PASSWORD 'pw'");
+  await superuser.query("ALTER ROLE artifactbin_app PASSWORD 'pw'; ALTER ROLE artifactbin_auth PASSWORD 'pw'; CREATE ROLE service_reader LOGIN PASSWORD 'pw'");
   // No role may create a schema in this database: every boot must check before creating (product bug 2).
   await superuser.query('REVOKE CREATE ON DATABASE postgres FROM PUBLIC');
   app=pool('artifactbin_app','app,identity');
@@ -52,13 +52,13 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
   await app.query("INSERT INTO identity_settings(id,deployment_mode,api_audiences) VALUES('installation','public',ARRAY['http://app.test/api'])");
   await superuser.query('CREATE TABLE events.events(id text)');
   await superuser.query(readFileSync(join(ROOT,'grants.sql'),'utf8'));
-  // MinusX's grant, as IDENTITY.sql's header gives it.
-  await superuser.query(`GRANT USAGE ON SCHEMA identity TO minusx_reader; GRANT SELECT ON ALL TABLES IN SCHEMA identity TO minusx_reader;
-   ALTER DEFAULT PRIVILEGES FOR ROLE artifactbin_auth IN SCHEMA identity GRANT SELECT ON TABLES TO minusx_reader`);
+  // Another service's grant, as IDENTITY.sql's header gives it (render-schema --reader-role).
+  await superuser.query(`GRANT USAGE ON SCHEMA identity TO service_reader; GRANT SELECT ON ALL TABLES IN SCHEMA identity TO service_reader;
+   ALTER DEFAULT PRIVILEGES FOR ROLE artifactbin_auth IN SCHEMA identity GRANT SELECT ON TABLES TO service_reader`);
   auth=pool('artifactbin_auth','auth');
   await ensureHumanAuthSchema({pool:auth,schema:'auth'});
   await ensureIdentitySchema(identityDbOf(auth),{auth:'auth',app:'app',read:'identity'});
-  minusx=pool('minusx_reader','identity');
+  service=pool('service_reader','identity');
  },180_000);
  afterAll(async()=>{
   for(const p of pools)await p.end().catch(()=>{});
@@ -104,7 +104,7 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
  });
 
  it('both readers are refused every base table, every write through a view, and a row lock', async()=>{
-  for(const [role,reader] of [['artifactbin_app',app],['minusx_reader',minusx]] as const){
+  for(const [role,reader] of [['artifactbin_app',app],['service_reader',service]] as const){
    for(const table of [...IDENTITY_OWNED_TABLES,'session','credentials','user','account','verification'])
     expect(await code(reader.query(`SELECT 1 FROM auth."${table}" LIMIT 1`)),`${role} SELECT auth.${table}`).toBe('42501');
    for(const [view,columns] of Object.entries(IDENTITY_VIEWS)){
@@ -119,7 +119,7 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
  });
 
  it('both readers read every view, and no view exposes a secret column', async()=>{
-  for(const reader of [app,minusx]){
+  for(const reader of [app,service]){
    for(const [view,columns] of Object.entries(IDENTITY_VIEWS)){
     const rows=await reader.query(`SELECT * FROM identity.${view} LIMIT 1`);
     expect(rows.fields.map(field=>field.name),view).toEqual(columns);
@@ -130,7 +130,7 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
   const exposed=(await superuser.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='identity'")).rows as {table_name:string;column_name:string}[];
   for(const [table,secrets] of Object.entries(SECRET_COLUMNS))
    for(const secret of secrets)expect(exposed.filter(c=>c.column_name===secret),`${table}.${secret}`).toEqual([]);
-  expect((await minusx.query("SELECT active FROM identity.users WHERE email='owner@example.com'")).rows).toEqual([{active:true}]);
+  expect((await service.query("SELECT active FROM identity.users WHERE email='owner@example.com'")).rows).toEqual([{active:true}]);
  });
 
  it('the app role, on its own search_path, reads identity through the views and runs its access SQL over them', async()=>{

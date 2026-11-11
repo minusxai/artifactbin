@@ -1,12 +1,12 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Events: watch what happens to what you may observe: comments on your
-and shared pages, and the job runs of groups you belong to.
-Usage: node scripts/events.mjs watch [--artifact ID] [--category comments|jobs] [--types A,B] --next
+and shared pages.
+Usage: node scripts/events.mjs watch [--artifact ID] [--category comments] [--types A,B] --next
        node scripts/events.mjs watch [filters] [--once] [--cursor CHECKPOINT_OR_LOG]
          [--output LOG --append]
 Flags: --artifact ID one page's events. --category comments (artifact.annotated, annotation_replied,
   annotation_edited, annotation_resolved, annotation_reopened, annotation_deleted,
-  annotation_reaction_changed) or jobs (job.run_started, job.run_succeeded, job.run_failed).
+  annotation_reaction_changed).
   --types A,B exactly these types. --next returns after the next batch holding an event someone
   else made, and on its own after --wait SECONDS (default 240); it resumes from
   events/<server>/<ID or _all>/<stream>.<session>.ndjson in the sign-in folder. --bounded (with
@@ -21,7 +21,7 @@ Events: {id,position,type,at,schema_version,resource:{kind,id},actor:{kind,id,yo
 Comments: node scripts/comment.mjs watch ID --next is this watch with --artifact ID --category
   comments --bounded, printing each comment with its words and the threads waiting for you.
 Examples:
-  node scripts/events.mjs watch --category jobs --next
+  node scripts/events.mjs watch --next
   node scripts/events.mjs watch --artifact PAGE12 --types artifact.annotation_resolved --once
 Gotchas: a cursor belongs to its filter: change a filter and the watch starts from now on its
   own log. Reading the text of what an event names is a second read, checked again.

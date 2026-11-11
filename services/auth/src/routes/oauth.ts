@@ -1,10 +1,15 @@
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, MINUSX_SCOPE, grantScope} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, type ServiceAudience} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
  * token minting remains app-owned and runs as the consenting session actor.
+ *
+ * A grant's RESOURCE (RFC 8707 `resource`) is this deployment's API (`<origin>/api`, scope `artifacts`, the
+ * default) or the origin of a configured service (IDENTITY__SERVICE_AUDIENCES; scope empty): a token for a
+ * service is the person's own credential at that service, which the bearer admission never accepts at this API
+ * (its audience is not ours). `/api/authentication/token` takes the service by id (`{"audience": "<id>"}`).
  */
 import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
 import {
@@ -74,6 +79,8 @@ interface OAuthRoutesOptions {
   trustedHops: number;
   publicBaseUrl?: string;
   aliasOrigins?: readonly string[];
+  /** IDENTITY__SERVICE_AUDIENCES: the other resources a grant may be for. */
+  serviceAudiences?: readonly ServiceAudience[];
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
@@ -107,7 +114,11 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const origins = (request: Request) => acceptedOriginsOf(request, o.trustedHops, o.publicBaseUrl, o.aliasOrigins);
   const sameOrigin = (request: Request) => origins(request).includes(request.headers.get('origin') ?? '');
   const resources = (request: Request) => origins(request).map((origin) => `${origin}${API_RESOURCE_PATH}`);
-  const acceptsResource = (request: Request, requested: string) => resources(request).includes(requested);
+  const serviceFor = (requested: string) => (o.serviceAudiences ?? []).find((service) => service.origin === requested);
+  const acceptsResource = (request: Request, requested: string) => resources(request).includes(requested) || !!serviceFor(requested);
+  /** The scope a grant for `resource` stores: `artifacts` for this API (the default), nothing for a service; null when the request names another. */
+  const scopeFor = (requested: string, scope: string): string | null =>
+    serviceFor(requested) ? (scope === '' ? '' : null) : ((scope || ARTIFACT_SCOPE) === ARTIFACT_SCOPE ? ARTIFACT_SCOPE : null);
   // Direct integrations obtain a bearer from an email-verified session, without device/browser grants.
   app.post('/api/authentication/token', async (c) => {
     const actor=c.get('actor') ?? ANONYMOUS;
@@ -115,19 +126,20 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
     if(!sameOrigin(c.req.raw))
       return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
-    // An optional {"scope":"artifacts minusx"}: the grant's scope (contracts grantScope), `artifacts` when absent.
+    // An optional {"audience":"<service id>"}: a grant for that configured service instead of this API.
     let requested:unknown;
-    try{const text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});requested=text.trim()?(JSON.parse(text) as {scope?:unknown}|null)?.scope:undefined;}
+    try{const text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});requested=text.trim()?(JSON.parse(text) as {audience?:unknown}|null)?.audience:undefined;}
     catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
-    const scope=requested===undefined?ARTIFACT_SCOPE:typeof requested==='string'?grantScope(requested):null;
-    if(!scope)return new Response(JSON.stringify({error:'invalid_scope',hint:`Request "${ARTIFACT_SCOPE}" or "${ARTIFACT_SCOPE} ${MINUSX_SCOPE}".`}),{status:400,headers:{'Content-Type':'application/json',...NO_STORE}});
+    const service=typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
+    if(requested!==undefined&&!service)return new Response(JSON.stringify({error:'invalid_audience',hint:'Name a configured service id, or send no audience for this API.'}),{status:400,headers:{'Content-Type':'application/json',...NO_STORE}});
+    const scope=service?'':ARTIFACT_SCOPE;
     try{
       const client=await o.oauth.register({client_name:'artifactbin HTTP',redirect_uris:['http://127.0.0.1/callback']});
       const clientId=String(client.client_id);
-      const grant={userId:actor.userId,resource:resource(c.req.raw),scope};
+      const grant={userId:actor.userId,resource:service?service.origin:resource(c.req.raw),scope};
       const minted=await mintFor(o,c.req.raw,grant);
       const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
-      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope,resource:grant.resource}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
     }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
@@ -157,7 +169,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const state = q.get('state') ?? '';
     const expectedResource = resource(c.req.raw);
     const requestedResource = q.get('resource') ?? expectedResource;
-    const scope = grantScope(q.get('scope') || ARTIFACT_SCOPE);
+    const scope = scopeFor(requestedResource, q.get('scope') ?? '');
     const client = clientId ? await o.oauth.client(clientId) : null;
     const problem =
       !client ? 'Unknown client.'
@@ -165,14 +177,15 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
       : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
       : !acceptsResource(c.req.raw, requestedResource) ? 'Invalid API resource.'
-      : !scope ? 'Unsupported scope.'
+      : scope === null ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${escapeHtml(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
     const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope ?? '')}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
+    const service = serviceFor(requestedResource);
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
-      <p>Your coding agent wants to publish artifacts${scope?.split(' ').includes(MINUSX_SCOPE) ? ' and to query MinusX as you' : ''}. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>
+      ${service ? `<p>An application wants to act as you at <strong>${escapeHtml(service.id)}</strong> (${escapeHtml(service.origin)}), as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>. It cannot use this site as you.</p>` : `<p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>`}
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
@@ -196,7 +209,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || grantScope(scope) !== scope) {
+    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scopeFor(requestedResource, scope) !== scope) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
@@ -255,9 +268,10 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
       if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
       try {
-        // New grants always bind the canonical resource, also when the code was spent through an alias.
-        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: expectedResource, scope: grant.scope });
-        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: expectedResource, scope: grant.scope, accessTokenId: minted.id });
+        // New grants always bind the canonical resource, also when the code was spent through an alias; a service's is its origin.
+        const bound = serviceFor(requestedResource) ? requestedResource : expectedResource;
+        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: bound, scope: grant.scope });
+        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: bound, scope: grant.scope, accessTokenId: minted.id });
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
       } catch (error) {
         return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);
@@ -270,7 +284,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (!acceptsResource(c.req.raw, requestedResource)) return oauthError('invalid_target', 'Invalid API resource');
       // A grant issued under a former canonical name (now an alias) refreshes, and moves to the canonical resource.
       try {
-        const result=await o.oauth.rotateAndMint(body.refresh_token,body.client_id,resources(c.req.raw),grant=>mintFor(o,c.req.raw,grant));
+        const result=await o.oauth.rotateAndMint(body.refresh_token,body.client_id,serviceFor(requestedResource)?[requestedResource]:resources(c.req.raw),grant=>mintFor(o,c.req.raw,grant));
         if(!result)return oauthError('invalid_grant','Invalid, expired, revoked, or already-used refresh token');
         const {grant,minted}=result;
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });

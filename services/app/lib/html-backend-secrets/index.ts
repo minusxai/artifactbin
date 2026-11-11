@@ -1,4 +1,4 @@
-import {MINUSX_CONNECTION_KIND} from '@artifactbin/contracts';
+import {VIEWER_CONNECTION_KIND} from '@artifactbin/contracts';
 import {createBackendSecretCipher} from './cipher';
 import { AUTH_SECRET, getDb } from '@/lib/platform';
 import {createBackendSecrets,type BackendSecretScope,type PinnedBackendSecretScope} from './contracts';
@@ -13,12 +13,12 @@ export const backendSecrets=createBackendSecrets({
 
 /**
  * Read ciphertext and current ownership in one database snapshot. Transfers never carry credentials: a personal page
- * reads values stored under its current owner, a group-owned page only its governed MinusX bindings (`'minusx'`, no
+ * reads values stored under its current owner, a group-owned page only its viewer bindings (`'viewer'`, no
  * credential in them) stored under its current owning group.
  */
 export async function readPinnedBackendSecret(backend:PinnedBackendSecretScope,name:string):Promise<string>{
  if(!backend.secretBindings?.includes(name))throw Error('backend_secret_forbidden');
- const row=(await(await getDb()).query<{ciphertext:string}>(`SELECT s.ciphertext FROM html_backend_secrets s JOIN artifacts a ON a.id=$4 AND a.deleted_at IS NULL AND ((a.group_id IS NULL AND a.user_id=s.owner_id) OR ($5::boolean AND a.group_id=s.owner_id)) WHERE s.owner_id=$1 AND s.backend_id=$2 AND s.name=$3`,[backend.ownerId,backend.backendId,name,backend.pageId,backend.secretHosts?.[name]===MINUSX_CONNECTION_KIND])).rows[0];
+ const row=(await(await getDb()).query<{ciphertext:string}>(`SELECT s.ciphertext FROM html_backend_secrets s JOIN artifacts a ON a.id=$4 AND a.deleted_at IS NULL AND ((a.group_id IS NULL AND a.user_id=s.owner_id) OR ($5::boolean AND a.group_id=s.owner_id)) WHERE s.owner_id=$1 AND s.backend_id=$2 AND s.name=$3`,[backend.ownerId,backend.backendId,name,backend.pageId,backend.secretHosts?.[name]===VIEWER_CONNECTION_KIND])).rows[0];
  if(!row)throw Error('backend_secret_unavailable');
  try{return backendSecretCipher.open(row.ciphertext,{ownerId:backend.ownerId,backendId:backend.backendId},name);}catch{throw Error('backend_secret_unavailable');}
 }

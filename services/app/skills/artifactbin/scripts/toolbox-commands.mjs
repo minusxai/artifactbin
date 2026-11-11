@@ -23,9 +23,9 @@ function flag(type = 'string', multiple = false) {
 // `listed:false` keeps a command out of the table; `starter` names the starter that routes it.
 const commands = {
   auth: {sub: {
-    login: {email: flag(), challenge: flag(), 'code-file': flag(), minusx: flag('boolean')},
-    status: {},
-    logout: {local: flag('boolean')}
+    login: {email: flag(), challenge: flag(), 'code-file': flag(), audience: flag()},
+    status: {audience: flag()},
+    logout: {local: flag('boolean'), audience: flag()}
   }},
   serve: {flags: {port: flag(), 'runtime-dir': flag(), autofix: flag('boolean')}},
   autofix: {listed: false, flags: {'dry-run': flag('boolean'), root: flag()}},
@@ -78,12 +78,6 @@ const commands = {
     unshare: {group: flag(), datasets: flag('boolean'), yes: flag('boolean')},
     move: {group: flag(), personal: flag('boolean'), yes: flag('boolean')},
     link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')}
-  }},
-  // Combined installations only: a group's MinusX connections, and a page's binding to one.
-  minusx: {sub: {
-    connections: {group: flag()}, catalog: {group: flag(), connection: flag()},
-    context: {group: flag(), connection: flag()},
-    bind: {name: flag(), group: flag(), connection: flag()}
   }},
   comment: {
     sub: {

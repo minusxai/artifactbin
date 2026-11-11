@@ -34,14 +34,14 @@ async function revokeSaved(saved, server, fetcher) {
     typeof error === 'string' && /^[a-z_]{1,64}$/.test(error) ? error : `http_${response.status}`);
 }
 
-export async function logoutGrant({values, server, root, shared, env, fetcher}) {
+export async function logoutGrant({values, server, root, shared, env, fetcher, audience}) {
   const revoke = !values.local;
-  const location = shared.credentialPaths(server, root);
+  const location = shared.credentialPaths(server, root, audience);
   let serverRevoked = false, saved = null;
   await shared.withStateLock(root, 'home', () =>
     shared.withStateLock(root, '@credential-refresh', async () => {
       // Select under the same locks as refresh/save. Never revoke an environment override.
-      saved = await shared.readCredentials(server, root);
+      saved = await shared.readCredentials(server, root, audience);
       if (revoke && saved) {
         if (!saved.refreshToken || !saved.clientId)
           throw new ToolError('revoke_unavailable',

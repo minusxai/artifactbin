@@ -5,7 +5,7 @@
  * app's schema. Accounts, handles and tokens: ./identity-store/accounts; groups, membership, invitations and the tree:
  * ./identity-store/groups; the group mail outbox: ./identity-store/mail.
  */
-import {IDENTITY_OWNED_TABLES,type IdentityService,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IDENTITY_OWNED_TABLES,IdentityError,type IdentityService,type Queryable,type ServiceAudience,type TransactionalQueryable} from '@artifactbin/contracts';
 import {ensureTable} from '@artifactbin/utils';
 import {ensureAuthSchema} from './schema';
 import {IDENTITY_TABLES} from './identity-store/schema';
@@ -15,6 +15,7 @@ import {accountMethods} from './identity-store/accounts';
 import {groupMethods} from './identity-store/groups';
 import {mailMethods} from './identity-store/mail';
 import {identityTables} from './identity-store/tables';
+import {signViewerToken,viewerTokenKey} from './identity/service-tokens';
 
 export interface IdentityStoreOptions {
   /** The database: queries, and transactions on a connection of their own. */
@@ -23,11 +24,28 @@ export interface IdentityStoreOptions {
   authSchema?: string;
   /** The test domain (TEST_DOMAIN): a test account invites only addresses there. */
   testDomain?: string;
+  /**
+   * Viewer tokens (`issueViewerToken`, ./identity/service-tokens): the host's AUTH__SECRET they are signed under and
+   * the configured services (IDENTITY__SERVICE_AUDIENCES). The introspecting host must be given the same two.
+   */
+  serviceTokens?: {secret?: string; audiences: readonly ServiceAudience[]};
 }
 
 export function createIdentityStore(options: IdentityStoreOptions): IdentityService {
   const t = identityTables(options.authSchema), db = retrying(options.db);
-  return {...accountMethods(db, t), ...groupMethods(db, t, {testDomain: options.testDomain}), ...mailMethods(db, t)};
+  const audiences = options.serviceTokens?.audiences ?? [], secret = options.serviceTokens?.secret;
+  const key = secret ? viewerTokenKey(secret) : null;
+  return {
+    ...accountMethods(db, t), ...groupMethods(db, t, {testDomain: options.testDomain}), ...mailMethods(db, t),
+    // Writes nothing: a signed token, verified only by introspection (the service's audit gets who asked from it).
+    async issueViewerToken({userId, service, artifactId, function: fn}) {
+      const audience = audiences.find(entry => entry.id === service);
+      if (!audience) throw new IdentityError('unknown_service', 404);
+      if (!key) throw new IdentityError('service_tokens_unavailable', 503);
+      try { return signViewerToken(key, audience, {userId, actor: {artifactId, function: fn}}); }
+      catch { throw new IdentityError('invalid_request', 400); }
+    },
+  };
 }
 
 /**

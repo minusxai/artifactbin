@@ -1,5 +1,5 @@
 /**
- * Named boundary-asset registry: the MinusX-approved boundaries the
+ * Named boundary-asset registry: the approved boundaries the
  * vega geo recipes look up against. Vega may NOT fetch geometry from the network (the
  * data policy rejects `data.url`), so choropleth/point recipes reference a boundary by
  * a reserved local DATASET NAME and the render pipeline injects the resolved features

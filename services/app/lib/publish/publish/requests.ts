@@ -11,7 +11,7 @@ import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/data
 import {pageDatasetCheckSources,pageDatasetRoots} from '@/lib/graphql-compat';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import {credentialNames,type PreparedHtmlBackend} from '@/lib/html-backends';
-import {governedPublishRefusal} from './governed';
+import {pageFunctionPublishRefusal} from './function-rules';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
  * auth modes and the operations registry run over one pipeline. Story owns the
@@ -280,7 +280,7 @@ export async function replaceArtifactWithBody(
   const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
-  const governedRefusal=await governedPublishRefusal(actor.userId,htmlBackends,(current.meta.htmlLinks??[]) as HtmlPageLink[]);if(governedRefusal)return governedRefusal;
+  const functionRefusal=await pageFunctionPublishRefusal(actor.userId,id,htmlBackends,(current.meta.htmlLinks??[]) as HtmlPageLink[]);if(functionRefusal)return functionRefusal;
   const graphqlRefusal=await pageGraphqlRefusal(owner,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
@@ -419,9 +419,9 @@ async function createArtifactFromBodyPrepared(
   const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
-  const governedRefusal=await governedPublishRefusal(actor.userId,htmlBackends,[]);if(governedRefusal)return governedRefusal;
+  const functionRefusal=await pageFunctionPublishRefusal(actor.userId,null,htmlBackends,[]);if(functionRefusal)return functionRefusal;
   // A credential is a person's (lib/html-backends authority): a group-owned page carries governed bindings only, as its republish does.
-  if(destination.type==='group'&&htmlBackends?.some(backend=>credentialNames(backend).length))return json({error:'backend_credentials_owner_required',details:htmlBackends.flatMap(backend=>credentialNames(backend).map(name=>`resolver "${backend.name}" declares ${name}, a credential: a group-owned page holds no one's credentials; publish it as your own page, or use a governed 'minusx' connection`))},403);
+  if(destination.type==='group'&&htmlBackends?.some(backend=>credentialNames(backend).length))return json({error:'backend_credentials_owner_required',details:htmlBackends.flatMap(backend=>credentialNames(backend).map(name=>`resolver "${backend.name}" declares ${name}, a credential: a group-owned page holds no one's credentials; publish it as your own page, or use a 'viewer' connection`))},403);
   const graphqlRefusal=await pageGraphqlRefusal(publicationActor,body.html,htmlDatasets,htmlBackends);if(graphqlRefusal)return graphqlRefusal;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;

@@ -4,8 +4,8 @@ import {it,expect} from 'vitest';
  * stream and session, prints others' events and only logs this session's own, and the 15-minute idle stop is an
  * explicit --bounded mode (comment.mjs watch is that mode on one page's comments).
  */
-const job=(id:string,verb:string)=>({id,type:`job.${verb}`,position:1,resource:{kind:'job',id:'sch_1'},actor:{kind:'service',id:'minusx',you:false},
- payload:{schedule_id:'sch_1',occurrence_id:'occ_1',group_id:'grp_1'}});
+const other=(id:string,verb:string)=>({id,type:`artifact.${verb}`,position:1,resource:{kind:'artifact',id:'PAGE7'},actor:{kind:'user',id:'usr_bob',you:false},
+ payload:{annotation_id:'B'}});
 const own=(id:string)=>({id,type:'artifact.annotated',resource:{kind:'artifact',id:'PAGE12'},actor:{kind:'token',id:'tok',you:true},payload:{annotation_id:'A'}});
 async function harness(feed:(n:number)=>any[]){
  const {mkdtemp}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
@@ -21,17 +21,17 @@ async function harness(feed:(n:number)=>any[]){
   return state.printed.map(v=>typeof v==='string'?v:v.event.id);};
  return {root,server,state,watch,env,eventsCommand,options};
 }
-it('watches a group\'s job runs with --next: filters reach the feed, own events are logged and never printed, and it resumes',async()=>{
+it('watches every page\'s comments with --next: filters reach the feed, own events are logged and never printed, and it resumes',async()=>{
  const {rm,readdir}=await import('node:fs/promises'),path=await import('node:path');
- const {root,state,watch}=await harness(n=>n===2?[own('mine')]:n===3?[job('j1','run_started')]:n===4?[job('j2','run_failed')]:[]);
+ const {root,state,watch}=await harness(n=>n===2?[own('mine')]:n===3?[other('j1','annotated')]:n===4?[other('j2','annotation_resolved')]:[]);
  try{
-  expect(await watch({category:'jobs'})).toEqual(['j1','next: handle the events above, then run the same watch --next command again']);
+  expect(await watch({category:'comments'})).toEqual(['j1','next: handle the events above, then run the same watch --next command again']);
   // A first call baselines at now (no replay), then long polls from each checkpoint.
-  expect(state.queries.map(q=>[q.after,q.wait,q.category,q.artifact_id])).toEqual([['now','0','jobs',undefined],['c1','30','jobs',undefined],['c2','30','jobs',undefined]]);
+  expect(state.queries.map(q=>[q.after,q.wait,q.category,q.artifact_id])).toEqual([['now','0','comments',undefined],['c1','30','comments',undefined],['c2','30','comments',undefined]]);
   // Its own log, per stream and session, beside the sign-in: the next call resumes from it.
   const dir=path.join(root,'events',(await readdir(path.join(root,'events')))[0]!,'_all');
-  expect((await readdir(dir)).filter(f=>f.endsWith('.ndjson'))).toEqual([expect.stringMatching(/^jobs\..+\.ndjson$/)]);
-  expect(await watch({category:'jobs'})).toEqual(['j2',expect.stringMatching(/^next:/)]);
+  expect((await readdir(dir)).filter(f=>f.endsWith('.ndjson'))).toEqual([expect.stringMatching(/^comments\..+\.ndjson$/)]);
+  expect(await watch({category:'comments'})).toEqual(['j2',expect.stringMatching(/^next:/)]);
   expect(state.queries.at(-1)).toMatchObject({after:'c3'});
  }finally{await rm(root,{recursive:true,force:true});}
 });

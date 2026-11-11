@@ -6,7 +6,7 @@
  * may read the page may watch it change — it reveals nothing a reload would
  * not.
  *
- * The transport is the minusx chat-stream pattern: a NOTIFY is only a wakeup
+ * The transport is the chat-stream pattern: a NOTIFY is only a wakeup
  * pointer, and every wakeup does a catch-up SELECT, so a missed notification
  * costs nothing. The first frame is always the current state, which makes the
  * stream self-syncing — a client that connects late, reconnects, or misses a

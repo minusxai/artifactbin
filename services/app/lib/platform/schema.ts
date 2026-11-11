@@ -1,7 +1,6 @@
 import {RUN_TABLES} from '@artifactbin/runner/schema';
 /**
- * Schema as data → idempotent DDL. (Distilled from minusx
- * lib/database/schema/tables.ts + render.ts.)
+ * Schema as data → idempotent DDL.
  *
  * The APP's table declarations — the data only. The renderer (renderSchema,
  * ensureTable) lives in @artifactbin/utils and is shared; `SCHEMA_STATEMENTS`
@@ -858,13 +857,15 @@ const DOCUMENT_TRUST: Table = {
 
 /**
  * THE CONFIGURATION THE SHARED IDENTITY VIEWS READ (lib/groups identity-views): one row, id 'installation', written
- * from this process's settings on every boot in combined mode, so the views stay static SQL and the rules they apply
+ * from this process's settings on every boot, so the views stay static SQL and the rules they apply
  * keep one definition. `deployment_mode` is APP__DEPLOYMENT_MODE; `api_audiences` the `<origin>/api` an OAuth access
- * token may be bound to (APP__PUBLIC_BASE_URL and APP__ALIAS_ORIGINS).
+ * token may be bound to (APP__PUBLIC_BASE_URL and APP__ALIAS_ORIGINS); `service_audiences` the origins of the services
+ * that accept this installation's identity tokens (IDENTITY__SERVICE_AUDIENCES).
  */
 const IDENTITY_SETTINGS:Table={name:'identity_settings',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'deployment_mode',type:'TEXT',notNull:true},
  {name:'api_audiences',type:'TEXT[]',notNull:true,default:"'{}'"},
+ {name:'service_audiences',type:'TEXT[]',notNull:true,default:"'{}'"},
 ],primaryKey:['id']};
 const GROUP_QUOTAS:Table={name:'group_quotas',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'action',type:'TEXT',notNull:true},{name:'window_start',type:'BIGINT',notNull:true},{name:'used',type:'INTEGER',notNull:true}],primaryKey:['user_id','action']};
 const GROUP_AUDIT:Table={name:'group_audit',columns:[

@@ -3,8 +3,8 @@
  * service's log with SELECT (the app holds nothing more on that schema) and joins the app's own tables to decide,
  * on every poll, what the caller may observe now:
  * - an artifact event: the artifact is live and in `commentMonitorScope` (owner, share, link or group reach), the
- *   scope the comment feed always used, so whoever may read a page's comments sees its comment events;
- * - a job event: the caller is a direct member of `payload.group_id` (lib/groups `listGroups`).
+ *   scope the comment feed always used, so whoever may read a page's comments sees its comment events.
+ * Another object kind joins the feed with its own category (contracts EVENT_CATEGORIES) and its own access rule here.
  *
  * Positions are assigned by the events service at durable acceptance (services/events local.ts), in commit order, so
  * a scan's last position is a safe resume point: anything committed later has a higher one. A scan reads at most
@@ -21,7 +21,6 @@ import {
 } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifact-access';
-import { listGroups } from '@/lib/groups';
 import { EVENTS_SCHEMA, getDb, publishEventOutbox } from '@/lib/platform';
 
 if (!/^[a-z_][a-z0-9_]*$/.test(EVENTS_SCHEMA)) throw new Error(`EVENTS__SCHEMA is not an identifier: ${EVENTS_SCHEMA}`);
@@ -128,8 +127,8 @@ function toWire(row: Row, actor: AccessActor, session: string | null): EventFeed
   return {
     id: row.id, position: Number(row.position), type: `${row.object_kind}.${row.verb}` as EventFeedType,
     at: new Date(row.at).toISOString(), schema_version: EVENT_FEED_SCHEMA_VERSION,
-    resource: { kind: row.object_kind as 'artifact' | 'job', id: row.object_id },
-    actor: row.subject_id && (kind === 'user' || kind === 'token' || kind === 'service')
+    resource: { kind: 'artifact', id: row.object_id },
+    actor: row.subject_id && (kind === 'user' || kind === 'token')
       ? { kind, id: row.subject_id, you: isYou(actor, session, row, via) } : null,
     payload,
   };
@@ -183,18 +182,16 @@ export async function readEventsFor(actor: AccessActor, query: EventFeedQuery, o
   const byKind = (kind: string) => query.types.filter(type => type.startsWith(`${kind}.`)).map(type => type.slice(kind.length + 1));
   const scan = async (): Promise<{ events: EventFeedEvent[]; full: boolean } | null> => {
     signal.throwIfAborted();
-    const groups = actor.userId ? (await listGroups(actor.userId)).map(group => group.id) : [];
     const result = await db.query<Row>(`WITH raw AS (
         SELECT id, position, at, subject_kind, subject_id, verb, object_kind, object_id, payload FROM ${EVENTS}
-        WHERE position > $1::bigint AND ((object_kind = 'artifact' AND verb = ANY($2::text[])) OR (object_kind = 'job' AND verb = ANY($3::text[])))
-          ${query.artifactId ? `AND object_id = $6 AND object_kind = 'artifact'` : ''}
+        WHERE position > $1::bigint AND object_kind = 'artifact' AND verb = ANY($2::text[])
+          ${query.artifactId ? `AND object_id = $4` : ''}
         ORDER BY position LIMIT ${SCAN_ROWS}
       ) SELECT raw.id, raw.position::text AS position, raw.at, raw.subject_kind, raw.subject_id, raw.verb, raw.object_kind,
-        raw.object_id, raw.payload, (
-        (raw.object_kind = 'artifact' AND EXISTS (SELECT 1 FROM artifacts WHERE artifacts.id = raw.object_id AND ${monitor.where('$4')}))
-        OR (raw.object_kind = 'job' AND raw.payload->>'group_id' = ANY($5::text[]))
-      ) AS visible FROM raw ORDER BY raw.position`,
-      [String(position), byKind('artifact'), byKind('job'), monitor.val, groups, ...(query.artifactId ? [query.artifactId] : [])]);
+        raw.object_id, raw.payload,
+        EXISTS (SELECT 1 FROM artifacts WHERE artifacts.id = raw.object_id AND ${monitor.where('$3')}) AS visible
+      FROM raw ORDER BY raw.position`,
+      [String(position), byKind('artifact'), monitor.val, ...(query.artifactId ? [query.artifactId] : [])]);
     const visible = result.rows.filter(row => row.visible).slice(0, query.limit);
     // Resume after the last row returned when the page filled, else after the last row read.
     const last = visible.length === query.limit ? visible.at(-1) : result.rows.at(-1);

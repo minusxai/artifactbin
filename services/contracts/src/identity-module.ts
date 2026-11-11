@@ -1,7 +1,7 @@
 /**
  * THE IDENTITY MODULE'S CONTRACT: every write to who someone is and who belongs where. The module is the auth
  * package (`@artifactbin/auth` createIdentityStore); it is the ONLY writer of `IDENTITY_OWNED_TABLES`, which every
- * other part of the installation (the app's joins and access checks, MinusX through the `identity` views) only
+ * other part of the installation (the app's joins and access checks, other services through the `identity` views) only
  * reads. One contract, two transports with one behaviour:
  *  - LOCAL: the store itself, in process, on the app's own database (a single-process install and the tests);
  *  - HTTP: `IDENTITY_CALL_PATH` on the auth host's `sessionAuthority` part (service-authenticated like
@@ -19,6 +19,7 @@
 import type {GroupInvitation,GroupRole,GroupSummary} from './groups';
 import type {Queryable} from './db';
 import type {UserKind} from './testusers';
+import type {IssuedViewerToken} from './service-audiences';
 
 /** The tables only the identity module writes (scripts/ci/table-ownership.mjs, the generated grants.sql). */
 export const IDENTITY_OWNED_TABLES = ['users', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox'] as const;
@@ -114,6 +115,13 @@ export interface IdentityService {
   setTokenHarness(input: {id: string; harness: string}): Promise<void>;
   /** Grant request authority to the server-minted tokens whose name starts with `prefix`. */
   markRequestAuthority(input: {prefix: string}): Promise<void>;
+  /**
+   * A VIEWER token (./service-audiences): act for `userId` at the configured service `service`, for
+   * VIEWER_TOKEN_TTL_SECONDS, naming the page and function that asked. Only a first-party caller reaches this (the
+   * HTTP transport is service-authenticated); it writes nothing. `unknown_service` (404) when no such service is
+   * configured, `service_tokens_unavailable` (503) when this host has no key to sign with.
+   */
+  issueViewerToken(input: {userId: string; service: string; artifactId?: string | null; function?: string | null}): Promise<IssuedViewerToken>;
 
   // ── groups (each answers the changes it committed) ────────────────────────
   createGroup(input: {actorId: string; handle: string; name: string; description?: string; parentId?: string | null}): Promise<{group: GroupSummary; hierarchyRevision: number; changes: GroupChange[]}>;
@@ -142,7 +150,7 @@ export interface IdentityService {
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [
   'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
-  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
+  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'touchToken', 'setTokenHarness', 'markRequestAuthority', 'issueViewerToken',
   'createGroup', 'updateGroup', 'setGroupParent', 'deleteGroup', 'setGroupMember', 'removeGroupMember', 'inviteGroupMember', 'removeGroupInvitation', 'acceptGroupInvitations', 'admitToGroup',
   'enqueueGroupMail', 'claimGroupMail', 'settleGroupMail',
 ];

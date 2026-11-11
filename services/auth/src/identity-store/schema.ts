@@ -1,7 +1,7 @@
 /**
  * THE IDENTITY MODULE'S TABLES (contracts `IDENTITY_OWNED_TABLES`), declared here and created by the identity host's
  * boot (`ensureIdentitySchema`) in the identity module's own schema, AUTH__SCHEMA. Nobody else reads them: every
- * reader (the app, MinusX) reads the thin views of the same names in the identity read schema (./views), which
+ * reader (the app, and any service granted them) reads the thin views of the same names in the identity read schema (./views), which
  * expose each table as it is minus `SECRET_COLUMNS`.
  *
  * Additive, like every declaration in this product (utils renderSchema): a new column is nullable or has a default.
@@ -122,8 +122,8 @@ const GROUPS:Table={name:'groups',columns:[
 
 /**
  * THE HIERARCHY REVISION: one row, id 'installation', seeded by `ensureIdentityRows`. Every topology change (group
- * create, delete, reparent) bumps `revision` as its first statement, which also serializes topology changes; MinusX's
- * stale-policy rule reads it. Nothing else locks it.
+ * create, delete, reparent) bumps `revision` as its first statement, which also serializes topology changes; a reader
+ * that caches anything per tree (a service's stale-policy rule) reads it. Nothing else locks it.
  */
 const GROUP_HIERARCHY:Table={name:'group_hierarchy',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'revision',type:'BIGINT',notNull:true,default:'0'},

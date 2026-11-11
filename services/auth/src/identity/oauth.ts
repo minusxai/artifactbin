@@ -1,6 +1,6 @@
 /** OAuth 2.1 for `/api`, implemented over the auth domain's clients and credentials. */
 import { createHash, randomBytes } from 'node:crypto';
-import {API_RESOURCE_PATH,GRANTABLE_SCOPES,type Queryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 // Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
@@ -252,14 +252,14 @@ export const authServerMetadata = (base: string): Record<string, unknown> => ({
   registration_endpoint: `${base}/oauth/register`,
   response_types_supported: ['code'],
   grant_types_supported: [AUTHORIZATION_CODE, REFRESH_TOKEN],
-  scopes_supported: [...GRANTABLE_SCOPES],
+  scopes_supported: [ARTIFACT_SCOPE],
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none'],
 });
 export const protectedResourceMetadata = (base: string): Record<string, unknown> => ({
   resource: `${base}${API_RESOURCE_PATH}`,
   authorization_servers: [base],
-  scopes_supported: [...GRANTABLE_SCOPES],
+  scopes_supported: [ARTIFACT_SCOPE],
   bearer_methods_supported: ['header'],
 });
 export const s256 = (verifier: string): string => createHash('sha256').update(verifier).digest('base64url');
