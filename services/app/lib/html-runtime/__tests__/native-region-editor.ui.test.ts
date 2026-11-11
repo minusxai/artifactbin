@@ -338,3 +338,13 @@ it('two peers preserve a task comment identity through split, peer typing and lo
  expect(regionHtml('rich-native-v1',state)).toContain('data-af-id="task-text">Task work peer');
  expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
 });
+
+it.each(['<ul><li','<ol><li','<ul data-type="taskList"><li data-type="taskItem" data-checked="false"'])('start split keeps supported item identity on original text: %s',prefix=>{
+ const tag=prefix.startsWith('<ol')?'ol':'ul';
+ const e=single(`${prefix} data-af-id="item"><p data-af-id="paragraph">alpha</p></li></${tag}>`);
+ let start=0;e.view.state.doc.descendants((node,pos)=>{if(node.attrs.afId==='paragraph')start=pos+1;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,start)));
+ e.replay([{key:'Enter'}]);
+ expect(e.view.dom.querySelector('[data-af-id="item"] p')?.textContent).toBe('alpha');
+ expect(e.view.dom.querySelector('[data-af-id="paragraph"]')?.textContent).toBe('alpha');
+});

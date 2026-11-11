@@ -1,6 +1,6 @@
 /** Native HTML identities and selected words, independent of compiler coordinates. */
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
-import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlTextFingerprint, resolveHtmlTextRange, type HtmlNodeAnchor } from '@artifactbin/contracts';
 
 type HtmlNode = DefaultTreeAdapterMap['node'];
 export interface HtmlCommentNode { nodeId: string; text: string }
@@ -44,7 +44,7 @@ export function resolveHtmlCommentAnchor(nodes: ReadonlyMap<string, HtmlCommentN
   const node = anchor.ancestorId ? nodes.has(anchor.nodeId ?? '') ? null : nodes.get(anchor.ancestorId) ?? null : anchor.nodeId ? nodes.get(anchor.nodeId) ?? null : null;
   if (anchor.ancestorId) return {node,quoteFound:anchor.quote ? false : null};
   if(anchor.segments) return {node,quoteFound:!!node && anchor.segments.length>0 && anchor.segments.every(part=>{const target=nodes.get(part.nodeId);return !!target && validHtmlCommentRange(target,{...anchor,nodeId:part.nodeId,quote:part.quote,range:part.range,segments:undefined});})};
-  return { node, quoteFound: anchor.quote ? !!node && validHtmlCommentRange(node, anchor) && canonical(node.text).includes(canonical(anchor.quote)) : null };
+  return { node, quoteFound: anchor.quote ? !!node && resolveHtmlTextRange(node.text, anchor).status === 'exact' : null };
 }
 
 /** A newly captured range must describe the selected node's exact text. */

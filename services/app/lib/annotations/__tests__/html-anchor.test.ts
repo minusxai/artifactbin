@@ -38,3 +38,9 @@ it('decodes bounded explicit selection segments and rejects malformed parts',()=
  expect(parseHtmlNodeAnchor(anchor)?.segments).toEqual([segment]);expect(parseHtmlNodeAnchor({...anchor,segments:[]} )?.segments).toEqual([]);
  for(const segments of [[{...segment,range:undefined}],[{...segment,nodeId:null}],[{...segment,extra:true}],Array(257).fill(segment)])expect(parseHtmlNodeAnchor({...anchor,segments})).toBeNull();
 });
+it('resolves a unique unchanged quote after append or stale offsets, but refuses ambiguity and deletion',()=>{
+ const picked=anchor({quote:'Task work',range:{start:0,end:9,length:9,fingerprint:htmlTextFingerprint('Task work')}});
+ for(const text of ['Task work peer','prefix Task work'])expect(resolveHtmlCommentAnchor(new Map([['n1',{nodeId:'n1',text}]]),picked).quoteFound).toBe(true);
+ for(const text of ['Task work Task work','peer','Task changed'])expect(resolveHtmlCommentAnchor(new Map([['n1',{nodeId:'n1',text}]]),picked).quoteFound).toBe(false);
+ expect(validHtmlCommentRange({nodeId:'n1',text:'Task work peer'},picked)).toBe(false);
+});

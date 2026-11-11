@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AnnotationAuthor, HtmlNodeAnchor } from '@artifactbin/contracts';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, ARTIFACTBIN_AGENT_HEADER, identityForUser } from '@/lib/accounts';
-import { createArtifact, getArtifactById } from '@/lib/artifacts';
+import { createArtifact, getArtifactById, replaceArtifactFor } from '@/lib/artifacts';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import {
   CommentWaitCapacityError, InvalidCommentCursor, actOnAnnotationFor, annotationAuthorForRequest, artifactToWireWithAnnotations, artifactWireFor,
@@ -282,4 +282,17 @@ describe('annotationAuthorForRequest', () => {
     // A session key outside its alphabet is no session: the credential rule decides `you`.
     expect(author({ [ARTIFACTBIN_AGENT_HEADER]: 'Codex Blue', 'Artifactbin-Session': 'short' })).not.toHaveProperty('writerSession');
   });
+});
+
+
+it('persists a creatable list-item block comment across a saved start split', async()=>{
+ const f=await fixture();
+ const source=(body:string)=>({format:'html' as const,source:`<!doctype html><html><head></head><body><ol>${body}</ol></body></html>`,meta:{}});
+ await replaceArtifactFor(f.owner,f.doc.id,source('<li data-af-id="item"><p data-af-id="paragraph">alpha</p></li>'),{expectedVersion:1});
+ const made=await createAnnotationFor(f.owner,f.doc.id,{anchor:anchor('item','2'),body:'On the list item'},human) as Wire;
+ expect(made).toMatchObject({orphaned:false,anchor:{nodeId:'item'}});
+ // The real native-editor regression checks this ownership is produced by Enter.
+ await replaceArtifactFor(f.owner,f.doc.id,source('<li data-af-id="new-item"><p data-af-id="new-paragraph"></p></li><li data-af-id="item"><p data-af-id="paragraph">alpha</p></li>'),{expectedVersion:2});
+ expect(await listAnnotationsFor(f.owner,f.doc.id)).toMatchObject([{id:made.id,orphaned:false,anchor:{nodeId:'item'}}]);
+
 });
