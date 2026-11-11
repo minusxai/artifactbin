@@ -1,4 +1,5 @@
 import {buildHostComments,buildPortableChrome} from './build-portable-chrome.server';
+import {hostCommentsPath} from './host-comments-address.server';
 import {build,type PluginBuild,type Plugin} from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -13,8 +14,6 @@ import {RUNTIME_BUILD_KEY,RUNTIME_MODULE_PATHS} from './contract';
  * refuses to run. Pages without a hosted core (offline copies embed their own modules) never set the id.
  */
 const skewGuard=(id:string)=>`{const c=globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})];if(c&&c!==${JSON.stringify(id)}){let r=!1;try{const n="afbin:runtime-reload";if(sessionStorage.getItem(n)!==${JSON.stringify(id)}){sessionStorage.setItem(n,${JSON.stringify(id)});r=!0}}catch{}if(r)location.reload();throw Error("Artifactbin runtime updated; reload the page")}}\n`;
-/** The host comments module's pinned address (lib/document-serving/hosted-blocks): its digest under /af/v1/host/. */
-export const hostCommentsPath=(source:string)=>`/af/v1/host/${createHash('sha256').update(source).digest('hex')}.js`;
 let assets:Promise<HtmlRuntimeAssets>|undefined;
 /** Build immutable code once. Page configuration is supplied only by assembly. */
 export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=compile().catch(error=>{assets=undefined;throw error;});}

@@ -2,7 +2,8 @@ import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {gzipSync} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import { expect, it } from 'vitest';
-import { buildHtmlCore,buildHtmlAssets,hostCommentsPath } from '../build.server';
+import { buildHtmlCore,buildHtmlAssets } from '../build.server';
+import { hostCommentsPath } from '../host-comments-address.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
 import { PLATFORM_STYLES_PATH } from '../../html-systems';
 /** `@afbin/offline-sql` gzipped: the SQLite engine and its wasm, carried only by an export with rows (594,406 B measured 2026-11-10). */
@@ -320,6 +321,11 @@ it('ships the document host module (/af/host.js) as its own small module: no app
  // Loaded by another shell, never by a page: not in the core's import map, and no skew guard tied to a core.
  expect(assets.core).not.toContain('/af/host.js');
  expect(host).not.toContain('afbin:runtime-reload');
+});
+
+it('exports from the build module only what a production server\'s prebuilt stand-in also exports (scripts/build/html-core.mjs)',async()=>{
+ // Anything else imported from it is undefined in dist/server.mjs: such a rule lives in a module of its own.
+ expect(Object.keys(await import('../build.server')).sort()).toEqual(['buildHtmlAssets','buildHtmlCore']);
 });
 
 it('ships the host comments module apart, at the pinned address the host module names, as public UI code',async()=>{
