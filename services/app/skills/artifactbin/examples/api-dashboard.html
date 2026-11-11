@@ -14,7 +14,8 @@
 //   APP, then publish and check (node scripts/new-app.mjs --help).
 // Gotchas: the key is a secret only the page owner sets (page settings, Resolvers, API_KEY; Test
 //   connection then lists the API's field names); until then the page says why no items load.
-//   The notes rules decide who may add or remove a note; the page shows controls from api.ts me.
+//   The notes rules decide who may add, change or remove a note; the page shows controls from
+//   api.ts me.
 // Built with: one HTML page; api.ts functions that read the API on the server with the owner's
 //   key; a notes dataset with own-rows rules, read and written with sql.
 // The only part to edit. fields: the API's field for each item's id, name, group and amount.
@@ -40,7 +41,8 @@ section{margin-top:28px}section h2{display:flex;justify-content:space-between;ga
 ul{list-style:none;margin:0;padding:0}.item{padding:12px 0;border-bottom:1px solid var(--border)}
 .head{display:flex;justify-content:space-between;gap:12px}.notes li{display:flex;gap:12px;
   align-items:center;justify-content:space-between;padding:4px 0 4px 12px;border-left:2px solid
-  var(--border)}.add-note{display:flex;gap:8px;margin-top:6px}.add-note input{flex:1;min-width:0}
+  var(--border)}.notes li>span,.edit-note{flex:1}.add-note,.edit-note{display:flex;gap:8px}
+.add-note{margin-top:6px}form input{flex:1;min-width:0}
 </style>
 </head><body><main>
 <p id="kicker" class="muted"></p><h1 id="title" class="t-display-l"></h1><p id="summary"></p>
@@ -54,7 +56,7 @@ import {sql,onResolverChange} from '@afbin/apollo';
 const APP=window.APP,F=APP.fields,$=s=>document.querySelector(s),status=$('#status');
 // Items and notes load apart, so items that cannot load (an unset key) never hide the notes.
 const notesQuery=sql`select _id, item, note, created_by from notes order by _id limit 5000`;
-let items=null,problem='',notes=[],me={signedIn:false,id:null,role:'anonymous'};
+let items=null,problem='',notes=[],me={signedIn:false,id:null,role:'anonymous'},editing=null;
 for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,summary:APP.summary}))
   $('#'+id).textContent=text;
 const money=new Intl.NumberFormat(undefined,APP.currency?{style:'currency',currency:APP.currency,
@@ -71,8 +73,8 @@ async function loadItems(){
     `the API: ${error.message}. If its key is not set yet, the page owner sets API_KEY in the ` +
     "page's settings under Resolvers.";}}
 async function loadNotes(){[notes,me]=await Promise.all([notesQuery,call('me')]);}
-// The notes rules: signed-in readers add notes and remove their own; owner and editors all.
-const canAdd=()=>me.signedIn,canRemove=n=>['owner','editor'].includes(me.role)||
+// The notes rules: signed-in readers add notes, change and remove their own; owner, editors all.
+const canAdd=()=>me.signedIn,canChange=n=>['owner','editor'].includes(me.role)||
   (me.signedIn&&n.created_by===me.id);
 // Script-made nodes take data-af-ids from the item's id, the group or the note's _id.
 const node=(tag,id,props={})=>{const n=Object.assign(document.createElement(tag),props);
@@ -81,12 +83,25 @@ const slug=text=>String(text).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/
 const sum=rows=>rows.reduce((total,row)=>total+row.amount,0);
 function noteList(key,list,showItem){const ul=node('ul',key+'-notes',{className:'notes'});
   ul.append(...list.map(n=>{const li=node('li','note-'+n._id);
+    if(editing===n._id){li.append(editForm(n));return li;}
     li.append(node('span','note-'+n._id+'-text',{textContent:(showItem?n.item+': ':'')+n.note}));
-    // Remove only for those the rules let remove it (their own notes; the owner's all).
-    if(canRemove(n))li.append(node('button','note-'+n._id+'-remove',{type:'button',
-      textContent:'Remove',ariaLabel:'Remove note: '+n.note,onclick:()=>void write('Removed a ' +
-        'note.',()=>sql`delete from notes where _id = ${n._id}`)}));
+    // Edit and Remove only for those the rules let change it (their own notes; the owner's all).
+    if(canChange(n))li.append(node('button','note-'+n._id+'-edit',{type:'button',textContent:
+      'Edit',ariaLabel:'Edit note: '+n.note,onclick:()=>{editing=n._id;render();
+        $('form.edit-note input').focus();}}),node('button','note-'+n._id+'-remove',{type:
+      'button',textContent:'Remove',ariaLabel:'Remove note: '+n.note,onclick:()=>void write(
+        'Removed a note.',()=>sql`delete from notes where _id = ${n._id}`)}));
     return li;}));return ul;}
+// One note's text, changed in place; the page's refreshes never rebuild it while it is open.
+function editForm(n){const key='note-'+n._id,form=node('form',key+'-form',{className:
+  'edit-note'}),input=node('input',key+'-input',{value:n.note,required:true,maxLength:280,
+    ariaLabel:'Change note'});
+  form.append(input,node('button',key+'-save',{type:'submit',textContent:'Save'}),node('button',
+    key+'-cancel',{type:'button',textContent:'Cancel',onclick:()=>{editing=null;render();}}));
+  form.onsubmit=event=>{event.preventDefault();const note=input.value.trim();
+    if(note)void write('Changed a note.',()=>sql`update notes set note = ${note} where _id = ${
+      n._id}`);};
+  return form;}
 function itemView(item){const key='item-'+slug(item.id),li=node('li',key,{className:'item'});
   const head=node('div',key+'-head',{className:'head'});
   head.append(node('strong',key+'-name',{textContent:item.name}),node('span',key+'-amount',
@@ -126,14 +141,16 @@ const summary=()=>problem||`${items.length} ${APP.labels.items.toLowerCase()}, $
 // One write, then a fresh read of the notes. A write the rules refuse changes nothing (affected 0).
 async function write(message,run){status.textContent='Saving…';
   try{if(!(await run()).affected)throw Error('Nothing changed: you may not change that note.');
-    await loadNotes();render();status.textContent=message;}
+    editing=null;await loadNotes();render();status.textContent=message;}
   catch(error){status.textContent=error.message||'Could not save.';}}
 // A new note, or signing in or out, refreshes the notes; a changed api.ts re-reads the items.
+// While a note is open (and still this reader's to change), the list waits until it closes.
+const show=()=>{if(!notes.some(n=>n._id===editing&&canChange(n))){editing=null;render();}};
 onResolverChange(names=>{const work=[];if(names.includes('api'))work.push(loadItems());
   if(names.includes('notes')||names.includes('viewer'))work.push(loadNotes());
-  if(work.length)void Promise.all(work).then(render,refused);});
+  if(work.length)void Promise.all(work).then(show,refused);});
 // A refused read (access removed, signed out) clears the notes and every control that needed it.
-function refused(error){notes=[];me={signedIn:false};render();
+function refused(error){notes=[];me={signedIn:false};editing=null;render();
   status.textContent=error.message||'Could not load the notes.';}
 try{await Promise.all([loadItems(),loadNotes()]);render();status.textContent=summary();}
 catch(error){refused(error);}
