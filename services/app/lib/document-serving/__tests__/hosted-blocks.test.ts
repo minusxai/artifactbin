@@ -29,7 +29,7 @@ interface Manifest {
   theme: { attributes: Record<string, string>; tokens: string[]; optionalTokens: string[] }; integrity: Record<string, string>;
 }
 /** Any pinned address, through its route. */
-async function get(url: string, headers: Record<string, string> = {}): Promise<Response> {
+async function pinned(url: string, headers: Record<string, string> = {}): Promise<Response> {
   const request = new Request(APP + url, { headers });
   const parts = url.split('/');
   if (url.startsWith('/af/v1/components/')) return pinnedComponent(request, { params: Promise.resolve({ digest: parts[4]!, file: parts[5]! }) });
@@ -53,7 +53,7 @@ it('names every public component, the stylesheets and the host module at immutab
   expect(m.fonts).toBe('/af/fonts/');
   const built = (file: string) => readFileSync(path.resolve('lib/build-assets/components', file));
   for (const [name, url] of Object.entries(m.components)) {
-    const response = await get(url);
+    const response = await pinned(url);
     expect(response.status, name).toBe(200);
     expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
@@ -65,40 +65,40 @@ it('names every public component, the stylesheets and the host module at immutab
     for (const [, chunk] of body.toString('utf8').matchAll(/["']\.\/(chunk-[a-z0-9]+\.js)["']/g)) {
       const chunkUrl = new URL(`./${chunk}`, APP + url).pathname;
       expect(m.integrity[chunkUrl], chunkUrl).toBeDefined();
-      expect((await get(chunkUrl)).status, chunkUrl).toBe(200);
+      expect((await pinned(chunkUrl)).status, chunkUrl).toBe(200);
     }
   }
-  const all = await get(m.styles);
+  const all = await pinned(m.styles);
   expect(all.headers.get('content-type')).toMatch(/^text\/css/);
   const allCss = await all.text();
   expect(m.integrity[m.styles]).toBe(sri(allCss));
   for (const name of HTML_SYSTEM_NAMES) expect(allCss).toContain(`:root[data-af-design-system="${name}"]`);
-  const one = await (await get(m.designSystems.meridian!.styles)).text();
+  const one = await (await pinned(m.designSystems.meridian!.styles)).text();
   expect(one).toContain(':root[data-af-design-system="meridian"]');
   expect(one).not.toContain(':root[data-af-design-system="almanac"]');
-  const host = await get(m.host);
+  const host = await pinned(m.host);
   expect(host.headers.get('content-type')).toMatch(/^text\/javascript/);
   const hostSource = await host.text();
   expect(hostSource).toBe(await (await flatHost(new Request(`${APP}/af/host.js`))).text());
   expect(hostSource).toContain('mountDocument');
   expect(m.integrity[m.host]).toBe(sri(hostSource));
-  const repeat = await get(m.host, { 'if-none-match': host.headers.get('etag')! });
+  const repeat = await pinned(m.host, { 'if-none-match': host.headers.get('etag')! });
   expect(repeat.status).toBe(304);
 });
 
 it('keeps answering a bundle an earlier deploy built, and refuses what it never stored or that was tampered with', async () => {
   const older = JSON.stringify({ files: { 'button.js': 'export const release = 0;', 'chunk-old0.js': 'export {};' } });
   await retainedPublicAssets('components', 'application/json; charset=utf-8').put(sha256(older), older);
-  const answer = await get(`/af/v1/components/${sha256(older)}/button.js`);
+  const answer = await pinned(`/af/v1/components/${sha256(older)}/button.js`);
   expect(answer.status).toBe(200);
   expect(await answer.text()).toBe('export const release = 0;');
-  expect((await get(`/af/v1/components/${sha256(older)}/chunk-old0.js`)).status).toBe(200);
-  expect((await get(`/af/v1/components/${sha256(older)}/tabs.js`)).status).toBe(404);
+  expect((await pinned(`/af/v1/components/${sha256(older)}/chunk-old0.js`)).status).toBe(200);
+  expect((await pinned(`/af/v1/components/${sha256(older)}/tabs.js`)).status).toBe(404);
   const forged = sha256('another');
   await retainedPublicAssets('components', 'application/json; charset=utf-8').put(forged, older);
-  expect((await get(`/af/v1/components/${forged}/button.js`)).status).toBe(404);
-  expect((await get(`/af/v1/components/${'0'.repeat(64)}/button.js`)).status).toBe(404);
-  expect((await get('/af/v1/components/nothex/button.js')).status).toBe(404);
+  expect((await pinned(`/af/v1/components/${forged}/button.js`)).status).toBe(404);
+  expect((await pinned(`/af/v1/components/${'0'.repeat(64)}/button.js`)).status).toBe(404);
+  expect((await pinned('/af/v1/components/nothex/button.js')).status).toBe(404);
 });
 
 it('answers a digest only as the kind it was stored as', async () => {
@@ -106,10 +106,10 @@ it('answers a digest only as the kind it was stored as', async () => {
   const styles = m.styles.split('/').pop()!.replace('.css', '');
   const host = m.host.split('/').pop()!.replace('.js', '');
   const bundle = Object.values(m.components)[0]!.split('/')[4]!;
-  expect((await get(`/af/v1/host/${styles}.js`)).status).toBe(404);
-  expect((await get(`/af/v1/styles/${host}.css`)).status).toBe(404);
-  expect((await get(`/af/v1/styles/${bundle}.css`)).status).toBe(404);
-  expect((await get(`/af/v1/styles/${styles}.js`)).status).toBe(404);
+  expect((await pinned(`/af/v1/host/${styles}.js`)).status).toBe(404);
+  expect((await pinned(`/af/v1/styles/${host}.css`)).status).toBe(404);
+  expect((await pinned(`/af/v1/styles/${bundle}.css`)).status).toBe(404);
+  expect((await pinned(`/af/v1/styles/${styles}.js`)).status).toBe(404);
 });
 
 it('leaves the flat addresses pages load as they were', async () => {
