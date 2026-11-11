@@ -276,7 +276,7 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   return json({
     error: 'not_found',
     help: guessedQuery ? '/llms/datasets' : '/llms.txt',
-    ...(guessedQuery ? { details: ['Read linked dataset schema and rows through the page GraphQL endpoint /api/artifacts/<pageId>/graphql. Use /llms/datasets for namespaces, discovery and permissions.'] } : {}),
+    ...(guessedQuery ? { details: ['Read and write a page\'s linked datasets with one SQL statement: POST /api/artifacts/<pageId>/sql {"sql", "params", "revision"}. Use /llms/datasets for tables, discovery and permissions.'] } : {}),
   }, 404, { 'Cache-Control': 'no-store' });
 };
 

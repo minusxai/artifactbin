@@ -198,7 +198,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
 
   return <section aria-label="Access policies" class="space-y-5 py-4 text-sm text-fg">
     <header><SectionHeading>Who can see and change this data</SectionHeading>
-      <p class="mt-1 text-muted">Rules apply to the dataset's GraphQL API and every page that uses it. A role with no rule is denied.</p></header>
+      <p class="mt-1 text-muted">Rules apply to every read and write of this dataset, directly or through any page that uses it. A role with no rule is denied.</p></header>
     <Show when={loadError()}><StatusMessage kind="error">{loadError()}</StatusMessage></Show>
     <Show when={!loaded() && !loadError()}><StatusMessage kind="loading">Loading data actions…</StatusMessage></Show>
     <Show when={loaded()}>{value => <>

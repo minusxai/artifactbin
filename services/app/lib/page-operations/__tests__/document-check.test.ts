@@ -1,7 +1,7 @@
 /**
  * THE PUBLISH DOCUMENT CHECK (document-check.ts): the GraphQL documents a resolver passes to `caps.query`, and the
  * page's own static `gql` documents, validated against the page's names. A dataset field written under the dataset's
- * own name (what `graphql.mjs schema DATASET_ID` shows) names its page-name replacement; other unknown roots list the
+ * own name (the name its direct GraphQL schema serves) names its page-name replacement; other unknown roots list the
  * closest names. Anything dynamic, unparsable or local-state is never reported.
  */
 import { expect, it } from 'vitest';
