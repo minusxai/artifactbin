@@ -1029,7 +1029,10 @@ export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):P
   if(!kinds.includes('rich')&&!kinds.includes('text'))return 'ineligible';
   if(kinds.includes('rich-native-v1'))throw new Error('Mixed generation migration refused');
   const plan=await planRegionSave(tx,write.current,await pageLedger(tx,write.current));
-  const converted=convertLegacyPage(plan?.html??write.current.source??'');
+  // Match saveRegionsLocked's complete storage projection, including heading-following titles.
+  // Otherwise dry-run accepts dirty docs whose apply fails its post-save equality proof.
+  const plannedHtml=plan ? (docTitleAfterSave(write.current,plan.html)?.html??plan.html) : (write.current.source??'');
+  const converted=convertLegacyPage(plannedHtml);
   // Saving legacy state can erase unsupported inline anchors: refuse rather than publish such a loss.
   const oldIds=canonicalizeHtmlPage(write.current.source??'').nodeIds;
   const newIds=canonicalizeHtmlPage(converted.html).nodeIds;
