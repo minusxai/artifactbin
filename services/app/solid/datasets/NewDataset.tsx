@@ -21,7 +21,7 @@ const STORED = [
 ] as const;
 
 function SourceTile(props: { label: string; summary: string; note?: string; disabled?: boolean; onChoose: () => void }): JSX.Element {
-  return <Button variant="secondary" shape="tile" type="button" disabled={props.disabled} aria-label={props.disabled ? `${props.label}, not yet available` : props.label} onClick={props.onChoose}>
+  return <Button variant="secondary" shape="tile" class="h-full p-3" type="button" disabled={props.disabled} aria-label={props.disabled ? `${props.label}, not yet available` : props.label} onClick={props.onChoose}>
     <span class="block text-left">
       <span class="block text-sm font-semibold text-fg">{props.label}<Show when={props.note}><span class="ml-2 text-micro font-normal text-faint">{props.note}</span></Show></span>
       <span class="mt-1 block text-xs font-normal text-muted">{props.summary}</span>
