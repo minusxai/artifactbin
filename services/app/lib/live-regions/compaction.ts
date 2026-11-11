@@ -8,7 +8,7 @@ import { readNativeHtml, writeNativeHtml } from './native-html';
 import { Fragment } from 'prosemirror-model';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import { applyEdits, attribute, parseSource, type Element } from '../html-page/html-source';
-import type { Node as PMNode } from 'prosemirror-model';
+import type { Node as PMNode, Mark } from 'prosemirror-model';
 import { readRegion, writeRegion } from './html';
 import { LiveRegionRefusal } from './refusal';
 import { ID_ATTRS, isRegionKind, regionSchema, type RegionKind } from './schema';
@@ -78,14 +78,25 @@ export function compactRegion(input: RegionCompactionInput): RegionCompaction {
   const doc = openRegionDoc(input.state, { kind: region.kind });
   if (region.kind === 'rich-native-v1') {
     const seen = new Set<string>();
+    const keep = (id: unknown) => {
+      if (typeof id !== 'string' || !region.ids.has(id) || seen.has(id)) return null;
+      seen.add(id); return id;
+    };
     const clean = (node: PMNode): PMNode => {
       if (node.isText) return node;
       const attrs = { ...node.attrs };
-      if (attrs.afId) {
-        if (!region.ids.has(attrs.afId) || seen.has(attrs.afId)) attrs.afId = null;
-        else seen.add(attrs.afId);
-      }
-      const children: PMNode[] = []; node.forEach(child => children.push(clean(child)));
+      if ('afId' in attrs) attrs.afId = keep(attrs.afId);
+      if ('codeAfId' in attrs) attrs.codeAfId = keep(attrs.codeAfId);
+      const children: PMNode[] = [];
+      let previous: readonly Mark[] = [], retained: Mark[] = [];
+      node.forEach(child => {
+        let common = 0;
+        while (common < previous.length && common < child.marks.length && previous[common]!.eq(child.marks[common]!)) common++;
+        retained = retained.slice(0, common);
+        for (const mark of child.marks.slice(common)) retained.push(mark.type.create({ ...mark.attrs, afId: keep(mark.attrs.afId) }));
+        previous = child.marks;
+        children.push(clean(child).mark(retained));
+      });
       return node.type.create(attrs, Fragment.fromArray(children), node.marks);
     };
     const merged = clean(nativeDocument(doc));

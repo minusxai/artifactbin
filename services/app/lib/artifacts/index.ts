@@ -73,3 +73,5 @@ export type { MutationReply } from './mutation-receipt';
 export { mutationInvocation } from './mutation-invocation';
 export { emitDatasetCommitted } from './after-commit';
 export { childrenTableFor } from './placement';
+
+export {migrateLegacyPage} from './store';

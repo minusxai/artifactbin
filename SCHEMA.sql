@@ -30,6 +30,22 @@ create index "verification_identifier_idx" on "auth"."verification" ("identifier
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.legacy_page_migrations (
+  artifact_id TEXT NOT NULL,
+  backup JSONB NOT NULL,
+  receipt JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id)
+);
+
+ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS backup JSONB NOT NULL;
+
+ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS receipt JSONB NOT NULL;
+
+ALTER TABLE app.legacy_page_migrations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.group_mail_outbox (
   id TEXT NOT NULL,
   email TEXT NOT NULL,
