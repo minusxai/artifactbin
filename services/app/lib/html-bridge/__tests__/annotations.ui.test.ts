@@ -166,3 +166,13 @@ it('source node rules paint computed outlines, preserve other reserved stamps, a
  painter.paint(input);expect(node.getAttribute('data-af-comment-block')).toBe('af-block-1-base');expect(getComputedStyle(node).outline).toContain('1px solid');expect(getComputedStyle(node).outlineOffset).toBe('3px');expect(getComputedStyle(aside).outline).not.toContain('rgba(245');
  painter.paint({...input,hoverId:'two'});expect(getComputedStyle(node).boxShadow).toContain('inset');painter.paint({...input,pins:[pins[0]!]});expect(getComputedStyle(node).boxShadow).not.toContain('inset');painter.dispose();expect(aside.outerHTML).toBe(before);expect(getComputedStyle(node).outline).not.toContain('rgba(245');
 });
+
+it('resolves saved selected words consistently after peer append and refuses stale ambiguous/deleted words',()=>{
+ const painter=createHtmlAnnotationPainter(document);
+ const anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'task',quote:'Task work',range:{start:0,end:9,length:9,fingerprint:htmlTextFingerprint('Task work')}};
+ for(const [text,status] of [['Task work peer','exact'],['prefix Task work','exact'],['Task work Task work','ambiguous'],['deleted','missing']]){
+  document.body.innerHTML=`<p data-af-id="task">${text}</p>`;
+  expect(painter.paint({pins:[{id:'saved',path:'task',anchor}],mode:'on',openId:'saved',hoverId:null})[0]?.status).toBe(status);
+ }
+ painter.dispose();
+});

@@ -34,3 +34,24 @@ it('restores a migrated forward endpoint at the next text node instead of the pr
  expect(resolved.range?.toString()).toBe('Keep \n ');
  expect(resolveHtmlRange(node,anchor).range?.endContainer).toBe(node.querySelector('af-text')!.firstChild);
 });
+
+it('preserves UTF-16 endpoints through canonical whitespace and exact trailing whitespace', () => {
+  const node = document.createElement('p'); node.innerHTML = ' \t😀<b>\n  words</b>\t after ';
+  const anchor = { kind: 'html-node' as const, v: 1 as const, revision: '1', nodeId: 'n1', quote: ' 😀 words ' };
+  const fallback = resolveHtmlRange(node, anchor).range!;
+  expect(fallback.startOffset).toBe(2); expect(fallback.endOffset).toBe(8);
+  expect(fallback.toString()).toBe('😀\n  words');
+  const exact = document.createRange(); exact.setStart(node.firstChild!, 2); exact.setEnd(node.lastChild!, 2);
+  const captured = { ...anchor, quote: exact.toString(), range: captureHtmlRange(node, exact) };
+  expect(resolveHtmlRange(node, captured).range?.toString()).toBe('😀\n  words\t ');
+  node.textContent = '😀 words 😀\twords';
+  expect(resolveHtmlRange(node, captured).status).toBe('ambiguous');
+  node.textContent = '😀 changed'; expect(resolveHtmlRange(node, captured).status).toBe('missing');
+  node.textContent = ' \u00a0word\t😀  ';
+  const ending = resolveHtmlRange(node, { ...anchor, quote: 'word 😀' }).range!;
+  expect(ending.toString()).toBe('word\t😀'); expect(ending.endOffset).toBe(9);
+  node.textContent = '';
+  expect(resolveHtmlRange(node, { ...anchor, quote: ' \t' }).status).toBe('ambiguous');
+  node.textContent = 'aaaa';
+  expect(resolveHtmlRange(node, { ...anchor, quote: 'aaa' }).status).toBe('ambiguous');
+});
