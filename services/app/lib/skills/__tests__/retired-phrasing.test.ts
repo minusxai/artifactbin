@@ -161,6 +161,8 @@ const RETIRED: Retired[] = [
   // The 2026-11-11 visibility facts (V): an agent left the product over link sharing when private was allowed only on the word "private".
   {pattern: /team can view"? needs\s+nothing more|only when the user says\s+"public" or "private"|Everyone with the link reads the notes/,
     scopes: AGENT_TEXT, reason: 'V1: who reads a page at each visibility is stated once, in SKILL.md Sharing; private also fits data the user calls confidential'},
+  {pattern: /confidential or\s+internal|Published private:/, scopes: AGENT_TEXT,
+    reason: 'V2: a page is private on the user\'s own word, never the agent\'s view of the data (one called a sales pipeline internal and published it where the team it was for could not open it)'},
   {pattern: /reaches (?:a|another) file only through a link|fetch its href/, scopes: [...AGENT_TEXT, 'runtime'],
     reason: 'A script fetches a file published with its page by the path it wrote (fetch(\'./data.json\'), html-runtime fn-fetch); no link-and-href recipe'},
 ];
@@ -197,6 +199,7 @@ describe('retired skill phrasing', () => {
       'Q2: export': 'test: String! @auth(role: owner)', 'Q1: a page computes': '{ _sql(sql: $s) { rows } }', 'Q1: no GraphQL': 'reads rows with GraphQL',
       'W1:': 'Watching is part of every task, however short the reply.',
       'V1:': 'so "my team can view" needs\n  nothing more.',
+      'V2:': 'calls the data confidential or\n  internal',
     };
     for (const [prefix, text] of Object.entries(samples)) {
       const row = RETIRED.find(candidate => candidate.reason.startsWith(prefix))!;

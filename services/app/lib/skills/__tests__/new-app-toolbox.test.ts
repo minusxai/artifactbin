@@ -192,7 +192,7 @@ it('sets up the API starter: the resolver aimed at --url, an empty notes dataset
   expect(result.next).toContain(CHECK);
   expect(result.next).toMatch(/API_KEY[^.]*Resolvers/);expect(result.next).toContain('Not tested');
   // A private page answers the signed-out guest pass not found, so its check runs without it.
-  expect(result.next).toContain('Published private: leave out --guest-steps guest.mjs');
+  expect(result.next).toContain('If the user asked for it private: leave out --guest-steps guest.mjs');
   // A rerun keeps every file and the dataset, and writes nothing.
   p.calls.length=0;
   const again=await p.run({dir:'app',kind:'api',title:'Open deals',url:'https://crm.example.com/v1/deals?status=open'});
