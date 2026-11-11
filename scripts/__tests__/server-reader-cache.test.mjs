@@ -8,7 +8,7 @@
  * failed on a stale build. The marker now also stamps the inputs of the receipt the build just wrote.
  */
 import { describe, expect, it } from 'vitest';
-import { withComponentGraph } from '../../services/app/scripts/server-reader-cache.mjs';
+import { lockedClosure, withComponentGraph } from '../../services/app/scripts/server-reader-cache.mjs';
 
 describe('server reader cache marker', () => {
   it('stamps the inputs a first build discovered, so an edit to one is a miss', () => {
@@ -28,5 +28,37 @@ describe('server reader cache marker', () => {
   it('ignores a receipt path outside the repository', () => {
     const before = { inputs: {}, sources: 's' };
     expect(withComponentGraph(before, { inputs: [{ path: '../outside.ts', sha256: 'c' }] }).inputs).toEqual({});
+  });
+});
+
+// A lock change outside the hosted libraries' packages rebuilt them in every pr fast test runner (runs 43024170368 and
+// 43027943712: ~7.5s each, both over the 60s clock). Their marker stamps only the lock entries they reach.
+describe('the hosted libraries\' lock digest', () => {
+  const lock = {
+    packages: {
+      '': { name: 'root' },
+      'node_modules/vega': { version: '6.3.1', integrity: 'v', dependencies: { 'd3-format': '^3' } },
+      'node_modules/d3-format': { version: '3.1.0', integrity: 'd' },
+      'node_modules/three': { version: '0.185.1', integrity: 't' },
+      'services/app/node_modules/vega-util': { version: '2.1.3', integrity: 'u', dependencies: { 'd3-format': '^2' } },
+      'services/app/node_modules/vega-util/node_modules/d3-format': { version: '2.0.0', integrity: 'd2' },
+      'node_modules/@artifactbin/contracts': { resolved: 'services/contracts', link: true },
+      'services/contracts': { version: '0.1.0', dependencies: { zod: '^4' } },
+      'node_modules/zod': { version: '4.0.0', integrity: 'z' },
+      'node_modules/typescript': { version: '5.9.0', integrity: 'ts' },
+    },
+  };
+  const roots = ['vega', 'vega-util', '@artifactbin/contracts', 'node:fs'];
+  const changed = (location, version) => ({ packages: { ...lock.packages, [location]: { ...lock.packages[location], version } } });
+
+  it('ignores a package the libraries cannot reach', () => {
+    expect(lockedClosure(roots, changed('node_modules/typescript', '6.0.0'))).toBe(lockedClosure(roots, lock));
+    expect(lockedClosure(roots, changed('node_modules/three', '0.186.0'))).toBe(lockedClosure(roots, lock));
+  });
+
+  it('changes with any package they reach: a root, a hoisted or nested dependency, a workspace link\'s dependency', () => {
+    for (const location of ['node_modules/vega', 'node_modules/d3-format', 'services/app/node_modules/vega-util/node_modules/d3-format', 'node_modules/zod']) {
+      expect(lockedClosure(roots, changed(location, '9.9.9')), location).not.toBe(lockedClosure(roots, lock));
+    }
   });
 });
