@@ -125,7 +125,8 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
 
 /**
  * How many proxies sit in front of this app — which is to say, how much of
- * `X-Forwarded-For` was written by something we trust.
+ * `X-Forwarded-For`, `X-Forwarded-Host` and `X-Forwarded-Proto` was written by something we trust
+ * (lib/http `trustedForwarded`, lib/accounts `forwardedFor`).
  *
  * The header is a list, and each hop APPENDS the address it received the
  * connection from, so a route sees `<whatever the client sent>, <what proxy1
@@ -137,9 +138,14 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
  * of the server — Caddy/Traefik/your host's). Raise it when another trusted hop is added in
  * front (a CDN, say); never raise it past the number of proxies that actually
  * rewrite the header, or the extra hops start reading caller-controlled values
- * again.
+ * again. 0 means no proxy: every forwarded header is the caller's, so none is read and `Host` names the
+ * addressed host. Unparseable or negative: 1.
  */
-export const TRUSTED_PROXY_HOPS = Math.max(1, Math.trunc(Number(env('HTTP', 'TRUSTED_PROXY_HOPS') ?? '1')) || 1);
+function parseTrustedProxyHops(value: string | undefined): number {
+  const hops = Math.trunc(Number(value ?? '1'));
+  return Number.isFinite(hops) && hops >= 0 && value?.trim() !== '' ? hops : 1;
+}
+export let TRUSTED_PROXY_HOPS = parseTrustedProxyHops(env('HTTP', 'TRUSTED_PROXY_HOPS'));
 
 /**
  * Object storage as ONE connection string (see lib/object-store/url.ts):
@@ -409,7 +415,7 @@ export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
 const SETTING_DEFAULTS = {
   publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, userPagesHost: USER_PAGES_HOST, outboundIps: OUTBOUND_IPS,
   browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
-  testDomain: TEST_DOMAIN,
+  testDomain: TEST_DOMAIN, trustedProxyHops: TRUSTED_PROXY_HOPS,
 };
 type ConfigOverrides = { [K in keyof typeof SETTING_DEFAULTS]?: (typeof SETTING_DEFAULTS)[K] };
 export function overrideConfig(settings: ConfigOverrides, environment: Record<string, string | undefined> = {}): void {
@@ -423,13 +429,14 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
   if ('sqlServiceUrl' in settings) SQL_SERVICE_URL = settings.sqlServiceUrl;
   if ('eventsServiceUrl' in settings) EVENTS_SERVICE_URL = settings.eventsServiceUrl;
   if ('testDomain' in settings) TEST_DOMAIN = settings.testDomain;
+  if ('trustedProxyHops' in settings) TRUSTED_PROXY_HOPS = settings.trustedProxyHops!;
   for (const [key, value] of Object.entries(environment)) envOverrides.set(key, value);
 }
 export function resetConfigOverrides(): void {
   PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
   USER_PAGES_HOST = SETTING_DEFAULTS.userPagesHost; OUTBOUND_IPS = SETTING_DEFAULTS.outboundIps; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
-  TEST_DOMAIN = SETTING_DEFAULTS.testDomain;
+  TEST_DOMAIN = SETTING_DEFAULTS.testDomain; TRUSTED_PROXY_HOPS = SETTING_DEFAULTS.trustedProxyHops;
   envOverrides.clear();
 }
 

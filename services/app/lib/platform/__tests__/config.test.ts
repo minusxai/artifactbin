@@ -116,7 +116,7 @@ describe('settings', () => {
     expect(config.MAX_FILE_BYTES).toBeGreaterThan(0);
   });
 
-  it('opens private web ingest and public visibility in development, and clamps a bad proxy hop count to one', async () => {
+  it('opens private web ingest and public visibility in development, and reads a bad proxy hop count as one, zero as no proxy', async () => {
     const config = await configFrom({ NODE_ENV: 'development', WEB_INGEST__ALLOW_PRIVATE: undefined, ARTIFACTS__ALLOW_PUBLIC: undefined, HTTP__TRUSTED_PROXY_HOPS: 'many' });
     expectSettings(config, [
       ['IS_DEV', true],
@@ -124,7 +124,9 @@ describe('settings', () => {
       ['ALLOW_PUBLIC_VISIBILITY', true],
       ['TRUSTED_PROXY_HOPS', 1],
     ]);
-    expect((await configFrom({ HTTP__TRUSTED_PROXY_HOPS: '0' })).TRUSTED_PROXY_HOPS).toBe(1);
+    expect((await configFrom({ HTTP__TRUSTED_PROXY_HOPS: '0' })).TRUSTED_PROXY_HOPS).toBe(0);
+    expect((await configFrom({ HTTP__TRUSTED_PROXY_HOPS: '-2' })).TRUSTED_PROXY_HOPS).toBe(1);
+    expect((await configFrom({ HTTP__TRUSTED_PROXY_HOPS: '' })).TRUSTED_PROXY_HOPS).toBe(1);
   });
 
   it('refuses to load a malformed outbound IP list, naming the setting', async () => {

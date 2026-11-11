@@ -41,7 +41,7 @@ import { attachActor, readCookie } from '@artifactbin/utils';
 import { ANONYMOUS, documentHostServes } from '@artifactbin/contracts';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
-import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
+import { addressedHost as requestHost, GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 
@@ -55,9 +55,8 @@ const isStatic = documentHostServes;
 
 const NO_STORE = { 'cache-control': 'no-store' };
 
-/** The host the client addressed (a proxy may rewrite `Host` and keep the original forwarded). */
-const addressedHost = (request: Request): string =>
-  request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || request.headers.get('host') || new URL(request.url).host;
+/** The host the client addressed: a trusted proxy's forwarded host, else `Host` (lib/http `addressedHost`). */
+const addressedHost = (request: Request): string => requestHost(request);
 
 /** Which door of `id` a path names, or null. */
 function doorOf(pathname: string, id: string): string | null {

@@ -19,17 +19,31 @@ import { artifactEditPath } from '@/lib/http/urls';
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { MAX_QUERY_ROWS, PUBLIC_BASE_URL, overrideRequestHeaders, runWithRequest } from '@/lib/platform';
 import { request } from '@/__tests__/harness';
+import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); overrideRequestHeaders(undefined); resetShared(); setAppBuild(null); });
+afterEach(() => { resetConfigOverrides(); vi.useRealTimers(); vi.unstubAllGlobals(); overrideRequestHeaders(undefined); resetShared(); setAppBuild(null); });
 
 /** The harness's request (on http://localhost:3000), with these headers. */
 const req = (headers: Record<string, string> = {}, method = 'GET') => request('/', { headers, method });
 
 describe('addressing a request', () => {
-  it('reads the base URL from the first forwarded proto and host, then the Host header, then the URL', () => {
+  it('reads the base URL from the trusted proxy\'s forwarded proto and host, then the Host header, then the URL', () => {
     expect(baseUrl(req())).toBe('http://localhost:3000');
     expect(baseUrl(req({ host: 'app.example.com' }))).toBe('http://app.example.com');
-    expect(baseUrl(req({ 'x-forwarded-proto': 'https, http', 'x-forwarded-host': 'a.example.com, b', host: 'c' }))).toBe('https://a.example.com');
+    // One trusted hop (the default): the entry it appended, the last; the caller's text to its left is never read.
+    expect(baseUrl(req({ 'x-forwarded-proto': 'http, https', 'x-forwarded-host': 'spoof.example, a.example.com', host: 'c' }))).toBe('https://a.example.com');
+    overrideConfig({ trustedProxyHops: 2 });
+    expect(baseUrl(req({ 'x-forwarded-proto': 'https, http', 'x-forwarded-host': 'a.example.com, b' }))).toBe('https://a.example.com');
+    expect(baseUrl(req({ 'x-forwarded-host': 'only.example' }))).toBe('http://only.example');
+    overrideConfig({ trustedProxyHops: 0 });
+    expect(baseUrl(req({ 'x-forwarded-proto': 'https', 'x-forwarded-host': 'spoof.example', host: 'c' }))).toBe('http://c');
+    expect(baseUrl(req({ 'x-forwarded-host': 'spoof.example' }))).toBe('http://localhost:3000');
+  });
+
+  it('ignores every forwarded header without a trusted hop, in scope and for the same-site check too', async () => {
+    overrideConfig({ trustedProxyHops: 0 });
+    expect(await runWithRequest(req({ 'x-forwarded-host': 'spoof.example', 'x-forwarded-proto': 'https', host: 'h.example' }), () => publicOrigin())).toBe('https://h.example');
+    expect(isCrossSiteRequest(req({ origin: 'https://spoof.example', 'x-forwarded-host': 'spoof.example', host: 'app.example.com' }))).toBe(true);
   });
 
   it('answers the public origin from the request in scope, else the declared base URL', async () => {

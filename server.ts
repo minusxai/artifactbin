@@ -1,6 +1,7 @@
 import {isUserPagesHost,handleFromUserPagesHost} from './services/app/lib/user-pages';
 import {userHostIngress,userHostStaticPath,USER_HOST_CREDENTIAL_HEADERS} from './services/app/server/user-host';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from './services/app/lib/deployment';
+import {trustedForwarded} from './services/app/lib/http';
 /**
  * OSS single-process host: shared authentication wraps the app. SQL, browser
  * and events run locally unless their service URLs select HTTP implementations.
@@ -272,8 +273,9 @@ async function main(): Promise<void> {
    */
   const server = http.createServer(withRequestLog(
     vite ? (req, res) => {
-      const addressed=req.headers['x-forwarded-host']??req.headers.host??new URL(baseURL).host;
-      const host=(Array.isArray(addressed)?addressed[0]!:addressed).split(',')[0]!.trim();
+      // The addressed host as the app reads it (lib/http trustedForwarded): a forwarded host only from a trusted hop.
+      const header=(name:string)=>{const value=req.headers[name];return Array.isArray(value)?value.join(','):value??null;};
+      const host=trustedForwarded({get:header},'x-forwarded-host')??req.headers.host??new URL(baseURL).host;
       if(isUserPagesHost(host,USER_PAGES_HOST)){
         const pathname=new URL(req.url??'/',baseURL).pathname;
         // Vite normally fronts authentication. Owner hosts must never reach its

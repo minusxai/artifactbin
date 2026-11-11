@@ -30,6 +30,8 @@ describe('actors', () => {
     expect(forwardedFor(headers({ 'x-forwarded-for': '10.0.0.1' }), 5)).toBe('10.0.0.1');
     expect(forwardedFor(headers({ 'x-forwarded-for': ' , ', 'x-real-ip': ' 10.0.0.9 ' }), 1)).toBe('10.0.0.9');
     expect(forwardedFor(headers({}), 1)).toBe('');
+    // No trusted hop: every forwarded address is the caller's text, so none identifies them.
+    expect(forwardedFor(headers({ 'x-forwarded-for': 'spoof', 'x-real-ip': 'spoof' }), 0)).toBe('');
   });
 });
 

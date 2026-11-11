@@ -90,7 +90,7 @@ it.each([
  ['an opaque Origin', {origin:'null'},403],
  ['a foreign Origin cannot be repaired by same-origin fetch metadata', {origin:'https://foreign.example.test','sec-fetch-site':'same-origin'},403],
  ['a mismatched forwarded host', {origin:'https://app.example.test','x-forwarded-host':'foreign.example.test'},403],
- ['an appended spoofed host does not replace the proxy first host', {origin:'https://foreign.example.test','x-forwarded-host':'app.example.test, foreign.example.test'},403],
+ ['a caller host left of the trusted proxy\'s entry does not replace it', {origin:'https://foreign.example.test','x-forwarded-host':'foreign.example.test, app.example.test'},403],
  ['malformed forwarded origin fails closed', {origin:'https://app.example.test','x-forwarded-proto':':'},403],
 ] satisfies Array<[string,Record<string,string>,number]>)('presence origin boundary admits or refuses %s',async(_name,headers,status)=>{
  const req=proxiedPresence(headers);const response=await runWithRequest(req,()=>POST(req,params('prespublic')));
