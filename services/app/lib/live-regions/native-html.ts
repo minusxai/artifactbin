@@ -14,7 +14,7 @@ export function readNativeHtml(html:string):PMNode {
     if(node.nodeName==='#text') { const text=(node as DefaultTreeAdapterMap['textNode']).value;return text ? [{type:'text',text,marks:inherited}] : []; }
     if(!('tagName' in node)) return refuse('non-element native content');
     const attrs=Object.fromEntries(node.attrs.map(a=>[a.name,a.value]));
-    const allowed=new Set(['data-af-id',...(node.tagName==='a'?['href','rel','target','title']:node.tagName==='ol'?['start']:node.tagName==='ul'?['data-type']:node.tagName==='li'?['data-type','data-checked']:node.tagName==='code'?['class']:[])]);
+    const allowed=new Set(['data-af-id',...(node.tagName==='a'?['href','rel','target','title']:node.tagName==='ol'?['start']:node.tagName==='ul'?['data-type']:node.tagName==='li'?['data-type','data-checked','role','aria-checked','aria-disabled']:node.tagName==='code'?['class']:[])]);
     for(const key of Object.keys(attrs))if(!allowed.has(key))refuse(`attribute ${key}`);
     if(attrs.target && attrs.target!=='_blank')refuse('link target');
     if(attrs.rel && attrs.rel!=='noopener noreferrer nofollow' && attrs.rel!=='noopener noreferrer')refuse('link rel');
@@ -29,6 +29,10 @@ export function readNativeHtml(html:string):PMNode {
     if(node.tagName==='li' && attrs['data-type']==='taskItem')type='taskItem';
     if(!type)return refuse(`node ${node.tagName}`);
     const own:Record<string,unknown>={afId:attrs['data-af-id']??null};
+    if(['role','aria-checked','aria-disabled'].some(key=>key in attrs)) {
+      if(type!=='listItem'||attrs.role!=='checkbox'||!['true','false'].includes(attrs['aria-checked']??'')||('aria-disabled' in attrs&&!['true','false'].includes(attrs['aria-disabled']!))||'data-type' in attrs||'data-checked' in attrs)refuse('legacy checkbox attributes');
+      own.legacyChecked=attrs['aria-checked'];own.legacyDisabled=attrs['aria-disabled']??null;
+    }
     if(type==='codeBlock'){const child=node.childNodes.find(n=>'tagName' in n&&n.tagName==='code');if(child&&'attrs' in child){own.codeAfId=child.attrs.find(a=>a.name==='data-af-id')?.value??null;const cls=child.attrs.find(a=>a.name==='class')?.value;if(cls)own.language=cls.replace(/^language-/, '');}}
     if(type==='heading')own.level=Number(node.tagName[1]);
     if(type==='orderedList'){own.start=Number(attrs.start??1);if(!Number.isSafeInteger(own.start)||Number(own.start)<1)refuse('list start');}
@@ -68,6 +72,10 @@ export function writeNativeHtml(doc:PMNode):string {
     if(!tag)return refuse('node');
     let attrs=identity(node.attrs.afId);
     if(node.type.name==='orderedList'&&node.attrs.start!==1)attrs+=` start="${node.attrs.start}"`;
+    if(node.type.name==='listItem' && node.attrs.legacyChecked!==null){
+      attrs+=` role="checkbox" aria-checked="${node.attrs.legacyChecked}"`;
+      if(node.attrs.legacyDisabled!==null)attrs+=` aria-disabled="${node.attrs.legacyDisabled}"`;
+    }
     if(node.type.name==='taskList')attrs+=' data-type="taskList"';
     if(node.type.name==='taskItem')attrs+=` data-type="taskItem" data-checked="${node.attrs.checked}"`;
     if(tag==='pre')inner=`<code${identity(node.attrs.codeAfId)}${node.attrs.language?` class="language-${escape(node.attrs.language)}"`: ''}>${inner}</code>`;

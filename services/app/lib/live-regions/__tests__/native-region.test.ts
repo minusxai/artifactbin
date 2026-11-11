@@ -124,3 +124,23 @@ it('retains adjacent ordinary and checked task lists through agent Markdown',()=
  const doc=openRegionDoc(initial.state,{kind});Y.applyUpdate(doc,revised.update);
  expect(regionHtml(kind,Y.encodeStateAsUpdate(doc))).toBe(source);
 });
+
+it('refuses lossy CommonMark export of legacy checkbox presence and disabled semantics',()=>{
+ expect(()=>regionMarkdown(kind,'<ul><li role="checkbox" aria-checked="true" aria-disabled="true"><p>Done</p></li></ul>')).toThrow('legacy checkbox requires HTML');
+});
+it.each([['legacyChecked','mixed'],['legacyDisabled','yes'],['aria-label','unknown']])('refuses forged native checkbox %s values', (key,value)=>{
+ const initial=createRegionState(kind,'<ul><li role="checkbox" aria-checked="false"><p>Task</p></li></ul>');
+ const doc=openRegionDoc(initial.state,{kind,clientId:987});const before=Y.encodeStateVector(doc);
+ const li=(doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(0) as Y.XmlElement;
+ li.setAttribute(key,value);
+ expect(()=>validateRegionUpdate(kind,initial.state,Y.encodeStateAsUpdate(doc,before),987)).toThrow();
+});
+it('refuses a Markdown revision that cannot express existing legacy checkbox semantics',()=>{
+ const initial=createRegionState(kind,'<ul><li role="checkbox" aria-checked="false" aria-disabled="true"><p>Task</p></li></ul>');
+ expect(()=>applyRegionRevision({kind,live:initial.state,savedSnapshot:initial.snapshot,markdown:'- Changed task'})).toThrow('legacy checkbox requires HTML');
+ expect(regionHtml(kind,initial.state)).toContain('aria-disabled="true"');
+});
+it('the shared editor schema itself rejects invalid legacy checkbox values',async()=>{
+ const {nativeSchema}=await import('../native-schema');
+ expect(()=>nativeSchema.nodes.listItem!.create({legacyChecked:'mixed'},nativeSchema.nodes.paragraph!.create()).check()).toThrow('legacy checkbox value');
+});

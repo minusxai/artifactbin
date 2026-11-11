@@ -140,3 +140,58 @@ it.each([false,true])('task list selected range nests structurally, reverse=%s',
  e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
  expect(e.view.state.doc.toJSON()).toEqual(before);
 });
+
+it.each(['true','false'])('legacy checkbox %s survives editor reload, text edit, update validation and saved projection',async checked=>{
+ const {canonicalizeHtmlPage}=await import('../../html-page');
+ const {compactRegion,editableRegions}=await import('../../live-regions');
+ const inner=`<p data-af-id="af-2">Tasks</p><ul data-af-id="af-3"><li data-af-id="af-4" role="checkbox" aria-checked="${checked}" aria-disabled="true"><p data-af-id="af-5">Example task</p></li></ul>`;
+ const page=canonicalizeHtmlPage(`<article data-af-id="af-1" data-af-editable="rich-native-v1">${inner}</article>`);
+ let state=createRegionState('rich-native-v1',inner).state;
+ const root=document.createElement('article');document.body.append(root);
+ const e=mountRegionEditor({win:window,root,regionId:'af-1',kind:'rich-native-v1',clientId:701,state,post(message){if(message.kind==='region-update')state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,message.update,701).doc);}});
+ cleanup.push(()=>{e.destroy();root.remove();});
+ const checkbox=e.view.dom.querySelector('[role="checkbox"]') as HTMLElement;
+ expect(checkbox.getAttribute('aria-checked')).toBe(checked);
+ expect(checkbox.getAttribute('aria-disabled')).toBe('true');
+ expect(checkbox.getAttribute('tabindex')).toBe('0');
+ checkbox.click();checkbox.dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true}));
+ expect(checkbox.getAttribute('aria-checked')).toBe(checked);
+ e.view.dispatch(e.view.state.tr.insertText(' updated',6));e.flush();
+ const saved=compactRegion({savedHtml:page.html,ledger:page.ledger,regionId:'af-1',state});
+ e.remote([saved.update]);e.flush();
+ expect(regionHtml('rich-native-v1',state)).toBe(inner.replace('Tasks','Tasks updated'));
+ const reload=single(regionHtml('rich-native-v1',state));
+ expect(reload.view.dom.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe(checked);
+ expect(editableRegions(saved.html)[0]!.inner).toBe(regionHtml('rich-native-v1',state));
+});
+it('legacy enabled checkbox responds to marker click and focused Space without toggling on text typing',()=>{
+ const e=single('<ul><li data-af-id="af-1" role="checkbox" aria-checked="false"><p data-af-id="af-2">Task</p><ul><li role="checkbox" aria-checked="true" aria-disabled="false"><p>Child</p></li></ul></li></ul>');
+ const checkbox=()=>e.view.dom.querySelector('li') as HTMLElement;
+ checkbox().querySelector('p')!.click();
+ expect(checkbox().getAttribute('aria-checked')).toBe('false');
+ checkbox().click();expect(checkbox().getAttribute('aria-checked')).toBe('true');
+ checkbox().focus();checkbox().dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true}));
+ expect(checkbox().getAttribute('aria-checked')).toBe('false');
+ expect(document.activeElement).toBe(checkbox());
+ expect(checkbox().getAttribute('data-af-id')).toBe('af-1');
+ checkbox().querySelector('li')!.click();
+ expect(checkbox().querySelector('li')!.getAttribute('aria-checked')).toBe('false');
+ expect(checkbox().getAttribute('aria-checked')).toBe('false');
+});
+it('native DOM parser retains the explicit legacy attributes and rich identities',async()=>{
+ const {DOMParser,DOMSerializer}=await import('prosemirror-model');
+ const {nativeExtensions}=await import('../../live-regions/native-browser');
+ const {getSchema}=await import('@tiptap/core');
+ const nativeSchema=getSchema(nativeExtensions());
+ const dom=document.createElement('div');
+ dom.innerHTML='<ul data-af-id="af-1"><li data-af-id="af-2" role="checkbox" aria-checked="true" aria-disabled="false"><p data-af-id="af-3"><strong data-af-id="af-4">Task</strong></p></li></ul>';
+ const parsed=DOMParser.fromSchema(nativeSchema).parse(dom);
+ const output=document.createElement('div');output.append(DOMSerializer.fromSchema(nativeSchema).serializeFragment(parsed.content));
+ expect(output.innerHTML).toBe(dom.innerHTML);
+});
+it('legacy checkbox interaction cannot mutate a read-only native editor',()=>{
+ const e=single('<ul><li role="checkbox" aria-checked="false"><p>Task</p></li></ul>');
+ e.view.setProps({editable:()=>false});
+ e.view.dom.querySelector('li')!.click();
+ expect(e.view.state.doc.firstChild!.firstChild!.attrs.legacyChecked).toBe('false');
+});

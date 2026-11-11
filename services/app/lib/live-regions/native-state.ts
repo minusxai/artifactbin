@@ -33,11 +33,14 @@ export function validateNativeTree(doc:Y.Doc):void {
    if(!(child instanceof Y.XmlElement)||!nativeSchema.nodes[child.nodeName]||['doc','text'].includes(child.nodeName))fail('native node');
    if (!(child instanceof Y.XmlElement)) return fail('native node');
    const spec=nativeSchema.nodes[child.nodeName]!.spec.attrs??{};
+   const checkbox=child.getAttributes();
+   if(checkbox.legacyDisabled!=null&&checkbox.legacyChecked==null)fail('orphan checkbox disabled');
    for(const [key,value] of Object.entries(child.getAttributes())){
     if(!(key in spec))fail('native attribute');
     if((key==='afId'||key==='codeAfId')&&value!==null&&!isNodeId(value))fail('native identity');
     if(key==='level'&&(!Number.isInteger(value)||Number(value)<1||Number(value)>6))fail('heading level');
     if(key==='start'&&(!Number.isSafeInteger(value)||Number(value)<1))fail('list start');
+    if((key==='legacyChecked'||key==='legacyDisabled')&&value!==null&&value!=='true'&&value!=='false')fail('legacy checkbox value');
     if(key==='checked'&&typeof value!=='boolean')fail('task checked');
     if(key==='language'&&value!==null&&(typeof value!=='string'||!/^[-\w+]{1,64}$/.test(value)))fail('code language');
    }
