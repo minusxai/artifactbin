@@ -38,7 +38,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  doc.on('update',(update:Uint8Array,origin:unknown)=>{if(origin!==REMOTE){pending.push(update);timer??=setTimeout(flush,50);}});
  const encode=(pos:number)=>{const sync=ySyncPluginKey.getState(editor.state);return base64(Y.encodeRelativePosition(absolutePositionToRelativePosition(pos,fragment,sync!.binding.mapping)));};
  const decode=(_state:unknown,position:string)=>{try{if(position.length>344)return null;const sync=ySyncPluginKey.getState(editor.state);return relativePositionToAbsolutePosition(doc,fragment,Y.decodeRelativePosition(Uint8Array.from(atob(position),c=>c.charCodeAt(0))),sync!.binding.mapping);}catch{return null;}};
- const caret=()=>{if(!editor?.view.hasFocus() || !ySyncPluginKey.getState(editor.state))return;const s=editor.state.selection;post({kind:'region-caret',regionId,anchor:encode(s.anchor),head:encode(s.head),marks:(editor.state.storedMarks ?? s.$head.marks()).map(m=>m.type.name==='bold'?'strong':m.type.name==='italic'?'em':m.type.name),block:s.$head.parent.type.name==='heading'?`h${s.$head.parent.attrs.level}`:'paragraph'});};
+ const caret=()=>{if(!editor?.isFocused || !editor.view.hasFocus() || !ySyncPluginKey.getState(editor.state))return;const s=editor.state.selection;post({kind:'region-caret',regionId,anchor:encode(s.anchor),head:encode(s.head),marks:(editor.state.storedMarks ?? s.$head.marks()).map(m=>m.type.name==='bold'?'strong':m.type.name==='italic'?'em':m.type.name),block:s.$head.parent.type.name==='heading'?`h${s.$head.parent.attrs.level}`:'paragraph'});};
  const apply=(updates:readonly Uint8Array[])=>{
   if(!updates.length)return;
   const selection=editor.state.selection;
