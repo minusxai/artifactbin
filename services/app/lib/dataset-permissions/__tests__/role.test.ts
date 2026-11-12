@@ -48,12 +48,12 @@ describe('datasetRole (the dataset sharing, read through access facts)', () => {
   it('derives owner from the account, the creating token and a group editor', async () => {
     expect(await datasetRole(row(), user('owner'), { facts: fakeFacts() })).toBe('owner');
     expect(await datasetRole(row({ user_id: null, token_id: 'tok' }), { ...identityForUser(null, 'tok') }, { facts: fakeFacts() })).toBe('owner');
-    expect(await datasetRole(row({ user_id: null, group_id: 'g1' }), user('member'), { facts: fakeFacts({ group: 'editor' }) })).toBe('owner');
+    expect(await datasetRole(row({ user_id: null, group_id: 'g1' }), user('member'), { facts: fakeFacts({ group: 'admin' }) })).toBe('owner');
   });
   it('derives viewer from a named viewer or commenter share and from group viewer membership', async () => {
     expect(await datasetRole(row(), user('reader'), { facts: fakeFacts({ named: 'viewer' }) })).toBe('viewer');
     expect(await datasetRole(row(), user('reader'), { facts: fakeFacts({ named: 'commenter' }) })).toBe('viewer');
-    expect(await datasetRole(row({ group_id: 'g1' }), user('member'), { facts: fakeFacts({ group: 'viewer' }) })).toBe('viewer');
+    expect(await datasetRole(row({ group_id: 'g1' }), user('member'), { facts: fakeFacts({ group: 'member' }) })).toBe('viewer');
     expect(await datasetRole(row(), user('reader'), { facts: fakeFacts({ named: 'editor' }) })).toBe('editor');
   });
   it('treats a guest and a test user outside the sandbox as anonymous, and a test user inside it as an account', async () => {

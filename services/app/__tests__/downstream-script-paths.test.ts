@@ -30,6 +30,7 @@ interface DownstreamPath {
 }
 
 const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
+  { path: 'services/auth/package.json', repo: SERVER, usedAt: ['scripts/build-source.mjs (workspace manifest)', 'scripts/assemble-release.mjs (groupRoleModelVersion compatibility fence)'] },
   { path: 'services/app/scripts/migrate-legacy-pages.ts', repo: SERVER, usedAt: ['scripts/build-source.mjs (bundles the privileged maintenance CLI into the app image)'] },
   { path: 'scripts/build/build-islands.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:7 (run from toolkit/services/app)', 'test/source-runtime.test.mjs:44'] },
   { path: 'scripts/build/html-core.mjs', repo: SERVER, exports: ['prebuiltPreviewAssets'], usedAt: ['scripts/build-native-core.mjs:38 (imports prebuiltPreviewAssets from toolkit/scripts/build/html-core.mjs)', 'test/native-core.test.mjs:33 (reads it)'] },
@@ -95,7 +96,7 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(20);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(21);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(4);
   });
 

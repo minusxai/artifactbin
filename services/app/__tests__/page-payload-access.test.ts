@@ -38,7 +38,7 @@ async function world() {
   const stranger = await createUser({ email: STRANGER_EMAIL });
   const member = await createUser({ email: MEMBER_EMAIL });
   const group = await createGroup(owner.id, { handle: 'payload_access', name: 'Payload access' });
-  await admitGroupMember(owner.id, group.id, member.id, 'viewer');
+  await admitGroupMember(owner.id, group.id, member.id, 'member');
   const make = async (visibility: 'private' | 'unlisted', grouped: boolean) => {
     await setAccountPreferences(owner.id, grouped ? { type: 'group', id: group.id } : { type: 'personal' });
     const response = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility, html: nativeHtml('<h1 id="t">Hello</h1><p data-af-id="p">Body</p>'), ...(grouped ? {} : { destination: { type: 'personal' } }) } }));

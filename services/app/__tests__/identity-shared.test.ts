@@ -205,7 +205,7 @@ it('groups and memberships: direct membership only, the chain to the root, a rev
  const admin=await createUser({email:'mxmx_test_identity_admin@example.com'}),bob=await createUser({email:'mxmx_test_identity_bob@example.com'});
  const finance=await createGroup(admin.id,{handle:'finance',name:'Finance'});
  const retail=await createGroup(admin.id,{handle:'retail',name:'Retail',parent_id:finance.id});
- await admitGroupMember(admin.id,retail.id,bob.id,'viewer');
+ await admitGroupMember(admin.id,retail.id,bob.id,'member');
  // Thin views: the reader keeps live groups itself, as every reader does.
  const member=async(user:string,group:string)=>(await sql('SELECT 1 FROM identity.group_members m JOIN identity.groups g ON g.id=m.group_id AND g.deleted_at IS NULL WHERE m.user_id=$1 AND m.group_id=$2',[user,group])).length===1;
  expect(await member(bob.id,retail.id)).toBe(true);

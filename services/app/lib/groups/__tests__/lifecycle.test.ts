@@ -14,9 +14,9 @@ describe('group lifecycle contracts',()=>{
  it('role PUT cannot add a member; a verified invite admits them and a viewer may leave',async()=>{
   const owner=await account('owner'),member=await account('member');
   const group=await groups.createGroup(owner.id,{handle:'design_crit',name:'Design'});
-  await expect(groups.setGroupMember(owner.id,group.id,member.id,'viewer')).rejects.toMatchObject({code:'not_member',status:404});
-  const first=await groups.inviteGroupMember(owner.id,group.id,member.email,'viewer');
-  const again=await groups.inviteGroupMember(owner.id,group.id,member.email,'viewer');
+  await expect(groups.setGroupMember(owner.id,group.id,member.id,'member')).rejects.toMatchObject({code:'not_member',status:404});
+  const first=await groups.inviteGroupMember(owner.id,group.id,member.email,'member');
+  const again=await groups.inviteGroupMember(owner.id,group.id,member.email,'member');
   expect(first).toMatchObject({changed:true,invited_by:owner.id});
   expect(again).toMatchObject({id:first.id,changed:false});
   await groups.acceptGroupInvitations(member.id,member.email);
@@ -26,8 +26,8 @@ describe('group lifecycle contracts',()=>{
 });
 
 it('updates presentation, protects default/nonempty groups, retains handle tombstones and clears references',async()=>{
- const owner=await account('owner'),viewer=await account('viewer');const group=await groups.createGroup(owner.id,{handle:'design_crit',name:'Design'});
- await groups.inviteGroupMember(owner.id,group.id,viewer.email,'viewer');await groups.acceptGroupInvitations(viewer.id,viewer.email);
+ const owner=await account('owner'),viewer=await account('member');const group=await groups.createGroup(owner.id,{handle:'design_crit',name:'Design'});
+ await groups.inviteGroupMember(owner.id,group.id,viewer.email,'member');await groups.acceptGroupInvitations(viewer.id,viewer.email);
  await expect(groups.updateGroup(viewer.id,group.id,{name:'No'})).rejects.toMatchObject({code:'forbidden'});
  await expect(groups.updateGroup(owner.id,group.id,{handle:'new'} as never)).rejects.toMatchObject({code:'invalid_group'});
  expect(await groups.updateGroup(owner.id,group.id,{description:'  Review  '})).toMatchObject({name:'Design',description:'Review'});
@@ -65,7 +65,7 @@ it('deletion racing a publish or a move into the group: whatever lands, a delete
 it('a deleted group grants nothing through what still names it: its pages, its shares, its links',async()=>{
  const owner=await account('ex_owner'),member=await account('ex_member');const actor={...identityForUser(owner.id,null),userId:owner.id};
  const group=await groups.createGroup(owner.id,{handle:'gone_team',name:'Gone'}),other=await groups.createGroup(owner.id,{handle:'kept_team',name:'Kept'});
- await groups.inviteGroupMember(owner.id,group.id,member.email,'viewer');await groups.acceptGroupInvitations(member.id,member.email);
+ await groups.inviteGroupMember(owner.id,group.id,member.email,'member');await groups.acceptGroupInvitations(member.id,member.email);
  await groups.setGroupLink(owner.id,other.id,group.id,true);
  const shared=await mine(actor,'Shared');
  await setArtifactGroupShare(actor,shared.id,group.id,'editor');

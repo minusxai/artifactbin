@@ -169,7 +169,7 @@ it.each(['private', 'deleted'] as const)('review2: page %s before replay is refu
 it('review2: page group membership revoked before the transaction prevents commit', async () => {
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle: 'review2_group', name: 'Review group'});
-  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
+  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
   await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
   await db.query("INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,'viewer',$3)", [f.page, group.id, f.owner.userId]);
   const engine = services().sql, original = engine.mutate.bind(engine);

@@ -50,7 +50,7 @@ async function teamTracker(dir: string) {
   expect(created.status, await created.clone().text()).toBe(201);
   const page = (await created.json()).id as string;
   const group = await createGroup(owner.userId!, { handle: 'launch_crew', name: 'Launch crew' });
-  for (const member of [first, second]) await admitGroupMember(owner.userId!, group.id, member.userId!, 'viewer');
+  for (const member of [first, second]) await admitGroupMember(owner.userId!, group.id, member.userId!, 'member');
   const groups = (sub: string, values: Record<string, unknown>) =>
     groupsCommand({ sub, positionals: [page], values: { server: SERVER, group: 'launch_crew', ...values } }, options(owner.token));
   return { owner, first, second, stranger, entries, page, groups };

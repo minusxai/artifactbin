@@ -40,7 +40,7 @@ export interface AccessFacts {
 
 const SHARED_WITH_SQL = 'SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 AND (s.user_id=$2 OR(s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$2)))';
 const RESOLVE_SHARES_SQL = (artifacts: string) => `UPDATE artifact_shares SET user_id = $2 WHERE artifact_id ${artifacts} AND user_id IS NULL AND email = (SELECT email FROM users WHERE id = $2)`;
-const EDITOR_GROUPS_SQL = "SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL";
+const EDITOR_GROUPS_SQL = "SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role IN ('editor','admin') AND g.deleted_at IS NULL";
 /** The best role a group share reaching the actor names: a share to any group the actor's memberships climb to. */
 const GROUP_SHARE_ROLES_SQL = `SELECT s.role FROM artifact_group_shares s JOIN users u ON u.id=$2 WHERE s.artifact_id=$1 AND u.kind='account' AND s.group_id IN (${reachedGroupsSql('$2')})`;
 const AUDIENCE_SQL = `SELECT EXISTS (SELECT 1 FROM (${reachedGroupsSql('$2')}) reached WHERE reached.id=$1) AS reached`;

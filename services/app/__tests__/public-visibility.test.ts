@@ -32,7 +32,7 @@ async function withPublic(enabled: boolean) {
     group: async () => {
       const db = await getDb();
       await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('grp_visibility','visibility_team','Team',$1)", [user.id]);
-      await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES('grp_visibility',$1,'editor')", [user.id]);
+      await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES('grp_visibility',$1,'admin')", [user.id]);
     },
     sharing: (id: string, patch?: Record<string, unknown>) => sharingRoute[patch ? 'PUT' : 'GET'](request(`/api/my/artifacts/${id}/sharing`, { method: patch ? 'PUT' : 'GET', json: patch }), { params: Promise.resolve({ id }) }),
     anonymousCreate: (body: Record<string, unknown>) => createArtifact(new Request(`${BASE}/api/artifacts`, {

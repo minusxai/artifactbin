@@ -106,11 +106,11 @@ it('invites and adds only test accounts to artifacts and groups', async () => {
   await expect(changeMembership(test, mine.id, { action: 'invite', usernames: [await handle(other.userId)] } as never)).resolves.toBeDefined();
 
   const group = await createGroup(test.userId, { handle: `tdg${n}${Date.now().toString(36)}`.slice(0, 30), name: 'Eval group' });
-  await expect(inviteGroupMember(test.userId, group.id, 'someone@example.com', 'viewer')).rejects.toMatchObject({ code: 'test_account_restricted', status: 403 });
-  await expect(inviteGroupMember(test.userId, group.id, `person@${DOMAIN}`, 'viewer')).resolves.toMatchObject({ email: `person@${DOMAIN}` });
-  await expect(setGroupMember(test.userId, group.id, real.userId, 'viewer')).rejects.toBeInstanceOf(GroupError);
-  await admitGroupMember(test.userId,group.id,other.userId,'viewer');
-  await expect(setGroupMember(test.userId, group.id, other.userId, 'viewer')).resolves.toBeUndefined();
+  await expect(inviteGroupMember(test.userId, group.id, 'someone@example.com', 'member')).rejects.toMatchObject({ code: 'test_account_restricted', status: 403 });
+  await expect(inviteGroupMember(test.userId, group.id, `person@${DOMAIN}`, 'member')).resolves.toMatchObject({ email: `person@${DOMAIN}` });
+  await expect(setGroupMember(test.userId, group.id, real.userId, 'member')).rejects.toBeInstanceOf(GroupError);
+  await admitGroupMember(test.userId,group.id,other.userId,'member');
+  await expect(setGroupMember(test.userId, group.id, other.userId, 'member')).resolves.toBeUndefined();
 });
 
 it('never notifies a non-test user about a test account\'s activity', async () => {

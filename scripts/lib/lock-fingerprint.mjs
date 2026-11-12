@@ -43,6 +43,9 @@ export function installFingerprint(root = '.') {
     if (file.endsWith('package.json')) {
       const manifest = JSON.parse(text);
       delete manifest.version; // Workspace release versions resolve no dependency.
+      // Release admission reads this metadata; npm and copy-assets do not. Changing the role model
+      // must not discard every shard's exact install and force a larger fallback download.
+      if (file === 'services/auth/package.json') delete manifest.groupRoleModelVersion;
       text = JSON.stringify(manifest);
     }
     // Configuration may contain registry credentials; retain only its digest, never its text.

@@ -1,3 +1,4 @@
+import {canEditGroupContent} from '@artifactbin/contracts';
 /** Artifact ownership is distinct from attribution and request credentials. */
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
@@ -30,14 +31,14 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
  let destination:ArtifactDestination;
  try{destination=selectNewArtifactDestination({explicit,parent:parent?destinationOf(parent):undefined,preference,deployment_default});}
  catch{throw new DatasetError('Destination conflicts with parent owner',400);}
- if(destination.type==='group'&&await getGroupRole(actor.userId,destination.id)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
+ if(destination.type==='group'&&!canEditGroupContent(await getGroupRole(actor.userId,destination.id)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
  return destination;
 }
 export async function assertDestination(tx:Queryable,actor:AccessActor,destination:ArtifactDestination):Promise<void>{
  if(destination.type==='group'){
   // Read at decision time, unlocked: a membership revoked after this commit refuses the next request
   // (a deleted group's pages grant nobody anything).
-  if(await getGroupRole(actor.userId,destination.id,tx)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
+  if(!canEditGroupContent(await getGroupRole(actor.userId,destination.id,tx)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
  }
 }
 

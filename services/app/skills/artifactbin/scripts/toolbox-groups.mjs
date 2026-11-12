@@ -9,10 +9,10 @@ export function groupReference(value){
  return value.startsWith('@')?value.slice(1):value;
 }
 /** What an editor grant (invite, role or share at editor) gives: its refusal and result say it. */
-export const EDITOR_GRANT='An editor can rewrite pages and their rules (a group editor: the '+
- 'group\'s pages and members), which a viewer cannot; letting people change a page\'s entries '+
- 'needs only a viewer share with --datasets.';
-export const editorGrant=(sub,role)=>['invite','role','share'].includes(sub)&&role==='editor';
+export const EDITOR_GRANT='Editors can rewrite pages and their data rules. Group Admins also '+
+ 'manage members and group-owned sharing. For data entry, use a viewer share with --datasets.';
+export const editorGrant=(sub,role)=>['invite','role','share'].includes(sub)&&
+ (role==='editor'||(['invite','role'].includes(sub)&&role==='admin'));
 export function confirmation(sub,values){
  const editor=editorGrant(sub,values.role);
  if((['remove','leave','move','delete','uninvite','unshare','unlink','reparent','allow','disallow']

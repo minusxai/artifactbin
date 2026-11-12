@@ -35,14 +35,14 @@ export async function getDeploymentState(userId:string|null):Promise<DeploymentS
 export async function getDeploymentDefaultDestination():Promise<ArtifactDestination|undefined> {
  const s=await getDeploymentState(null);
  if(s.mode==='public')return undefined;
- if(!s.setup_complete||!s.default_group)throw new DeploymentError('default_group_unavailable',409,'Default group unavailable; deployment owner must confirm an editor group.');
+ if(!s.setup_complete||!s.default_group)throw new DeploymentError('default_group_unavailable',409,'Default group unavailable; deployment owner must confirm a group they administer.');
  return {type:'group',id:s.default_group.id};
 }
 export async function setupDeployment(userId:string,groupId:string):Promise<DeploymentState> {
  if(deploymentConfig().mode!=='company')throw new DeploymentError('company_required',400,'Company deployment required');
  const db=await getDb();await db.transaction(async tx=>{
   const s=await state(tx,true);if(s.owner_user_id!==userId)throw new DeploymentError('deployment_owner_required',403,'Deployment owner required');
-  const g=await group(tx,groupId,userId);if(g?.role!=='editor')throw new DeploymentError('default_group_unavailable',403,'Default group requires editor membership');
+  const g=await group(tx,groupId,userId);if(g?.role!=='admin')throw new DeploymentError('default_group_unavailable',403,'Default group requires Admin membership');
   await tx.query('UPDATE deployment_state SET default_group_id=$2,setup_complete=true WHERE id=$1',[ID,groupId]);
  });return getDeploymentState(userId);
 }

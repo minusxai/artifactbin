@@ -31,7 +31,7 @@ async function person(name: string) {
   const user = await createUser({ email, name });
   return { id: user.id, email, actor: { credential: 'session', userId: user.id, email, emailVerified: true } as Actor };
 }
-const join = async (by: string, group: string, who: { id: string; email: string }, role: 'viewer' | 'editor') => {
+const join = async (by: string, group: string, who: { id: string; email: string }, role: 'member' | 'admin') => {
   await groups.inviteGroupMember(by, group, who.email, role); await groups.acceptGroupInvitations(who.id, who.email);
 };
 async function publish(html: string, token?: { token: string }): Promise<string> {
@@ -50,7 +50,7 @@ async function company() {
   const admin = await person('gtadmin'), editor = await person('gteditor'), viewer = await person('gtviewer'), sub = await person('gtsub'), outsider = await person('gtoutsider');
   const top = await groups.createGroup(admin.id, { handle: 'gtcompany', name: 'Company' });
   const team = await groups.createGroup(admin.id, { handle: 'gtteam', name: 'Team', parent_id: top.id });
-  await join(admin.id, top.id, editor, 'editor'); await join(admin.id, top.id, viewer, 'viewer'); await join(admin.id, team.id, sub, 'viewer');
+  await join(admin.id, top.id, editor, 'admin'); await join(admin.id, top.id, viewer, 'member'); await join(admin.id, team.id, sub, 'member');
   return { admin, editor, viewer, sub, outsider, top, team };
 }
 

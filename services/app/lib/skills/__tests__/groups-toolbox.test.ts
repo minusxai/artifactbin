@@ -22,9 +22,9 @@ it.each([
  ['show',['design_crit'],{},'/api/groups/design_crit','GET',undefined],
  ['create',['design_crit'],{name:'Design Crit'},'/api/groups','POST',{handle:'design_crit',name:'Design Crit'}],
  ['update',['design_crit'],{name:'New'},'/api/groups/grp_stable','PATCH',{name:'New'}],
- ['invite',['design_crit','a@example.test'],{},'/api/groups/grp_stable/invitations','POST',{email:'a@example.test',role:'viewer'}],
+ ['invite',['design_crit','a@example.test'],{},'/api/groups/grp_stable/invitations','POST',{email:'a@example.test',role:'member'}],
  ['uninvite',['design_crit','pending@example.test'],{yes:true},'/api/groups/grp_stable/invitations/gin_pending','DELETE',undefined],
- ['role',['design_crit','teammate'],{role:'viewer'},'/api/groups/grp_stable/members/usr_member','PUT',{role:'viewer'}],
+ ['role',['design_crit','teammate'],{role:'member'},'/api/groups/grp_stable/members/usr_member','PUT',{role:'member'}],
  ['remove',['design_crit','teammate'],{yes:true},'/api/groups/grp_stable/members/usr_member','DELETE',undefined],
  ['leave',['design_crit'],{yes:true},'/api/groups/grp_stable/members/me','DELETE',undefined],
  ['share',['PAGE12'],{group:'design_crit',role:'commenter'},'/api/artifacts/PAGE12/group-shares/grp_stable','PUT',{role:'commenter'}],
@@ -83,7 +83,7 @@ it.each(['uninvite','unshare','unlink'])('%s also refuses before HTTP without de
 });
 it('show ends on how to change its members and invitations: proposed to the user by handle, role and email, made after they agree',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
- const detail={group:{id:'grp_stable',handle:'design_crit'},members:[{user_id:'usr_a',username:'teammate',role:'editor'}],invitations:[{id:'gin_a',email:'pending@example.test',role:'viewer'}]};
+ const detail={group:{id:'grp_stable',handle:'design_crit'},members:[{user_id:'usr_a',username:'teammate',role:'editor'}],invitations:[{id:'gin_a',email:'pending@example.test',role:'member'}]};
  const options=(body:any)=>({env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body)});
  const shown=await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options(detail));
  expect(shown).toMatchObject(detail);
@@ -99,7 +99,7 @@ it('show --pages binds the stable group ID and cursor while retaining the server
 });
 it.each(['not_member','ambiguous_member'])('refuses %s without a member mutation or global account search',async expected=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');const seen:string[]=[];
- await expect(groupsCommand({sub:'role',positionals:['design_crit','same'],values:{role:'viewer'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any)=>{
+ await expect(groupsCommand({sub:'role',positionals:['design_crit','same'],values:{role:'member'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any)=>{
   const path=new URL(String(url)).pathname;seen.push(path);return Response.json(path.endsWith('/members')?{members:expected==='not_member'?[]:[{user_id:'usr_a',name:'same'},{user_id:'usr_b',name:'same'}]}:{group:{id:'grp_stable',handle:'design_crit'}});
  }})).rejects.toMatchObject({code:expected,exit:3});expect(seen).toEqual(['/api/groups/design_crit','/api/groups/grp_stable/members']);
 });
@@ -121,7 +121,7 @@ it.each(['list','show','create','update','invite','uninvite','role','remove','le
  const args=sub==='list'?[]:sub==='invite'?['design_crit','a@example.test']:['role','remove','link','unlink'].includes(sub)?['design_crit','teammate']:sub==='uninvite'?['design_crit','pending@example.test']:['share','unshare','move'].includes(sub)?['PAGE12']:['design_crit'];
  // Refuse the first request: a failed identity resolution must never fall through to writes.
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub,positionals:args,values:{yes:true,role:'viewer',group:'design_crit',name:'Name',handle:'design_crit'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>{calls++;return Response.json({error:'forbidden'},{status:403});}})).rejects.toMatchObject({code:'forbidden',exit:3});expect(calls).toBe(1);
+ await expect(groupsCommand({sub,positionals:args,values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>{calls++;return Response.json({error:'forbidden'},{status:403});}})).rejects.toMatchObject({code:'forbidden',exit:3});expect(calls).toBe(1);
 });
 it('does not retry an uncertain mutation and reports exit 5',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let writes=0;
@@ -143,7 +143,7 @@ it('runs every verb through the installed CLI JSON envelope and refuses output o
  const script=path.join(installed,'scripts/groups.mjs');
  const run=(args:string[])=>promisify(execFile)(process.execPath,[script,...args,'--server',origin,'--json','--no-update'],{env:{...process.env,ARTIFACTBIN_URL:origin,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root}});
  try{
-  const invocations=[['list'],['show','design_crit'],['create','design_crit','--name','Design Crit'],['update','design_crit','--name','New'],['invite','design_crit','a@example.test'],['uninvite','design_crit','pending@example.test','--yes'],['role','design_crit','teammate','--role','viewer'],['remove','design_crit','teammate','--yes'],['leave','design_crit','--yes'],['share','PAGE12','--group','design_crit'],['share','PAGE12','--group','design_crit','--datasets'],['unshare','PAGE12','--group','design_crit','--yes'],['unshare','PAGE12','--group','design_crit','--datasets','--yes'],['move','PAGE12','--group','design_crit','--yes'],['link','design_crit','other'],['unlink','design_crit','other','--yes'],['delete','design_crit','--handle','design_crit','--yes']];
+  const invocations=[['list'],['show','design_crit'],['create','design_crit','--name','Design Crit'],['update','design_crit','--name','New'],['invite','design_crit','a@example.test'],['uninvite','design_crit','pending@example.test','--yes'],['role','design_crit','teammate','--role','member'],['remove','design_crit','teammate','--yes'],['leave','design_crit','--yes'],['share','PAGE12','--group','design_crit'],['share','PAGE12','--group','design_crit','--datasets'],['unshare','PAGE12','--group','design_crit','--yes'],['unshare','PAGE12','--group','design_crit','--datasets','--yes'],['move','PAGE12','--group','design_crit','--yes'],['link','design_crit','other'],['unlink','design_crit','other','--yes'],['delete','design_crit','--handle','design_crit','--yes']];
   for(const args of invocations){const output=await run(args);expect(JSON.parse(output.stdout),args[0]).toMatchObject({ok:true,code:'completed'});}
   const output=path.join(root,'receipt.json');await run(['list','--output',output]);expect(JSON.parse(await readFile(output,'utf8'))).toMatchObject({ok:true});
   await writeFile(output,'keep');const before=requests;
@@ -153,12 +153,12 @@ it('runs every verb through the installed CLI JSON envelope and refuses output o
 },20000);
 it.each(['list','show','create','update','invite','uninvite','role','remove','leave','share','unshare','move','link','unlink','delete'])('%s rejects missing/extra positional arguments before HTTP',async sub=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub,positionals:sub==='list'?['extra']:[],values:{yes:true,role:'viewer',group:'design_crit',name:'Name',handle:'design_crit'}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({code:'invalid_arguments',exit:2});expect(calls).toBe(0);
+ await expect(groupsCommand({sub,positionals:sub==='list'?['extra']:[],values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({code:'invalid_arguments',exit:2});expect(calls).toBe(0);
 });
 it.each(['create','update','invite','uninvite','role','remove','leave','share','unshare','move','link','unlink','delete'])('%s preserves a mutation refusal after successful identity resolution',async sub=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let writes=0;
  const args=sub==='invite'?['design_crit','a@example.test']:['role','remove','link','unlink'].includes(sub)?['design_crit','teammate']:sub==='uninvite'?['design_crit','pending@example.test']:['share','unshare','move'].includes(sub)?['PAGE12']:['design_crit'];
- const pending=groupsCommand({sub,positionals:args,values:{yes:true,role:'viewer',group:'design_crit',name:'Name',handle:'design_crit'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+ const pending=groupsCommand({sub,positionals:args,values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
   if(init.method!=='GET'){writes++;return Response.json({error:'forbidden'},{status:403});}
   const path=new URL(String(url)).pathname;
   return Response.json(path.endsWith('/members')?{members:[{user_id:'usr_member',username:'teammate'}]}:path.endsWith('/invitations')?{invitations:[{id:'gin_pending',email:'pending@example.test'}]}:{group:{id:'grp_stable',handle:'design_crit'}});
@@ -169,13 +169,13 @@ it.each(['create','update','invite','uninvite','role','remove','leave','share','
 it('an editor grant says what it gives, refused without --yes and once made; a viewer grant says nothing',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
  const {EDITOR_GRANT}=await import('../../../skills/artifactbin/scripts/toolbox-groups.mjs');
- expect(EDITOR_GRANT).toBe('An editor can rewrite pages and their rules (a group editor: the group\'s pages and members), which a viewer cannot; letting people change a page\'s entries needs only a viewer share with --datasets.');
+ expect(EDITOR_GRANT).toContain('Group Admins also');
  const cases:[string,string[],Record<string,unknown>][]=[['share',['PAGE12'],{group:'design_crit'}],['invite',['design_crit','a@example.test'],{}],['role',['design_crit','teammate'],{}]];
  for(const [sub,positionals,values] of cases){
   const refused=groupsCommand({sub,positionals,values:{...values,role:'editor'}},{fetcher:async()=>{throw Error('unexpected');}});
   await expect(refused,sub).rejects.toMatchObject({code:'confirmation_required',recovery:expect.stringContaining(EDITOR_GRANT)});
   expect((await harness(sub,positionals,{...values,role:'editor',yes:true})).result.note,sub).toBe(EDITOR_GRANT);
-  expect((await harness(sub,positionals,{...values,role:'viewer'})).result.note,sub).toBeUndefined();
+  expect((await harness(sub,positionals,{...values,role:sub==='share'?'viewer':'member'})).result.note,sub).toBeUndefined();
  }
  await expect(groupsCommand({sub:'remove',positionals:['design_crit','teammate'],values:{}},{fetcher:async()=>{throw Error('unexpected');}})).rejects.toMatchObject({recovery:expect.not.stringContaining(EDITOR_GRANT)});
 });

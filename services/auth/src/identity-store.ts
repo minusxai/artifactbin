@@ -14,6 +14,7 @@ import type {Pool} from 'pg';
 import {accountMethods} from './identity-store/accounts';
 import {groupMethods} from './identity-store/groups';
 import {mailMethods} from './identity-store/mail';
+import {initializeGroupRoleModel} from './identity-store/group-role-migration';
 import {identityTables} from './identity-store/tables';
 
 export interface IdentityStoreOptions {
@@ -111,6 +112,7 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
       }
     }
     await ensureTable(tx, IDENTITY_TABLES, {schema: auth});
+    await initializeGroupRoleModel(tx, auth);
     await ensureIdentityRows(tx, auth);
     if (!await schemaExists(tx, read)) await tx.query(`CREATE SCHEMA ${read}`);
     const sessions = await relationKind(tx, auth, 'session') === 'r';

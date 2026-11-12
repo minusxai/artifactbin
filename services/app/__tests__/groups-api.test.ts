@@ -22,15 +22,15 @@ describe('groups authenticated HTTP boundary',()=>{
   expect((await create(request('/api/groups',{actor,method:'POST',origin:'https://other.test',json:{handle:'cross-site',name:'Cross site'}}))).status).toBe(403);
  });
  it('creates, lists and resolves group handles, protecting private detail and editor writes',async()=>{
-  const owner=await mintAccountToken('owner'),viewer=await mintAccountToken('viewer'),outsider=await mintAccountToken('outsider');
+  const owner=await mintAccountToken('owner'),viewer=await mintAccountToken('member'),outsider=await mintAccountToken('outsider');
   const created=await create(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'api_team',name:'API'}}));expect(created.status).toBe(201);const group=await created.json();
   expect((await (await list(request('/api/groups',{token:owner.token}))).json()).groups).toMatchObject([{id:group.id}]);
   expect((await detail(request('/api/groups/@api_team',{token:owner.token}),context({id:'@api_team'}))).status).toBe(200);
   expect((await detail(request('/api/groups/'+group.id,{token:outsider.token}),context({id:group.id}))).status).toBe(404);
-  expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'viewer'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(404);
-  expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:viewer.email,role:'viewer'}}),context({id:group.id}))).status).toBe(201);
+  expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'member'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(404);
+  expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:viewer.email,role:'member'}}),context({id:group.id}))).status).toBe(201);
   await acceptGroupInvitations(viewer.userId!,viewer.email!);
-  expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'editor'}}),context({id:group.id}))).status).toBe(403);
+  expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'admin'}}),context({id:group.id}))).status).toBe(403);
   const viewed=await (await detail(request('/api/groups/'+group.id,{token:viewer.token}),context({id:group.id}))).json();expect(viewed.invitations).toBeUndefined();expect(viewed.members[0]).not.toHaveProperty('email');
  });
  it('validates preference membership and invalid JSON destinations',async()=>{
@@ -44,13 +44,13 @@ describe('groups authenticated HTTP boundary',()=>{
 it('refuses withdrawal of accepted or missing invitations without removing membership',async()=>{
  const owner=await mintAccountToken('withdraw_owner'),invitee=await mintAccountToken('withdraw_member');
  const group=await (await create(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'withdraw_team',name:'Withdrawal'}}))).json();
- const invitation=await (await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:invitee.email,role:'viewer'}}),context({id:group.id}))).json();
+ const invitation=await (await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:invitee.email,role:'member'}}),context({id:group.id}))).json();
  await acceptGroupInvitations(invitee.userId!,invitee.email!);
  for(const invitationId of [invitation.id,'gin_missing']){
   const response=await withdraw(request('/api/groups/'+group.id+'/invitations/'+invitationId,{method:'DELETE',token:owner.token}),context({id:group.id,invitationId}));
   expect(response.status).toBe(404);expect(await response.json()).toMatchObject({error:'not_found'});
  }
- expect(await getGroupRole(invitee.userId!,group.id)).toBe('viewer');
+ expect(await getGroupRole(invitee.userId!,group.id)).toBe('member');
 });
 
 describe('a group\'s page data names its place in the tree and who receives its shares',()=>{
@@ -61,12 +61,12 @@ describe('a group\'s page data names its place in the tree and who receives its 
   const retail=await post({handle:'tree_retail',name:'Retail',parent_id:finance.id});
   const outlet=await post({handle:'tree_outlet',name:'Outlet',parent_id:retail.id});
   // Rita is in Retail only; Eve in Outlet only; the admin is a direct member of all three.
-  const join=async(group:string,who:{userId:string|null;email:string|null},role:'viewer'|'editor')=>{expect((await invite(request(`/api/groups/${group}/invitations`,{method:'POST',token:admin.token,json:{email:who.email,role}}),context({id:group}))).status).toBe(201);await acceptGroupInvitations(who.userId!,who.email!);};
-  await join(retail.id,rita,'viewer');await join(outlet.id,eve,'editor');
+  const join=async(group:string,who:{userId:string|null;email:string|null},role:'member'|'admin')=>{expect((await invite(request(`/api/groups/${group}/invitations`,{method:'POST',token:admin.token,json:{email:who.email,role}}),context({id:group}))).status).toBe(201);await acceptGroupInvitations(who.userId!,who.email!);};
+  await join(retail.id,rita,'member');await join(outlet.id,eve,'admin');
   const read=async(token:string,id:string)=>{const response=await detail(request(`/api/groups/${id}`,{token}),context({id}));expect(response.status).toBe(200);return response.json();};
   const top=await read(admin.token,finance.id);
   expect(top.parent).toBeNull();
-  expect(top.subgroups).toEqual([{id:retail.id,handle:'tree_retail',name:'Retail',role:'editor'}]);
+  expect(top.subgroups).toEqual([{id:retail.id,handle:'tree_retail',name:'Retail',role:'admin'}]);
   expect(top.members.map((m:{user_id:string})=>m.user_id)).toEqual([admin.userId]);
   // Rita and Eve receive Finance's shares through a subgroup without being Finance members.
   expect(top.subgroup_audience).toEqual([

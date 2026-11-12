@@ -20,8 +20,8 @@ Each request has exactly one role, decided by the dataset's own sharing, never b
 
 | Role | Who | Rules |
 |---|---|---|
-| `owner`, `editor` | The owner, a group editor, a named editor | Always full access |
-| `viewer` | A named viewer or commenter share, a group viewer, a group share of the dataset | Denied unless a rule allows |
+| `owner`, `editor` | The owner, a group Admin or Editor, a named editor | Always full access |
+| `viewer` | A named viewer or commenter share, a group Member, a group share of the dataset | Denied unless a rule allows |
 | `signed_in` | A signed-in account with no share of its own (a link holder, or a page's reader) | Denied unless a rule allows |
 | `anonymous` | Signed out (only for unlisted or public datasets) | Denied unless a rule allows |
 

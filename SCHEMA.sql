@@ -1773,12 +1773,15 @@ CREATE INDEX IF NOT EXISTS idx_groups_parent ON auth.groups (parent_id) WHERE pa
 CREATE TABLE IF NOT EXISTS auth.group_hierarchy (
   id TEXT NOT NULL,
   revision BIGINT NOT NULL DEFAULT 0,
+  role_model_version INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (id)
 );
 
 ALTER TABLE auth.group_hierarchy ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
 ALTER TABLE auth.group_hierarchy ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;
+
+ALTER TABLE auth.group_hierarchy ADD COLUMN IF NOT EXISTS role_model_version INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS auth.group_members (
   group_id TEXT NOT NULL,

@@ -1,3 +1,4 @@
+import {canEditGroupContent} from '@artifactbin/contracts';
 /* @jsxImportSource solid-js */
 import {createSignal,Show,type JSX} from 'solid-js';
 import type {ArtifactDestination,GroupSummary} from '@artifactbin/contracts';
@@ -12,7 +13,7 @@ import {StatusMessage} from '../ui/StatusMessage';
 export function TransferOwnershipDialog(props:{id:string;title:string;currentGroupId?:string|null;onClose:()=>void;onTransferred:(destination:ArtifactDestination)=>void}):JSX.Element {
  const groups=usePageData<{groups:GroupSummary[]}>('/api/groups');
  const [selected,setSelected]=createSignal('');const [busy,setBusy]=createSignal(false);const [error,setError]=createSignal('');
- const choices=()=>groups.data()?.groups.filter(group=>group.role==='editor'&&group.id!==props.currentGroupId)??[];
+ const choices=()=>groups.data()?.groups.filter(group=>canEditGroupContent(group.role)&&group.id!==props.currentGroupId)??[];
  const options=()=>[...(props.currentGroupId?[{value:'personal',label:'Personal'}]:[]),...choices().map(group=>({value:group.id,label:group.name}))];
  const destination=():ArtifactDestination=>selected()==='personal'?{type:'personal'}:{type:'group',id:selected()};
  const transfer=async()=>{if(!selected()||busy())return;setBusy(true);setError('');try{const next=destination();await apiRequest(`/api/artifacts/${encodeURIComponent(props.id)}/transfer`,'POST',{destination:next});props.onTransferred(next);}catch(err){setError(err instanceof Error?err.message:'Could not transfer ownership.');}finally{setBusy(false);}};

@@ -28,12 +28,12 @@ describe('the identity module over HTTP',()=>{
   expect(calls).toBe(2);
   const finance=await createGroup(owner.id,{handle:'http_finance',name:'Finance'});
   const retail=await createGroup(owner.id,{handle:'http_retail',name:'Retail',parent_id:finance.id});
-  expect(retail).toMatchObject({handle:'http_retail',role:'editor',parent_id:finance.id});
+  expect(retail).toMatchObject({handle:'http_retail',role:'admin',parent_id:finance.id});
   await expect(createGroup(owner.id,{handle:'http_finance',name:'Again'})).rejects.toMatchObject({code:'handle_taken',status:409});
   await expect(createGroup(owner.id,{handle:'http_finance',name:'Again'})).rejects.toBeInstanceOf(IdentityError);
-  await inviteGroupMember(owner.id,retail.id,member.email,'viewer');
+  await inviteGroupMember(owner.id,retail.id,member.email,'member');
   expect(await acceptGroupInvitations(member.id,member.email)).toEqual([retail.id]);
-  expect(await getGroupRole(member.id,retail.id)).toBe('viewer');
+  expect(await getGroupRole(member.id,retail.id)).toBe('member');
   await expect(deleteGroup(owner.id,finance.id,finance.handle)).rejects.toMatchObject({code:'group_has_children',status:409});
   expect(await setGroupParent(owner.id,retail.id,null,finance.id)).toMatchObject({changed:true,parent_id:null});
   await removeGroupMember(owner.id,retail.id,member.id);

@@ -45,10 +45,11 @@ export async function roleWithoutLink(
   if (ownsArtifact(row, actor)) return 'owner';
   let groupRole:ArtifactRole='none';
   if (row.group_id) {
-    // Ownership is a DIRECT editor of the owning group; its audience (a member of it or of a subgroup) reads.
+    // Ownership is a DIRECT admin of the owning group; its audience (a member of it or of a subgroup) reads.
     const role = await facts.groupRole(row.group_id);
-    if(role==='editor')return 'owner';
-    if(role==='viewer'||await facts.groupAudience(row.group_id))groupRole='viewer';
+    if(role==='admin')return 'owner';
+    if(role==='editor')groupRole='editor';
+    else if(role==='member'||await facts.groupAudience(row.group_id))groupRole='viewer';
   }
   // A NAMED share can never reach a guest or a test user: neither has an email
   // for an invitation to be addressed to, and neither is the kind of identity

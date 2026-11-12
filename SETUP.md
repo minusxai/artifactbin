@@ -78,6 +78,26 @@ matching across them; keep that network private).
 message: stop every writer, back up, then run `npm run migrate:account -w services/auth -- --writes-paused-backup-verified`
 with `AUTH__MIGRATION_DATABASE_URL` set. It never runs at startup.
 
+**Upgrading group roles.** The old group Editor could administer members and owned files; it becomes
+Admin. The old Viewer becomes Member. The new Editor publishes and edits group content, without member
+administration or ownership. Artifact share roles (viewer/commenter/editor) are unchanged.
+
+For an existing installation, stop **all** app and identity instances and pause automatic release reconciliation.
+Back up the database and verify a restore on a disposable database. From the new release, run
+`npm run migrate:groups -w services/auth -- --writes-paused-backup-verified`, supplying
+`AUTH__MIGRATION_DATABASE_URL` through the operator's secret environment and the configured `AUTH__SCHEMA`
+(default `auth`). The transaction converts memberships and pending invitations together, then records version 2.
+It is safe to repeat; it never promotes a new Editor. Startup refuses unmigrated grants, including on a split app
+host. Fresh empty installations initialize version 2 directly.
+
+Start the new identity and app release together, update API/CLI clients to member/editor/admin, and verify all
+three roles before resuming reconciliation. Do not run old writers or roll back only the binaries: the old
+`editor` value had different authority. To roll back, stop all processes and restore the verified pre-upgrade
+backup with the matching old release; preserve any post-upgrade writes separately for reconciliation.
+No group nesting, personal ownership, artifact share, or external data policy is changed by this migration.
+Release tooling can read `groupRoleModelVersion` from `services/auth/package.json` to reject a rolling
+upgrade between incompatible role models; absence in an older package means version 1.
+
 This repository has no request proxy or rate-limit policy: put your own TLS proxy in front.
 
 ## Changing the code

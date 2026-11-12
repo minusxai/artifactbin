@@ -5,9 +5,9 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs create HANDLE --name NAME [--description TEXT] [--parent GROUP]
        node scripts/groups.mjs reparent GROUP --parent GROUP|--root --yes
        node scripts/groups.mjs update GROUP [--name NAME] [--description TEXT]
-       node scripts/groups.mjs invite GROUP EMAIL... [--role viewer|editor] [--yes]
+       node scripts/groups.mjs invite GROUP EMAIL... [--role member|editor|admin] [--yes]
        node scripts/groups.mjs uninvite GROUP EMAIL --yes
-       node scripts/groups.mjs role GROUP USER --role viewer|editor [--yes]
+       node scripts/groups.mjs role GROUP USER --role member|editor|admin [--yes]
        node scripts/groups.mjs remove GROUP USER --yes
        node scripts/groups.mjs leave GROUP --yes
        node scripts/groups.mjs share PAGE --group GROUP [--role viewer|commenter|editor]
@@ -22,13 +22,13 @@ Usage: node scripts/groups.mjs list
 Flags: --server ORIGIN, --json, --output FILE (exclusive; never overwrites), --help.
 Examples:
   node scripts/groups.mjs create design_crit --name "Design Crit"
-  node scripts/groups.mjs invite design_crit one@example.test two@example.test --role viewer
+  node scripts/groups.mjs invite design_crit one@example.test two@example.test --role member
   node scripts/groups.mjs share PAGE12 --group design_crit --role commenter
   node scripts/groups.mjs share PAGE12 --group design_crit --datasets
   node scripts/groups.mjs show design_crit --pages
 Gotchas: GROUP is an ID, handle or @handle, resolved once; writes use stable IDs. USER must
   resolve uniquely inside that group's current members (ID, handle or exact name); invite by email
-  to add someone. Invitations are listed only for editors; uninvite resolves their email there.
+  to add someone. Invitations are listed only for admins; uninvite resolves their email there.
   Multiple invitations return individual successes/failures; a partial failure is not atomic.
   Share preserves personal ownership and host. Move deliberately transfers ownership, including
   folder descendants; publish --group instead creates new group-owned work. Links only navigate.
@@ -73,8 +73,8 @@ async function command({sub,values,positionals},options){
  let role;
  if(['invite','role','share'].includes(sub)){
   if(sub==='role')requireFlags(values,['role']);
-  role=enumValue(values.role??'viewer',sub==='share'?['viewer','commenter','editor']:['viewer',
-  'editor'],'role');
+  role=enumValue(values.role??(sub==='share'?'viewer':'member'),sub==='share'?
+  ['viewer','commenter','editor']:['member','editor','admin'],'role');
  }
  if(values.datasets&&role==='editor')throw new ToolError('datasets_editor',
   '--datasets shares the linked datasets at viewer: a dataset editor bypasses its rules.',2,

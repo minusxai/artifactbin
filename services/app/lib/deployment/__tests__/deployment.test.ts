@@ -16,21 +16,21 @@ describe('company admission',()=>{
   expect(await admitDeploymentIdentity(identity('visitor','other@example.com'))).toBe(false);
   expect((await getDeploymentState('owner')).is_owner).toBe(true);
  });
- it('requires explicit live editor group and preserves admitted members after default deletion',async()=>{
+ it('requires explicit live Admin group and preserves admitted members after default deletion',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false'});
   await admitDeploymentIdentity(identity('owner','owner@example.com'));
   await expect(getDeploymentDefaultDestination()).rejects.toThrow('Default group unavailable');
   const db=await getDb();
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('group','team','Team','owner')");
-  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('group','owner','editor')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('group','owner','admin')");
   await expect(setupDeployment('visitor','group')).rejects.toThrow();
-  await db.query("UPDATE group_members SET role='viewer' WHERE group_id='group' AND user_id='owner'");
-  await expect(setupDeployment('owner','group')).rejects.toThrow('editor membership');
-  await db.query("UPDATE group_members SET role='editor' WHERE group_id='group' AND user_id='owner'");
+  await db.query("UPDATE group_members SET role='member' WHERE group_id='group' AND user_id='owner'");
+  await expect(setupDeployment('owner','group')).rejects.toThrow('Admin membership');
+  await db.query("UPDATE group_members SET role='admin' WHERE group_id='group' AND user_id='owner'");
   await setupDeployment('owner','group');
   expect(await getDeploymentDefaultDestination()).toEqual({type:'group',id:'group'});
   expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);
-  expect((await db.query("SELECT role FROM group_members WHERE user_id='member'")).rows[0]).toEqual({role:'viewer'});
+  expect((await db.query("SELECT role FROM group_members WHERE user_id='member'")).rows[0]).toEqual({role:'member'});
   await db.query("UPDATE groups SET deleted_at=now() WHERE id='group'");
   expect(await admitDeploymentIdentity({userId:'member'})).toBe(true);
   expect(await canUseDeploymentIdentity('member')).toBe(true);
@@ -43,11 +43,11 @@ describe('company admission',()=>{
   await admitDeploymentIdentity(identity('owner','owner@example.com'));
   const db=await getDb();
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('default','default','Default','owner'),('other','other','Other','owner')");
-  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('default','owner','editor')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('default','owner','admin')");
   await setupDeployment('owner','default');
-  await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('invite','default','editor@example.com','editor','owner'),('outside','default','outside@other.com','editor','owner'),('elsewhere','other','elsewhere@example.com','editor','owner')");
+  await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('invite','default','editor@example.com','admin','owner'),('outside','default','outside@other.com','admin','owner'),('elsewhere','other','elsewhere@example.com','admin','owner')");
   expect(await admitDeploymentIdentity(identity('editor','editor@example.com'))).toBe(true);
-  expect((await db.query("SELECT role FROM group_members WHERE user_id='editor'")).rows).toEqual([{role:'editor'}]);
+  expect((await db.query("SELECT role FROM group_members WHERE user_id='editor'")).rows).toEqual([{role:'admin'}]);
   expect((await db.query("SELECT id FROM group_invitations WHERE id='invite'")).rows).toEqual([]);
   expect(await admitDeploymentIdentity(identity('outsider','outside@other.com'))).toBe(false);
   expect(await admitDeploymentIdentity(identity('elsewhere','elsewhere@example.com'))).toBe(false);
@@ -57,7 +57,7 @@ describe('company admission',()=>{
   await admitDeploymentIdentity(identity('owner','owner@example.com'));
   const db=await getDb();
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('locked','locked','Locked','owner')");
-  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('locked','owner','editor')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('locked','owner','admin')");
   const transaction=db.transaction.bind(db),reads:string[]=[];
   db.transaction=async<T>(fn:(tx:Queryable)=>Promise<T>):Promise<T>=>transaction(tx=>fn({query:async<R>(sql:string,params?:unknown[])=>{
    if(sql.includes('FROM groups g'))reads.push(sql);
@@ -66,7 +66,7 @@ describe('company admission',()=>{
   try{await setupDeployment('owner','locked');expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);}
   finally{db.transaction=transaction;}
   expect(reads).toHaveLength(2);for(const sql of reads)expect(sql).not.toMatch(/FOR (UPDATE|SHARE)/);
-  expect(await getDb().then(db=>db.query("SELECT role FROM group_members WHERE group_id='locked' AND user_id='member'"))).toMatchObject({rows:[{role:'viewer'}]});
+  expect(await getDb().then(db=>db.query("SELECT role FROM group_members WHERE group_id='locked' AND user_id='member'"))).toMatchObject({rows:[{role:'member'}]});
  });
  it('serializes competing owner binds and never gives a changed email the owner ID',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
@@ -81,7 +81,7 @@ describe('company admission',()=>{
   expect(await admitDeploymentIdentity(identity('owner','owner@example.com'))).toBe(true);
   const db=await getDb();
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('team','team','Team','owner')");
-  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('team','owner','editor')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('team','owner','admin')");
   await setupDeployment('owner','team');
   expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);
   const transaction=db.transaction.bind(db),query=db.query.bind(db),sql:string[]=[];let transactions=0;
@@ -99,7 +99,7 @@ describe('company admission',()=>{
   expect(sql.filter(text=>/^\s*(INSERT|UPDATE|DELETE)/i.test(text))).toEqual([]);
   // The write path is unchanged: a new, eligible, verified person is still admitted under the lock.
   expect(await admitDeploymentIdentity(identity('newcomer','newcomer@example.com'))).toBe(true);
-  expect((await db.query("SELECT role FROM group_members WHERE group_id='team' AND user_id='newcomer'")).rows).toEqual([{role:'viewer'}]);
+  expect((await db.query("SELECT role FROM group_members WHERE group_id='team' AND user_id='newcomer'")).rows).toEqual([{role:'member'}]);
  });
  it('public mode remains open',async()=>{overrideConfig({}, {APP__DEPLOYMENT_MODE:'public'});expect(await admitDeploymentIdentity(identity('any','any@example.com'))).toBe(true);});
 });

@@ -173,7 +173,7 @@ it('supports group membership granted after private bundle publication without b
  const user=await createUser({email:'mxmx_test_bundle_group_owner@example.com'}),member=await createUser({email:'mxmx_test_bundle_group_member@example.com'});const actor=await mintAccountToken('bundle-group-share',user.id);const group=await createGroup(user.id,{handle:'bundle_group_access',name:'Bundle access'});
  const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_group_share_create'},json:{visibility:'private',destination:{type:'group',id:group.id},html:'<img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status,JSON.stringify(saved)).toBe(201);const child=saved.dependencyReceipts[0],params={params:Promise.resolve({id:saved.id})};
  const read=()=>assetGet(request(`/a/${saved.id}/assets?dependency=${child.id}&revision=1`,{actor:{credential:'session',userId:member.id,email:member.email!,emailVerified:true}}),params);
- expect((await read()).status).toBe(404);await admitGroupMember(user.id,group.id,member.id,'viewer');expect((await read()).status).toBe(200);await removeGroupMember(user.id,group.id,member.id);expect((await read()).status).toBe(404);
+ expect((await read()).status).toBe(404);await admitGroupMember(user.id,group.id,member.id,'member');expect((await read()).status).toBe(200);await removeGroupMember(user.id,group.id,member.id);expect((await read()).status).toBe(404);
 });
 it('retains the complete dataset update wire reply including affected dependents on its first response and retry',async()=>{
  const actor=await mintAccountToken('dataset-receipt-equivalence');

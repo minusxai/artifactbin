@@ -136,9 +136,9 @@ if(values.visibility)body.visibility=enumValue(values.visibility,['private','unl
  if(values.group!==undefined){
   const detail=await client.request('/api/groups/'+encodeURIComponent(
     values.group.replace(/^@/,'')));
-if(detail.group?.role!=='editor')throw new ToolError('group_not_editor',
-    'Publishing into a group needs editor access in it.',3,
-    'Ask a group editor for editor access, or publish without --group.');
+if(!['editor','admin'].includes(detail.group?.role))throw new ToolError('group_not_editor',
+    'Publishing into a group needs Editor or Admin access in it.',3,
+    'Ask a group Admin for Editor access, or publish without --group.');
   body.destination={type:'group',id:detail.group.id};}
  if(values['dry-run']){
 const report=fixed&&(await import('./preview-html.mjs')).formatAutofixReport(fixed,{file:

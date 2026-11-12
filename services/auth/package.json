@@ -1,6 +1,7 @@
 {
   "name": "@artifactbin/auth",
   "version": "0.1.0",
+  "groupRoleModelVersion": 2,
   "description": "Shared human login, device OAuth and credential resolution.",
   "license": "Apache-2.0",
   "type": "module",
@@ -25,6 +26,7 @@
     "vitest": "4.1.12"
   },
   "scripts": {
+    "migrate:groups": "node --import tsx scripts/migrate-groups.ts",
     "migrate:account": "node --import tsx scripts/migrate-account.ts"
   }
 }

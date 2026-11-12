@@ -28,7 +28,7 @@ function serve(answers: Record<string, unknown> = {}) {
     const key = `${method} ${url}`;
     if (key in answers) return Response.json(answers[key]);
     if (url === '/api/connections') return Response.json({ connectors: CONNECTORS });
-    if (url === '/api/groups') return Response.json({ groups: [{ id: 'g1', name: 'Finance', role: 'editor' }, { id: 'g2', name: 'Readers', role: 'viewer' }] });
+    if (url === '/api/groups') return Response.json({ groups: [{ id: 'g1', name: 'Finance', role: 'editor' }, { id: 'g2', name: 'Readers', role: 'member' }] });
     return Response.json({ error: 'unexpected' }, { status: 500 });
   }));
   return calls;
