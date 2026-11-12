@@ -1,11 +1,9 @@
 /**
  * THE NATIVE HTML ACCEPTANCE SCENARIO, owned here beside the contract it exercises.
  *
- * The private server repository's post-merge `native-html` job (scripts/accept-native-html.mjs) imports this file
- * from its `toolkit` submodule and runs it against the built production composition; this repository's pr fast
- * contract tier runs the same scenario through the real route handlers (services/app/lib/page-doors/__tests__/native-acceptance.test.ts).
- * A product change to the publish body or the page SQL door therefore fails a product pull
- * request instead of the server's production deploy.
+ * This repository's pr fast contract tier runs the scenario through real route handlers
+ * (services/app/lib/page-doors/__tests__/native-acceptance.test.ts). It catches changes to the publish body
+ * and page SQL door before merge. The server repository owns a separate HTTP composition scenario.
  *
  * Plain dependency-free ESM: Node imports it by path, with no build, alias or TypeScript step.
  */

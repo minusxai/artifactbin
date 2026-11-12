@@ -105,12 +105,12 @@ describe('reviewed CSS parser dispatch', () => {
   });
 });
 
-describe('reviewed query request port', () => {
+describe('removed query request port', () => {
   const file='services/app/lib/html-runtime/apollo/watch-query.ts';
-  it('admits only the no-argument request callback injected into the pure watch model', () => {
+  it('rejects fetch callbacks even at the retired query watcher path', () => {
     for(const path of [file,file.replaceAll('/', '\\')]) {
-      expect(auditFastSource('options.remote!.fetch()',path)).toEqual([]);
-      expect(auditFastSource('options.remote.fetch()',path)).toEqual([]);
+      expect(auditFastSource('options.remote!.fetch()',path)).not.toEqual([]);
+      expect(auditFastSource('options.remote.fetch()',path)).not.toEqual([]);
     }
   });
   it('continues rejecting ambient transport and other capability receivers', () => {
