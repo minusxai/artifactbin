@@ -14,10 +14,10 @@ import {
   type SqlService, type TokenReader, type TokenRecord, type Upstream,
 } from '@artifactbin/contracts';
 // The URL map the deployment's proxy (and any co-hosted router) reads instead of keeping its own path lists:
-// the classifier, the host allowlists, the legacy table and the e-mail link builder its mail extension writes.
+// the classifier, the host allowlists, the e-mail link builder its mail extension writes.
 import {
-  URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, canonicalPublicPath,
-  LEGACY_PUBLIC_PATHS, emailLinkPath, personLinkPath, isScreenPath, type PathKind,
+  URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath,
+  emailLinkPath, personLinkPath, isScreenPath, type PathKind,
 } from '@artifactbin/contracts';
 
 it('exports the values the deployment imports', () => {
@@ -26,10 +26,10 @@ it('exports the values the deployment imports', () => {
 });
 
 it('exports the URL map the deployment classifies paths with', () => {
-  for (const [name, value] of Object.entries({ URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, canonicalPublicPath, LEGACY_PUBLIC_PATHS, emailLinkPath, personLinkPath, isScreenPath })) expect(value, name).toBeDefined();
+  for (const [name, value] of Object.entries({ URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, emailLinkPath, personLinkPath, isScreenPath })) expect(value, name).toBeDefined();
   expect(URL_SPACE_PATH).toBe('/af/url-space.json');
   expect(emailLinkPath('d1')).toBe('/api/email/d1');
-  expect(classifyPath('/email/d1')).toBe('legacy');
+  expect(classifyPath('/email/d1')).toBe('screen');
   expectTypeOf<PathKind>().not.toBeNever();
 });
 

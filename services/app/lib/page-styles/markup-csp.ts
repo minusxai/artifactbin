@@ -25,7 +25,7 @@
  * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
  * __tests__/raw-document.test.ts.
  */
-import { BASEMAP_PATH, withLegacy } from '@artifactbin/contracts';
+import { BASEMAP_PATH } from '@artifactbin/contracts';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document';
 /** Where each kind of subresource may come from — content-independent. */
@@ -102,28 +102,13 @@ export const mutatePath = (id: string): string => `/a/${id}/mutate`;
  */
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
-/**
- * …and the one static directory: the boundary geometry the geo charts fetch
- * (`loadGeoFeatures` → `/af/geojson/<file>.json`, an allowlisted registry of
- * public files under `public/`; saved pages may still name the old `/geojson/`,
- * which `withLegacy` adds from the legacy table). A trailing slash makes a CSP source a
- * directory-prefix match, so this admits exactly those files and nothing
- * else on the origin. Without it every choropleth/point map rendered inside
- * a served document failed its boundary fetch — connect-src governs fetch()
- * even same-origin.
- */
-const GEOJSON_DIRS = withLegacy('/af/geojson/');
+/** Public boundary files fetched by maps; the trailing slash confines the CSP source to this directory. */
+const GEOJSON_DIRS = ['/af/geojson/'];
 
-/**
- * …and the bundled font files (public/fonts, the manifest's faces): the kit
- * reads the files the page already loaded — from the HTTP cache — to put them
- * into its Mermaid drawings, which an `<img>` shows and which cannot reach the
- * page's fonts otherwise (lib/mermaid-images/mermaid-fonts). Public, immutable
- * files, like /geojson/ and /story/.
- */
-const FONTS_DIRS = withLegacy('/af/fonts/');
-/** The hosted libraries' directory (and its old address, which saved pages import by URL). */
-const LIBRARY_DIRS = withLegacy('/af/lib/');
+/** Public platform fonts used by pages and their diagrams. */
+const FONTS_DIRS = ['/af/fonts/'];
+/** The hosted libraries' directory. */
+const LIBRARY_DIRS = ['/af/lib/'];
 
 export function markupCsp(origin: string, id: string, assetOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour

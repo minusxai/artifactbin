@@ -15,9 +15,9 @@ it('names components under one prefix at one unversioned path',()=>{
  expect(componentImports('https://app.test')[`${LIBRARY_SPECIFIER_PREFIX}button`]).toBe(componentUrl('button','https://app.test'));
 });
 
-it('hosts the listed components and the legacy wrappers, and nothing else',()=>{
- for(const name of [...hosted.components,...hosted.legacy])expect(isHostedComponent(name),name).toBe(true);
- for(const name of ['','Button','button.js','../button','vega','constructor','__proto__','chunk-abc'])expect(isHostedComponent(name),name).toBe(false);
+it('hosts the listed components, and nothing else',()=>{
+ for(const name of hosted.components)expect(isHostedComponent(name),name).toBe(true);
+ for(const name of ['mermaid','deck-gl','','Button','button.js','../button','vega','constructor','__proto__','chunk-abc'])expect(isHostedComponent(name),name).toBe(false);
 });
 
 it('recognizes only content-addressed chunk names',()=>{

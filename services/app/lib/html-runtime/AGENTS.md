@@ -12,18 +12,17 @@ build that serve them. Access decisions belong to the doors behind the trusted p
 - Anything assembly writes inside a `<script>` is escaped as `assembleHtmlPage` does (`<` in JSON, `</script`
   in code). Viewer state stays in this viewer's browser storage; only an explicit local Save reads it
   (`readViewerDocument`).
-- Page editing uses only the native engine. `@afbin/regions` remains a small native re-export for old import maps; legacy page sessions are refused before decoding. Keep the cell Y.Text engine and historical storage compatibility. Deploy removal only after zero active and trashed legacy page heads are verified.
+- Page editing uses only the native engine. The editor loads through `@afbin/native-regions`; legacy page sessions are refused before decoding. Keep the cell Y.Text engine and historical storage compatibility.
 - Runtime modules are public code: no page, viewer, cookie or credential is an input to their bytes, so they
-  never carry viewer state (`native-html.server.ts`). A retained content-addressed alias serves its exact bytes.
+  never carry viewer state (`native-html.server.ts`). Current modules use flat revalidated addresses; pinned host assets retain exact bytes.
 - A page's extra script, frame or connect origins come only from publish-validated `<head>` declarations
   (`<meta name="csp-connect" …>`, `lib/document/csp-extensions.ts`) and reader consent, never another way.
 - A read-only (archived) shell relays only reads: SQL reads, no uploads. Raw pages and portable
   copies have no trusted frame, so they never upload.
 - Teach new pages `sql` and `@afbin/state`. `apollo/graphql-compat.ts` is the deprecated
   GraphQL client behind module-graph rule 5 (`GRAPHQL_COMPAT`): fix it, never extend it.
-- Published pages are live code: never remove or rename a name `@afbin/apollo` or `@afbin/state` exports. A name
-  kept only for old pages lives in `legacy-page-names.ts` and is never taught.
-- The gzipped budgets in `__tests__/build.test.ts` (core, reader, chrome, regions, collab, state) are never
+- Author-facing modules expose only current supported names; retired aliases are removed rather than re-exported.
+- The gzipped budgets in `__tests__/build.test.ts` (core, reader, chrome, native regions, collab, state) are never
   raised. New code goes in a lazy module; the reader carries no SQL code.
 - A new `@afbin/*` module: its build in `build.server.ts`, its path in `RUNTIME_MODULE_PATHS` (`contract.ts`),
   its import-map entry in the core, a size test; runtime modules reach it by dynamic `import()`, as

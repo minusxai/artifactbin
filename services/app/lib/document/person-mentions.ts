@@ -2,7 +2,7 @@ import { personLinkPath } from '@artifactbin/contracts/url-space';
 /**
  * Resolved mentions carry stable IDs. Plain @text and rendered User chips have no side effects. A mention is written
  * `[@name](/api/people/<id>)` (contracts `personLinkPath`); stored documents and comments keep the old form
- * `[@name](/people/<id>)`, which stays recognised everywhere (never rewritten) and still answers (legacy-public-paths).
+ * `[@name](/people/<id>)`, which stays recognised as stored text without rewriting its destination.
  */
 const ID='[A-Za-z0-9_-]{1,128}';
 const HREF=`(?:/api)?/people/`;

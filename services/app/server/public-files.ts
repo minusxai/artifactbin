@@ -17,20 +17,16 @@
  * `/assets/` is NOT here: it is stored user content with its own sandboxed policy (app/assets, APP__ASSETS_ORIGIN);
  * its immutable cache rule is set below only because it shared the old static block, and its routes own the rest.
  *
- * OLD ADDRESSES (`/libraries/`, `/geojson/`, `/fonts/`, and the short links `/people/`, `/email/`,
- * `/workspace/`) answer through `publicFilePath`: the router sees the new address, so the answer is the same
- * handler's, byte for byte. The table and its reasons are contracts' legacy-public-paths.ts, the one place
- * old addresses are kept.
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Hono } from 'hono';
 import { getPath } from 'hono/utils/url';
-import { CACHE_CONTROL, PUBLIC_FILES_PREFIX, canonicalPublicPath, publicFileClass } from '@artifactbin/contracts';
+import { CACHE_CONTROL, PUBLIC_FILES_PREFIX, publicFileClass } from '@artifactbin/contracts';
 import { precompressedStatic } from './content-encoding';
 
-/** Hono's request path, with an old address replaced by the one that owns it now (the legacy table). */
-export const publicFilePath = (request: Request): string => canonicalPublicPath(getPath(request));
+/** Hono's request path, without public URL rewrites. */
+export const publicFilePath = (request: Request): string => getPath(request);
 
 const IMMUTABLE = CACHE_CONTROL.immutable;
 

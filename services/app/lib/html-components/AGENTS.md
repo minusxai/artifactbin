@@ -7,7 +7,7 @@ renderer share live in `lib/html-component-specs`, not here.
 ## Rules
 - A component is one flat lowercase file, `<name>.ts`, that calls `registerComponent` once at top level
   (`register-component.ts`), with `-model`/`-styles` siblings for logic and CSS. A public one is listed in
-  `hosted.json` `components`; `legacy` is served only for pages that already load it and only shrinks.
+  `hosted.json` `components`; only listed components are served.
 - After any source edit run `npm run build:reader -w services/app`. It rebuilds the served modules (gitignored
   output) and rewrites the tracked readable copies in `services/app/skills/artifactbin/components/`: commit those
   regenerated files, never hand-edit them.

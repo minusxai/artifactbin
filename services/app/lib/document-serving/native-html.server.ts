@@ -1,20 +1,18 @@
 import {nativeCodeHtml} from './native-code-html';
 import {hasImportedSourceObservation} from '../html-bridge';
 import {type HtmlAssemblyInput, type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml} from '@/lib/html-runtime';
-import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, buildHtmlAssets} from '@/lib/html-runtime/server';
+import {buildHtmlAssets} from '@/lib/html-runtime/server';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import {nativeHtmlStructuralWrapper} from './native-html-structural-wrapper';
 import {publishedFileTable,type PublicationRecord} from '@/lib/html-publication-bundle';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { etagOf, matchingTag, publicRevalidatedResponse } from '@/lib/http';
-import { PUBLIC_IMMUTABLE } from './cache-control';
+import { etagOf, publicRevalidatedResponse } from '@/lib/http';
 const JS='application/javascript; charset=utf-8';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { scriptFingerprint } from '@/lib/html-autofix';
 import type { HtmlPageLink } from '@artifactbin/contracts';
-import { withLegacy } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
@@ -56,11 +54,7 @@ export interface NativeHtmlRender {
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
 
 // Only code is cached. ACL, source, bindings and viewer state are never retained here.
-let assets:ReturnType<typeof buildHtmlAssets>|undefined,retention:RuntimeAssetRetention|undefined;
-const htmlAssets=()=>assets??=buildHtmlAssets().then(current=>{
- retention=createRuntimeAssetRetention(current,retainedRuntimeAssets,source=>createHash('sha256').update(source).digest('hex'));
- return retention.expose();
-}).catch(error=>{assets=undefined;retention=undefined;throw error;});
+const htmlAssets=buildHtmlAssets;
 function htmlCore(): Promise<string> {
   return htmlAssets().then(assets=>assets.core);
 }
@@ -94,7 +88,7 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     // On a anonymous owner host, and in the exporter's capture, the page reads its data from its own page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
     // The exporter's capture alone also reads its `sql` from the page SQL door (lib/page-doors `opaqueSqlRead`).
     const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
-    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${withLegacy(PLATFORM_FONTS_PATH).map(dir=>new URL(dir,base).href).join(' ')}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
+    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${[PLATFORM_FONTS_PATH].map(dir=>new URL(dir,base).href).join(' ')}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions,framers:embedTrustedOrigins()}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
@@ -120,31 +114,18 @@ export function nativeHtmlRuntimeIdentity(): Promise<string> {
   }).catch(error => { coreIdentity = undefined; throw error; });
 }
 
-/** Public code only: no page, viewer, cookie or credential is an input to these bytes. /af/core.js and its /af/v1 alias. */
+/** Public code only: no page, viewer, cookie or credential is an input to these bytes. /af/core.js. */
 export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
  return publicRevalidatedResponse(request,await htmlCore(),JS);
 }
 
-/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/regions.js, /af/collab.js, /af/state.js) or the document host module (/af/host.js) and its comments (/af/host-comments.js), always this build's bytes. */
-export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'regions'|'nativeRegions'|'nativeMarkdown'|'collab'|'state'|'host'|'hostComments';
+/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/collab.js, /af/state.js) or the document host module (/af/host.js) and its comments (/af/host-comments.js), always this build's bytes. */
+export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'nativeRegions'|'nativeMarkdown'|'collab'|'state'|'host'|'hostComments';
 export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
  const source=(await htmlAssets())[module];
  if(!source)return new Response('Not found',{status:404});
  return publicRevalidatedResponse(request,source,JS);
 }
-
-/** The pre-D17 content-addressed alias (/af/v1/apollo|reader/<sha256>): exact retained bytes, so pages opened before a deploy keep loading. */
-export async function nativeHtmlApolloResponse(request:Request,digest:string):Promise<Response>{
- await htmlAssets();
- const source=await retention!.read(digest);
- if(source===null)return new Response('Not found',{status:404});
- const headers={'content-type':JS,'cache-control':PUBLIC_IMMUTABLE,'access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
- if(matchingTag(request.headers.get('if-none-match'),headers.etag))return new Response(null,{status:304,headers});
- return new Response(request.method==='HEAD'?null:source,{headers});
-}
-
-/** Same public, digest-verified code store and cache policy as the author engine. */
-export async function nativeHtmlReaderResponse(request:Request,digest:string):Promise<Response>{return nativeHtmlApolloResponse(request,digest);}
 
 /** The platform stylesheet (lib/html-systems) at its one stable address: public, revalidated on every load by its content hash.
  * `?system=NAME` answers that one system's sheet (what an offline copy or the skill's local preview inlines). */

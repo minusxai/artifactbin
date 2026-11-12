@@ -9,8 +9,8 @@ import { POST } from '@/app/api/artifacts/route';
 import { markPagesRequest, pagesSite } from '@/lib/http';
 import { getDb } from '@/lib/platform';
 import {
-  DOCUMENT_FRAME_CSS, cachedShell, componentModuleResponse, documentFrameFallback, documentFrameHtml, documentHeadTags, nativeHtmlApolloResponse,
-  nativeHtmlCoreResponse, nativeHtmlModuleResponse, nativeHtmlReaderResponse, nativeHtmlTitle, serveRawDocument,
+  DOCUMENT_FRAME_CSS, cachedShell, componentModuleResponse, documentFrameFallback, documentFrameHtml, documentHeadTags,
+  nativeHtmlCoreResponse, nativeHtmlModuleResponse,  nativeHtmlTitle, serveRawDocument,
 } from '@/lib/document-serving';
 import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/html-reader/frame-markup';
 
@@ -68,15 +68,13 @@ describe('the raw document door', () => {
 
 
 describe('the native runtime\'s public code', () => {
-  it('serves the core and each module revalidated, and the retained alias only for a digest it holds', async () => {
+  it('serves the core and each module revalidated', async () => {
     const core = await nativeHtmlCoreResponse(request('/af/core.js'));
     expect(core.status).toBe(200);
     expect(core.headers.get('content-type')).toContain('javascript');
     const etag = core.headers.get('etag')!;
     expect((await nativeHtmlCoreResponse(request('/af/core.js', { headers: { 'if-none-match': etag } }))).status).toBe(304);
     expect((await nativeHtmlModuleResponse(request('/af/apollo.js'), 'apollo')).status).toBe(200);
-    expect((await nativeHtmlApolloResponse(request('/af/v1/apollo/x'), '0'.repeat(64))).status).toBe(404);
-    expect((await nativeHtmlReaderResponse(request('/af/v1/reader/x'), '0'.repeat(64))).status).toBe(404);
   });
 
   it('serves no component module it does not have', async () => {

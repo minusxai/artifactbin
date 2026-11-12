@@ -64,7 +64,6 @@ export default {
         'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
         // Native browser assets are reached through explicit build and HTTP entry points.
-        'lib/mermaid-images/mermaid-render.ts',
         // Test fixtures run as their own tsx processes by the tests beside them.
         // The setup file of pr fast's guard tier (vitest.guard.config.ts at the root).
         'test/setup/guard.setup.ts',

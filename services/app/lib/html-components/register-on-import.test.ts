@@ -12,14 +12,12 @@ const components: Record<string, { style?: string; tags: string[] }> = {
   collapsible: { style: 'af-collapsible-styles', tags: ['af-collapsible', 'af-collapsible-trigger', 'af-collapsible-content'] },
   'data-table': { style: 'af-data-table-styles', tags: ['af-data-table'] },
   'date-picker': { style: 'af-date-picker-styles', tags: ['af-date-picker'] },
-  'deck-gl': { tags: ['af-deck-gl'] },
   dialog: { style: 'af-dialog-styles', tags: ['af-dialog', 'af-dialog-trigger', 'af-dialog-content', 'af-dialog-header', 'af-dialog-footer', 'af-dialog-title', 'af-dialog-description', 'af-dialog-close'] },
   'file-upload': { style: 'af-file-upload-styles', tags: ['af-file-upload'] },
   icon: { style: 'af-icon-styles', tags: ['af-icon'] },
   input: { style: 'af-input-styles', tags: ['af-input'] },
   isometric: { tags: ['af-isometric'] },
   markdown: { style: 'af-markdown-styles', tags: ['af-markdown'] },
-  mermaid: { style: 'af-mermaid-styles', tags: ['af-mermaid'] },
   popover: { style: 'af-popover-styles', tags: ['af-popover', 'af-popover-trigger', 'af-popover-content', 'af-popover-anchor', 'af-popover-header', 'af-popover-title', 'af-popover-description'] },
   progress: { style: 'af-progress-styles', tags: ['af-progress'] },
   segmented: { style: 'af-segmented-styles', tags: ['af-segmented'] },
@@ -32,7 +30,7 @@ const components: Record<string, { style?: string; tags: string[] }> = {
   tooltip: { style: 'af-tooltip-styles', tags: ['af-tooltip', 'af-tooltip-provider', 'af-tooltip-trigger', 'af-tooltip-content'] },
   user: { style: 'af-user-styles', tags: ['af-user'] },
 };
-const helpers = ['accordion-model', 'date-calendar', 'deck-gl-engine', 'deck-gl-model', 'file-upload-model', 'floating-geometry', 'floating-position', 'host-name', 'icon-glyphs', 'isometric-model', 'register-component', 'select-model', 'slide-navigation', 'tab-navigation', 'table-model', 'text-control',
+const helpers = ['accordion-model', 'date-calendar', 'file-upload-model', 'floating-geometry', 'floating-position', 'host-name', 'icon-glyphs', 'isometric-model', 'register-component', 'select-model', 'slide-navigation', 'tab-navigation', 'table-model', 'text-control',
   // Parts split out of their components to keep each source under 200 lines.
   'isometric-geometry', 'isometric-mesh', 'isometric-scene', 'isometric-visibility',
   'markdown-styles', 'row-identity', 'table-comparison', 'table-values', 'avatar-model', 'data-table-cells', 'data-table-compare', 'data-table-frame', 'data-table-grid', 'data-table-measure', 'date-picker-styles', 'dialog-model', 'popover-model', 'segmented-model', 'slide-deck-parts', 'tooltip-model', 'user-model'];

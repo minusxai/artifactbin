@@ -16,7 +16,7 @@ what an artifact is served as, and the local-file doors in `lib/local-connection
 - Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app.ts`).
 - One URL map, contracts `url-space.ts` (`/af/url-space.json`): `/api/` (JSON, links), `/af/` (public,
   credential-free files), `/a/<id>/`, `/@handle`, a few fixed paths, else a screen; host allowlists derive from it.
-  Old addresses answer only through contracts `legacy-public-paths.ts`, which only shrinks (`url-space.test.ts`).
+  Public paths are never rewritten from retired root prefixes (`url-space.test.ts`).
 - A pages origin is same-site with the app, so on another host it reaches only its own document's doors and the
   public files; everything else stays 403 `forbidden_origin` (`pages-host.ts`). The pages session comes
   from a one-use ticket and a host-only cookie, never the app-session cookie; sign-out ends it server-side.

@@ -2,8 +2,8 @@
  * THE URL SPACE: what every path on an Artifactbin origin is, declared once. This repository's servers and
  * host boundaries derive their allowlists from it (server/public-files, server/pages-host, server/user-host,
  * utils `isBuildAssetPath`); a deployment's proxy, a co-hosted service's router or a custom shell import the
- * same data (`URL_SPACE`, `classifyPath`) or fetch it from `URL_SPACE_PATH`. Pure data and functions, no imports
- * beyond the legacy table, so any runtime can load it.
+ * same data (`URL_SPACE`, `classifyPath`) or fetch it from `URL_SPACE_PATH`. Pure data and functions with no imports,
+ * so any runtime can load it.
  *
  *   Prefix              Job
  *   /api/               every JSON API, and the short links people click (`/api/people/<id>`, `/api/email/<id>`)
@@ -16,7 +16,6 @@
  *   FIXED               the few root addresses that are stable public links or another service's: the screens the product
  *                       draws itself even when a custom shell stands in for the others, and `/login`, the product's screen
  *                       unless a shell is set (`shell: true`, below)
- *   LEGACY              old prefixes still answering (legacy-public-paths.ts, never taught)
  *   everything else     a screen (the app shell; unknown ones are its 404 page)
  *
  * ONE ANSWER TO "IS THIS A SCREEN" (`isScreenPath`): `screen`, `page-screen`, `handle` and a fixed path marked
@@ -27,10 +26,9 @@
  * `server/__tests__/url-space.test.ts` fails when the route table holds a route this map does not classify,
  * when an `/af/` handler reads a credential, or when the published JSON drifts from these constants.
  */
-import { LEGACY_PUBLIC_PATHS, canonicalPublicPath, legacyPublicPath } from './legacy-public-paths';
 
 /** Bumped when a consumer would read the document differently (a field changes meaning or goes away). */
-const URL_SPACE_VERSION = 1;
+const URL_SPACE_VERSION = 2;
 /** Where the map is served, public and revalidated like the other `/af/` documents. */
 export const URL_SPACE_PATH = '/af/url-space.json';
 
@@ -70,7 +68,7 @@ const PUBLIC_FILE_CLASSES: readonly PublicFileClass[] = [
   { prefix: '/af/lib/', what: 'hosted libraries, `/af/lib/<name>-<version>/index.js`', cache: 'versioned', staticDirectory: true, ownerHost: '^/af/lib/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+/index\\.js$' },
   { prefix: '/af/geojson/', what: 'boundary files a map fetches, `/af/geojson/<name>.json`', cache: 'day', staticDirectory: true, ownerHost: '^/af/geojson/[a-z0-9-]+\\.json$' },
   { prefix: '/af/img/', what: 'the app\'s images: logos, design-system previews', cache: 'day', staticDirectory: true, ownerHost: null },
-  { prefix: '/af/v1/', what: 'pinned content-addressed copies of earlier runtime builds (and the pre-D17 core address)', cache: 'immutable', staticDirectory: false, ownerHost: null },
+  { prefix: '/af/v1/', what: 'pinned host, component and style builds', cache: 'immutable', staticDirectory: false, ownerHost: null },
   { prefix: PUBLIC_FILES_PREFIX, what: 'runtime modules (`/af/<name>.js`), styles.css, import-map.json, manifest.json, host.js, host-comments.js, url-space.json', cache: 'revalidate', staticDirectory: false, ownerHost: '^/af/(?:apollo|reader)\\.js$|^/af/styles\\.css$' },
 ];
 
@@ -79,7 +77,6 @@ interface LinkEndpoint { readonly prefix: string; readonly what: string }
 const LINK_ENDPOINTS: readonly LinkEndpoint[] = [
   { prefix: '/api/people/', what: 'a person mention: 302 to the person\'s current `/@username`' },
   { prefix: '/api/email/', what: 'a notification e-mail click: recorded, then 302 to its same-site target' },
-  { prefix: '/api/workspace/', what: 'compatibility only (legacy `/workspace/<id>`): 303 to the page after an edit check' },
 ];
 /** The link a person mention names: written into new mentions; `/people/<id>` is the stored old form. */
 export const personLinkPath = (userId: string): string => `/api/people/${encodeURIComponent(userId)}`;
@@ -146,7 +143,7 @@ const FIXED_PATHS: readonly FixedPath[] = [
   { path: '/login/cli', match: 'exact', what: 'retired: always 404', why: 'a retired sign-in flow, kept unanswerable', hosts: [] },
 ];
 
-export type PathKind = 'api' | 'public-file' | 'page-door' | 'page-screen' | 'page-app' | 'handle' | 'fixed' | 'legacy' | 'screen';
+export type PathKind = 'api' | 'public-file' | 'page-door' | 'page-screen' | 'page-app' | 'handle' | 'fixed' | 'screen';
 
 const fixedOf = (pathname: string): FixedPath | undefined =>
   FIXED_PATHS.find((f) => (f.match === 'exact' ? pathname === f.path : pathname.startsWith(f.path)));
@@ -159,7 +156,6 @@ const HANDLE_RE = /^\/@[a-z0-9_]+(?:\/.*)?$/;
 export function classifyPath(pathname: string): PathKind {
   if (pathname === '/api' || pathname.startsWith(API_PREFIX)) return 'api';
   if (pathname.startsWith(PUBLIC_FILES_PREFIX)) return 'public-file';
-  if (legacyPublicPath(pathname)) return 'legacy';
   const page = PAGE_RE.exec(pathname);
   if (page) {
     const sub = page[2] ?? '';
@@ -173,7 +169,7 @@ export function classifyPath(pathname: string): PathKind {
 /**
  * THE SCREENS RULE, for a custom shell: true when the app or a shell standing in for it draws this address —
  * a page's screens, a handle's address, the sign-in screen (the fixed paths marked `shell`) and everything that is not
- * `/api/`, `/af/`, a page door or app entry, another fixed path or a legacy address. A screen the app does not know is
+ * `/api/`, `/af/`, a page door or app entry, another fixed path. A screen the app does not know is
  * still a screen: its 404 page.
  */
 export const isScreenPath = (pathname: string): boolean => {
@@ -181,26 +177,23 @@ export const isScreenPath = (pathname: string): boolean => {
   return kind === 'screen' || kind === 'page-screen' || kind === 'handle' || (kind === 'fixed' && !!fixedOf(pathname)?.shell);
 };
 
-/** The `/af/` class an address belongs to (after canonicalizing a legacy file address), or null. */
+/** The `/af/` class an address belongs to (without rewriting the requested path), or null. */
 export function publicFileClass(pathname: string): PublicFileClass | null {
-  const canonical = canonicalPublicPath(pathname);
-  if (!canonical.startsWith(PUBLIC_FILES_PREFIX)) return null;
-  return PUBLIC_FILE_CLASSES.find((c) => canonical.startsWith(c.prefix)) ?? null;
+  if (!pathname.startsWith(PUBLIC_FILES_PREFIX)) return null;
+  return PUBLIC_FILE_CLASSES.find((c) => pathname.startsWith(c.prefix)) ?? null;
 }
 
-const legacyFile = (pathname: string): boolean => legacyPublicPath(pathname)?.kind === 'file';
-
-/** A document's own origin (the pages host) may load: every public file, old file addresses, and the fixed paths marked `documents`. */
+/** A document's own origin (the pages host) may load: every public file, and the fixed paths marked `documents`. */
 export function documentHostServes(pathname: string): boolean {
-  return pathname.startsWith(PUBLIC_FILES_PREFIX) || legacyFile(pathname) || !!fixedOf(pathname)?.hosts.includes('documents');
+  return pathname.startsWith(PUBLIC_FILES_PREFIX) || !!fixedOf(pathname)?.hosts.includes('documents');
 }
 
-/** An anonymous owner host may load: the reader's part of each class (old file addresses too), and the fixed paths marked `owner`. */
+/** An anonymous owner host may load: the reader's part of each class, and the fixed paths marked `owner`. */
 export function ownerHostServes(pathname: string): boolean {
   if (fixedOf(pathname)?.hosts.includes('owner')) return true;
-  if (!pathname.startsWith(PUBLIC_FILES_PREFIX) && !legacyFile(pathname)) return false;
+  if (!pathname.startsWith(PUBLIC_FILES_PREFIX)) return false;
   const cls = publicFileClass(pathname);
-  return !!cls?.ownerHost && new RegExp(cls.ownerHost).test(canonicalPublicPath(pathname));
+  return !!cls?.ownerHost && new RegExp(cls.ownerHost).test(pathname);
 }
 
 /** A Vite build file the proxy may answer without a session (utils build-assets): manifest-checked by the app. */
@@ -214,6 +207,5 @@ export const URL_SPACE = {
   page: PAGE_SPACE,
   handle: HANDLE_PATTERN,
   fixed: FIXED_PATHS,
-  legacy: LEGACY_PUBLIC_PATHS,
   otherwise: 'screen',
 };

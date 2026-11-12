@@ -10,9 +10,8 @@ import { browserParityFixtures, parityThemes } from './index.mjs';
 /** @typedef {{idempotencyKey?:string}} PublicationRequestOptions */
 /** @typedef {{path:string,kind:"asset"|"dataset",id:string,revision:string,sha256:string,state?:string}} DependencyReceipt */
 /** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string,dependencyReceipts?:DependencyReceipt[]}>} PublishFixture */
-/** Hosted components load by their `@afbin/<name>` import-map name; the legacy wrappers have none and load by URL. */
-const LEGACY_COMPONENTS=new Set(['deck-gl','mermaid']);
-export const componentImport=name=>`import "${LEGACY_COMPONENTS.has(name)?`/af/components/${name}.js`:`@afbin/${name}`}";`;
+/** Hosted components load by their `@afbin/<name>` import-map name. */
+export const componentImport=name=>`import "@afbin/${name}";`;
 export const htmlBodyPadding=fixture=>fixture.bareRoot?'0px':'24px';
 /** Select whole fixture definitions without rewriting their states or hashes.
  * @template {{id:string}} T

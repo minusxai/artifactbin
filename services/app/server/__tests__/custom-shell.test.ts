@@ -13,7 +13,7 @@ import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
 import {createUser,ensureUsername,mintToken} from '@/lib/accounts';
 import {overrideConfig} from '@/lib/platform/config';
 import {shellFile} from '@/lib/platform';
-import {URL_SPACE,isScreenPath,LEGACY_PUBLIC_PATHS} from '@artifactbin/contracts';
+import {URL_SPACE,isScreenPath} from '@artifactbin/contracts';
 import {SPA_PATHS} from '@/lib/http/app-pages';
 import {createAppServer} from '../app';
 import {customShellResponse,loadCustomShell} from '../custom-shell';
@@ -87,7 +87,7 @@ describe('with a custom shell',()=>{
    ...URL_SPACE.fixed.map(f=>f.match==='exact'?f.path:`${f.path}x`),
    ...[...URL_SPACE.page.screens,...URL_SPACE.page.app,...URL_SPACE.page.doors].map(s=>`/a/${ID}${s?`/${one(s)}`:''}`),
    `${URL_SPACE.api.prefix}x`,`${URL_SPACE.api.internal}x`,...URL_SPACE.api.links.map(l=>`${l.prefix}x`),
-   ...URL_SPACE.publicFiles.classes.map(c=>`${c.prefix}x.js`),...LEGACY_PUBLIC_PATHS.map(l=>`${l.from}x`),
+   ...URL_SPACE.publicFiles.classes.map(c=>`${c.prefix}x.js`),
    '/@nobody_here','/@nobody_here/a-doc',`/a/${ID}/edit/`,'/a','/no-such-page',...statics,
   ];
   expect(statics).toEqual(expect.arrayContaining(['/','/welcome','/start','/login','/groups/x/settings']));

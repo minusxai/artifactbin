@@ -59,7 +59,7 @@ export async function loadComponentFile(file: string): Promise<LoadedComponentFi
 const CHUNK_IMPORT = /["']\.\/(chunk-[a-z0-9]+\.js)["']/g;
 /**
  * The public components' current files: every `hosted.json` `components` entry and the chunks they import, read
- * transitively (legacy wrappers and the chunks only they use stay out). The pinned bundle a host page loads
+ * transitively. The pinned bundle a host page loads
  * (lib/document-serving/hosted-blocks) is exactly these. Null when this build has not produced them.
  */
 export async function publicComponentFiles(): Promise<Map<string, LoadedComponentFile> | null> {

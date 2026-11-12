@@ -2,7 +2,6 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
-import {canonicalPublicPath} from '@artifactbin/contracts';
 import {libraryUrls,libraryPathForSpecifier,COMPONENTS_PATH,LIBRARIES_PATH} from './index';
 import {componentFile,readComponentFile} from './components.server';
 export interface RegisteredLibraryResource {url:string;contentType:'text/javascript';bytes:Uint8Array}
@@ -11,9 +10,9 @@ export interface LibraryResourceInput {url:string;contentType:string;bytes:Uint8
 const publicDir=path.resolve('public');
 const registered=new Set(Object.values(libraryUrls()));
 const GEOJSON_PATH='/af/geojson/';
-/** The file under public/ a library or boundary address names (the old `/libraries/`, `/geojson/` forms included). */
+/** The file under public/ a library or boundary address names. */
 const diskPath=(url:string):string=>{
- const canonical=canonicalPublicPath(url);
+ const canonical=url;
  const relative=canonical.startsWith(LIBRARIES_PATH)?'libraries/'+canonical.slice(LIBRARIES_PATH.length):canonical.startsWith(GEOJSON_PATH)?'geojson/'+canonical.slice(GEOJSON_PATH.length):null;
  if(!relative)throw Error('Not a hosted library or boundary path');
  return path.join(publicDir,relative);
@@ -33,7 +32,7 @@ export async function referencedLibraryResources(html:string,resources:readonly 
   if(components.has(pathname))return;const file=componentFile(pathname.slice(COMPONENTS_PATH.length));if(!file)return;components.set(pathname,new Uint8Array());
   pending.push(readComponentFile(file).then(bytes=>{if(!bytes)throw Error('Hosted component unavailable: '+file);components.set(pathname,bytes);module(bytes.toString('utf8'),new URL(pathname,origin).href);}));
  };
- const admit=(value:string,base=baseUrl)=>{const url=new URL(libraryPathForSpecifier(value)??value,base);if(url.origin!==origin||url.search||url.username||url.password)return;if(registered.has(canonicalPublicPath(url.pathname)))chosen.add(url.pathname);else if(url.pathname.startsWith(COMPONENTS_PATH))component(url.pathname);};
+ const admit=(value:string,base=baseUrl)=>{const url=new URL(libraryPathForSpecifier(value)??value,base);if(url.origin!==origin||url.search||url.username||url.password)return;if(registered.has(url.pathname))chosen.add(url.pathname);else if(url.pathname.startsWith(COMPONENTS_PATH))component(url.pathname);};
  const module=(source:string,base=baseUrl)=>{for(const item of parseImports(source)[0])if(item.n&&item.d!==-2)admit(item.n,base);};
  const visit=(node:DefaultTreeAdapterMap['node']):void=>{
   if('tagName'in node&&node.tagName==='script'){

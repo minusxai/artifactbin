@@ -20,7 +20,6 @@
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
-import { withLegacy } from '@artifactbin/contracts';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document';
 
@@ -74,7 +73,7 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
     // The faces a document's sheets declare are the app's /af/fonts/ files (and their old /fonts/ address).
     join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
-    join('font-src', "'self'", 'data:', withLegacy('/af/fonts/').map((dir) => `${appOrigin}${dir}`), FONT_FILES, asset, ext.style),
+    join('font-src', "'self'", 'data:', ['/af/fonts/'].map((dir) => `${appOrigin}${dir}`), FONT_FILES, asset, ext.style),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', `${appOrigin}/api/users/`, asset, ext.img),
     join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
     // An author `<iframe>` (lib/jsx/validate): the default players, then the hosts the document declares.

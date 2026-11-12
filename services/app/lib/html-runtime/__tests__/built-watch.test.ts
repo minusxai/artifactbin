@@ -34,7 +34,7 @@ it('the emitted author module watches backend results with explicit loading with
  subscription.unsubscribe();
 });
 
-it('a published page that calls onBackendChange still subscribes through the built runtime (live-page compatibility)',async()=>{
+it('the supported onResolverChange listener subscribes through the built runtime',async()=>{
  const assets=await buildHtmlAssets();
  vi.stubGlobal('document',{querySelector:()=>null});vi.stubGlobal('location',{hash:''});
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
@@ -46,8 +46,8 @@ it('a published page that calls onBackendChange still subscribes through the bui
  const source=linked(assets,dataUrl(reader));
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const changed:unknown[]=[];
- expect(runtime.onBackendChange).toBe(runtime.onResolverChange);
- runtime.onBackendChange((names:string[])=>changed.push(names)).unsubscribe();
+ expect(runtime.onBackendChange).toBeUndefined();
+ runtime.onResolverChange((names:string[])=>changed.push(names)).unsubscribe();
  listeners.at(-1)!(['orders']);
  expect(changed).toEqual([['orders']]);
 });

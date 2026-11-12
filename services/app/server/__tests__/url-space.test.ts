@@ -42,8 +42,8 @@ describe('the classifier and the allowlists that derive from it', () => {
   it('answers each kind', () => {
     const cases: Array<[string, string]> = [
       ['/api/artifacts', 'api'], ['/api/people/u1', 'api'], ['/af/core.js', 'public-file'], ['/af/app/index-1.js', 'public-file'],
-      ['/libraries/vega-6.3.1/index.js', 'legacy'], ['/geojson/world.json', 'legacy'], ['/fonts/a.12345678.woff2', 'legacy'],
-      ['/people/u1', 'legacy'], ['/email/d1', 'legacy'], ['/workspace/Abc123', 'legacy'],
+      ['/libraries/vega-6.3.1/index.js', 'screen'], ['/geojson/world.json', 'screen'], ['/fonts/a.12345678.woff2', 'screen'],
+      ['/people/u1', 'screen'], ['/email/d1', 'screen'], ['/workspace/Abc123', 'screen'],
       ['/a/Abc123', 'page-screen'], ['/a/Abc123/edit', 'page-screen'], ['/a/Abc123/app/', 'page-app'], ['/a/Abc123/app', 'page-app'],
       ['/a/Abc123/raw', 'page-door'], ['/a/Abc123/app/manifest.webmanifest', 'page-door'],
       ['/@sam', 'handle'], ['/@sam/q3-review', 'handle'], ['/login', 'fixed'], ['/welcome', 'fixed'], ['/start', 'fixed'], ['/local/connect', 'fixed'], ['/health', 'fixed'], ['/llms.txt', 'fixed'],
@@ -55,17 +55,17 @@ describe('the classifier and the allowlists that derive from it', () => {
     for (const [pathname, kind] of cases) expect(new RegExp(URL_SPACE.handle).test(pathname), pathname).toBe(kind === 'handle');
     for (const [pathname, kind] of cases.filter(([p]) => p.startsWith('/a/'))) expect(new RegExp(`^${URL_SPACE.page.prefix}${URL_SPACE.page.id}`).test(pathname), pathname).toBe(kind.startsWith('page-'));
     for (const screen of ['/', '/trash', '/a/Abc123', '/@sam', '/@sam/q3-review', '/login']) expect(isScreenPath(screen), screen).toBe(true);
-    for (const other of ['/api/me', '/af/core.js', '/a/Abc123/raw', '/a/Abc123/app/', '/login/cli', '/welcome', '/start', '/local/connect', '/geojson/world.json']) expect(isScreenPath(other), other).toBe(false);
+    for (const other of ['/api/me', '/af/core.js', '/a/Abc123/raw', '/a/Abc123/app/', '/login/cli', '/welcome', '/start', '/local/connect']) expect(isScreenPath(other), other).toBe(false);
   });
 
-  it('lets a document origin load every public file, old file addresses and stored bytes, and nothing of the app', () => {
-    for (const p of ['/af/chrome.js', '/af/host.js', '/af/v1/core.js', '/af/lib/vega-6.3.1/index.js', '/geojson/world.json', '/assets/' + 'a'.repeat(64), '/favicon.ico', '/basemap/worker.mjs']) expect(documentHostServes(p), p).toBe(true);
-    for (const p of ['/api/me', '/login', '/people/u1', '/email/d1', '/a/Abc123/raw', '/islands/x.js']) expect(documentHostServes(p), p).toBe(false);
+  it('lets a document origin load every public file, stored bytes, and nothing of the app', () => {
+    for (const p of ['/af/chrome.js', '/af/host.js', '/af/v1/host/'+'a'.repeat(64)+'.js', '/af/lib/vega-6.3.1/index.js', '/af/geojson/world.json', '/assets/' + 'a'.repeat(64), '/favicon.ico', '/basemap/worker.mjs']) expect(documentHostServes(p), p).toBe(true);
+    for (const p of ['/geojson/world.json', '/fonts/a.woff2', '/api/me', '/login', '/people/u1', '/email/d1', '/a/Abc123/raw', '/islands/x.js']) expect(documentHostServes(p), p).toBe(false);
   });
 
   it('lets an owner host load the reader\'s part only', () => {
-    for (const p of ['/af/apollo.js', '/af/reader.js', '/af/styles.css', '/af/components/tabs.js', '/af/fonts/inter-latin-standard-normal.woff2', '/af/fonts/inter-latin-standard-normal.2c295d99.woff2', '/fonts/inter-latin-standard-normal.2c295d99.woff2', '/af/lib/vega-6.3.1/index.js', '/libraries/vega-6.3.1/index.js', '/af/geojson/world.json', '/geojson/world.json', '/af/app/index-abc.css', '/favicon.ico']) expect(ownerHostServes(p), p).toBe(true);
-    for (const p of ['/af/chrome.js', '/af/core.js', '/af/app/index-abc.js', '/af/v1/core.js', '/af/img/logo.png', '/assets/' + 'a'.repeat(64), '/people/u1']) expect(ownerHostServes(p), p).toBe(false);
+    for (const p of ['/af/apollo.js', '/af/reader.js', '/af/styles.css', '/af/components/tabs.js', '/af/fonts/inter-latin-standard-normal.woff2', '/af/fonts/inter-latin-standard-normal.2c295d99.woff2', '/af/lib/vega-6.3.1/index.js', '/af/geojson/world.json', '/af/app/index-abc.css', '/favicon.ico']) expect(ownerHostServes(p), p).toBe(true);
+    for (const p of ['/libraries/vega-6.3.1/index.js', '/geojson/world.json', '/fonts/a.woff2', '/af/chrome.js', '/af/core.js', '/af/app/index-abc.js', '/af/v1/core.js', '/af/img/logo.png', '/assets/' + 'a'.repeat(64), '/people/u1']) expect(ownerHostServes(p), p).toBe(false);
   });
 
   it('gives the proxy the app build\'s shape', () => {
@@ -84,6 +84,6 @@ describe(URL_SPACE_PATH, () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     expect(res.headers.get('cache-control')).toBe('no-cache');
     expect((await app.request(URL_SPACE_PATH, { headers: { 'if-none-match': res.headers.get('etag')! } })).status).toBe(304);
-    expect(URL_SPACE.version).toBe(1);
+    expect(URL_SPACE.version).toBe(2);
   });
 });

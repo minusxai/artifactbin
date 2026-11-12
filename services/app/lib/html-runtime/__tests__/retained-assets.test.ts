@@ -1,25 +1,23 @@
-/** The server entry's retained runtime store: the object store under its own public-code namespace. */
+/** Supported pinned host assets use a separate public-code object namespace. */
 import {createHash, randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {objectStore} from '@/lib/object-store';
-import {createRuntimeAssetRetention,retainedRuntimeAssets} from '../server';
+import {createSourceRetention,retainedPublicAssets} from '../server';
 
+const store=retainedPublicAssets('host','application/javascript; charset=utf-8');
 const hash=(source:string)=>createHash('sha256').update(source).digest('hex');
-
-it('stores runtime code under html-runtime/apollo and answers null for a digest never stored',async()=>{
+it('stores host code under html-runtime/host without touching retired runtime objects',async()=>{
  const source=`export const release="${randomUUID()}";// ☕`;
- expect(await retainedRuntimeAssets.get(hash(source))).toBeNull();
- await retainedRuntimeAssets.put(hash(source),source);
- expect(await retainedRuntimeAssets.get(hash(source))).toBe(source);
- expect((await objectStore().get(`html-runtime/apollo/${hash(source)}`)).toString('utf8')).toBe(source);
+ expect(await store.get(hash(source))).toBeNull();
+ await store.put(hash(source),source);
+ expect(await store.get(hash(source))).toBe(source);
+ expect((await objectStore().get(`html-runtime/host/${hash(source)}`)).toString('utf8')).toBe(source);
 });
-
-it('serves a previous release the retention exposed through the real store',async()=>{
- const release=(n:string)=>({core:'core',apollo:`export const release="${n}";`,apolloPath:'/af/apollo.js',reader:'reader',readerPath:'/af/reader.js'});
- const first=release(randomUUID()),second=release(randomUUID());
- await createRuntimeAssetRetention(first,retainedRuntimeAssets,hash).expose();
- const deployed=createRuntimeAssetRetention(second,retainedRuntimeAssets,hash);
+it('serves a previous pinned host release through the real store',async()=>{
+ const first=[`export const release="${randomUUID()}";`],second=[`export const release="${randomUUID()}";`];
+ await createSourceRetention(first,store,hash).expose();
+ const deployed=createSourceRetention(second,store,hash);
  await deployed.expose();
- expect(await deployed.read(hash(first.apollo))).toBe(first.apollo);
+ expect(await deployed.read(hash(first[0]!))).toBe(first[0]!);
  expect(await deployed.read(hash('never stored'))).toBeNull();
 });

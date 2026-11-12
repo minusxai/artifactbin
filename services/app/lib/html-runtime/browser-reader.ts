@@ -20,7 +20,7 @@ import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERS
 /** The live morph is its own content-addressed module (build.server `@afbin/morph`), fetched only when a version arrives. */
 const MORPH_MODULE='@afbin/morph';
 const loadLiveMorph=()=>import(/* @vite-ignore */ MORPH_MODULE) as Promise<typeof import('./live-morph')>;
-/** The region editor (build.server `@afbin/regions`), fetched only when the parent opens a region session (./frame-regions). */
+/** The region editor (build.server `@afbin/native-regions`), fetched only when the parent opens a region session (./frame-regions). */
 const NATIVE_REGIONS_MODULE='@afbin/native-regions';
 // The lazy native module validates the session kind before decoding its state.
 const loadRegionEditor=()=>import(/* @vite-ignore */ NATIVE_REGIONS_MODULE) as Promise<typeof import('./native-region-editor')>;
