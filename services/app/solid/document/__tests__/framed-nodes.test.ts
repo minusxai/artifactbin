@@ -15,11 +15,15 @@ afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 const answer = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 describe('native HTML trusted context', () => {
-  it('uses the platform revision and refuses archived writes through the original shell bridge', async () => {
+  it('pins SQL reads and writes to the platform revision and archived mode through the shell bridge', async () => {
     const frame = document.createElement('iframe');
     document.body.append(frame);
     const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
-    const fetcher = vi.fn(async () => answer(200, { data: {} }));
+    const fetcher = vi.fn(async (_path: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      return body.readOnly && body.sql.startsWith('insert')
+        ? answer(403, {error:'permission_denied'}) : answer(200, {rows:[{n:1}]});
+    });
     vi.stubGlobal('fetch', fetcher);
     createRoot((dispose) => {
       cleanups.push(dispose);
@@ -31,16 +35,20 @@ describe('native HTML trusted context', () => {
       data: { type: 'mx:frame-bridge', key, payload }, origin: PAGES, source: frame.contentWindow,
     }));
     send({ kind: 'ready', nonce: 'native' });
-    const request = (operation: string) => ({ kind: 'fetch', call: 1, path: '/api/artifacts/doc1/graphql', method: 'POST', headers: {},
-      body: JSON.stringify({ operation, revision: '999', query: '{ count }' }) });
-    send(request('query'));
+    const request = (sql: string) => ({ kind: 'fetch', call: 1, path: '/api/artifacts/doc1/sql', method: 'POST', headers: {},
+      body: JSON.stringify({ sql, revision: '999', readOnly: false }) });
+    send(request('select count(*) as n from tasks'));
     await Promise.resolve(); await Promise.resolve();
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).revision).toBe('2');
-    send(request('mutation'));
+    expect(JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({sql:'select count(*) as n from tasks',params:{},revision:'2',readOnly:true});
+    send(request("insert into tasks(title) values('forbidden')"));
     await Promise.resolve(); await Promise.resolve();
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(posted.mock.calls.some(([envelope]) => (envelope as {payload?:{status?:number}}).payload?.status === 403)).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse((fetcher.mock.calls[1] as unknown as [string, RequestInit])[1].body as string)).toEqual({sql:"insert into tasks(title) values('forbidden')",params:{},revision:'2',readOnly:true});
+    await vi.waitFor(() => expect(posted.mock.calls.some(([envelope]) => (envelope as {payload?:{status?:number;body?:string}}).payload?.status === 403)).toBe(true));
+    send({...request('select 1'),path:'/api/artifacts/other/sql'});
+    await Promise.resolve();
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
 

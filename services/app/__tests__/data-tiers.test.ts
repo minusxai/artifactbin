@@ -105,7 +105,9 @@ describe('dataset tier', () => {
     const res = await serveArtifact(request(`/a/${body.id}/raw`), params({ id: body.id }));
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toContain('application/json');
-    expect(await res.json()).toEqual(ROWS);
+    expect(await res.json()).toEqual({ catalog: { kind: 'stored', defaultSchema: 'public', refreshSeconds: 0, tables: [{ schema: 'public', name: 'rows', columns: [
+      { name: 'month', type: 'string' }, { name: 'mrr', type: 'number' }, { name: 'region', type: 'string' },
+    ] }] } });
   });
 });
 
