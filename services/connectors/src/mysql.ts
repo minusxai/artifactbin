@@ -17,6 +17,9 @@
  *       `COMMIT` (`ROLLBACK` after an error)
  *       `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''`
  *
+ * Doris is detected from version_comment and uses autocommit SELECTs instead of transaction statements.
+ * It still receives the viewer, bound values, read-only admission, limits and cleanup; use a SELECT-only account.
+ *
  * A database can use the viewer in a view only through a function (MySQL views refuse user variables), e.g.
  * `CREATE FUNCTION app_viewer_id() RETURNS VARCHAR(255) DETERMINISTIC RETURN @app_viewer_id`.
  */
@@ -54,8 +57,8 @@ function cell(field: FieldPacket, type: ConnectorValueType, value: unknown): Con
 /** A MySQL string literal for any value: `\\` and `'` doubled, so it stays one literal whether or not
  * NO_BACKSLASH_ESCAPES is on (with it, a backslash in the value arrives doubled: changed, never escaping). */
 export const mysqlLiteral = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`;
-const viewerStatement = (v: { id: string; email: string; groups: string }) => `SET @app.viewer_id=${mysqlLiteral(v.id)}, @app.viewer_email=${mysqlLiteral(v.email)}, @app.viewer_groups=${mysqlLiteral(v.groups)}`;
-const CLEARED = "SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''";
+const viewerStatement = (v: { id: string; email: string; groups: string }, quoted = false) =>
+  'SET ' + (['id', 'email', 'groups'] as const).map(key => `@${quoted ? '`app.viewer_' + key + '`' : 'app.viewer_' + key}=${mysqlLiteral(v[key])}`).join(', ');
 
 const call = <T = unknown>(c: MysqlConnection, text: string, values?: unknown[]) => new Promise<T>((resolve, reject) => {
   const done = (error: unknown, result: unknown) => (error ? reject(error) : resolve(result as T));
@@ -66,6 +69,9 @@ export const mysqlConnector: ConnectorModule = {
   open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}) {
     const target = targetOf(config, policy);
     const secrets = connectionSecrets(config);
+    // Positive detection only: unsupported metadata reads keep the transaction-protected native path.
+    // Gateways may refuse metadata before a viewer is installed; they retain their own viewer transaction scope.
+    const autocommit = new WeakSet<MysqlConnection>();
     const sessions = new SessionPool<MysqlConnection>({
       async open(database) {
         const socket = await connectTarget(target, policy, seams);
@@ -80,6 +86,8 @@ export const mysqlConnector: ConnectorModule = {
         } as never);
         connection.on('error', () => {});
         await new Promise<void>((resolve, reject) => connection.connect((error) => (error ? (connection.destroy(), reject(error)) : resolve())));
+        const version = await call<Array<{engine: string}>>(connection, 'SELECT @@version_comment AS engine').catch(() => []);
+        if (/\bdoris\b/i.test(String(version[0]?.engine))) autocommit.add(connection);
         for (const setting of ['SET time_zone = \'+00:00\'', `SET SESSION max_execution_time = ${CONNECTOR_LIMITS.timeoutMs}`]) await call(connection, setting).catch(() => undefined);
         return connection;
       },
@@ -103,9 +111,9 @@ export const mysqlConnector: ConnectorModule = {
         const discard = () => { gone = true; dropSession(); };
         try {
           return await withinTime(limits.timeoutMs + 1000, query.signal, () => { discard(); c.destroy(); }, async () => {
-            await call(c, 'START TRANSACTION READ ONLY');
-            open = true;
-            await call(c, viewerStatement(viewer));
+            if (guarded && autocommit.has(c)) readOnlyStatement('mysql', query.text, true);
+            if (!autocommit.has(c)) { await call(c, 'START TRANSACTION READ ONLY'); open = true; }
+            await call(c, viewerStatement(viewer, autocommit.has(c)));
             const answer = await new Promise<ConnectorAnswer>((resolve, reject) => {
               let collector: Collector | undefined, fields: FieldPacket[] = [], types: ConnectorValueType[] = [], stopped = false;
               const start = (f: FieldPacket[]) => { fields = f ?? []; types = fields.map(typeOf); collector = new Collector(limits, uniqueColumns(fields.map((x, i) => ({ name: x.name, type: types[i]! })))); };
@@ -124,7 +132,7 @@ export const mysqlConnector: ConnectorModule = {
               command.on('error', (error: unknown) => { if (!stopped) reject(error); });
               command.on('end', () => { if (stopped) return; if (!collector) start([]); resolve(collector!.answer()); });
             });
-            await call(c, 'COMMIT');
+            if (open) await call(c, 'COMMIT');
             open = false;
             return answer;
           });
@@ -136,7 +144,7 @@ export const mysqlConnector: ConnectorModule = {
           if (!gone) {
             try {
               if (open) await call(c, 'ROLLBACK');
-              await call(c, CLEARED);
+              await call(c, viewerStatement({ id: '', email: '', groups: '' }, autocommit.has(c)));
             } catch { discard(); }
           }
         }

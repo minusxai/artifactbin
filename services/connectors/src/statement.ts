@@ -133,12 +133,16 @@ const READS: Record<ConnectorDialect, ReadonlySet<string>> = {
 };
 
 /** Refuses anything but one reading statement (see the header). */
-export function readOnlyStatement(dialect: ConnectorDialect, text: string): void {
+export function readOnlyStatement(dialect: ConnectorDialect, text: string, autocommit = false): void {
   const tokens = tokenize(dialect, text).filter(significant);
   const first = tokens.find((t) => !(t.kind === 'punct' && t.text === '('));
   if (!first || first.kind !== 'word' || !READS[dialect].has(first.text.toLowerCase())) throw new ConnectorFailure('read_only', 'only a read runs here: SELECT, WITH, VALUES, TABLE, SHOW or EXPLAIN');
   const semicolon = tokens.findIndex((t) => t.kind === 'punct' && t.text === ';');
   if (semicolon >= 0 && semicolon < tokens.length - 1) throw new ConnectorFailure('invalid_query', 'one statement at a time');
+  // An autocommit analytics engine has no read-only transaction to reject a write behind WITH or EXPLAIN.
+  // Inspect tokens, not quoted values/identifiers. A SELECT-only database account remains the authority.
+  if (autocommit && tokens.some(t => t.kind === 'word' && /^(insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|call|load)$/i.test(t.text)))
+    throw new ConnectorFailure('read_only', 'only a read runs here: writes inside WITH or EXPLAIN are refused');
   if (dialect === 'mysql' && tokens.some((t) => t.kind === 'word' && t.text.toLowerCase() === 'into')) throw new ConnectorFailure('read_only', 'SELECT … INTO is refused: it writes a file or a session variable');
   // The viewer guard, an extra one only (see the package header for what a database can rely on): a statement
   // never sets a session value itself, so it cannot name another person in app.viewer_* / @app_viewer_*.

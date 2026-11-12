@@ -7,8 +7,10 @@
  * WHAT A DATABASE BEHIND A CONNECTION CAN RELY ON, whatever the statement says:
  *  - Sessions are read-only (`BEGIN READ ONLY` / `START TRANSACTION READ ONLY`, ended by ROLLBACK), one statement per
  *    query (extended protocol / multiple statements off), first keyword a read (./statement). A read-only
- *    transaction still runs functions with side effects: give the configured account read-only grants.
- *  - The viewer's values (contracts header) are set inside each query's own transaction, right before its statement,
+ *    transaction still runs functions with side effects: give the configured account read-only grants. Doris is
+ *    detected through the MySQL protocol and uses autocommit with stricter statement admission instead; it requires
+ *    SELECT-only grants because it does not implement MySQL's read-only transaction statement.
+ *  - The viewer's values (contracts header) are set on each query's session, right before its statement,
  *    every time. They are advisory where the reader writes the SQL: a plain database cannot stop a statement that
  *    changes them (Postgres `set_config` is refused by name here, MySQL `:=`, `SET` and `INTO` too, but a function
  *    that runs SQL text gets past any such check). A gateway built for this reads them as the statement starts.

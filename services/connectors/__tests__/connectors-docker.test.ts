@@ -150,3 +150,46 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     expect(schema.tables.map((t) => [t.name, t.kind])).toEqual([['mine', 'view'], ['orders', 'table']]);
   });
 });
+
+// The MySQL connector must detect protocol-compatible engines itself: callers pass no engine flag.
+describe.skipIf(!has('apache/doris:all-in-one-4.1.3'))('Doris through the MySQL connector', () => {
+  let container = '', my: OpenConnection;
+  beforeAll(async () => {
+    container = execFileSync('docker', ['run', '--rm', '-d', '-p', '127.0.0.1::9030', 'apache/doris:all-in-one-4.1.3'], {encoding:'utf8'}).trim();
+    const port = portOf(container, 9030);
+    const sql = (text: string) => spawnSync('docker', ['exec', container, 'mysql', '-h127.0.0.1', '-P9030', '-uroot', '-e', text], {encoding:'utf8'});
+    for(let attempt=0;;attempt++) {
+      const backends = sql('SHOW BACKENDS');
+      const [header = '', ...rows] = backends.stdout.trim().split('\n');
+      const columns = header.split('\t');
+      if (backends.status === 0 && rows.some(row => {
+        const values = row.split('\t');
+        return values[columns.indexOf('Alive')] === 'true' && parseFloat(values[columns.indexOf('TotalCapacity')] ?? '0') > 0;
+      })) break;
+      if(attempt > 180) throw Error('Doris never became ready');
+      await new Promise(r=>setTimeout(r,500));
+    }
+    const seeded = sql(`CREATE DATABASE shop;
+      CREATE TABLE shop.orders(id INT, price DECIMAL(18,2), placed DATETIME, big BIGINT, note VARCHAR(100)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+      INSERT INTO shop.orders VALUES (1,12.34,'2026-11-01 12:00:00',9007199254740993,'tea'),(2,NULL,'2099-01-01 00:00:00',1,NULL);
+      CREATE USER 'reader' IDENTIFIED BY '${PASSWORD}'; GRANT SELECT_PRIV ON shop.* TO 'reader';`);
+    expect(seeded.status, seeded.stderr).toBe(0);
+    my = openConnection({connector:'mysql',host:'127.0.0.1',port,database:'shop',user:'reader',password:PASSWORD,tls:'disable'},DEV);
+  },120_000);
+  afterAll(async()=>{await my?.close();if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});});
+  it('tests and discovers schema without engine-specific caller configuration',async()=>{
+    expect(await my.test({viewer:alice})).toMatchObject({ok:true});
+    expect((await my.schema({viewer:alice})).tables.map(t=>t.name)).toEqual(['orders']);
+  });
+  it('binds typed values, keeps precision and nulls, rejects writes, and reuses a clean session',async()=>{
+    const q={text:'SELECT id,price,placed,big,note FROM orders WHERE placed >= $start AND placed <= CURRENT_TIMESTAMP',params:{start:'2026-11-01'},viewer:alice};
+    expect((await my.query(q)).rows).toEqual([{id:1,price:12.34,placed:'2026-11-01T12:00:00',big:'9007199254740993',note:'tea'}]);
+    expect((await my.query({text:'SELECT price,note FROM orders WHERE id=$id',params:{id:2},viewer:bob})).rows).toEqual([{price:null,note:null}]);
+    expect(await failure(my.query({text:'DELETE FROM orders',params:{},viewer:alice}))).toMatchObject({code:'read_only'});
+    expect(await failure(my.query({text:'WITH x AS (SELECT 1) DELETE FROM orders',params:{},viewer:alice}))).toMatchObject({code:'read_only'});
+    for (const viewer of [alice, bob, null]) {
+      expect((await my.query({text:'SELECT @`app.viewer_id` AS id',params:{},viewer})).rows).toEqual([{id:viewer?.id ?? ''}]);
+    }
+    expect((await my.query(q)).rows).toHaveLength(1);
+  });
+});
