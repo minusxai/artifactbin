@@ -6,17 +6,17 @@ import { requestOrSessionActor } from '@/lib/authentication';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import {getVersionFor,updateSharingFor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
-import {linkedGql,errorCode} from '@/__tests__/linked-datasets';
+import {linkedSql,errorCode} from '@/__tests__/linked-datasets';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '../index';
 useAppHarness();
 const anonymous=identityForUser(null);
-const READ='{ data(limit: 1) { _id amount } }';
+const READ='select _id, amount from data limit 1';
 async function fixture(visibility:'public'|'private'){
  const owner=await mintAccountToken('pinned_dataset_fixture'),req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{amount:1}],access:'readwrite',visibility}}),actor=await requestOrSessionActor(req),response=await create(req);
  expect(response.status).toBe(201);const {id}=await response.json(),live={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const},pinned={...live,mode:'pinned' as const,revision:'1'};
- const read=async(reader:AccessActor,link:typeof live|typeof pinned)=>{const reply=await linkedGql(reader,link,READ);if(reply.errors)throw Error(errorCode(reply)??'');return reply.data!.data as Array<{_id:string;amount:number}>;};
+ const read=async(reader:AccessActor,link:typeof live|typeof pinned)=>{const reply=await linkedSql(reader,link,READ);if(reply.error)throw Error(errorCode(reply)??'');return reply.rows! as Array<{_id:string;amount:number}>;};
  const advance=async()=>{
-  expect((await linkedGql(actor,live,'mutation { update_data(where: {}, _set: {amount: 2}) { affected_rows } }')).data).toEqual({update_data:{affected_rows:1}});
+  expect((await linkedSql(actor,live,'update data set amount = 2')).affected).toBe(1);
  };
  return {id,actor,owner,live,pinned,read,advance};
 }

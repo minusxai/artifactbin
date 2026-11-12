@@ -68,7 +68,6 @@
     "d3-format": "3.1.2",
     "es-module-lexer": "2.3.2",
     "esbuild": "0.28.2",
-    "graphql": "16.11.0",
     "hono": "4.13.14",
     "nunjucks": "3.2.4",
     "parse5": "8.0.1",

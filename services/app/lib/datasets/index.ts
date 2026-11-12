@@ -18,6 +18,5 @@ export type {
   CatalogInput, CatalogRowView, DatasetCatalog, DatasetTable,
 } from './types';
 export { people, resolveDefinitionScope, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
-export { graphqlRootNameProblem } from './graphql-names';
 
 export { selectSqlLinks } from './sql-links';

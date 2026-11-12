@@ -4,7 +4,7 @@ import {isRegionId,isRegionPosition} from '@/lib/html-presence/model';
 const loadUploadRelay=()=>import('./upload');
 /** Parent transport for the native HTML reader. Messages must come from the
  * current iframe, expected origin and session key. The only HTTP relay is this
- * page's GraphQL endpoint, pinned to the trusted shell's revision and read mode.
+ * page's SQL endpoint, pinned to the trusted shell's revision and read mode.
  */
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController } from '@/lib/html-reader/contract';
@@ -120,47 +120,13 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 const sameOriginFetch = (win: Window) => (path: string, init: RequestInit): Promise<Response> =>
   win.fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
 
-/** The relayed request, checked: this document's GraphQL path, on the page's own origin, or null. */
+/** Relay only this page's SQL door, pinned to the trusted shell revision and read mode. */
 export function relayedRequest(win: Window, id: string, request: { path: unknown; method: unknown; headers: unknown; body: unknown }, htmlContext?: HtmlRelayContext): { path: string; init: RequestInit } | null {
-  if (typeof request.path !== 'string' || (request.method !== 'GET' && request.method !== 'POST')) return null;
+  if (typeof request.path !== 'string' || request.method !== 'POST') return null;
   let url: URL;
   try { url = new URL(request.path, win.location.origin); } catch { return null; }
-  if (url.origin !== win.location.origin) return null;
-  const graphql = url.pathname === `/api/artifacts/${encodeURIComponent(id)}/graphql` && request.method === 'POST' && !url.search && !url.hash;
-  // The page SQL door: its own path, or (the reader's one request relay, html-runtime browser-client `sql`) the GraphQL path
-  // with `operation: 'sql'`, routed here to /sql.
-  if ((url.pathname === `/api/artifacts/${encodeURIComponent(id)}/sql` || graphql && sqlBody(request.body)) && request.method === 'POST' && !url.search && !url.hash) return relayedSql(new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`, url), request, htmlContext);
-  if (!graphql) return null;
-  let graphqlBody: string | undefined;
-  let mutation = false;
-  if (graphql) {
-    if (!htmlContext?.revision || typeof request.body !== 'string' || request.body.length > 1_000_000) return null;
-    try {
-      const input: unknown = JSON.parse(request.body);
-      if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-      const body = input as Record<string, unknown>;
-      if (typeof body.query !== 'string' || !['query', 'mutation'].includes(String(body.operation)) || htmlContext.readOnly && body.operation !== 'query') return null;
-      mutation = body.operation === 'mutation';
-      graphqlBody = JSON.stringify({ ...body, revision: htmlContext.revision });
-    } catch { return null; }
-  }
-  const headers: Record<string, string> = {};
-  if (request.headers && typeof request.headers === 'object') {
-    for (const [name, value] of Object.entries(request.headers as Record<string, unknown>)) {
-      if (SENT_HEADERS.includes(name.toLowerCase()) && typeof value === 'string') headers[name] = value;
-      else if (mutation && name.toLowerCase() === 'idempotency-key' && typeof value === 'string' && IDEMPOTENCY_KEY.test(value)) headers['Idempotency-Key'] = value;
-    }
-  }
-  const body = graphqlBody ?? (request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined);
-  return { path: url.pathname + url.search, init: { method: request.method, headers, ...(body !== undefined ? { body } : {}) } };
-}
-
-const MAX_RELAYED_BODY = 1_000_000;
-
-/** A relayed body the page runtime's `sql` sent through the GraphQL relay (`operation: 'sql'`). */
-function sqlBody(body: unknown): boolean {
-  if (typeof body !== 'string' || body.length > MAX_RELAYED_BODY) return false;
-  try { return (JSON.parse(body) as { operation?: unknown } | null)?.operation === 'sql'; } catch { return false; }
+  if (url.origin !== win.location.origin || url.pathname !== `/api/artifacts/${encodeURIComponent(id)}/sql` || url.search || url.hash) return null;
+  return relayedSql(url, request, htmlContext);
 }
 
 /**
@@ -262,8 +228,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
     const reply=(answer:FrameBridgeParentPayload)=>{if(key===relayKey)post(answer);};
     const request = relayedRequest(win, id, payload, options.htmlContext?.());
     if (!request) {
-      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/sql` || sqlBody(payload.body)) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ error: 'permission_denied', message: 'This page request is not permitted' }) });
-      else if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/graphql`) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: null, errors: [{ message: 'This page request is not permitted' }] }) });
+      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/sql`) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ error: 'permission_denied', message: 'This page request is not permitted' }) });
       else reply({ kind: 'fetch-result', call: payload.call, error: 'refused' });
       return;
     }

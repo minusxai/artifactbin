@@ -24,11 +24,10 @@ const dir = (name: string, pattern: RegExp) => readdirSync(new URL(name, SKILL))
 const runtime = readdirSync(new URL('html-runtime/', LIB)).filter(file => file.endsWith('.ts')).sort();
 const APP = new URL('../../../', import.meta.url);
 /** The deprecated GraphQL layer (scripts/ci/module-graph.mjs GRAPHQL_COMPAT.paths): what it answers older pages stays. */
-const GRAPHQL_LAYER = ['lib/graphql-compat/', 'lib/html-runtime/apollo/graphql-compat'];
 /** The product's own sources (the skill tree has its scopes above), tests and the GraphQL layer left out. */
 const product = ['app', 'lib', 'server', 'solid'].flatMap(top => readdirSync(new URL(top + '/', APP), {recursive: true,
   encoding: 'utf8'}).map(file => `${top}/${file}`)).filter(file => /\.tsx?$/.test(file) &&
-  !/(?:^|\/)(?:__tests__|node_modules)\//.test(file) && !GRAPHQL_LAYER.some(prefix => file.startsWith(prefix))).sort()
+  !/(?:^|\/)(?:__tests__|node_modules)\//.test(file)).sort()
   .map(file => ({path: file, text: read(new URL(file, APP))}));
 /** A source with all but its string, template and JSX text blanked, newlines kept: what it says, never its comments. */
 function literals({path, text}: {path: string; text: string}): {path: string; text: string} {
@@ -254,7 +253,6 @@ describe('retired skill phrasing', () => {
     expect(strings('const usage = `const q=gql\\`{rows}\\`;`;')).toMatch(gqlHint);
     expect(strings('// the page\'s own gql`…` documents\nconst gql = 1;')).not.toMatch(gqlHint);
     expect(FILES.product.map(file => file.path)).toContain('lib/datasets/dataset-usage.ts');
-    expect(FILES.product.some(file => GRAPHQL_LAYER.some(prefix => file.path.startsWith(prefix)))).toBe(false);
   });
   it('keeps the monitor instruction and the served watch guide on the same loop sentence (H1 drift)', () => {
     const guide = FILES.references.find(file => file.path.endsWith('/html-operations.md'))!.text;

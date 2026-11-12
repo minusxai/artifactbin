@@ -129,7 +129,7 @@ async function deckLeg(browser) {
 
 /**
  * A DECK DRAWN FROM ITS DATASET EXPORTS ITS SLIDES. The capture (`raw?chrome=0&key=…`) is a top-level page in the
- * opaque sandbox with no app frame; before it read the page GraphQL endpoint itself (document-serving/raw), every
+ * opaque sandbox with no app frame; before it read the page SQL endpoint itself (document-serving/raw), every
  * `@afbin/apollo` read answered "offline: nothing was sent". This deck draws a green slide from two rows and throws
  * on none, as an agent's deck does: a slide without its data drew no slide, and the export failed at the deadline.
  */
@@ -139,7 +139,7 @@ async function publishDataDeck(visibility) {
   const created = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset: [{ stage: 'Data access', days: 3.5 }, { stage: 'Security review', days: 2.5 }], title: 'Stages', visibility }) });
   const dataset = await created.json();
   check(created.status === 201, `published the ${visibility} deck's dataset (${created.status})`);
-  const script = "const {data,errors}=await client.query({query:gql`{stages(order_by:{stage:asc}){stage days}}`});if(errors?.length)throw Error(errors[0].message);"
+  const script = "import {sql} from '@afbin/apollo';const data={stages:await sql`select stage, days from stages order by stage`};"
     + "if(data?.stages?.length!==2)throw Error('no rows');const s=document.createElement('section');s.setAttribute('data-af-slide','');s.style.cssText='height:630px;background:rgb(51,204,51)';s.textContent=data.stages.map(r=>r.stage+' '+r.days).join(', ');document.querySelector('#deck').append(s);";
   const put = await fetch(`${BASE}/api/artifacts/${start.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Data deck', html: nativeHtml('Data deck', `<link rel="af-dataset" data-af-name="stages" href="ref:${dataset.id}"><main id="deck"></main>`, { script }) }) });
   check(put.status === 200, `published the ${visibility} data deck (${put.status})`);
@@ -167,7 +167,7 @@ async function dataDeckLeg() {
 
 /**
  * AN EXPORT SHOWS WHAT ITS REQUESTER MAY SEE. A PRIVATE deck reading a PRIVATE dataset exports its slide with real
- * rows for its owner — the capture reads as the requester the export key was minted for (lib/graphql-compat) — and a
+ * rows for its owner — the capture reads as the requester the export key was minted for (lib/page-doors) — and a
  * second account, or nobody, who cannot read the page is refused, never handed the owner's image.
  */
 async function privateDataDeckLeg() {

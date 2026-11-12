@@ -3,19 +3,17 @@
  * `sql` statement (/sql). Each failure keeps its field, message, code and the detail the server
  * sends, stamped with how many page and console errors came before it. A failed read (a
  * SELECT) that got no detail keeps what it sent, so check can ask it again as the owner; a write
- * never is. A page published before sql may still post to /graphql: that counts as a call too (a
+ * never is. A SQL request is a data call (a
  * data read, and a failure when refused), nothing more. Serialized into the hosted script
  * (PARTS): it references only its parameters.
  * Used by: toolbox-check-inspect.mjs.
  */
 
-/** Which page call a URL is: 'sql' or 'graphql', or null. */
+/** Which page call a URL is: 'sql', or null. */
 export function callKind(value) {
   try {
     const path = new URL(value).pathname;
     if (/^\/api\/artifacts\/[^/]+\/sql$/i.test(path)) return {kind: 'sql'};
-    if (/^\/api\/(?:artifacts|local-connection)\/[^/]+\/graphql$/i.test(path))
-      return {kind: 'graphql'};
   } catch {}
   return null;
 }

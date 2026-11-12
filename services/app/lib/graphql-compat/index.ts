@@ -1,7 +1,0 @@
-/** DEPRECATED: GraphQL compatibility for pages published before SQL. Do not use in new code; do not extend. */
-/**
- * The page and dataset GraphQL doors: every dataset link mounts the dataset's generated (Hasura-style) API, and the
- * page schema composes them. Who may import this module: GRAPHQL_COMPAT in scripts/ci/module-graph.mjs; the rules for editing it: AGENTS.md.
- */
-export {pageGraphql} from './page';
-export {datasetGraphqlSchema,executeDatasetGraphql,executeLinkedDatasetGraphql,isDatasetGraphqlTarget,pageDatasetRoots} from './dataset/hasura';

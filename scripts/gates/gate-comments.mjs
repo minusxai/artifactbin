@@ -1021,13 +1021,13 @@ const VIEW_DOC = `<!doctype html><html><head><title>Saved comment view</title>
 <script src="/af/core.js" data-af="core"></script>
 <script type="application/json" data-af="state" data-af-comment-version="one" data-af-comment-fields='["screen"]'>{"screen":"home","draft":""}</script></head>
 <body style="padding:40px"><button id="home">Home</button><button id="detail">Detail</button><input id="draft" aria-label="Private draft"><p id="target" data-af-id="target">Saved view target</p><output id="screen"></output>
-<script type="module">import {client,gql} from '@afbin/apollo';
-const query=gql\`{screen draft}\`;
+<script type="module">import {state} from '@afbin/state';
+
 const draw=({data})=>{document.querySelector('#screen').textContent=data.screen;document.querySelector('#draft').value=data.draft};
-client.watchQuery({query}).subscribe(draw);
-for(const screen of ['home','detail'])document.getElementById(screen).onclick=()=>client.updateQuery({query},data=>({...data,screen}));
-document.querySelector('#draft').oninput=event=>client.updateQuery({query},data=>({...data,draft:event.target.value}));
-await client.query({query}).then(draw);document.documentElement.dataset.afReady='yes';</script></body></html>`;
+state.subscribe(data=>draw({data}));draw({data:state.getState()});
+for(const screen of ['home','detail'])document.getElementById(screen).onclick=()=>state.setState(data=>({...data,screen}));
+document.querySelector('#draft').oninput=event=>state.setState(data=>({...data,draft:event.target.value}));
+await Promise.resolve({data:state.getState()}).then(draw);document.documentElement.dataset.afReady='yes';</script></body></html>`;
 async function savedViewLeg(browser,seed) {
  const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
  try {

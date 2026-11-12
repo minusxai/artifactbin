@@ -12,9 +12,8 @@ comment, history nowhere. Keep links plain, never `@` imports.
 | [lib/artifact-access](services/app/lib/artifact-access/AGENTS.md) | read, write, export, live-stream or dataset-mutation paths; locking |
 | [lib/html-runtime](services/app/lib/html-runtime/AGENTS.md) | page scripts, viewer state, the built runtime, what pages may do |
 | [lib/html-components](services/app/lib/html-components/AGENTS.md) | native components, specs, generated lists, the reader build |
-| [lib/page-operations](services/app/lib/page-operations/AGENTS.md) | the page SQL door, the page GraphQL engine (deprecated) |
+| [lib/page-doors](services/app/lib/page-doors/AGENTS.md) | the page SQL door and access guards |
 | [lib/dataflow](services/app/lib/dataflow/AGENTS.md) | the data language: references, evaluation, browser leaves |
-| [lib/graphql-compat](services/app/lib/graphql-compat/AGENTS.md) | anything that touches GraphQL (deprecated, fenced) |
 | [lib/skills](services/app/lib/skills/AGENTS.md) | the author skill (`services/app/skills`), served `/llms` copy, evals |
 | [solid](services/app/solid/AGENTS.md) | any app UI: chrome, controls, overlays, UI tests |
 | [server](services/app/server/AGENTS.md) | serving, origins, CSP, hosts, credentials: the trust boundary |

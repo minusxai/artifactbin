@@ -58,12 +58,12 @@ it('keeps a private dataset and its grants unchanged when its native owner page 
  expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();
 });
 it('does not treat page membership or a read rule as dataset authority; an editor share is',async()=>{
- const {linkedGql,liveLink}=await import('@/__tests__/linked-datasets');
+ const {linkedSql,liveLink}=await import('@/__tests__/linked-datasets');
  const owner=await mintToken('grant-owner'),bob=await mintToken('grant-reader');const actor=identityForUser(owner.userId,owner.id),reader=identityForUser(bob.userId,bob.id);
  const ds=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],access:'readwrite',visibility:'public'}}))).json();
  const page=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds.id}"></head><body>Rows</body></html>`,visibility:'public'}}))).json();
  // The reader inserts through the page's generated API: committed only when the root answered.
- const write=async(key:string)=>{const reply=await linkedGql(reader,liveLink(ds.id),'mutation { insert_data(objects: [{n: 2}]) { affected_rows } }',{pageId:page.id,idempotencyKey:`grant_${key}`});return {outcome:!reply.errors?.length&&reply.data?.insert_data?'committed':'rejected'};};
+ const write=async(key:string)=>{const reply=await linkedSql(reader,liveLink(ds.id),'insert into data(n) values(2)',{pageId:page.id,idempotencyKey:`grant_${key}`});return {outcome:!reply.error&&reply.affected?'committed':'rejected'};};
  expect((await write('before_membership')).outcome).toBe('rejected');
  await changeMembership(reader,page.id,{action:'join'});await changeMembership(actor,page.id,{action:'approve',userId:bob.userId!});
  expect((await write('after_membership')).outcome).toBe('rejected');

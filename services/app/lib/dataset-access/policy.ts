@@ -1,6 +1,6 @@
 /**
  * THE AGENT POLICY DOOR for v3 dataset permissions (get_dataset_policy, set_dataset_policy,
- * get_dataset_policy_templates): what the dataset's GraphQL API lets each role do, as owners and editors read
+ * get_dataset_policy_templates): what the dataset's SQL doors lets each role do, as owners and editors read
  * and set it.
  *
  * Read: the stored v3 policy, or the default when none is stored (lib/dataset-permissions `storedPolicy`, the
@@ -44,7 +44,6 @@ const invalid = (errors: DatasetPermissionsIssue[]): PolicyReply => ({
   status: 400,
   body: { error: 'invalid_policy', detail: errors.map((e) => `${e.path}: ${e.message}`).join('; '), errors },
 });
-const graphqlType = (type: DatasetColumn['type']) => (type === 'number' ? 'Float' : type === 'boolean' ? 'Boolean' : 'String');
 
 /** A stored dataset the actor edits or owns, with its catalog tables; null for everything else. */
 async function editable(actor: AccessActor, id: string): Promise<{ row: ArtifactRow; tables: DatasetTable[] } | null> {
@@ -72,7 +71,7 @@ function collaborativeTypeErrors(policy: DatasetPermissions, tables: readonly Da
   }));
 }
 
-/** GET: the policy as v3, its revision, the roles rules may name, each table's GraphQL names and the read-back. */
+/** GET: the policy as v3, its revision, the roles rules may name, each table's persisted field identifiers and the read-back. */
 export async function readDatasetPermissions(actor: AccessActor, id: string): Promise<PolicyReply> {
   const found = await editable(actor, id);
   if (!found) return NOT_FOUND;
@@ -93,7 +92,7 @@ export async function readDatasetPermissions(actor: AccessActor, id: string): Pr
     tables: tables.map((t, i) => ({
       table: { schema: t.schema, name: t.name },
       root: names[i]!.root,
-      columns: t.columns.map((c) => ({ name: c.name, field: names[i]!.columns[c.name], type: c.type, graphqlType: graphqlType(c.type) })),
+      columns: t.columns.map((c) => ({ name: c.name, field: names[i]!.columns[c.name], type: c.type })),
     })),
     ...(reading ? readBack(reading.policy, row) : { readBack: '', readBackTables: [], warnings: [] }),
   });

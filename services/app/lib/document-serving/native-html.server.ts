@@ -84,9 +84,8 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     // The opaque raw reader may load only this page's admission-checked linked
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
-    // On a anonymous owner host, and in the exporter's capture, the page reads its data from its own page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
-    // The exporter's capture alone also reads its `sql` from the page SQL door (lib/page-doors `opaqueSqlRead`).
-    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href}${options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:''}`:'';
+    // Export captures read through the page SQL door (lib/page-doors opaqueSqlRead).
+    const reads=options.domainReads&&options.captureSql?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/sql`,base).href}`:'';
     return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${[PLATFORM_FONTS_PATH].map(dir=>new URL(dir,base).href).join(' ')}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions,framers:embedTrustedOrigins()}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");

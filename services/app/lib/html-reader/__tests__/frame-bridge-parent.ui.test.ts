@@ -47,15 +47,15 @@ describe('relayedRequest', () => {
   });
 
   it('admits the page GraphQL door only with a revision, pins it, and refuses mutations to a read-only reader', () => {
-    const graphql = { path: '/api/artifacts/doc/graphql', method: 'POST', headers: {}, body: JSON.stringify({ query: '{a}', operation: 'query', revision: 'forged' }) };
-    expect(relayedRequest(win, 'doc', graphql)).toBeNull();
-    expect(JSON.parse(String(relayedRequest(win, 'doc', graphql, { revision: '7', readOnly: true })!.init.body))).toEqual({ query: '{a}', operation: 'query', revision: '7' });
-    const mutation = { ...graphql, body: JSON.stringify({ query: 'mutation{a}', operation: 'mutation' }) };
-    expect(relayedRequest(win, 'doc', mutation, { revision: '7', readOnly: true })).toBeNull();
+    const sql = { path: '/api/artifacts/doc/sql', method: 'POST', headers: {}, body: JSON.stringify({ sql: 'select 1', params: {}, revision: 'forged' }) };
+    expect(relayedRequest(win, 'doc', sql)).toBeNull();
+    expect(JSON.parse(String(relayedRequest(win, 'doc', sql, { revision: '7', readOnly: true })!.init.body))).toEqual({ sql: 'select 1', params: {}, revision: '7', readOnly:true });
+    const mutation = { ...sql, body: JSON.stringify({ sql: 'update data set n = 1', params:{} }) };
+    expect(JSON.parse(String(relayedRequest(win, 'doc', mutation, { revision: '7', readOnly: true })!.init.body)).readOnly).toBe(true);
     expect(relayedRequest(win, 'doc', mutation, { revision: '7', readOnly: false })).not.toBeNull();
-    for (const body of ['not json', '[]', '{"operation":"query"}', JSON.stringify({ query: '{a}', operation: 'subscription' }), 'x'.repeat(1_000_001)])
-      expect(relayedRequest(win, 'doc', { ...graphql, body }, { revision: '7', readOnly: false })).toBeNull();
-    expect(relayedRequest(win, 'doc', { ...graphql, path: '/api/artifacts/doc/graphql?x=1' }, { revision: '7', readOnly: false })).toBeNull();
+    for (const body of ['not json', '[]', '{"operation":"query"}', 'x'.repeat(1_000_001)])
+      expect(relayedRequest(win, 'doc', { ...sql, body }, { revision: '7', readOnly: false })).toBeNull();
+    expect(relayedRequest(win, 'doc', { ...sql, path: '/api/artifacts/doc/sql?x=1' }, { revision: '7', readOnly: false })).toBeNull();
   });
 });
 
@@ -100,14 +100,14 @@ describe('createFrameBridgeParent', () => {
   it('relays an admitted fetch with only the kept response headers, and refuses others', async () => {
     const t = setup(FRAME, { htmlContext: () => ({ revision: '7', readOnly: true }) });
     t.say({ kind: 'ready', nonce: 'n' });
-    t.say({ kind: 'fetch', call: 1, path: '/api/artifacts/doc/graphql', method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'secret', 'x-draft-sequence': '4' }, body: JSON.stringify({ query: '{a}', operation: 'query' }) });
+    t.say({ kind: 'fetch', call: 1, path: '/api/artifacts/doc/sql', method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'secret', 'x-draft-sequence': '4' }, body: JSON.stringify({ sql: 'select 1', params: {} }) });
     t.say({ kind: 'fetch', call: 2, path: '/a/other/story', method: 'GET', headers: {}, body: null });
     await flush(); await flush();
     const results = t.posted.filter(p => p.data.payload.kind === 'fetch-result').map(p => p.data.payload);
     expect(results).toContainEqual({ kind: 'fetch-result', call: 2, error: 'refused' });
     expect(results).toContainEqual({ kind: 'fetch-result', call: 1, status: 200, headers: { 'content-type': 'application/json', 'retry-after': '3' }, body: '{"ok":true}' });
     expect(t.appFetch).toHaveBeenCalledTimes(1);
-    expect(t.appFetch).toHaveBeenCalledWith('/api/artifacts/doc/graphql', expect.objectContaining({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{a}', operation: 'query', revision: '7' }) }));
+    expect(t.appFetch).toHaveBeenCalledWith('/api/artifacts/doc/sql', expect.objectContaining({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sql: 'select 1', params: {}, revision: '7', readOnly:true }) }));
   });
 
   it('re-attaches under a fresh key when a new document says hello, dropping the old backlog', () => {

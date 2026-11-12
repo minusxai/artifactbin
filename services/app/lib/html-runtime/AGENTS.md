@@ -19,8 +19,7 @@ build that serve them. Access decisions belong to the doors behind the trusted p
   (`<meta name="csp-connect" …>`, `lib/document/csp-extensions.ts`) and reader consent, never another way.
 - A read-only (archived) shell relays only reads: SQL reads, no uploads. Raw pages and portable
   copies have no trusted frame, so they never upload.
-- Teach new pages `sql` and `@afbin/state`. `apollo/graphql-compat.ts` is the deprecated
-  GraphQL client behind module-graph rule 5 (`GRAPHQL_COMPAT`): fix it, never extend it.
+- Teach pages `sql` and `@afbin/state`; page data uses the SQL door and viewer state stays in the browser.
 - Author-facing modules expose only current supported names; retired aliases are removed rather than re-exported.
 - The gzipped budgets in `__tests__/build.test.ts` (core, reader, chrome, native regions, collab, state) are never
   raised. New code goes in a lazy module; the reader carries no SQL code.

@@ -4,7 +4,6 @@ import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/li
 import {json,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
 import {parseCsv} from '@/lib/data-ingest';
-import {graphqlRootNameProblem} from '@/lib/datasets';
 import {FILE_EXTENSIONS} from '@artifactbin/contracts';
 /** A bundle file the actor may not write, named by its project path. */
 class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_not_editable'|'bundle_file_not_creatable',readonly path:string){super(code);}}
@@ -19,12 +18,12 @@ const MAPPING_ID=/^[A-Za-z0-9]{6,128}$/;
 const unsupportedFile=(path:string):string=>/\.html?$/i.test(path)?`unsupported_file_type: ${path} is a page: publish it on its own and link its address`:`unsupported_file_type: ${path}; a page publishes files of these types: ${FILE_EXTENSIONS.join(', ')}`;
 /**
  * A CSV a page links by path is named by its file, as a CSV published alone is: its title is the file name and its
- * GraphQL root the name made valid (sales.csv → sales), and a header with no rows is an empty table of those columns.
+ * dataset title; a header with no rows is an empty table of those columns.
  */
-function csvDatasetFields(path:string,csv:string):{title:string;name?:string;columns?:{name:string;type:'string'}[]}{
- const file=path.split('/').at(-1)!,stem=file.replace(/\.[^.]+$/,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+function csvDatasetFields(path:string,csv:string):{title:string;columns?:{name:string;type:'string'}[]}{
+ const file=path.split('/').at(-1)!;
  const {headers,rows}=parseCsv(csv);
- return {title:file,...(graphqlRootNameProblem(stem)?{}:{name:stem}),...(headers.length&&!rows.length?{columns:headers.map(name=>({name,type:'string' as const}))}:{})};
+ return {title:file,...(headers.length&&!rows.length?{columns:headers.map(name=>({name,type:'string' as const}))}:{})};
 }
 export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Response>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);

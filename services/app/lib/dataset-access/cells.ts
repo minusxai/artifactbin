@@ -1,5 +1,5 @@
 /**
- * ONE TEXT CELL of a stored dataset, addressed as the generated API addresses it (a row's `_id`, a column's GraphQL
+ * ONE TEXT CELL of a stored dataset, addressed by a row's stable `_id` and a column's persisted
  * field), for live co-editing (lib/region-sessions, contract region-sessions CellScope): where it is, what it holds,
  * whether its column is collaborative, and its merged text written back through the one write path.
  *
@@ -24,7 +24,7 @@ import { ID_COLUMN, quote, rowIdsForObject, tableIdentity } from './model';
 export interface DatasetCell {
   table: DatasetTable;
   tableId: string;
-  /** The column's source name and its GraphQL field. */
+  /** The column's source name and its persisted field identifier. */
   source: string;
   field: string;
   rowId: string;

@@ -58,7 +58,7 @@ it('reads a dataset with no stored policy as v3, with its GraphQL names, roles, 
     report: [],
     roles: { rules: ['viewer', 'signed_in', 'anonymous'], admin: ['owner', 'editor'] },
     templates: ['read-only', 'own-rows', 'editors-only'],
-    tables: [{ table: ROWS, root: 'signups', columns: [{ name: 'name', field: 'name', type: 'string', graphqlType: 'String' }, { name: 'created_by', field: 'created_by', type: 'string', graphqlType: 'String' }] }],
+    tables: [{ table: ROWS, root: 'signups', columns: [{ name: 'name', field: 'name', type: 'string' }, { name: 'created_by', field: 'created_by', type: 'string' }] }],
     warnings: [],
   });
   expect(owned.body.policy).toMatchObject({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'viewer' }, { role: 'signed_in' }, { role: 'anonymous' }] }] });

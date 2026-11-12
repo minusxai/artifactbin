@@ -13,7 +13,7 @@ interface PortableSessionOptions {
  connect?:typeof connectLocalDocument;
  attach(post:(payload:FrameBridgeFramePayload)=>void):{receive(payload:FrameBridgeParentPayload):void;dispose():void};
  adoptIdentity?(identity:PortableIdentity,source:string):void;
- online(value:boolean,request?:LocalDocumentConnection['request'],pending?:boolean):void;
+ online(value:boolean,pending?:boolean):void;
 }
 /** Shared local chrome persists independently of the trusted remote connection. */
 export function startPortableSession(options:PortableSessionOptions):()=>void {
@@ -65,10 +65,10 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
    };
    if(win.document.body)attachFrame();
    else{win.document.addEventListener('DOMContentLoaded',attachFrame,{once:true});cancelFrameMount=()=>win.document.removeEventListener('DOMContentLoaded',attachFrame);}
-   options.online(true,transport.request);
+   options.online(true);
   };
   current=(options.connect??connectLocalDocument)({win,identity,onSourceObservation(value){if(epoch!==attempt||disposed)return;remoteObservation=value;update();},
-   onState(next){if(epoch!==attempt||disposed)return;state=next;win.document.documentElement.setAttribute('data-af-connection',next);if(next!=='connected'){ready=false;active=false;cancelFrameMount();options.online(false,undefined,next==='connecting');frame?.dispose();frame=undefined;}update();},
+   onState(next){if(epoch!==attempt||disposed)return;state=next;win.document.documentElement.setAttribute('data-af-connection',next);if(next!=='connected'){ready=false;active=false;cancelFrameMount();options.online(false,next==='connecting');frame?.dispose();frame=undefined;}update();},
    onConnected(){if(epoch!==attempt||disposed)return;ready=true;activate();},
    onMessage(message){
     if(epoch!==attempt||disposed)return;

@@ -1,6 +1,6 @@
 import type {ArtifactRow} from '@/lib/artifacts';
 import {catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
-import type {DatasetGraphqlPort,DatasetSnapshot} from './types';
+import type {DatasetRowPort,DatasetSnapshot} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
 import {canRunSql,datasetReadAccess,datasetView,viewCatalog} from '@/lib/dataset-permissions';
@@ -14,7 +14,7 @@ interface RetainedReadOptions {
  /** SQL planning retains visible metadata without opening stored row objects. Only selected execution hydrates IDs. */
  deferRowIds?:boolean;
  retainReadFence?:(verify:()=>Promise<void>)=>void;
- /** The dataset's own GraphQL endpoint: the dataset's sharing alone decides the role (no page audience). */
+ /** A direct dataset request: the dataset's sharing alone decides the role (no page audience). */
  direct?:boolean;
  /** Through a page's generated API: the page (`X-Hasura-Page-Id`) the read's session names. */
  pageId?:string;
@@ -46,7 +46,7 @@ export async function readIdentityIn(tx:Queryable,actor:AccessActor,datasetId:st
  const decision=await datasetReadAccess(row,actor,{throughPage:true,pageId,tx});
  return decision.allowed?JSON.stringify([authorityIdentity(row),decision.identity]):null;
 }
-export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):DatasetGraphqlPort {
+export function retainedDatasetPort(options:RetainedReadOptions={}):DatasetRowPort {
  const hydrate = new WeakMap<DatasetSnapshot, (signal:AbortSignal) => Promise<void>>();
  return {
   async snapshot(actor,binding,signal){

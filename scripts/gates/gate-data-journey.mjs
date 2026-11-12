@@ -43,7 +43,7 @@ const framed = async (page) => {
   return frame;
 };
 try {
-  await lane(check, "CSV, catalog and GraphQL pagination").run(async () => {
+  await lane(check, "CSV, catalog and SQL pagination").run(async () => {
     const owner = await startDocument(BASE);
     const csv = 'month,revenue,zip,note\n2026-01,120,01234,ok\n2026-02,,09876,\n2026-03,190,01234,""';
     const ds = await create(owner, { title: "Q3 Revenue", dataset: csv, columns: [{ name: "zip", type: "string" }] });
@@ -61,7 +61,7 @@ try {
     let frame = await framed(page);
     check(await frame.locator("#total").textContent() === "rows: 3", "generated dataset roots read CSV rows");
     const cells = await frame.locator("tbody tr").filter({ hasText: "2026-02" }).locator("td").allTextContents();
-    check(cells.includes("09876") && cells.includes("NULL"), "GraphQL preserves typed null and lexical identifier");
+    check(cells.includes("09876") && cells.includes("NULL"), "SQL preserves typed null and lexical identifier");
     check((await frame.locator("tbody tr").filter({ hasText: "2026-03" }).locator("td").allTextContents()).includes(""), "quoted empty string remains different from typed null");
     const bars = await frame.locator("#chart rect").evaluateAll((nodes) => nodes.map((node) => ({ value: Number(node.dataset.value), height: Number(node.getAttribute("height")) })));
     check(bars.length === 3 && bars.find((b) => b.value === 190)?.height === 180 && bars.find((b) => b.value === 120)?.height > 0, "uploaded numeric values render proportional SVG marks rather than table fallback");
@@ -194,7 +194,7 @@ try {
     });
     check(Math.max(...latencies) < 50, `offline day clicks stay below 50ms (${latencies.map(Math.round).join(",")}ms)`);
     // Reader presence starts independently and heartbeats every three seconds.
-    // Keep every authored-frame request and every parent GraphQL relay in this measurement.
+    // Keep every authored-frame request and every parent SQL relay in this measurement.
     const fixture={origin:new URL(BASE).origin,artifactId:owner.id,revision:String(published.version)};
     const stateRequests=requests.filter(request=>!isReaderPresenceRequest(request,fixture));
     const detail=stateRequests.map(({url,method,mainFrame,type})=>({path:new URL(url).pathname,method,source:mainFrame?'parent':'page',type}));

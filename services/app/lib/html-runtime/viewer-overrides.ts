@@ -1,6 +1,6 @@
 /**
  * How a viewer's saved state combines with the page's defaults (the state block). Pure; ./viewer-state applies it, so
- * `@afbin/state` and `gql` local fields see the same document.
+ * `@afbin/state` and comment views see the same document.
  *
  * The browser keeps only the viewer's OVERRIDES: top-level keys whose value differed from the defaults when written.
  * The document is the current defaults with those overrides merged over them one level deep (a saved nested object

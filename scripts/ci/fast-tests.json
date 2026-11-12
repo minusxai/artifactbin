@@ -36,7 +36,6 @@
   "services/app/lib/html-presence/__tests__/reader-session.test.ts",
   "services/app/lib/html-presence/__tests__/room.test.ts",
   "services/app/lib/html-publication-bundle/__tests__/bundle.test.ts",
-  "services/app/lib/html-runtime/__tests__/apollo.test.ts",
   "services/app/lib/html-runtime/__tests__/assembly.test.ts",
   "services/app/lib/html-runtime/__tests__/inline-scripts.test.ts",
   "services/app/lib/html-runtime/__tests__/asset-retention.test.ts",
@@ -47,7 +46,6 @@
   "services/app/lib/html-runtime/__tests__/viewer-state.test.ts",
   "services/app/lib/html-component-specs/__tests__/deck-spec.test.ts",
   "services/app/lib/local-connection/__tests__/registry.test.ts",
-  "services/app/lib/local-connection/__tests__/read-only-operation.test.ts",
   "services/app/lib/object-store/__tests__/url.test.ts",
   "services/app/lib/skills/__tests__/setup-instructions.test.ts",
   "services/app/lib/html-reader/__tests__/reader-mode.test.ts",
@@ -89,8 +87,6 @@
   "services/app/lib/live-regions/__tests__/region-doc.test.ts",
   "services/app/lib/live-regions/__tests__/cells.property.test.ts",
   "services/app/lib/html-components/__tests__/markdown-code-sizes.test.ts",
-  "services/app/lib/graphql-compat/__tests__/hasura-schema.test.ts",
-  "services/app/lib/graphql-compat/__tests__/hasura-read.test.ts",
   "services/app/lib/live-regions/__tests__/tasks.test.ts",
   "scripts/__tests__/new-doc-contract.test.mjs"
 ]

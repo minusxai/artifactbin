@@ -29,11 +29,11 @@ async function owner() {
 
 describe('native dataset column validation',()=>{
  it('reads generated columns and rejects unknown ones before executing a query',async()=>{
-  const {linkedGql,liveLink,errorCode}=await import('./linked-datasets');
+  const {linkedSql,liveLink,errorCode}=await import('./linked-datasets');
   const o=await owner(),id=await o.created({dataset:[{region:'EU',revenue:837}]});
   const link=liveLink(id,'sales'),actor=identityForUser(o.t.userId,o.t.id);
-  expect((await linkedGql(actor,link,'{ sales(limit: 1) { region } }')).data).toEqual({sales:[{region:'EU'}]});
-  expect(errorCode(await linkedGql(actor,link,'{ sales(limit: 1) { missing_column } }'))).toBe('validation_failed');
+  expect((await linkedSql(actor,link,'select region from sales limit 1')).rows).toEqual([{region:'EU'}]);
+  expect(errorCode(await linkedSql(actor,link,'select missing_column from sales limit 1'))).toBe('validation_failed');
  });
 });
 

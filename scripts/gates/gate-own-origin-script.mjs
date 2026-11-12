@@ -2,7 +2,7 @@
  * chrome owns credentials, publication and comments. Retired editor/CLI and
  * Helmet/Value/query/consent legs are replaced by native Apollo state, hostile
  * message admission, the original comment flow and a real server screenshot.
- * Linked backend GraphQL admission is exercised by the native backend gate. */
+ * Linked dataset SQL admission is exercised by the native backend gate. */
 import {createChecker,createSection} from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import {launchChromium} from './lib/browser.mjs';
@@ -44,7 +44,7 @@ await section('private origin and credential boundary',async()=>{
  check(!exposed.cookies.includes('afbin_pages')&&!exposed.source.includes(owner.token),'author scripts receive neither account bearer nor HttpOnly ticket');
  const raw=await context.request.get(pages.origin(owner.id));const policy=raw.headers()['content-security-policy']??'';
  check(raw.status()===200&&!/(^|;)\s*sandbox/.test(policy)&&policy.includes(`frame-ancestors ${APP}`),'runner policy admits only platform framing without an opaque sandbox');
- const probes=await frame.evaluate(async urls=>Promise.all(urls.map(async url=>{try{await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',credentials:'include'});return 'sent'}catch{return 'blocked'}})),[`${APP}/api/my/artifacts`,`${pages.origin(other.id)}/api/artifacts/${other.id}/graphql`]);
+ const probes=await frame.evaluate(async urls=>Promise.all(urls.map(async url=>{try{await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',credentials:'include'});return 'sent'}catch{return 'blocked'}})),[`${APP}/api/my/artifacts`,`${pages.origin(other.id)}/api/artifacts/${other.id}/sql`]);
  check(probes.every(result=>result==='blocked'),'CSP blocks platform API and another page origin');
  const before=await (await api(`/api/artifacts/${owner.id}`)).json();await sleep(500);
  const after=await (await api(`/api/artifacts/${owner.id}`)).json();

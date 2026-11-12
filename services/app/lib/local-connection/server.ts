@@ -7,16 +7,12 @@
  * happen on the hosted original, never here.
  */
 import {createHash,randomBytes} from 'node:crypto';
-import {attachActor} from '@artifactbin/utils';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { effectiveRole } from '@/lib/artifact-access';
 import { getArtifactHeaderById } from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {isCrossSiteRequest,json,readJson,baseUrl} from '@/lib/http';
-import {pageOperationKind} from '@/lib/page-operations';
-import {pageGraphql} from '@/lib/graphql-compat';
 import { currentRequest, runWithRequest } from '@/lib/platform';
-import {rejectLocalMutation} from './read-only-operation';
 import {createConnectionRegistry,validLinkedDocument} from './registry';
 import {LocalConnectionError,type SourceObservation,type ConnectionStatus} from './contracts';
 const registry=createConnectionRegistry({random:()=>randomBytes(32).toString('base64url'),async inspect(identity){
@@ -50,25 +46,6 @@ export async function revokeLocalConnection(request:Request):Promise<Response>{
  if(!sameOrigin(request))return json({error:'forbidden'},403);
  registry.revoke(request.headers.get('X-Af-Local-Capability')??'');return json({disconnected:true},200,{'Cache-Control':'no-store'});
 }
-export async function localConnectionGraphql(request:Request,artifactId:string):Promise<Response>{
- if(!sameOrigin(request))return json({error:'forbidden'},403);
- return runWithRequest(request,async()=>{try{
-  const capability=request.headers.get('X-Af-Local-Capability')??'';
-  const admission=await registry.authorize(capability,artifactId);
-  const payload=await request.clone().json() as {revision?:unknown;query?:unknown;operationName?:unknown};
-  if(payload.revision!==admission.identity.baseRevision)return json({error:'stale'},409);
-  const kind=typeof payload.query==='string'?pageOperationKind(payload.query,typeof payload.operationName==='string'?payload.operationName:undefined):null;
-  if(!kind)return json({error:'invalid_operation'},400,{'Cache-Control':'no-store'});
-  // Deny before schema/backend execution, even for legacy grants or ambient owner cookies.
-  if(kind==='mutation')return json(rejectLocalMutation(payload.query as string,typeof payload.operationName==='string'?payload.operationName:undefined),200,{'Cache-Control':'no-store'});
-  const guestHeaders=new Headers(request.headers);guestHeaders.delete('authorization');guestHeaders.delete('cookie');
-  const execution=attachActor(new Request(request,{headers:guestHeaders}),{credential:'none'});
-  const response=await runWithRequest(execution,()=>pageGraphql(execution,artifactId));
-  if(response.ok)await registry.authorize(capability,artifactId);
-  return response;
- }catch(error){return refusal(error);}});
-}
-
 /** Read only current head evidence; a stale claimed base never becomes a grant. */
 export async function observeLocalSource(request:Request):Promise<Response>{
  if(!sameOrigin(request))return json({error:'forbidden'},403);

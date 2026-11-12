@@ -3,7 +3,6 @@
  * longer authorize browser access. Bearer writes remain independent of Origin,
  * and logged-out readers cannot mutate even a public document's dataset.
  */
-import { DOMAIN_READ_ONLY_MESSAGE } from '@artifactbin/contracts/domain-footer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {nativeDatasetClient} from './native-dataset-http';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -53,7 +52,7 @@ async function setup() {
   return { t, user, ds, doc };
 }
 const write=async(doc:string,auth:Parameters<typeof mutationRequest>[1])=>
- (await nativeDatasetClient(doc).gql('mutation { insert_records(objects: [{choice: "tacos"}]) { affected_rows } }',{},auth)).response;
+ (await nativeDatasetClient(doc).sql("insert into records(choice) values('tacos')",{},auth)).response;
 
 describe('cross-site writes', () => {
   it('refuses one riding an ACCOUNT session, and writes nothing', async () => {
@@ -124,11 +123,11 @@ describe('cross-site writes', () => {
     const doc=await bind(t.token,ds,'public'); // public
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });
-    // An opaque origin only reads (lib/graphql-compat opaqueOriginRead): a mutation is refused before it runs.
+    // An opaque origin only reads (lib/page-doors opaqueOriginRead): a mutation is refused before it runs.
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.data ?? null).toBeNull();
-    expect(body.errors?.[0]?.message).toBe(DOMAIN_READ_ONLY_MESSAGE);
+    expect(body.error).toBe('permission_denied');
     expect((await getArtifactById(ds))!.version).toBe(1);
   });
 });

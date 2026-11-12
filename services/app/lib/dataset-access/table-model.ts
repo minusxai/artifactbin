@@ -1,19 +1,18 @@
 /**
  * ONE TABLE AS A ROLE READS AND WRITES IT (./linked): the columns it may select, the columns each write rule lets it
- * name and what it may change. The SQL door reads the stored `source` names; the GraphQL compatibility layer
- * (lib/graphql-compat) also generates its schema from `root` and each column's `field`. The names keep their
- * generated-API (Hasura-style) prefix because published pages' schemas are generated from them.
+ * name and what it may change. SQL uses stored `source` names. Persisted Hasura-style `field` identifiers
+ * still address collaborative cells and policy metadata.
  */
 import type { DatasetBoolExp, DatasetTableName, Scalar } from '@artifactbin/contracts';
 
 export type HasuraScalar = 'String' | 'Float' | 'Boolean';
 export interface HasuraColumn {
-  /** The GraphQL field name (lib/datasets/graphql-names). */
+  /** The persisted field identifier (lib/datasets/graphql-names). */
   field: string;
   /** The stored source column it reads. */
   source: string;
   type: HasuraScalar;
-  /** A text column the policy names in `collaborative_columns`: its object field says so in the SDL. */
+  /** A text column the policy names in `collaborative_columns`: its cells may be edited collaboratively. */
   collaborative?: boolean;
 }
 export interface HasuraTableModel {

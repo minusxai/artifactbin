@@ -39,8 +39,8 @@ export interface HtmlRuntimeConfig {
   scriptFingerprint?: string;
   /** What the core sets on <html> at load (D4): the design system, when the page has one, and the default colour mode. The viewer's own choice (`?mx-mode=`, reader messages) wins over `mode`. */
   appearance?: { designSystem?: string; mode: 'light' | 'dark' };
-  /** Private preview helper transport; never an account capability. */
-  localPreview?: { endpoint: string; schema: import('@artifactbin/contracts').PageSchema };
+  /** Local preview marker; never an account capability or executable data transport. */
+  localPreview?: object;
 }
 export interface HtmlAssemblyInput {
   html: string;

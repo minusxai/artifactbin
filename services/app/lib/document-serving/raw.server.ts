@@ -149,7 +149,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
    * sent" — a deck that guards the read exported with no numbers, one that throws drew no slide at all. It reads its
    * data straight from the page GraphQL endpoint, as an anonymous owner host's page does (html-runtime/domain-reads),
    * (its `sql` from the page SQL door, which admits an opaque origin only with that key, lib/page-doors `opaqueSqlRead`),
-   * and that endpoint answers an opaque origin as the requester the key was minted for, or as nobody (lib/graphql-compat):
+   * and that endpoint answers an opaque origin as the requester the key was minted for, or as nobody (lib/page-doors):
    * the image shows what its requester may read, never a session's view, and lib/export stores it for that audience.
    * Its page's own published files are read the same way: this response names each own-door address with the key
    * (native-html `captureKey`), as the asset door admits it. Only this response carries it: a keyed request is never a

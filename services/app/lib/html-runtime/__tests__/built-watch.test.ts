@@ -16,7 +16,7 @@ it('the emitted author module watches backend results with explicit loading with
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
  vi.stubGlobal('addEventListener',()=>{});vi.stubGlobal('removeEventListener',()=>{});
  let finish!:(value:unknown)=>void;
- const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onResolverChange(){},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");},watchUploadContext:()=>({unsubscribe(){}}),bindFileUpload:()=>()=>{}};
+ const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onResolverChange(){return {unsubscribe(){}};},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");},watchUploadContext:()=>({unsubscribe(){}}),bindFileUpload:()=>()=>{}};
  vi.stubGlobal('__builtWatchReader',fixture);
  const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
  const readerUrl='data:text/javascript;base64,'+Buffer.from(reader).toString('base64');
@@ -24,14 +24,15 @@ it('the emitted author module watches backend results with explicit loading with
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  expect(runtime.watchUploadContext).toBeTypeOf('function');
  expect(runtime.bindFileUpload).toBeTypeOf('function');
- const results:any[]=[];
- const subscription=runtime.client.watchQuery({query:runtime.gql`{orders{total} filter}`,clearOnRefresh:true}).subscribe((value:unknown)=>results.push(value));
- expect(results.at(-1)).toEqual({data:{filter:'private',orders:null},loading:true});
- finish({data:{orders:{total:17}}});
+ expect(runtime).not.toHaveProperty('client');expect(runtime).not.toHaveProperty('gql');
+ const results:unknown[]=[];
+ const stop=runtime.sql.watch(runtime.sql`select total from orders`,(value:unknown)=>results.push(value));
+ expect(results).toEqual([]);
+ finish({rows:[{total:17}],columns:[{name:'total',type:'number'}]});
  for(let i=0;i<12;i++)await Promise.resolve();
- expect(results.at(-1)).toEqual({data:{filter:'private',orders:{total:17}},loading:false});
+ expect(results.at(-1)).toMatchObject([{total:17}]);
  expect(runtime.readViewerDocument()).toEqual({filter:'private'});
- subscription.unsubscribe();
+ stop();
 });
 
 it('the supported onResolverChange listener subscribes through the built runtime',async()=>{

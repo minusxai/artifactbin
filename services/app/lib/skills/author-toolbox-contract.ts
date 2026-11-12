@@ -44,8 +44,8 @@ export interface AuthorCheckResult {
  slideLinks?:string[];
  /** Linked datasets the page never read on any viewport, load or steps (a failed check). */
  unreadDatasets?:ReadonlyArray<{id:string;name:string}>;
- /** Failed calls (toolbox-check-explain.mjs): `sql` or an older page's GraphQL field, with
+ /** Failed calls (toolbox-check-explain.mjs): `sql`, with
   * the owner-only detail, or for a guest its code and what the same read gives the owner. Never a secret, token,
   * statement, query or variables. */
- callFailures?:ReadonlyArray<{field:string;kind:'sql'|'graphql';message:string;code?:string;detail?:string;guest?:true;ownerDetail?:string;ownerPasses?:true;notReplayed?:true}>;
+ callFailures?:ReadonlyArray<{field:string;kind:'sql';message:string;code?:string;detail?:string;guest?:true;ownerDetail?:string;ownerPasses?:true;notReplayed?:true}>;
 }

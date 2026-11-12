@@ -1,4 +1,4 @@
-import {POST as pageMutation} from '@/app/api/artifacts/[id]/graphql/route';
+import {POST as pageMutation} from '@/app/api/artifacts/[id]/sql/route';
 /**
  * AN OLDER VERSION, IN THE BROWSER. `?version=N` on the served document renders that archived
  * version read-only for whoever may read the version history (the owner and editors), so a
@@ -141,8 +141,8 @@ describe('who may open an archived version', () => {
    */
   it('refuses an HTTP mutation from an archived revision without changing the head', async () => {
     const {owner,id}=await twoVersions();
-    const response=await pageMutation(request(`/api/artifacts/${id}/graphql`,{
-      method:'POST',token:owner.token,json:{revision:'1',query:'mutation { tasks { add(title:"forbidden") { id } } }'},
+    const response=await pageMutation(request(`/api/artifacts/${id}/sql`,{
+      method:'POST',token:owner.token,json:{revision:'1',sql:"insert into tasks(title) values('forbidden')"},
     }),params({id}));
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({error:'archived_page_readonly'});

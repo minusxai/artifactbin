@@ -6,7 +6,7 @@ import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject } from "@artifa
 import { check } from "./storable";
 import type { StatePort } from "./apollo-contracts";
 
-export const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /* ------------------------------------------------------------------ data */
 

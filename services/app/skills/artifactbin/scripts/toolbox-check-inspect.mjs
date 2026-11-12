@@ -75,7 +75,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
   let navigation = 0;
   const started = new WeakMap();
   // The page's dataset reads, on load and in its steps: its sql, its live dataset
-  // cells (and a page published before sql, its /graphql posts). check fails a linked dataset
+  // cells. check fails a linked dataset
   // that none read.
   let datasetReads = 0;
   const cell = /^\/api\/(?:artifacts|local-connection)\/[^/]+\/regions\/cell(?::|%3A)/i;

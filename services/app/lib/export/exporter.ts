@@ -523,7 +523,7 @@ export async function exportImageResponse(
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
     // value any reader has seen. It names the audience the capture reads its
-    // data as (lib/graphql-compat): the requester, or nobody for a shared render. Minted lazily (see RenderInput): a key that
+    // data as (lib/page-doors): the requester, or nobody for a shared render. Minted lazily (see RenderInput): a key that
     // expires while the request waits produces a 200 PNG of a 404 page.
     // A markup document is photographed from its OWN page (`raw?chrome=0` —
     // the document with none of the reading chrome); the data tiers have no

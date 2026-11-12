@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { request, useAppHarness, mintAccountToken } from "./harness";
 import { nativeHtml } from "./native-html-fixture";
 import { POST as create } from "@/app/api/artifacts/route";
-import { POST as graphql } from "@/app/api/artifacts/[id]/graphql/route";
+import { POST as sqlDoor } from "@/app/api/artifacts/[id]/sql/route";
 import { POST as tableQuery } from "@/app/a/[id]/tables/route";
 import { POST as mutateRows } from "@/app/api/artifacts/[id]/mutate/route";
 useAppHarness();
@@ -32,18 +32,18 @@ async function fixture(dataset: unknown) {
     query: string,
     variables: Record<string, unknown> = {},
   ) => {
-    const response = await graphql(
-      request(`/api/artifacts/${page}/graphql`, {
+    const response = await sqlDoor(
+      request(`/api/artifacts/${page}/sql`, {
         method: "POST",
         token: owner.token,
-        json: { revision: "1", query, variables },
+        json: { revision: "1", sql: query, params: variables },
       }),
       ctx(page),
     );
     expect(response.status, await response.clone().text()).toBe(200);
     const body = await response.json();
-    expect(body.errors).toBeUndefined();
-    return body.data;
+    expect(body.error).toBeUndefined();
+    return body;
   };
   return { id, page, owner, publish, run };
 }
@@ -52,15 +52,15 @@ it("page SQL reads complete stored inputs beyond display windows and bounds pagi
     Array.from({ length: 10005 }, (_, i) => ({ n: i + 1 })),
   );
   const result = await f.run(
-    '{_sql(sql:"select count(*) as count, sum(n) as total from data"){rows} data(limit:2){_id}}',
+    'select count(*) as count, sum(n) as total from data',
   );
-  expect(result._sql.rows).toEqual([{ count: 10005, total: 50055015 }]);
-  expect(result.data).toHaveLength(2);
+  expect(result.rows).toEqual([{ count: 10005, total: 50055015 }]);
+  expect((await f.run('select _id from data limit 2')).rows).toHaveLength(2);
   const filtered = await f.run(
-    'query($p:JSON){_sql(sql:"select sum(n) as total from data where n > $minimum", params:$p){rows}}',
-    { p: { minimum: 10000 } },
+    'select sum(n) as total from data where n > $minimum',
+    { minimum: 10000 },
   );
-  expect(filtered._sql.rows).toEqual([{ total: 50015 }]);
+  expect(filtered.rows).toEqual([{ total: 50015 }]);
 });
 it("discovers multi-schema tables and changes only the explicitly selected stable table", async () => {
   const f = await fixture({
@@ -72,13 +72,13 @@ it("discovers multi-schema tables and changes only the explicitly selected stabl
     ],
   });
   // A multi-table link's roots are <link>_<table>.
-  const read = await f.run("{data_orders{total} data_tickets{_id}}");
-  expect(read.data_orders).toHaveLength(2);
+  const read = await f.run("select _id, total from data.tickets");
+  expect((await f.run('select total from data.orders')).rows).toHaveLength(2);
   const write = await f.run(
-    "mutation($row:ID!){update_data_tickets_by_pk(pk_columns:{_id:$row},_set:{total:11}){total}}",
-    { row: read.data_tickets[0]._id },
+    "update data.tickets set total = 11 where _id = $row",
+    { row: read.rows[0]._id },
   );
-  expect(write.update_data_tickets_by_pk).toEqual({ total: 11 });
+  expect(write.returning).toEqual([expect.objectContaining({total:11})]);
   const response = await tableQuery(
     request(`/a/${f.id}/tables`, {
       method: "POST",

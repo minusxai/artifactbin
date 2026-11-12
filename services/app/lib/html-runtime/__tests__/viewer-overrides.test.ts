@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 import { createPageState, type PageState, type PageStateOptions } from '../page-state';
 import { encodeState } from '../apollo/state-url';
-// The one GraphQL import: old pages read and write the same document through `gql`.
-import { createClient, gql } from '../apollo/graphql-compat';
 import { createHtmlCommentViewSession, withHtmlCommentView } from '../../html-bridge/comment-view-session';
 
 /** One viewer's browser storage (one localStorage), shared by every load of the page in it. */
@@ -24,17 +22,13 @@ function viewer(seed?: Record<string, string>) {
   const deliver = () => tabs.forEach((listener) => listener('af:viewer:v2:p'));
   return { open, stored, items, deliver };
 }
-const query = (keys: readonly string[]) => { const source = `{${keys.join(' ')}}`; return gql(Object.assign([source], { raw: [source] }) as unknown as TemplateStringsArray); };
 /** The two ways a page changes and reads this document: `@afbin/state` and `gql` (old pages). */
 const paths = {
   state: {
     write: (page: PageState, values: HtmlJsonObject) => page.state.setState(values),
     read: async (page: PageState, keys: readonly string[]) => Object.fromEntries(keys.map((key) => [key, page.state.getState()[key] ?? null])),
   },
-  gql: {
-    write: async (page: PageState, values: HtmlJsonObject) => { await createClient({ backends: [], state: page.port }).updateQuery({ query: query(Object.keys(values)) }, () => values); },
-    read: async (page: PageState, keys: readonly string[]) => (await createClient({ backends: [], state: page.port }).query({ query: query(keys) })).data,
-  },
+
 } as const;
 
 describe.each(Object.keys(paths) as (keyof typeof paths)[])('saved viewer state over the page defaults, through %s', (name) => {
@@ -194,7 +188,7 @@ describe('older page revisions are fenced off from a newer one\'s saved state', 
     await old.state.setState({ count: 2 });
     expect(old.state.getState()).toEqual({ count: 0 });
     expect(errors).toHaveBeenCalled();
-    await expect(createClient({ backends: [], state: old.port }).updateQuery({ query: query(['count']) }, () => ({ count: 3 }))).rejects.toThrow(/reload/i);
+    expect(await old.port.write({expected:{count:0},next:{count:3}})).toMatchObject({status:'rejected'});
     alice.deliver();
     old.port.read();
     expect(next.port.read()).toEqual({ count: 7 });

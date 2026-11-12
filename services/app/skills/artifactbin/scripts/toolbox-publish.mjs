@@ -47,8 +47,6 @@ if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='d
    !values.template))throw new ToolError('template_requires_dataset',
    '--template (with --owner-column for own-rows) sets the permissions of a new dataset.',2,
    'For an existing dataset use policy.mjs template and set.');
-if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_dataset',
-   '--name sets a new dataset\'s name.',2);
  let baseline=null,source=bytes.toString('utf8'),replaced=null,marker=null;
  const target=values.artifact?resolveTarget(values.artifact,server).id:null,name=path.basename(
   file);
@@ -68,9 +66,6 @@ if(values.name!==undefined&&type!=='dataset')throw new ToolError('name_requires_
 if(updating&&values.template)throw new ToolError('template_not_for_update',
    '--template applies only when a dataset is created.',2,
    'Use policy.mjs template ID and policy.mjs set ID for an existing dataset.');
-if(updating&&values.name!==undefined)throw new ToolError('name_not_for_update',
-   '--name applies only when a dataset is created; its name never changes.',2,
-   'Drop --name, or publish a new dataset with --create.');
  if(target&&marker?.id!==target&&!values.create){baseline=await headBaseline(client,target,type);
   replaced=`${name} replaced page ${target} (its version ${baseline.version} was the baseline).`;}
  else if(marker&&!values.create)baseline=await markedBaseline(client,marker,name,source);
@@ -135,8 +130,6 @@ if(values.visibility)body.visibility=enumValue(values.visibility,['private','unl
  // A new dataset is named after its file (sales.csv → sales), the name a page links it by.
  const stem=path.basename(file).replace(/\.[^.]+$/,'').toLowerCase().replace(/[^a-z0-9]+/g,'_')
   .replace(/^_+|_+$/g,''),named=/^(?!dataset|true$|false$|null$)[a-z][a-z0-9_]{0,40}$/;
- if(values.name!==undefined)body.name=values.name;
- else if(type==='dataset'&&!baseline&&named.test(stem))body.name=stem;
  if(values.personal)body.destination={type:'personal'};
  // --group HANDLE: create the page directly in a group you can edit. The server refuses a
  // destination that conflicts with the parent's owner.

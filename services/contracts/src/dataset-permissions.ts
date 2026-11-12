@@ -96,7 +96,7 @@ export const DATASET_COLUMN_OPERATORS = [
   '_ilike',
   '_nilike',
 ] as const;
-export type DatasetColumnOperator = (typeof DATASET_COLUMN_OPERATORS)[number];
+type DatasetColumnOperator = (typeof DATASET_COLUMN_OPERATORS)[number];
 export const DATASET_ID_OPERATORS = ['_eq', '_neq', '_in', '_nin'] as const;
 
 /** The stable platform row ID: predicates may use it; columns and presets may not. */
