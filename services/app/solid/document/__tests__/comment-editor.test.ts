@@ -20,6 +20,7 @@ function mount(value = "") {
   const editor = mountCommentEditor(root, {
     value: () => value,
     label: "Comment",
+    placeholder: "Write a comment ...",
     onChange,
     onMention,
     onKey: () => false,
@@ -188,4 +189,35 @@ it('highlights code as decorations without changing Markdown or local history', 
   fireEvent.keyDown(editor.view.dom,{key:'z',ctrlKey:true});
   expect(commentMarkdown(editor.view.state.doc)).toBe(source);
   expect(editor.view.state.doc.toJSON()).not.toHaveProperty('decorations');
+});
+
+// Clipboard events must update placeholder state along with the editor document.
+it.each(['A short draft', 'First line\nSecond line'])('hides the placeholder after pasting %s into an empty composer, and restores it on undo', text => {
+  const editor = mount();
+  expect(editor.view.dom).toHaveAttribute('aria-placeholder', 'Write a comment ...');
+  replaceComment(editor.view.dom, text);
+  expect(editor.view.state.doc.textContent).toBe(text.replace('\n', ''));
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'false');
+  expect(editor.onChange).toHaveBeenLastCalledWith(text);
+  fireEvent.keyDown(editor.view.dom, {key: 'z', ctrlKey: true});
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'true');
+  fireEvent.keyDown(editor.view.dom, {key: 'z', ctrlKey: true, shiftKey: true});
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'false');
+});
+it('keeps the placeholder hidden when pasting after typing and restores it when cleared or synced', async () => {
+  const editor = mount();
+  // Native typing is observed through ProseMirror's DOM observer.
+  editor.view.dom.querySelector('p')!.insertBefore(document.createTextNode('Typed '), editor.view.dom.querySelector('br'));
+  await waitFor(() => expect(editor.onChange).toHaveBeenLastCalledWith('Typed '));
+  editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.atEnd(editor.view.state.doc)));
+  fireEvent.paste(editor.view.dom, {clipboardData: {getData: (type: string) => type === 'text/plain' ? 'and pasted' : '', files: [], types: ['text/plain']}});
+  expect(editor.onChange).toHaveBeenLastCalledWith('Typed and pasted');
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'false');
+  fireEvent.keyDown(editor.view.dom, {key: 'a', ctrlKey: true});
+  fireEvent.keyDown(editor.view.dom, {key: 'Backspace'});
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'true');
+  editor.sync('A restored draft');
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'false');
+  editor.sync('');
+  expect(editor.view.dom).toHaveAttribute('data-empty', 'true');
 });

@@ -232,7 +232,9 @@ export function mountCommentEditor(
       else query();
     },
     editorProps: {
-    attributes: {
+    attributes: state => ({
+      // A trailing editor <br> may sit beside text, so DOM child selectors cannot determine emptiness.
+      "data-empty": String(state.doc.childCount === 1 && state.doc.firstChild?.type.name === "paragraph" && state.doc.firstChild.content.size === 0),
       role: "textbox",
       tabindex: "0",
       "aria-placeholder": props.placeholder ?? "",
@@ -240,7 +242,7 @@ export function mountCommentEditor(
       "aria-label": props.label,
       "data-placeholder": props.placeholder ?? "",
       class: "comment-rich-editor",
-    },
+    }),
     handleDOMEvents:{keydown:(_,event)=>{plainPaste=event.shiftKey;return false;},keyup:()=>{plainPaste=false;return false;}},
     handleKeyDown: (_, event) => props.onKey(event),
     handleClick: (_, __, event) => {
