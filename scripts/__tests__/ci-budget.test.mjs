@@ -166,12 +166,22 @@ it('runs the cheap node batch on every pull request: its own runners, its config
 it('uses Node 22 in every pr fast job: the runner\'s own when it is a 22, setup-node\'s otherwise',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const probe=steps.findIndex(step=>step.id==='runner-node'),setup=steps.findIndex(step=>step.uses?.startsWith('actions/setup-node@'));
- expect(steps[probe].run).toContain("process.versions.node.split(\".\")[0]");
+ expect(steps[probe].run).toContain('node --version');
  expect(steps[probe].run).toContain('$GITHUB_OUTPUT');
  expect(steps[setup]).toMatchObject({if:"steps.runner-node.outputs.major != '22'",with:{'node-version':22}});
  expect(probe).toBeLessThan(setup);
  expect(setup).toBeLessThan(steps.findIndex(step=>step.id==='install'));
  expect(steps.find(step=>step.id==='install').with.key).toContain('-node22-');
+});
+it.each([['v22.23.4','22'],['v24.11.0','24']])('probes %s without starting a JavaScript evaluation', (version,major)=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-node-probe-')),output=join(directory,'output');
+ try {
+  const probe=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.id==='runner-node').run;
+  const shell=`node(){ [ "$#" = 1 ] && [ "$1" = --version ] || return 91; printf '%s\\n' '${version}'; };\n${probe}`;
+  const result=spawnSync('bash',['-e','-c',shell],{env:{...process.env,GITHUB_OUTPUT:output},encoding:'utf8'});
+  expect(result.status,result.stderr).toBe(0);
+  expect(readFileSync(output,'utf8')).toBe(`major=${major}\n`);
+ } finally {rmSync(directory,{recursive:true,force:true});}
 });
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
 it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{

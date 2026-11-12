@@ -205,8 +205,15 @@ jobs:
       # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
       # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
       # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
+      # --version exits before JavaScript initialization; evaluating process.versions took 14.7s on the slowest
+      # runner of run 43196988989, making its complete attempt 61s. Shell expansion needs only the version string.
       - id: runner-node
-        run: echo "major=$(node -p 'process.versions.node.split(".")[0]')" | tee -a "$GITHUB_OUTPUT"
+        run: |
+          runner_version=$(node --version)
+          runner_major=${runner_version#v}
+          runner_major=${runner_major%%.*}
+          printf 'major=%s\n' "$runner_major" >> "$GITHUB_OUTPUT"
+          printf 'Runner Node: %s\n' "$runner_version"
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
       - if: steps.runner-node.outputs.major != '22'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
