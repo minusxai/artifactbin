@@ -1,33 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
-import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
-const BASE = 'http://localhost:3000';
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) =>
   (await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }))).json();
 
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
-describe('retired draft compiler boundary', () => {
- it('authenticates and enforces same-origin sessions before refusing legacy markup',async()=>{
-  const t=await mintToken('draft');
-  const call=(options:Parameters<typeof request>[1])=>draftQueryRoute(request('/api/query',{method:'POST',...options}));
-  expect((await call({json:{markup:'<p>x</p>'}})).status).toBe(401);
-  const actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};
-  expect((await call({actor,origin:'https://evil.example',json:{markup:'<p>x</p>'}})).status).toBe(403);
-  for(const auth of [{token:t.token},{actor,origin:BASE}]){
-   const response=await call({...auth,json:{markup:'<Helmet><Query name="secret">select * from secret</Query></Helmet>'}});
-   expect(response.status).toBe(400);expect(await response.json()).toEqual({error:'native_html_required'});
-   expect(response.headers.get('cache-control')).toBe('no-store');
-  }
-  expect((await call({token:t.token,json:{}})).status).toBe(400);
- });
-});
-
 // Saved JSX query/value/hold/people transports are retired. Saved pages execute
 // their declared dataset namespace through the native GraphQL boundary instead.
 describe('native saved-page dataset queries',()=>{

@@ -10,6 +10,7 @@ describe('retired story doors', () => {
     expect(paths).toContain('/api/artifacts/:id/mutate');
     expect(paths).not.toContain('/a/:id/query');
     expect(paths).not.toContain('/a/:id/mutate');
+    expect(paths).not.toContain('/api/query');
   });
   it('does not advertise declaration query and mutation page doors', () => {
     expect(URL_SPACE.page.doors).not.toContain('query');
