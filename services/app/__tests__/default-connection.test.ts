@@ -150,3 +150,36 @@ it('stops the boot on a bad value, naming the setting and never the value', () =
   overrideConfig({}, { DATASETS__ALLOW_PRIVATE_NETWORK: 'yes' });
   expect(() => validateDefaultConnection()).toThrow('DATASETS__ALLOW_PRIVATE_NETWORK must be 0 (the default) or 1.');
 });
+
+
+it('routes named defaults independently, preserving the viewer, namespace and one-source rule', async () => {
+  const {alice,bob}=await readers();
+  const other=await startPgliteWire("create table public.marker(n int); insert into public.marker values (42)");
+  try {
+    configure(JSON.stringify({default:JSON.parse(setting),connections:{secondary:{...JSON.parse(setting),port:other.port}}}));
+    validateDefaultConnection();
+    expect(ok(await agent(alice,{sql:'select n from marker',namespace:'secondary:analytics/team'})).rows).toEqual([{n:42}]);
+    expect(ok(await agent(bob,{sql:'select id from sales.mine',namespace:'warehouse/finance'})).rows).toEqual([{id:2}]);
+    const page=(await publish(alice,{html:PAGE('<link rel="af-dataset" data-af-name="other" href="default:secondary:analytics/team">')})).body.id;
+    expect(ok(await sql(page,alice,'select n from other.marker')).rows).toEqual([{n:42}]);
+    expect((await sql(page,alice,'select * from other.marker, wh.sales.mine')).status).toBe(400);
+    expect((await sql(page,null,'select n from other.marker')).status).toBe(403);
+    const schema=await agent(alice,{namespace:'secondary:analytics/team'});
+    expect(schema.status).toBe(200);
+    expect(schema.body.tables).toEqual(expect.arrayContaining([expect.objectContaining({name:'marker'})]));
+    const status=JSON.stringify(await (await statusGet(request('/api/default-connection',{token:alice.token}))).json());
+    expect(status).toContain('secondary');expect(status).not.toContain(PASSWORD);
+  } finally {await closeDefaultConnection();await other.close();}
+});
+
+it('validates every named default without exposing a secret or accepting an unconfigured alias', async () => {
+  const {alice}=await readers();
+  for (const connections of [null, [], { 'Bad alias': JSON.parse(setting) }, Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`c${i}`, JSON.parse(setting)])), { secondary: { ...JSON.parse(setting), password: PASSWORD, connector: 'missing' } }]) {
+    configure(JSON.stringify({default:JSON.parse(setting),connections}));
+    let message='';try{validateDefaultConnection();}catch(e){message=String((e as Error).message);}
+    expect(message).toContain('DATASETS__DEFAULT_CONNECTION');expect(message).not.toContain(PASSWORD);
+  }
+  configure(JSON.stringify({default:JSON.parse(setting),connections:{secondary:JSON.parse(setting)}}));
+  const denied=await agent(alice,{sql:'select 1',namespace:'missing:db'});
+  expect(denied.status).toBe(400);
+});
