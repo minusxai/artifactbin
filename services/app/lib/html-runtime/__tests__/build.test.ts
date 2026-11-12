@@ -185,7 +185,7 @@ it('links the platform stylesheet after the core and before authored styles, and
  const head=/<head>([\s\S]*)<\/head>/.exec(hosted)![1]!;
  expect(head.indexOf('data-af="core"')).toBeLessThan(head.indexOf('data-af="platform-styles"'));
  expect(head.indexOf(`href="${PLATFORM_STYLES_PATH}"`)).toBeLessThan(head.indexOf('<style>'));
- expect(JSON.parse(/data-af="runtime">([\s\S]*?)<\/script>/.exec(hosted)![1]!).appearance).toEqual({designSystem:'nocturne',mode:'light'});
+ expect(JSON.parse(/data-af="runtime">([\s\S]*?)<\/script>/.exec(hosted)![1]!).appearance).toEqual({designSystem:'nocturne',mode:'dark'});
  const owner=assembleHtmlPage({html:'<html><head><meta name="artifactbin:design-system" content="redline"></head><body></body></html>',core:assets.core,systemsHref:PLATFORM_STYLES_PATH,designSystem:'phosphor',config:{pageId:'p',revision:'1',backends:[]}});
  expect(JSON.parse(/data-af="runtime">([\s\S]*?)<\/script>/.exec(owner)![1]!).appearance).toEqual({designSystem:'phosphor',mode:'dark'});
  expect(assembleHtmlPage({html:'<html><head></head><body></body></html>',core:assets.core,systemsHref:PLATFORM_STYLES_PATH,config:{pageId:'p',revision:'1',backends:[]}})).not.toContain('platform-styles');

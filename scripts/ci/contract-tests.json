@@ -4,6 +4,8 @@
   "services/app/lib/datasets/__tests__/sql-links.test.ts",
   "services/app/lib/document-serving/__tests__/native-html-publication-bundle.test.ts",
   "services/app/lib/page-doors/__tests__/native-acceptance.test.ts",
+  "services/app/lib/page-doors/__tests__/retired-data-doors.test.ts",
+  "services/app/lib/page-doors/__tests__/retired-story-doors.test.ts",
   "services/app/lib/platform/__tests__/outbound-ips-route.test.ts",
   "services/app/lib/publish/__tests__/content-write-fence.test.ts"
 ]
