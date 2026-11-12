@@ -25,16 +25,17 @@ const open = (id: string, options: Parameters<typeof request>[1] = {}, query = '
   return runWithRequest(req, () => POST(req, { params: Promise.resolve({ id }) }));
 };
 
-it('records real inline opens in both stores and deduplicates dashboard visitors', async () => {
+it('records real inline opens only in canonical storage and deduplicates dashboard visitors', async () => {
   expect((await open('viewpu')).status).toBe(204);
   expect((await open('viewpu')).status).toBe(204);
   expect((await open('viewpu', { actor: { credential: 'session', userId: owner.id, email: owner.email, emailVerified: true } })).status).toBe(204);
   const db = await harness.db();
-  const legacy = await db.query<{ visitor: string; user_id: string | null }>("SELECT visitor, user_id FROM analytics_events WHERE event = 'view' ORDER BY seq");
-  expect(legacy.rows).toHaveLength(3);
-  expect(legacy.rows[0].visitor).toMatch(/^[a-f0-9]{32}$/);
-  expect(legacy.rows[0].visitor).toBe(legacy.rows[1].visitor);
-  expect(legacy.rows[2].user_id).toBe(owner.id);
+  const canonical = await db.query<{ visitor: string; user_id: string | null }>(`SELECT subject_id AS visitor, payload->>'user_id' AS user_id FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' AND verb='viewed' ORDER BY position`);
+  expect(canonical.rows).toHaveLength(3);
+  expect((await db.query('SELECT * FROM analytics_events')).rows).toEqual([]);
+  expect(canonical.rows[0].visitor).toMatch(/^[a-f0-9]{32}$/);
+  expect(canonical.rows[0].visitor).toBe(canonical.rows[1].visitor);
+  expect(canonical.rows[2].user_id).toBe(owner.id);
   expect((await db.query(`SELECT id FROM ${EVENTS_SCHEMA}.events WHERE verb = 'viewed'`)).rows).toHaveLength(3);
   expect((await viewSeriesByUser(owner.id)).get('viewpu')?.at(-1)).toBe(2);
 });
@@ -45,12 +46,12 @@ it('allows unlisted readers and private owners, refuses unreadable, missing and 
   expect((await open('absent')).status).toBe(404);
   expect((await open('viewfo')).status).toBe(404);
   expect((await open('viewpr', { actor: { credential: 'session', userId: owner.id, email: owner.email, emailVerified: true } })).status).toBe(204);
-  const rows = await (await harness.db()).query<{ artifact_id: string }>("SELECT artifact_id FROM analytics_events WHERE event = 'view' ORDER BY seq");
+  const rows = await (await harness.db()).query<{ artifact_id: string }>(`SELECT object_id AS artifact_id FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' AND verb='viewed' ORDER BY position`);
   expect(rows.rows.map(row => row.artifact_id)).toEqual(['viewun', 'viewpr']);
 });
 
 it('rejects cross-site reports even anonymously and ignores capture requests', async () => {
   expect((await open('viewpu', { origin: 'https://elsewhere.example' })).status).toBe(403);
   expect((await open('viewpu', {}, '?key=capture')).status).toBe(204);
-  expect((await (await harness.db()).query("SELECT seq FROM analytics_events WHERE event = 'view'")).rows).toHaveLength(0);
+  expect((await (await harness.db()).query(`SELECT id FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' AND verb='viewed'`)).rows).toHaveLength(0);
 });

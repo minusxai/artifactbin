@@ -65,9 +65,8 @@ export async function trashArtifactFor(actor: AccessActor, id: string): Promise<
   /*
    * `deleted`, said HERE, because this is the only delete there is. The count
    * is what the statement above actually took, so a folder's sentence says how
-   * much went with it and a document's says nothing went — and the legacy
-   * `analytics_events` row rides on the same call, which is why it is
-   * trackEvent rather than a bare emit.
+   * much went with it and a document's says nothing went. trackEvent writes
+   * only the canonical event and isolates telemetry failure from this delete.
    *
    * Fire-and-forget, and never inside a transaction (PGLite deadlock).
    */

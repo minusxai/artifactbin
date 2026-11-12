@@ -6,6 +6,7 @@ import { createUser } from '@/lib/accounts';
 import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } from '@/lib/workspace';
+import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 
@@ -95,10 +96,10 @@ describe('Home insights', () => {
     try {
       await accountWorkspaceInsightsFor(user.id);
       // Before: the per-document counts and the account total each scanned every view event of the account.
-      // The totals aggregate runs once and supplies both readouts.
+      // The canonical cache read runs once and supplies both readouts.
       const reads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes(`FROM ${EVENTS_SCHEMA}.events`));
       expect(reads.every(sql => !sql.includes('analytics_events'))).toBe(true);
-      expect(reads.filter(sql => sql.includes('SUM(d.n)'))).toHaveLength(1);
+      expect(reads.filter(sql => sql.includes('LEFT JOIN canonical_view_totals'))).toHaveLength(1);
     } finally { query.mockRestore(); }
   });
 
@@ -138,7 +139,7 @@ describe('the owner listing', () => {
     const second = await listOwnedArtifacts('user_id', user.id);
     expect(viewsById(second.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
     // A newly canonical view is added once.
-    await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) VALUES ('new','app','viewed','artifact',$1,'brand-new-visitor')`, [docId(3)]);
+    await trackEvent('view', docId(3), { userId: 'brand-new-visitor' });
     const third = await listOwnedArtifacts('user_id', user.id);
     expect(third.find((row) => row.id === docId(3))?.views).toBe(expectedViews(3) + 1);
     expect(third.find((row) => row.id === docId(4))?.views).toBe(expectedViews(4));

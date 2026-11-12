@@ -1182,6 +1182,38 @@ ALTER TABLE app.artifact_view_totals ADD COLUMN IF NOT EXISTS closed_through DAT
 
 ALTER TABLE app.artifact_view_totals ADD COLUMN IF NOT EXISTS views INTEGER NOT NULL DEFAULT 0;
 
+CREATE TABLE IF NOT EXISTS app.canonical_view_totals (
+  source TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  position BIGINT,
+  views BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (source, artifact_id)
+);
+
+ALTER TABLE app.canonical_view_totals ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
+
+ALTER TABLE app.canonical_view_totals ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.canonical_view_totals ADD COLUMN IF NOT EXISTS position BIGINT;
+
+ALTER TABLE app.canonical_view_totals ADD COLUMN IF NOT EXISTS views BIGINT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS app.canonical_view_visitors (
+  source TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  visitor TEXT NOT NULL,
+  PRIMARY KEY (source, artifact_id, day, visitor)
+);
+
+ALTER TABLE app.canonical_view_visitors ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
+
+ALTER TABLE app.canonical_view_visitors ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.canonical_view_visitors ADD COLUMN IF NOT EXISTS day DATE NOT NULL;
+
+ALTER TABLE app.canonical_view_visitors ADD COLUMN IF NOT EXISTS visitor TEXT NOT NULL;
+
 CREATE TABLE IF NOT EXISTS app.relations (
   subject_kind TEXT NOT NULL,
   subject_id TEXT NOT NULL,

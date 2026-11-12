@@ -5,6 +5,7 @@ import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
+import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { folderPageFor } from '@/lib/workspace';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
@@ -72,7 +73,7 @@ describe('the folder page at volume', () => {
     await db.query("INSERT INTO analytics_events (event,artifact_id,visitor,created_at) VALUES ('view',$1,'retired',now()-interval '2 days')", [childId(3)]);
     await db.query("DELETE FROM analytics_events WHERE created_at < (now() AT TIME ZONE 'UTC')::date");
     expect(viewsOf((await folderPageFor(folder, viewer)).rows)).toEqual(expectedAll(40));
-    await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) VALUES ('new','app','viewed','artifact',$1,'brand-new-visitor')`, [childId(3)]);
+    await trackEvent('view', childId(3), { userId: 'brand-new-visitor' });
     const third = viewsOf((await folderPageFor(folder, viewer)).rows);
     expect(third[childId(3)]).toBe(expectedViews(3) + 1);
     expect(third[childId(4)]).toBe(expectedViews(4));

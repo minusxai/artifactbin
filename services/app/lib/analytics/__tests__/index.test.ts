@@ -2,7 +2,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
-import { EVENTS_SCHEMA, overrideRequestHeaders, services, setServices } from '@/lib/platform';
+import { EVENTS_SCHEMA, envelope, overrideRequestHeaders, services, setServices } from '@/lib/platform';
 import { flushViews, recordView, trackEvent, viewTotalsFor, viewSeriesFor, forgetEventsTable } from '..';
 
 const harness = useAppHarness();
@@ -134,4 +134,75 @@ describe('canonical readers and history boundary', () => {
       expect((await viewSeriesFor(['art1'])).size).toBe(0);
     } finally { await db.query(`ALTER TABLE ${EVENTS_SCHEMA}.unavailable_events RENAME TO events`); }
   });
+});
+
+
+describe('incremental canonical totals', () => {
+  const append = async (id: string, visitor: string | null, at: string, artifact = 'art1') => {
+    const event = envelope(visitor ? { kind: 'visitor', id: visitor } : null, 'viewed', { kind: 'artifact', id: artifact }, {});
+    await services().events.emit([{ ...event, id, at }]);
+  };
+
+  it('folds late events and concurrent overlapping batches without double counting, even after pruning', async () => {
+    await append('first', 'v1', '2026-01-01T23:59:00Z');
+    expect(Object.fromEntries(await viewTotalsFor(['art1', 'art2']))).toEqual({ art1: 1, art2: 0 });
+    const db = await harness.db();
+    // A folded membership survives source pruning and still dedupes a later delivery.
+    await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
+    expect((await viewTotalsFor(['art1'])).get('art1')).toBe(1);
+    await append('late-repeat', 'v1', '2026-01-01T23:50:00Z');
+    await append('late-new', 'v2', '2026-01-01T00:01:00Z');
+    await append('next-day', 'v1', '2026-01-02T00:01:00Z');
+    await append('anonymous1', null, '2026-01-01T00:01:00Z');
+    await append('anonymous2', null, '2026-01-01T00:01:00Z');
+    await append('other', 'v1', '2026-01-01T00:01:00Z', 'art2');
+    const racers = await Promise.all([
+      viewTotalsFor(['art1', 'art2']), viewTotalsFor(['art2', 'art1']), viewTotalsFor(['art1']),
+    ]);
+    expect(Object.fromEntries(racers[0])).toEqual({ art1: 5, art2: 1 });
+    expect(Object.fromEntries(racers[1])).toEqual({ art2: 1, art1: 5 });
+    expect(racers[2].get('art1')).toBe(5);
+    expect((await viewTotalsFor(['art1'])).get('art1')).toBe(5);
+  });
+
+  it('does not read folded event rows again on unchanged listings', async () => {
+    await append('once', 'v1', '2026-01-01T00:01:00Z');
+    await viewTotalsFor(['art1']);
+    const db = await harness.db();
+    // A retained row whose timestamp can no longer be read proves the incremental predicate
+    // excludes old positions, rather than a query-count assertion hiding a full-history scan.
+    await db.query(`ALTER TABLE ${EVENTS_SCHEMA}.events RENAME TO stored_events`);
+    await db.query(`CREATE VIEW ${EVENTS_SCHEMA}.events AS SELECT id,
+      CASE WHEN id='once' THEN ('unreadable-' || id)::timestamptz ELSE at END AS at,
+      source, subject_kind, subject_id, verb, object_kind, object_id, payload, position FROM ${EVENTS_SCHEMA}.stored_events`);
+    try {
+      expect((await viewTotalsFor(['art1'])).get('art1')).toBe(1);
+      // The fold path must exclude old positions too, even when a new late event needs folding.
+      await db.query(`INSERT INTO ${EVENTS_SCHEMA}.stored_events (id,at,source,verb,object_kind,object_id,subject_id,position)
+        SELECT 'fresh', '2026-01-01T00:00:00Z', 'app', 'viewed', 'artifact', 'art1', 'v2', max(position)+1
+        FROM ${EVENTS_SCHEMA}.stored_events`);
+      expect((await viewTotalsFor(['art1'])).get('art1')).toBe(2);
+    } finally {
+      await db.query(`DROP VIEW ${EVENTS_SCHEMA}.events`);
+      await db.query(`ALTER TABLE ${EVENTS_SCHEMA}.stored_events RENAME TO events`);
+    }
+  });
+});
+
+
+it('isolates canonical source versions and rolls memberships and cursor back together', async () => {
+  const db = await harness.db();
+  await db.query(`INSERT INTO canonical_view_totals (source,artifact_id,position,views) VALUES ('different-source','art1',99999,999)`);
+  await trackEvent('view', 'art1');
+  const transaction = db.transaction.bind(db);
+  const injected = vi.spyOn(db, 'transaction').mockImplementation(fn => transaction(async tx => {
+    await fn(tx);
+    throw new Error('abort fold');
+  }));
+  try {
+    await expect(viewTotalsFor(['art1'])).rejects.toThrow('abort fold');
+  } finally { injected.mockRestore(); }
+  expect((await db.query('SELECT * FROM canonical_view_visitors')).rows).toEqual([]);
+  expect((await db.query('SELECT views FROM canonical_view_totals')).rows).toEqual([{ views: 999 }]);
+  expect((await viewTotalsFor(['art1'])).get('art1')).toBe(1);
 });
