@@ -4,7 +4,7 @@ description: "Read before a page shows or writes dataset rows: CSV and JSON data
 ---
 ## Read first
 
-A dataset is stored CSV or JSON rows; a page links it and reads and writes it with SQL:
+Link CSV or JSON rows to read/write with SQL:
 
 ```html
 <link rel="af-dataset" data-af-name="orders" href="./orders.csv">
@@ -138,6 +138,7 @@ under the same permissions. Pinned bindings cannot upload.
 `<link rel="af-dataset" data-af-name="wh" href="default:DB">` reads the install's database
 ([[ connectors ]]; empty DB: its default), signed in, read-only: `wh.table` in its own SQL.
 Agents: `sql.mjs query default:DB 'SQL'`; `schema default:DB`.
+Named connector: `default:NAME:DB`.
 
 ## Live datasets
 
