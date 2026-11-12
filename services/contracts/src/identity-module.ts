@@ -127,7 +127,7 @@ export interface IdentityService {
   removeGroupInvitation(input: {actorId: string; groupId: string; invitationId: string}): Promise<{changes: GroupChange[]}>;
   /** Every pending invitation to this verified address joins the account (exactly once each). */
   acceptGroupInvitations(input: {userId: string; email: string}): Promise<{groupIds: string[]; changes: GroupChange[]}>;
-  /** A company deployment's admission into its default group: the invitation's role (or viewer), consuming it. */
+  /** A company deployment's admission into its default group: the invitation's role (or Member), consuming it. */
   admitToGroup(input: {userId: string; email: string; groupId: string; inviteOnly: boolean}): Promise<{admitted: boolean; changes: GroupChange[]}>;
 
   // ── the group mail outbox (the changes above write their own rows) ────────

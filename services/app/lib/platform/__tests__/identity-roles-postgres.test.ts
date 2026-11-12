@@ -19,6 +19,7 @@ import pg from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {IDENTITY_OWNED_TABLES,IDENTITY_VIEWS,type Queryable} from '@artifactbin/contracts';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema,identityDbOf,identityMoveStatements} from '@artifactbin/auth/identity-store';
+import {assertGroupRoleModel,migrateGroupRoles} from '@artifactbin/auth/identity-store/group-role-migration';
 import {SECRET_COLUMNS} from '@artifactbin/auth/identity-store/schema';
 import {ensureHumanAuthSchema} from '@artifactbin/auth';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
@@ -65,6 +66,26 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
   if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});
  },30_000);
 
+ it('migrates existing grants atomically on PostgreSQL and never promotes a new Editor on a repeated run',async()=>{
+  await superuser.query(`CREATE SCHEMA role_upgrade;
+   CREATE TABLE role_upgrade.group_hierarchy(id text PRIMARY KEY,revision bigint NOT NULL DEFAULT 0);
+   CREATE TABLE role_upgrade.group_members(group_id text,user_id text,role text NOT NULL);
+   CREATE TABLE role_upgrade.group_invitations(id text,role text NOT NULL);
+   INSERT INTO role_upgrade.group_hierarchy VALUES('installation',9);
+   INSERT INTO role_upgrade.group_members VALUES('g','old','editor');
+   INSERT INTO role_upgrade.group_invitations VALUES('pending','viewer'),('bad','unknown');`);
+  const db=identityDbOf(superuser),options={schema:'role_upgrade',writesPausedAndBackupVerified:true};
+  await expect(migrateGroupRoles(db,options)).rejects.toThrow('Unexpected group role');
+  expect((await superuser.query('SELECT role FROM role_upgrade.group_members')).rows).toEqual([{role:'editor'}]);
+  await superuser.query("DELETE FROM role_upgrade.group_invitations WHERE id='bad'");
+  expect(await migrateGroupRoles(db,options)).toEqual({changed:true});
+  await superuser.query("INSERT INTO role_upgrade.group_members VALUES('g','new','editor')");
+  expect(await migrateGroupRoles(db,options)).toEqual({changed:false});
+  await assertGroupRoleModel(db,'role_upgrade');
+  expect((await superuser.query('SELECT user_id,role FROM role_upgrade.group_members ORDER BY user_id')).rows).toEqual([{user_id:'new',role:'editor'},{user_id:'old',role:'admin'}]);
+  expect((await superuser.query('SELECT role FROM role_upgrade.group_invitations')).rows).toEqual([{role:'member'}]);
+ });
+
  it('the identity role performs every identity write, through the identity store', async()=>{
   const store=createIdentityStore({db:identityDbOf(auth),authSchema:'auth'});
   const owner=await store.createUser({email:'owner@example.com'});
@@ -74,14 +95,14 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
   await store.confirmWelcome({userId:'usr_member'});await store.setAutoAcceptMentions({userId:owner.id,autoAccept:false});
   const finance=(await store.createGroup({actorId:owner.id,handle:'finance',name:'Finance'})).group;
   const retail=(await store.createGroup({actorId:owner.id,handle:'retail',name:'Retail',parentId:finance.id})).group;
-  const invited=await store.inviteGroupMember({actorId:owner.id,groupId:retail.id,email:'member@example.com',role:'viewer'});
+  const invited=await store.inviteGroupMember({actorId:owner.id,groupId:retail.id,email:'member@example.com',role:'member'});
   expect(invited.changes).toHaveLength(1);
   expect((await store.acceptGroupInvitations({userId:'usr_member',email:'member@example.com'})).groupIds).toEqual([retail.id]);
-  await store.setGroupMember({actorId:owner.id,groupId:retail.id,userId:'usr_member',role:'editor'});
-  await store.setGroupMember({actorId:owner.id,groupId:retail.id,userId:'usr_member',role:'viewer'});
-  const second=await store.inviteGroupMember({actorId:owner.id,groupId:finance.id,email:'later@example.com',role:'viewer'});
+  await store.setGroupMember({actorId:owner.id,groupId:retail.id,userId:'usr_member',role:'admin'});
+  await store.setGroupMember({actorId:owner.id,groupId:retail.id,userId:'usr_member',role:'member'});
+  const second=await store.inviteGroupMember({actorId:owner.id,groupId:finance.id,email:'later@example.com',role:'member'});
   await store.removeGroupInvitation({actorId:owner.id,groupId:finance.id,invitationId:second.invitation.id});
-  await store.inviteGroupMember({actorId:owner.id,groupId:finance.id,email:'pending@example.com',role:'viewer'});
+  await store.inviteGroupMember({actorId:owner.id,groupId:finance.id,email:'pending@example.com',role:'member'});
   expect((await store.setGroupParent({actorId:owner.id,groupId:retail.id,parentId:null,fromParentId:finance.id})).changed).toBe(true);
   await store.setGroupParent({actorId:owner.id,groupId:retail.id,parentId:finance.id,fromParentId:null});
   const doomed=(await store.createGroup({actorId:owner.id,handle:'doomed',name:'Doomed'})).group;
@@ -148,7 +169,7 @@ describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=
    await client.query('BEGIN');
    const facts=transactionAccessFacts({userId:owner,tokenId:null,email:null,documentEditor:false} as never,{query:async(sql:string,params?:unknown[])=>({rows:(await client.query(sql,params as never[])).rows})} as Queryable);
    expect(await facts.groupShareRole('data')).toBe('editor');
-   expect(await facts.groupRole(groups.retail!)).toBe('editor');
+   expect(await facts.groupRole(groups.retail!)).toBe('admin');
    expect(await facts.userKind(owner)).toBe('account');
    await client.query('COMMIT');
   }finally{client.release();}

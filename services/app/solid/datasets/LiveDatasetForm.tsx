@@ -1,3 +1,4 @@
+import {canEditGroupContent} from '@artifactbin/contracts';
 /* @jsxImportSource solid-js */
 /**
  * A LIVE DATASET'S FORM (lib/live-datasets), drawn from its connector's own fields (contracts `ConnectorSpec`, served
@@ -57,7 +58,7 @@ export function LiveDatasetForm(props: { connector: ListedConnector; datasetId?:
     setValues(Object.fromEntries(Object.entries(details.config ?? {}).filter(([k]) => k !== 'connector').map(([k, v]) => [k, String(v)])));
     return details;
   });
-  const [groups] = createResource(() => !editing, async () => (await apiRequest<{ groups: GroupSummary[] }>('/api/groups')).groups.filter((g) => g.role === 'editor'), { initialValue: [] });
+  const [groups] = createResource(() => !editing, async () => (await apiRequest<{ groups: GroupSummary[] }>('/api/groups')).groups.filter((g) => canEditGroupContent(g.role)), { initialValue: [] });
   const set = (name: string, value: string) => setValues((v) => ({ ...v, [name]: value }));
   const storedSecret = (field: ConnectorField) => field.secret && !!stored()?.secrets?.includes(field.name);
   const say = (kind: 'notice' | 'error', text: string) => setResult({ kind, text });

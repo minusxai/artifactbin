@@ -41,7 +41,7 @@ export function datasetRoleAtLeast(
  * owning lib module (`lib/dataset-permissions` `datasetRole`) reads them; resolvers call that, never this.
  */
 export interface DatasetRoleFacts {
-  /** The role held without the link: ownership (group editor included), a named share, group viewer. */
+  /** The role held without the link: ownership (group Admin included), a named share, group Member. */
   held: ArtifactRole;
   /** The caller reaches as an account: signed in, not a guest, not a test user outside the sandbox. */
   account: boolean;
@@ -58,7 +58,7 @@ export interface DatasetRoleFacts {
 /**
  * THE ONE ROLE DERIVATION for a dataset request: exactly one role, or null (the uniform 404). The first
  * matching step wins: owner; editor (a named editor share, or the link's editor role for an account);
- * anonymous (no account); viewer (a viewer or commenter share, or group viewer); signed_in (an account
+ * anonymous (no account); viewer (a viewer or commenter share, or group Member); signed_in (an account
  * reaching through the link or a linking page). A page never raises the role.
  */
 export function datasetRoleFrom(facts: DatasetRoleFacts): DatasetRole | null {

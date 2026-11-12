@@ -141,16 +141,16 @@ export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
  * caller wants `ownerScope`, which is this with the gate composed in.
  */
 /**
- * A group-owned row's members. `'editor'`: a DIRECT editor of the owning group, its owner (never inherited from the
+ * A group-owned row's members. `'admin'`: a DIRECT admin of the owning group, its owner (never inherited from the
  * tree). Without a role: the owning group's AUDIENCE, a direct member of it or of any descendant (./access-facts
  * `groupAudience`), the same subtree a share to that group reaches.
  */
-export const groupMemberPredicate = (user:string, role?:'editor', alias='artifacts') => role
-  ? `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role='editor' AND g.deleted_at IS NULL)`
+export const groupMemberPredicate = (user:string, role?:'admin'|'editor', alias='artifacts') => role
+  ? `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role IN (${role==='admin'?"'admin'":"'admin','editor'"}) AND g.deleted_at IS NULL)`
   : `(${alias}.group_id IN (${reachedGroupsSql(user)}))`;
 
 export const ownerPredicate = ({ tokenId, userId, groupId }: AccessActor): Scope =>
-  groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'editor')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
+  groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'admin')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
 
 export const ownerScope = (actor: AccessActor): Scope => live(ownerPredicate(actor));
 
@@ -191,7 +191,7 @@ const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'html' AND artifacts.visi
  */
 const scopeAtLeast = (actor: AccessActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
+    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'editor')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'editor');

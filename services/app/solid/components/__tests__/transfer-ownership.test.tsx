@@ -11,7 +11,7 @@ function open(level:'full'|'share'='full',removed=vi.fn(),groupId?:string){
  return removed;
 }
 it('requires confirmation to transfer an existing artifact into an editor group',async()=>{
- const fetcher=vi.fn(async(url:string)=>Response.json(url==='/api/groups'?{groups:[{id:'g1',handle:'team',name:'Team',description:'',role:'editor'},{id:'g2',handle:'readers',name:'Readers',description:'',role:'viewer'}]}:{ok:true}));vi.stubGlobal('fetch',fetcher);
+ const fetcher=vi.fn(async(url:string)=>Response.json(url==='/api/groups'?{groups:[{id:'g1',handle:'team',name:'Team',description:'',role:'editor'},{id:'g2',handle:'readers',name:'Readers',description:'',role:'member'}]}:{ok:true}));vi.stubGlobal('fetch',fetcher);
  const removed=open();fireEvent.click(screen.getByRole('button',{name:'New owner'}));await screen.findByRole('option',{name:'Team'});expect(screen.queryByRole('option',{name:'Readers'})).toBeNull();
  fireEvent.click(screen.getByRole('option',{name:'Team'}));expect(fetcher.mock.calls.some(([url])=>url.includes('/transfer'))).toBe(false);
  fireEvent.click(screen.getByRole('button',{name:'Confirm ownership transfer'}));await waitFor(()=>expect(removed).toHaveBeenCalledWith('doc123'));

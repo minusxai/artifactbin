@@ -55,7 +55,7 @@ describe('GET /api/page/home?part=bootstrap', () => {
       signedIn: true, accountId: w.member.id,
       deployment: { mode: 'public' },
       preferences: { default_destination: { type: 'group', id: w.group.id } },
-      destination: { kind: 'group', groupId: w.group.id, detail: { group: { id: w.group.id, handle: 'home_team', role: 'editor' } } },
+      destination: { kind: 'group', groupId: w.group.id, detail: { group: { id: w.group.id, handle: 'home_team', role: 'admin' } } },
     });
     expect(body.destination.core.artifacts.map((row: { id: string }) => row.id)).toEqual([w.groupArtifactId]);
     expect(JSON.stringify(body)).not.toContain('Personal secret');

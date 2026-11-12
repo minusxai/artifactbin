@@ -42,9 +42,9 @@ describe('groupRoute', () => {
 
   it('answers a GroupError as its code and status, and rethrows any other error', async () => {
     const actor = { credential: 'session' as const, userId: 'usr_session' };
-    const refused = await groupRoute(async () => { throw new GroupError('last_editor', 409); })(request('/api/groups', { actor }), context());
+    const refused = await groupRoute(async () => { throw new GroupError('last_admin', 409); })(request('/api/groups', { actor }), context());
     expect(refused.status).toBe(409);
-    expect(await refused.json()).toEqual({ error: 'last_editor' });
+    expect(await refused.json()).toEqual({ error: 'last_admin' });
     const plain = await groupRoute(async () => { throw new GroupError('invalid_group'); })(request('/api/groups', { actor }), context());
     expect(plain.status).toBe(400);
     await expect(groupRoute(async () => { throw new Error('boom'); })(request('/api/groups', { actor }), context())).rejects.toThrow('boom');

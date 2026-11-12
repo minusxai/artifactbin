@@ -44,11 +44,11 @@ async function finance(){
  const retail=await createGroup(admin.userId,{handle:'retail',name:'Retail',parent_id:fin.id});
  const enterprise=await createGroup(admin.userId,{handle:'enterprise',name:'Enterprise',parent_id:fin.id});
  const finOnly=await account('mxmx_test_fin@example.com'),retailOnly=await account('mxmx_test_retail@example.com'),entOnly=await account('mxmx_test_ent@example.com');
- await admitGroupMember(admin.userId,fin.id,finOnly.userId,'viewer');
- await admitGroupMember(admin.userId,retail.id,retailOnly.userId,'viewer');
- await admitGroupMember(admin.userId,enterprise.id,entOnly.userId,'viewer');
+ await admitGroupMember(admin.userId,fin.id,finOnly.userId,'member');
+ await admitGroupMember(admin.userId,retail.id,retailOnly.userId,'member');
+ await admitGroupMember(admin.userId,enterprise.id,entOnly.userId,'member');
  // The author shares into groups it belongs to (sharing requires membership): a viewer of each.
- for(const group of [fin,retail,enterprise])await admitGroupMember(admin.userId,group.id,author.userId,'viewer');
+ for(const group of [fin,retail,enterprise])await admitGroupMember(admin.userId,group.id,author.userId,'member');
  return {admin,author,fin,retail,enterprise,finOnly,retailOnly,entOnly};
 }
 
@@ -95,7 +95,7 @@ describe('a share reaches its group and every descendant, nothing upward or side
 describe('group-owned work: the audience reads, ownership stays on direct editor rows',()=>{
  it('a Retail editor reads Finance-owned work but never owns or edits it by ancestry',async()=>{
   const f=await finance(),lead=await account('mxmx_test_lead@example.com');
-  await admitGroupMember(f.admin.userId,f.retail.id,lead.userId,'editor');
+  await admitGroupMember(f.admin.userId,f.retail.id,lead.userId,'admin');
   const owned=await mine(f.admin,'Finance owned',{visibility:'private',destination:{type:'group',id:f.fin.id}});
   expect((await head(owned.id)).group_id).toBe(f.fin.id);
   expect(await roleOf(owned.id,f.admin)).toBe('owner');

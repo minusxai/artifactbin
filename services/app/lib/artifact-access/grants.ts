@@ -33,7 +33,7 @@ export async function uploadGrantContext(dataset:GrantDataset,actor:AccessActor,
 }
 async function savedGrantContext(dataset:GrantDataset,actor:AccessActor,document:{id:string;editId:string},tx:Queryable|undefined,verifyHtml:(db:Queryable)=>Promise<boolean>):Promise<DatasetGrantContext>{
  const db=tx??await getDb();
- const editorGroups=actor.userId?(await db.query<{group_id:string}>("SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL",[actor.userId])).rows.map(r=>r.group_id):[];
+ const editorGroups=actor.userId?(await db.query<{group_id:string}>("SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role IN ('editor','admin') AND g.deleted_at IS NULL",[actor.userId])).rows.map(r=>r.group_id):[];
  const context:DatasetGrantContext={caller:actor,owner:principalOf(dataset),callerEditorGroupIds:editorGroups};
  const identity=actor.userId?(await db.query<{kind:string}>("SELECT kind FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now())",[actor.userId])).rows[0]:null;
  if(actor.userId&&(!identity||identity.kind==='guest'))throw new DatasetError('Sign in to change data',403);

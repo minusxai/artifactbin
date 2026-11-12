@@ -1,3 +1,4 @@
+import {isGroupRole} from '@artifactbin/contracts';
 import {GroupError} from './errors';
 import {groupAttempt,recordGroupChanges,type GroupMutationActor} from './mutations';
 import {subtreeSql} from './hierarchy';
@@ -18,7 +19,7 @@ export async function getGroupById(id:string,query?:ContractQueryable):Promise<G
 export async function getGroupRole(userId:string|null,groupId:string,query?:ContractQueryable):Promise<GroupRole|null>{if(!userId)return null;return (await (query??await getDb()).query<{role:GroupRole}>('SELECT m.role FROM group_members m JOIN groups g ON g.id=m.group_id WHERE m.group_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL',[groupId,userId])).rows[0]?.role??null;}
 /**
  * A new group, a root or (`parent_id`) a subgroup: a topology change, which moves the hierarchy revision. Only a
- * direct editor of the parent creates beneath it, because the new subtree's members receive the parent's shares.
+ * direct admin of the parent creates beneath it, because the new subtree's members receive the parent's shares.
  */
 export async function createGroup(userId:string,input:CreateGroupInput,actor?:GroupMutationActor):Promise<GroupSummary>{
  if(!normalizeCreateGroup(input))throw new GroupError('invalid_group');
@@ -53,7 +54,7 @@ export async function getGroupDetail(userId:string|null,idOrHandle:string):Promi
  if(!group)return null;const role=await getGroupRole(userId,group.id,db);if(!role)return null;
  const members=await searchGroupMembers(userId!,group.id,'');
  const linked_groups=(await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id FROM group_links l JOIN groups g ON g.id=l.linked_group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE l.group_id=$1 AND g.deleted_at IS NULL ORDER BY g.name',[group.id,userId])).rows;
- const invitations=role==='editor'?(await db.query<GroupInvitation>('SELECT id,email,role,created_at,invited_by FROM group_invitations WHERE group_id=$1 ORDER BY created_at',[group.id])).rows:undefined;
+ const invitations=role==='admin'?(await db.query<GroupInvitation>('SELECT id,email,role,created_at,invited_by FROM group_invitations WHERE group_id=$1 ORDER BY created_at',[group.id])).rows:undefined;
  const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
  const subgroups=(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
  const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
@@ -67,7 +68,7 @@ export async function removeGroupMember(actorId:string,groupId:string,userId:str
  await recordGroupChanges((await services().identity.removeGroupMember({actorId,groupId,userId})).changes,actor);
 }
 export async function inviteGroupMember(actorId:string,groupId:string,email:string,role:GroupRole,actor?:GroupMutationActor):Promise<GroupInvitation>{
- if(typeof email!=='string'||!/^\S+@\S+\.\S+$/.test(email.trim())||email.length>320||(role!=='editor'&&role!=='viewer'))throw new GroupError('invalid_invitation');
+ if(typeof email!=='string'||!/^\S+@\S+\.\S+$/.test(email.trim())||email.length>320||!isGroupRole(role))throw new GroupError('invalid_invitation');
  await groupAttempt(actorId,'invite');
  const invited=await services().identity.inviteGroupMember({actorId,groupId,email,role});
  await recordGroupChanges(invited.changes,actor);
@@ -89,9 +90,9 @@ export async function acceptGroupInvitations(userId:string,verifiedEmail:string)
  await recordGroupChanges(accepted.changes);
  return accepted.groupIds;
 }
-/** Links are the app's (`group_links`): a direct editor of the group links another group they belong to. No recipients, so no mail. */
+/** Links are the app's (`group_links`): a direct admin of the group links another group they belong to. No recipients, so no mail. */
 export async function setGroupLink(actorId:string,groupId:string,linkedId:string,present:boolean,actor?:GroupMutationActor):Promise<void>{await (await getDb()).transaction(async tx=>{
- const role=await getGroupRole(actorId,groupId,tx);if(!role)throw new GroupError('not_found',404);if(role!=='editor')throw new GroupError('forbidden',403);
+ const role=await getGroupRole(actorId,groupId,tx);if(!role)throw new GroupError('not_found',404);if(role!=='admin')throw new GroupError('forbidden',403);
  if(present){if(groupId===linkedId||!await getGroupRole(actorId,linkedId,tx))throw new GroupError('invalid_link');const changed=await tx.query('INSERT INTO group_links(group_id,linked_group_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING group_id',[groupId,linkedId]);if(changed.rows.length)await recordGroupMutation(tx,actorId,groupId,'linked',{linked_group_id:linkedId},[],actor);}
  else{const changed=await tx.query('DELETE FROM group_links WHERE group_id=$1 AND linked_group_id=$2 RETURNING group_id',[groupId,linkedId]);if(changed.rows.length)await recordGroupMutation(tx,actorId,groupId,'unlinked',{linked_group_id:linkedId},[],actor);}
 });}
@@ -116,7 +117,7 @@ export async function updateGroup(actorId:string,id:string,input:UpdateGroupInpu
 export async function deleteGroup(actorId:string,id:string,handle:string,actor?:GroupMutationActor):Promise<void>{
  const db=await getDb();
  const role=await getGroupRole(actorId,id,db);
- if(role==='editor'){
+ if(role==='admin'){
   if((await db.query('SELECT id FROM deployment_state WHERE default_group_id=$1',[id])).rows.length)throw new GroupError('default_group_locked',409);
   if((await db.query('SELECT id FROM artifacts WHERE group_id=$1 AND deleted_at IS NULL LIMIT 1',[id])).rows.length)throw new GroupError('group_not_empty',409);
  }

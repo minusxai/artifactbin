@@ -1,6 +1,11 @@
 import {isValidHandle} from './handles';
 /** Group identity is independent of accounts and artifacts. IDs, never handles, carry authority. */
-export type GroupRole = 'editor' | 'viewer';
+export type GroupRole = 'member' | 'editor' | 'admin';
+/** Group roles govern this group only; artifact sharing and external data policies are separate. */
+export const GROUP_ROLES = ['member', 'editor', 'admin'] as const;
+export const isGroupRole = (value: unknown): value is GroupRole => typeof value === 'string' && (GROUP_ROLES as readonly string[]).includes(value);
+export const canEditGroupContent = (role: GroupRole | null | undefined): boolean => role === 'editor' || role === 'admin';
+export const groupRoleRank = (role: GroupRole): number => GROUP_ROLES.indexOf(role);
 export type ArtifactDestination = {type:'personal'} | {type:'group';id:string};
 export type DefaultDestination = ArtifactDestination | {type:'inherit'};
 export interface AccountPreferences {default_destination:DefaultDestination;}

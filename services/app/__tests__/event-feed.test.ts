@@ -149,7 +149,7 @@ it('stops delivering an artifact\'s events on the next poll after access is lost
   const owner = await mintAccountToken('access-owner'), member = await mintAccountToken('access-member');
   const made = await createGroup(request('/api/groups', { method: 'POST', token: owner.token, json: { handle: `feed_${randomUUID().slice(0, 8)}`, name: 'Feed' } }));
   const group = await made.json() as { id: string };
-  expect((await invite(request(`/api/groups/${group.id}/invitations`, { method: 'POST', token: owner.token, json: { email: member.email, role: 'viewer' } }), context({ id: group.id }))).status).toBe(201);
+  expect((await invite(request(`/api/groups/${group.id}/invitations`, { method: 'POST', token: owner.token, json: { email: member.email, role: 'member' } }), context({ id: group.id }))).status).toBe(201);
   await listGroups(request('/api/groups', { actor: { credential: 'session', userId: member.userId!, email: member.email!, emailVerified: true } }));
   const { doc, say } = await publish(owner);
   expect((await share(request(`/api/artifacts/${doc.id}/group-shares/${group.id}`, { method: 'PUT', token: owner.token, json: { role: 'viewer' } }),

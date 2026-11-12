@@ -127,6 +127,8 @@ const GROUPS:Table={name:'groups',columns:[
  */
 const GROUP_HIERARCHY:Table={name:'group_hierarchy',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'revision',type:'BIGINT',notNull:true,default:'0'},
+ // Version 1 is the legacy Editor/Viewer model. Only the explicit migration upgrades existing grants.
+ {name:'role_model_version',type:'INTEGER',notNull:true,default:'1'},
 ],primaryKey:['id']};
 
 const GROUP_MEMBERS:Table={name:'group_members',columns:[

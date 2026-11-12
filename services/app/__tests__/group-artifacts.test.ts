@@ -41,9 +41,9 @@ describe('the pages a member can open through a group',()=>{
   const retail=await createGroup(alice.userId!,{handle:'ga_retail',name:'Retail',parent_id:finance.id});
   const sales=await createGroup(carol.userId!,{handle:'ga_sales',name:'Sales'});
   const gone=await createGroup(alice.userId!,{handle:'ga_gone',name:'Gone'});
-  await admitGroupMember(alice.userId!,finance.id,bob.userId!,'viewer');
-  await admitGroupMember(alice.userId!,retail.id,rita.userId!,'viewer');
-  await admitGroupMember(alice.userId!,gone.id,bob.userId!,'viewer');
+  await admitGroupMember(alice.userId!,finance.id,bob.userId!,'member');
+  await admitGroupMember(alice.userId!,retail.id,rita.userId!,'member');
+  await admitGroupMember(alice.userId!,gone.id,bob.userId!,'member');
   const publish=async(who:{token:string},title:string,visibility='private')=>{
    const r=await app.request('/api/artifacts',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${who.token}`},body:JSON.stringify({html:`<!doctype html><html><head><title>${title}</title></head><body><h1>${title}</h1></body></html>`,visibility,title})});
    expect(r.status,await r.clone().text()).toBe(201);

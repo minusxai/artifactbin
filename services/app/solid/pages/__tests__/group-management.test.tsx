@@ -5,32 +5,32 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { SessionProvider } from '../../lib/session';
 import { GroupManagement, GroupSettingsPage } from '../Group';
-const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'editor' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'editor' as const}],linked_groups:[],invitations:[],parent:null,subgroups:[],subgroup_audience:[]};
+const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'admin' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'admin' as const}],linked_groups:[],invitations:[],parent:null,subgroups:[],subgroup_audience:[]};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
-it('viewer can search people and open profiles without management controls',()=>{
+it.each(['member','editor'] as const)('%s can search people without management controls',(role)=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[]})));
- render(()=> <GroupManagement detail={{...detail,group:{...detail.group,role:'viewer'}}} refresh={()=>{}} />);
+ render(()=> <GroupManagement detail={{...detail,group:{...detail.group,role}}} refresh={()=>{}} />);
  expect(screen.getByRole('link',{name:'Alice'})).toHaveAttribute('href','/@alice');
  fireEvent.input(screen.getByRole('searchbox',{name:'Search people'}),{target:{value:'missing'}});
  expect(screen.queryByRole('link',{name:'Alice'})).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Invite person'})).not.toBeInTheDocument();
 });
-it('keeps last-editor refusal visible and preserves member role',async()=>{
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'last_editor'},{status:409})));
+it('keeps last-admin refusal visible and preserves member role',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'last_admin'},{status:409})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}} />);
  fireEvent.click(screen.getByRole('button',{name:'Role for Alice'}));
- fireEvent.click(screen.getByRole('option',{name:'Viewer'}));
- await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('Keep at least one editor'));
- expect(screen.getByRole('button',{name:'Role for Alice'})).toHaveTextContent('Editor');
- expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members/u1',expect.objectContaining({method:'PUT',body:JSON.stringify({role:'viewer'})}));
+ fireEvent.click(screen.getByRole('option',{name:'Member'}));
+ await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('Keep at least one admin'));
+ expect(screen.getByRole('button',{name:'Role for Alice'})).toHaveTextContent('Admin');
+ expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members/u1',expect.objectContaining({method:'PUT',body:JSON.stringify({role:'member'})}));
 });
 
 it('finds a server search result outside the initially loaded people',async()=>{
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[{user_id:'u200',username:'zoe',name:'Zoe',role:'viewer'}]})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[{user_id:'u200',username:'zoe',name:'Zoe',role:'member'}]})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}}/>);
  fireEvent.input(screen.getByRole('searchbox',{name:'Search people'}),{target:{value:'Zoe'}});
  expect(await screen.findByRole('link',{name:'Zoe'})).toHaveAttribute('href','/@zoe');
- expect(screen.getByRole('button',{name:'Role for Zoe'})).toHaveTextContent('Viewer');
+ expect(screen.getByRole('button',{name:'Role for Zoe'})).toHaveTextContent('Member');
  expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members?query=Zoe',expect.objectContaining({credentials:'same-origin'}));
 });
 
@@ -52,7 +52,7 @@ it('lists the group\'s allowed addresses, lets an editor remove one, and draws n
  let held=[address];
  const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='DELETE'){held=[];return Response.json({changed:{connect:['https://api.example.com']},addresses:[]});}return Response.json({addresses:held});});vi.stubGlobal('fetch',fetcher);
  const {GroupAddresses}=await import('../GroupAddresses');
- const view=render(()=> <GroupAddresses group={{id:'g1',name:'Team',role:'editor'}}/>);
+ const view=render(()=> <GroupAddresses group={{id:'g1',name:'Team',role:'admin'}}/>);
  const panel=await screen.findByRole('region',{name:'Allowed addresses'});
  await waitFor(()=>expect(panel).toHaveTextContent('api.example.com'));
  expect(panel).toHaveTextContent('Data');expect(panel).toHaveTextContent('Approved by Alice');
@@ -60,8 +60,8 @@ it('lists the group\'s allowed addresses, lets an editor remove one, and draws n
  await waitFor(()=>expect(panel).toHaveTextContent('No addresses approved yet'));
  expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/allowed-addresses',expect.objectContaining({method:'DELETE',body:JSON.stringify({connect:['https://api.example.com']})}));
  view.unmount();
- render(()=> <GroupAddresses group={{id:'g9',name:'Viewers',role:'viewer'}}/>);
+ render(()=> <GroupAddresses group={{id:'g9',name:'Viewers',role:'member'}}/>);
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'group_approvals_disabled'},{status:403})));
- const off=render(()=> <GroupAddresses group={{id:'g8',name:'Off',role:'editor'}}/>);
+ const off=render(()=> <GroupAddresses group={{id:'g8',name:'Off',role:'admin'}}/>);
  await waitFor(()=>expect(off.queryByRole('region',{name:'Allowed addresses'})).toBeNull());
 });

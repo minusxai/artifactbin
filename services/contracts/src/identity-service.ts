@@ -52,7 +52,7 @@ export const IDENTITY_VIEWS = {
   tokens: ['id', 'name', 'user_id', 'client_harness', 'audience', 'scope', 'request_authority', 'created_at', 'deleted_at', 'expires_at', 'last_used_at', 'scopes', 'live'],
   handle_reservations: ['handle', 'kind', 'subject_id'],
   groups: ['id', 'handle', 'name', 'description', 'created_by', 'created_at', 'deleted_at', 'parent_id'],
-  group_hierarchy: ['id', 'revision'],
+  group_hierarchy: ['id', 'revision', 'role_model_version'],
   group_members: ['group_id', 'user_id', 'role', 'created_at'],
   group_invitations: ['id', 'group_id', 'email', 'role', 'invited_by', 'created_at'],
   group_mail_outbox: ['id', 'email', 'recipient_id', 'group_id', 'group_name', 'handle', 'action', 'sender_id', 'lease_until', 'claim_token', 'attempts', 'next_attempt_at', 'quarantined_at', 'sent_at', 'created_at'],

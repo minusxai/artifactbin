@@ -128,11 +128,11 @@ describe('session side effects',()=>{
  it('accept a pending group invitation only for a verified address',async()=>{
   const db=await harness.db();
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('gdoor','doorcrew','Door crew',$1)",[b.userId]);
-  await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_door','gdoor',$1,'viewer',$2)",[a.email,b.userId]);
+  await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_door','gdoor',$1,'member',$2)",[a.email,b.userId]);
   await pageSession(request('/api/page/session',{actor:verified(a.userId!,a.email!,{emailVerified:false})}));
   expect((await db.query("SELECT 1 FROM group_members WHERE group_id='gdoor' AND user_id=$1",[a.userId])).rows).toHaveLength(0);
   await pageSession(request('/api/page/session',{actor:verified(a.userId!,a.email!)}));
-  expect((await db.query("SELECT role FROM group_members WHERE group_id='gdoor' AND user_id=$1",[a.userId])).rows).toEqual([{role:'viewer'}]);
+  expect((await db.query("SELECT role FROM group_members WHERE group_id='gdoor' AND user_id=$1",[a.userId])).rows).toEqual([{role:'member'}]);
  });
  it('leaves legacy guest ownership unchanged after verified email login',async()=>{
   const guest=await createGuestOwner(),db=await harness.db();

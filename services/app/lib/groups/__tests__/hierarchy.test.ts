@@ -14,7 +14,7 @@ const account=(name:string)=>createUser({email:`mxmx_test_${name}@example.com`})
 const revision=async()=>hierarchyRevision(await getDb());
 const parentOf=async(id:string)=>(await (await getDb()).query<{parent_id:string|null}>('SELECT parent_id FROM groups WHERE id=$1',[id])).rows[0]?.parent_id;
 const audit=async(id:string)=>(await (await getDb()).query<{action:string;details:Record<string,unknown>}>('SELECT action,details FROM group_audit WHERE group_id=$1 ORDER BY created_at,id',[id])).rows;
-const join=async(owner:string,group:string,user:{id:string;email:string},role:'viewer'|'editor')=>{await groups.inviteGroupMember(owner,group,user.email,role);await groups.acceptGroupInvitations(user.id,user.email);};
+const join=async(owner:string,group:string,user:{id:string;email:string},role:'member'|'admin')=>{await groups.inviteGroupMember(owner,group,user.email,role);await groups.acceptGroupInvitations(user.id,user.email);};
 /** Finance ⊃ {Retail, Enterprise}, all administered by `admin`. */
 async function tree(){
  const admin=await account('admin');
@@ -26,12 +26,12 @@ async function tree(){
 
 describe('subgroups',()=>{
  it('creates a subgroup only beneath a live group the creator directly edits, and reports its parent',async()=>{
-  const {admin,finance,retail}=await tree(),viewer=await account('viewer'),stranger=await account('stranger');
-  expect(retail).toMatchObject({parent_id:finance.id,role:'editor'});
+  const {admin,finance,retail}=await tree(),viewer=await account('member'),stranger=await account('stranger');
+  expect(retail).toMatchObject({parent_id:finance.id,role:'admin'});
   expect(await groupChain(await getDb(),retail.id)).toEqual([retail.id,finance.id]);
   expect((await groups.listGroups(admin.id)).find(g=>g.id===retail.id)?.parent_id).toBe(finance.id);
   expect((await groups.getGroupDetail(admin.id,retail.id))?.group.parent_id).toBe(finance.id);
-  await join(admin.id,finance.id,viewer,'viewer');
+  await join(admin.id,finance.id,viewer,'member');
   await expect(groups.createGroup(viewer.id,{handle:'viewer_sub',name:'No',parent_id:finance.id})).rejects.toMatchObject({code:'forbidden',status:403});
   await expect(groups.createGroup(stranger.id,{handle:'stranger_sub',name:'No',parent_id:finance.id})).rejects.toMatchObject({code:'parent_not_found',status:404});
   await expect(groups.createGroup(admin.id,{handle:'orphan',name:'No',parent_id:'grp_missing'})).rejects.toMatchObject({code:'parent_not_found'});
@@ -45,8 +45,8 @@ describe('subgroups',()=>{
   const r0=await revision();
   const {admin,finance,retail}=await tree();
   const r1=await revision();expect(r1).toBe(r0+3);
-  const member=await account('member');await join(admin.id,retail.id,member,'viewer');
-  await groups.setGroupMember(admin.id,retail.id,member.id,'editor');await groups.removeGroupMember(admin.id,retail.id,member.id);
+  const member=await account('member');await join(admin.id,retail.id,member,'member');
+  await groups.setGroupMember(admin.id,retail.id,member.id,'admin');await groups.removeGroupMember(admin.id,retail.id,member.id);
   expect(await revision()).toBe(r1);
   expect(await groups.setGroupParent(admin.id,retail.id,null)).toMatchObject({changed:true,parent_id:null,hierarchy_revision:r1+1});
   expect(await revision()).toBe(r1+1);
@@ -87,12 +87,12 @@ describe('subgroups',()=>{
  it('needs a direct editor of the moved group, its current parent and its new one; ancestry grants none of it',async()=>{
   const {admin,finance,retail}=await tree(),lead=await account('lead');
   // An editor of Retail and a viewer of Finance: Retail's administrator cannot lift it out of Finance.
-  await join(admin.id,retail.id,lead,'editor');await join(admin.id,finance.id,lead,'viewer');
+  await join(admin.id,retail.id,lead,'admin');await join(admin.id,finance.id,lead,'member');
   await expect(groups.setGroupParent(lead.id,retail.id,null)).rejects.toMatchObject({code:'forbidden',status:403});
   const own=await groups.createGroup(lead.id,{handle:'lead_team',name:'Lead team'});
   await expect(groups.setGroupParent(lead.id,own.id,finance.id)).rejects.toMatchObject({code:'forbidden'});
   // Finance's editor administers neither Retail nor its membership by ancestry.
-  const head=await account('head');await join(admin.id,finance.id,head,'editor');
+  const head=await account('head');await join(admin.id,finance.id,head,'admin');
   await expect(groups.setGroupParent(head.id,retail.id,null)).rejects.toMatchObject({code:'not_found',status:404});
   await expect(groups.updateGroup(head.id,retail.id,{name:'Mine'})).rejects.toMatchObject({code:'not_found'});
   expect(await groups.getGroupRole(head.id,retail.id)).toBeNull();

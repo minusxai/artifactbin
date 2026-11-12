@@ -65,7 +65,7 @@ describe('publication uses shared account destination through the real HTTP hand
  });
  it('lets viewers choose a default but refuses publication and never falls back after membership removal',async()=>{
   const a=await account('owner'),b=await account('member');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
-  await admitGroupMember(a.user.id,group.id,b.user.id,'viewer');
+  await admitGroupMember(a.user.id,group.id,b.user.id,'member');
   await setAccountPreferences(b.user.id,{type:'group',id:group.id});
   const denied=await create(b.token,{html:nativeHtml('<p id="intro">Viewer cannot publish</p>')});
   expect(denied.status).toBeGreaterThanOrEqual(400);expect(denied.status).toBeLessThan(500);

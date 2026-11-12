@@ -72,7 +72,7 @@ describe('handlers through Hono', () => {
   it('dispatches viewer self-leave to the static me route before the member ID route',async()=>{
     const owner=await mintToken('route-owner'),viewer=await mintToken('route-viewer');
     const group=await createGroup(owner.userId!,{handle:'static_leave',name:'Leave'});
-    await admitGroupMember(owner.userId!,group.id,viewer.userId!,'viewer');
+    await admitGroupMember(owner.userId!,group.id,viewer.userId!,'member');
     const response=await app.request(`/api/groups/${group.id}/members/me`,{method:'DELETE',headers:{authorization:`Bearer ${viewer.token}`}});
     expect(response.status).toBe(200);
   });

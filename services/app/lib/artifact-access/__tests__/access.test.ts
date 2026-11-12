@@ -73,7 +73,7 @@ describe('the role lattice', () => {
     const viewer = await account('viewer@example.test');
     const stranger = await account('stranger@example.test');
     const group = await createGroup(owner.userId, { handle: 'access_team', name: 'Access team' });
-    await admitGroupMember(owner.userId, group.id, viewer.userId, 'viewer');
+    await admitGroupMember(owner.userId, group.id, viewer.userId, 'member');
     const row = await mine(owner, 'Team', { destination: { type: 'group', id: group.id } });
     expect(await effectiveRole(row, owner)).toBe('owner');
     expect(await effectiveRole(row, viewer)).toBe('viewer');
@@ -179,7 +179,7 @@ describe('access facts', () => {
     expect(await liveAccessFacts(identityForUser(null, null)).editorGroupIds()).toEqual([]);
     const group = await createGroup(friend.userId, { handle: 'facts_team', name: 'Facts' });
     expect(await live.editorGroupIds()).toEqual([group.id]);
-    expect(await live.groupRole(group.id)).toBe('editor');
+    expect(await live.groupRole(group.id)).toBe('admin');
     expect(await facts.groupRole(group.id)).toBeNull();
   });
 });

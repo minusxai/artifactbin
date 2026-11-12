@@ -13,11 +13,11 @@ import type { GroupDetail } from '@artifactbin/contracts';
 import { GroupManagement } from '../Group';
 import { GroupTreePanel, GroupTreeSummary } from '../GroupTree';
 
-const finance = { id: 'grp_finance', handle: 'finance', name: 'Finance', role: 'editor' as const };
-const retail = { id: 'grp_retail', handle: 'retail', name: 'Retail', role: 'editor' as const };
+const finance = { id: 'grp_finance', handle: 'finance', name: 'Finance', role: 'admin' as const };
+const retail = { id: 'grp_retail', handle: 'retail', name: 'Retail', role: 'admin' as const };
 const detail = (over: Partial<GroupDetail> = {}): GroupDetail => ({
-  group: { id: 'grp_retail', handle: 'retail', name: 'Retail', description: '', role: 'editor', parent_id: null },
-  members: [{ user_id: 'u_alice', username: 'alice', name: 'Alice', role: 'editor' }],
+  group: { id: 'grp_retail', handle: 'retail', name: 'Retail', description: '', role: 'admin', parent_id: null },
+  members: [{ user_id: 'u_alice', username: 'alice', name: 'Alice', role: 'admin' }],
   linked_groups: [], invitations: [], parent: null, subgroups: [], subgroup_audience: [], ...over,
 });
 const outlet = { id: 'grp_outlet', handle: 'outlet', name: 'Outlet', role: null };
@@ -64,15 +64,15 @@ it('says what the group belongs to and what belongs to it, linking only groups t
   expect(screen.getByRole('link', { name: 'Finance' })).toHaveAttribute('href', '/@finance');
 });
 
-it('an editor creates a subgroup beneath this group', async () => {
-  const calls = answer(() => Response.json({ id: 'grp_web', handle: 'web_team', name: 'Web', description: '', role: 'editor', parent_id: 'grp_retail' }, { status: 201 }));
+it('an admin creates a subgroup beneath this group', async () => {
+  const calls = answer(() => Response.json({ id: 'grp_web', handle: 'web_team', name: 'Web', description: '', role: 'admin', parent_id: 'grp_retail' }, { status: 201 }));
   const refresh = vi.fn();
   render(() => <GroupTreePanel detail={detail()} refresh={refresh} />);
   expect(screen.getByRole('region', { name: 'Group tree' })).toHaveTextContent('None: Retail is a top-level group.');
   fireEvent.input(screen.getByRole('textbox', { name: 'Subgroup name' }), { target: { value: 'Web' } });
   fireEvent.input(screen.getByRole('textbox', { name: 'Subgroup handle' }), { target: { value: 'web_team' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create subgroup' }));
-  expect(await screen.findByText('Web is now a subgroup of Retail. You are its first editor.')).toBeInTheDocument();
+  expect(await screen.findByText('Web is now a subgroup of Retail. You are its first admin.')).toBeInTheDocument();
   expect(calls).toEqual([{ url: '/api/groups', method: 'POST', body: { name: 'Web', handle: 'web_team', parent_id: 'grp_retail' } }]);
   expect(refresh).toHaveBeenCalledTimes(1);
 });
@@ -92,17 +92,17 @@ it('moves the group under a group the editor edits, naming the parent it loaded,
   const calls = answer((call) => call.url === '/api/groups' ? Response.json({ groups: [
     { ...finance, description: '', parent_id: null },
     { ...retail, description: '', parent_id: 'grp_finance' },
-    { id: 'grp_outlet', handle: 'outlet', name: 'Outlet', description: '', role: 'editor', parent_id: 'grp_retail' },
+    { id: 'grp_outlet', handle: 'outlet', name: 'Outlet', description: '', role: 'admin', parent_id: 'grp_retail' },
     // Below Retail through a subgroup this account is not in (so not in this list): still never offered.
-    { id: 'grp_kiosk', handle: 'kiosk', name: 'Kiosk', description: '', role: 'editor', parent_id: 'grp_web' },
-    { id: 'grp_ops', handle: 'ops', name: 'Operations', description: '', role: 'editor', parent_id: null },
-    { id: 'grp_read', handle: 'read', name: 'Readers', description: '', role: 'viewer', parent_id: null },
+    { id: 'grp_kiosk', handle: 'kiosk', name: 'Kiosk', description: '', role: 'admin', parent_id: 'grp_web' },
+    { id: 'grp_ops', handle: 'ops', name: 'Operations', description: '', role: 'admin', parent_id: null },
+    { id: 'grp_read', handle: 'read', name: 'Readers', description: '', role: 'member', parent_id: null },
   ] }) : Response.json({ changed: true, parent_id: 'grp_ops', hierarchy_revision: 9 }));
   const refresh = vi.fn();
   render(() => <GroupTreePanel detail={detail({ group: { ...detail().group, parent_id: finance.id }, parent: finance, subgroups: [{ id: 'grp_web', handle: 'web', name: 'Web', role: null }] })} refresh={refresh} />);
   fireEvent.click(screen.getByRole('button', { name: 'Move group' }));
   const dialog = await screen.findByRole('dialog', { name: 'Move Retail' });
-  expect(dialog).toHaveTextContent('Only someone who is an editor of Retail, of its current parent and of the new parent can move it.');
+  expect(dialog).toHaveTextContent('Only someone who is an admin of Retail, of its current parent and of the new parent can move it.');
   const parent = within(dialog).getByRole('button', { name: 'New parent group' });
   await waitFor(() => expect(parent).not.toBeDisabled());
   fireEvent.click(parent);
@@ -117,12 +117,12 @@ it('moves the group under a group the editor edits, naming the parent it loaded,
 });
 
 it.each([
-  ['forbidden', 403, 'Only someone who is an editor of this group, of its current parent and of the new parent can move it.'],
+  ['forbidden', 403, 'Only someone who is an admin of this group, of its current parent and of the new parent can move it.'],
   ['parent_changed', 409, 'This group’s parent changed since the page loaded. Reload the page and try again.'],
   ['already_has_parent', 409, 'This group already has a parent. Reload the page, then move it from its current parent.'],
   ['hierarchy_cycle', 409, 'A group cannot move under itself or one of its own subgroups.'],
 ])('a refused move (%s) stays open with the reason in plain words', async (code, status, words) => {
-  answer((call) => call.url === '/api/groups' ? Response.json({ groups: [{ id: 'grp_ops', handle: 'ops', name: 'Operations', description: '', role: 'editor', parent_id: null }] }) : Response.json({ error: code }, { status }));
+  answer((call) => call.url === '/api/groups' ? Response.json({ groups: [{ id: 'grp_ops', handle: 'ops', name: 'Operations', description: '', role: 'admin', parent_id: null }] }) : Response.json({ error: code }, { status }));
   const refresh = vi.fn();
   render(() => <GroupTreePanel detail={detail()} refresh={refresh} />);
   fireEvent.click(screen.getByRole('button', { name: 'Move group' }));
@@ -150,7 +150,7 @@ it('moving to the top level says whose files stop arriving', async () => {
 
 it('a viewer sees the tree and the rule, with no controls to change it', () => {
   answer(() => Response.json({}));
-  render(() => <GroupTreePanel detail={{ ...withTree, group: { ...withTree.group, role: 'viewer' } }} refresh={() => {}} />);
+  render(() => <GroupTreePanel detail={{ ...withTree, group: { ...withTree.group, role: 'member' } }} refresh={() => {}} />);
   const panel = screen.getByRole('region', { name: 'Group tree' });
   expect(panel).toHaveTextContent('Finance');
   expect(panel).toHaveTextContent('Outlet');

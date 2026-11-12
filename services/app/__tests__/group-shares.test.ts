@@ -17,9 +17,9 @@ const context=<T extends Record<string,string>>(params:T)=>({params:Promise.reso
 it('real routes preserve owner, admit shared reads/raw/offline/feeds, and revoke them on viewer leave',async()=>{
  const owner=await mintAccountToken('owner'),member=await mintAccountToken('member'),outsider=await mintAccountToken('outsider');
  const made=await createGroup(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'design_crit',name:'Design'}}));expect(made.status).toBe(201);const group=await made.json();
- expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:member.email,role:'viewer'}}),context({id:group.id}))).status).toBe(201);
+ expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:member.email,role:'member'}}),context({id:group.id}))).status).toBe(201);
  // Next normal verified account request accepts; no adoption is involved.
- expect((await (await listGroups(request('/api/groups',{actor:{credential:'session',userId:member.userId!,email:member.email!,emailVerified:true}}))).json()).groups).toMatchObject([{id:group.id,role:'viewer'}]);
+ expect((await (await listGroups(request('/api/groups',{actor:{credential:'session',userId:member.userId!,email:member.email!,emailVerified:true}}))).json()).groups).toMatchObject([{id:group.id,role:'member'}]);
  const published=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeHtml('<p>Private group review</p>'),visibility:'private'}}));expect(published.status).toBe(201);const page=await published.json();
  const path=`/api/artifacts/${page.id}/group-shares/${group.id}`,params=context({id:page.id,groupId:group.id});
  expect((await share(request(path,{method:'PUT',token:owner.token,json:{role:'viewer'}}),params)).status).toBe(200);

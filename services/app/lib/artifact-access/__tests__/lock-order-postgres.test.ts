@@ -47,7 +47,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     await clients[0]!.query(`TRUNCATE artifact_group_shares, artifact_shares, group_members, groups, users, artifacts, group_hierarchy;
       INSERT INTO group_hierarchy VALUES ('installation', 0);
       INSERT INTO artifacts VALUES ('page'), ('data'), ('data2'), ('Bdata'), ('adata'); INSERT INTO users VALUES ('u1', 'u1@example.com', 'account');
-      INSERT INTO groups VALUES ('g1', NULL); INSERT INTO group_members VALUES ('g1', 'u1', 'viewer');
+      INSERT INTO groups VALUES ('g1', NULL); INSERT INTO group_members VALUES ('g1', 'u1', 'member');
       INSERT INTO artifact_shares VALUES ('page', 'u1', 'u1@example.com', 'viewer'); INSERT INTO artifact_group_shares VALUES ('data', 'g1', 'editor');`);
   };
 
@@ -85,7 +85,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     // lib/artifacts writeShares / membership invites: the artifact FOR UPDATE, then the named share.
     ['a named share', {}, '', ["SELECT id FROM artifacts WHERE id='data' FOR UPDATE", "INSERT INTO artifact_shares VALUES ('data', NULL, 'u1@example.com', 'viewer')"]],
     // lib/artifacts setArtifactGroupShare: the artifact FOR UPDATE NOWAIT, then the group share (a group the actor is in).
-    ['a group share', {}, "INSERT INTO groups VALUES ('g2', NULL); INSERT INTO group_members VALUES ('g2', 'u1', 'viewer')", ["SELECT id FROM artifacts WHERE id='data' FOR UPDATE NOWAIT", "INSERT INTO artifact_group_shares VALUES ('data', 'g2', 'viewer')"]],
+    ['a group share', {}, "INSERT INTO groups VALUES ('g2', NULL); INSERT INTO group_members VALUES ('g2', 'u1', 'member')", ["SELECT id FROM artifacts WHERE id='data' FOR UPDATE NOWAIT", "INSERT INTO artifact_group_shares VALUES ('data', 'g2', 'viewer')"]],
     // lib/artifacts updateSharingFor: link role and visibility live on the artifact row itself.
     ['a link role or visibility change', {}, '', ["SELECT id FROM artifacts WHERE id='data' FOR UPDATE", "UPDATE artifacts SET id = id WHERE id='data'"]],
   ] as const)('an insert of %s cannot narrow the role of an in-flight commit', async (_name, patch, setup, grantSql) => {
@@ -279,7 +279,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     await seed();
     await clients[0]!.query(`DELETE FROM artifact_group_shares; DELETE FROM group_members;
       INSERT INTO groups VALUES ('fin', NULL, NULL), ('ret', NULL, 'fin');
-      INSERT INTO artifact_group_shares VALUES ('data', 'fin', '${role}');${member ? " INSERT INTO group_members VALUES ('ret', 'u1', 'viewer');" : ''}`);
+      INSERT INTO artifact_group_shares VALUES ('data', 'fin', '${role}');${member ? " INSERT INTO group_members VALUES ('ret', 'u1', 'member');" : ''}`);
   };
   const BUMP = "INSERT INTO group_hierarchy AS h (id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=h.revision+1";
   const identityCompetitors = {
@@ -345,7 +345,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     try {
       await lockAuthorization(tx(writer), { write: 'data' });
       expect(await datasetWriteAccess(row, ACTOR, { tx: tx(writer) })).toMatchObject({ allowed: true, role: 'signed_in' });
-      const grant = transaction(grantor, async () => { await grantor.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await grantor.query("INSERT INTO group_members VALUES ('ret', 'u1', 'viewer')"); }).then(() => 'ok', code);
+      const grant = transaction(grantor, async () => { await grantor.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await grantor.query("INSERT INTO group_members VALUES ('ret', 'u1', 'member')"); }).then(() => 'ok', code);
       expect(await settles(grant, 300)).toBe(true);
       expect(await grant).toBe('ok');
       await writer.query('COMMIT');

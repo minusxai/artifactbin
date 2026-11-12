@@ -39,13 +39,13 @@ describe('a verified-email browser request', () => {
     await sessionActor(request('/api/my/artifacts', { actor }));
     const db = await getDb();
     await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('g1','crew','Crew','usr_invited')");
-    await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_1','g1','invited@example.com','editor','usr_invited')");
+    await db.query("INSERT INTO group_invitations(id,group_id,email,role,invited_by) VALUES ('gin_1','g1','invited@example.com','admin','usr_invited')");
     const { transactions, sql } = await recordStatements(() => sessionActor(request('/api/my/artifacts', { actor })));
     expect(transactions).toBe(2);
     // Identity locks the invited groups first (one statement, canonical order), then the invitation rows.
     expect(sql.some((text) => /FROM auth\.groups WHERE id=ANY\(\$1::text\[\]\) AND deleted_at IS NULL ORDER BY id COLLATE "C" FOR UPDATE/.test(text))).toBe(true);
     expect(sql.some((text) => /FOR UPDATE OF i/.test(text))).toBe(true);
-    expect((await db.query("SELECT role FROM group_members WHERE group_id='g1' AND user_id='usr_invited'")).rows).toEqual([{ role: 'editor' }]);
+    expect((await db.query("SELECT role FROM group_members WHERE group_id='g1' AND user_id='usr_invited'")).rows).toEqual([{ role: 'admin' }]);
     expect((await db.query("SELECT id FROM group_invitations WHERE id='gin_1'")).rows).toEqual([]);
   });
 });

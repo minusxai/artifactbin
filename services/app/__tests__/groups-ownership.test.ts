@@ -21,7 +21,7 @@ async function fixture(){
  const creator=await createUser({email:'mxmx_test_group_creator@example.com'}),editor=await createUser({email:'mxmx_test_group_editor@example.com'}),viewer=await createUser({email:'mxmx_test_group_viewer@example.com'});
  const a=await mintAccountToken('group creator',creator.id),b=await mintAccountToken('group editor',editor.id),c=await mintAccountToken('group viewer',viewer.id);
  const db=await getDb();await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_ownership','ownership','Ownership','',$1)",[creator.id]);
- for(const [user,role] of [[creator,'editor'],[editor,'editor'],[viewer,'viewer']] as const)await db.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)',['grp_ownership',user.id,role]);
+ for(const [user,role] of [[creator,'admin'],[editor,'admin'],[viewer,'member']] as const)await db.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)',['grp_ownership',user.id,role]);
  const make=async(body:object)=>{const response=await create(request('/api/artifacts',{method:'POST',token:a.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return (await response.json()).id as string;};
  const move=(id:string,destination:object,bearer=a.token)=>transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',token:bearer,json:{destination}}),{params:Promise.resolve({id})});
  return {creator,editor,viewer,a,b,c,db,make,move};

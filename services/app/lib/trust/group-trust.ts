@@ -7,7 +7,7 @@
  *
  *  - Script, style and frame run or embed code: never a group's to grant. A wildcard declaration is never approvable,
  *    and an approval is the canonical exact origin a declaration normalises to (lib/document `parseCspOrigin`).
- *  - Who: a direct editor of the group (`GroupRole` has editor and viewer; editors administer). Any direct member reads
+ *  - Who: a direct admin of the group (`GroupRole` has editor and viewer; editors administer). Any direct member reads
  *    the list. Every change is audited on the group (lib/groups `recordGroupMutation`) in its own transaction.
  *  - A reader's own Never on a document still wins there (./document-trust `standingOf`).
  *  - TRUST__GROUP_APPROVALS=off: nothing is offered, the API refuses, and stored rows are ignored (never deleted).
@@ -86,7 +86,7 @@ export async function listGroupAddresses(userId: string, groupId: string): Promi
   }));
 }
 
-/** Approve (`present`) or remove addresses for a whole group: its direct editors only, audited on the group. */
+/** Approve (`present`) or remove addresses for a whole group: its direct admins only, audited on the group. */
 export async function setGroupAddresses(userId: string, groupId: string, addresses: CspExtensions, present: boolean, actor?: { tokenId: string | null }): Promise<{ changed: CspExtensions }> {
   requireEnabled();
   const pairs = pairsOf(groupEligibleCspExtensions(addresses));
@@ -94,7 +94,7 @@ export async function setGroupAddresses(userId: string, groupId: string, address
   await (await getDb()).transaction(async (tx) => {
     const role = await getGroupRole(userId, groupId, tx);
     if (!role) throw new TrustError('not_found', 404);
-    if (role !== 'editor') throw new TrustError('forbidden', 403, 'Only an editor of this group may change what it approves.');
+    if (role !== 'admin') throw new TrustError('forbidden', 403, 'Only an admin of this group may change what it approves.');
     for (const [directive, host] of pairs) {
       const done = present
         ? await tx.query('INSERT INTO group_trust (group_id, directive, host, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING host', [groupId, directive, host, userId])
@@ -131,6 +131,6 @@ export async function groupApprovedFor(userId: string | null | undefined, wanted
 export async function approvableGroupsFor(userId: string | null | undefined): Promise<CspApprovalGroup[]> {
   if (!userId || !groupTrustApprovalsEnabled()) return [];
   return (await (await getDb()).query<CspApprovalGroup>(
-    "SELECT g.id, g.handle, g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = $1 AND m.role = 'editor' AND g.deleted_at IS NULL ORDER BY g.name, g.id LIMIT 20",
+    "SELECT g.id, g.handle, g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = $1 AND m.role = 'admin' AND g.deleted_at IS NULL ORDER BY g.name, g.id LIMIT 20",
     [userId])).rows;
 }

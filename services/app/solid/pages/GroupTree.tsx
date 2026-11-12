@@ -5,7 +5,7 @@
  * Membership is DIRECT: a member of a subgroup is not a member of this group and cannot act as it, yet receives what
  * is shared with this group. The page says both, and lists those people apart from the members (`SubgroupAudience`).
  *
- * An editor creates a subgroup (`POST /api/groups` with `parent_id`) and moves this group (`PUT /api/groups/{id}/parent`),
+ * An admin creates a subgroup (`POST /api/groups` with `parent_id`) and moves this group (`PUT /api/groups/{id}/parent`),
  * which the server allows only to someone who directly edits the group, its current parent and the new one: moving a
  * group hands its members the new parent's shares. A move always names the parent this page loaded
  * (`from_parent_id`), so the server refuses a stale one (`parent_changed`) instead of silently re-rooting. Every
@@ -23,8 +23,8 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
 const MESSAGES: Record<string, string> = {
-  forbidden: 'Only someone who is an editor of this group, of its current parent and of the new parent can move it.',
-  parent_not_found: 'That parent group is unavailable. Choose a group you are an editor of.',
+  forbidden: 'Only someone who is an admin of this group, of its current parent and of the new parent can move it.',
+  parent_not_found: 'That parent group is unavailable. Choose a group you are an admin of.',
   already_has_parent: 'This group already has a parent. Reload the page, then move it from its current parent.',
   parent_changed: 'This group’s parent changed since the page loaded. Reload the page and try again.',
   hierarchy_cycle: 'A group cannot move under itself or one of its own subgroups.',
@@ -78,7 +78,7 @@ function parentChoices(self: GroupDetail, groups: GroupSummary[]): GroupSummary[
     grew = false;
     for (const group of groups) if (group.parent_id && below.has(group.parent_id) && !below.has(group.id)) { below.add(group.id); grew = true; }
   }
-  return groups.filter((group) => group.role === 'editor' && !below.has(group.id));
+  return groups.filter((group) => group.role === 'admin' && !below.has(group.id));
 }
 
 function MoveGroupDialog(props: { detail: GroupDetail; onClose: () => void; onMoved: () => void }): JSX.Element {
@@ -99,7 +99,7 @@ function MoveGroupDialog(props: { detail: GroupDetail; onClose: () => void; onMo
     finally { setBusy(false); }
   };
   return <Dialog title={`Move ${props.detail.group.name}`} busy={busy()} onClose={props.onClose}
-    description={<>Only someone who is an editor of {props.detail.group.name}, of its current parent and of the new parent can move it.</>}
+    description={<>Only someone who is an admin of {props.detail.group.name}, of its current parent and of the new parent can move it.</>}
     footer={<>
       <Button variant="secondary" disabled={busy()} onClick={props.onClose}>Cancel</Button>
       <Button disabled={busy() || !groups() || target() === current()} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move group'}</Button>
@@ -118,9 +118,9 @@ function MoveGroupDialog(props: { detail: GroupDetail; onClose: () => void; onMo
   </Dialog>;
 }
 
-/** The settings panel: the parent (with Move, for editors), the subgroups and a form to create one. */
+/** The settings panel: the parent (with Move, for admins), the subgroups and a form to create one. */
 export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void }): JSX.Element {
-  const editor = () => props.detail.group.role === 'editor';
+  const admin = () => props.detail.group.role === 'admin';
   const [moving, setMoving] = createSignal(false);
   const [name, setName] = createSignal(''); const [handle, setHandle] = createSignal('');
   const [busy, setBusy] = createSignal(false); const [error, setError] = createSignal(''); const [created, setCreated] = createSignal('');
@@ -128,7 +128,7 @@ export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void
     setBusy(true); setError(''); setCreated('');
     try {
       const group = await apiRequest<GroupSummary>('/api/groups', 'POST', { name: name(), handle: handle(), parent_id: props.detail.group.id });
-      setCreated(`${group.name} is now a subgroup of ${props.detail.group.name}. You are its first editor.`); setName(''); setHandle('');
+      setCreated(`${group.name} is now a subgroup of ${props.detail.group.name}. You are its first admin.`); setName(''); setHandle('');
       props.refresh();
     } catch (cause) { setError(groupTreeMessage(cause)); }
     finally { setBusy(false); }
@@ -138,17 +138,17 @@ export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void
       <span class="text-xs font-medium text-muted">Parent group</span>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <Show when={props.detail.parent} fallback={<span>None: {props.detail.group.name} is a top-level group.</span>}>{(parent) => <span>{relativeName(parent())}</span>}</Show>
-        <Show when={editor()}><Button size="sm" variant="secondary" onClick={() => setMoving(true)}>Move group</Button></Show>
+        <Show when={admin()}><Button size="sm" variant="secondary" onClick={() => setMoving(true)}>Move group</Button></Show>
       </div>
     </div>
     <div class="mt-5 grid gap-1">
       <span class="font-sans text-xs font-medium text-muted">Subgroups</span>
       <Show when={props.detail.subgroups.length} fallback={<StatusMessage kind="empty">No subgroups yet.</StatusMessage>}>
-        <ul class="m-0"><For each={props.detail.subgroups}>{(group) => <ListRow class="justify-between">{relativeName(group)}<Show when={group.role} fallback={<Badge tone="dim">Not a member</Badge>}><Badge>{group.role === 'editor' ? 'Editor' : 'Viewer'}</Badge></Show></ListRow>}</For></ul>
+        <ul class="m-0"><For each={props.detail.subgroups}>{(group) => <ListRow class="justify-between">{relativeName(group)}<Show when={group.role} fallback={<Badge tone="dim">Not a member</Badge>}><Badge>{group.role === 'admin' ? 'Admin' : group.role === 'editor' ? 'Editor' : 'Member'}</Badge></Show></ListRow>}</For></ul>
       </Show>
       <p class="m-0 mt-2 font-sans text-xs leading-relaxed text-muted">Files shared with {props.detail.group.name} also reach every subgroup’s members. Membership never carries over: a subgroup member is not a member of {props.detail.group.name}, and a member of {props.detail.group.name} is not a member of its subgroups. A group with subgroups cannot be deleted until they are moved or deleted.</p>
     </div>
-    <Show when={editor()}>
+    <Show when={admin()}>
       <form class="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (!busy()) void create(); }}>
         <Field label="Subgroup name"><Input required placeholder="e.g. Retail" value={name()} disabled={busy()} onInput={(event) => setName(event.currentTarget.value)} /></Field>
         <Field label="Subgroup handle"><Input required placeholder="e.g. retail_team" value={handle()} disabled={busy()} onInput={(event) => setHandle(event.currentTarget.value)} /></Field>

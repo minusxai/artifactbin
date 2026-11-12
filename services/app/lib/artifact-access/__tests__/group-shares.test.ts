@@ -12,7 +12,7 @@ describe('group principal lattice',()=>{
  it('matches live/preloaded JS, SQL, readThrough and policy reads at each role, preserving personal ownership',async()=>{
   const owner=await account('mxmx_test_owner@example.com'),member=await account('mxmx_test_member@example.com'),outsider=await account('mxmx_test_outsider@example.com');
   const group=await createGroup(owner.userId,{handle:'design_crit',name:'Design'});
-  await admitGroupMember(owner.userId,group.id,member.userId,'viewer');
+  await admitGroupMember(owner.userId,group.id,member.userId,'member');
   const page=await mine(owner);
   for(const role of ['viewer','commenter','editor'] as const){
    expect(await setArtifactGroupShare(owner,page.id,group.id,role)).toEqual({changed:true});
@@ -44,7 +44,7 @@ describe('group principal lattice',()=>{
  it('does not inherit through navigation links or grant dataset writes through readability',async()=>{
   const owner=await account('mxmx_test_owner@example.com'),member=await account('mxmx_test_member@example.com');
   const first=await createGroup(owner.userId,{handle:'first_team',name:'First'}),second=await createGroup(owner.userId,{handle:'second_team',name:'Second'});
-  await admitGroupMember(owner.userId,second.id,member.userId,'viewer');await setGroupLink(owner.userId,second.id,first.id,true);
+  await admitGroupMember(owner.userId,second.id,member.userId,'member');await setGroupLink(owner.userId,second.id,first.id,true);
   const row=await dataset(owner,{version:3,tables:[]},{visibility:'private'});
   await setArtifactGroupShare(owner,row.id,first.id,'editor');
   expect(await effectiveRole(row,member)).toBe('none');
@@ -57,7 +57,7 @@ describe('group principal lattice',()=>{
  it('makes members the dataset viewer only through a group share of the dataset itself, never of the page',async()=>{
   const owner=await account('mxmx_test_owner@example.com'),member=await account('mxmx_test_member@example.com');
   const group=await createGroup(owner.userId,{handle:'tracker_team',name:'Tracker'});
-  await admitGroupMember(owner.userId,group.id,member.userId,'viewer');
+  await admitGroupMember(owner.userId,group.id,member.userId,'member');
   const data=await dataset(owner,{version:3,tables:[]},{visibility:'unlisted'}),page=await mine(owner);
   for(const role of ['viewer','commenter','editor'] as const){
    await setArtifactGroupShare(owner,page.id,group.id,role);

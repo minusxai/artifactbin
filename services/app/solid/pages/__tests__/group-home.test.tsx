@@ -10,7 +10,7 @@ import { HomePage } from '../Home';
 import { CompanySetup } from '../CompanySetup';
 import { SessionProvider } from '../../lib/session';
 const session={kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true};
-const group={id:'g1',handle:'team',name:'Team',description:'',role:'viewer'};
+const group={id:'g1',handle:'team',name:'Team',description:'',role:'member'};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 function open(){render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);}
 const publicDeployment={mode:'public',setup_complete:true,is_owner:false,default_group:null};
@@ -28,6 +28,11 @@ function stub(unavailable=false){const fetcher=vi.fn(async(url:string)=>{
 });vi.stubGlobal('fetch',fetcher);return fetcher;}
 const requested=(fetcher:ReturnType<typeof stub>)=>fetcher.mock.calls.map(([url])=>String(url));
 const deferred=()=>{let resolve!:(value:Response)=>void;const promise=new Promise<Response>(done=>{resolve=done;});return {promise,resolve};};
+it.each(['editor','admin'])('%s can create group content',async(role)=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):bootstrapOf({...groupDestination,detail:{...groupDestination.detail,group:{...group,role}}})));
+ open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Create'})).toBeInTheDocument();
+});
 it('uses the default group shelf, links its handle to the group page, and hides write controls for viewers',async()=>{stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();expect(screen.getByRole('link',{name:'@team'})).toHaveAttribute('href','/@team');expect(screen.queryByRole('button',{name:'Create'})).toBeNull();expect(screen.queryByRole('button',{name:'Invite person'})).toBeNull();});
 it('reaches the default group from one initial request: no preference, details or shelf waterfall, and no personal shelf',async()=>{
  const fetcher=stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
@@ -89,7 +94,7 @@ it('moves Home to Personal after the default group is removed, reading the desti
  expect(fetcher.mock.calls.filter(([url])=>String(url).startsWith('/api/page/home?part=bootstrap'))).toHaveLength(2);
 });
 it('requires explicit confirmation after selecting a company group',async()=>{
- const fetcher=vi.fn(async(url:string)=>Response.json(url==='/api/groups'?{groups:[{...group,role:'editor'}]}:{}));vi.stubGlobal('fetch',fetcher);const complete=vi.fn();
+ const fetcher=vi.fn(async(url:string)=>Response.json(url==='/api/groups'?{groups:[{...group,role:'admin'}]}:{}));vi.stubGlobal('fetch',fetcher);const complete=vi.fn();
  render(()=> <CompanySetup deployment={{mode:'company',setup_complete:false,is_owner:true,default_group:null}} complete={complete}/>);
  await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/groups',expect.anything()));fireEvent.click(screen.getByRole('button',{name:'Company group'}));fireEvent.click(await screen.findByRole('option',{name:'Team'}));expect(screen.getByRole('button',{name:'Company group'})).toHaveTextContent('Team');expect(fetcher.mock.calls.filter(([url])=>url.includes('/setup'))).toHaveLength(0);
  fireEvent.click(screen.getByRole('button',{name:'Confirm company setup'}));await waitFor(()=>expect(complete).toHaveBeenCalledOnce());expect(fetcher).toHaveBeenCalledWith('/api/deployment/setup',expect.objectContaining({method:'POST',body:JSON.stringify({group_id:'g1'})}));
@@ -100,11 +105,11 @@ it('shows the newly created company group when its option arrives after creation
  const refreshed=new Promise<void>(resolve=>{release=resolve;});
  let reads=0;
  const fetcher=vi.fn(async(url:string,options?:RequestInit)=>{
-  if(url==='/api/groups'&&options?.method==='POST')return Response.json({...group,role:'editor'},{status:201});
+  if(url==='/api/groups'&&options?.method==='POST')return Response.json({...group,role:'admin'},{status:201});
   if(url==='/api/groups'){
    if(++reads===1)return Response.json({groups:[]});
    await refreshed;
-   return Response.json({groups:[{...group,role:'editor'}]});
+   return Response.json({groups:[{...group,role:'admin'}]});
   }
   return Response.json({});
  });

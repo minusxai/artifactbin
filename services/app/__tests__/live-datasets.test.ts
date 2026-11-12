@@ -352,8 +352,8 @@ it('ignores retired GraphQL naming metadata without granting live query access',
 it('lets a group own a live dataset (its editors change and query it), and keeps the secret out of the creation ledger', async () => {
   const { alice, bob, carol } = await people();
   const group = await createGroup(alice.userId!, { handle: 'live_group', name: 'Live' });
-  await admitGroupMember(alice.userId!, group.id, bob.userId!, 'editor');
-  await admitGroupMember(alice.userId!, group.id, carol.userId!, 'viewer');
+  await admitGroupMember(alice.userId!, group.id, bob.userId!, 'admin');
+  await admitGroupMember(alice.userId!, group.id, carol.userId!, 'member');
   const keyed = await createArtifactFromBody({ connection: config(), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
   expect(keyed.status, await keyed.clone().text()).toBe(201);
   const id = ((await keyed.json()) as { id: string }).id;

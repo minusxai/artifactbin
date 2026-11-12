@@ -13,6 +13,7 @@
  * config on its own.
  */
 import {API_RESOURCE_PATH,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {assertGroupRoleModel} from '@artifactbin/auth/identity-store/group-role-migration';
 import {ensureIdentitySchema} from '@artifactbin/auth/identity-store';
 import {ALIAS_ORIGINS,AUTH_SCHEMA,AUTH_SERVICE_URL,IDENTITY_READ_SCHEMA,PUBLIC_BASE_URL,deploymentConfig,serviceAudiences} from './config';
 
@@ -44,7 +45,7 @@ export async function openIdentity(db: TransactionalQueryable, waitMs = 120_000)
   const deadline = Date.now() + (AUTH_SERVICE_URL ? waitMs : 0);
   for (let logged = false; ; ) {
     const seen = await readsView(db);
-    if (seen.ok) return;
+    if (seen.ok) { await assertGroupRoleModel(db, IDENTITY_READ_SCHEMA); return; }
     if (Date.now() >= deadline) throw new Error(`identity: \`users\` resolves to ${seen.found}, not the read view ${IDENTITY_READ_SCHEMA}.users. `
       + (AUTH_SERVICE_URL ? 'Boot the auth host (it creates the identity schema once this app\'s tables exist), and move any identity table still in the app\'s schema into AUTH__SCHEMA (@artifactbin/auth identityMoveStatements).'
         : 'The identity tables could not be moved into AUTH__SCHEMA on this database; see the error above.'));

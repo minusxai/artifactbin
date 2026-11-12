@@ -42,7 +42,7 @@ it('review3: malformed requests do not distinguish an unreadable page from a mis
 it('review3: a group revoke between dataset authorization and page locks prevents a SQL commit', async () => {
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle:'review3_group', name:'Review group'});
-  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
+  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
   await db.query("INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,'editor',$3)", [f.staff, group.id, f.owner.userId]);
   const before = await stored(f.staff), transaction = db.transaction.bind(db);
   let revoked = false;
@@ -95,7 +95,7 @@ it('review3: sharing edits and the write guard agree on page/share lock order', 
 it('review3 (SQL door too): a group revoke between dataset authorization and page locks prevents the commit', async () => {
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle:'review3_sql_group', name:'Review group'});
-  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
+  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
   await db.query("INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,'editor',$3)", [f.staff, group.id, f.owner.userId]);
   const before = await stored(f.staff), transaction = db.transaction.bind(db);
   let revoked = false;
@@ -141,7 +141,7 @@ it.each(['sql'] as const)('a private page answers malformed requests and bad Ide
 it('every writer locks its artifacts by tier and lockOrder, before its facts', async () => {
   const f = await fixture(), db = await getDb(), transaction = db.transaction.bind(db);
   const group = await createGroup(f.owner.userId!, { handle: 'lock_order_group', name: 'Lock order' });
-  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'viewer');
+  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
   overrideConfig({}, { DATASETS__ALLOW_PRIVATE_NETWORK: '1' });
   const live = (await publish(f.owner, { connection: { connector: 'postgres', host: '127.0.0.1', database: 'd', user: 'u', password: 'p', tls: 'disable' }, title: 'Live' })).body.id;
   const formats = new Map((await db.query<{ id: string; format: string }>('SELECT id, format FROM artifacts')).rows.map((r) => [r.id, r.format]));

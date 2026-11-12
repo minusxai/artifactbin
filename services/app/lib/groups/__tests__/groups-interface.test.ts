@@ -50,9 +50,9 @@ describe('listGroups', () => {
     const owner = await account('lister'), other = await account('lister-other');
     const zeta = await createGroup(owner.id, { handle: 'zeta', name: 'Zeta' });
     const alpha = await createGroup(other.id, { handle: 'alpha', name: 'Alpha' });
-    await admitGroupMember(other.id, alpha.id, owner.id, 'viewer');
+    await admitGroupMember(other.id, alpha.id, owner.id, 'member');
     await createGroup(other.id, { handle: 'hidden', name: 'Hidden' });
-    expect((await listGroups(owner.id)).map(group => [group.handle, group.role])).toEqual([['alpha', 'viewer'], ['zeta', 'editor']]);
+    expect((await listGroups(owner.id)).map(group => [group.handle, group.role])).toEqual([['alpha', 'member'], ['zeta', 'admin']]);
     await (await getDb()).query('UPDATE groups SET deleted_at = now() WHERE id = $1', [zeta.id]);
     expect((await listGroups(owner.id)).map(group => group.handle)).toEqual(['alpha']);
     expect(await listGroups('usr_nobody')).toEqual([]);
@@ -66,7 +66,7 @@ describe('searchGroupMembers', () => {
     await setUsername(ada.id, 'ada');
     await (await getDb()).query("UPDATE users SET name = 'Ada Lövelace' WHERE id = $1", [ada.id]);
     const group = await createGroup(owner.id, { handle: 'search', name: 'Search' });
-    await admitGroupMember(owner.id, group.id, ada.id, 'viewer');
+    await admitGroupMember(owner.id, group.id, ada.id, 'member');
     expect((await searchGroupMembers(owner.id, group.id, '')).map(member => member.user_id).sort()).toEqual([ada.id, owner.id].sort());
     expect((await searchGroupMembers(owner.id, group.id, 'LÖV')).map(member => member.user_id)).toEqual([ada.id]);
     expect(await searchGroupMembers(owner.id, group.id, 'nobody-matches')).toEqual([]);
@@ -83,8 +83,8 @@ describe('removeGroupInvitation', () => {
   it('lets an editor withdraw an invitation and refuses viewers', async () => {
     const owner = await account('inv-owner'), viewer = await account('inv-viewer');
     const group = await createGroup(owner.id, { handle: 'invites', name: 'Invites' });
-    await admitGroupMember(owner.id, group.id, viewer.id, 'viewer');
-    const invitation = await inviteGroupMember(owner.id, group.id, '  MXMX_TEST_New@Example.com ', 'viewer');
+    await admitGroupMember(owner.id, group.id, viewer.id, 'member');
+    const invitation = await inviteGroupMember(owner.id, group.id, '  MXMX_TEST_New@Example.com ', 'member');
     expect(invitation.email).toBe('mxmx_test_new@example.com');
     await expect(removeGroupInvitation(viewer.id, group.id, invitation.id)).rejects.toMatchObject({ code: 'forbidden' });
     expect((await getGroupDetail(owner.id, group.id))?.invitations).toHaveLength(1);
@@ -97,6 +97,6 @@ describe('removeGroupInvitation', () => {
 
 it('finds an exact member ID through scoped search without global discovery',async()=>{
  const owner=await account('id-owner'),member=await account('id-member');const group=await createGroup(owner.id,{handle:'id_search',name:'ID search'});
- await admitGroupMember(owner.id,group.id,member.id,'viewer');
+ await admitGroupMember(owner.id,group.id,member.id,'member');
  expect(await searchGroupMembers(owner.id,group.id,member.id)).toMatchObject([{user_id:member.id}]);
 });
