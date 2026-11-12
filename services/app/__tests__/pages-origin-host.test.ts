@@ -74,7 +74,6 @@ async function frameSrc(app: ReturnType<typeof framing>, actor: Actor | null, id
   const page = await app.request(as(`${APP}/a/${id}${search}`, actor, { headers: { accept: 'text/html' } }));
   return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
 }
-const query = (_id: string) => JSON.stringify({ values: {}, only: ['counted'] });
 
 describe('the app page frames the document on its own origin', () => {
   it('draws one sandboxed frame whose first URL is the document\'s own origin carrying a ticket, under the strict policy that frames only the pages origins', async () => {
@@ -216,9 +215,9 @@ describe('the pages session', () => {
     expect(await pagesSessionActor(cookie, w.secret)).toEqual({ credential: 'agent-cookie', userId: w.user.id, tokenId: w.token.id, email: w.user.email! });
     // The document's own door reads the private document as the session's reader.
     const self = pagesOriginFor(w.secret, site);
-    const read = await app.request(as(`${self}/a/${w.secret}/query`, owner, { method: 'POST', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) }));
+    const read = await app.request(as(`${self}/a/${w.secret}/events/frame`, owner, { method: 'GET', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' } }));
     expect(read.status, await read.clone().text()).toBe(200);
-    expect(await read.json()).toEqual({tables:{},errors:{}});
+    expect(await read.json()).toMatchObject({format:'html',version:1});
     // The session mark with no transport behind it is nobody's session: a guest page, the guest marker.
     const open = await w.publish('<h1>Open</h1>', 'unlisted');
     const unmarked = await (await app.request(`${APP}/a/${open}`, { headers: { accept: 'text/html', [BROWSER_SESSION_HEADER]: '1', authorization: `Bearer ${w.token.token}` } })).text();
@@ -278,7 +277,7 @@ describe('the pages session', () => {
     expect(await guest.text()).not.toContain('Private plan');
     expect(guest.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=None; Max-Age=0; Secure; Partitioned`);
     // The row is gone too: the old cookie value names nobody on the doors.
-    const after = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, ...held, 'content-type': 'text/plain' }, body: query(w.secret) });
+    const after = await app.request(`${self}/a/${w.secret}/events/frame`, { method: 'GET', headers: { origin: self, ...held, 'content-type': 'text/plain' } });
     expect(after.status).toBe(404);
     // A public document rendered to a guest carries nothing of the reader's.
     const open = await w.publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><p>{$region}</p>', 'unlisted');
@@ -324,7 +323,7 @@ describe('the pages session', () => {
     const readable = await w.publish('<h1>Second</h1>', 'private');
     // The same value presented at another document's origin (a buggy proxy, a stolen value) is not that document's session.
     expect((await app.request(`${pagesOriginFor(readable, site)}/`, { headers: { cookie: `${COOKIE}=${cookie}` } })).status).toBe(404);
-    const door = await app.request(`${pagesOriginFor(readable, site)}/a/${readable}/query`, { method: 'POST', headers: { origin: pagesOriginFor(readable, site), cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: '{}' });
+    const door = await app.request(`${pagesOriginFor(readable, site)}/a/${readable}/events/frame`, { method: 'GET', headers: { origin: pagesOriginFor(readable, site), cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' } });
     expect(door.status).toBe(404);
     // The server reads only the prefixed name: a planted plain-named cookie (a sibling's toss) is ignored, first or last.
     const self = pagesOriginFor(w.secret, site);
@@ -363,7 +362,7 @@ describe('the pages session', () => {
     const second = await w.publish('<h1>Second</h1>', 'private');
     const cookie2 = await pagesCookie(app, w.actor, second);
     const self = pagesOriginFor(w.secret, site);
-    const door = (id: string, value: string) => app.request(`${pagesOriginFor(id, site)}/a/${id}/query`, { method: 'POST', headers: { origin: pagesOriginFor(id, site), cookie: `${COOKIE}=${value}`, 'content-type': 'text/plain' }, body: query(id) });
+    const door = (id: string, value: string) => app.request(`${pagesOriginFor(id, site)}/a/${id}/events/frame`, { method: 'GET', headers: { origin: pagesOriginFor(id, site), cookie: `${COOKIE}=${value}`, 'content-type': 'text/plain' } });
     expect((await door(w.secret, cookie)).status).toBe(200);
     // A document origin has no way to end a session (nor the apex).
     for (const base of [self, APEX]) expect((await app.request(`${base}/pages-session`, { method: 'DELETE', headers: { origin: self, cookie: `${COOKIE}=${cookie}` } })).status).toBe(404);
@@ -531,7 +530,7 @@ describe('a document\'s own origin', () => {
     const app = framing();
     const self = pagesOriginFor(w.secret, site);
     const path = `/a/${w.secret}/datasets/Attach01/files`;
-    const preflight = await app.request(`${self}${path}`, { method: 'OPTIONS', headers: { origin: self, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-edit-id,idempotency-key,x-filename' } });
+    const preflight = await app.request(`${self}${path}`, { method: 'OPTIONS', headers: { origin: self, 'access-control-request-method': 'GET', 'access-control-request-headers': 'content-type,x-edit-id,idempotency-key,x-filename' } });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('access-control-allow-headers')).toContain('x-filename');
     const refused = await app.request(`${self}/a/${w.other}/datasets/Attach01/files`, { method: 'OPTIONS', headers: { origin: self } });
@@ -565,17 +564,16 @@ describe('a document\'s own origin', () => {
     const app = framing();
     const cookie = await pagesCookie(app, w.actor, w.secret);
     const self = pagesOriginFor(w.secret, site);
-    const res = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) });
+    const res = await app.request(`${self}/a/${w.secret}/events/frame`, { method: 'GET', headers: { origin: self, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' } });
     expect(res.status, await res.clone().text()).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBe(self);
     expect(res.headers.get('access-control-allow-credentials')).toBe('true');
     expect(res.headers.get('vary')).toMatch(/Origin/);
-    const body = (await res.json()) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> };
-    expect(body).toEqual({tables:{},errors:{}});
+    expect(await res.json()).toMatchObject({format:'html',version:1});
     // The same door with no cookie is a stranger's.
-    const stranger = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, 'content-type': 'text/plain' }, body: query(w.secret) });
+    const stranger = await app.request(`${self}/a/${w.secret}/events/frame`, { method: 'GET', headers: { origin: self, 'content-type': 'text/plain' } });
     expect(stranger.status).toBe(404);
-    const preflight = await app.request(`${self}/a/${w.secret}/mutate`, { method: 'OPTIONS', headers: { origin: self, 'access-control-request-method': 'POST' } });
+    const preflight = await app.request(`${self}/a/${w.secret}/events/frame`, { method: 'OPTIONS', headers: { origin: self, 'access-control-request-method': 'GET' } });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('access-control-allow-origin')).toBe(self);
   });
@@ -614,7 +612,7 @@ describe('a document\'s own origin', () => {
     const app = framing();
     const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
-    for (const path of ['/login', '/api/artifacts', `/a/${w.secret}`, `/a/${w.secret}/raw`, `/a/${w.secret}/export`, `/a/${w.other}/query`, '/@someone']) {
+    for (const path of ['/login', '/api/artifacts', `/a/${w.secret}`, `/a/${w.secret}/raw`, `/a/${w.secret}/export`, `/a/${w.other}/events/frame`, '/@someone']) {
       expect((await app.request(`${self}${path}`, { headers: { cookie } })).status, path).toBe(404);
     }
     // The public runtime directories pass (a miss is the directory's own 404, never a refusal).
@@ -629,8 +627,8 @@ describe('the origin gate', () => {
     const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
     const intruder = pagesOriginFor(w.other, site);
-    for (const url of [`${self}/a/${w.secret}/query`, `${APP}/a/${w.secret}/query`]) {
-      const res = await app.request(url, { method: 'POST', headers: { origin: intruder, cookie, 'content-type': 'text/plain' }, body: query(w.secret) });
+    for (const url of [`${self}/a/${w.secret}/events/frame`, `${APP}/a/${w.secret}/events/frame`]) {
+      const res = await app.request(url, { method: 'GET', headers: { origin: intruder, cookie, 'content-type': 'text/plain' } });
       expect(res.status, url).toBe(403);
       expect(((await res.json()) as { error: string }).error).toBe('forbidden_origin');
       expect(res.headers.get('access-control-allow-origin')).toBeNull();
@@ -646,7 +644,7 @@ describe('the origin gate', () => {
       expect(res.status, path).toBe(403);
     }
     // Its own door on the app's host answers cross-origin with credentialed CORS for exactly that origin.
-    const own = await app.request(`${APP}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, 'content-type': 'text/plain' }, body: query(w.secret) });
+    const own = await app.request(`${APP}/a/${w.secret}/events/frame`, { method: 'GET', headers: { origin: self, 'content-type': 'text/plain' } });
     expect(own.status).toBe(404); // no pages cookie reaches the app host here: a stranger, honestly answered
     expect(own.headers.get('access-control-allow-origin')).toBe(self);
   });
@@ -655,7 +653,7 @@ describe('the origin gate', () => {
     const w = await world();
     const app = framing();
     for (const headers of [{}, { origin: APP }] as Array<Record<string, string>>) {
-      const res = await app.request(as(`${APP}/a/${w.secret}/query`, w.actor, { method: 'POST', headers: { ...headers, 'content-type': 'text/plain' }, body: query(w.secret) }));
+      const res = await app.request(as(`${APP}/a/${w.secret}/events/frame`, w.actor, { method: 'GET', headers: { ...headers, 'content-type': 'text/plain' } }));
       expect(res.status).toBe(200);
       expect(res.headers.get('access-control-allow-credentials')).toBeNull();
     }
