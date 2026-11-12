@@ -4,15 +4,17 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { createTransport } from 'nodemailer';
 import { isLoopbackName } from '@artifactbin/contracts';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import type { ConnectionOptions } from 'node:tls';
 import type { Mailer, OutgoingMail } from './auth/human';
 
 export class MailNotConfigured extends Error { constructor() { super('mail is not configured (EMAIL__RESEND_API_KEY or EMAIL__SMTP_HOST)'); } }
 export class MailSendFailed extends Error { constructor(public readonly status: number) { super(`mail send failed: ${status}`); } }
 
-interface ResendOptions { apiKey?: string; from: string; fetch?: typeof fetch }
+interface ResendOptions { apiKey?: string; from: string; productName?: string; fetch?: typeof fetch }
 export interface SmtpSettings { host: string; port: number; secure: boolean; user?: string; password?: string }
-export interface MailSettings { apiKey?: string; from: string; smtp?: SmtpSettings }
+/** `productName` (config `APP__NAME`, already validated) names the install in mail; absent, `artifactbin`. */
+export interface MailSettings { apiKey?: string; from: string; productName?: string; smtp?: SmtpSettings }
 interface RuntimeMailerOptions extends ResendOptions, MailSettings { publicBaseUrl: string; devOutboxPath?: string }
 interface DevOutboxOptions { path?: string; reset?: boolean; log?: (line: string) => void }
 
@@ -21,16 +23,17 @@ export const DEV_OUTBOX_DEFAULT_PATH = resolve(tmpdir(), 'artifactbin-dev-mail.j
 export const resolveDevOutboxPath = (value?: string): string => resolve(value?.trim() || DEV_OUTBOX_DEFAULT_PATH);
 const RESEND_API_URL = 'https://api.resend.com';
 const OTP_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_PRODUCT_NAME = 'artifactbin';
 
-const html = (m: OutgoingMail): string =>
+const html = (m: OutgoingMail, name: string): string =>
   m.kind === 'otp'
-    ? `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;line-height:1.6;color:#0b0e11"><p>Your artifactbin login code is</p><p style="font-size:32px;font-weight:600;letter-spacing:0.18em;margin:16px 0">${m.otp}</p><p style="color:#57606a">It expires in 10 minutes. If you didn't ask to log in, ignore this email.</p></div>`
+    ? `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;line-height:1.6;color:#0b0e11"><p>Your ${escapeHtml(name)} login code is</p><p style="font-size:32px;font-weight:600;letter-spacing:0.18em;margin:16px 0">${m.otp}</p><p style="color:#57606a">It expires in 10 minutes. If you didn't ask to log in, ignore this email.</p></div>`
     : `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;line-height:1.6;color:#0b0e11"><p>${m.text.replace(/</g, '&lt;')}</p></div>`;
 
-const contentOf = (mail: OutgoingMail) => ({
-  subject: mail.kind === 'otp' ? `${mail.otp} is your artifactbin login code` : mail.subject,
-  text: mail.kind === 'otp' ? `Your artifactbin login code is ${mail.otp}\n\nIt expires in 10 minutes. If you didn't ask to log in, ignore this email.` : mail.text,
-  html: mail.html ?? html(mail),
+const contentOf = (mail: OutgoingMail, name = DEFAULT_PRODUCT_NAME) => ({
+  subject: mail.kind === 'otp' ? `${mail.otp} is your ${name} login code` : mail.subject,
+  text: mail.kind === 'otp' ? `Your ${name} login code is ${mail.otp}\n\nIt expires in 10 minutes. If you didn't ask to log in, ignore this email.` : mail.text,
+  html: mail.html ?? html(mail, name),
 });
 
 export function resendMailer(opts: ResendOptions): Mailer {
@@ -42,7 +45,7 @@ export function resendMailer(opts: ResendOptions): Mailer {
         method: 'POST',
         signal: AbortSignal.timeout(15000),
         headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json',...(mail.idempotencyKey?{'Idempotency-Key':mail.idempotencyKey}:{}) },
-        body: JSON.stringify({ from: opts.from, to: [mail.to], ...contentOf(mail) }),
+        body: JSON.stringify({ from: opts.from, to: [mail.to], ...contentOf(mail, opts.productName) }),
       });
       if (!res.ok) throw new MailSendFailed(res.status);
     },
@@ -50,7 +53,7 @@ export function resendMailer(opts: ResendOptions): Mailer {
 }
 
 /** A narrow trust-root override supports deterministic TLS fixtures; certificate verification is always enabled. */
-export function smtpMailer(opts: { from: string; smtp: SmtpSettings }, trust: { ca?: ConnectionOptions['ca'] } = {}): Mailer {
+export function smtpMailer(opts: { from: string; productName?: string; smtp: SmtpSettings }, trust: { ca?: ConnectionOptions['ca'] } = {}): Mailer {
   const smtp = opts.smtp;
   const transport = createTransport({
     host: smtp.host, port: smtp.port, secure: smtp.secure, requireTLS: !smtp.secure,
@@ -61,7 +64,7 @@ export function smtpMailer(opts: { from: string; smtp: SmtpSettings }, trust: { 
   });
   return { async send(mail) {
     try {
-      const result = await transport.sendMail({ from: opts.from, to: mail.to, ...contentOf(mail) });
+      const result = await transport.sendMail({ from: opts.from, to: mail.to, ...contentOf(mail, opts.productName) });
       if (!result.accepted.length || result.rejected.length) throw new Error('recipient not accepted');
     } catch {
       // Provider replies can echo AUTH credentials, recipients or message contents. Never retain a cause.
@@ -103,5 +106,5 @@ export function usesDevOutbox(publicBaseUrl: string): boolean {
 export function mailerForRuntime(opts: RuntimeMailerOptions): Mailer {
   if (usesDevOutbox(opts.publicBaseUrl)) return devOutboxMailer({ path: opts.devOutboxPath });
   if (opts.smtp && opts.apiKey) throw new Error('Configure either SMTP or Resend, never both.');
-  return opts.smtp ? smtpMailer({ from: opts.from, smtp: opts.smtp }) : resendMailer(opts);
+  return opts.smtp ? smtpMailer({ from: opts.from, ...(opts.productName ? { productName: opts.productName } : {}), smtp: opts.smtp }) : resendMailer(opts);
 }

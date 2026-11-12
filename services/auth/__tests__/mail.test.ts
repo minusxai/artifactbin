@@ -3,6 +3,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath, usesDevOutbox } from '../src/mail';
+import { mailSettingsOf } from '../src/config';
+import { authEnvNamesRead } from '../src/env';
 
 describe('resendMailer', () => {
   it('posts the Resend shape — the login code in the subject and the text, never logged', async () => {
@@ -56,5 +58,40 @@ describe('resendMailer', () => {
     const f = (async () => new Response('secret-key 123456', { status: 500 })) as unknown as typeof fetch;
     await expect(resendMailer({ apiKey: 'k', from: 'x', fetch: f }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toBeInstanceOf(MailSendFailed);
     await expect(resendMailer({ apiKey: 'k', from: 'x', fetch: f }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toThrow('mail send failed: 500');
+  });
+});
+
+describe('the product name in mail (APP__NAME)', () => {
+  const sent = async (env: Record<string, string | undefined>) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const f = (async (_url: string, init: RequestInit) => { bodies.push(JSON.parse(String(init.body))); return new Response('{}'); }) as unknown as typeof fetch;
+    await resendMailer({ ...mailSettingsOf({ EMAIL__RESEND_API_KEY: 're_test', ...env }), fetch: f }).send({ to: 'a@example.com', kind: 'otp', subject: 'x', text: 'x', otp: '123456' });
+    return bodies[0] as { subject: string; text: string; html: string };
+  };
+  it('unset, says artifactbin exactly as before', async () => {
+    expect(mailSettingsOf({ APP__NAME: '   ' })).not.toHaveProperty('productName');
+    expect(authEnvNamesRead().has('APP__NAME')).toBe(true);
+    expect(await sent({})).toMatchObject({
+      subject: '123456 is your artifactbin login code',
+      text: "Your artifactbin login code is 123456\n\nIt expires in 10 minutes. If you didn't ask to log in, ignore this email.",
+      html: `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;line-height:1.6;color:#0b0e11"><p>Your artifactbin login code is</p><p style="font-size:32px;font-weight:600;letter-spacing:0.18em;margin:16px 0">123456</p><p style="color:#57606a">It expires in 10 minutes. If you didn't ask to log in, ignore this email.</p></div>`,
+    });
+  });
+  it('set, names the install in the subject, text and HTML of the sign-in code mail', async () => {
+    const mail = await sent({ APP__NAME: '  Acme Data ' });
+    expect(mail.subject).toBe('123456 is your Acme Data login code');
+    expect(mail.text).toBe("Your Acme Data login code is 123456\n\nIt expires in 10 minutes. If you didn't ask to log in, ignore this email.");
+    expect(mail.html).toContain('<p>Your Acme Data login code is</p>');
+    expect(JSON.stringify([mail.subject, mail.text, mail.html])).not.toContain('artifactbin');
+  });
+  it('is plain text: escaped in HTML, verbatim in the subject and text', async () => {
+    const mail = await sent({ APP__NAME: 'R&D <Tools> "Lab"' });
+    expect(mail.html).toContain('<p>Your R&amp;D &lt;Tools&gt; &quot;Lab&quot; login code is</p>');
+    expect(mail.subject).toBe('123456 is your R&D <Tools> "Lab" login code');
+  });
+  it('refuses control characters (no header injection) and names longer than 60 characters, naming the setting only', () => {
+    for (const value of ['Acme\r\nBcc: x@example.com', 'Acme\nData', 'Acme\u0000', 'Acme\u007f', 'x'.repeat(61)])
+      expect(() => mailSettingsOf({ APP__NAME: value }), JSON.stringify(value)).toThrow(/^APP__NAME must be/);
+    expect(mailSettingsOf({ APP__NAME: 'x'.repeat(60) }).productName).toBe('x'.repeat(60));
   });
 });
