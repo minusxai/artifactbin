@@ -52,8 +52,21 @@ export function loginProvidersOf(source: Record<string, string | undefined>): Lo
   };
 }
 
+/**
+ * `APP__NAME`: the product name an install presents in mail it sends (unset: `artifactbin`). Plain text, trimmed, at
+ * most 60 characters, and no control characters, so it can never break a mail header; mail escapes it for HTML.
+ */
+function productNameOf(source: Record<string, string | undefined>): string | undefined {
+  const name = readEnv(source, 'APP__NAME')?.trim() || undefined;
+  if (name && /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(name)) throw new Error('APP__NAME must be plain text on one line, without control characters.');
+  if (name && name.length > 60) throw new Error('APP__NAME must be at most 60 characters.');
+  return name;
+}
+
 /** The audited owner of outgoing-mail settings. Credentials are never interpolated into errors. */
 export function mailSettingsOf(source: Record<string, string | undefined>): MailSettings {
+  const productName = productNameOf(source);
+  const branding = productName ? { productName } : {};
   const apiKey = readEnv(source, 'EMAIL__RESEND_API_KEY')?.trim() || undefined;
   const from = readEnv(source, 'EMAIL__FROM')?.trim() || 'artifactbin <login@example.com>';
   const host = readEnv(source, 'EMAIL__SMTP_HOST')?.trim() || undefined;
@@ -63,7 +76,7 @@ export function mailSettingsOf(source: Record<string, string | undefined>): Mail
   // Passwords are opaque: do not silently trim valid leading/trailing spaces.
   const password = readEnv(source, 'EMAIL__SMTP_PASSWORD') || undefined;
   const named = !!(host || portValue || secureValue || user || password);
-  if (!named) return { ...(apiKey ? { apiKey } : {}), from };
+  if (!named) return { ...(apiKey ? { apiKey } : {}), from, ...branding };
   if (apiKey) throw new Error('Configure either EMAIL__SMTP_HOST or EMAIL__RESEND_API_KEY, never both.');
   if (!host) throw new Error('EMAIL__SMTP_HOST is required when SMTP settings are present.');
   if (!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[a-f0-9:]+\])$/i.test(host)) throw new Error('EMAIL__SMTP_HOST must be a hostname or IP address, not a URL.');
@@ -72,7 +85,7 @@ export function mailSettingsOf(source: Record<string, string | undefined>): Mail
   const port = portValue ? Number(portValue) : secure ? 465 : 587;
   if ((portValue && !/^\d+$/.test(portValue)) || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('EMAIL__SMTP_PORT must be an integer from 1 to 65535.');
   if (!!user !== !!password) throw new Error('EMAIL__SMTP_USER and EMAIL__SMTP_PASSWORD must both be set or both be absent.');
-  return { from, smtp: { host, port, secure, ...(user && password ? { user, password } : {}) } };
+  return { from, ...branding, smtp: { host, port, secure, ...(user && password ? { user, password } : {}) } };
 }
 
 /**

@@ -80,6 +80,15 @@ describe('SMTP real local transport', () => {
       expect(server.messages[0]).toContain('login@example.test');
     } finally { await server.close(); }
   });
+  it('names the install (APP__NAME) in the SMTP subject and body', async () => {
+    const server = await fixture();
+    try {
+      await smtpMailer({ ...mailSettingsOf({ ...env, APP__NAME: 'Acme Data' }), smtp: { host: 'localhost', port: server.port, secure: false } }, { ca: cert }).send(otp);
+      expect(server.messages[0]).toContain('Subject: 428163 is your Acme Data login code');
+      expect(server.messages[0]).toContain('Your Acme Data login code is 428163');
+      expect(server.messages[0]).not.toContain('artifactbin');
+    } finally { await server.close(); }
+  });
   it('accepts a TLS relay without login credentials', async () => {
     const server = await fixture();
     try { await smtpMailer({ from: env.EMAIL__FROM, smtp: { host: 'localhost', port: server.port, secure: false } }, { ca: cert }).send(otp); expect(server.sessions).toEqual([true]); }
