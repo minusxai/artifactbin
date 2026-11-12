@@ -5,8 +5,8 @@ import {richBaselineRevision,richBrowserParityFixtures,richBaselineReadiness} fr
 import {htmlBodyPadding} from '../publication.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
 describe('actual original/new rich reader fixture inputs',()=>{
- it('names all eleven public families and pins evidence sources without pretending captures exist',()=>{
-  expect(richBrowserParityFixtures.map(f=>f.family)).toEqual(['Markdown','Mermaid','Isometric','DeckGL','SlideDeck','User','Avatar','Icon','Progress','DatePicker','Tooltip']);
+ it('names all nine public families and pins evidence sources without pretending captures exist',()=>{
+  expect(richBrowserParityFixtures.map(f=>f.family)).toEqual(['Markdown','Isometric','SlideDeck','User','Avatar','Icon','Progress','DatePicker','Tooltip']);
   expect(new Set(richBrowserParityFixtures.map(f=>f.id)).size).toBe(richBrowserParityFixtures.length);
   for(const fixture of richBrowserParityFixtures){expect(fixture.provenance.revision).toBe(richBaselineRevision);expect(fixture.provenance.sources.length).toBeGreaterThan(1);expect(fixture.limitations.length).toBeGreaterThan(0);expect(fixture.states[0]).toMatchObject({id:'initial',actions:[]});for(const state of fixture.states)expect(Object.keys(state.expected).length).toBeGreaterThan(0);}
  });
@@ -14,11 +14,17 @@ describe('actual original/new rich reader fixture inputs',()=>{
   const doc=new JSDOM(fixture.newHtml).window.document;expect(doc.querySelector(`af-${fixture.modules[0]}`)).not.toBeNull();
   expect(()=>transformSync(fixture.setup||'',{loader:'js',format:'esm'})).not.toThrow();
  });
- it('keeps real engine readiness mandatory and basemaps network free',()=>{
-  expect(Object.keys(richBaselineReadiness)).toEqual(['mermaid-flow','deck-gl-points','isometric-assembly']);
-  const map=richBrowserParityFixtures.find(f=>f.family==='DeckGL');expect(map.oldJsx).toContain('basemap="none"');expect(map.setup).toContain('"basemap":"none"');expect(map.oldJsx).toContain('select 10 as longitude');expect(map.oldJsx).not.toMatch(/https?:\/\//);
+ it('keeps real isometric readiness mandatory and fixtures network free',()=>{
+  expect(Object.keys(richBaselineReadiness)).toEqual(['isometric-assembly']);
   for(const fixture of richBrowserParityFixtures)expect(fixture.oldJsx+fixture.newHtml+(fixture.setup||'')).not.toMatch(/https?:\/\//);
-  const mermaid=richBaselineReadiness['mermaid-flow'];expect(mermaid.jsx.toString()).toContain('naturalWidth');expect(mermaid.html.toString()).toContain('naturalWidth');
+  const assembly=richBrowserParityFixtures.find(f=>f.id==='isometric-assembly');
+  for(const [reader,html] of [['jsx','<div data-slot="isometric"><svg><g data-part="body"></g></svg></div>'],['html',assembly.newHtml.replace('</af-isometric>','<svg><g data-part="body"></g></svg></af-isometric>')]]){
+   const dom=new JSDOM(html,{runScripts:'outside-only'});
+   const ready=()=>dom.window.eval(`(${richBaselineReadiness['isometric-assembly'][reader].toString()})()`);
+   expect(ready()).toBe(true);
+   dom.window.document.querySelector('[data-part="body"]').remove();
+   expect(ready()).toBe(false);
+  }
  });
  it('keeps fixed calendar inputs and records unavoidable API differences explicitly',()=>{
   const date=richBrowserParityFixtures.find(f=>f.family==='DatePicker');expect(date.oldJsx).toContain('2024-06-15');expect(date.setup).toContain('2024-06-15');expect(date.oldJsx).toContain('min="2024-06-01"');expect(date.newHtml).toContain('max="2024-06-30"');
