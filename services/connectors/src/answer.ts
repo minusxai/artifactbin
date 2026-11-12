@@ -4,7 +4,7 @@
  * namespace checks, and the value rules of the common types:
  *
  *  - `number`: a JS number. A 64-bit integer outside ±2^53 stays its exact decimal string (an id must not round);
- *    a DECIMAL/NUMERIC becomes the nearest number (a chart's value), its string only when not finite (NaN).
+ *    DECIMAL/NUMERIC stays a string when conversion changes its decimal value, overflows or underflows.
  *  - `date` `YYYY-MM-DD`; `timestamp` ISO 8601, `…Z` when the database stores an instant (the session runs in UTC),
  *    without a zone when it stores a wall-clock time; `boolean` true/false; `json` the parsed value; arrays are `json`.
  *  - `text` everything else; binary values as `\x` and lowercase hex.
@@ -41,13 +41,26 @@ export function viewerValues(query: Pick<ConnectorQuery, 'viewer'>): { id: strin
 }
 
 const SAFE = /^-?\d{1,15}$/;
+/** Compare decimal values without allocating powers of ten or rounding through Number. Trailing zeros
+ * and exponent notation do not change a value. A normal 4.5000 still becomes 4.5 for chart consumers. */
+function decimalIdentity(text: string): string | null {
+  const match = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(text);
+  if (!match || !(match[2] || match[3])) return null;
+  const digits = ((match[2] ?? '') + (match[3] ?? '')).replace(/^0+/, '');
+  if (!digits) return '0';
+  const trimmed = digits.replace(/0+$/, '');
+  const exponent = Number(match[4] ?? 0) - (match[3]?.length ?? 0) + digits.length - trimmed.length;
+  if (!Number.isSafeInteger(exponent)) return null;
+  return `${match[1] === '-' ? '-' : ''}${trimmed}e${exponent}`;
+}
 export function numberValue(value: unknown): ConnectorJson {
   if (typeof value === 'number' || value === null) return Number.isFinite(value) || value === null ? value as number | null : String(value);
   if (typeof value === 'bigint') return Number.isSafeInteger(Number(value)) ? Number(value) : value.toString();
   const text = String(value);
   if (/^-?\d+$/.test(text)) return SAFE.test(text) || Number.isSafeInteger(Number(text)) ? Number(text) : text;
   const n = Number(text);
-  return Number.isFinite(n) ? n : text;
+  return Number.isFinite(n) && (!Number.isInteger(n) || Number.isSafeInteger(n))
+    && decimalIdentity(text) !== null && decimalIdentity(text) === decimalIdentity(String(n)) ? n : text;
 }
 export function timestampValue(text: string, instant: boolean): string {
   // `2026-01-02 03:04:05.123+00` / `2026-01-02 03:04:05`: the session's zone is UTC, so an instant normally ends +00.

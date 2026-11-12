@@ -139,6 +139,7 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     const answer = await my.query({ text: 'select id, placed, at, big, price, meta from orders where item = $item or id = $id order by id', params: { item: "tea' or '1'='1", id: 1 }, viewer: alice });
     expect(answer.columns.map((c) => c.type)).toEqual(['number', 'timestamp', 'timestamp', 'number', 'number', 'json']);
     expect(answer.rows).toEqual([{ id: 1, placed: '2026-11-01T10:00:00', at: '2026-11-01T10:00:00Z', big: '9007199254740993', price: 4.5, meta: { a: 1 } }]);
+    expect((await my.query({text: "SELECT CAST('9876543210987654.3210' AS DECIMAL(24,4)) AS amount, CAST('0.1234567890123456789' AS DECIMAL(24,19)) AS fraction", params:{}, viewer:null})).rows).toEqual([{amount:'9876543210987654.3210',fraction:'0.1234567890123456789'}]);
     expect(await failure(my.query({ text: 'with x as (select 1) delete from orders', params: {}, viewer: alice }))).toMatchObject({ code: 'read_only' });
     for (const text of ["select 1 into outfile '/tmp/x'", "select @app.viewer_id := 'u_bob'", "set @app.viewer_id = 'u_bob'", 'drop table orders'])
       expect((await failure(my.query({ text, params: {}, viewer: alice }))).code, text).toBe('read_only');
@@ -184,6 +185,7 @@ describe.skipIf(!has('apache/doris:all-in-one-4.1.3'))('Doris through the MySQL 
   it('binds typed values, keeps precision and nulls, rejects writes, and reuses a clean session',async()=>{
     const q={text:'SELECT id,price,placed,big,note FROM orders WHERE placed >= $start AND placed <= CURRENT_TIMESTAMP',params:{start:'2026-11-01'},viewer:alice};
     expect((await my.query(q)).rows).toEqual([{id:1,price:12.34,placed:'2026-11-01T12:00:00',big:'9007199254740993',note:'tea'}]);
+    expect((await my.query({text: "SELECT CAST('9876543210987654.3210' AS DECIMAL(24,4)) AS amount, CAST('0.1234567890123456789' AS DECIMAL(24,19)) AS fraction", params:{}, viewer:null})).rows).toEqual([{amount:'9876543210987654.3210',fraction:'0.1234567890123456789'}]);
     expect((await my.query({text:'SELECT price,note FROM orders WHERE id=$id',params:{id:2},viewer:bob})).rows).toEqual([{price:null,note:null}]);
     expect(await failure(my.query({text:'DELETE FROM orders',params:{},viewer:alice}))).toMatchObject({code:'read_only'});
     expect(await failure(my.query({text:'WITH x AS (SELECT 1) DELETE FROM orders',params:{},viewer:alice}))).toMatchObject({code:'read_only'});

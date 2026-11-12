@@ -7,11 +7,21 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { colonParameters, connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
+import { numberValue } from '../src/answer';
 import { readOnlyStatement } from '../src/statement';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 
 const DEV = { allowPrivateNetwork: true }, PUBLIC = { allowPrivateNetwork: false };
 const failure = async (p: Promise<unknown>) => p.then(() => { throw Error('expected a refusal'); }, (e) => connectorError(e));
+
+describe('numeric transport', () => {
+  it('preserves exact decimals when their JSON number would change the database value', () => {
+    for (const value of ['9876543210987654.3210', '-9876543210987654.3210', '0.1234567890123456789', '1.0000000000000001', '9007199254740993.0000', '1e-400', '1e400', '1e20']) expect(numberValue(value), value).toBe(value);
+    for (const [value, expected] of [['4.5000', 4.5], ['1.25e2', 125], ['+001.200', 1.2], ['0.0000001', 1e-7], ['-0.000', -0]] as const) expect(numberValue(value), value).toEqual(expected);
+    expect(numberValue(null)).toBeNull();
+    expect(numberValue(1.25)).toBe(1.25);
+  });
+});
 
 describe('statement rules', () => {
   it('autocommit engines reject writes behind WITH and EXPLAIN without confusing quoted text with SQL', () => {
@@ -81,6 +91,11 @@ describe('the network rule', () => {
 });
 
 describe('postgres, end to end', () => {
+  it('returns exact high-precision numeric values through the Postgres wire', async () => {
+    const answer = await pg.query({text: "select '9876543210987654.3210'::numeric(24,4) as amount, '0.1234567890123456789'::numeric as fraction, 4.50::numeric as ordinary", params: {}, viewer: null});
+    expect(answer.rows).toEqual([{amount: '9876543210987654.3210', fraction: '0.1234567890123456789', ordinary: 4.5}]);
+  });
+
   let wire: PgliteWire, pg: OpenConnection;
   const alice = { id: 'u_alice', email: 'alice@example.com', groups: ['g2', 'g1'] }, bob = { id: 'u_bob', email: 'bob@example.com', groups: [] };
   beforeAll(async () => {
