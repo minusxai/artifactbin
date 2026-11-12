@@ -9,8 +9,8 @@ export {startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadC
  * `sql` (./apollo/sql) reaches the page SQL door through the reader's ONE request relay, `remote.execute`: the frame-bridge parent routes it to /api/artifacts/<page>/sql with the
  * trusted revision bound (lib/html-reader/frame-bridge parent `relayedSql`). The reader carries no SQL code at all: it
  * sits at its 20 KiB gzip budget (html-runtime build.test). No app frame relays in a local preview, so it refuses at
- * once; an unframed page (an export capture, an owner host) sends it straight to the SQL door, which reads only with
- * the capture's export key and is unreachable without one (./domain-reads `createDomainSql`). A downloaded copy
+ * once; an unframed page (an export capture, an owner host) sends it straight to the SQL door, which selects anonymous reads on a verified
+ * owner host or requires the capture's export key on the canonical host (./domain-reads `createDomainSql`). A downloaded copy
  * answers from the rows it carries, in the engine only an export embeds (`@afbin/offline-sql`, ./offline-sql), never
  * through the app, even when the copy is connected: without that module (no data in the copy) it refuses, and says so
  * where the reader sees it (offlineSqlNoData).

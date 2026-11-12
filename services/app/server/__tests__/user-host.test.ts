@@ -1,12 +1,15 @@
 import {Hono} from 'hono';
 import {userHostIngress,userHostStaticPath} from '../user-host';
-import {beforeEach,expect,it} from 'vitest';
+import {beforeEach,expect,it,vi} from 'vitest';
 import {useAppHarness,request} from '@/__tests__/harness';
 import {overrideConfig} from '@/lib/platform/config';
 import {mintToken,createUser,setUsername} from '@/lib/accounts';
-import {getDb} from '@/lib/platform';
+import {mintExportKey} from '@/lib/export';
+import {getDb,services} from '@/lib/platform';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {createAppServer} from '../app';
+import {fixture,sql,stored} from '@/__tests__/page-sql-door-fixture';
+import {ACTOR_HEADER} from '@artifactbin/contracts';
 import {DOMAIN_HOME_CSP} from '@/lib/user-pages';
 useAppHarness();
 const app=()=>createAppServer({indexHtml:async()=>'<html><head><link rel="stylesheet" href="/shell.css"></head><body>APP</body></html>'});
@@ -164,4 +167,76 @@ it('an owner host has no function door: its unframed CSP admits no function path
  const connect=res.headers.get('content-security-policy')!.split(';').find(part=>part.trim().startsWith('connect-src'))!;
  expect(connect).not.toContain('/fn/');
  expect((await server.request(`${base}/api/artifacts/${post.id}/fn/missing?revision=1`,{headers:{origin:'null'}})).status).toBe(404);
+});
+
+it('owner-host SQL is the canonical anonymous read, always read-only and credential-free',async()=>{
+ const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app();
+ const read=(text='select name from staff order by name',extra:Record<string,unknown>={},host=base)=>server.request(`${host}/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null','content-type':'text/plain',authorization:`Bearer ${f.owner.token}`,cookie:'session=secret','proxy-authorization':'Bearer ignored',[ACTOR_HEADER]:'ignored','idempotency-key':'invalid'},body:JSON.stringify({sql:text,revision:'1',readOnly:false,key:'ignored',...extra})});
+ await (await getDb()).query(`UPDATE artifacts SET dataset_policy=jsonb_set(dataset_policy,'{tables,0,select_permissions,2,permission,filter}',$2::jsonb),policy_revision=policy_revision+1 WHERE id=$1`,[f.staff,JSON.stringify({name:{_eq:'ada'}})]);
+ const canonical=await sql(f.page,null,'select name from staff order by name');
+ expect(canonical.body.rows).toEqual([{name:'ada'}]);
+ for(const visibility of ['public','unlisted']){
+  await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[f.page,visibility]);
+  const response=await read();expect(response.status,await response.clone().text()).toBe(200);expect(await response.json()).toEqual(canonical.body);
+  expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(response.headers.has('access-control-allow-credentials')).toBe(false);expect(response.headers.has('set-cookie')).toBe(false);
+  const html=await server.request(`${base}/${f.page}`);expect(html.headers.get('content-security-policy')).toContain(`${base}/api/artifacts/${f.page}/sql`);
+ }
+ const before=await stored(f.staff);
+ for(const text of ["insert into staff(name) values('bad')","update staff set name='bad'",'delete from staff','drop table staff','select salary from staff','select * from unlinked'])expect((await read(text)).status,text).toBeGreaterThanOrEqual(400);
+ expect(await stored(f.staff)).toEqual(before);
+ expect((await read(undefined,{revision:'revoked'})).status).toBe(404);
+ await owner('other');expect((await read(undefined,{},'https://other.u.example.test')).status).toBe(404);
+ const db=await getDb();
+ for(const change of ["visibility='private'","deleted_at=now()",'user_id=NULL']){
+  await db.query(`UPDATE artifacts SET ${change} WHERE id=$1`,[f.page]);expect((await read()).status).toBe(404);
+  await db.query("UPDATE artifacts SET visibility='unlisted',deleted_at=NULL,user_id=$2 WHERE id=$1",[f.page,f.owner.userId]);
+ }
+ await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.staff]);expect((await read()).status).toBeGreaterThanOrEqual(400);
+ await db.query("UPDATE artifacts SET visibility='unlisted',dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1",[f.staff,JSON.stringify({version:3,tables:[]})]);expect((await read()).status).toBeGreaterThanOrEqual(400);
+});
+
+it('owner-host SQL ignores valid capture authority, while canonical opaque capture reads keep working',async()=>{
+ const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app(),db=await getDb();
+ await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.page]);
+ const key=mintExportKey(f.page,60_000,Date.now(),f.owner.actor);
+ const send=(host:string,key?:string)=>server.request(`${host}/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null','content-type':'text/plain',authorization:`Bearer ${f.owner.token}`},body:JSON.stringify({sql:'select salary from staff',revision:'1',readOnly:false,key})});
+ expect((await send(base,key)).status).toBe(404);
+ expect((await send('https://app.example.test')).status).toBe(403);
+ const capture=await send('https://app.example.test',key);expect(capture.status).toBe(200);expect((await capture.json()).rows).toEqual([{salary:10},{salary:20}]);
+ await db.query("UPDATE artifacts SET visibility='public' WHERE id=$1",[f.page]);
+ expect((await send(base,key)).status).toBeGreaterThanOrEqual(400);
+});
+
+it('owner-host SQL withholds results when page, owner identity or dataset access changes during execution',async()=>{
+ const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app(),db=await getDb(),engine=services().sql,run=engine.run.bind(engine);
+ for(const change of [
+  ()=>db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.page]),
+  ()=>db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[f.page]),
+  ()=>db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[f.page,f.other.userId]),
+  ()=>setUsername(f.owner.userId!,'renamed'),
+  ()=>db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[f.page]),
+  ()=>db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[f.staff,JSON.stringify({version:3,tables:[]})]),
+ ]){
+  let changed=false;
+  const spy=vi.spyOn(engine,'run').mockImplementation(async input=>{const result=await run(input);if(!changed){changed=true;await change();}return result;});
+  try{
+   const res=await server.request(`${base}/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff',revision:'1'})});
+   expect(changed).toBe(true);expect(res.status).toBeGreaterThanOrEqual(400);expect(await res.text()).not.toContain('ada');
+  }finally{spy.mockRestore();}
+  await db.query("UPDATE artifacts SET visibility='unlisted',deleted_at=NULL,user_id=$2,version=1 WHERE id=$1",[f.page,f.owner.userId]);await setUsername(f.owner.userId!,'alice');
+ }
+});
+
+it('owner-host SQL follows current group ownership and hides dead or reclaimed identities',async()=>{
+ const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app(),db=await getDb();
+ await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_sql','sql_team','Team','',$1)",[f.owner.userId]);
+ await db.query("UPDATE artifacts SET group_id='grp_sql' WHERE id=$1",[f.page]);
+ const read=(host:string,method='POST')=>server.request(`${host}/api/artifacts/${f.page}/sql`,{method,...(method==='POST'?{headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff',revision:'1'})}:{})});
+ expect((await read(base)).status).toBe(404);
+ const groupHost='https://sql-team.u.example.test';expect((await read(groupHost)).status).toBe(200);
+ for(const method of ['GET','HEAD','PUT','OPTIONS'])expect((await read(groupHost,method)).status).toBe(404);
+ await db.query("UPDATE groups SET deleted_at=now() WHERE id='grp_sql'");expect((await read(groupHost)).status).toBe(404);
+ await db.query('UPDATE artifacts SET group_id=NULL WHERE id=$1',[f.page]);
+ await setUsername(f.owner.userId!,'renamed');await owner('alice');expect((await read(base)).status).toBe(404);
+ expect((await read('https://renamed.u.example.test')).status).toBe(200);
 });

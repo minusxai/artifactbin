@@ -1,8 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {createDomainSql} from '../domain-reads';
-import {RemoteUnreachable} from '../apollo/apollo-contracts';
 const location={href:'https://blog.example.org/abc123-sales?x=1'};
-it('sends an export capture\'s sql to the page SQL door with the key, read-only, and never sql without a key',async()=>{
+it('sends an export capture\'s sql to the page SQL door with the key, read-only, and anonymous owner-host SQL without a key',async()=>{
  const rows={columns:[{name:'n',type:'integer'}],rows:[{n:2}]};
  const send=vi.fn<typeof fetch>(async()=>new Response(JSON.stringify(rows)));
  const capture=createDomainSql({pageId:'abc123',revision:'2'},{href:'http://localhost:3030/a/abc123/raw?chrome=0&key=123.abc.def'},send);
@@ -15,8 +14,11 @@ it('sends an export capture\'s sql to the page SQL door with the key, read-only,
  // A refusal reaches the page's sql as the door's own answer.
  send.mockImplementationOnce(async()=>new Response(JSON.stringify({error:'permission_denied',message:'no'}),{status:403}));
  expect(await capture(statement)).toEqual({error:'permission_denied',message:'no'});
- // An owner host's page carries no key: its sql never leaves the page.
- await expect(createDomainSql({pageId:'abc123',revision:'2'},location,send)(statement)).rejects.toBeInstanceOf(RemoteUnreachable);
- expect(send).toHaveBeenCalledTimes(2);
-
+ // Owner-host reads use the same narrow address, including a root index page.
+ for(const href of [location.href,'https://blog.example.org/']){
+  expect(await createDomainSql({pageId:'abc123',revision:'2'},{href},send)(statement)).toEqual(rows);
+  const [url,init]=send.mock.calls.at(-1)!;
+  expect(String(url)).toBe('https://blog.example.org/api/artifacts/abc123/sql');
+  expect(JSON.parse(String(init!.body))).toEqual({...statement,revision:'2',readOnly:true});
+ }
 });

@@ -3,7 +3,7 @@
  * shares: the request's reader, the after-read page verification and the write's commit guard.
  */
 import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
-import type { AccessActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactHeaderById, accessMoved, readableArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {executePageSql,type PageCommitGuard} from '@/lib/dataset-access';
@@ -96,14 +96,30 @@ async function opaqueSqlRead(request:Request,pageId:string):Promise<Response>{
  out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
 }
-/** `reader`: an export capture's requester (opaqueSqlRead), read as given and read-only; otherwise the request's own. */
-async function answerSql(request:Request,pageId:string,reader?:AccessActor):Promise<Response>{
+/**
+ * Verified publishing-host entry only. The host supplies a current ownership/eligibility check, run before
+ * admission and again after the canonical verifier. No body field or credential chooses the actor or write mode.
+ * This is separate from pageSqlDoor: canonical opaque requests still require an export capture key.
+ */
+export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:()=>Promise<boolean>):Promise<Response>{
+ if(!await hostHolds())return json({error:'not_found'},404,SQL_HEADERS);
+ const headers=new Headers(request.headers);
+ for(const name of [...CREDENTIAL_HEADERS,'idempotency-key'])headers.delete(name);
+ const guest=new Request(request.url,{method:'POST',headers,body:await readBody(request),signal:request.signal});
+ const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,ANONYMOUS_ACTOR,hostHolds));
+ const out=new Headers(answered.headers);
+ out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
+ return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
+}
+/** `reader`: a host-selected anonymous reader or capture requester, always read-only; otherwise the request's own. */
+async function answerSql(request:Request,pageId:string,reader?:AccessActor,hostHolds?:()=>Promise<boolean>):Promise<Response>{
  const headers=SQL_HEADERS;
  const requested=reader?null:await requestOrSessionActor(request);
  // An export reader carries no cookie, so no same-site guard applies; it never writes (readOnly below).
  if(requested&&refusesCrossSite(request,requested))return json({error:'forbidden'},403);
  const actor:AccessActor=reader??requested!;
  try{
+  if(hostHolds&&!await hostHolds())throw Error('page_unavailable');
   const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
   // Readership first: a page this reader cannot read answers exactly as a missing one (the uniform 404), whatever
   // the body or Idempotency-Key; only then is the request itself judged.
@@ -122,6 +138,7 @@ async function answerSql(request:Request,pageId:string,reader?:AccessActor):Prom
     const reply=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
     await verifyPage(page.revision);
+    if(hostHolds&&!await hostHolds())throw Error('page_unavailable');
     // The last guard: nothing past the SQL output budget leaves, however it was produced.
     const text=JSON.stringify(reply.body);
     if(new TextEncoder().encode(text).length>SQL_READ_LIMITS.outputBytes)return json({error:'result_too_large',message:`an answer is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`},413,headers);
