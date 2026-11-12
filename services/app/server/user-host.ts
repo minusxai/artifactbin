@@ -2,6 +2,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
 import { ACTOR_HEADER, ownerHostServes } from '@artifactbin/contracts';
+import { ownerHostSqlRead } from '@/lib/page-doors';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
 import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
@@ -245,6 +246,18 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
     if (readable && owner) {
       const bytes = await embedded(request, path, owner);
       if (bytes) return privacy(bytes);
+    }
+
+    const sql=/^\/api\/artifacts\/([^/]+)\/sql$/.exec(path);
+    if(sql&&owner&&request.method==='POST'&&ID_RE.test(sql[1]!)){
+      const id=sql[1]!;
+      // Resolve the live handle and true owner at both ends of every read, including identity moves.
+      const hostHolds=async()=>{
+        const liveOwner=await ownerForHandle(handle),row=await getArtifactById(id);
+        return !!liveOwner&&liveOwner.kind===owner.kind&&liveOwner.id===owner.id&&!!row&&servesDocument(liveOwner,row);
+      };
+      try{return privacy(await ownerHostSqlRead(request,id,hostHolds));}
+      catch(error){if(error instanceof PayloadTooLarge)return privacy(withReadCors(error.response()));throw error;}
     }
 
     const document = DOCUMENT_ROUTE.exec(path);

@@ -23,7 +23,8 @@ what an artifact is served as, and the local-file doors in `lib/local-connection
 - Serving assembles runtime configuration, asset URLs and presentation around the saved source, never written
   back into it or a download (`native-html-presentation.server.ts`).
 - A request on a publishing host (`user-host.ts`) is a guest's whatever it carries: native read doors only, no
-  shared writes.
+  shared writes. Its page-specific SQL POST reuses canonical page/revision/dataset verification, forces anonymous
+  read-only execution, and checks the live handle and eligible true owner before admission and after execution.
 - No agent-facing surface issues a credential. The operator mint (`app/api/tokens/route.ts`) is a 404 without
   `ADMIN__SECRET`. Connections are stored hash-only, shown once.
 - An export capture holds no session: its short-lived key names the requester the export door admitted

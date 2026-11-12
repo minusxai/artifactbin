@@ -17,6 +17,8 @@ build that serve them. Access decisions belong to the doors behind the trusted p
   never carry viewer state (`native-html.server.ts`). Current modules use flat revalidated addresses; pinned host assets retain exact bytes.
 - A page's extra script, frame or connect origins come only from publish-validated `<head>` declarations
   (`<meta name="csp-connect" …>`, `lib/document/csp-extensions.ts`) and reader consent, never another way.
+- Unframed publishing-host SQL uses only its page-specific SQL address: the verified host selects anonymous, read-only
+  execution and rechecks current ownership. Canonical opaque SQL still requires a capture key; neither path carries ambient credentials.
 - A read-only (archived) shell relays only reads: SQL reads, no uploads. Raw pages and portable
   copies have no trusted frame, so they never upload.
 - Teach pages `sql` and `@afbin/state`; page data uses the SQL door and viewer state stays in the browser.
