@@ -1,9 +1,8 @@
 # Serving and the trust boundary
 
-The Hono server and its host boundaries: `app.ts` (the app page, the API), `public-files.ts` (public files),
-`pages-host.ts` (every document on its own origin), `user-host.ts` (anonymous publishing hosts) and `host.ts` (the
-composition a downstream deployment builds on). This card also covers `lib/document-serving`, which answers
-what an artifact is served as, and the local-file doors in `lib/local-connection`.
+Host boundaries: `app.ts` (app and API), `public-files.ts` (files), `pages-host.ts` (document origins),
+`user-host.ts` (anonymous publishing) and `host.ts` (downstream composition). Also covers
+`lib/document-serving` and the local-file doors in `lib/local-connection`.
 
 ## Rules
 - An artifact ID is an address, not a credential: `public` is readable and may be listed on the owner's profile,
