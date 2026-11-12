@@ -6,8 +6,6 @@ export { publishDataset, publishImage, publishPdf, publishVizRecipe, storeImageC
 export { loadDatasetRows, storeDatasetRows, storedRowCount } from './dataset-store';
 export { datasetCreateFields } from './dataset-usage';
 export { serializeDatasetDefinition } from './definition';
-export { executeDocumentQueries } from './document-queries';
-export type { DocumentQuerySourceMode } from './document-queries';
 export { DatasetError } from './errors';
 export { CatalogQueryFailure, executeCatalog, executeMounted, mutateMounted, readMountRows, type CatalogMount } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';

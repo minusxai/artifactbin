@@ -4,10 +4,9 @@
  * kinds. Pure: no engine, no database.
  */
 import { describe, expect, it } from 'vitest';
-import { compiledSource } from '@/test/helpers/compiled';
 import {
-  imageReferenceId, imageRefData, importRef,
-  EMPTY_COMPILED_DATAFLOW, initialValues, LocalStateInputError, localTableOverrides, mutationTargetRef, NUMERIC_AGGS,
+  imageReferenceId, imageRefData,
+  EMPTY_COMPILED_DATAFLOW, LocalStateInputError, localTableOverrides, NUMERIC_AGGS,
   parseLocalTables, parseMutationRequest, platformValues, rawUrl, readerZone, rowField, scalarMatches,
   VIEWER, VIEWER_ID, type CompiledDataflow,
 } from '..';
@@ -86,35 +85,13 @@ describe('scalar typing', () => {
   });
 });
 
-describe('the compiled record', () => {
-  const source = '<Helmet><Import name="books" src="ref:BookRows1" /><Value name="n" type="number" default={3} /><Value name="s" default="x" />'
-    + '<Value name="t" type="table" value={[{"a":1}]} />'
-    + '<Mutation name="add">{`insert into books.rows (id) values ($n)`}</Mutation>'
-    + '<Mutation name="local">{`insert into t (a) values (1)`}</Mutation></Helmet><p>{$n}</p>';
-  const columns = [{ name: 'id', type: 'number' as const }];
-  let flow: CompiledDataflow;
-  const compiled = async () => (flow ??= await compiledSource(source, { BookRows1: columns }));
-
-  it('initialValues holds every scalar at its default', async () => {
-    expect(initialValues(await compiled())).toEqual({ n: 3, s: 'x' });
-    expect(initialValues(EMPTY_COMPILED_DATAFLOW)).toEqual({});
-  });
-
-  it('importRef and mutationTargetRef name the dataset an import reads and a mutation writes', async () => {
-    const f = await compiled();
-    expect(importRef(f, 'books')).toBe('BookRows1');
-    expect(importRef(f, 'nope')).toBeUndefined();
-    expect(mutationTargetRef(f, f.mutations.find((m) => m.name === 'add')!)).toBe('BookRows1');
-    expect(mutationTargetRef(f, f.mutations.find((m) => m.name === 'local')!)).toBeNull();
-  });
-
-  it('localTableOverrides replaces only declared inline tables, row by row checked', async () => {
-    const f = await compiled();
-    expect(localTableOverrides(f, { t: [{ a: 2 }, {}] })).toEqual({ t: { columns: f.values.find((v) => v.name === 't')!.kind === 'table' ? expect.any(Array) : [], rows: [{ a: 2 }, { a: null }] } });
-    expect(localTableOverrides(f)).toEqual({});
-    expect(() => localTableOverrides(f, { books: [] })).toThrow(LocalStateInputError);
-    expect(() => localTableOverrides(f, { n: [] })).toThrow('"n" is not a declared inline table');
-  });
+it('localTableOverrides validates only declared inline tables', () => {
+  const flow: CompiledDataflow = { ...EMPTY_COMPILED_DATAFLOW, values: [
+    { name: 't', kind: 'table', type: 'table', default: null, columns: [{ name: 'a', type: 'number' }], rows: [{ a: 1 }] },
+  ] };
+  expect(localTableOverrides(flow, { t: [{ a: 2 }, {}] })).toEqual({ t: { columns: [{ name: 'a', type: 'number' }], rows: [{ a: 2 }, { a: null }] } });
+  expect(localTableOverrides(flow)).toEqual({});
+  expect(() => localTableOverrides(flow, { missing: [] })).toThrow(LocalStateInputError);
 });
 
 describe('parseMutationRequest', () => {

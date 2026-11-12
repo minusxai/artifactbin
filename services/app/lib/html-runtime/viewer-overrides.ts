@@ -9,12 +9,7 @@
  * any value: it means "nothing chosen yet"); keys without a default keep their override. Removing a key that has a
  * default brings the default back. A changed page state version (`data-af-state-version`) clears every override once.
  *
- * Stored as `{"$af":"overrides","version":…,"revision":…,"overrides":{…}}` under its OWN key (page-state: `af:viewer:v2:<id>`),
- * never under the legacy key that deployed older runtimes read as their whole document and still write. While the new
- * key is empty, the legacy full document is migrated on read (values equal to the current defaults are no override) and
- * persisted by the first write; the legacy key is never changed, and once the new key exists it is never read again.
- * So an old tab still open after that first write keeps its own legacy document: its later edits are not seen by new
- * tabs (and theirs not by it) until it reloads into the new runtime.
+ * Stored as `{"$af":"overrides","version":…,"revision":…,"overrides":{…}}` under its OWN key (page-state: `af:viewer:v2:<id>`).
  *
  * Reads never write. An entry of another state version reads as the defaults alone; the first write replaces it. Each
  * entry records the page revision that wrote it: an instance of an OLDER revision never writes over it (./viewer-state
@@ -54,15 +49,6 @@ export function parseEntry(raw: string): OverrideEntry {
   if (!isObject(value) || value.$af !== 'overrides' || !isObject(value.overrides) || Object.keys(value).length !== 4
     || !(value.version === null || typeof value.version === 'string') || !(value.revision === null || typeof value.revision === 'string')) throw new TypeError('Saved viewer state is not an overrides entry');
   return { version: value.version, revision: value.revision, overrides: createLocalStore(value.overrides as HtmlJsonObject).read() };
-}
-
-/** A legacy full document as an entry (written before state versions or revisions); null when it is not one. */
-export function legacyEntry(raw: string, defaults: HtmlJsonObject): OverrideEntry | null {
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (!isObject(value)) return null;
-    return { version: null, revision: null, overrides: overridesOf(createLocalStore(value as HtmlJsonObject).read(), defaults) };
-  } catch { return null; }
 }
 
 /** The document an entry shows this page: another state version's overrides do not apply. */

@@ -14,25 +14,6 @@ export interface TableResult {
   totalRows?: number;
 }
 
-/**
- * The document's data at one instant: every scalar's current value and every
- * table's current rows, keyed by declared name. Built server-side at render
- * (defaults + a fresh run of every query) and thereafter owned by the runtime
- * store, which re-runs the queries a changed value feeds.
- */
-export interface DataflowState {
-  /** Per-viewer mutation availability: null permits, a message explains refusal. Missing means not yet checked. */
-  mutationAccess?: Record<string, string | null>;
-  userOptions?: Record<string, import('@artifactbin/contracts').UserOption[]>;
-  /** The people this document may name, by id (lib/datasets/user-fields people). */
-  people?: Record<string,import('@artifactbin/contracts').PersonCard>;
-  values: Record<string, Scalar>;
-  tables: Record<string, TableResult>;
-  /** Queries that did not run, by name → the engine's message (shown in place of the embed). */
-  errors: Record<string, string>;
-}
-
-
 export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
   if (v === null) return true;
   switch (t) {

@@ -96,22 +96,15 @@ describe.each(Object.keys(paths) as (keyof typeof paths)[])('saved viewer state 
   });
 });
 
-it('migrates a legacy stored full document once, into its own key, never touching the legacy key', async () => {
-  const legacy = JSON.stringify({ tab: 'summary', theme: 'light', note: 'x', mode: 'grid' });
+it('ignores the old full-document key and persists only current overrides', async () => {
+  const legacy = JSON.stringify({ tab: 'details', note: 'old' });
   const alice = viewer({ 'af:viewer:p': legacy });
-  const page = alice.open({ tab: 'summary', theme: 'light', mode: 'list' });
-  // Values equal to the current defaults are not overrides; reading writes nothing.
-  expect(page.state.getState()).toEqual({ tab: 'summary', theme: 'light', note: 'x', mode: 'grid' });
+  const page = alice.open({ tab: 'summary', theme: 'light' });
+  expect(page.state.getState()).toEqual({ tab: 'summary', theme: 'light' });
   expect(alice.stored()).toBeNull();
-  // Until a write persists it, the migration is against whatever defaults are current: a legacy value that now differs from its default is kept.
-  expect(alice.open({ tab: 'summary', theme: 'dark', mode: 'list' }).port.read()).toEqual({ tab: 'summary', theme: 'light', note: 'x', mode: 'grid' });
-  // The first write persists the migration; the legacy key, which deployed old readers consume, keeps its document.
   await page.state.setState({ tab: 'details' });
-  expect(alice.stored()).toEqual({ $af: 'overrides', version: null, revision: null, overrides: { note: 'x', mode: 'grid', tab: 'details' } });
+  expect(alice.stored()).toEqual({ $af: 'overrides', version: null, revision: null, overrides: { tab: 'details' } });
   expect(alice.items.get('af:viewer:p')).toBe(legacy);
-  // Once the new key exists, the legacy key is never read again.
-  alice.items.set('af:viewer:p', JSON.stringify({ tab: 'summary', note: 'changed later by an old tab' }));
-  expect(alice.open({ tab: 'summary', theme: 'light', mode: 'list' }).port.read()).toEqual({ tab: 'details', theme: 'light', note: 'x', mode: 'grid' });
 });
 
 it('a legacy document is not carried over once the page declares a state version', async () => {
@@ -154,24 +147,6 @@ it('removing a key that has a default brings the default back', async () => {
   expect(alice.stored()!.overrides).toEqual({ note: 'y' });
 });
 
-// Review regressions: the legacy read/write steps below are frozen from the pre-PR viewer port.
-import { createLocalStore } from '../apollo/local-store';
-it('review: an old tab writing after migration preserves untouched viewer values', async () => {
-  const alice = viewer({ 'af:viewer:p': JSON.stringify({ count: 2, note: 'mine' }) });
-  const next = alice.open({ count: 0, note: '' });
-  await next.state.setState({ count: 5 });
-  const oldRead = () => createLocalStore(JSON.parse(alice.items.get('af:viewer:p')!));
-  // Old code never sees the new format: its key still holds its whole document.
-  expect(oldRead().read()).toEqual({ count: 2, note: 'mine' });
-  const receipt = await oldRead().write({ expected: { count: 2 }, next: { count: 3 } });
-  if (receipt.status !== 'committed') throw Error('legacy write failed');
-  alice.items.set('af:viewer:p', JSON.stringify(receipt.document));
-  expect(JSON.parse(alice.items.get('af:viewer:p')!)).toEqual({ count: 3, note: 'mine' });
-  // Transient, by design: an old tab's edits after the migration are not seen by new tabs (until it reloads into new code).
-  expect(next.port.read()).toEqual({ count: 5, note: 'mine' });
-  expect(alice.open({ count: 0, note: '' }).port.read()).toEqual({ count: 5, note: 'mine' });
-});
-
 it('review: an already-open old version cannot reset the new version on every read', async () => {
   const alice = viewer();
   const old = alice.open({ count: 0 }, { version: '1' });
@@ -183,23 +158,23 @@ it('review: an already-open old version cannot reset the new version on every re
 });
 
 it('review: canonical equality removes reordered objects and alternate number spellings', async () => {
-  const alice = viewer({ 'af:viewer:p': '{"obj":{"b":2,"a":1},"n":1.0,"list":[{"b":2,"a":1}],"removed":"mine"}' });
+  const alice = viewer();
   const page = alice.open({ obj: { a: 1, b: 2 }, n: 1e0, list: [{ a: 1, b: 2 }] });
-  // Reads write nothing; the migrated overrides (below) are what the first write persists.
+  // Reads write nothing; canonical equality leaves no override for the defaults.
   expect(alice.stored()).toBeNull();
   await page.state.setState({ obj: { b: 3, a: 1 } });
   await page.state.setState({ obj: { b: 2, a: 1 } });
-  expect(alice.stored()!.overrides).toEqual({ removed: 'mine' });
+  expect(alice.stored()!.overrides).toEqual({});
 });
 
-it('review: corrupt storage falls back to private memory and partial legacy state gets missing defaults', async () => {
-  const corrupt = viewer({ 'af:viewer:p': '{broken' });
+it('review: corrupt current storage falls back to private memory and old state is ignored', async () => {
+  const corrupt = viewer({ 'af:viewer:v2:p': '{broken' });
   const page = corrupt.open({ count: 0 });
   await page.state.setState({ count: 1 });
   expect(page.port.read()).toEqual({ count: 1 });
-  expect(corrupt.items.get('af:viewer:p')).toBe('{broken');
+  expect(corrupt.items.get('af:viewer:v2:p')).toBe('{broken');
   const partial = viewer({ 'af:viewer:p': '{"count":3}' });
-  expect(partial.open({ count: 0, theme: 'dark' }).port.read()).toEqual({ count: 3, theme: 'dark' });
+  expect(partial.open({ count: 0, theme: 'dark' }).port.read()).toEqual({ count: 0, theme: 'dark' });
 });
 
 describe('older page revisions are fenced off from a newer one\'s saved state', () => {

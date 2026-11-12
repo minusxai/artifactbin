@@ -9,10 +9,8 @@ export interface ViewerStateOptions {
   revision?: string | null;
   /** An explicit af-state URL's document: replaces this viewer's overrides with its differences from the defaults. */
   seed?: HtmlJsonObject;
-  /** This viewer's overrides entry (its own key; never the legacy one). */
+  /** This viewer's overrides entry. */
   storage: { read(): string | null; write(json: string): void };
-  /** The legacy full document older runtimes kept (and still keep, in tabs open across a deploy): read only, to migrate. */
-  legacy?: () => string | null;
   /** Browser storage notifications from another tab of this viewer only. */
   observe(listener: () => void): () => void;
   /** Navigator Locks serializes compare-and-swap across tabs of the same page origin. */
