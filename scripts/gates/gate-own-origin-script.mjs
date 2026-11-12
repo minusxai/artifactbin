@@ -10,10 +10,13 @@ import {pagesServer} from './lib/pages-server.mjs';
 import {DOCUMENT_FRAME,documentFrame} from './lib/page-facts.mjs';
 import {startDocument,becomeOwner} from '../lib/start-doc.mjs';
 import {nativeHtml,nativeChoiceScript} from './lib/native-surface.mjs';
+import {connectionBrowserCookie} from './lib/account-connection.mjs';
 import {sleep} from './lib/sleep.mjs';
 import sharp from 'sharp';
 const check=createChecker('own-origin-script'),section=createSection(check);
-const pages=await pagesServer(process.argv[2],'own-origin-script'),APP=pages.app;
+// Owner-host configuration is required; a pages-only runner also serves public files,
+// so a successful runtime fetch cannot prove it has anonymous publishing hosts enabled.
+const pages=await pagesServer(process.argv[2],'own-origin-script',{env:{APP__USER_PAGES_HOST:'u.lvh.me'},drives:async()=>false}),APP=pages.app;
 const browser=await launchChromium();
 const owner=await startDocument(APP),auth={'Content-Type':'application/json',Authorization:`Bearer ${owner.token}`};
 const api=(path,init={})=>fetch(`${APP}${path}`,{...init,headers:{...auth,...init.headers}});
@@ -56,6 +59,27 @@ await section('private origin and credential boundary',async()=>{
  const stranger=await browser.newContext();const strangerPage=await stranger.newPage();
  const denied=await strangerPage.goto(`${APP}/a/${owner.id}`,{waitUntil:'load'});
  check(denied.status()===404,'private native page stays unavailable to a stranger');await stranger.close();
+});
+await section('anonymous owner-host state runtime',async()=>{
+ const profile=await fetch(`${APP}/api/my/profile`,{headers:{cookie:connectionBrowserCookie(APP,owner.token)}});
+ const {username}=await profile.json();check(profile.status===200&&!!username,'fixture has an actual owner handle');
+ const published=await api('/api/artifacts',{method:'POST',body:JSON.stringify({html:nativeHtml('Public choice','<button id="advance">Choose west</button><output id="choice"></output>',{state:{region:'east'},script:nativeChoiceScript({field:'region',button:'#advance',output:'#choice',value:'west'})+"const apollo=await import('@afbin/apollo');document.body.dataset.apollo=String(!!apollo);"}),visibility:'public'})});
+ const post=await published.json();check(published.status===201&&!!post.user_page_url,'public fixture supplies its owner-host URL');
+ const url=new URL(post.user_page_url);check(url.hostname===`${username.replaceAll('_','-')}.u.lvh.me`&&url.origin!==APP,'browser targets owner host rather than canonical runner');
+ const guest=await browser.newContext(),publicPage=await guest.newPage();
+ try{
+  const modules=new Set();publicPage.on('response',response=>{if(response.status()===200&&new URL(response.url()).origin===url.origin)modules.add(new URL(response.url()).pathname);});
+  const response=await publicPage.goto(url.href,{waitUntil:'load'});check(response.status()===200,'anonymous owner-host page loads');
+  await publicPage.waitForFunction(()=>document.querySelector('#choice')?.textContent==='east'&&document.body.dataset.apollo==='true');
+  check(['/af/state.js','/af/apollo.js','/af/reader.js'].every(path=>modules.has(path)),'owner host serves the complete state and Apollo module closure');
+  await publicPage.locator('#advance').click();await publicPage.waitForFunction(()=>document.querySelector('#choice')?.textContent==='west');
+  check(true,'anonymous owner-host click updates actual viewer state and DOM');
+  check(await publicPage.evaluate(()=>{try{localStorage.getItem('probe');return false}catch{return true}}),'opaque owner-host sandbox denies persistent browser storage');
+  await publicPage.reload({waitUntil:'load'});await publicPage.waitForFunction(()=>document.querySelector('#choice')?.textContent==='east'&&document.body.dataset.apollo==='true');
+  await publicPage.locator('#advance').click();await publicPage.waitForFunction(()=>document.querySelector('#choice')?.textContent==='west');
+  check((await guest.cookies()).length===0,'owner-host modules and interactions work after reload without account cookies');
+  check.note('Owner-host state is memory-only under the existing opaque sandbox; persistence is verified on the isolated framed origin above.');
+ }finally{await guest.close();}
 });
 await section('comments through original chrome',async()=>{
  const frame=await documentFrame(page),third=frame.locator('#third');

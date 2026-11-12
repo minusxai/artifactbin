@@ -11,5 +11,6 @@
   "services/app/lib/platform/__tests__/outbound-ips-route.test.ts",
   "services/app/lib/publish/__tests__/content-write-fence.test.ts",
   "services/app/lib/skills/__tests__/font-delivery.test.ts",
-  "services/app/lib/skills/__tests__/new-app-toolbox.test.ts"
+  "services/app/lib/skills/__tests__/new-app-toolbox.test.ts",
+  "services/app/server/__tests__/user-host.test.ts"
 ]

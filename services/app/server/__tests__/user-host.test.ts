@@ -79,7 +79,7 @@ it('serves groups by actual ownership and refuses deleted groups or creator host
 });
 it('denies retired compiler, identity and encoded doors even carrying credentials',async()=>{
  const user=await owner(),post=await page(user.token),server=app();
- for(const path of ['/login','/api/my/domain','/api/domains/allow',`/a/${post.id}/query`,`/a/${post.id}/mutate`,`/a/${post.id}/story`,`/a/${post.id}/viewer`,'/islands/x.js','/%61pi/tokens','/af/chrome.js','/api/internal/build-assets/assets/app.css']){
+ for(const path of ['/login','/api/my/domain','/api/domains/allow',`/a/${post.id}/query`,`/a/${post.id}/mutate`,`/a/${post.id}/story`,`/a/${post.id}/viewer`,'/islands/x.js','/%61pi/tokens','/af/chrome.js','/af/host.js','/af/state.js/extra','/af/state.js.map','/af/%73tate.js','/af/native-regions.js','/af/private.js','/api/tokens','/api/admin/settings','/api/internal/build-assets/assets/app.css']){
   const res=await server.request(base+path,{headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret'}});expect(res.status,path).toBe(404);expect(res.headers.has('set-cookie')).toBe(false);
  }
  for(const host of ['https://u.example.test','https://app.u.example.test','https://a.b.u.example.test'])expect((await server.request(host+'/')).status).toBe(404);
@@ -93,9 +93,13 @@ it('removes retired domain API routes on the app host',async()=>{
 });
 it('serves native static and live read doors and no credential-bearing script entry points',async()=>{
  const user=await owner(),post=await page(user.token),server=app();
- for(const path of ['/af/apollo.js','/af/reader.js','/af/components/button.js','/af/styles.css']){
+ for(const path of ['/af/state.js','/af/apollo.js','/af/reader.js','/af/components/button.js','/af/styles.css']){
   const response=await server.request(base+path,{headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret'}});
   expect(response.status,path).toBe(200);expect(response.headers.has('set-cookie')).toBe(false);
+  const anonymous=await server.request(base+path);expect(anonymous.status,path).toBe(200);
+  expect(anonymous.headers.get('access-control-allow-origin')).toBe('*');
+  expect(anonymous.headers.has('access-control-allow-credentials')).toBe(false);
+  expect(await anonymous.text()).toBe(await response.text());
   const head=await server.request(base+path,{method:'HEAD'});expect(head.status,path).toBe(200);expect(await head.text()).toBe('');
   expect((await server.request(base+path,{method:'POST'})).status).toBe(404);
  }
@@ -150,7 +154,7 @@ it('exposes the same eligible public-view URL on reads, replacements and the app
 });
 
 it('shares one static allowlist with dev ingress and rejects encoded or executable Vite paths',()=>{
- for(const path of ['/af/apollo.js','/af/reader.js','/af/components/chunk-ab12.js','/af/styles.css','/af/fonts/test.woff2','/af/app/app-123.css','/af/lib/vega-6.3.1/index.js','/af/geojson/world.json'])expect(userHostStaticPath(path),path).toBe(true);
+ for(const path of ['/af/state.js','/af/apollo.js','/af/reader.js','/af/components/chunk-ab12.js','/af/styles.css','/af/fonts/test.woff2','/af/app/app-123.css','/af/lib/vega-6.3.1/index.js','/af/geojson/world.json'])expect(userHostStaticPath(path),path).toBe(true);
  for(const path of ['/fonts/test.woff2','/geojson/world.json','/solid-entry.tsx','/@vite/client','/@fs/private.ts','/islands/entry.js','/af/app/app-123.js','/assets/app-123.css','/af/chrome.js','/fonts/%2f../private.ts','/api/internal/build-assets/assets/app.css'])expect(userHostStaticPath(path),path).toBe(false);
 });
 

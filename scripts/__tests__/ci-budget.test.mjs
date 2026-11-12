@@ -267,15 +267,16 @@ it('enrolls existing node-project guard tests that the full suite also runs, onc
  }
 });
 // The contract tier: route-level scenarios another repository runs against its production composition after merge.
-it('enrolls node-project contract tests that the full suite also runs, once each, outside the other lists',()=>{
+it('enrolls node and API contract tests that the full suite also runs, once each, outside the other lists',()=>{
  const read=path=>JSON.parse(readFileSync(new URL(`../../${path}`,import.meta.url),'utf8'));
  const contracts=read('scripts/ci/contract-tests.json'),guards=read('scripts/ci/guard-tests.json'),fast=read('scripts/ci/fast-tests.json');
  expect(contracts).toContain('services/app/lib/page-doors/__tests__/native-acceptance.test.ts');
+ expect(contracts).toContain('services/app/server/__tests__/user-host.test.ts');
  expect(contracts).toEqual([...new Set(contracts)].sort());
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain("byIsolation('pr-contracts', 'contract-tests.json'");
  for(const file of contracts){
   expect(readFileSync(new URL(`../../${file}`,import.meta.url),'utf8').length,file).toBeGreaterThan(0);
-  expect(file).toMatch(/^services\/app\/lib\/(?:.+\/)?__tests__\/[^/]+(?<!\.ui)\.test\.ts$/);
+  expect(file).toMatch(/^services\/app\/(?:lib|server)\/(?:.+\/)?__tests__\/[^/]+(?<!\.ui)\.test\.ts$/);
   expect(fast).not.toContain(file);expect(guards).not.toContain(file);
  }
 });

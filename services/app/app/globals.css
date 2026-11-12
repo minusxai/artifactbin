@@ -512,7 +512,7 @@ body {
 .comment-rich-editor .ProseMirror-selectednode {
   outline: 2px solid var(--color-accent);
 }
-.comment-rich-editor:has(> p:only-child > br:only-child)::before {
+.comment-rich-editor[data-empty="true"]::before {
   content: attr(data-placeholder);
   color: var(--color-faint);
   pointer-events: none;
@@ -542,7 +542,7 @@ body {
 
 /* The hover card's reply box (AnnotationPreview): one line until it is focused or holds a draft. */
 [data-hover-reply] .comment-rich-editor { max-height: 30vh; padding: 8px 10px; font-size: 13px; }
-[data-hover-reply] .comment-rich-editor:has(> p:only-child > br:only-child)::before { inset-inline: 10px; }
+[data-hover-reply] .comment-rich-editor[data-empty="true"]::before { inset-inline: 10px; }
 [data-hover-reply][data-compact='true'] .comment-rich-editor { min-height: 0; margin-bottom: 0; padding-block: 5px; }
 [data-hover-reply][data-compact='true'] :is(.comment-editor-tools, .comment-agents, [data-reply-actions]) { display: none; }
 
