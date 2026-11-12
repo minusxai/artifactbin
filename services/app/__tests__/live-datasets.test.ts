@@ -7,7 +7,10 @@
  * socket (test-support pglite-wire); its tables key rows on the reader's email, so what each reader gets back is what
  * the bound `:viewer_email` selected.
  */
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import * as connectors from '@artifactbin/connectors';
+import { setUsername } from '@/lib/accounts';
+import { createAppServer } from '@/server/app';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 import { admitGroupMember, request, setSession, useAppHarness } from './harness';
 import { createGroup } from '@/lib/groups';
@@ -363,4 +366,46 @@ it('lets a group own a live dataset (its editors change and query it), and keeps
   const again = await createArtifactFromBody({ connection: config({ password: 'another-one' }), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
   expect([again.status, ((await again.json()) as { id: string }).id]).toEqual([201, id]);
   expect(await everyStoredRow()).not.toContain(PASSWORD);
+});
+
+// Hold a real connector answer until a concurrent access change has committed. Neither
+// the public page nor its owner host changes; the live dataset must fence its own rows.
+it.each(['canonical', 'owner-host'] as const)('withholds live declared-query rows after revocation through %s', async (surface) => {
+  const { alice } = await people();
+  await setUsername(alice.userId!, 'livereader');
+  overrideConfig({ userPagesHost: 'public.example.test', publicBaseUrl: 'https://app.example.test' }, { DATASETS__ALLOW_PRIVATE_NETWORK: '1' });
+  const server = createAppServer({ indexHtml: async () => '<html><body>App</body></html>' });
+  for (const change of ['policy', 'private', 'deleted'] as const) {
+    const id = (await createLive(alice)).body.id;
+    await setRule(alice, id, 'anonymous');
+    const page = (await publish(alice, { html: PAGE(id, SCRIPT('total', 'shop', 'select n from public.loose')) })).body.id;
+    const read = async () => surface === 'canonical'
+      ? door(page, null, { query: 'total' })
+      : answer(await server.request(`https://livereader.public.example.test/api/artifacts/${page}/sql`, {
+        method: 'POST', headers: { 'content-type': 'text/plain', origin: 'null' },
+        body: JSON.stringify({ query: 'total', params: {}, revision: '1' }),
+      }));
+    expect(ok(await read()).rows).toEqual([{ n: 7 }]);
+    await closeLiveDatasetConnections();
+    const original = connectors.openConnection;
+    let executions = 0;
+    const spy = vi.spyOn(connectors, 'openConnection').mockImplementation((...args) => {
+      const connection = original(...args);
+      return { ...connection, async query(input) {
+        const result = await connection.query(input);
+        executions++;
+        expect(result.rows).toEqual([{ n: 7 }]);
+        if (change === 'policy') await setRule(alice, id);
+        else if (change === 'private') await updateSharingFor(alice.actor, id, { visibility: 'private' });
+        else await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [id]);
+        return result;
+      } };
+    });
+    try {
+      const response = await read();
+      expect(response.status, change).not.toBe(200);
+      expect(response.body, change).not.toHaveProperty('rows');
+      expect(executions).toBe(1);
+    } finally { spy.mockRestore(); await closeLiveDatasetConnections(); }
+  }
 });

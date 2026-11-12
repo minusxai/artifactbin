@@ -383,7 +383,13 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
       if (!row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${link.name} names a live dataset that is gone`);
       const decision = await datasetReadAccess(row, actor, { pageId: page.pageId });
       if (!decision.allowed) throw new LiveDatasetRefusal(403, 'permission_denied', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
-      return await run(row.id, link.name, query.sql, raw.params, await connectorViewer(actor), signal);
+      const reply = await run(row.id, link.name, query.sql, raw.params, await connectorViewer(actor), signal);
+      // A connector may outlive a permission change. Fence its answer just as stored SQL does;
+      // the page door retries under current policy and never returns rows from a revoked decision.
+      const current = await liveRow(row.id);
+      const after = current && await datasetReadAccess(current, actor, { pageId: page.pageId });
+      if (!after?.allowed || after.identity !== decision.identity) throw new Error('dataset_changed');
+      return reply;
     }
     if (typeof raw.sql !== 'string' || !lives.length) return null;
     const rows = await Promise.all(lives.map(async (link) => ({ link, row: await liveRow(link.datasetId) })));
