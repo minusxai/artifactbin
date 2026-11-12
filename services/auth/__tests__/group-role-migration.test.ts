@@ -3,6 +3,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import type {TransactionalQueryable} from '@artifactbin/contracts';
 import {assertGroupRoleModel,migrateGroupRoles} from '../src/identity-store/group-role-migration';
+import manifest from '../package.json';
 let pg:PGlite;
 let db:TransactionalQueryable;
 beforeEach(async()=>{
@@ -24,6 +25,7 @@ it('refuses startup and unacknowledged changes, preserves both sets of grants, a
  expect((await pg.query('SELECT role FROM auth.group_members ORDER BY user_id')).rows).toEqual([{role:'admin'},{role:'member'}]);
  expect((await pg.query('SELECT role FROM auth.group_invitations ORDER BY id')).rows).toEqual([{role:'admin'},{role:'member'}]);
  expect((await pg.query('SELECT revision FROM auth.group_hierarchy')).rows).toEqual([{revision:7}]);
+ expect((await pg.query('SELECT role_model_version FROM auth.group_hierarchy')).rows).toEqual([{role_model_version:manifest.groupRoleModelVersion}]);
  await pg.exec("INSERT INTO auth.group_members VALUES('one','cara','editor')");
  await assertGroupRoleModel(db,'auth');
  expect(await migrateGroupRoles(db,{schema:'auth',writesPausedAndBackupVerified:true})).toEqual({changed:false});

@@ -1,6 +1,7 @@
 {
   "name": "@artifactbin/auth",
   "version": "0.1.0",
+  "groupRoleModelVersion": 2,
   "description": "Shared human login, device OAuth and credential resolution.",
   "license": "Apache-2.0",
   "type": "module",

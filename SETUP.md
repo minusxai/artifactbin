@@ -95,6 +95,8 @@ three roles before resuming reconciliation. Do not run old writers or roll back 
 `editor` value had different authority. To roll back, stop all processes and restore the verified pre-upgrade
 backup with the matching old release; preserve any post-upgrade writes separately for reconciliation.
 No group nesting, personal ownership, artifact share, or external data policy is changed by this migration.
+Release tooling can read `groupRoleModelVersion` from `services/auth/package.json` to reject a rolling
+upgrade between incompatible role models; absence in an older package means version 1.
 
 This repository has no request proxy or rate-limit policy: put your own TLS proxy in front.
 
