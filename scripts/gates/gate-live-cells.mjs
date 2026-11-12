@@ -61,7 +61,7 @@ const page = (datasetId) => `<!doctype html><html><head><title>Tracker</title>
 <script type="module">
 import {sql} from '@afbin/apollo';
 import {collab} from '@afbin/collab';
-// Offline (a downloaded copy) the read fails and the field keeps its default; the cell is read-only there.
+// A downloaded copy reads its embedded SQL snapshot; the cell keeps that value read-only.
 let row=null;try{row=(await sql\`select _id, description from tasks where title = 'Login'\`)[0];}catch{}
 const field=document.getElementById('description'), status=document.getElementById('status');
 if(row)field.value=row.description??'';
@@ -283,6 +283,9 @@ try {
   });
 
   await section('a downloaded copy works offline: the library loads and the field is read-only', async () => {
+    // All editors have left and saved: export must carry this exact persisted cell, including early typing.
+    const saved = await stored();
+    check(typeof saved === 'string' && saved.endsWith(' early-D'), 'the export baseline includes the final saved typing');
     const response = await fetch(`${BASE}/a/${pageId}/download`, { headers: { authorization: `Bearer ${token}` } });
     check(response.ok, `the page downloads (${response.status})`);
     const html = await response.text();
@@ -297,7 +300,7 @@ try {
     await O.goto(pathToFileURL(file).href, { waitUntil: 'load' });
     check(await until(() => O.locator(FIELD).getAttribute('data-status'), (s) => s === 'readonly', 15_000) === 'readonly', 'the offline copy says readonly');
     check(await O.locator(FIELD).evaluate((node) => node.readOnly) === true, 'its field is not editable');
-    check(await O.locator(FIELD).inputValue() === 'Offline default', 'its field keeps the value the page gave it');
+    check(await O.locator(FIELD).inputValue() === saved, 'its field reads exactly the saved dataset snapshot');
     check(errors.length === 0, `no script error offline (${errors.join(' | ') || 'none'})`);
     check(remote.length === 0, `no network request (${remote.join(' ') || 'none'})`);
     await context.close();
