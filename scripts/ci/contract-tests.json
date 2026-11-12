@@ -1,4 +1,6 @@
 [
+  "services/app/lib/__tests__/font-cache-headers.test.ts",
+  "services/app/lib/__tests__/story-asset-headers.test.ts",
   "services/app/lib/agent-copy/__tests__/agent-starter-consistency.test.ts",
   "services/app/lib/dataset-access/__tests__/page-sql.test.ts",
   "services/app/lib/datasets/__tests__/sql-links.test.ts",
@@ -7,5 +9,7 @@
   "services/app/lib/page-doors/__tests__/retired-data-doors.test.ts",
   "services/app/lib/page-doors/__tests__/retired-story-doors.test.ts",
   "services/app/lib/platform/__tests__/outbound-ips-route.test.ts",
-  "services/app/lib/publish/__tests__/content-write-fence.test.ts"
+  "services/app/lib/publish/__tests__/content-write-fence.test.ts",
+  "services/app/lib/skills/__tests__/font-delivery.test.ts",
+  "services/app/lib/skills/__tests__/new-app-toolbox.test.ts"
 ]
