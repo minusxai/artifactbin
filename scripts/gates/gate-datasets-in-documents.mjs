@@ -41,7 +41,7 @@ const outcome = async (frame) => {
   await frame.locator("#receipt").filter({ hasText: /./ }).waitFor();
   return frame.locator("#receipt").textContent();
 };
-const imageHtml = (datasetId, initial, tall = false) => pageHtml("Row images", `<link rel="af-dataset" data-af-name="data" href="ref:${datasetId}"><h1>Row images</h1><label>Rows <input id="take" type="number" value="2"></label><label>Reverse <input id="reverse" type="checkbox"></label><label>Selected book <input id="selected" value="0"></label><section aria-label="Selected"></section><section aria-label="Gallery">${initial.map((row) => `<article style="min-height:${tall ? 384 : 90}px"><img src="${row.image}" alt="${row.title}" loading="lazy" width="48" height="64"><h2>${row.title}</h2></article>`).join("")}</section><output id="error"></output>`, `import {sql} from '@afbin/apollo';const readDataset=${readDataset.toString()};const query=(columns,offset)=>sql(Object.assign(['select _id, '+columns.map(c=>'"'+c.replaceAll('"','""')+'"').join(', ')+' from data limit 100 offset ',''],{raw:[]}),offset);
+const imageHtml = (datasetId, initial, tall = false) => pageHtml("Row images", `<link rel="af-dataset" data-af-name="data" href="ref:${datasetId}"><h1>Row images</h1><label>Rows <input id="take" type="number" value="2"></label><label>Reverse <input id="reverse" type="checkbox"></label><label>Selected book <input id="selected" value="0"></label><section aria-label="Selected"></section><section aria-label="Gallery">${initial.map((row) => `<article style="min-height:${tall ? 384 : 90}px"><img src="${row.image}" alt="${row.title}" loading="lazy" width="48" height="64"><h2>${row.title}</h2></article>`).join("")}</section><output id="error"></output>`, `import {sql} from '@afbin/apollo';const readDataset=${readDataset.toString()};const query=(columns,offset)=>sql(Object.assign(['select _id, '+columns.map(c=>'"'+c.replaceAll('"','""')+'"').join(', ')+' from data limit 100 offset '+offset],{raw:[]}));
 
 const loaded=await readDataset(query,['id','title','image']);const rows=loaded.rows.map(({_id,...row})=>row).sort((a,b)=>Number(a.id)-Number(b.id));
 function article(row){const node=document.createElement('article');node.style.minHeight='${tall ? 384 : 90}px';node.dataset.afId='book-'+row.id;const image=document.createElement('img');image.src=row.image;image.alt=row.title;image.loading='lazy';image.width=48;image.height=64;const title=document.createElement('h2');title.textContent=row.title;node.append(image,title);return node}
@@ -54,12 +54,12 @@ try {
     await api(owner.token, `/api/artifacts/${owner.id}`, { html: editableDatasetPageHtml(dataset.id) }, "PUT");
     const a = await open(owner.id, owner);
     const b = await open(owner.id, owner);
-    check(await a.frame.locator("tbody tr").count() === 500, "500 rows load through limit/offset pages of the generated API");
+    check(await a.frame.locator("tbody tr").count() === 500, "500 rows load through limit/offset SQL pages");
     const bMutations = [];
     b.page.on("request", (request) => {
       if (request.method() === "POST" && request.url().endsWith("/sql")) {
         try {
-          if (/mutation/.test(request.postDataJSON().query)) bMutations.push(request);
+          if (/^update\b/i.test(request.postDataJSON().sql)) bMutations.push(request);
         } catch {
         }
       }
